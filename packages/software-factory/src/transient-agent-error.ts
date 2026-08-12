@@ -29,12 +29,26 @@ const TRANSIENT_PATTERNS = [
   /premature close/i,
 ];
 
+/**
+ * The agent's shared backend is no longer reachable. This is different from
+ * a one-off network fault: retrying a turn, or moving to another issue, will
+ * keep talking to the same dead process. The factory must stop so its outer
+ * supervisor can replace the backend instead of consuming the whole run
+ * deadline one issue at a time.
+ */
+export class AgentTransportUnavailableError extends Error {
+  override name = 'AgentTransportUnavailableError';
+}
+
 export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
 /** True for the narrow set of errors that mean "the network hiccuped," not a real failure. */
 export function isTransientAgentError(error: unknown): boolean {
+  if (error instanceof AgentTransportUnavailableError) {
+    return false;
+  }
   let message = errorMessage(error);
   return TRANSIENT_PATTERNS.some((pattern) => pattern.test(message));
 }

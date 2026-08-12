@@ -2,6 +2,7 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 
 import {
+  AgentTransportUnavailableError,
   isTransientAgentError,
   retryTransientAgentError,
 } from '../src/transient-agent-error.ts';
@@ -26,6 +27,17 @@ module('transient-agent-error > isTransientAgentError', function () {
       isTransientAgentError(new Error('Issue "x" has no linked project')),
     );
     assert.notOk(isTransientAgentError(new Error('Unexpected token')));
+  });
+
+  test('does not retry a backend-wide transport failure', function (assert) {
+    assert.notOk(
+      isTransientAgentError(
+        new AgentTransportUnavailableError(
+          'session.list failed: fetch failed ECONNREFUSED',
+        ),
+      ),
+      'the message can contain transient words without making the dead shared backend retryable',
+    );
   });
 
   test('handles non-Error throws without crashing', function (assert) {

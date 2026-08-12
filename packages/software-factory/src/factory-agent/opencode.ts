@@ -32,6 +32,8 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import type { Config as OpencodeConfig } from '@opencode-ai/sdk';
 
+import { AgentTransportUnavailableError } from '../transient-agent-error.ts';
+
 // `@opencode-ai/sdk` is ESM-only, so in a CommonJS load context a
 // top-level `import` would fail at module-load time on every test that
 // touches this file. Lazy-load via dynamic
@@ -492,12 +494,7 @@ export class OpencodeFactoryAgent implements LoopAgent {
       };
     }
     if (sessionWaitResult?.status === 'transport-error') {
-      return {
-        status: 'blocked',
-        toolCalls: toolCallLog,
-        usage,
-        message: sessionWaitResult.message,
-      };
+      throw new AgentTransportUnavailableError(sessionWaitResult.message);
     }
     return {
       status: toolCallLog.length > 0 ? 'done' : 'needs_iteration',
