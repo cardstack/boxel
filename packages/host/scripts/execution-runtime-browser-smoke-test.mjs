@@ -56,7 +56,10 @@ test('the wild corpus remains fifty unique, intentional CTSE cards', () => {
       new URL(entry.referenceUrl).origin,
       'https://realms-staging.stack.cards',
     );
-    assert.equal(new URL(entry.candidateUrl).origin, 'https://localhost:4200');
+    assert.equal(
+      new URL(entry.candidateUrl).origin,
+      'https://host.codex-execution-runtime.localhost',
+    );
     assert.ok(entry.category);
     assert.ok(entry.sourceUrl);
   }

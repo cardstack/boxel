@@ -8,7 +8,7 @@
  * staging-backed local Host is the candidate.
  */
 const referenceOrigin = 'https://realms-staging.stack.cards';
-const candidateOrigin = 'https://localhost:4200';
+const candidateOrigin = 'https://host.codex-execution-runtime.localhost';
 
 export const executionRuntimeWildUrlMatrix = [
   // Format delegation, rich content, FileDef, and browser transitions.
@@ -123,13 +123,13 @@ export const executionRuntimeWildUrlMatrix = [
     'staff fields, enums, dates, and relationship projection',
   ),
   row(
-    'clinical-study-stress',
-    'clinical',
-    'middle-wolverine',
-    'Clinical/StudySite/stdy-301-site-110-stress',
-    'Clinical/study-site.gts',
-    'SITE-110',
-    'the same clinical graph through a delayed/adverse-event branch',
+    'bpm-architecture-thesis',
+    'rich-content',
+    'bpm-architecture',
+    'ArchitectureDoc/01-thesis',
+    'architecture-doc.gts',
+    'BPM is npm for Boxel’s ESM world',
+    'real-world rich architecture document with a table, typography, and authored Capsule presentation',
   ),
   row(
     'classroom-workflow',

@@ -49,7 +49,7 @@ when it is the current persisted example for that module.
 |  10 | clinical           | `hospital-operations`         | [staging](https://realms-staging.stack.cards/ctse/working-loon/Hospital/HospitalOperations/st-aurelius-medical-center)                                        | [localhost](https://localhost:4200/ctse/working-loon/Hospital/HospitalOperations/st-aurelius-medical-center)                                        | hospital dashboard composition over patients and staff              |
 |  11 | clinical           | `hospital-patient`            | [staging](https://realms-staging.stack.cards/ctse/working-loon/Hospital/HospitalPatient/sun-li-park)                                                          | [localhost](https://localhost:4200/ctse/working-loon/Hospital/HospitalPatient/sun-li-park)                                                          | nested clinical values, medication lists, and patient presentation  |
 |  12 | clinical           | `hospital-staff`              | [staging](https://realms-staging.stack.cards/ctse/working-loon/Hospital/HospitalStaff/dr-amara-osei)                                                          | [localhost](https://localhost:4200/ctse/working-loon/Hospital/HospitalStaff/dr-amara-osei)                                                          | staff fields, enums, dates, and relationship projection             |
-|  13 | clinical           | `clinical-study-stress`       | [staging](https://realms-staging.stack.cards/ctse/middle-wolverine/Clinical/StudySite/stdy-301-site-110-stress)                                               | [localhost](https://localhost:4200/ctse/middle-wolverine/Clinical/StudySite/stdy-301-site-110-stress)                                               | the clinical graph through a delayed/adverse-event branch           |
+|  13 | rich content       | `bpm-architecture-thesis`     | [staging](https://realms-staging.stack.cards/ctse/bpm-architecture/ArchitectureDoc/01-thesis)                                                                 | [localhost](https://host.codex-execution-runtime.localhost/ctse/bpm-architecture/ArchitectureDoc/01-thesis)                                         | rich document table, typography, and Capsule presentation           |
 |  14 | Tribeca Prep       | `classroom-workflow`          | [staging](https://realms-staging.stack.cards/ctse/voluntary-llama/ClassroomWorkflowDashboard/classroom-2a)                                                    | [localhost](https://localhost:4200/ctse/voluntary-llama/ClassroomWorkflowDashboard/classroom-2a)                                                    | classroom workflow, lists, controls, and dense status UI            |
 |  15 | Tribeca Prep       | `head-of-school-dashboard`    | [staging](https://realms-staging.stack.cards/ctse/early-swift/HeadOfSchoolDashboardMockup/main)                                                               | [localhost](https://localhost:4200/ctse/early-swift/HeadOfSchoolDashboardMockup/main)                                                               | school-wide dashboard composition and responsive layout             |
 |  16 | Tribeca Prep       | `hero-classroom-dashboard`    | [staging](https://realms-staging.stack.cards/ctse/early-swift/HeroClassroomDashboardMockup/main)                                                              | [localhost](https://localhost:4200/ctse/early-swift/HeroClassroomDashboardMockup/main)                                                              | classroom hero dashboard, cards, controls, and images               |
@@ -62,7 +62,7 @@ when it is the current persisted example for that module.
 |  23 | music              | `music-coder`                 | [staging](https://realms-staging.stack.cards/ctse/frostbay-haven/MusicCoder/e3e86660-a2be-4b5d-bcd0-b294e0bcc042)                                             | [localhost](https://localhost:4200/ctse/frostbay-haven/MusicCoder/e3e86660-a2be-4b5d-bcd0-b294e0bcc042)                                             | music composition state and browser audio APIs                      |
 |  24 | music              | `kpop-musical`                | [staging](https://realms-staging.stack.cards/ctse/personal/KPopDemonHunterMusical/c797808d-15eb-4a8c-bd7a-0f61dbbac88c)                                       | [localhost](https://localhost:4200/ctse/personal/KPopDemonHunterMusical/c797808d-15eb-4a8c-bd7a-0f61dbbac88c)                                       | nested cast and musical-number composition                          |
 |  25 | music              | `music-library`               | [staging](https://realms-staging.stack.cards/ctse/persistent-possum/MusicLibraryMockup/demo)                                                                  | [localhost](https://localhost:4200/ctse/persistent-possum/MusicLibraryMockup/demo)                                                                  | surface-based library, player layout, selection, and scrolling      |
-|  26 | queries            | `assistant-recipe-gallery`    | [staging](https://realms-staging.stack.cards/ctse/assistant-realm-runner-poc/RecipeGallery/home)                                                              | [localhost](https://localhost:4200/ctse/assistant-realm-runner-poc/RecipeGallery/home)                                                              | query-backed gallery and linked recipe cards                        |
+|  26 | queries            | `assistant-recipe-gallery`    | [staging](https://realms-staging.stack.cards/ctse/assistant-realm-runner-poc/RecipeGallery/home)                                                              | [localhost](https://host.codex-execution-runtime.localhost/ctse/assistant-realm-runner-poc/RecipeGallery/home)                                      | query-backed gallery and linked recipe cards                        |
 |  27 | async              | `assistant-run`               | [staging](https://realms-staging.stack.cards/ctse/assistant-realm-runner-poc/AssistantRun/5b0c9ccb-80a7-40ba-a869-7212e25345a9)                               | [localhost](https://localhost:4200/ctse/assistant-realm-runner-poc/AssistantRun/5b0c9ccb-80a7-40ba-a869-7212e25345a9)                               | Host tools, progress, and long-running assistant state              |
 |  28 | interaction        | `surface-keyboard-navigation` | [staging](https://realms-staging.stack.cards/ctse/persistent-possum/KeyboardSurfaceNavigation/demo)                                                           | [localhost](https://localhost:4200/ctse/persistent-possum/KeyboardSurfaceNavigation/demo)                                                           | focus ladder, keyboard traversal, and selection                     |
 |  29 | composition        | `surface-combinatorial`       | [staging](https://realms-staging.stack.cards/ctse/persistent-possum/CombinatorialWorkspace/demo)                                                              | [localhost](https://localhost:4200/ctse/persistent-possum/CombinatorialWorkspace/demo)                                                              | recursively nested Surface types and stable paths                   |
@@ -128,7 +128,7 @@ Run this lane with the same browser runner:
 
 ```js
 let smoke =
-  await import('/Users/chris/Projects/boxel/packages/host/scripts/execution-runtime-browser-smoke.mjs');
+  await import('./packages/host/scripts/execution-runtime-browser-smoke.mjs');
 let fileTwins =
   await import('/Users/chris/Projects/boxel/packages/host/scripts/execution-runtime-file-twin-corpus.mjs');
 let result = await smoke.runExecutionRuntimeBrowserSmoke({
@@ -182,10 +182,10 @@ Use the existing browser smoke runner with this single matrix:
 let smoke =
   await import('/Users/chris/Projects/boxel/packages/host/scripts/execution-runtime-browser-smoke.mjs');
 let wild =
-  await import('/Users/chris/Projects/boxel/packages/host/scripts/execution-runtime-wild-corpus.mjs');
+  await import('./packages/host/scripts/execution-runtime-wild-corpus.mjs');
 let result = await smoke.runExecutionRuntimeBrowserSmoke({
   browser,
-  candidateOrigin: 'https://localhost:4200',
+  candidateOrigin: 'https://host.codex-execution-runtime.localhost',
   cases: wild.executionRuntimeWildCorpusCases,
   continueOnReferenceDrift: true,
 });
@@ -212,3 +212,35 @@ the 50 card paths remain identical.
   batch has **not** yet been claimed. The matrix is the input for that next
   run, and its failures should become reusable protocol tests rather than
   card-specific exceptions.
+
+### Authenticated 15-card readiness sample — 2026-08-12
+
+The first signed-in sample used the dedicated staging-backed Host at
+`https://host.codex-execution-runtime.localhost`. A row is not called correct
+merely because the card shell mounted: its authored semantic signature had to
+appear, the selected execution tier had to be observable, and Sandbox rows had
+to expose substantive content inside the child document.
+
+| Outcome                          | Cards                                                                                                                                                                                                                                                         | Evidence                                                                                                                                                                                                                                                                                                                                      |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Eventually correct               | `bpm-architecture-thesis`, `format-preview-news`, `assistant-recipe-gallery`, `clinical-study-site`, `airline-international`, `invoice-billing`, `joinery-brand-guide`, `currency-field-demo`, `surface-basic-layout`, `tier-fast-food`, `tribeca-sign-maker` | Direct, Capsule, and Sandbox all produced substantive persisted output. The sample includes query results, deep BXL/computeVia graphs, nested linked objects, Base CurrencyField formats, a Surface booking workspace, 20 ranked/decodeable restaurant images, and a live Three.js canvas.                                                    |
+| Inconclusive environment failure | `rich-markdown`, `hospital-operations`, `filedef-design-board`, `deal-intake`                                                                                                                                                                                 | Three cards remained in the pre-routing `Loading card` state while the Host recorded staging fetch failures. Rich Markdown retained its readable last-known-good document, but its external ProseMirror bundle fetch from Vercel failed, so interactivity could not be evaluated. No runtime semantic verdict is assigned to these four rows. |
+
+This sample found no new semantic mismatch after readiness completed, but it
+did find an unacceptable readiness problem. Clean cards commonly took 68–143
+seconds after a full navigation. `invoice-billing` and
+`surface-basic-layout` required roughly three minutes before the Sandbox child
+became substantive. `tier-fast-food` took 143 seconds and
+`tribeca-sign-maker` took 129 seconds. Full navigation also repeatedly rebooted Host/Matrix work,
+so the next runner revision must record two timings separately:
+
+1. application/auth readiness, and
+2. execution-session routing through substantive Direct, Capsule, or Sandbox
+   output.
+
+The smoke runner must persist each case as it completes and bound cancellation
+per case. A single long in-memory batch can otherwise exceed the browser
+control deadline and hide already-collected evidence. Pre-routing network
+failure, runtime failure, semantic mismatch, interaction failure, and slow but
+eventually correct output are separate statuses; none should be collapsed into
+one red/green value.

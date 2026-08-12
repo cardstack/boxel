@@ -384,16 +384,20 @@ async function settle(tab, expectedText, timeoutMs) {
             ),
           ),
           fatal: fatalText.some((value) => text.includes(value)),
+          loadingCard: Boolean(
+            document.querySelector('[aria-label="Loading card"]'),
+          ),
           ready:
-            (normalizedExpectedText.length > 0
-              ? normalizedExpectedText.every((value) =>
-                  normalizedText.includes(value),
-                )
-              : Boolean(
-                  document.querySelector(
-                    '[data-boxel-card-id], [data-boxel-card-container], .boxel-card-container',
-                  ),
-                )) && text.trim() !== 'Loading…',
+            Boolean(
+              document.querySelector(
+                '[data-boxel-card-id], [data-boxel-card-container], .boxel-card-container',
+              ),
+            ) &&
+            !document.querySelector('[aria-label="Loading card"]') &&
+            (normalizedExpectedText.length === 0 ||
+              normalizedExpectedText.every((value) =>
+                normalizedText.includes(value),
+              )),
           signIn: text.includes('Sign in to your Boxel Account'),
         };
       },
@@ -607,11 +611,31 @@ async function probe(
       .catch(() => undefined);
   }
   let startedAt = performance.now();
-  await tab.goto(url);
-  await tab.playwright.waitForLoadState({
-    state: 'domcontentloaded',
-    timeoutMs,
-  });
+  let currentUrl = await tab.url();
+  if (currentUrl !== url) {
+    try {
+      await tab.goto(url);
+    } catch (error) {
+      // The in-app browser's navigation promise can outlive the top-level
+      // document when a long-running Sandbox child or Matrix bootstrap keeps
+      // the navigation open. Once the requested document committed, `settle`
+      // is the authoritative readiness check; a pending load event is not a
+      // card failure.
+      let committedUrl = await tab.url();
+      if (new URL(committedUrl).pathname !== new URL(url).pathname) {
+        throw error;
+      }
+    }
+  }
+  await tab.playwright
+    .waitForLoadState({
+      state: 'domcontentloaded',
+      timeoutMs,
+    })
+    .catch(async (error) => {
+      let readyState = await tab.playwright.evaluate(() => document.readyState);
+      if (readyState === 'loading') throw error;
+    });
   let settled = await settle(tab, smokeCase.mustContain, timeoutMs);
   let detectedExecution = checkExecution
     ? await tab.playwright.evaluate(() => [
@@ -1593,6 +1617,55 @@ export async function runExecutionRuntimeBrowserSmoke({
               sandboxTeardown.failures.length
             ? 'candidate-regression'
             : 'pass',
+  };
+}
+
+/**
+ * Run the curated smoke cohort against only the current candidate Host.
+ *
+ * Use this after the reference expectations have been captured. It keeps the
+ * fast, repeated development lane independent from staging availability while
+ * retaining the same semantic, interaction, execution, and lifecycle checks.
+ * A candidate failure should still be compared with its live staging twin
+ * before it is classified as a product regression.
+ */
+export async function runExecutionRuntimeCandidateSmoke({
+  browser,
+  candidateTab,
+  candidateOrigin,
+  cases = executionRuntimeSmokeCases,
+  performanceRepeats = 0,
+  timeoutMs = 20_000,
+}) {
+  if (!browser) throw new Error('browser is required');
+  if (!candidateOrigin) throw new Error('candidateOrigin is required');
+
+  let candidate = await runOrigin(browser, candidateOrigin, cases, {
+    checkExecution: true,
+    collectPerformance: performanceRepeats > 0,
+    performanceRepeats,
+    tab: candidateTab,
+    timeoutMs,
+  });
+  let sandboxTeardown = await auditSandboxTeardown(
+    candidate.tab,
+    candidateOrigin,
+    cases,
+    timeoutMs,
+  );
+  let sandboxLifecycle = await auditSandboxLifecycle(candidate.tab, cases);
+  let failures = candidate.results.filter((result) => !result.assessment.pass);
+
+  return {
+    candidate,
+    sandboxLifecycle,
+    sandboxTeardown,
+    status:
+      failures.length ||
+      sandboxLifecycle.failures.length ||
+      sandboxTeardown.failures.length
+        ? 'candidate-regression'
+        : 'pass',
   };
 }
 
