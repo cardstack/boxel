@@ -29,6 +29,7 @@
     "test:wait-for-servers": "./scripts/test-wait-for-servers.sh",
     "test:live": "./scripts/live-test-wait-for-servers.sh",
     "test:execution-runtime-smoke": "node --test scripts/execution-runtime-browser-smoke-test.mjs",
+    "test:environment-config": "node scripts/verify-test-environment-config.mjs",
     "ember-test-pre-built": "sleep 15 && ember test --path ./dist --query \"shard=$HOST_TEST_PARTITION&shardCount=$HOST_TEST_PARTITION_COUNT\"",
     "wait": "sleep 10000000",
     "test:ember": "vite build --mode development && ember test --path dist"

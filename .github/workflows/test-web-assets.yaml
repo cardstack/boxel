@@ -100,6 +100,12 @@ jobs:
           # vite chunks. Empty preserves the standard-mode defaults.
           BOXEL_ENVIRONMENT: ${{ inputs.boxel_environment }}
 
+      - name: Verify Host test environment config
+        run: pnpm test:environment-config
+        working-directory: packages/host
+        env:
+          BOXEL_ENVIRONMENT: ${{ inputs.boxel_environment }}
+
       - name: Write assets manifest
         shell: bash
         run: |

@@ -281,23 +281,46 @@ function isolatedEnvironmentConfigPlugin(mode) {
     return;
   }
 
-  let environment = mode === 'production' ? 'production' : 'development';
-  let config = require('./config/environment')(environment);
-  let encodedConfig = encodeURIComponent(JSON.stringify(config));
+  let applicationEnvironment =
+    mode === 'production' ? 'production' : 'development';
+  let encodedConfigs = new Map(
+    [applicationEnvironment, 'test'].map((environment) => [
+      environment,
+      encodeURIComponent(
+        JSON.stringify(require('./config/environment')(environment)),
+      ),
+    ]),
+  );
   let configMetaRE =
     /(<meta\s+name="@cardstack\/host\/config\/environment"\s+content=")[^"]*("\s*\/?>)/;
+
+  function environmentForDocument(context) {
+    // Vite's development server uses the request path while a production
+    // build also provides the source filename. Check both so `/tests/` and
+    // the built `tests/index.html` receive the test configuration even though
+    // the overall Vite build deliberately runs in development mode.
+    let documentPaths = [context?.path, context?.filename].filter(Boolean);
+    let isTestDocument = documentPaths.some((documentPath) =>
+      /(?:^|[/\\])tests(?:[/\\]index\.html)?[/\\]?$/.test(
+        documentPath.split(/[?#]/, 1)[0],
+      ),
+    );
+    return isTestDocument ? 'test' : applicationEnvironment;
+  }
 
   return {
     name: 'boxel-isolated-environment-config',
     enforce: 'post',
     transformIndexHtml: {
       order: 'post',
-      handler(html) {
+      handler(html, context) {
         if (!configMetaRE.test(html)) {
           throw new Error(
             'Unable to isolate Boxel environment config: config meta tag is missing',
           );
         }
+        let environment = environmentForDocument(context);
+        let encodedConfig = encodedConfigs.get(environment);
         return html.replace(configMetaRE, `$1${encodedConfig}$2`);
       },
     },
