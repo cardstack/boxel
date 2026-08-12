@@ -250,6 +250,15 @@ module('Acceptance | svg image def', function (hooks) {
       img?.getAttribute('src')?.includes('sample.svg'),
       'img src references the SVG file',
     );
+    assert.strictEqual(
+      img?.getAttribute('data-image-fit'),
+      'contain',
+      'a vector letterboxes at its own proportions instead of cropping',
+    );
+    assert.ok(
+      document.querySelector('[data-prerender] [data-test-file-isolated]'),
+      'the shared isolated shell hosts the preview',
+    );
   });
 
   test('indexing stores SVG metadata and file meta uses it', async function (assert) {
@@ -329,7 +338,7 @@ module('Acceptance | svg image def', function (hooks) {
     let { status } = await capturePrerenderResult('innerHTML');
     assert.strictEqual(status, 'ready', 'render completed');
 
-    let imgSelector = '[data-prerender] .image-isolated__img';
+    let imgSelector = '[data-prerender] [data-test-image-preview]';
     let img = document.querySelector(imgSelector) as HTMLImageElement | null;
     assert.ok(img, 'img element is rendered');
     assert.ok(
