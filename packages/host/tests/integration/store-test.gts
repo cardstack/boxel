@@ -3753,7 +3753,18 @@ module('Integration | Store', function (hooks) {
           invalidations: [module],
         } as RealmEventContent);
       }
-      await settled();
+      // `settled()` observes every waiter in the application, including
+      // long-lived realm/index activity that this synthetic event burst did
+      // not start and does not need to finish. Wait on the finite operation
+      // this test owns instead: every invalidation has reached a rebuild and
+      // the keep-latest task has drained its pending run.
+      await waitUntil(
+        () =>
+          new Set(invalidationBatches.flat()).size ===
+            invalidatedModules.length &&
+          !(storeService as any).rebuildForCodeChange.isRunning,
+        { timeout: 10_000 },
+      );
     } finally {
       rebuilds.restore();
       (storeService as any).reestablishReferencesForCodeChange =

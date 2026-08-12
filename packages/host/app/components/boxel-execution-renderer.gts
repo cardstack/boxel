@@ -666,14 +666,22 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
             // above, which already ran synchronously for this generation as
             // part of `session.update()`'s own `notify()` — no separate
             // assignment needed here.
-            let [fields, slot] = await Promise.all([
-              this.boxelExecution.fieldPortalsFor(card),
-              session.getRenderSlot(
-                format ?? 'isolated',
-                hostOwnsBox,
-                componentCodeRef,
-              ),
-            ]);
+            let slot = await session.getRenderSlot(
+              format ?? 'isolated',
+              hostOwnsBox,
+              componentCodeRef,
+            );
+            // `@fields` is a Capsule boundary: its portals mediate authored
+            // field renderers back through Host policy. Direct components
+            // already read the canonical Box graph, while Sandbox owns its
+            // field graph in the child. Building portals for either is not
+            // merely wasted work: a Direct search result that is unmounted
+            // and later rendered again can retain the unused portal graph and
+            // feed Store/search invalidations back into its new render.
+            let fields =
+              slot.owner === 'capsule'
+                ? await this.boxelExecution.fieldPortalsFor(card)
+                : {};
             if (slot.owner === 'trusted-base') {
               slot = this.boxelExecution.trustedBaseRenderSlotFor(
                 card,

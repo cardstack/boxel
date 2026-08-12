@@ -232,10 +232,6 @@ module('Integration | preview', function (hooks) {
   });
 
   test('an authored relationship portal preserves trusted Base broken-link slots without directly rendering present authored siblings', async function (assert) {
-    const BrokenLink = <template>
-      <span data-test-rp-broken-link>Missing relationship</span>
-    </template>;
-
     let values: unknown[] = ['present relationship', 'present sibling'];
     let relationshipState = new TrackedObject({ broken: false });
     let Portal = createBoxelFieldPortal(
@@ -244,8 +240,18 @@ module('Integration | preview', function (hooks) {
       { fieldType: 'linksToMany', fieldName: 'pets' },
       undefined,
       {
-        isBroken: (index) => index === 0 && relationshipState.broken,
-        component: (index) => (index === 0 ? (BrokenLink as never) : undefined),
+        broken: (index) =>
+          index === 0 && relationshipState.broken
+            ? {
+                kind: 'not-found',
+                reference: 'https://example.test/Pet/missing',
+                errorDoc: {
+                  message: 'Missing relationship',
+                  status: 404,
+                  additionalErrors: null,
+                },
+              }
+            : undefined,
       },
     );
 
@@ -261,18 +267,15 @@ module('Integration | preview', function (hooks) {
         'present relationship',
         'the initially live relationship uses the Host portal',
       );
-    assert.dom('[data-test-rp-broken-link]').doesNotExist();
+    assert.dom('[data-test-broken-link-template]').doesNotExist();
 
     values[0] = undefined;
     relationshipState.broken = true;
     await settled();
 
     assert
-      .dom('[data-test-rp-broken-link]')
-      .hasText(
-        'Missing relationship',
-        'the failed slot delegates only its placeholder to trusted Base',
-      );
+      .dom('[data-test-broken-link-template]')
+      .exists('the failed slot delegates its state to the trusted placeholder');
     assert
       .dom('.boxel-field-portal-value')
       .hasText(

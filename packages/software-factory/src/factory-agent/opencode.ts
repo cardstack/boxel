@@ -367,6 +367,7 @@ export class OpencodeFactoryAgent implements LoopAgent {
       });
       let sessionId = (session.data as { id: string }).id;
       log.info(`session: ${sessionId}`);
+      let requestController = new AbortController();
 
       // Subscribe to opencode's per-directory event bus. Drives both
       // visibility (tool calls + step transitions logged) and error
@@ -376,6 +377,7 @@ export class OpencodeFactoryAgent implements LoopAgent {
       let stopEventLog = subscribeForLogging(
         client,
         sessionId,
+        requestController.signal,
         (message) => {
           sessionErrorMessage = message;
           resolveSessionError();
@@ -403,6 +405,7 @@ export class OpencodeFactoryAgent implements LoopAgent {
       let promptPromise = client.session
         .prompt({
           path: { id: sessionId },
+          signal: requestController.signal,
           body: {
             model: {
               providerID: FACTORY_PROVIDER_ID,
@@ -447,6 +450,16 @@ export class OpencodeFactoryAgent implements LoopAgent {
           }),
         ]);
       } finally {
+        // Both SDK calls are intentionally long-lived: `prompt` waits for the
+        // whole model turn and `event.subscribe` owns an SSE connection. Once
+        // any independent completion signal wins the race, retaining either
+        // request only keeps undici sockets (and therefore the CLI process)
+        // alive. This is especially visible after the opencode child dies:
+        // the issue loop has already reached its terminal result, but the
+        // factory command otherwise survives until its outer watchdog kills
+        // it. Abort only our client-side requests; the session lifecycle is
+        // still closed by `close()` in the orchestrator's outer `finally`.
+        requestController.abort();
         // Best-effort drain so sockets close cleanly when they can,
         // bounded so we never block on the documented opencode 1.14.34
         // bug where `session.prompt` returns but never flushes the HTTP
@@ -887,14 +900,19 @@ function num(v: unknown): number {
  * runs.
  */
 async function subscribeForLogging(
-  client: { event: { subscribe: () => Promise<unknown> } },
+  client: {
+    event: {
+      subscribe: (options?: { signal?: AbortSignal }) => Promise<unknown>;
+    };
+  },
   sessionId: string,
+  signal: AbortSignal,
   onError?: (message: string) => void,
   onUsage?: (usage: TurnUsage) => void,
 ): Promise<void> {
   let events: { stream: AsyncIterable<unknown> };
   try {
-    events = (await client.event.subscribe()) as {
+    events = (await client.event.subscribe({ signal })) as {
       stream: AsyncIterable<unknown>;
     };
   } catch {

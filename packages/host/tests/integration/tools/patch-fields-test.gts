@@ -33,6 +33,8 @@ import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
 module('Integration | Command | patch-fields', function (hooks) {
+  const saveWaitTimeoutMs = 5_000;
+
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
@@ -224,7 +226,10 @@ module('Integration | Command | patch-fields', function (hooks) {
         'store.patch receives doNotWaitForPersist option',
       );
 
-      await waitUntil(() => saves > 0);
+      await waitUntil(() => saves > 0, {
+        timeout: saveWaitTimeoutMs,
+        timeoutMessage: 'timed out waiting for save to complete',
+      });
 
       let persistedCard = await store.get(cardId);
       if (isCard(persistedCard)) {

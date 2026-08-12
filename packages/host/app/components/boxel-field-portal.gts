@@ -2,10 +2,14 @@ import Component from '@glimmer/component';
 
 import { consume } from 'ember-provide-consume-context';
 
+import { BrokenLinkTemplate } from '@cardstack/boxel-ui/components';
+
 import {
+  CardCrudFunctionsContextName,
   DefaultFormatsContextName,
   isBaseDefInstance,
   isCardInstance,
+  type SerializedError,
   type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 
@@ -27,6 +31,12 @@ interface Signature {
 }
 
 type PortalComponent = ComponentLike<Signature>;
+
+interface BrokenRelationship {
+  kind: 'error' | 'not-found';
+  reference: string;
+  errorDoc: SerializedError;
+}
 
 /** What the Host knows about the field this portal renders. */
 export interface PortalFieldMeta {
@@ -76,18 +86,17 @@ class BoxelFieldPortal extends Component<Signature> {
   static write: ((value: unknown) => void) | undefined;
   static relativeTo: RealmResourceIdentifier | undefined;
   static fieldMeta: PortalFieldMeta | undefined;
-  /**
-   * A trusted Base component is available only for terminal relationship
-   * failures. Base owns the broken-link visual contract; the portal still
-   * owns every present authored value, so authored templates always re-enter
-   * the execution router rather than leaking through Direct rendering.
-   */
-  static readBrokenComponent: (() => PortalComponent | undefined) | undefined;
-  static isBroken: (() => boolean) | undefined;
+  /** Base owns the terminal relationship state and warning presentation. */
+  static readBroken: (() => BrokenRelationship | undefined) | undefined;
   static readItems: (() => PortalComponent[]) | undefined;
 
   @consume(DefaultFormatsContextName)
   declare private defaultFormats: FieldFormats | undefined;
+
+  @consume(CardCrudFunctionsContextName)
+  declare private cardCrudFunctions:
+    | { viewCard?: (cardOrURL: URL | { id: string } | string) => void }
+    | undefined;
 
   private get value(): unknown {
     return (this.constructor as typeof BoxelFieldPortal).read();
@@ -113,11 +122,8 @@ class BoxelFieldPortal extends Component<Signature> {
     return this.fieldMeta?.fieldName;
   }
 
-  private get brokenComponent(): PortalComponent | undefined {
-    let constructor = this.constructor as typeof BoxelFieldPortal;
-    return constructor.isBroken?.()
-      ? constructor.readBrokenComponent?.()
-      : undefined;
+  private get broken(): BrokenRelationship | undefined {
+    return (this.constructor as typeof BoxelFieldPortal).readBroken?.();
   }
 
   private get items(): PortalComponent[] | undefined {
@@ -182,57 +188,85 @@ class BoxelFieldPortal extends Component<Signature> {
     }
   }
 
+  private get brokenFormat(): 'atom' | 'embedded' | 'fitted' | 'isolated' {
+    switch (this.format) {
+      case 'atom':
+      case 'embedded':
+      case 'fitted':
+      case 'isolated':
+        return this.format;
+      case 'edit':
+        return 'fitted';
+      default:
+        return 'embedded';
+    }
+  }
+
+  private get viewBrokenCard(): ((url: URL) => void) | undefined {
+    let viewCard = this.cardCrudFunctions?.viewCard;
+    return viewCard ? (url) => viewCard(url) : undefined;
+  }
+
   <template>
     {{! RP-11.5: the ElementTracker registration and card data attributes are
       stamped by the renderer on its own slot root (the one registration
       site, shared with root renders); this portal contributes the field
       identity overlays classify entries by. }}
-    {{#if this.brokenComponent}}
-      <this.brokenComponent @format={{this.format}} ...attributes />
-    {{else if this.items}}
-      <div
-        class='plural-field {{this.fieldType}}-field'
-        data-test-plural-view-field={{this.fieldName}}
-        data-test-plural-view={{this.fieldType}}
-        data-test-plural-view-format={{this.format}}
-        ...attributes
-      >
-        {{#each this.items as |Item|}}
-          <div class='{{this.fieldType}}-itemContainer'>
-            <Item @format={{this.format}} />
-          </div>
-        {{/each}}
-      </div>
-    {{else if this.boxel}}
-      <BoxelExecutionRenderer
-        @card={{this.boxel}}
-        @format={{this.format}}
-        @displayContainer={{false}}
-        @relativeTo={{this.relativeTo}}
-        @set={{this.write}}
-        @fieldType={{this.fieldType}}
-        @fieldName={{this.fieldName}}
-        data-test-field-component-card
-        ...attributes
-      />
-    {{else if this.boxels}}
-      {{#each this.boxels as |boxel|}}
+    {{#let this.broken as |broken|}}
+      {{#if broken}}
+        <BrokenLinkTemplate
+          @brokenUrl={{broken.reference}}
+          @errorDoc={{broken.errorDoc}}
+          @state={{broken.kind}}
+          @format={{this.brokenFormat}}
+          @viewCard={{this.viewBrokenCard}}
+          ...attributes
+        />
+      {{else if this.items}}
+        <div
+          class='plural-field {{this.fieldType}}-field'
+          data-test-plural-view-field={{this.fieldName}}
+          data-test-plural-view={{this.fieldType}}
+          data-test-plural-view-format={{this.format}}
+          ...attributes
+        >
+          {{#each this.items as |Item|}}
+            <div class='{{this.fieldType}}-itemContainer'>
+              <Item @format={{this.format}} />
+            </div>
+          {{/each}}
+        </div>
+      {{else if this.boxel}}
         <BoxelExecutionRenderer
-          @card={{boxel}}
+          @card={{this.boxel}}
           @format={{this.format}}
           @displayContainer={{false}}
           @relativeTo={{this.relativeTo}}
+          @set={{this.write}}
           @fieldType={{this.fieldType}}
           @fieldName={{this.fieldName}}
           data-test-field-component-card
           ...attributes
         />
-      {{/each}}
-    {{else}}
-      <span class='boxel-field-portal-value' ...attributes>
-        {{this.displayValue}}
-      </span>
-    {{/if}}
+      {{else if this.boxels}}
+        {{#each this.boxels as |boxel|}}
+          <BoxelExecutionRenderer
+            @card={{boxel}}
+            @format={{this.format}}
+            @displayContainer={{false}}
+            @relativeTo={{this.relativeTo}}
+            @fieldType={{this.fieldType}}
+            @fieldName={{this.fieldName}}
+            data-test-field-component-card
+            ...attributes
+          />
+        {{/each}}
+      {{else}}
+        <span class='boxel-field-portal-value' ...attributes>
+          {{this.displayValue}}
+        </span>
+      {{/if}}
+    {{/let}}
   </template>
 }
 
@@ -242,8 +276,7 @@ function createPortalClass(
   fieldMeta: PortalFieldMeta | undefined,
   write: ((value: unknown) => void) | undefined,
   options: {
-    readBrokenComponent?: () => PortalComponent | undefined;
-    isBroken?: () => boolean;
+    readBroken?: () => BrokenRelationship | undefined;
     readItems?: () => PortalComponent[];
   } = {},
 ): PortalComponent {
@@ -252,8 +285,7 @@ function createPortalClass(
     static write = write;
     static relativeTo = relativeTo;
     static fieldMeta = fieldMeta;
-    static readBrokenComponent = options.readBrokenComponent;
-    static isBroken = options.isBroken;
+    static readBroken = options.readBroken;
     static readItems = options.readItems;
   } as unknown as PortalComponent;
 }
@@ -264,8 +296,7 @@ export function createBoxelFieldPortal(
   fieldMeta?: PortalFieldMeta,
   write?: (value: unknown) => void,
   relationship?: {
-    isBroken(index: number): boolean;
-    component(index: number): PortalComponent | undefined;
+    broken(index: number): BrokenRelationship | undefined;
   },
 ): PortalComponent {
   // Plurality is a property of the FIELD (its declared kind), never of a
@@ -277,10 +308,7 @@ export function createBoxelFieldPortal(
     fieldMeta?.fieldType !== 'linksToMany'
   ) {
     return createPortalClass(read, relativeTo, fieldMeta, write, {
-      isBroken: relationship ? () => relationship.isBroken(0) : undefined,
-      readBrokenComponent: relationship
-        ? () => relationship.component(0)
-        : undefined,
+      readBroken: relationship ? () => relationship.broken(0) : undefined,
     });
   }
 
@@ -328,10 +356,7 @@ export function createBoxelFieldPortal(
           }
         : undefined,
       {
-        isBroken: relationship ? () => relationship.isBroken(index) : undefined,
-        readBrokenComponent: relationship
-          ? () => relationship.component(index)
-          : undefined,
+        readBroken: relationship ? () => relationship.broken(index) : undefined,
       },
     );
     itemPortals.set(index, portal);
