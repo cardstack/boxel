@@ -4,7 +4,10 @@
 [boxel-rendering-protocol.md](boxel-rendering-protocol.md) is the normative
 spec (RP ids cited throughout; the spec wins on disagreement);
 [boxel-execution-runtime-architecture.md](boxel-execution-runtime-architecture.md)
-is the original design rationale. Read this once, top to bottom, then review
+is the original design rationale; and
+[boxel-capsule-glimmer-dom-review.md](boxel-capsule-glimmer-dom-review.md)
+audits the Capsule's Glimmer wire-format bridge and shared-Host-DOM risk for
+Ember/Glimmer maintainers. Read this guide once, top to bottom, then review
 against the spec.
 
 ---
