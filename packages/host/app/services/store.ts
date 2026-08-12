@@ -2025,8 +2025,10 @@ export default class StoreService extends Service implements StoreInterface {
       executableInvalidations.length > 0 &&
       (this.rebuildForCodeChange.isRunning ||
         alreadyFlushed.size > 0 ||
-        executableInvalidations.some((i) =>
-          this.loaderService.loader.isModuleLoaded(i),
+        executableInvalidations.some(
+          (i) =>
+            this.loaderService.loader.isModuleLoaded(i) ||
+            this.loaderService.isExecutableModuleInUse(i),
         ));
 
     let reloadsTriggered = 0;
@@ -2281,7 +2283,8 @@ export default class StoreService extends Service implements StoreInterface {
       // will re-fetch it, even though the flushed loader no longer reports it.
       if (
         alreadyFlushed.has(module) ||
-        this.loaderService.loader.isModuleLoaded(module)
+        this.loaderService.loader.isModuleLoaded(module) ||
+        this.loaderService.isExecutableModuleInUse(module)
       ) {
         pending.modulesRefetched.add(module);
       }
@@ -2310,7 +2313,14 @@ export default class StoreService extends Service implements StoreInterface {
     // A code-change flush landing *during* the re-fetch below writes fresh
     // records against the new loader, so the invalidation still to come for
     // that write finds them.
-    this.loaderService.resetLoader();
+    // This is the generation-changing reset that makes the invalidated source
+    // observable. It must not be swallowed by the loader service's ordinary
+    // duplicate-call window (for example, a session/setup reset immediately
+    // before the realm index event).
+    this.loaderService.resetLoader({
+      force: true,
+      reason: 'code-change-rebuild',
+    });
     this.store.reset();
     let cardsReloaded: number | undefined;
     try {

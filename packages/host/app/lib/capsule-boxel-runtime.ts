@@ -4,6 +4,7 @@ import {
   fieldDefFormats,
   formats as renderableFormats,
   normalizeCodeRef,
+  trimExecutableExtension,
   type BoxelDescription,
   type BoxelInstanceHandle,
   type BoxelRenderRecord,
@@ -75,6 +76,32 @@ function trustedBaseFallbackRef(
     module: 'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
     name,
   };
+}
+
+/**
+ * The standard-view pin is a semantic Base reference, not a module URL
+ * identity. Runtime-common publishes it through the stable
+ * `@cardstack/base/card-api` alias while Capsule ancestry can identify the
+ * same constructor by its resolved Base URL. Comparing those module strings
+ * would silently retain the authored template instead of returning control
+ * to the trusted Host renderer.
+ */
+function isTrustedBaseFallbackOverride(
+  ref: CodeRef,
+  metadata: CapsuleCardTypeMetadata,
+): boolean {
+  let { module, name } = normalizeCodeRef(ref);
+  let expectedName =
+    metadata.definitionKind === 'field'
+      ? 'FieldDef'
+      : metadata.definitionKind === 'file'
+        ? 'FileDef'
+        : 'CardDef';
+  return (
+    name === expectedName &&
+    (module.startsWith('@cardstack/base/') ||
+      module.startsWith('https://cardstack.com/base/'))
+  );
 }
 
 /**
@@ -209,14 +236,18 @@ export default class CapsuleBoxelRuntime implements BoxelRuntime {
   getRenderSlot(
     card: BoxelInstanceHandle,
     format: string,
+    componentCodeRef?: CodeRef,
   ): Promise<CapsuleRuntimeRenderSlot> {
     let instance = this.instances.get(card);
-    let key = typeKey(instance.type, format);
+    let providerKey = componentCodeRef
+      ? JSON.stringify(normalizeCodeRef(componentCodeRef))
+      : 'default';
+    let key = `${typeKey(instance.type, format)}:${providerKey}`;
     let existing = this.renderSlots.get(key);
     if (existing) {
       return existing;
     }
-    let slot = this.renderSlotFor(instance, format);
+    let slot = this.renderSlotFor(instance, format, componentCodeRef);
     this.renderSlots.set(key, slot);
     void slot.catch(() => {
       if (this.renderSlots.get(key) === slot) {
@@ -229,8 +260,21 @@ export default class CapsuleBoxelRuntime implements BoxelRuntime {
   private async renderSlotFor(
     instance: CapsuleInstanceState,
     format: string,
+    componentCodeRef?: CodeRef,
   ): Promise<CapsuleRuntimeRenderSlot> {
-    let metadata = await this.metadataFor(instance.type);
+    let instanceMetadata = await this.metadataFor(instance.type);
+    if (
+      componentCodeRef &&
+      isTrustedBaseFallbackOverride(componentCodeRef, instanceMetadata)
+    ) {
+      // Preserve the caller's canonical ref. The Host's Base getComponent()
+      // API uses this identity to select standard view; substituting the
+      // Capsule's resolved-URL marker would mount a Direct slot but let the
+      // authored component win again inside Base.
+      return createTrustedBaseRenderSlot(componentCodeRef);
+    }
+    let provider = await this.renderProviderFor(instance, componentCodeRef);
+    let metadata = await this.metadataFor(provider);
     if (!metadata.authoredTemplateFormats.includes(format)) {
       return createTrustedBaseRenderSlot(
         trustedBaseFallbackRef(metadata.definitionKind),
@@ -238,7 +282,7 @@ export default class CapsuleBoxelRuntime implements BoxelRuntime {
     }
     let bundle: CapsuleTemplateBundle;
     try {
-      bundle = await this.templateForHandle(instance, format);
+      bundle = await this.templateForType(provider, format);
     } catch (error) {
       throw new Error(
         `Unable to capture ${instance.type.module}#${instance.type.name} ${format} template: ${error instanceof Error ? error.message : String(error)}`,
@@ -251,15 +295,47 @@ export default class CapsuleBoxelRuntime implements BoxelRuntime {
     );
   }
 
-  private templateForHandle(
-    instance: CapsuleInstanceState,
+  private templateForType(
+    type: CapsuleTypeState,
     format: string,
   ): Promise<CapsuleTemplateBundle> {
-    return this.evaluator.evaluateTemplate(
-      instance.type.module,
-      instance.type.name,
-      format,
+    return this.evaluator.evaluateTemplate(type.module, type.name, format);
+  }
+
+  /**
+   * Implements Base `getComponent()`'s provider pin without moving a
+   * template across the Capsule boundary. A matching authored ancestor is
+   * evaluated by reference inside the Capsule; an unrelated ref falls back
+   * to the instance's own type, exactly as Base does.
+   */
+  private async renderProviderFor(
+    instance: CapsuleInstanceState,
+    componentCodeRef?: CodeRef,
+  ): Promise<CapsuleTypeState> {
+    if (!componentCodeRef) {
+      return instance.type;
+    }
+    let requested = normalizeCodeRef(componentCodeRef);
+    if (
+      sameModuleIdentifier(requested.module, instance.type.module) &&
+      requested.name === instance.type.name
+    ) {
+      return instance.type;
+    }
+    let metadata = await this.metadataFor(instance.type);
+    let ancestor = metadata.ancestorTypes.find(
+      (candidate) =>
+        sameModuleIdentifier(candidate.module, requested.module) &&
+        candidate.name === requested.name,
     );
+    if (!ancestor) {
+      return instance.type;
+    }
+    return {
+      ref: componentCodeRef,
+      module: ancestor.module,
+      name: ancestor.name,
+    };
   }
 
   async serializeCard(
@@ -439,6 +515,13 @@ function formatDescriptionsFor(
 
 function typeKey(type: CapsuleTypeState, format?: string): string {
   return `${type.module}#${type.name}${format ? `:${format}` : ''}`;
+}
+
+function sameModuleIdentifier(left: string, right: string): boolean {
+  return (
+    trimExecutableExtension(left as RealmResourceIdentifier) ===
+    trimExecutableExtension(right as RealmResourceIdentifier)
+  );
 }
 
 function trustedIdentityRef(identity: {

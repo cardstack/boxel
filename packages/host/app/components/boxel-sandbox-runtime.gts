@@ -711,7 +711,15 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
         this.network.virtualNetwork,
       );
       this.runtime = new DirectBoxelRuntime(
-        () => this.loader!.import('@cardstack/base/card-api'),
+        // Use the canonical Base URL here, matching the module identity that
+        // authored card sources import. Loading the package alias separately
+        // can produce two Base module instances inside the child: the card's
+        // Field objects then write query/deserialization state into one module
+        // registry while DirectBoxelRuntime reads another. One canonical
+        // identity keeps the runtime adapter and rendered card on the same
+        // Card API, just as the Host's ordinary Loader does.
+        // eslint-disable-next-line @cardstack/boxel/no-url-form-base-imports -- the Sandbox must share authored cards' canonical Base module identity
+        () => this.loader!.import('https://cardstack.com/base/card-api'),
         () => this.loader!,
         undefined,
         store,

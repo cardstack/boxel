@@ -7,7 +7,10 @@ import { TrackedObject } from 'tracked-built-ins';
 import {
   isCssResource,
   isHtmlResource,
+  buildQuerySearchURL,
   identifyCard,
+  isCardInstance,
+  isFileDefInstance,
   getAncestor,
   Loader,
   localId,
@@ -20,6 +23,7 @@ import {
   type CodeRef,
   type FieldDefinition,
   type JSONValue,
+  type LooseCardResource,
   type LooseSingleCardDocument,
   type PrerenderedHtmlFormat,
   type Query,
@@ -96,6 +100,13 @@ import type {
   Field,
   Format,
 } from '@cardstack/base/card-api';
+
+interface HostBoundaryQuerySeed {
+  instance: BaseDef;
+  fieldName: string;
+  values: CardDef[];
+  searchURL: string;
+}
 
 /**
  * Application owner for Boxel execution runtimes.
@@ -240,6 +251,39 @@ export default class BoxelExecutionService extends Service {
     return Loader.identify(card.constructor)?.module;
   }
 
+  /**
+   * Host-side executable generation token. Replacing the Loader is the
+   * established application-wide code-generation boundary: constructors and
+   * components imported by the discarded Loader must never remain the source
+   * of a later RP generation. Returning the tracked Loader identity lets the
+   * presentation resource depend on that boundary without exposing a Loader
+   * to Direct, Capsule, or Sandbox adapters.
+   */
+  get executableGeneration(): object {
+    return this.loaderService.loader;
+  }
+
+  /**
+   * Resolve a caller-held instance back to the Store's current canonical
+   * object before forming an execution request. A code rebuild may replace a
+   * card's constructor while the surrounding Host component remains mounted;
+   * rendering the old object would pair new source with an obsolete CardDef
+   * and component. The Store remains the semantic owner in every tier.
+   */
+  canonicalCardFor(card: BaseDef): BaseDef {
+    if (!('id' in card) || typeof card.id !== 'string') {
+      return card;
+    }
+    let current = this.store.peek(card.id);
+    return isCardInstance(current) || isFileDefInstance(current)
+      ? (current as BaseDef)
+      : card;
+  }
+
+  retainExecutableModule(moduleIdentifier: string): () => void {
+    return this.loaderService.retainExecutableModule(moduleIdentifier);
+  }
+
   private volatileToken(moduleIdentifier: string): { v: number } {
     let token = this.volatileTokens.get(moduleIdentifier);
     if (!token) {
@@ -337,6 +381,7 @@ export default class BoxelExecutionService extends Service {
     format: Format | undefined,
     surfaceId: string,
     relativeTo?: RealmResourceIdentifier,
+    hostRequestedMode?: 'direct',
   ): Promise<BoxelExecutionRequest> {
     let performance: BoxelExecutionPerformanceContext = {
       operationId: `${surfaceId}:${++this.nextPerformanceOperation}`,
@@ -394,22 +439,33 @@ export default class BoxelExecutionService extends Service {
     // serialize once more so the child receives relationship data and
     // included resources rather than an empty snapshot that cannot repair
     // itself.
-    let projectionStage = startBoxelExecutionStage({
-      ...performance,
-      stage: 'projection-settle',
-    });
-    let hostProjection: HostBoxelProjection;
-    let hadPendingRelationship: boolean;
-    try {
-      let settled = await this.settleHostProjection(card, api);
-      hostProjection = settled.projection;
-      hadPendingRelationship = settled.hadPendingRelationship;
-      projectionStage.finish({
-        counters: { passes: settled.relationshipSettlementPasses },
+    let hostProjection: HostBoxelProjection | undefined;
+    let hadPendingRelationship = false;
+    let querySeeds: HostBoundaryQuerySeed[] = [];
+    // Direct owns the canonical Store instance and therefore has no graph
+    // boundary to prepare. Projecting its complete field graph here would
+    // eagerly read query-backed fields before Glimmer renders them, starting
+    // searches that main never performs and duplicating Store semantics. The
+    // Direct runtime derives its cloneable RP record from the canonical card
+    // at render time instead. Capsule and Sandbox still need the bounded,
+    // settled Host projection before data crosses their execution boundary.
+    if (hostRequestedMode !== 'direct') {
+      let projectionStage = startBoxelExecutionStage({
+        ...performance,
+        stage: 'projection-settle',
       });
-    } catch (error) {
-      projectionStage.finish({ status: 'error' });
-      throw error;
+      try {
+        let settled = await this.settleHostProjection(card, api);
+        hostProjection = settled.projection;
+        hadPendingRelationship = settled.hadPendingRelationship;
+        querySeeds = settled.querySeeds;
+        projectionStage.finish({
+          counters: { passes: settled.relationshipSettlementPasses },
+        });
+      } catch (error) {
+        projectionStage.finish({ status: 'error' });
+        throw error;
+      }
     }
     if (hadPendingRelationship) {
       document = await recordExecutionPromise(
@@ -433,9 +489,17 @@ export default class BoxelExecutionService extends Service {
       api,
       isTrustedModule,
     );
+    applyHostBoundaryQuerySeeds(
+      card,
+      projectedDocument,
+      querySeeds,
+      api,
+      (id) => this.network.virtualNetwork.unresolveURL(id),
+    );
     let request: BoxelExecutionRequest = {
       principal: this.principal,
       surfaceId,
+      hostRequestedMode,
       // A Loader-shimmed module is host-defined by construction: its class
       // identity lives in the host process and its realm file serves only a
       // shim marker (no evaluable source exists for Capsule/Sandbox to
@@ -663,7 +727,7 @@ export default class BoxelExecutionService extends Service {
     // publish only after the same bounded graph projection used at initial
     // materialization is stable, so the push lane never sends a transient
     // empty membership that has no later mutation to repair it.
-    await this.settleHostProjection(card, api);
+    let { querySeeds } = await this.settleHostProjection(card, api);
     let document = await this.cardService.serializeCard(card as never, {
       withIncluded: true,
       includeUnrenderedFields: true,
@@ -672,12 +736,20 @@ export default class BoxelExecutionService extends Service {
     if (!document.data) {
       throw new Error('Cannot push a Boxel without a serialized resource');
     }
-    return projectBoxelExecutionDocument(
+    let projectedDocument = projectBoxelExecutionDocument(
       card,
       document as LooseSingleCardDocument,
       api,
       isTrustedModule,
     );
+    applyHostBoundaryQuerySeeds(
+      card,
+      projectedDocument,
+      querySeeds,
+      api,
+      (id) => this.network.virtualNetwork.unresolveURL(id),
+    );
+    return projectedDocument;
   }
 
   /**
@@ -693,10 +765,12 @@ export default class BoxelExecutionService extends Service {
     projection: HostBoxelProjection;
     hadPendingRelationship: boolean;
     relationshipSettlementPasses: number;
+    querySeeds: HostBoundaryQuerySeed[];
   }> {
     let relationshipSettlementPasses = 0;
     let sawPendingRelationship = false;
     let resolvedQueries = new WeakMap<BaseDef, Map<string, CardDef[]>>();
+    let querySeeds = new Map<BaseDef, Map<string, HostBoundaryQuerySeed>>();
     let pendingRelationships: Array<{
       instance: BaseDef;
       fieldName: string;
@@ -714,6 +788,19 @@ export default class BoxelExecutionService extends Service {
         resolvedQueries.set(instance, fields);
       }
       fields.set(fieldName, values);
+    };
+    let markQuerySeed = (
+      instance: BaseDef,
+      fieldName: string,
+      values: CardDef[],
+      searchURL: string,
+    ) => {
+      let fields = querySeeds.get(instance);
+      if (!fields) {
+        fields = new Map();
+        querySeeds.set(instance, fields);
+      }
+      fields.set(fieldName, { instance, fieldName, values, searchURL });
     };
     let project = () => {
       sawPendingRelationship = false;
@@ -777,6 +864,14 @@ export default class BoxelExecutionService extends Service {
             })
           : [];
         markQueryResolved(instance, fieldName, instances);
+        if (request) {
+          markQuerySeed(
+            instance,
+            fieldName,
+            instances,
+            buildQuerySearchURL(request.realms, request.query),
+          );
+        }
         await primeBoundaryQueryField(
           instance,
           field,
@@ -793,6 +888,9 @@ export default class BoxelExecutionService extends Service {
       projection,
       hadPendingRelationship: relationshipSettlementPasses > 0,
       relationshipSettlementPasses,
+      querySeeds: [...querySeeds.values()].flatMap((fields) => [
+        ...fields.values(),
+      ]),
     };
   }
 
@@ -1265,6 +1363,13 @@ export default class BoxelExecutionService extends Service {
   }
 
   private async sourceFor(moduleIdentifier: string): Promise<string> {
+    // A shim's executable identity is already installed in the Host Loader.
+    // It has no independent realm source to fetch (and Direct is the only
+    // runtime allowed to consume it), but the RP classifier still needs a
+    // deterministic inert input so the request follows the same pipeline.
+    if (this.loaderService.loader.isShimmedModule(moduleIdentifier)) {
+      return `// Host-defined shim: ${moduleIdentifier}`;
+    }
     let load = () =>
       this.cardService.getSource(moduleIdentifier as RealmResourceIdentifier);
     let result = await (this.isDedicatedPrerenderApp()
@@ -1414,6 +1519,133 @@ async function primeBoundaryQueryField(
   // This is a bounded data snapshot, never a Store or SearchResource crossing
   // the execution boundary.
   api.getDataBucket(instance).set(field.name, instances);
+}
+
+/**
+ * Turn a Host-resolved query into an explicit, bounded relationship grant.
+ *
+ * Ordinary linksToMany serialization uses `field.0`, `field.1`, ... entries.
+ * That shape describes authored links, but it does not tell a receiving Store
+ * that an empty (or partial) list is the authoritative result of a query. The
+ * umbrella relationship is the existing Boxel query wire shape: `data` is the
+ * complete membership and `links.search` records which Host-owned query
+ * produced it. A boundary-local Store consumes the included cards as a seed;
+ * it never receives the Host Store or permission to execute the search.
+ */
+function applyHostBoundaryQuerySeeds(
+  root: BaseDef,
+  document: LooseSingleCardDocument,
+  seeds: HostBoundaryQuerySeed[],
+  api: typeof import('@cardstack/base/card-api'),
+  normalizeId: (id: string) => string,
+): void {
+  for (let seed of seeds) {
+    let resource = resourceForBoundaryQuerySeed(
+      root,
+      seed.instance,
+      document,
+      normalizeId,
+    );
+    if (!resource) {
+      continue;
+    }
+    let fieldName = boundaryQueryFieldName(root, seed, api);
+    let relationships = (resource.relationships ??= {});
+    let prefix = `${fieldName}.`;
+    for (let relationshipName of Object.keys(relationships)) {
+      let suffix = relationshipName.slice(prefix.length);
+      if (relationshipName.startsWith(prefix) && /^\d+$/.test(suffix)) {
+        delete relationships[relationshipName];
+      }
+    }
+    relationships[fieldName] = {
+      links: { self: null, search: seed.searchURL },
+      data: seed.values.map((value) => {
+        if (typeof value.id === 'string' && value.id.length > 0) {
+          return { type: 'card' as const, id: value.id };
+        }
+        return { type: 'card' as const, lid: value[localId] };
+      }),
+    };
+  }
+}
+
+function resourceForBoundaryQuerySeed(
+  root: BaseDef,
+  instance: BaseDef,
+  document: LooseSingleCardDocument,
+  normalizeId: (id: string) => string,
+): LooseCardResource | undefined {
+  if (instance === root || typeof (instance as CardDef).id !== 'string') {
+    return document.data;
+  }
+  let id = normalizeId((instance as CardDef).id);
+  return [document.data, ...(document.included ?? [])].find(
+    (resource): resource is LooseCardResource =>
+      resource.type === 'card' &&
+      typeof resource.id === 'string' &&
+      normalizeId(resource.id) === id,
+  );
+}
+
+function boundaryQueryFieldName(
+  root: BaseDef,
+  seed: HostBoundaryQuerySeed,
+  api: typeof import('@cardstack/base/card-api'),
+): string {
+  if (
+    seed.instance === root ||
+    typeof (seed.instance as CardDef).id === 'string'
+  ) {
+    return seed.fieldName;
+  }
+  return (
+    containedInstancePath(root, seed.instance, api)
+      ?.concat(seed.fieldName)
+      .join('.') ?? seed.fieldName
+  );
+}
+
+function containedInstancePath(
+  current: BaseDef,
+  target: BaseDef,
+  api: typeof import('@cardstack/base/card-api'),
+  seen = new WeakSet<object>(),
+): string[] | undefined {
+  if (current === target) {
+    return [];
+  }
+  if (seen.has(current)) {
+    return undefined;
+  }
+  seen.add(current);
+  let fields = api.getFields(current, { includeComputeds: false }) as Record<
+    string,
+    Field<BaseDefConstructor>
+  >;
+  for (let [fieldName, field] of Object.entries(fields)) {
+    if (field.fieldType !== 'contains' && field.fieldType !== 'containsMany') {
+      continue;
+    }
+    let value = api.peekAtField(current, fieldName);
+    let entries =
+      field.fieldType === 'containsMany' && Array.isArray(value)
+        ? value.map((entry, index) => ({
+            entry,
+            path: [fieldName, String(index)],
+          }))
+        : [{ entry: value, path: [fieldName] }];
+    for (let { entry, path } of entries) {
+      if (!entry || typeof entry !== 'object') {
+        continue;
+      }
+      let nested = containedInstancePath(entry as BaseDef, target, api, seen);
+      if (nested) {
+        return [...path, ...nested];
+      }
+    }
+  }
+  return undefined;
 }
 
 function resolveInstancePathValue(instance: BaseDef, path: string): unknown {

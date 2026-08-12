@@ -77,6 +77,7 @@ interface LiveCapsuleComponent {
 class CapsuleComponentContext {
   @tracked private revision = 0;
   private state: Record<string, unknown> = {};
+  private revisionPending = false;
 
   constructor(
     private readonly runtime: DefaultCapsuleComponentRuntime,
@@ -88,12 +89,21 @@ class CapsuleComponentContext {
   }
 
   update(descriptor: CapsuleComponentInstanceDescriptor): void {
-    // Called only from action results now (args-as-paths removed the
-    // arg-update re-instantiation path), so this always runs outside a
-    // render frame and the invalidation can be synchronous.
     this.installShape(descriptor);
     this.state = descriptor.state;
-    this.revision++;
+    // Action delivery can still be reached while Glimmer is evaluating a
+    // getter (for example a component that synchronizes derived state during
+    // render). The state swap is immediate, but invalidating a tag already
+    // consumed in that render frame triggers Glimmer's backtracking assertion.
+    // Coalesce the notification into the next microtask; readers then re-read
+    // the already-current state without recreating the authored instance.
+    if (!this.revisionPending) {
+      this.revisionPending = true;
+      queueMicrotask(() => {
+        this.revisionPending = false;
+        this.revision++;
+      });
+    }
   }
 
   readState(name: string, fallback?: unknown): unknown {

@@ -129,7 +129,6 @@ export default class RenderedMarkdown extends Component<Signature> {
   @tracked renderSlots: RenderSlot[] = [];
   @tracked private loadedCards = new Map<string, CardDef>();
   @tracked private loadedFiles = new Map<string, FileDef>();
-  private _modifierHasRun = false;
 
   // ── HTML rendering ──
 
@@ -229,16 +228,8 @@ export default class RenderedMarkdown extends Component<Signature> {
     (element: HTMLElement, _positional: unknown[]) => {
       let baseUrl = this.args.cardReferenceBaseUrl ?? undefined;
       let pendingUpdate = false;
-
-      let showFallback =
-        this._modifierHasRun ||
-        this.loadedCards.size > 0 ||
-        this.loadedFiles.size > 0;
-      this._modifierHasRun = true;
-
-      // Trigger card + file loading when content changes
-      this.loadReferencedCards.perform();
-      this.loadReferencedFiles.perform();
+      let referencesSettled = false;
+      let active = true;
 
       let collectSlots = (): RenderSlot[] => {
         let cardsByUrl = this.loadedCards;
@@ -317,9 +308,12 @@ export default class RenderedMarkdown extends Component<Signature> {
             }
           }
 
-          // No matching instance yet: show the sized loading shimmer until the
-          // load settles (showFallback), then fall back to the broken-link box.
-          if (!showFallback) {
+          // No matching instance yet: show the sized loading shimmer until
+          // both bounded reference loads acknowledge settlement, then fall
+          // back to the broken-link box. An empty result is a successful
+          // terminal state; it must not depend on a second modifier run or a
+          // non-empty result to become visible.
+          if (!referencesSettled) {
             slots.push({
               element: el,
               refType,
@@ -380,22 +374,31 @@ export default class RenderedMarkdown extends Component<Signature> {
 
       scheduleUpdate();
 
-      if (typeof MutationObserver === 'undefined') return;
+      let observer: MutationObserver | undefined;
+      if (typeof MutationObserver !== 'undefined') {
+        observer = new MutationObserver(scheduleUpdate);
+        observer.observe(element, { childList: true, subtree: true });
+      }
 
-      let observer = new MutationObserver(scheduleUpdate);
-      observer.observe(element, { childList: true, subtree: true });
-      return () => observer.disconnect();
+      let cardLoad = this.loadReferencedCards.perform();
+      let fileLoad = this.loadReferencedFiles.perform();
+      void Promise.allSettled([cardLoad, fileLoad]).then(() => {
+        if (!active) return;
+        referencesSettled = true;
+        scheduleUpdate();
+      });
+
+      return () => {
+        active = false;
+        observer?.disconnect();
+      };
     },
   );
 
   <template>
     <div
       class='markdown-content'
-      {{this.captureCardSlots
-        this.renderedHtml
-        this.loadedCards
-        this.loadedFiles
-      }}
+      {{this.captureCardSlots this.renderedHtml @cardReferenceBaseUrl}}
     >
       {{this.renderedHtml}}
     </div>

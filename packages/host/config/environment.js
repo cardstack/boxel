@@ -197,11 +197,15 @@ module.exports = function (environment) {
       process.env.RESOLVED_OPENROUTER_REALM_URL || defaults.openRouterRealmURL,
     // A Sandbox child must be served from an origin distinct from the Host.
     // Standard local development derives user.localhost from the active Host
-    // port when this is absent. Environment mode gets a dedicated
-    // sandbox.<slug>.localhost origin from the defaults above. Hosted builds
-    // must supply the deployed runtime origin.
-    boxelSandboxRuntimeURL:
-      process.env.BOXEL_SANDBOX_RUNTIME_URL || defaults.boxelSandboxRuntimeURL,
+    // port when this is absent. Environment mode always owns a dedicated
+    // sandbox.<slug>.localhost origin because it runs the same local Host
+    // assets. In particular, an inherited staging.env must not redirect a
+    // local execution process to boxelusercontent.dev. Hosted builds (which
+    // do not set BOXEL_ENVIRONMENT) must supply the deployed runtime origin.
+    boxelSandboxRuntimeURL: process.env.BOXEL_ENVIRONMENT
+      ? defaults.boxelSandboxRuntimeURL
+      : process.env.BOXEL_SANDBOX_RUNTIME_URL ||
+        defaults.boxelSandboxRuntimeURL,
     // The live test realm-server's /test/ realm — used by host tests
     // that load source modules from it via
     // `tests/helpers#testModuleRealm`. Derived from BOXEL_ENVIRONMENT via

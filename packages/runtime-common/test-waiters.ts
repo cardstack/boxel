@@ -13,6 +13,7 @@ export interface Waiters {
 }
 
 let injectedWaiters: Waiters | undefined;
+const waitersByLabel = new Map<string, TestWaiter>();
 
 export function useTestWaiters(w: Waiters) {
   injectedWaiters = w;
@@ -28,6 +29,11 @@ export interface TestWaiter {
 // a chance to inject the real implementation) without registering a stray
 // waiter in production.
 export function buildWaiter(label: string): TestWaiter {
+  let existing = waitersByLabel.get(label);
+  if (existing) {
+    return existing;
+  }
+
   let real: ReturnType<Waiters['buildWaiter']> | undefined;
   let resolve = () => {
     if (!real && injectedWaiters) {
@@ -35,7 +41,7 @@ export function buildWaiter(label: string): TestWaiter {
     }
     return real;
   };
-  return {
+  let waiter = {
     beginAsync() {
       return resolve()?.beginAsync();
     },
@@ -46,6 +52,8 @@ export function buildWaiter(label: string): TestWaiter {
       resolve()?.endAsync(token);
     },
   };
+  waitersByLabel.set(label, waiter);
+  return waiter;
 }
 
 export function waitForPromise<T>(

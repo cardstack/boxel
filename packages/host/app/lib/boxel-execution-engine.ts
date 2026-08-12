@@ -4,6 +4,7 @@ import {
   modulesConsumedInMeta,
   type BoxelInstanceHandle,
   type BoxelRenderRecord,
+  type CodeRef,
   type LooseCardResource,
   type LooseSingleCardDocument,
   type RealmResourceIdentifier,
@@ -51,6 +52,8 @@ export interface BoxelExecutionRequest {
   /** Stable identity of the mounted visual surface. */
   surfaceId: string;
   trusted: boolean;
+  /** Host-authorized tier selection; authored records cannot set this. */
+  hostRequestedMode?: 'direct';
   format: string;
   moduleIdentifier: string;
   source: string;
@@ -176,6 +179,7 @@ export class BoxelExecutionSession {
   async getRenderSlot(
     format: string,
     hostOwnsBox?: boolean,
+    componentCodeRef?: CodeRef,
   ): Promise<BoxelExecutionRenderSlot> {
     let current = this.currentGeneration;
     if (!current) {
@@ -185,11 +189,14 @@ export class BoxelExecutionSession {
       case 'direct':
         return (
           current.lease.runtime as DirectBoxelRuntime
-        ).getRenderSlotForHandle(current.card);
+        ).getRenderSlotForHandle(current.card, undefined, {
+          componentCodeRef,
+        });
       case 'capsule':
         return (current.lease.runtime as CapsuleBoxelRuntime).getRenderSlot(
           current.card,
           format,
+          componentCodeRef,
         );
       case 'sandbox':
         return (current.lease.runtime as SandboxRuntimeProcess).getRenderSlot(
@@ -219,6 +226,7 @@ export class BoxelExecutionSession {
       return undefined;
     }
     let decision = decideBoxelExecution({
+      hostRequestedMode: request.hostRequestedMode,
       trusted: request.trusted,
       format,
       source: current.source,
@@ -237,10 +245,9 @@ export class BoxelExecutionSession {
       tier: 'sandbox',
     });
     let slot: SandboxRenderSlot;
+    let process = current.lease.runtime as SandboxRuntimeProcess;
     try {
-      slot = await (
-        current.lease.runtime as SandboxRuntimeProcess
-      ).getRenderSlot(current.card, format, hostOwnsBox);
+      slot = await process.getRenderSlot(current.card, format, hostOwnsBox);
     } catch (error) {
       formatSwitchStage.finish({ status: 'error' });
       throw error;
@@ -256,7 +263,12 @@ export class BoxelExecutionSession {
     }
     formatSwitchStage.finish();
     this.lastRequest = { ...request, format };
-    return slot;
+    // The child card and iframe stay live, but the Glimmer modifier that
+    // presents them belongs to a new format generation. Transfer teardown
+    // ownership with a fresh token: if the successor reused the old token,
+    // the predecessor's later cleanup would still match and unmount the
+    // retained iframe.
+    return { ...slot, mountToken: process.reserveMount() };
   }
 
   /**
@@ -488,6 +500,7 @@ export class BoxelExecutionSession {
     let route: BoxelRuntimeRouteInput = {
       principal: request.principal,
       surfaceId: request.surfaceId,
+      hostRequestedMode: request.hostRequestedMode,
       trusted: request.trusted,
       format: request.format,
       source,

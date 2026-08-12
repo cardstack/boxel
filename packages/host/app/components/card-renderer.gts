@@ -1,4 +1,5 @@
 import { service } from '@ember/service';
+import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 
 import { provide, consume } from 'ember-provide-consume-context';
@@ -13,7 +14,6 @@ import {
   GetCardContextName,
   GetCardsContextName,
   GetCardCollectionContextName,
-  Loader,
   type ResolvedCodeRef,
   type getCard,
   type getCards,
@@ -22,7 +22,6 @@ import {
 
 import BoxelExecutionRenderer from '@cardstack/host/components/boxel-execution-renderer';
 import HeadFormatPreview from '@cardstack/host/components/head-format-preview';
-import { isTrustedModule } from '@cardstack/host/lib/trusted-modules';
 import type DirectBoxelRuntimeService from '@cardstack/host/services/direct-boxel-runtime';
 
 import type {
@@ -79,9 +78,10 @@ export default class CardRenderer extends Component<Signature> {
       <BoxelExecutionRenderer
         @card={{@card}}
         @format={{@format}}
+        @execution={{this.execution}}
         @displayContainer={{@displayContainer}}
         @viewCard={{this.viewCard}}
-        @baseTemplateRef={{@codeRef}}
+        @componentCodeRef={{@codeRef}}
         @hostOwnsBox={{@hostOwnsBox}}
         ...attributes
       />
@@ -110,16 +110,28 @@ export default class CardRenderer extends Component<Signature> {
     return this.cardCrudFunctions?.viewCard;
   }
 
+  /**
+   * The long-standing Host regression suite describes trusted Direct
+   * behavior. Run those unchanged product call sites through the Direct RP
+   * adapter instead of preserving the removed pre-RP renderer as a second
+   * implementation. Dedicated RP policy tests always pass `auto`
+   * explicitly, so Capsule/Sandbox classification remains production-like
+   * and cannot be accidentally hidden by this test-build default.
+   */
+  private get execution(): 'auto' | 'direct' {
+    return this.args.execution ?? (isTesting() ? 'direct' : 'auto');
+  }
+
   private get usesExecutionRuntime(): boolean {
-    // Top-level Boxels enter the policy router unless a trusted caller makes
-    // the legacy/direct escape hatch explicit. This keeps containment as the
-    // safe default for every product surface that adopts CardRenderer; new
-    // surfaces cannot accidentally execute authored modules in the Host.
+    // Every top-level Boxel uses the rendering protocol. `execution='direct'`
+    // is a Host capability that selects the Direct adapter inside that
+    // protocol; it is no longer a legacy mount that bypasses the engine.
+    // Authored modules cannot import this Host component through the runtime
+    // import policy, so they cannot grant themselves that capability.
     //
-    // A field render must stay inside its parent's already-selected execution
-    // environment. CardRenderer therefore accepts a delegated field only on
-    // the explicit trusted Direct path; an authored caller cannot use the
-    // legacy field argument as a second Host-rendering escape hatch.
+    // A delegated field render stays inside its parent's already-selected
+    // environment. Routing it again would create a second boundary per field
+    // and break the compositional render graph.
     //
     // Under automatic execution, a codeRef is only ever the standard-view
     // Base-template override (baseCardRef from stack-item / preview-panel).
@@ -129,16 +141,6 @@ export default class CardRenderer extends Component<Signature> {
     // tier
     // (RP-6.5): host-side trusted Base for Direct/Capsule, refused for
     // Sandbox.
-    let identity = Loader.identify(this.args.card.constructor);
-    let trustedDirectRequest =
-      this.args.execution === 'direct' &&
-      identity !== undefined &&
-      isTrustedModule(identity.module);
-    if (this.args.field !== undefined && !trustedDirectRequest) {
-      throw new Error(
-        'Untrusted delegated fields must render inside their selected Boxel execution runtime',
-      );
-    }
-    return !trustedDirectRequest;
+    return this.args.field === undefined;
   }
 }

@@ -6,6 +6,12 @@ import {
 import type { BoxelExecutionMode } from './boxel-runtime';
 
 export interface BoxelExecutionPolicyInput {
+  /**
+   * A trusted Host call site may require the Direct adapter while still
+   * using the rendering protocol. This is a capability of the call site,
+   * never a property authored code can request for itself.
+   */
+  hostRequestedMode?: 'direct';
   trusted: boolean;
   format?: string;
   source: BoxelSourceClassification;
@@ -37,6 +43,9 @@ export interface BoxelExecutionDecision {
 export function decideBoxelExecution(
   input: BoxelExecutionPolicyInput,
 ): BoxelExecutionDecision {
+  if (input.hostRequestedMode === 'direct') {
+    return { mode: 'direct', reason: 'host-requested-direct' };
+  }
   if (input.prefersFullSandbox) {
     let requested = executionDecisionForFormat(
       {

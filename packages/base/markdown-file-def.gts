@@ -170,6 +170,7 @@ class Isolated extends Component<typeof MarkdownDef> {
           @linkedCards={{@model.linkedCards}}
           @linkedFiles={{@model.linkedFiles}}
           @cardReferenceBaseUrl={{@model.id}}
+          @relationshipOwner={{@model}}
         />
       {{else}}
         <header class='markdown-isolated__title'>{{this.title}}</header>
@@ -233,6 +234,7 @@ class Embedded extends Component<typeof MarkdownDef> {
           @linkedCards={{@model.linkedCards}}
           @linkedFiles={{@model.linkedFiles}}
           @cardReferenceBaseUrl={{@model.id}}
+          @relationshipOwner={{@model}}
         />
       </div>
     </article>

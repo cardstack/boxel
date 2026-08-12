@@ -8,6 +8,7 @@ import { untrack } from '@glimmer/validator';
 
 import Modifier, { modifier } from 'ember-modifier';
 import { consume, provide } from 'ember-provide-consume-context';
+import ContextProvider from 'ember-provide-consume-context/components/context-provider';
 import { resource, use } from 'ember-resources';
 import { TrackedObject } from 'tracked-built-ins';
 
@@ -85,15 +86,14 @@ interface Signature {
     fieldType?: FieldType;
     fieldName?: string;
     /**
-     * The standard-view override (always `baseCardRef` today): render the
-     * trusted Base template for this card instead of its authored format.
-     * Resolved per tier (RP-6.5) — host-side via
-     * `trustedBaseRenderSlotFor` for Direct/Capsule (the same resolution a
-     * Capsule's missing authored format takes), REFUSED for Sandbox, where
-     * honoring it host-side would execute the sandboxed module's authored
-     * FieldDef templates in the main document.
+     * Pins rendering to a particular provider in the card's ancestry, the
+     * same `componentCodeRef` contract as Base `getComponent()`. This covers
+     * both authored query render types and the trusted Base standard view.
+     * Direct and Capsule resolve the provider inside their own runtime;
+     * Sandbox currently refuses the override rather than rendering authored
+     * code in the Host document.
      */
-    baseTemplateRef?: CodeRef;
+    componentCodeRef?: CodeRef;
     /**
      * RP-9.9: this render's slot lands in a Host box that already has a
      * definite height (a stack item, sized from the viewport), so the card
@@ -106,7 +106,18 @@ interface Signature {
      * the format's own rule — intrinsic for everything but `fitted`.
      */
     hostOwnsBox?: boolean;
+    /** Host-authorized tier selection. Still runs through the RP engine. */
+    execution?: 'auto' | 'direct';
   };
+}
+
+function surfaceModeFor(
+  slot: BoxelExecutionRenderSlot,
+): 'direct' | 'capsule' | 'sandbox' {
+  // A trusted Base-template override is materialized in the Host document.
+  // Surface coordination therefore has Direct ownership even when the
+  // authored card around it was selected for Capsule execution.
+  return slot.owner === 'trusted-base' ? 'direct' : slot.owner;
 }
 
 type ExecutionRendererState = {
@@ -291,7 +302,7 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
   private previousExecution?: {
     card: BaseDef;
     format: Format;
-    baseTemplateRef?: CodeRef;
+    componentCodeRef?: CodeRef;
     state: ExecutionRendererState;
   };
 
@@ -327,34 +338,72 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
 
   @use private execution = resource(({ on }) => {
     let session = this.session;
-    let card = this.args.card;
+    // Loader replacement is the Host's executable-generation boundary. Read
+    // it synchronously in this resource's tracking frame, then resolve the
+    // caller-held instance back to canonical Store state. This covers code
+    // rebuilds where the surrounding component remains mounted with the old
+    // CardDef object while the Store has installed a fresh constructor.
+    void this.boxelExecution.executableGeneration;
+    let card = this.boxelExecution.canonicalCardFor(this.args.card);
     let format = this.args.format;
     let relativeTo = this.args.relativeTo;
-    let baseTemplateRef = this.args.baseTemplateRef;
+    let componentCodeRef = this.args.componentCodeRef;
     let hostOwnsBox = this.args.hostOwnsBox;
+    let execution = this.args.execution;
     let effectiveFormat = format ?? 'isolated';
     let previousExecution = this.previousExecution;
+    let retainedHostState =
+      previousExecution &&
+      previousExecution.card === card &&
+      previousExecution.componentCodeRef === componentCodeRef &&
+      isIsolatedEditToggle(previousExecution.format, effectiveFormat) &&
+      (previousExecution.state.slot?.owner === 'direct' ||
+        previousExecution.state.slot?.owner === 'capsule')
+        ? previousExecution.state
+        : undefined;
     let retainedSandboxState =
       previousExecution &&
       previousExecution.card === card &&
-      previousExecution.baseTemplateRef === baseTemplateRef &&
+      previousExecution.componentCodeRef === componentCodeRef &&
       isIsolatedEditToggle(previousExecution.format, effectiveFormat) &&
       previousExecution.state.slot?.owner === 'sandbox'
         ? previousExecution.state
         : undefined;
     let state = new TrackedObject<ExecutionRendererState>({
-      snapshot: retainedSandboxState?.snapshot ?? session.snapshot,
-      slot: retainedSandboxState?.slot,
-      model: retainedSandboxState?.model,
-      fields: retainedSandboxState?.fields,
+      // A format change is a new RP generation, not necessarily a new
+      // Glimmer island. Seed the replacement resource with the currently
+      // mounted Host-side slot so an isolated/edit toggle never removes the
+      // component while the next generation is being prepared. When the
+      // destination resolves to the same component reference, Glimmer keeps
+      // its instance and DOM; when it resolves to a different reference, the
+      // ordinary slot assignment below remounts it. This preserves main's
+      // component-identity semantics without making format knowledge part of
+      // the protocol engine.
+      snapshot:
+        retainedHostState?.snapshot ??
+        retainedSandboxState?.snapshot ??
+        session.snapshot,
+      slot: retainedHostState?.slot ?? retainedSandboxState?.slot,
+      model: retainedHostState?.model ?? retainedSandboxState?.model,
+      fields: retainedHostState?.fields ?? retainedSandboxState?.fields,
       placeholder: retainedSandboxState?.placeholder,
       sandboxPainted: retainedSandboxState?.sandboxPainted,
       sandboxReadyFormat: retainedSandboxState?.sandboxReadyFormat,
+      // Surface handles are resource-owned. Give the retained Host slot a
+      // fresh handle synchronously instead of transferring the old resource's
+      // handle (which its cleanup must release). The modifier updates the
+      // handle on the same element; the rendered component stays mounted.
+      surface: retainedHostState?.slot
+        ? this.boxelExecution.registerSurface(
+            surfaceModeFor(retainedHostState.slot),
+            this.surfaceId,
+          )
+        : undefined,
     });
     this.previousExecution = {
       card,
       format: effectiveFormat,
-      baseTemplateRef,
+      componentCodeRef,
       state,
     };
     let unsubscribe = session.subscribe((snapshot) => {
@@ -429,11 +478,13 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
     let moduleIdentifier = this.boxelExecution.moduleIdentifierFor(card);
     if (moduleIdentifier) {
       this.boxelExecution.isVolatile(moduleIdentifier);
+      on.cleanup(this.boxelExecution.retainExecutableModule(moduleIdentifier));
     }
     // RP-20.1: this resource's tracked dependency set is EXACTLY the four
     // reads above — the card's identity (the `args.card` reference), the
-    // requested format, the standard-view override (`baseTemplateRef`, so a
-    // Toggle Standard View re-materializes like a format change), and the
+    // requested format, the render-provider override (`componentCodeRef`, so
+    // Toggle Standard View or a query render type rematerializes like a
+    // format change), and the
     // module's volatility cell. Nothing below may
     // add to it: the synchronous prefix of the async pipeline (everything
     // up to its first await) otherwise still runs inside this tracking
@@ -476,6 +527,7 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
               format,
               this.surfaceId,
               relativeTo,
+              execution === 'direct' ? 'direct' : undefined,
             );
             let source = await this.boxelExecution.classifyForExecution(
               request.moduleIdentifier,
@@ -585,7 +637,11 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
             // assignment needed here.
             let [fields, slot] = await Promise.all([
               this.boxelExecution.fieldPortalsFor(card),
-              session.getRenderSlot(format ?? 'isolated', hostOwnsBox),
+              session.getRenderSlot(
+                format ?? 'isolated',
+                hostOwnsBox,
+                componentCodeRef,
+              ),
             ]);
             if (slot.owner === 'trusted-base') {
               slot = this.boxelExecution.trustedBaseRenderSlotFor(
@@ -593,26 +649,20 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
                 slot.componentCodeRef,
               );
             }
-            if (baseTemplateRef) {
-              if (slot.owner === 'sandbox') {
-                // RP-6.5: the override never crosses the Sandbox boundary —
-                // the authored render stays confined and the standard view
-                // is unavailable for this card.
-                console.warn(
-                  `Ignoring standard-view base-template override for a Sandbox-classified card — honoring it would execute the module's authored field templates outside the iframe boundary`,
-                );
-              } else {
-                slot = this.boxelExecution.trustedBaseRenderSlotFor(
-                  card,
-                  baseTemplateRef,
-                );
-              }
+            if (componentCodeRef && slot.owner === 'sandbox') {
+              // RP-6.5: the override never escapes the Sandbox boundary.
+              // Until the child protocol accepts a provider ref, keep the
+              // authored render confined and refuse the pin instead of
+              // resolving its template in the Host document.
+              console.warn(
+                `Ignoring componentCodeRef override for a Sandbox-classified card — resolving it in the Host would execute authored templates outside the iframe boundary`,
+              );
             }
             state.fields = fields;
             state.slot = slot;
             if (slot.owner !== 'sandbox') {
               state.surface = this.boxelExecution.registerSurface(
-                slot.owner,
+                surfaceModeFor(slot),
                 this.surfaceId,
               );
             } else {
@@ -952,10 +1002,28 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
         data-boxel-execution-reason={{this.executionReason}}
         {{surfaceElement this.directSurface}}
       >
-        <this.directComponent
-          @displayContainer={{@displayContainer}}
-          ...attributes
-        />
+        {{! Direct is an RP adapter, not a new semantic scope. Preserve the
+          surrounding Host CardContext by reference across the asynchronous
+          render-slot boundary so Base field components, nested BFM renders,
+          and operator-mode element tracking see the same capabilities they
+          receive on main's direct path. Capsule and Sandbox intentionally use
+          their own projected contexts instead. }}
+        {{#if this.hostCardContext}}
+          <ContextProvider
+            @key={{CardContextName}}
+            @value={{this.hostCardContext}}
+          >
+            <this.directComponent
+              @displayContainer={{@displayContainer}}
+              ...attributes
+            />
+          </ContextProvider>
+        {{else}}
+          <this.directComponent
+            @displayContainer={{@displayContainer}}
+            ...attributes
+          />
+        {{/if}}
       </div>
     {{else if this.hasFailedPlaceholder}}
       <div
