@@ -4,7 +4,7 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { baseRealm, Loader } from '@cardstack/runtime-common';
+import { baseRealm, Deferred, Loader } from '@cardstack/runtime-common';
 
 import {
   testRealmURL,
@@ -159,6 +159,46 @@ module('Unit | loader', function (hooks) {
     assert.strictEqual(aModule.a(), 'abcd', 'module executed successfully');
     assert.strictEqual(bModule.b(), 'bcd', 'module executed successfully');
     assert.strictEqual(cModule.c(), 'cd', 'module executed successfully');
+  });
+
+  test('an import in flight across a realm-mapping change still resolves', async function (assert) {
+    // A mapping change discards the module cache (the cache keys are RRI-form,
+    // so they stop resolving the same way), and every discarded module is
+    // refetched from scratch. An import already walking the module graph then
+    // has to classify dependencies the discard moved out from under it, while
+    // holding a recursion stack naming the modules whose dependencies are
+    // mid-completion. Gate a fetch inside a dependency cycle so the discard
+    // lands while that stack is non-empty: a dependency named there can be
+    // back in flight, which is neither `completing-dep` nor a state the
+    // consumer can read a dependency list from.
+    let virtualNetwork = getService('network').virtualNetwork;
+    let cRequested = new Deferred<void>();
+    let releaseC = new Deferred<void>();
+    let gate = async (req: Request) => {
+      if (req.url.includes('deadlock/c')) {
+        cRequested.fulfill();
+        await releaseC.promise;
+      }
+      return null;
+    };
+    virtualNetwork.mount(gate, { prepend: true });
+    try {
+      let importing = loader.import<{ a(): string }>(
+        `${testRealmURL}deadlock/a`,
+      );
+      await cRequested.promise;
+      virtualNetwork.addRealmMapping('@test-loader-inflight/', testRealmURL);
+      releaseC.fulfill();
+      let { a } = await importing;
+      assert.strictEqual(
+        a(),
+        'abcd',
+        'the import resolves across the cache discard',
+      );
+    } finally {
+      virtualNetwork.unmount(gate);
+      virtualNetwork.removeRealmMapping('@test-loader-inflight/');
+    }
   });
 
   test('can determine consumed modules', async function (assert) {
