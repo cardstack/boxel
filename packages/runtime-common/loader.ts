@@ -202,8 +202,7 @@ export class Loader {
   // loader.import() calls (e.g. when deserializing 22 cards of the same type).
   private knownDepsCache = new Map<string, Set<string>>();
   // Incremented every time the caches above are discarded, so an in-flight
-  // `advanceToState` walk can tell whether the cache changed under it and say
-  // so when it reports an unexpected module state.
+  // `advanceToState` walk can tell that the cache changed under it.
   private cacheGeneration = 0;
   private identities = new WeakMap<
     Function,
@@ -679,19 +678,17 @@ export class Loader {
     // further up this recursion. A module listed there is one an ancestor
     // frame is advancing, which is what lets a dependency cycle record a
     // `completing-dep` below instead of recursing forever. The states of those
-    // modules are read from the cache rather than assumed, because a cache
-    // discard (realm-mapping change) refetches every module from scratch and
-    // can put one back below where the ancestor frame left it.
+    // modules are read from the cache rather than assumed: a cache discard
+    // (realm-mapping change) refetches every module from scratch, so one can
+    // sit below where the ancestor frame left it.
     //
-    // Count the discards this walk lives through purely to describe a failure:
-    // the errors below distinguish a walk that crossed a discard from one that
-    // never saw a cache change at all, which are different faults.
+    // A walk that crosses a discard logs it, because a discard reshapes what
+    // every subsequent pass reads and is otherwise invisible in a trace of
+    // state transitions alone.
     let generation = this.cacheGeneration;
-    let discardsObserved = 0;
     for (;;) {
       if (this.cacheGeneration !== generation) {
         generation = this.cacheGeneration;
-        discardsObserved++;
         this.log.debug(
           `module cache was discarded while advancing ${resolvedURL.href} to '${targetState}'`,
         );
@@ -812,13 +809,29 @@ export class Loader {
                 break outer_switch;
               case undefined:
               case 'registered':
+                // This dependency needs the completion its `completing-dep`
+                // entry recorded, and the frame that recorded it cannot supply
+                // it: if that frame is an ancestor of this one it is suspended
+                // awaiting this walk, so it cannot observe the state or resume
+                // until this frame unwinds. Do the completion here — state
+                // transitions only move forward and the walk is re-entrant, so
+                // the ancestor finds the work done — and re-enter the state
+                // machine to reclassify from the result.
+                await this.advanceToState(
+                  entry.moduleURL,
+                  'registered-completing-deps',
+                  {
+                    ...stack,
+                    ...{
+                      'registered-completing-deps': [
+                        ...stack['registered-completing-deps'],
+                        resolvedURL.href,
+                      ],
+                    },
+                  },
+                );
+                break outer_switch;
               case 'registered-completing-deps': {
-                // A `completing-dep` entry records that a frame of this walk was
-                // already advancing this dependency. Anything below
-                // 'registered-with-deps' still needs that advance, so drive it
-                // from whatever state the cache holds now — a discard can have
-                // put it back to unfetched or 'registered' since the entry was
-                // recorded.
                 if (
                   !stack['registered-with-deps'].includes(entry.moduleURL.href)
                 ) {
@@ -836,7 +849,7 @@ export class Loader {
                     },
                   );
                   break outer_switch;
-                } else if (depModule?.state === 'registered-completing-deps') {
+                } else {
                   // the dep module is actually evaluatable now--we only got
                   // here because we were already in the process of trying to
                   // move the state of the dep to 'registered-with-deps'
@@ -844,22 +857,6 @@ export class Loader {
                     type: 'dep',
                     moduleURL: entry.moduleURL,
                   });
-                } else {
-                  // An ancestor frame is driving this dependency to
-                  // 'registered-with-deps', which it only does from
-                  // 'registered-completing-deps' or better, so it cannot be
-                  // below that here. Name the consumer, the target, the
-                  // recursion stack, and how many cache discards this walk
-                  // absorbed: a report with `discards observed: 0` is reachable
-                  // without any cache discard at all, which is a different
-                  // fault from one that survived a discard.
-                  throw new Error(
-                    `expected ${entry.moduleURL.href} to be 'registered-completing-deps' but was '${depModule?.state}' ` +
-                      `while advancing ${resolvedURL.href} to '${targetState}' ` +
-                      `(discards observed: ${discardsObserved}, ` +
-                      `completing deps: [${stack['registered-completing-deps'].join(', ')}], ` +
-                      `completing with deps: [${stack['registered-with-deps'].join(', ')}])`,
-                  );
                 }
                 break;
               }
