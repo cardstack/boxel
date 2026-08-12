@@ -24,11 +24,7 @@ import { setupApplicationTest } from '../helpers/setup';
 
 module('Acceptance | prerender | html', function (hooks) {
   setupApplicationTest(hooks);
-  // Every test builds the same fixtures in the beforeEach below, so the realm
-  // is indexed once and that index restored per test.
-  setupLocalIndexing(hooks, {
-    reuseIndexAcrossTests: 'prerenderHtml',
-  });
+  setupLocalIndexing(hooks);
   setupOnSave(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
