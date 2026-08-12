@@ -73,6 +73,10 @@ function shouldSkipReauthentication(): boolean {
   }
 }
 
+function mayRetryAnonymously(request: Request): boolean {
+  return request.method === 'GET' || request.method === 'HEAD';
+}
+
 export function authorizationMiddleware(
   tokenSource: TokenSource,
 ): FetcherMiddlewareHandler {
@@ -103,6 +107,20 @@ export function authorizationMiddleware(
           req.headers.delete('Authorization');
         }
         response = await next(req);
+
+        // A browser can retain a realm token that is still rejected after
+        // reauthentication. Public realm reads must remain available in that
+        // state: the realm server accepts them without an Authorization
+        // header. Keep this fallback bounded to safe reads so a mutation is
+        // never replayed anonymously.
+        if (
+          response.status === 401 &&
+          req.headers.has('Authorization') &&
+          mayRetryAnonymously(req)
+        ) {
+          req.headers.delete('Authorization');
+          response = await next(req);
+        }
       }
     }
     return response;

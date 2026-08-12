@@ -85,4 +85,60 @@ module('Unit | authorization middleware render context', function () {
     assert.strictEqual(response.status, 200);
     assert.deepEqual(attempts, ['Bearer stale-token', 'anonymous']);
   });
+
+  test('a safe read retries as anonymous when a replacement token is also rejected', async function (assert) {
+    let attempts: string[] = [];
+    let middleware = authorizationMiddleware({
+      token: () => 'Bearer stale-token',
+      reauthenticate: async () => 'Bearer replacement-token',
+    });
+    let request = new Request('https://realm.example/card');
+
+    let response = await middleware(request, async (onwardRequest) => {
+      attempts.push(onwardRequest.headers.get('Authorization') ?? 'anonymous');
+      if (attempts.length < 3) {
+        return new Response('rejected token', {
+          status: 401,
+          headers: {
+            'x-boxel-realm-url': 'https://realm.example/',
+          },
+        });
+      }
+      return new Response('public content', { status: 200 });
+    });
+
+    assert.strictEqual(response.status, 200);
+    assert.deepEqual(attempts, [
+      'Bearer stale-token',
+      'Bearer replacement-token',
+      'anonymous',
+    ]);
+  });
+
+  test('a mutation is not retried anonymously when a replacement token is rejected', async function (assert) {
+    let attempts: string[] = [];
+    let middleware = authorizationMiddleware({
+      token: () => 'Bearer stale-token',
+      reauthenticate: async () => 'Bearer replacement-token',
+    });
+    let request = new Request('https://realm.example/card', {
+      method: 'PATCH',
+    });
+
+    let response = await middleware(request, async (onwardRequest) => {
+      attempts.push(onwardRequest.headers.get('Authorization') ?? 'anonymous');
+      return new Response('rejected token', {
+        status: 401,
+        headers: {
+          'x-boxel-realm-url': 'https://realm.example/',
+        },
+      });
+    });
+
+    assert.strictEqual(response.status, 401);
+    assert.deepEqual(attempts, [
+      'Bearer stale-token',
+      'Bearer replacement-token',
+    ]);
+  });
 });
