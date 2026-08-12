@@ -169,6 +169,12 @@ class MarkdownPreview extends GlimmerComponent<FilePreviewSignature> {
   }
 
   get content(): string {
+    if (this.args.mode === 'fitted') {
+      // Budgeted in `fileViewModel`; a fitted cell never touches the whole
+      // file — and the presence guard below judges the same bounded snippet
+      // the cell draws, so the two can't disagree.
+      return this.args.model?.contentPreview ?? '';
+    }
     return String(this.source?.content ?? '');
   }
 
