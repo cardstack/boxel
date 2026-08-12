@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "experimentLabel": "CUT / ROOM",
+      "headline": "Keep the hook. Keep the context.",
+      "subhead": "A narrow software-factory trial that turns one long-form creator video into an approved social clip pack through mechanical extraction, AI selection and generation, human editing, and auditable release gates.",
+      "appName": "CutRoom",
+      "sourceTitle": "Offline Summer — Episode 06",
+      "cardInfo": {
+        "name": "Factory Trial 03 — CutRoom",
+        "summary": "An attractive 5-reuse / 10-build proposal for a creator clip factory with source-grounded AI, human approval, and a publishable social pack.",
+        "notes": "Proposal authored 2026-07-21. Reuse candidates are provisional until their live CardDefs pass the search-first gate. Realm-server capabilities are excluded from the artifact budget.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/cutroom-signal"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../cutroom-proposal",
+        "name": "CutRoomProposal"
+      }
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "headline": "The Integrated Software Layer Matrix",
+      "subhead": "A printable field guide to reusable Boxel cards, fields, components, and tools—organized by dependency depth and grounded provenance.",
+      "cardInfo": {
+        "name": "Integrated Software Layer Matrix",
+        "summary": "A standalone, print-ready 6 × 4 matrix of 528 reusable software concepts.",
+        "notes": "Single-page publication edition. Print CSS targets A3 landscape PDF with a cover sheet, one dependency layer per page, preserved provenance colors, compact typography, and protected page breaks.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "./Theme/software-elements"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "./integrated-layer-atlas",
+        "name": "IntegratedLayerAtlas"
+      }
+    }
+  }
+}

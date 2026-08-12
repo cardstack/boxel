@@ -1,0 +1,32 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "PopoverPlayground",
+        "module": "../popover-playground-example"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "title": "Popover Playground Example (No Theme Linked)",
+      "cardInfo": {
+        "name": "Popover Playground Example (No Theme Linked)",
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

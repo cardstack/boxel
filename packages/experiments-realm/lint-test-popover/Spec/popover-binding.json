@@ -1,0 +1,45 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Spec",
+        "module": "https://cardstack.com/base/spec"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "surfacePopoverBinding",
+        "module": "../modifiers/popover-binding"
+      },
+      "readMe": "## surfacePopoverBinding\n\nElement modifier installed on each hover-target unit (grid cell, canvas node, kanban card, calendar event — whatever the host considers \"popover-able\") that wires the desktop popover gesture model to a shared `PopoverState`.\n\nReads in: a `PopoverState` (one per surface root) + a per-unit `PopoverContract` (which kinds the unit supports) + the unit's `(row, col)` coordinates + optional `onSelect` / `onActivate` host hooks.\n\nWires out: `pointerenter` / `pointerleave` / `click` / `dblclick` on the modified element, translating DOM events into `state.scheduleHoverDetails` / `scheduleDismissDetails` / `openEdit`. It does not paint, read tracked state, draw chrome, set focus, or own keyboard nav — those stay with the host and the `<Popover>` element itself.\n\n```gts\nimport surfacePopoverBinding from '../modifiers/popover-binding';\n\n<div\n  {{surfacePopoverBinding\n    state=this.popoverState\n    contract=this.cellContract\n    row=row\n    col=col\n    onSelect=this.selectCell\n  }}\n>…</div>\n```",
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "specType": null,
+      "cardTitle": "SurfacePopoverBinding",
+      "cardDescription": "Element modifier wiring per-unit pointer/click gestures to a shared PopoverState — the host-agnostic input side of the popover hover/click/escalate flow.",
+      "containedExamples": []
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

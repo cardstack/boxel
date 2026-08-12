@@ -1,0 +1,44 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Submit Img-to-3D Generator",
+      "submittedBy": "@richardtan:localhost",
+      "roomId": "!UCxcVAaNTXhRpkNlNr:localhost",
+      "branchName": "7a8b04-img-to-3-d-generator",
+      "catalogRealmUrl": "https://localhost:4201/catalog/",
+      "lintStatus": "failed",
+      "lintErrors": [
+        "4376bf-img-to-3d-generator/img-to-3d/282993ec-cba6-4130-bc27-582b997caf06/exports/red-cab-over-delivery-truck-round-1.js:1:70348 [lint] Parsing error: Expression expected."
+      ],
+      "lintFixedCount": null,
+      "prCreationError": "PR creation failed: Lint failed with 1 unfixable error(s)",
+      "failedStep": "lint",
+      "participants": [],
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "listing": {
+        "links": {
+          "self": "../4376bf-img-to-3d-generator/CardListing/3f11fac0-cddf-4662-99ae-2abf3988eb28"
+        }
+      },
+      "prCard": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "@cardstack/catalog/submission-workflow-card/submission-workflow-card",
+        "name": "SubmissionWorkflowCard"
+      }
+    }
+  }
+}

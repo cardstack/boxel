@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "experimentLabel": "CUE / CLEAR",
+      "headline": "Clear the set. Keep the proof.",
+      "subhead": "A narrow software-factory trial that turns one live set into a governed cue sheet through mechanical extraction, AI rights analysis, human approval, and an auditable release decision.",
+      "appName": "CueClear",
+      "cardInfo": {
+        "name": "Factory Trial 03 — CueClear",
+        "summary": "A 5-reuse / 10-build factory proposal for one culturally current music-clearance workflow with extraction, AI, human approval, and audit.",
+        "notes": "Proposal authored 2026-07-21. The five reuse cards are candidates until their live CardDefs pass the proposal's reuse gate. Realm-server capabilities are explicitly excluded from the artifact budget.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/software-elements"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../cue-clear-proposal",
+        "name": "CueClearProposal"
+      }
+    }
+  }
+}

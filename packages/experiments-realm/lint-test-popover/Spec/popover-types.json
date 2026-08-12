@@ -1,0 +1,45 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Spec",
+        "module": "https://cardstack.com/base/spec"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "resolvePopoverEscalationTarget",
+        "module": "../utils/popover-types"
+      },
+      "readMe": "## popover-types\n\nShared TypeScript vocabulary for `<Popover>` — the kind/axis unions plus the kind→glyph / kind→label maps and the escalation-priority resolver. Pulled out of the component so hosts, the playground, and the popover state machine import ONE canonical source instead of reaching into the `.gts`. Pure types + data; no Glimmer, no DOM.\n\nType exports: `PopoverKind` · `PopoverAnchoring` · `PopoverSize` · `PopoverBackdrop` · `PopoverElevation` · `PopoverKeyboardModel`.\n\nValue exports: `POPOVER_KIND_GLYPHS` (✎ edit · ⓘ details · ⋯ tools), `POPOVER_KIND_LABELS`, `POPOVER_ESCALATION_PRIORITY`, and `resolvePopoverEscalationTarget` (the canonical resolver this spec points at).\n\n```ts\nimport {\n  resolvePopoverEscalationTarget,\n  POPOVER_KIND_GLYPHS,\n  type PopoverKind,\n} from '../utils/popover-types';\n```",
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "specType": null,
+      "cardTitle": "Popover Types",
+      "cardDescription": "The Popover axis unions plus kind→glyph / kind→label maps and the escalation-priority resolver — one canonical source of the popover vocabulary.",
+      "containedExamples": []
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,279 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/brand-guide"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "version": null,
+      "cardInfo": {
+        "name": "Paper Press",
+        "notes": null,
+        "summary": "Warm letterpress paper theme for the Popover demo. Exercises the popover's SIZE knob family: every size tier is fixed-width (240/320/420px, so kind swaps never change width), plus square print-block corners (card is 0.25rem), harder offset shadows, and an IBM Plex Mono typewriter face.",
+        "cardThumbnailURL": null
+      },
+      "markUsage": {
+        "primaryMark1": null,
+        "primaryMark2": null,
+        "secondaryMark1": null,
+        "secondaryMark2": null,
+        "primaryMarkMinHeight": null,
+        "primaryMarkGreyscale1": null,
+        "primaryMarkGreyscale2": null,
+        "secondaryMarkMinHeight": null,
+        "socialMediaProfileIcon": null,
+        "secondaryMarkGreyscale1": null,
+        "secondaryMarkGreyscale2": null,
+        "primaryMarkClearanceRatio": null,
+        "secondaryMarkClearanceRatio": null
+      },
+      "styleName": "Paper Press",
+      "visualDNA": "Warm cream paper, vermilion ink, tight corners, hard offset letterpress shadows, serif accents.",
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,300..700;1,300..700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400..700;1,8..60,400..700&family=IBM+Plex+Mono:wght@300..700&display=swap"
+      ],
+      "typography": {
+        "body": {
+          "fontSize": null,
+          "fontFamily": null,
+          "fontWeight": null,
+          "lineHeight": null,
+          "sampleText": null
+        },
+        "caption": {
+          "fontSize": null,
+          "fontFamily": null,
+          "fontWeight": null,
+          "lineHeight": null,
+          "sampleText": null
+        },
+        "heading": {
+          "fontSize": null,
+          "fontFamily": null,
+          "fontWeight": null,
+          "lineHeight": null,
+          "sampleText": null
+        },
+        "subheading": {
+          "fontSize": null,
+          "fontFamily": null,
+          "fontWeight": null,
+          "lineHeight": null,
+          "sampleText": null
+        },
+        "sectionHeading": {
+          "fontSize": null,
+          "fontFamily": null,
+          "fontWeight": null,
+          "lineHeight": null,
+          "sampleText": null
+        }
+      },
+      "colorPalette": null,
+      "contentVoice": null,
+      "inspirations": [],
+      "designMindset": null,
+      "rootVariables": {
+        "card": "#fffdf7",
+        "ring": "#b3432b",
+        "input": "#efe8db",
+        "muted": "#efe8db",
+        "accent": "#1f6f54",
+        "border": "#d8cdbb",
+        "chart1": "#b3432b",
+        "chart2": "#1f6f54",
+        "chart3": "#c89b3c",
+        "chart4": "#4a6fa5",
+        "chart5": "#7d5ba6",
+        "radius": "0.25rem",
+        "shadow": "2px 2px 0px 0px hsl(30 15% 15% / 0.18)",
+        "popover": "#fffdf7",
+        "primary": "#b3432b",
+        "sidebar": "#f3ecdf",
+        "spacing": "0.25rem",
+        "fontMono": "IBM Plex Mono, monospace",
+        "fontSans": "IBM Plex Sans, sans-serif",
+        "shadowLg": "4px 4px 0px 0px hsl(30 15% 15% / 0.22)",
+        "shadowMd": "3px 3px 0px 0px hsl(30 15% 15% / 0.2)",
+        "shadowSm": "2px 2px 0px 0px hsl(30 15% 15% / 0.18)",
+        "shadowXl": "6px 6px 0px 0px hsl(30 15% 15% / 0.24)",
+        "shadowXs": "1px 1px 0px 0px hsl(30 15% 15% / 0.16)",
+        "fontSerif": "Source Serif 4, serif",
+        "secondary": "#e7dfd1",
+        "shadow2xl": "8px 8px 0px 0px hsl(30 15% 15% / 0.26)",
+        "shadow2xs": "1px 1px 0px 0px hsl(30 15% 15% / 0.12)",
+        "background": "#faf6ef",
+        "foreground": "#2b2620",
+        "themeScale": null,
+        "destructive": "#a32318",
+        "sidebarRing": "#b3432b",
+        "sidebarAccent": "#e7dfd1",
+        "sidebarBorder": "#d8cdbb",
+        "themeFontSize": null,
+        "cardForeground": "#2b2620",
+        "sidebarPrimary": "#b3432b",
+        "trackingNormal": "0em",
+        "mutedForeground": "#7d7468",
+        "accentForeground": "#fffdf7",
+        "popoverForeground": "#2b2620",
+        "primaryForeground": "#fffdf7",
+        "sidebarForeground": "#2b2620",
+        "secondaryForeground": "#2b2620",
+        "destructiveForeground": "#fffdf7",
+        "sidebarAccentForeground": "#2b2620",
+        "sidebarPrimaryForeground": "#fffdf7"
+      },
+      "motionLanguage": null,
+      "technicalSpecs": null,
+      "wallpaperImages": [],
+      "compositionRules": null,
+      "qualityStandards": null,
+      "typographySystem": null,
+      "brandColorPalette": [],
+      "darkModeVariables": {
+        "card": "#2b251d",
+        "ring": "#e07a5f",
+        "input": "#352e24",
+        "muted": "#352e24",
+        "accent": "#7fb69e",
+        "border": "#463d30",
+        "chart1": "#e07a5f",
+        "chart2": "#7fb69e",
+        "chart3": "#d9b35c",
+        "chart4": "#7e98c0",
+        "chart5": "#a98bc8",
+        "radius": "0.25rem",
+        "shadow": "2px 2px 0px 0px hsl(30 15% 15% / 0.5)",
+        "popover": "#2b251d",
+        "primary": "#e07a5f",
+        "sidebar": "#1a1611",
+        "spacing": "0.25rem",
+        "fontMono": "IBM Plex Mono, monospace",
+        "fontSans": "IBM Plex Sans, sans-serif",
+        "shadowLg": "4px 4px 0px 0px hsl(30 15% 15% / 0.6)",
+        "shadowMd": "3px 3px 0px 0px hsl(30 15% 15% / 0.55)",
+        "shadowSm": "2px 2px 0px 0px hsl(30 15% 15% / 0.5)",
+        "shadowXl": "6px 6px 0px 0px hsl(30 15% 15% / 0.65)",
+        "shadowXs": "1px 1px 0px 0px hsl(30 15% 15% / 0.45)",
+        "fontSerif": "Source Serif 4, serif",
+        "secondary": "#463d30",
+        "shadow2xl": "8px 8px 0px 0px hsl(30 15% 15% / 0.7)",
+        "shadow2xs": "1px 1px 0px 0px hsl(30 15% 15% / 0.4)",
+        "background": "#211c16",
+        "foreground": "#ece4d6",
+        "themeScale": null,
+        "destructive": "#d65b4d",
+        "sidebarRing": "#e07a5f",
+        "sidebarAccent": "#352e24",
+        "sidebarBorder": "#352e24",
+        "themeFontSize": null,
+        "cardForeground": "#ece4d6",
+        "sidebarPrimary": "#e07a5f",
+        "trackingNormal": "0em",
+        "mutedForeground": "#a89a85",
+        "accentForeground": "#211c16",
+        "popoverForeground": "#ece4d6",
+        "primaryForeground": "#211c16",
+        "sidebarForeground": "#ece4d6",
+        "secondaryForeground": "#ece4d6",
+        "destructiveForeground": "#211c16",
+        "sidebarAccentForeground": "#ece4d6",
+        "sidebarPrimaryForeground": "#211c16"
+      },
+      "functionalPalette": {
+        "dark": null,
+        "light": null,
+        "accent": null,
+        "primary": null,
+        "secondary": null
+      },
+      "geometricLanguage": null,
+      "historicalContext": null,
+      "customCssVariables": [
+        {
+          "name": "bx-popover-size-compact-min-w",
+          "value": "240px"
+        },
+        {
+          "name": "bx-popover-size-compact-max-w",
+          "value": "240px"
+        },
+        {
+          "name": "bx-popover-edit-bg",
+          "value": "#fdf3cf"
+        },
+        {
+          "name": "bx-popover-edit-border",
+          "value": "#e3c95e"
+        },
+        {
+          "name": "bx-popover-radius",
+          "value": "0px"
+        },
+        {
+          "name": "bx-popover-shadow-raised",
+          "value": "3px 3px 0px 0px hsl(30 15% 15% / 0.35)"
+        },
+        {
+          "name": "bx-popover-shadow-elevated",
+          "value": "5px 5px 0px 0px hsl(30 15% 15% / 0.35)"
+        },
+        {
+          "name": "bx-popover-shadow-floating",
+          "value": "8px 8px 0px 0px hsl(30 15% 15% / 0.35)"
+        },
+        {
+          "name": "bx-popover-font-family",
+          "value": "IBM Plex Mono, monospace"
+        },
+        {
+          "name": "bx-popover-size-compact-max-h",
+          "value": "300px"
+        },
+        {
+          "name": "bx-popover-size-comfortable-min-w",
+          "value": "320px"
+        },
+        {
+          "name": "bx-popover-size-comfortable-max-w",
+          "value": "320px"
+        },
+        {
+          "name": "bx-popover-size-comfortable-max-h",
+          "value": "420px"
+        },
+        {
+          "name": "bx-popover-size-spacious-min-w",
+          "value": "420px"
+        },
+        {
+          "name": "bx-popover-size-spacious-max-w",
+          "value": "420px"
+        },
+        {
+          "name": "bx-popover-size-spacious-max-h",
+          "value": "540px"
+        }
+      ],
+      "materialVocabulary": null,
+      "componentVocabulary": null,
+      "applicationScenarios": null,
+      "brandImageAttachments": []
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

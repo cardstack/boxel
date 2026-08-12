@@ -1,0 +1,32 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "PopoverPlayground",
+        "module": "../popover-playground-example"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "title": "Popover Playground Example (Theme Linked)",
+      "cardInfo": {
+        "name": "Popover Playground",
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../../Theme/paper-press"
+        }
+      },
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

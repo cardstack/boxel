@@ -1,0 +1,113 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "ComponentListing",
+        "module": "@cardstack/catalog/catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Popover UI",
+      "summary": "The Popover component provides an anchored floating surface that appears next to a source element to display focused interactions without redirecting user focus away from the source. It supports multiple visual and behavioral variants driven by four main dimensions—kind, anchoring, size, backdrop, and elevation—allowing customization of appearance and positioning. The component manages open/close state, positioning, dismissal (via Escape or outside clicks), focus restoration, and optional escalation to different modes or kinds through a corner glyph button. It supports accessibility features such as ARIA roles and labels, keyboard navigation, focus trapping, auto-focus, and delegation of keyboard events. The Popover owns the surface rendering, positioning, chrome variants, and optional dim background, making it suitable for contextual, modal, or overlay interactions across app domains like cards, fields, skills, or themes.",
+      "cardInfo": {
+        "name": "Popover UI",
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "images.0": {
+        "links": {
+          "self": "../Screenshots/fa9c0fa1-44e2-4cd6-a5d3-6e249c09b53f-eca04a49.png"
+        }
+      },
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags.0": {
+        "links": {
+          "self": "../Tag/card"
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/popover"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/popover-state"
+        }
+      },
+      "specs.2": {
+        "links": {
+          "self": "../Spec/popover-types"
+        }
+      },
+      "specs.3": {
+        "links": {
+          "self": "../Spec/popover-playground-example"
+        }
+      },
+      "specs.4": {
+        "links": {
+          "self": "../Spec/layer-manager"
+        }
+      },
+      "specs.5": {
+        "links": {
+          "self": "../Spec/popover-binding"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../example/PopoverPlayground/fa9c0fa1-44e2-4cd6-a5d3-6e249c09b53f"
+        }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../example/PopoverPlayground/70b516be-e312-4c75-8521-40116794e35e"
+        }
+      },
+      "examples.2": {
+        "links": {
+          "self": "../Theme/paper-press"
+        }
+      },
+      "examples.3": {
+        "links": {
+          "self": "../Theme/midnight-glass"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/ui-components-design"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": "../ListingThumbnails/popover-d3634b22.png"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Spec",
+        "module": "https://cardstack.com/base/spec"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "PopoverPlayground",
+        "module": "../example/popover-playground-example"
+      },
+      "readMe": "## Popover Playground\n\nA config explorer for `<Popover>`. Every exported axis union is a `BoxelSelect` across the top, so you can mix any combination and watch a live `<Popover>` preview plus the generated invocation update together.\n\nThe preview body is crafted per `kind`, mirroring how the popover docs describe each: `details` is a read-only info view, `edit` is a BoxelSelect + input editor (the yellow editor surface), and `tools` is a dark action menu. Escalating with the corner glyph swaps between them.\n\nThis is the **teaching example** for the Popover API — the printed invocation panel is the authoritative reference for how to call `<Popover>` for any combination of axes.",
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "specType": "card",
+      "cardTitle": "Popover Playground",
+      "cardDescription": "A live config explorer for <Popover> — every axis is a control, with a live preview and the generated invocation shown side by side. The teaching example for the Popover API.",
+      "containedExamples": []
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

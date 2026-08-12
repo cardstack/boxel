@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "experimentLabel": "Factory Trial 01",
+      "headline": "The Reuse Stress Test",
+      "subhead": "A bounded software-factory run to measure whether mature Boxel models, fields, components, and platform tools can compress the path to a complete Layer 06 application.",
+      "appName": "Vendor Readiness Workspace",
+      "cardInfo": {
+        "name": "Factory Trial 01 — Vendor Readiness",
+        "summary": "A measurable Layer 06 build proposal designed to test module reuse, catalog discovery, typed commands, build time, quality, and token savings.",
+        "notes": "Proposed 2026-07-21. The time and token targets are hypotheses, not observed results. The factory run must preserve the frozen control estimate and fill the run record with actual telemetry.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/software-elements"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../factory-run-proposal",
+        "name": "FactoryRunProposal"
+      }
+    }
+  }
+}

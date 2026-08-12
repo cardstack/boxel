@@ -1,0 +1,42 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Submit Popover UI",
+      "submittedBy": "@richardtan:localhost",
+      "roomId": "!uJkGFjkrgCENRXkzwB:localhost",
+      "branchName": "211443-popover-ui",
+      "catalogRealmUrl": "https://localhost:4201/catalog/",
+      "lintStatus": null,
+      "lintErrors": [],
+      "lintFixedCount": null,
+      "prCreationError": null,
+      "failedStep": null,
+      "participants": [],
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "listing": {
+        "links": {
+          "self": "../lint-test-popover/ComponentListing/4340bd7b-2138-44c5-9dbc-a594670b3b15"
+        }
+      },
+      "prCard": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "@cardstack/catalog/submission-workflow-card/submission-workflow-card",
+        "name": "SubmissionWorkflowCard"
+      }
+    }
+  }
+}

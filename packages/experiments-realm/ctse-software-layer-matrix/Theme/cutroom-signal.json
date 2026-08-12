@@ -1,0 +1,22 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cssVariables": ":root {\n  --font-sans: 'DM Sans', ui-sans-serif, system-ui, sans-serif;\n  --font-serif: 'Source Serif 4', ui-serif, Georgia, serif;\n  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;\n  --background: #f2efe8;\n  --card: #fffdf8;\n  --foreground: #111216;\n  --card-foreground: #111216;\n  --muted: #e5e0d6;\n  --muted-foreground: #66645f;\n  --border: #ccc6ba;\n  --input: #ccc6ba;\n  --primary: #ff4b2b;\n  --primary-foreground: #190704;\n  --accent: #ff4b2b;\n  --accent-foreground: #190704;\n  --ring: #ff4b2b;\n  --radius: 0.125rem;\n  --cutroom-ink: #111216;\n  --cutroom-paper: #f2efe8;\n  --cutroom-panel: #1b1d23;\n  --cutroom-panel-soft: #292c34;\n  --cutroom-screen: #d5d7d2;\n  --cutroom-signal: #ff4b2b;\n  --cutroom-rule-dark: #3d4049;\n}\n",
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:ital,wght@0,400;0,500;1,400&display=swap"
+      ],
+      "cardInfo": {
+        "name": "CutRoom Signal",
+        "summary": "A post-production slate palette with warm paper, black monitor panels, and one recording-signal accent.",
+        "notes": "Designed for the CutRoom factory proposal. Sharp geometry, editorial serif display type, mono timecodes, and one signal-red accent."
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/theme",
+        "name": "default"
+      }
+    }
+  }
+}

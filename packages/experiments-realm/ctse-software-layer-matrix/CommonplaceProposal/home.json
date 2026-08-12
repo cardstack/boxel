@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "experimentLabel": "COMMON / PLACE",
+      "headline": "The things you keep are trying to tell you something.",
+      "subhead": "A narrow software-factory trial that turns any copy-and-pasteable artifact into a source-grounded, personally curated zine—without replacing the person’s point of view.",
+      "appName": "Commonplace",
+      "issueTitle": "Small Audiences, Real Rooms",
+      "cardInfo": {
+        "name": "Factory Trial 04 — Commonplace",
+        "summary": "An article-led 5-reuse / 10-build proposal for transforming mixed clipboard fragments into an auditable personal zine.",
+        "notes": "Proposal authored 2026-07-21. Crawl Source is treated as an assumed reusable, provider-backed typed command and must pass the search-first gate. Platform services remain outside the artifact budget.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/commonplace-newsprint"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../commonplace-proposal",
+        "name": "CommonplaceProposal"
+      }
+    }
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Submit Popover UI",
+      "submittedBy": "@richardtan:localhost",
+      "roomId": "!vZhIeDBnPpOhhygFuo:localhost",
+      "branchName": "db2594-popover-ui",
+      "catalogRealmUrl": "https://localhost:4201/catalog/",
+      "lintStatus": "passed",
+      "lintErrors": [
+        "lint-test-popover/popover.gts:1321:10 [global] unrecognized template-lint instruction: `template-lint-disable-next-line`",
+        "lint-test-popover/popover.gts:1327:12 [no-invalid-interactive] Interaction added to non-interactive element"
+      ],
+      "lintFixedCount": 3,
+      "prCreationError": "PR creation failed: Failed to get source branch ref (401): {\"message\":\"Bad credentials\",\"documentation_url\":\"https://docs.github.com/rest\",\"status\":\"401\"}",
+      "failedStep": "github-pr",
+      "participants": [],
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "listing": {
+        "links": {
+          "self": "../lint-test-popover/ComponentListing/4340bd7b-2138-44c5-9dbc-a594670b3b15"
+        }
+      },
+      "prCard": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "@cardstack/catalog/submission-workflow-card/submission-workflow-card",
+        "name": "SubmissionWorkflowCard"
+      }
+    }
+  }
+}

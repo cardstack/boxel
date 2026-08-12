@@ -1,0 +1,42 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Submit Img-to-3D Generator",
+      "submittedBy": "@richardtan:localhost",
+      "roomId": "!MPjagWmvFHowUiQYgN:localhost",
+      "branchName": "512f23-img-to-3-d-generator",
+      "catalogRealmUrl": "https://localhost:4201/catalog/",
+      "lintStatus": "passed",
+      "lintErrors": [],
+      "lintFixedCount": 6,
+      "prCreationError": null,
+      "failedStep": null,
+      "participants": [],
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "listing": {
+        "links": {
+          "self": "../4376bf-img-to-3d-generator/CardListing/3f11fac0-cddf-4662-99ae-2abf3988eb28"
+        }
+      },
+      "prCard": {
+        "links": {
+          "self": "https://localhost:4201/submissions/PrCard/08b61a0a-f5c9-4fba-a33b-582133299698"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "@cardstack/catalog/submission-workflow-card/submission-workflow-card",
+        "name": "SubmissionWorkflowCard"
+      }
+    }
+  }
+}
