@@ -1153,6 +1153,8 @@ export {
   invalidationsNameImportMap,
   IMPORT_MAP_PATH,
   packageBaseOf,
+  packageSpecOf,
+  resolvePackageBase,
   parentImportMapURL,
   parseImportMapFile,
   resolveImportMap,

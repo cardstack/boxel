@@ -1,0 +1,43 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "AD-ALIAS-120 \u00b7 adopts by package alias",
+        "summary": "ADOPTION BY PACKAGE ADDRESS rather than by path. The other direct instances name a location in the store \u2014 ./_packages/<publisher>/<name>@<version>/index \u2014 which works but writes the store's layout, and the publisher, into every instance. This one names the package the way a consumer thinks of it: ./@records@1.2.0. The realm resolves the short name to whichever publisher governs it and redirects into the store, so the instance knows the package and the Version and nothing else. Pinned to 1.2.0, which no app resolves, so it is a real test rather than a coincidence."
+      },
+      "invoiceNumber": "AD-ALIAS-120",
+      "issuedOn": "2026-06-20",
+      "dueOn": "2026-07-20",
+      "currency": {
+        "code": "JPY"
+      },
+      "lines": [
+        {
+          "description": "Tokyo datacentre egress",
+          "quantity": 12,
+          "unitPrice": {
+            "value": 148000,
+            "currency": "JPY"
+          },
+          "taxRate": {
+            "rate": 0.1
+          }
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "./pretui-theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "./@records@1.2.0",
+        "name": "Invoice"
+      }
+    }
+  }
+}

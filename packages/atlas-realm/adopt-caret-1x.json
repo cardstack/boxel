@@ -1,0 +1,43 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "AD-CARET-1X \u00b7 direct, floating range",
+        "summary": "DIRECT ADOPTION, FLOATING RANGE. This instance names ^1.0.0 rather than a Version, and the store answers with a redirect to whatever satisfies it \u2014 1.3.0 today. It follows the 1.x line as it is maintained and stops at the major boundary. Nothing about this instance changes when it moves; the answer to the question it asks changes."
+      },
+      "invoiceNumber": "AD-CARET-1X",
+      "issuedOn": "2026-06-20",
+      "dueOn": "2026-07-20",
+      "currency": {
+        "code": "JPY"
+      },
+      "lines": [
+        {
+          "description": "Tokyo datacentre egress",
+          "quantity": 12,
+          "unitPrice": {
+            "value": 148000,
+            "currency": "JPY"
+          },
+          "taxRate": {
+            "rate": 0.1
+          }
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "./pretui-theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "./_packages/northwind/records@%5E1.0.0/index",
+        "name": "Invoice"
+      }
+    }
+  }
+}

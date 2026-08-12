@@ -1,0 +1,42 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "AD-PIN-200 \u00b7 direct, exact pin, 2.x",
+        "summary": "The same statement across the break: pinned to records@2.0.0 while apps/next-gen resolves 2.1.0. This and ng-invoice-1 hold the same SHAPE and render differently \u2014 a pin is to a Version, not to a shape."
+      },
+      "invoiceNumber": "AD-PIN-200",
+      "issuedOn": "2026-07-20",
+      "dueOn": "2026-09-18",
+      "currency": "DEM",
+      "billTo": "Legacy Ledger GmbH",
+      "taxRate": {
+        "rate": 0.19
+      },
+      "items": [
+        {
+          "label": "Tokyo datacentre egress",
+          "quantity": 2,
+          "unitPrice": {
+            "value": 880,
+            "currency": "DEM"
+          }
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "./pretui-theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "./_packages/northwind/records@2.0.0/index",
+        "name": "Invoice"
+      }
+    }
+  }
+}

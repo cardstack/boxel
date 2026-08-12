@@ -36,13 +36,11 @@ import {
   ensureTrailingSlash,
   fetchPublishabilityReport,
   importMapURL,
-  IMPORT_MAP_PATH,
   DECKLIST_ROOTS,
   appImportMapURL,
   composeRealmDecklist,
   invalidationsNameImportMap,
   logger,
-  packageBaseOf,
   parseImportMapFile,
   resolveImportMap,
   ri,
@@ -1097,90 +1095,27 @@ export default class RealmService extends Service {
   }
 
   /**
-   * Install the pins of the Version a module belongs to.
+   * Install the sealed pins of the Version a module belongs to, before
+   * anything inside that module resolves a specifier.
    *
-   * THE GAP THIS FILLS. `routes/module` sets up a module's realm before
-   * resolving anything inside it, and reads that realm from the
-   * `x-boxel-realm-url` header — "shimmed modules have no realm and no pins;
-   * everything else gets its realm's decklist installed". A module served
-   * from `<realm>/_packages/` is neither. The realm GOVERNS the namespace,
-   * but the bytes come from the immutable store rather than from the realm's
-   * tree, so the serve door carries no realm header and nothing gets
-   * installed. Every bare specifier inside it then falls through to the
-   * packages origin and 404s.
+   * ONE IMPLEMENTATION, TWO DOORS. This used to be a second copy of the same
+   * idea, and the two copies did not agree: the host's understood exact store
+   * paths only, while the one in `VirtualNetwork` also handles range and
+   * alias spellings. Which one you got depended on how the module was
+   * reached — code mode came through here, a card instance's `adoptsFrom`
+   * came through `loadCardDef` — so the same Version resolved or failed
+   * according to the door. It now delegates; the memo, the failure mode and
+   * the transitive walk all live in `VirtualNetwork.ensurePackageDecklist`.
    *
-   * And a realm header would be the WRONG fix even where one exists: a sealed
-   * Version resolves through its OWN pins, not through whatever its realm
-   * currently resolves. That is the entire point of sealing.
-   *
-   * That presented as: a package whose modules import ANOTHER package indexed
-   * as an error, while a package with no dependencies of its own indexed
-   * fine — because only the former ever needed a specifier resolved.
-   *
-   * WHY THE PACK'S OWN MANIFEST IS THE RIGHT SOURCE. Its pins were sealed at
-   * publish, so they mean the same thing in every realm that installs the
-   * pack; there is no realm-specific answer to go looking for. Registering
-   * them under the pack's own base reuses `setRealmDecklist` exactly as it
-   * already works — it turns a decklist's `imports` into a scope over the URL
-   * it is keyed by, which is precisely "these are the pins for modules living
-   * here", and the same longest-scope-wins rule then keeps a realm's own
-   * override on top.
-   *
-   * TRANSITIVE, via `resolveImportMap`: loading acme's module pulls
-   * ledgerworks', which needs ITS pins to resolve northwind. Installing one
-   * level would move the failure rather than fix it.
-   *
-   * FAILS OPEN, like `resolveSealedScopes`. An unreachable manifest costs
-   * exactly that Version's imports, which fail loudly at their own import;
-   * throwing here would take down a render over a package the card may not
-   * even touch.
+   * What this door contributes is the FETCH: an authenticated one asking for
+   * card source, which is what reaches a private realm's store.
    */
   async ensurePackageDecklist(moduleURL: string): Promise<void> {
-    let base = packageBaseOf(moduleURL);
-    if (!base) {
-      return;
-    }
-    let inFlight = this.packageDecklists.get(base);
-    if (!inFlight) {
-      inFlight = this.loadPackageDecklist(base);
-      this.packageDecklists.set(base, inFlight);
-    }
-    await inFlight;
-  }
-
-  // Memoised per Version base rather than per module: a Version is immutable,
-  // so its pins cannot change under us and one fetch answers for every module
-  // in the pack.
-  private packageDecklists = new Map<string, Promise<void>>();
-
-  private async loadPackageDecklist(base: string): Promise<void> {
-    let read = async (url: string) => {
-      let response = await this.network.authedFetch(url, {
+    await this.network.virtualNetwork.ensurePackageDecklist(moduleURL, (url) =>
+      this.network.authedFetch(url, {
         headers: { Accept: SupportedMimeType.CardSource },
-      });
-      return response.ok
-        ? parseImportMapFile(await response.text())
-        : undefined;
-    };
-    try {
-      let start = await read(`${base}${IMPORT_MAP_PATH}`);
-      if (!start) {
-        return;
-      }
-      let decklist = await resolveImportMap({
-        start,
-        realmURL: base,
-        load: read,
-      });
-      this.network.virtualNetwork.setRealmDecklist(base, decklist);
-    } catch (error) {
-      console.warn(
-        `[realm-service] package decklist failed ${JSON.stringify({
-          base,
-          error: String(error),
-        })}`,
-      );
-    }
+      }),
+    );
   }
 
   // Force a re-read of a realm's decklist, bypassing the memo. For the

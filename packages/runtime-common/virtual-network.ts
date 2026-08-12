@@ -1,6 +1,6 @@
 import { resolveSpecifier } from '@cardstack/deck';
 import { RealmPaths, ensureTrailingSlash } from './paths.ts';
-import { baseRealm } from './index.ts';
+import { baseRealm, logger } from './index.ts';
 import type {
   RealmIdentifier,
   RealmResourceIdentifier,
@@ -14,6 +14,13 @@ import {
 import type { Readable } from 'stream';
 import { fetcher, type FetcherMiddlewareHandler } from './fetcher.ts';
 import { createEnvironmentAwareFetch } from '#fetch';
+import { IMPORT_MAP_PATH } from '@cardstack/deck/import-map';
+import {
+  packageSpecOf,
+  parseImportMapFile,
+  resolveImportMap,
+  resolvePackageBase,
+} from './import-map-file.ts';
 
 export interface ResponseWithNodeStream extends Response {
   nodeStream?: Readable;
@@ -245,6 +252,23 @@ export class VirtualNetwork {
     }
   }
 
+  // Pin bookkeeping speaks on its own channel: the question it answers — did
+  // this module's pins install, under which base, and what did a specifier
+  // resolve against — only gets asked once something has already failed to
+  // resolve, and the answer is otherwise invisible.
+  //
+  // LEVELS ARE CHOSEN FOR THE PRERENDER LOG, where this mostly runs: the host
+  // page's `console` is forwarded by the page pool onto `prerenderer-chrome`
+  // at the matching level, and the host's own levels are baked in at build
+  // time (`*=info`), so a `debug` line here is unreachable in practice. The
+  // lines a reader needs are therefore `info`, and each is bounded — the
+  // install lines by the per-module memo, the unmapped-specifier line by the
+  // loader's own module cache.
+  //
+  // DECLARED ABOVE `resolveImport` because that is a class field holding an
+  // arrow function, and fields initialise in source order.
+  private pinsLog = logger('virtual-network:pins');
+
   // `relativeTo` is the importing module — the argument that makes scopes
   // possible at all. It is OPTIONAL because this function is passed by value
   // to a dozen call sites (Loader, the capsule evaluator, tests), most of
@@ -278,6 +302,13 @@ export class VirtualNetwork {
       }
     }
     if (!isUrlLike(moduleIdentifier)) {
+      // NOT a diagnostic point, though it looks like one. Landing on the
+      // packages origin is the ROUTINE path for every shimmed package — the
+      // shim handler answers there — so "nothing mapped this specifier" is
+      // true of ~2000 resolutions per render and says nothing about whether
+      // anything is wrong. The failure is one layer down, at the fetch that
+      // finds nothing shimmed, and that is where the importer would have to
+      // be reported for the message to name both halves.
       moduleIdentifier = new URL(moduleIdentifier, PACKAGES_FAKE_ORIGIN).href;
     }
     return moduleIdentifier;
@@ -374,11 +405,199 @@ export class VirtualNetwork {
     }
   }
 
+  /**
+   * Install the sealed pins of the Version a module belongs to, before
+   * anything inside that module resolves a specifier.
+   *
+   * WHY THIS CANNOT LIVE ONLY AT THE MODULE ROUTE. A published Version is
+   * reached two ways: a person opens it in code mode, and a card instance
+   * names it in `meta.adoptsFrom`. Only the first had this, so a
+   * direct-adopting instance loaded the module and then died on the module's
+   * own first bare specifier — `missing file https://packages/…` — because
+   * nothing had installed the pins that give that specifier a meaning. It
+   * appeared to work whenever some app happened to resolve the same exact
+   * Version, which is the worst kind of working: the failure depends on
+   * whether an unrelated app moved.
+   *
+   * WHY A REALM HEADER IS NOT THE FIX. `routes/module` installs a module's
+   * realm decklist from the `x-boxel-realm-url` header — "shimmed modules
+   * have no realm and no pins; everything else gets its realm's decklist".
+   * A module served from `<realm>/_packages/` is neither: the realm GOVERNS
+   * the namespace, but the bytes come from the immutable store rather than
+   * the realm's tree, so the serve door carries no realm header. And even
+   * where one exists it would be the wrong answer — a sealed Version resolves
+   * through its OWN pins, not through whatever its realm currently resolves.
+   * That is the entire point of sealing.
+   *
+   * WHY THE PACK'S OWN MANIFEST IS THE RIGHT SOURCE. Its pins were sealed at
+   * publish, so they mean the same thing in every realm that installs the
+   * pack; there is no realm-specific answer to go looking for. Registering
+   * them under the pack's own base reuses `setRealmDecklist` exactly as it
+   * already works — it turns a decklist's `imports` into a scope over the URL
+   * it is keyed by, which is precisely "these are the pins for modules living
+   * here", and the same longest-scope-wins rule keeps a realm's own override
+   * on top.
+   *
+   * THE FETCH IS THE CALLER'S. Each door reaches the store differently — the
+   * host's realm service passes an authenticated card-source fetch, the
+   * loader passes its own — so the one thing that genuinely differs between
+   * callers is injected, and nothing else is duplicated.
+   *
+   * A RANGE-SPELLED address resolves through the store first, so `@%5E1.0.0`
+   * installs under the exact base the door redirects to — which is the base
+   * the module itself is addressed by once the loader follows that same
+   * redirect, so the scope matches what actually loads.
+   *
+   * THE MEMO DEDUPES CONCURRENT WORK; IT DOES NOT RECORD HISTORY. The
+   * in-flight promise is shared so two modules from one pack cost one round
+   * trip, and then it is DROPPED — because "these pins were installed once"
+   * and "these pins are installed now" are different claims, and only the
+   * second one is what a module about to resolve a specifier needs. A page
+   * pool outlives any single render: whatever resets or replaces a decklist
+   * between renders leaves a remembering memo asserting an install that is no
+   * longer there, and the next card fails exactly as if the feature did not
+   * exist — intermittently, according to which page it landed on. So the
+   * repeat check asks the live table (`realmDecklists`) instead.
+   *
+   * FAILS OPEN. An unreachable manifest costs exactly that Version's imports,
+   * which then fail at their own import site with a specifier a reader can
+   * act on. Throwing here would take down a render over a package the card
+   * may not even touch.
+   */
+  async ensurePackageDecklist(
+    moduleURL: string,
+    fetch: (url: string) => Promise<Response>,
+  ): Promise<void> {
+    if (!packageSpecOf(moduleURL)) {
+      return; // not a package module; nothing sealed to install
+    }
+    let inFlight = this.packageDecklists.get(moduleURL);
+    if (!inFlight) {
+      inFlight = this.loadPackageDecklist(moduleURL, fetch).finally(() => {
+        this.packageDecklists.delete(moduleURL);
+      });
+      this.packageDecklists.set(moduleURL, inFlight);
+    }
+    await inFlight;
+  }
+
+  // In-flight only, keyed by the URL AS ASKED FOR: two modules of one pack,
+  // or one module reached by two spellings, share a round trip. Entries are
+  // removed as they settle — see `ensurePackageDecklist` on why this must not
+  // become a record of past installs.
+  private packageDecklists = new Map<string, Promise<void>>();
+
+  // Its own channel because the question it answers — "did this module's pins
+  // get installed, and under which base?" — only gets asked once a card has
+  // already failed to resolve a specifier, and the answer is otherwise
+  // invisible: a Version whose pins never installed looks exactly like a
+  // Version that had none to install.
+  //
+  // LEVELS ARE CHOSEN FOR THE PRERENDER LOG, where this mostly runs: the host
+  // page's `console` is forwarded by the page pool onto `prerenderer-chrome`
+  // at the matching level, and the host's own levels are baked in at build
+  // time (`*=info`), so a `debug` line here is unreachable in practice. The
+  // two lines a reader needs — installed, and could-not-resolve — are
+  // therefore `info`, and both are bounded: one per Version base actually
+  // installed, not one per module and not one per import resolved.
+
+  private async loadPackageDecklist(
+    moduleURL: string,
+    fetch: (url: string) => Promise<Response>,
+  ): Promise<void> {
+    try {
+      let base = await resolvePackageBase(moduleURL, fetch);
+      if (!base) {
+        // The address names a Version and the store would not say which one.
+        // Harmless for a pack that had no pins to install, and the cause of a
+        // `missing file https://packages/…` for one that did — and from here
+        // the two are indistinguishable, which is exactly why it is worth a
+        // default-visible line: the import failure it may cause names the
+        // specifier, never this.
+        this.pinsLog.info(`no exact Version for ${moduleURL}; nothing pinned`);
+        return;
+      }
+      // THE REPEAT CHECK SKIPS THE FETCH, NOT THE REGISTRATION. Asking the
+      // live table answers "do we already know this Version's pins" — and
+      // that is a question about the BASE, while the scopes below are about
+      // the SPELLING this particular caller used. Returning here on a known
+      // base was a bug with exactly one symptom: the loader probes an alias
+      // twice, once plain and once with an executable extension, and the
+      // second probe found the base installed and returned before giving its
+      // own URL a scope. Pins logged as installed, and the module still died
+      // on its first bare specifier.
+      let decklist: DecklistInput | undefined = this.realmDecklists.get(base);
+      if (decklist) {
+        this.pinsLog.debug(`pins already known for ${base}`);
+      } else {
+        let read = async (url: string) => {
+          let response = await fetch(url);
+          return response.ok
+            ? parseImportMapFile(await response.text())
+            : undefined;
+        };
+        let start = await read(`${base}${IMPORT_MAP_PATH}`);
+        if (!start) {
+          // No manifest is not an error: a Version with no dependencies of its
+          // own has nothing to seal, and every specifier inside it is relative.
+          this.pinsLog.debug(`no sealed manifest at ${base}`);
+          return;
+        }
+        // TRANSITIVE: loading acme's module pulls ledgerworks', which needs
+        // ITS pins to resolve northwind. Installing one level moves the
+        // failure rather than fixing it.
+        decklist = await resolveImportMap({
+          start,
+          realmURL: base,
+          load: read,
+        });
+        this.setRealmDecklist(base, decklist);
+      }
+      // AND UNDER THE SPELLING THE CALLER USED, when that differs. Resolving
+      // `@^1.0.0` tells us the pins belong to 1.3.0, and installing them there
+      // is right — but the module is still being loaded from the range
+      // address, and a scope keyed on the exact base does not cover a module
+      // addressed by the range. Both keys name the same immutable Version, so
+      // installing twice cannot disagree with itself; installing once leaves
+      // whichever address the loader actually used without pins, and which one
+      // that is depends on whether the redirect was followed before or after
+      // the module got its identity.
+      let asked = packageSpecOf(moduleURL)?.base;
+      if (asked && asked !== base) {
+        this.setRealmDecklist(asked, decklist);
+      }
+      // AND UNDER THE MODULE'S OWN URL when neither base covers it. A scope
+      // covers a referrer it EQUALS, or one it is a prefix of INCLUDING the
+      // slash — and the realm's short alias names the entry module with no
+      // trailing path at all: `…/atlas/@records@1.2.0`. Its base is that plus
+      // a slash, which covers every module in the pack except the single one
+      // the alias itself names — which is precisely the one an instance
+      // adopting by alias loads. That presented as pins installing, being
+      // logged as installed, and the very next specifier still failing with
+      // `unable to fetch https://packages/cardstack/contracts`.
+      let covered = [base, asked].some(
+        (key) => key && moduleURL.startsWith(key),
+      );
+      if (!covered) {
+        this.setRealmDecklist(moduleURL, decklist);
+      }
+      this.pinsLog.info(
+        `${Object.keys(decklist.imports ?? {}).length} pins at ${base} cover ` +
+          `${moduleURL}${!covered ? ' (scoped to the module itself)' : ''}`,
+      );
+    } catch (err) {
+      this.pinsLog.warn(
+        `could not install sealed pins for ${moduleURL}: ${String(err)}`,
+      );
+    }
+  }
+
   /** Drop every decklist mapping. Exists so a test can assert the
    * no-decklist behaviour on the same instance it just exercised. */
   clearDecklist(): void {
     this.anonymousDecklist = { imports: {}, scopes: {} };
     this.realmDecklists.clear();
+    this.packageDecklists.clear();
     this.recomputeDecklist();
   }
 

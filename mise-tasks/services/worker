@@ -29,6 +29,12 @@ SOFTWARE_FACTORY_REALM_URL="${RESOLVED_SOFTWARE_FACTORY_REALM_URL:-$DEFAULT_SOFT
 
 START_EXPERIMENTS=$(if [ -z "${SKIP_EXPERIMENTS:-}" ]; then echo "true"; else echo ""; fi)
 START_CATALOG=$(if [ -z "${SKIP_CATALOG:-}" ]; then echo "true"; else echo ""; fi)
+# Mirrors the realm-server task's START_ATLAS. A realm the worker has no
+# mapping for is a realm it will not index: its jobs sit `unfulfilled` forever
+# and its events are dropped as "unmanaged realm" — with the realm itself
+# serving 200 the whole time, which is what makes it look like an indexer bug
+# rather than a missing pair of flags.
+START_ATLAS=$(if [ -z "${SKIP_ATLAS:-}" ]; then echo "true"; else echo ""; fi)
 
 NODE_ENV=development \
   NODE_NO_WARNINGS=1 \
@@ -52,6 +58,9 @@ NODE_ENV=development \
   \
   ${START_EXPERIMENTS:+--fromUrl="${REALM_BASE_URL}/experiments/"} \
   ${START_EXPERIMENTS:+--toUrl="${REALM_BASE_URL}/experiments/"} \
+  \
+  ${START_ATLAS:+--fromUrl="${REALM_BASE_URL}/atlas/"} \
+  ${START_ATLAS:+--toUrl="${REALM_BASE_URL}/atlas/"} \
   \
   ${START_CATALOG:+--fromUrl='@cardstack/catalog/'} \
   ${START_CATALOG:+--toUrl="${CATALOG_REALM_URL}"} \

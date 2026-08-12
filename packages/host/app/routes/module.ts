@@ -287,12 +287,19 @@ export async function buildModuleModel(
       // sealed Version resolves through the pins it was published with, not
       // through whatever its realm resolves today. Handing it the realm's
       // decklist would silently un-seal it.
+      //
+      // BOTH, not either. The pins call answers "is this address inside a
+      // published Version" from the address itself and returns immediately
+      // when it is not, so asking unconditionally costs nothing and removes
+      // the one thing that made this fragile: a package door that DID send a
+      // realm header would have taken the other branch and silently gone
+      // unpinned. Scope order settles the overlap — a Version's base is
+      // longer than its realm's, so its sealed pins win inside it.
       let realmURL = response.headers.get('x-boxel-realm-url');
       if (realmURL) {
         await context.realm.ensureRealmMeta(realmURL);
-      } else {
-        await context.realm.ensurePackageDecklist(id);
       }
+      await context.realm.ensurePackageDecklist(id);
 
       let module: Record<string, any> | undefined;
       try {

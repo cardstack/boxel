@@ -48,6 +48,7 @@ import {
   type MatchesFilter,
   type Sort,
   type RangeFilter,
+  type MissingFieldPolicy,
   RANGE_OPERATORS,
   isCardTypeFilter,
   isReferenceFilterField,
@@ -292,7 +293,10 @@ export type QueryOptions = WIPOptions & {
 //   'skip'  (default) — that type's branch of the query goes UNKNOWN and the
 //                       skip is reported in `meta.skippedFilters`.
 //   'error' — any unanswerable predicate fails the whole query.
-export type MissingFieldPolicy = 'skip' | 'error';
+// Declared once, in `query.ts`, because it is part of the QUERY's shape —
+// a caller writes it into the query and the engine reads it. Re-exported
+// here so an engine-side importer need not know which file it came from.
+export type { MissingFieldPolicy } from './query.ts';
 
 // One (type, path) pair a filter asked about that the type could not answer.
 // Reported on a successful response so a thinner result set is never silent.

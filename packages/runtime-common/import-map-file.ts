@@ -305,16 +305,197 @@ export function packageBaseOf(value: string): string | undefined {
   if (!match) {
     return undefined;
   }
-  // A RANGE-SPELLED pin — `greeter@%5E2.0.0/` — is deliberately skipped. The
-  // sealed map would have to be fetched through a redirect, and the scope key
-  // it produced would name the range while the module that gets loaded is
-  // addressed by the exact version it redirected to, so the scope would match
-  // nothing. Attaching a scope that silently never applies is worse than
-  // attaching none: it looks configured. This is the same range-spelling gap
-  // that `internalKeyFor` has, and it wants the same fix.
+  // A RANGE-SPELLED pin — `greeter@%5E2.0.0/` — is skipped HERE, and that is
+  // still right: the scope key it produced would name the range while the
+  // module that gets loaded is addressed by the exact version it redirected
+  // to, so the scope would match nothing, and a scope that silently never
+  // applies is worse than none because it looks configured.
+  //
+  // What a caller wanting the range case should use is `resolvePackageBase`
+  // below, which asks the store what the range resolves to and hands back the
+  // EXACT base. This function stays pure and synchronous because most of its
+  // callers are mapping over a table of pins, where a network round trip per
+  // entry would be absurd.
   return EXACT_VERSION.test(decodeURIComponent(match[2]))
     ? match[1]
     : undefined;
+}
+
+// The realm's SHORT address for a package it publishes: `<realm>/@<key>@<v>/…`
+// — the same Version, named the way a consumer thinks of it rather than by
+// where the store keeps it. The realm resolves the short name to whichever
+// publisher governs it and redirects, so this address carries no publisher and
+// no store layout. The trailing path is optional: `…/@records@1.2.0` is the
+// entry module.
+const ALIAS_BASE = /^(.*\/@[^/@]+@([^/@]+))(?:\/|$)/;
+
+// An alias names a MODULE, not a directory, so the loader is free to probe it
+// with an executable extension on the end — `…/@records@1.2.0.gts` — and does.
+// The extension then lands inside the version segment, where it turns an exact
+// version into a spec the store cannot resolve: observed as
+// `no exact Version for …/@records@1.2.0.gts; nothing pinned` beside a
+// successful install for the same Version one line earlier. Whether that
+// mattered came down to which spelling the loader reached first, which is the
+// order-dependence this whole path exists to remove.
+//
+// Only the alias branch needs this. A store path carries its extension after
+// the version segment (`…/records@1.2.0/index.gts`), where `[^/@]+` never
+// sees it.
+const EXECUTABLE_EXTENSION = /\.(?:js|gjs|ts|gts)$/;
+
+/** The Version base of a module URL however it is SPELLED — the store's own
+ *  path or the realm's short alias, with an exact version, a range or a tag —
+ *  and the spec beside it. `packageBaseOf` answers "is this an exact STORE
+ *  base"; this answers "does this address a Version at all, and how". */
+export function packageSpecOf(value: string):
+  | {
+      base: string;
+      spec: string;
+      exact: boolean;
+      kind: 'store' | 'alias';
+    }
+  | undefined {
+  let match = value.match(PACKAGE_BASE);
+  if (match) {
+    let spec = decodeURIComponent(match[2]);
+    return {
+      base: match[1],
+      spec,
+      exact: EXACT_VERSION.test(spec),
+      kind: 'store',
+    };
+  }
+  let alias = value.match(ALIAS_BASE);
+  if (alias) {
+    let spec = decodeURIComponent(alias[2]).replace(EXECUTABLE_EXTENSION, '');
+    return {
+      // Normalised with the trailing slash a scope key needs, which the
+      // entry-module spelling does not carry, and without the extension the
+      // loader may have added — so every spelling of one Version asks the
+      // store the same question. The scope for the extension-suffixed URL
+      // itself is installed separately, by the caller that knows it.
+      base: `${alias[1].replace(EXECUTABLE_EXTENSION, '')}/`,
+      spec,
+      exact: EXACT_VERSION.test(spec),
+      kind: 'alias',
+    };
+  }
+  return undefined;
+}
+
+/**
+ * The EXACT Version base for a module URL, resolving a range or tag through
+ * the store if that is how it was spelled.
+ *
+ * WHY A FETCH RATHER THAN A COMPARISON. Deciding which Version satisfies
+ * `^1.0.0` requires knowing which Versions exist, and only the store knows
+ * that. The store already answers the question — every path under a
+ * range-spelled base 302s to the same path under the exact one — so this
+ * resolves by asking for the Version's own manifest and reading the URL it
+ * ended up at. One request, and it is a request the caller is about to make
+ * anyway.
+ *
+ * An exact base is returned untouched, with no request at all. That is the
+ * overwhelmingly common case: pins are written exact, and only an instance or
+ * an author naming a range lands in the other branch.
+ */
+export async function resolvePackageBase(
+  moduleURL: string,
+  fetch: (url: string) => Promise<Response>,
+): Promise<string | undefined> {
+  let found = packageSpecOf(moduleURL);
+  if (!found) {
+    return undefined;
+  }
+  // An ALIAS always needs resolving, even spelled with an exact version: the
+  // short name says nothing about which publisher governs it, and the pins
+  // have to be keyed where the bytes actually live.
+  if (found.exact && found.kind === 'store') {
+    return found.base;
+  }
+  let probe = `${found.base}${IMPORT_MAP_PATH}`;
+  let response = await fetch(probe).catch(() => undefined);
+  if (!response) {
+    return undefined;
+  }
+  // THREE WAYS TO LEARN THE ANSWER, because the fetches that reach here do not
+  // agree about redirects. A browser fetch follows the 302 and reports where
+  // it landed in `response.url`. The virtual network follows it too but
+  // synthesises the Response, so `url` comes back empty. A raw fetch with
+  // manual redirects hands the 302 straight over. Reading only one of these
+  // worked for exactly one caller, which is how the range case looked fixed
+  // and was not.
+  //
+  // The last one is the reliable one and is worth preferring: a Version's
+  // manifest DECLARES its own version, so the bytes answer the question
+  // without anyone having to agree about redirect semantics.
+  // ONLY THE VERSION IS TAKEN FROM THE ANSWER; the base is always rebuilt from
+  // the address we asked about. A redirect's `Location` is rewritten from the
+  // virtual origin to the real one as it crosses the network boundary, so
+  // adopting the redirect's base wholesale installs the scope under an origin
+  // the module is never loaded from — a scope that looks installed and matches
+  // nothing, which is the failure mode this whole path exists to avoid.
+  //
+  // AN ALIAS IS THE ONE CASE THAT NEEDS MORE THAN THE VERSION. The short name
+  // says nothing about the publisher, so the store path has to come from the
+  // answer — but only its PATH, grafted onto the realm we asked in, for the
+  // same origin-rewrite reason.
+  if (found.kind === 'alias') {
+    let landed = redirectTarget(response, probe);
+    let tail = landed?.match(/(_packages\/(?:[^/@]+\/)?[^/@]+@[^/@]+\/)/)?.[1];
+    let realmRoot = found.base.slice(0, found.base.lastIndexOf('/@') + 1);
+    return tail && realmRoot ? `${realmRoot}${tail}` : undefined;
+  }
+  let version =
+    versionFromRedirect(response, probe) ??
+    (response.ok
+      ? await response
+          .text()
+          .then(declaredVersionOf)
+          .catch(() => undefined)
+      : undefined);
+  return version ? found.base.replace(/@[^/@]+\/$/, `@${version}/`) : undefined;
+}
+
+function redirectTarget(response: Response, probe: string): string | undefined {
+  let landed =
+    response.status >= 300 && response.status < 400
+      ? response.headers.get('location')
+      : response.url || undefined;
+  return landed ? new URL(landed, probe).href : undefined;
+}
+
+function versionFromRedirect(
+  response: Response,
+  probe: string,
+): string | undefined {
+  let landed =
+    response.status >= 300 && response.status < 400
+      ? response.headers.get('location')
+      : response.url || undefined;
+  if (!landed) {
+    return undefined;
+  }
+  let found = packageSpecOf(new URL(landed, probe).href);
+  return found?.exact ? found.spec : undefined;
+}
+
+/** The version a package manifest claims for ITSELF, out of `deck.packages`.
+ *  A pack declares exactly one package, so the single entry is the answer and
+ *  its key does not have to be matched against the URL. */
+function declaredVersionOf(manifestText: string): string | undefined {
+  let packages = (JSON.parse(manifestText) as { deck?: { packages?: unknown } })
+    ?.deck?.packages;
+  if (!packages || typeof packages !== 'object') {
+    return undefined;
+  }
+  for (let entry of Object.values(packages as Record<string, unknown>)) {
+    let version = (entry as { version?: unknown })?.version;
+    if (typeof version === 'string' && EXACT_VERSION.test(version)) {
+      return version;
+    }
+  }
+  return undefined;
 }
 
 /**

@@ -1,0 +1,42 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "AD-STAR \u00b7 direct, unbounded",
+        "summary": "DIRECT ADOPTION, UNBOUNDED. `*` means newest with no ceiling, so it crosses major boundaries \u2014 today it resolves 2.1.0. The day a 3.0.0 is published this instance adopts a shape nobody has looked at, without being edited. That is not a bug in `*`; it is what `*` says."
+      },
+      "invoiceNumber": "AD-STAR",
+      "issuedOn": "2026-07-20",
+      "dueOn": "2026-09-18",
+      "currency": "DEM",
+      "billTo": "Legacy Ledger GmbH",
+      "taxRate": {
+        "rate": 0.19
+      },
+      "items": [
+        {
+          "label": "Tokyo datacentre egress",
+          "quantity": 2,
+          "unitPrice": {
+            "value": 880,
+            "currency": "DEM"
+          }
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "./pretui-theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "./_packages/northwind/records@*/index",
+        "name": "Invoice"
+      }
+    }
+  }
+}

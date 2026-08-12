@@ -219,6 +219,16 @@ export async function loadCardDef(
       opts?.relativeTo,
       virtualNetwork,
     );
+    // An instance may adopt STRAIGHT from a published Version —
+    // `…/_packages/northwind/records@1.3.0/index`, or a range the store
+    // resolves — with no app surface in between. Such a module resolves its
+    // own imports through its own sealed pins, and nothing else on the
+    // instance path installs them, so without this the module loads and then
+    // fails on its first bare specifier. A no-op for every module that is not
+    // a package module, which is nearly all of them.
+    await virtualNetwork.ensurePackageDecklist(resolvedModuleURL, (url) =>
+      loader.fetch(url),
+    );
     let module = await loader.import<Record<string, any>>(
       resolvedModuleURL,
       opts.dependencyTrackingContext,

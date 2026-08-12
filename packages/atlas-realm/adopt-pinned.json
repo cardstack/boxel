@@ -1,0 +1,43 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "AD-PIN-120 \u00b7 direct, exact pin",
+        "summary": "DIRECT ADOPTION, EXACT PIN, and pinned BELOW what any app resolves. The three apps sit on 1.3.0 and 2.1.0; this instance names records@1.2.0 in its own meta.adoptsFrom and cannot be moved by any of them. It still draws the pre-house-style invoice, which is what a frozen pin looks like from the outside."
+      },
+      "invoiceNumber": "AD-PIN-120",
+      "issuedOn": "2026-06-20",
+      "dueOn": "2026-07-20",
+      "currency": {
+        "code": "JPY"
+      },
+      "lines": [
+        {
+          "description": "Tokyo datacentre egress",
+          "quantity": 12,
+          "unitPrice": {
+            "value": 148000,
+            "currency": "JPY"
+          },
+          "taxRate": {
+            "rate": 0.1
+          }
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "./pretui-theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "./_packages/northwind/records@1.2.0/index",
+        "name": "Invoice"
+      }
+    }
+  }
+}
