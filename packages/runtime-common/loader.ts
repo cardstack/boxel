@@ -775,10 +775,30 @@ export class Loader {
             switch (depModule?.state) {
               case undefined:
               case 'fetching':
-              case 'registered':
-                throw new Error(
-                  `expected ${entry.moduleURL.href} to be 'registered-completing-deps' but was '${depModule?.state}'`,
+              case 'registered': {
+                // A `completing-dep` is recorded while the task completing it
+                // is still on its own recursion stack. A concurrent import
+                // root can reach this transition while that task is suspended
+                // at an await, so finding the dep not-yet-completed is a real
+                // interleaving, not a broken invariant. State transitions are
+                // monotonic and re-entrant, so do the pending work here and
+                // re-enter the state machine rather than asserting some other
+                // task already did it.
+                await this.advanceToState(
+                  entry.moduleURL,
+                  'registered-completing-deps',
+                  {
+                    ...stack,
+                    ...{
+                      'registered-completing-deps': [
+                        ...stack['registered-completing-deps'],
+                        resolvedURL.href,
+                      ],
+                    },
+                  },
                 );
+                break outer_switch;
+              }
               case 'registered-completing-deps': {
                 if (
                   !stack['registered-with-deps'].includes(entry.moduleURL.href)

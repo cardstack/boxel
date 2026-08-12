@@ -32,8 +32,11 @@ export default class ProfileSubscription extends Component<Signature> {
 
   <template>
     <WithSubscriptionData as |subscriptionData|>
-      <FieldContainer @label='Membership Tier' class='profile-field'>
-        <div class='profile-subscription'>
+      <FieldContainer
+        class='profile-field membership-tier-field'
+        @label='Membership Tier'
+      >
+        <div class='profile-subscription membership-tier-content'>
           <div class='monthly-credit'>
             <div class='plan-name'>{{subscriptionData.plan}}</div>
             <div class='credit-info'>
@@ -43,6 +46,7 @@ export default class ProfileSubscription extends Component<Signature> {
           </div>
           {{#if this.billingService.subscriptionData.plan}}
             <BoxelButton
+              class='membership-tier-button'
               @kind='secondary-light'
               @size='extra-small'
               {{on
@@ -97,9 +101,6 @@ export default class ProfileSubscription extends Component<Signature> {
       .profile-field :deep(.invalid) {
         box-shadow: none;
       }
-      .profile-field + .profile-field {
-        margin-top: var(--boxel-sp-xl);
-      }
       .profile-subscription {
         display: flex;
         justify-content: space-between;
@@ -112,6 +113,7 @@ export default class ProfileSubscription extends Component<Signature> {
       .credit-info {
         display: flex;
         flex-direction: column;
+        justify-content: center;
         gap: var(--boxel-sp-xs);
         padding-left: var(--boxel-sp-sm);
         border-left: 5px solid #c6c6c6;
@@ -148,22 +150,51 @@ export default class ProfileSubscription extends Component<Signature> {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        border-bottom: 1px solid var(--boxel-300);
-        padding: var(--boxel-sp-xxs);
+        padding: var(--boxel-sp-2xs);
+      }
+      .payment-link:not(:last-child) {
+        border-bottom: 1px solid var(--boxel-200);
       }
       .payment-link > span {
         color: var(--boxel-dark);
         font: 600 var(--boxel-font-sm);
         display: flex;
         align-items: center;
-        gap: var(--boxel-sp-4xs);
+        gap: var(--boxel-sp-3xs);
 
-        --icon-color: var(--boxel-teal);
+        --icon-color: var(--boxel-highlight);
         --boxel-loading-indicator-size: var(--boxel-icon-xs);
       }
       :deep(.buy-more-credits .boxel-loading-indicator) {
         width: 100%;
         text-align: center;
+      }
+
+      @container dialog-box (width <= 48rem) {
+        .profile-field {
+          grid-template-columns: 1fr;
+          gap: var(--boxel-sp-xs);
+        }
+        .payment-links {
+          padding-left: 0;
+        }
+        .payment-link {
+          padding-inline: 0;
+        }
+        .membership-tier-field {
+          position: relative;
+        }
+        .membership-tier-button {
+          position: absolute;
+          right: 0;
+          top: var(--boxel-sp-2xs);
+        }
+        .membership-tier-content,
+        .additional-credit {
+          background-color: var(--boxel-100);
+          padding: var(--boxel-sp-xs);
+          border-radius: var(--boxel-border-radius);
+        }
       }
     </style>
   </template>

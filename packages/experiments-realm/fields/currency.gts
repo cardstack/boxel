@@ -56,7 +56,10 @@ class CurrencyFieldEdit extends Component<typeof CurrencyField> {
     );
   });
 
-  @action onSelectCurrency(currency: CurrencyData) {
+  @action onSelectCurrency(currency: CurrencyData | null) {
+    if (!currency) {
+      return;
+    }
     this.currency = { code: currency.code };
     this.args.model.code = currency.code;
   }

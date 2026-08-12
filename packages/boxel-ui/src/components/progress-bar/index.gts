@@ -79,6 +79,11 @@ export default class ProgressBar extends Component<Signature> {
     <style scoped>
       @layer {
         .boxel-progress-bar {
+          /* Track height. Defaults to the em-relative height this component
+             has always had, so a caller that sets nothing is unaffected; a
+             caller that wants a slimmer rule sets a length here rather than
+             shrinking the font to get at it indirectly. */
+          --progress-bar-height: var(--boxel-progress-bar-height, 1.5em);
           --progress-bar-background-color: var(
             --boxel-progress-bar-background-color,
             var(--muted, var(--boxel-light-200))
@@ -101,7 +106,7 @@ export default class ProgressBar extends Component<Signature> {
           );
         }
         .progress-bar-container {
-          height: 1.5em;
+          height: var(--progress-bar-height);
           width: 100%;
           background-color: var(--progress-bar-background-color);
           border-radius: var(--progress-bar-border-radius);

@@ -27,3 +27,8 @@ packages/boxel-cli/plugin/skills/
 # to be made in Deck and synced back. Deck formats with its own config.
 packages/deck/src/
 packages/deck/tests/
+
+# FileDef regression fixtures: licensed sample files whose bytes must match
+# the integrity manifest in the sibling SOURCES.md. Reformatting a fixture
+# breaks its recorded SHA-256 and drifts it from its documented provenance.
+packages/experiments-realm/filedef-fixtures/samples/

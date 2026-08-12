@@ -31,6 +31,9 @@ const VERBATIM_COPIED_TREES = [
   // pre-commit hook rather than on a real edit.
   '/packages/deck/src/',
   '/packages/deck/tests/',
+  // Licensed FileDef sample files whose bytes must match the integrity
+  // manifest in the sibling SOURCES.md.
+  '/packages/experiments-realm/filedef-fixtures/samples/',
 ];
 const isVerbatimCopy = (file) => {
   const posix = file.replace(/\\/g, '/');

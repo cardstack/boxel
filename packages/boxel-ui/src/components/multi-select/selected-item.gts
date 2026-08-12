@@ -2,34 +2,35 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
-import type { Select } from 'ember-power-select/components/power-select';
+import type { Option, Select } from 'ember-power-select/types';
 
 import IconX from '../../icons/icon-x.gts';
 import Pill from '../pill/index.gts';
 
-// Inside the trigger component, the selected item component is called within in ember-power-select
-// It only passes option, select
-// We follow the same convention when defining our own selected item component
+// Invoked per selected item by the trigger; the arg names follow
+// ember-power-select's own selected-item contract (@selected, @select) so
+// custom components typed against either signature are interchangeable.
 export interface SelectedItemSignature<ItemT> {
   Args: {
-    option: any;
-    select: Select & {
+    extra?: unknown;
+    select: Select<ItemT, true> & {
       actions: {
-        remove: (item: ItemT) => void;
+        remove?: (item: Option<ItemT>) => void;
       };
     };
+    selected: Option<ItemT>;
   };
   Blocks: {
-    default: [ItemT, Select];
+    default: [Option<ItemT>, Select<ItemT, true>];
   };
-  Element: HTMLDivElement;
+  Element: HTMLElement;
 }
 
 export default class BoxelSelectedItem<ItemT> extends Component<
   SelectedItemSignature<ItemT>
 > {
   @action
-  remove(item: ItemT, event: MouseEvent) {
+  remove(item: Option<ItemT>, event: MouseEvent) {
     // Do not remove these event methods
     // This is to ensure that the close/click event from selected item does not bubble up to the trigger
     // and cause the dropdown to close
@@ -46,14 +47,14 @@ export default class BoxelSelectedItem<ItemT> extends Component<
     <div class='ember-power-select-multiple-option'>
       <Pill class='boxel-selected-option'>
         <:default>
-          {{yield @option @select}}
+          {{yield @selected @select}}
         </:default>
         <:iconRight>
           {{! TODO: Replace with icon button }}
           <button
             type='button'
             class='boxel-multi-select__remove-button'
-            {{on 'click' (fn this.remove @option)}}
+            {{on 'click' (fn this.remove @selected)}}
             aria-label='Remove item'
           >
 

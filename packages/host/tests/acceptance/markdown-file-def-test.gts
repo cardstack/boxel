@@ -325,8 +325,8 @@ module('Acceptance | markdown BFM card references', function (hooks) {
             '::file[https://nonexistent.example/gone.pdf]',
           ].join('\n'),
           // A plain markdown target embedded across the full format matrix.
-          // MarkdownDef defines atom/embedded/fitted/isolated, so each combo
-          // renders a distinct `data-test-markdown-*` hook.
+          // MarkdownDef inherits the four shared FileDef shells, so each combo
+          // renders through a `data-test-file-*` shell hook.
           'documents/target.md': ['# Target Doc', '', 'Body text.'].join('\n'),
           'bfm-file-matrix.md': [
             '# BFM File Matrix',
@@ -465,13 +465,13 @@ module('Acceptance | markdown BFM card references', function (hooks) {
 
     await settled();
 
-    // documents/notes.txt resolves to a TextFileDef, whose atom/embedded views
-    // render its title — the file name without extension ('notes' / 'spec').
+    // documents/notes.txt resolves to a TextFileDef, whose atom/embedded shells
+    // show its name without extension ('notes' / 'spec').
     assert
       .dom('[data-test-markdown-bfm-inline-file]')
       .exists('inline file reference renders a resolved file slot');
     assert
-      .dom('[data-test-markdown-bfm-inline-file] [data-test-text-atom]')
+      .dom('[data-test-markdown-bfm-inline-file] [data-test-file-atom]')
       .containsText(
         'notes',
         'inline file slot renders the text file in atom format',
@@ -481,7 +481,7 @@ module('Acceptance | markdown BFM card references', function (hooks) {
       .dom('[data-test-markdown-bfm-block-file]')
       .exists('block file reference renders a resolved file slot');
     assert
-      .dom('[data-test-markdown-bfm-block-file] [data-test-text-embedded]')
+      .dom('[data-test-markdown-bfm-block-file] [data-test-file-embedded]')
       .containsText(
         'spec',
         'block file slot renders the text file in embedded format',
@@ -511,7 +511,7 @@ module('Acceptance | markdown BFM card references', function (hooks) {
     ] as const) {
       for (let format of ['atom', 'embedded', 'fitted', 'isolated'] as const) {
         assert
-          .dom(`${wrapper} [data-test-markdown-${format}]`)
+          .dom(`${wrapper} [data-test-file-${format}]`)
           .exists(`${format} file renders in ${placement} placement`);
       }
     }
@@ -520,9 +520,7 @@ module('Acceptance | markdown BFM card references', function (hooks) {
     // collapse bug left the instance in the DOM at zero size. Pin the
     // footprint on the slot the collapse hit hardest.
     assert
-      .dom(
-        '[data-test-markdown-bfm-block-file]:has([data-test-markdown-isolated])',
-      )
+      .dom('[data-test-markdown-bfm-block-file]:has([data-test-file-isolated])')
       .hasAttribute(
         'style',
         /min-height: 18\.75rem/,
@@ -530,7 +528,7 @@ module('Acceptance | markdown BFM card references', function (hooks) {
       );
     assert
       .dom(
-        '[data-test-markdown-bfm-inline-file]:has([data-test-markdown-isolated])',
+        '[data-test-markdown-bfm-inline-file]:has([data-test-file-isolated])',
       )
       .hasAttribute(
         'style',

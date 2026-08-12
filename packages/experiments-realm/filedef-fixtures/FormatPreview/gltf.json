@@ -1,0 +1,47 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "gltf · Format Preview",
+      "cardInfo": {
+        "name": "gltf · Format Preview",
+        "summary": "Simple, moderate, and complex gltf fixtures across atom, embedded, isolated, and the 16 fitted envelopes."
+      }
+    },
+    "relationships": {
+      "previewFiles.0": {
+        "links": {
+          "self": "../samples/gltf-simple.gltf"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/gltf-simple.gltf"
+        }
+      },
+      "previewFiles.1": {
+        "links": {
+          "self": "../samples/gltf-moderate.gltf"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/gltf-moderate.gltf"
+        }
+      },
+      "previewFiles.2": {
+        "links": {
+          "self": "../samples/gltf-complex.gltf"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/gltf-complex.gltf"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../format-preview",
+        "name": "FileDefFormatPreview"
+      }
+    }
+  }
+}

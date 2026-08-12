@@ -61,8 +61,10 @@ import type { LocalPath } from './paths.ts';
 import { RealmPaths, ensureTrailingSlash, join } from './paths.ts';
 import type ms from 'ms';
 import {
+  DEFAULT_AUDIO_SIZE_LIMIT_BYTES,
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
+  DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
 } from './constants.ts';
 import {
   persistFileMeta,
@@ -187,8 +189,11 @@ import {
 } from './index-query-engine.ts';
 import { RealmIndexUpdater } from './realm-index-updater.ts';
 import serialize from './file-serializer.ts';
-import { validateWriteSize } from './write-size-validation.ts';
-import { md5 } from 'super-fast-md5';
+import {
+  fileSizeLimitFor,
+  validateWriteSize,
+} from './write-size-validation.ts';
+import { computeContentHash, isSampledContentHash } from './content-hash.ts';
 import { resolveFileDefCodeRef } from './file-def-code-ref.ts';
 
 import type { Utils } from './matrix-backend-authentication.ts';
@@ -244,6 +249,17 @@ export type RealmInfo = {
   realmUserId?: string;
   publishable: boolean | null;
   lastPublishedAt: string | Record<string, string> | null;
+  // Realm lifecycle timestamps, from realm_registry. Served by the realm
+  // server's batch `/_federated-info` only — absent from the per-realm
+  // `/_info` and from the `meta.realmInfo` embedded in card responses. See
+  // `Realm#getDetailedRealmInfo` for why. Optional (rather than `| null`-only)
+  // so consumers reading a card's `meta.realmInfo` type-check without
+  // pretending the values are there.
+  //
+  // The workspace-chooser tile counts are deliberately NOT here — see
+  // `RealmIndexCounts` and `Realm#getIndexCounts`.
+  createdAt?: string | null;
+  updatedAt?: string | null;
   // Opt-in to producing the full prerendered isolated HTML for the
   // realm's default index card (CardsGrid or Workspace). When
   // undefined / null / false the host's render route substitutes a
@@ -255,6 +271,19 @@ export type RealmInfo = {
   // the index's isolated HTML. Optional to avoid forcing every
   // RealmInfo fixture to update.
   includePrerenderedDefaultRealmIndex?: boolean | null;
+};
+
+// Counts behind a favorite workspace tile's Cards / Files / Definitions row.
+// Kept out of `RealmInfo` because they're the expensive half to compute — an
+// aggregate over every index row in the realm — and only favorited tiles
+// render them, so the host fetches them lazily from
+// `/_federated-index-counts` rather than at boot for every realm. A `null`
+// means "not available" (index tables missing, or the query failed) and the
+// tile drops that stat rather than showing a zero.
+export type RealmIndexCounts = {
+  cardCount: number | null;
+  fileCount: number | null;
+  definitionCount: number | null;
 };
 
 // Marker header the host SPA attaches to outbound _federated-search /
@@ -434,7 +463,8 @@ type CachedSourceFileEntry = {
   ref: FileRef;
   defaultHeaders: Record<string, string>;
   canonicalPath: LocalPath;
-  // md5 of the materialized body, computed once on cache populate. Used
+  // Content fingerprint of the materialized body, computed once on cache
+  // populate. Used
   // as the ETag base so two writes within the same unix second still
   // produce distinct ETags — see `buildEtag` for the rationale.
   contentHash: string | undefined;
@@ -479,7 +509,7 @@ type ModuleTranspileResult = {
   dependencyKeys: Set<string>;
 };
 
-// ETag base prefers a content fingerprint (md5 of the file body) over
+// ETag base prefers a content fingerprint (derived from the file body) over
 // `lastModified` because the unix-second timestamp collides for two
 // writes that land in the same second — and `cachedFetch` (loader →
 // cached-fetch) will then serve a stale 304-cached body. We compute the
@@ -488,6 +518,31 @@ type ModuleTranspileResult = {
 // cache entry so subsequent serves reuse it. Adapters that don't yet
 // surface a content fingerprint fall back to `lastModified` and keep the
 // pre-existing behavior.
+//
+// An `etagBase` must be a TOTAL identity of the body, because displacing
+// `lastModified` gives up the only signal that sees every write. A sampled
+// fingerprint (see `computeContentHash`) is not total — it cannot see a large
+// file's middle — so it is joined with `lastModified` rather than replacing
+// it: the hash resolves two writes inside one second, and the timestamp
+// covers a same-length middle-only edit the hash misses. An mtime-only touch
+// then busts the cache, which is the safe direction and already how every
+// file without a fingerprint behaves.
+// Joins a sampled fingerprint with the file's mtime so the ETag base is a
+// total identity again. Returns a whole fingerprint unchanged, and undefined
+// when there is none (the caller then falls back to mtime alone).
+function totalEtagBase(
+  etagBase: string | undefined,
+  lastModified: number | undefined,
+): string | undefined {
+  if (etagBase == null) {
+    return undefined;
+  }
+  if (lastModified == null || !isSampledContentHash(etagBase)) {
+    return etagBase;
+  }
+  return `${etagBase}:${lastModified}`;
+}
+
 function buildEtag(
   base: string | number | undefined,
   variant?: string,
@@ -576,24 +631,9 @@ export function ifNoneMatchMatches(headerValue: string, etag: string): boolean {
     .some((token) => token.trim().replace(/^W\//, '') === normalizedEtag);
 }
 
-function computeContentHash(content: string | Uint8Array): string {
-  try {
-    if (content instanceof Uint8Array) {
-      return md5(content);
-    }
-    return md5(new TextEncoder().encode(content));
-  } catch {
-    try {
-      return md5(String(content));
-    } catch {
-      throw new Error('Failed to compute content hash');
-    }
-  }
-}
-
-// Cheap helper for the source endpoint: returns md5 of the body when the
-// ref has already been materialized to a string or Uint8Array. Returns
-// undefined for stream refs (the caller falls back to lastModified).
+// Cheap helper for the source endpoint: returns the content fingerprint of the
+// body when the ref has already been materialized to a string or Uint8Array.
+// Returns undefined for stream refs (the caller falls back to lastModified).
 function contentHashFromMaterializedRef(ref: FileRef): string | undefined {
   let { content } = ref;
   if (typeof content === 'string' || content instanceof Uint8Array) {
@@ -604,6 +644,18 @@ function contentHashFromMaterializedRef(ref: FileRef): string | undefined {
     }
   }
   return undefined;
+}
+
+// Normalizes a timestamp column to an ISO string. pg hands back a
+// `timestamp` as a native Date; the sqlite adapter returns it as text. An
+// unparseable value yields null rather than the "Invalid Date" a bare
+// `toISOString()` would throw on.
+function toISOStringOrNull(value: string | Date | null): string | null {
+  if (value == null) {
+    return null;
+  }
+  let date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
 function computeContentSize(content: string | Uint8Array): number {
@@ -870,6 +922,8 @@ export class Realm {
   #transpileCoordinator?: PopulateCoordinator;
   #cardSizeLimitBytes: number;
   #fileSizeLimitBytes: number;
+  #audioSizeLimitBytes: number;
+  #videoSizeLimitBytes: number;
 
   #publicEndpoints: RouteTable<true> = new Map([
     [
@@ -892,6 +946,27 @@ export class Realm {
   // bump on a config change. Recomputed lazily alongside the cached
   // realm info.
   #cachedRealmInfoHash: string | null = null;
+  // Realm lifecycle timestamps, served by `getDetailedRealmInfo` on top of the
+  // plain info. Cached separately from `#cachedRealmInfo` rather than folded
+  // into it, because that object is hashed into the card+json ETag and
+  // `updated_at` moves on every realm write — mixing it in would bust every
+  // card's cached representation whenever one card changed. A single indexed
+  // `realm_registry` row lookup, so cheap enough for the boot-time batch.
+  #cachedRegistryTimestamps: {
+    createdAt: string | null;
+    updatedAt: string | null;
+  } | null = null;
+  // Cards / files / definitions counts, served ONLY by the dedicated
+  // `/_federated-index-counts` route — the host requests them just for the
+  // realms whose tiles actually render a stats row (favorites). Kept off the
+  // realm-info path because this is the expensive half: an aggregate over
+  // every index row in the realm, versus a single row lookup for the
+  // timestamps above.
+  #cachedIndexCounts: RealmIndexCounts | null = null;
+  // The in-flight `queryIndexCounts()` promise, so concurrent
+  // `/_federated-index-counts` callers share one aggregate instead of each
+  // running the full per-url scan. Nulled once it settles (and on index swap).
+  #indexCountsPromise: Promise<RealmIndexCounts> | null = null;
   // Cached host routing map, derived from the indexed RealmConfig card.
   // `getHostRoutingMap()` is called on every host-mode index request
   // (serve-index), so re-querying the index each time is wasteful — the map
@@ -936,6 +1011,8 @@ export class Realm {
       definitionLookup,
       cardSizeLimitBytes,
       fileSizeLimitBytes,
+      audioSizeLimitBytes,
+      videoSizeLimitBytes,
       transpileCoordinator,
     }: {
       url: string;
@@ -949,6 +1026,8 @@ export class Realm {
       definitionLookup: DefinitionLookup;
       cardSizeLimitBytes?: number;
       fileSizeLimitBytes?: number;
+      audioSizeLimitBytes?: number;
+      videoSizeLimitBytes?: number;
       // CS-11030: when set, the realm coalesces concurrent cross-process
       // transpiles through an advisory-lock + NOTIFY winner/loser flow
       // and persists the resulting bytes to `module_transpile_cache` so
@@ -980,6 +1059,10 @@ export class Realm {
       cardSizeLimitBytes ?? DEFAULT_CARD_SIZE_LIMIT_BYTES;
     this.#fileSizeLimitBytes =
       fileSizeLimitBytes ?? DEFAULT_FILE_SIZE_LIMIT_BYTES;
+    this.#audioSizeLimitBytes =
+      audioSizeLimitBytes ?? DEFAULT_AUDIO_SIZE_LIMIT_BYTES;
+    this.#videoSizeLimitBytes =
+      videoSizeLimitBytes ?? DEFAULT_VIDEO_SIZE_LIMIT_BYTES;
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
     this.#copiedFromRealm = opts?.copiedFromRealm;
     let owner: string | undefined;
@@ -1466,6 +1549,7 @@ export class Realm {
         // replicas via NOTIFY realm_index_updated so their #inFlightSearch
         // maps don't coalesce post-update callers into pre-update promises.
         await this.clearRealmIndexCachesAndBroadcast();
+        await this.touchSourceRealmUpdatedAt();
         await this.handleExecutableInvalidations(invalidatedURLs);
         for (let invalidatedURL of invalidatedURLs) {
           invalidations.add(invalidatedURL.href);
@@ -1516,6 +1600,7 @@ export class Realm {
       clientRequestId: opts?.clientRequestId ?? null,
       onInvalidation: async (invalidatedURLs: URL[], meta) => {
         await this.clearRealmIndexCachesAndBroadcast();
+        await this.touchSourceRealmUpdatedAt();
         await this.handleExecutableInvalidations(invalidatedURLs);
         for (let invalidatedURL of invalidatedURLs) {
           invalidations.add(invalidatedURL.href);
@@ -2138,7 +2223,7 @@ export class Realm {
         isCardDocumentString(content)
           ? 'card'
           : 'file';
-      this.assertWriteSize(content, sizeType);
+      this.assertWriteSize(content, sizeType, path);
       let isNewFile: boolean;
       if (typeof content === 'string') {
         let existingFile = await readFileAsText(path, (p) =>
@@ -2508,14 +2593,14 @@ export class Realm {
         }
         if (isModuleResource(resource)) {
           let content = resource.attributes?.content ?? '';
-          this.assertWriteSize(content, 'file');
+          this.assertWriteSize(content, 'file', localPath);
           files.set(localPath, content);
         } else if (isCardResource(resource)) {
           let doc = {
             data: resource,
           };
           let jsonString = JSON.stringify(doc, null, 2);
-          this.assertWriteSize(jsonString, 'card');
+          this.assertWriteSize(jsonString, 'card', localPath);
           files.set(localPath, jsonString);
         } else {
           return createResponse({
@@ -3835,7 +3920,7 @@ export class Realm {
     options?: {
       defaultHeaders?: Record<string, string>;
       etagVariant?: string;
-      // Optional content-derived fingerprint (e.g. md5 of body bytes).
+      // Optional content-derived fingerprint derived from the body bytes.
       // Takes precedence over `ref.lastModified` for the ETag — see
       // `buildEtag`. Callers that have the materialized body already
       // (the source endpoint cache-miss path) compute this for free.
@@ -3857,7 +3942,7 @@ export class Realm {
       ? `${cacheVisibility}, max-age=60, must-revalidate`
       : `${cacheVisibility}, max-age=0`;
     let etag = buildEtag(
-      options?.etagBase ?? ref.lastModified,
+      totalEtagBase(options?.etagBase, ref.lastModified) ?? ref.lastModified,
       options?.etagVariant,
     );
     let lastModified = formatRFC7231(ref.lastModified * 1000);
@@ -4125,9 +4210,19 @@ export class Realm {
     });
   }
 
-  private assertWriteSize(content: string | Uint8Array, type: 'card' | 'file') {
+  private assertWriteSize(
+    content: string | Uint8Array,
+    type: 'card' | 'file',
+    path: LocalPath,
+  ) {
     let limit =
-      type === 'card' ? this.#cardSizeLimitBytes : this.#fileSizeLimitBytes;
+      type === 'card'
+        ? this.#cardSizeLimitBytes
+        : fileSizeLimitFor(path, {
+            default: this.#fileSizeLimitBytes,
+            audio: this.#audioSizeLimitBytes,
+            video: this.#videoSizeLimitBytes,
+          });
     try {
       validateWriteSize(content, limit, type);
     } catch (error: any) {
@@ -4280,7 +4375,7 @@ export class Realm {
         }
         // Compute the content fingerprint while we have the body in
         // memory — `cachedRef.content` is already a string/Uint8Array
-        // post-materialization, so this is a single md5 with no extra I/O.
+        // post-materialization, so this is a single hash with no extra I/O.
         let contentHash = contentHashFromMaterializedRef(cachedRef);
         if (
           sourceCacheGenSnapshot &&
@@ -6873,6 +6968,134 @@ export class Realm {
     }
   }
 
+  // created_at / updated_at come from realm_registry rather than
+  // realm_metadata: every mounted realm has a registry row — source,
+  // published, and bootstrap realms alike — while realm_metadata rows only
+  // exist for realms that went through the create-realm or publish flow.
+  // Kept separate from getRealmMetadata() (rather than joined into it) so a
+  // realm that has one row but not the other still gets whatever it does
+  // have; a join in either direction drops the columns from the missing side.
+  private async getRegistryTimestamps(): Promise<{
+    createdAt: string | null;
+    updatedAt: string | null;
+  }> {
+    try {
+      let results = (await query(this.#dbAdapter, [
+        `SELECT created_at, updated_at FROM realm_registry WHERE url =`,
+        param(this.url),
+      ])) as {
+        // pg returns a `timestamp` column as a native Date; sqlite (used
+        // in host tests) stores/returns it as text. Normalize both to an
+        // ISO string below so `createdAt`/`updatedAt` honor their
+        // declared types.
+        created_at: string | Date | null;
+        updated_at: string | Date | null;
+      }[];
+      if (results.length === 0) {
+        return { createdAt: null, updatedAt: null };
+      }
+      return {
+        createdAt: toISOStringOrNull(results[0].created_at),
+        updatedAt: toISOStringOrNull(results[0].updated_at),
+      };
+    } catch (error) {
+      this.#log.warn(`Failed to query realm registry timestamps: ${error}`);
+      return { createdAt: null, updatedAt: null };
+    }
+  }
+
+  // Advance `realm_registry.updated_at` when this realm's content changes, so
+  // the workspace chooser's "Updated" footer tracks real activity. Scoped to
+  // `kind = 'source'`: source rows are the only ones a user writes to, while
+  // published rows carry publish-time semantics via `last_published_at` and
+  // bootstrap rows never change. Called from the incremental-index invalidation
+  // hook — once per write batch, not once per file — so the cost is one cheap
+  // single-row UPDATE per write. Best-effort: a failed touch must not fail the
+  // index that triggered it. The surrounding index swap already dropped
+  // `#cachedRegistryTimestamps` (via `invalidateCachedRealmInfo`), so the next
+  // `getRegistryTimestamps` re-reads the advanced value.
+  private async touchSourceRealmUpdatedAt(): Promise<void> {
+    try {
+      await query(this.#dbAdapter, [
+        `UPDATE realm_registry SET updated_at = now() WHERE url =`,
+        param(this.url),
+        `AND kind = 'source'`,
+      ]);
+    } catch (error) {
+      this.#log.warn(
+        `Failed to advance realm_registry.updated_at for ${this.url}: ${error}`,
+      );
+    }
+  }
+
+  // Cards / files / definitions for the tile-metadata row (see
+  // workspace-chooser). "Definitions" are the modules that can declare a card
+  // or field (.gts/.ts/.gjs/.js); "files" is everything else — assets, docs,
+  // standalone data.
+  //
+  // Counted per distinct url, not per row, because a card instance produces
+  // BOTH an `instance` row and a `file` row at the same url (its `.json`).
+  // Counting rows would put every card into the file count as well, so a
+  // realm of 24 cards and 3 assets would report 27 files.
+  //
+  // Scoped by `is_deleted` alone, with no generation predicate: deletions are
+  // tombstoned via `is_deleted`, while `boxel_index.generation` is a
+  // last-touched watermark that an incremental index only bumps on the rows it
+  // rewrote. Pinning `generation = current_generation` would count just the
+  // files touched by the most recent index pass — on a realm that has had any
+  // incremental index that is a handful of rows, not its contents. This
+  // matches how the query engine scopes a live search (see
+  // `index-query-engine.ts`).
+  //
+  // One query rather than three: they share a scan, and the counts are only
+  // ever consumed together. Returns nulls rather than throwing on a query
+  // failure — boxel_index is absent from the sqlite adapter the host tests use,
+  // and a gap here should leave the tile without a stats row, not fail the
+  // request. Callers reach this through the memoizing `getIndexCounts()`.
+  private async queryIndexCounts(): Promise<RealmIndexCounts> {
+    // Spelled as SUM(CASE ...) rather than COUNT(*) with a `::int` cast: the
+    // cast is Postgres-only syntax. 1/0 flags rather than booleans for the
+    // same reason — sqlite has no boolean type.
+    let modulePredicate = `(bi.url LIKE '%.gts' OR bi.url LIKE '%.ts' OR bi.url LIKE '%.gjs' OR bi.url LIKE '%.js')`;
+    try {
+      let results = (await query(this.#dbAdapter, [
+        `SELECT
+           SUM(CASE WHEN has_instance = 1 THEN 1 ELSE 0 END) AS card_count,
+           SUM(CASE WHEN has_instance = 0 AND is_module = 1 THEN 1 ELSE 0 END) AS definition_count,
+           SUM(CASE WHEN has_instance = 0 AND is_module = 0 THEN 1 ELSE 0 END) AS file_count
+         FROM (
+           SELECT
+             MAX(CASE WHEN bi.type = 'instance' THEN 1 ELSE 0 END) AS has_instance,
+             MAX(CASE WHEN ${modulePredicate} THEN 1 ELSE 0 END) AS is_module
+           FROM boxel_index bi
+           WHERE bi.realm_url =`,
+        param(this.url),
+        `AND (bi.is_deleted = FALSE OR bi.is_deleted IS NULL)
+           GROUP BY bi.url
+         ) per_url`,
+      ])) as {
+        card_count: number | string | null;
+        definition_count: number | string | null;
+        file_count: number | string | null;
+      }[];
+      let row = results[0];
+      if (!row) {
+        return { cardCount: null, fileCount: null, definitionCount: null };
+      }
+      // SUM over zero rows is NULL in both adapters, and pg can hand back a
+      // bigint as a string — coalesce to 0 and normalize to a number so the
+      // UI's `count === 0` checks behave.
+      return {
+        cardCount: Number(row.card_count ?? 0),
+        fileCount: Number(row.file_count ?? 0),
+        definitionCount: Number(row.definition_count ?? 0),
+      };
+    } catch (error) {
+      this.#log.warn(`Failed to query realm index counts: ${error}`);
+      return { cardCount: null, fileCount: null, definitionCount: null };
+    }
+  }
+
   // CS-10054: read host routing rules from the indexed RealmConfig card.
   // The `instance` field is `linksTo(CardDef)`, so the indexed
   // searchDoc flattens each rule's link as `{ id, ...flattened
@@ -7024,6 +7247,11 @@ export class Realm {
   invalidateCachedRealmInfo(): void {
     this.#cachedRealmInfo = null;
     this.#cachedRealmInfoHash = null;
+    this.#cachedRegistryTimestamps = null;
+    this.#cachedIndexCounts = null;
+    // Drop any in-flight aggregate too, so a request that overlapped the swap
+    // doesn't repopulate the cache with pre-swap counts.
+    this.#indexCountsPromise = null;
   }
 
   private async parseRealmInfo(): Promise<RealmInfo> {
@@ -7141,6 +7369,73 @@ export class Realm {
     return realmInfo;
   }
 
+  // RealmInfo plus the realm-lifecycle timestamps, for the realm server's batch
+  // `/_federated-info` — what the host loads once at boot for every realm.
+  // Public so that handler can reach it. Index counts are NOT included: they
+  // are the expensive half and only a favorited realm's tile renders them, so
+  // they have their own route (see `getIndexCounts`).
+  //
+  // Deliberately not folded into `parseRealmInfo()`/`getRealmInfo()`: that
+  // result is embedded in every card response's `meta.realmInfo` and hashed
+  // into the card+json ETag, so `updated_at` — which `touchSourceRealmUpdatedAt`
+  // advances on every write to a source realm — would invalidate every card's
+  // cached representation in the realm each time one card changed.
+  async getDetailedRealmInfo(): Promise<RealmInfo> {
+    let [info, timestamps] = await Promise.all([
+      this.getRealmInfo(),
+      this.getCachedRegistryTimestamps(),
+    ]);
+    return { ...info, ...timestamps };
+  }
+
+  private async getCachedRegistryTimestamps(): Promise<{
+    createdAt: string | null;
+    updatedAt: string | null;
+  }> {
+    if (!this.#cachedRegistryTimestamps) {
+      this.#cachedRegistryTimestamps = await this.getRegistryTimestamps();
+    }
+    return this.#cachedRegistryTimestamps;
+  }
+
+  // Cards / files / definitions for the workspace-chooser favorite tiles.
+  // Served by `/_federated-index-counts` and requested lazily, only for the
+  // realms whose tiles render a stats row — the underlying query aggregates
+  // every index row in the realm, so it must not sit on a path the host walks
+  // for every realm at boot. Memoized and dropped on index swap, so a realm
+  // whose tile is re-rendered repeatedly pays the aggregate once per
+  // generation. Public so the route handler can reach it.
+  async getIndexCounts(): Promise<RealmIndexCounts> {
+    if (this.#cachedIndexCounts) {
+      return this.#cachedIndexCounts;
+    }
+    if (!this.#indexCountsPromise) {
+      this.#indexCountsPromise = this.queryIndexCounts().finally(() => {
+        this.#indexCountsPromise = null;
+      });
+    }
+    let counts = await this.#indexCountsPromise;
+    // Don't memoize a failed query — `queryIndexCounts` returns an all-`null`
+    // triple on error, and caching that would suppress this realm's counts
+    // until its next index swap. Leaving it uncached lets the next request
+    // retry; a real (even all-zero) result is safe to memoize.
+    if (
+      counts.cardCount !== null ||
+      counts.fileCount !== null ||
+      counts.definitionCount !== null
+    ) {
+      this.#cachedIndexCounts = counts;
+    }
+    return counts;
+  }
+
+  // Serves the plain `RealmInfo`, NOT `getDetailedRealmInfo`. This route is
+  // fanned out to internally: the realm server's `/_catalog-realms` handler
+  // issues one `_info` per publicly-readable realm and silently drops any
+  // realm whose response isn't a 200, then caches that list for the life of
+  // the process. Adding per-request index aggregation here put that cold
+  // fan-out at risk for no benefit — the workspace chooser reads its tile
+  // metadata from `/_federated-info`, which does serve the detailed variant.
   private async realmInfo(
     _request: Request,
     requestContext: RequestContext,

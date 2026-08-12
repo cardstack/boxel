@@ -1,0 +1,47 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "mp3 · Format Preview",
+      "cardInfo": {
+        "name": "mp3 · Format Preview",
+        "summary": "Simple, moderate, and complex mp3 fixtures across atom, embedded, isolated, and the 16 fitted envelopes."
+      }
+    },
+    "relationships": {
+      "previewFiles.0": {
+        "links": {
+          "self": "../samples/mp3-simple.mp3"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/mp3-simple.mp3"
+        }
+      },
+      "previewFiles.1": {
+        "links": {
+          "self": "../samples/mp3-moderate.mp3"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/mp3-moderate.mp3"
+        }
+      },
+      "previewFiles.2": {
+        "links": {
+          "self": "../samples/mp3-complex.mp3"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/mp3-complex.mp3"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../format-preview",
+        "name": "FileDefFormatPreview"
+      }
+    }
+  }
+}

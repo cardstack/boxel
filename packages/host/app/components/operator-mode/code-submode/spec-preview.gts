@@ -95,7 +95,7 @@ interface ContentSignature {
     showCreateSpec: boolean;
     errorMessage?: string;
     canWrite: boolean;
-    onSelectSpec: (spec: Spec) => void;
+    onSelectSpec: (spec: Spec | null) => void;
     allSpecs: Spec[];
     activeSpec: Spec | undefined;
     isLoading: boolean;
@@ -361,7 +361,10 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     return state;
   });
 
-  @action private onSelectSpec(spec: Spec): void {
+  @action private onSelectSpec(spec: Spec | null): void {
+    if (!spec) {
+      return;
+    }
     this.specPanelService.setSelection(spec.id);
   }
 

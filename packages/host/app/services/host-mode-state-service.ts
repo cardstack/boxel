@@ -9,6 +9,8 @@ import stringify from 'safe-stable-stringify';
 
 import { TrackedArray } from 'tracked-built-ins';
 
+import { removeTopmost, unwindOrPush } from '../utils/host-mode-stack';
+
 import type RealmService from './realm';
 import type SessionService from './session';
 
@@ -95,15 +97,12 @@ export default class HostModeStateService extends Service {
   }
 
   pushCard(cardId: string) {
-    this.stackCardItems.push(cardId);
+    unwindOrPush(this.stackCardItems, cardId, this.primaryCardItem);
     this.schedulePersist();
   }
 
   removeCardFromStack(cardId: string) {
-    let index = this.stackCardItems.findIndex((item) => item === cardId);
-
-    if (index !== -1) {
-      this.stackCardItems.splice(index, 1);
+    if (removeTopmost(this.stackCardItems, cardId)) {
       this.schedulePersist();
     }
   }

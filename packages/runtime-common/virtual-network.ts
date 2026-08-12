@@ -723,6 +723,60 @@ export class VirtualNetwork {
   }
 
   /**
+   * The realm holding `reference`, as a real URL href, or undefined when no
+   * registered realm does.
+   *
+   * Matches either spelling — a prefix-form RRI against the registered realm
+   * identifiers, a URL against those identifiers' targets — and always answers
+   * in URL form so callers can compare against a realm's own URL.
+   *
+   * Longest match wins, because a realm's identifier can be a prefix of
+   * another's: `@cardstack/base/` and `@cardstack/base-extras/` both match a
+   * reference into the latter, and the deeper one is the real holder. This is
+   * why a realm can't be recovered by counting path segments — realm roots are
+   * whatever was registered, at whatever depth.
+   */
+  realmForReference(reference: string): string | undefined {
+    // A realm can be addressed several ways, and which ones exist depends on
+    // how it was registered. A prefix mapping contributes its `@scope/name/`
+    // spelling and its target; a URL mapping contributes the virtual space and
+    // the real one. Realms registered only by URL — everything that isn't
+    // `@cardstack/<name>/` or a scoped prefix — appear solely in the latter, so
+    // matching `realmMappings` alone would fail to place them at all.
+    let candidates: [string, string][] = [];
+    for (let [prefix, target] of this.realmMappings) {
+      candidates.push([prefix, target], [target, target]);
+    }
+    for (let [virtual, real] of this.urlMappings) {
+      candidates.push([virtual, real], [real, real]);
+    }
+
+    let best: string | undefined;
+    let bestLength = -1;
+    for (let [addressable, realmHref] of candidates) {
+      if (
+        reference.startsWith(addressable) &&
+        addressable.length > bestLength
+      ) {
+        bestLength = addressable.length;
+        best = realmHref;
+      }
+    }
+    if (!best) {
+      return undefined;
+    }
+    // A prefix mapping points at where the realm is *reachable*, which is not
+    // always the URL the realm calls itself. The base realm is served as
+    // `https://cardstack.com/base/` and merely mapped to a real host, and its
+    // index rows are stored under that virtual URL — so answering with the
+    // mapping target would name a realm the index has never heard of, and the
+    // search would come back empty. Fold back to the virtual form when one
+    // exists; every other realm maps to itself and is unaffected.
+    let virtual = this.mapURL(ensureTrailingSlash(best), 'real-to-virtual');
+    return ensureTrailingSlash(virtual ? virtual.href : best);
+  }
+
+  /**
    * Convert a URL back to its registered prefix form when one matches,
    * e.g. `http://localhost:4201/catalog/foo` → `@cardstack/catalog/foo`.
    *

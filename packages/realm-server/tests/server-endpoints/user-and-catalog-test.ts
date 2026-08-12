@@ -104,18 +104,18 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           .set('Accept', 'application/json');
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
-        assert.deepEqual(response.body, {
-          data: [
-            {
-              type: 'catalog-realm',
-              id: `${testRealmURL}`,
-              attributes: {
-                ...testRealmInfo,
-                showAsCatalog: true,
-              },
+        // `/_catalog-realms` forwards each realm's `/_info` attributes
+        // verbatim, and that route serves the plain RealmInfo.
+        assert.deepEqual(response.body.data, [
+          {
+            type: 'catalog-realm',
+            id: `${testRealmURL}`,
+            attributes: {
+              ...testRealmInfo,
+              showAsCatalog: true,
             },
-          ],
-        });
+          },
+        ]);
       });
 
       test(`returns 200 with empty data if failed to fetch catalog realm's info`, async function (assert) {

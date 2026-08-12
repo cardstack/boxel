@@ -8,9 +8,15 @@ import {
   Deferred,
   RealmPaths,
   isCardErrorJSONAPI,
+  toSafeFileName,
   type LocalPath,
 } from '@cardstack/runtime-common';
+import {
+  fileSizeLimitFor,
+  validateByteLength,
+} from '@cardstack/runtime-common/write-size-validation';
 
+import type EnvironmentService from './environment-service';
 import type NetworkService from './network';
 import type SessionService from './session';
 import type StoreService from './store';
@@ -48,6 +54,7 @@ export class FileUploadTask {
 }
 
 export default class FileUploadService extends Service {
+  @service declare private environmentService: EnvironmentService;
   @service declare private network: NetworkService;
   @service declare private session: SessionService;
   @service declare private store: StoreService;
@@ -193,17 +200,38 @@ export default class FileUploadService extends Service {
         return;
       }
 
-      let lastDotIndex = file.name.lastIndexOf('.');
-      if (lastDotIndex <= 0 || lastDotIndex >= file.name.length - 1) {
+      // The realm identifies a file by the local path it is written to, and
+      // derives everything else — content type, size ceiling, which FileDef
+      // subtype it adopts — from that path. A name carrying URL syntax would
+      // be truncated on the way there, so it is made safe first and every
+      // decision below is made about the name that will actually be stored.
+      let uploadName = toSafeFileName(file.name);
+
+      let lastDotIndex = uploadName.lastIndexOf('.');
+      if (lastDotIndex <= 0 || lastDotIndex >= uploadName.length - 1) {
         throw new Error(
           `The file "${file.name}" has no extension. Please select a file with an extension (e.g. .png, .txt, .gts).`,
         );
       }
 
-      task.fileName = file.name;
+      task.fileName = uploadName;
+
+      // The realm rejects an over-limit write with a 413, but only after the
+      // whole body has crossed the wire and been buffered server-side. Checking
+      // the size the browser already knows turns that into an immediate error.
+      validateByteLength(
+        file.size,
+        fileSizeLimitFor(uploadName, {
+          default: this.environmentService.fileSizeLimitBytes,
+          audio: this.environmentService.audioSizeLimitBytes,
+          video: this.environmentService.videoSizeLimitBytes,
+        }),
+        'file',
+      );
+
       task.state = 'uploading';
 
-      let targetUrl = new RealmPaths(realmURL).fileURL(file.name as LocalPath);
+      let targetUrl = new RealmPaths(realmURL).fileURL(uploadName as LocalPath);
 
       let response = await this.network.authedFetch(targetUrl, {
         method: 'POST',

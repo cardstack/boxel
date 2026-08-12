@@ -444,9 +444,8 @@ export default class AiAssistantPanelService extends Service {
             input.disabledSkillIds = disabledSkillIds;
           } else {
             // Use default skills (ids; may name `.md` skill files or cards)
-            input.enabledSkillIds = await this.matrixService.loadDefaultSkills(
-              this.operatorModeStateService.state.submode,
-            );
+            input.enabledSkillIds =
+              await this.matrixService.loadDefaultSkills();
           }
 
           ({ roomId } = await createRoomCommand.execute(input));
@@ -538,9 +537,7 @@ export default class AiAssistantPanelService extends Service {
 
   private async applyDefaultSkillsToRoom(roomId: string) {
     try {
-      let skillIds = await this.matrixService.loadDefaultSkills(
-        this.operatorModeStateService.state.submode,
-      );
+      let skillIds = await this.matrixService.loadDefaultSkills();
       if (!skillIds.length) {
         return;
       }

@@ -7,16 +7,17 @@ import GlimmerComponent from '@glimmer/component';
 import { modifier } from 'ember-modifier';
 
 import { profileForFile, type FileTypeProfile } from './file-type-profile';
+// The image primitive lives in its own lean module because card-api's
+// universal graph reaches it (via `image-preview`); re-exported here so this
+// module remains the media-primitives barrel.
+import {
+  FileImage,
+  fileResourceURL,
+  stringValue,
+  type FileResourceLike,
+} from './file-image';
 
-// A structural contract rather than `FileDef` itself, so callers can pass a
-// plain object (a test fixture, a serialized file) as well as a real instance.
-export interface FileResourceLike {
-  id?: string | URL | null;
-  url?: string | URL | null;
-  sourceUrl?: string | URL | null;
-  name?: string | null;
-  contentType?: string | null;
-}
+export { FileImage, fileResourceURL, type FileResourceLike };
 
 interface ResourceArgs {
   file?: FileResourceLike | null;
@@ -33,24 +34,6 @@ export interface ResolvedFileResource {
   profile: FileTypeProfile;
   backgroundImage: string;
   backgroundStyle: ReturnType<typeof htmlSafe>;
-}
-
-function stringValue(value?: string | URL | null): string {
-  return value == null ? '' : String(value);
-}
-
-// One precedence order for every primitive: an explicit URL wins, then the
-// FileDef's own `url`, then its id, then the source URL it was extracted from.
-export function fileResourceURL(
-  file?: FileResourceLike | null,
-  explicitURL?: string | URL | null,
-): string {
-  return (
-    stringValue(explicitURL) ||
-    stringValue(file?.url) ||
-    stringValue(file?.id) ||
-    stringValue(file?.sourceUrl)
-  );
 }
 
 // Keep an untrusted filename or URL inside a single quoted CSS token so it
@@ -312,39 +295,6 @@ export class FileResource extends GlimmerComponent<FileResourceSignature> {
   }
 
   <template>{{yield this.resource}}</template>
-}
-
-interface FileImageSignature {
-  Args: ResourceArgs & {
-    src?: string | URL | null;
-    alt?: string | null;
-    loading?: 'eager' | 'lazy';
-    decoding?: 'async' | 'auto' | 'sync';
-  };
-  Element: HTMLImageElement;
-}
-
-// Exactly one `<img>`; the caller owns every visual decision through
-// `...attributes`.
-export class FileImage extends GlimmerComponent<FileImageSignature> {
-  get src() {
-    return fileResourceURL(this.args.file, this.args.src ?? this.args.url);
-  }
-  get alt() {
-    return this.args.alt ?? this.args.name ?? this.args.file?.name ?? '';
-  }
-
-  <template>
-    {{#if this.src}}
-      <img
-        src={{this.src}}
-        alt={{this.alt}}
-        loading={{@loading}}
-        decoding={{@decoding}}
-        ...attributes
-      />
-    {{/if}}
-  </template>
 }
 
 interface FileAudioSignature {

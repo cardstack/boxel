@@ -92,7 +92,10 @@ class UrgencyTagEdit extends Component<typeof UrgencyTag> {
     });
   }
 
-  @action onSelectStatus(status: UrgencyTag): void {
+  @action onSelectStatus(status: UrgencyTag | null): void {
+    if (!status) {
+      return;
+    }
     this.label = status.label;
     this.args.model.label = this.selectedStatus?.label;
     this.args.model.foregroundColor = this.selectedStatus?.foregroundColor;

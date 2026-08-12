@@ -1,0 +1,47 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "jpeg · Format Preview",
+      "cardInfo": {
+        "name": "jpeg · Format Preview",
+        "summary": "Simple, moderate, and complex jpeg fixtures across atom, embedded, isolated, and the 16 fitted envelopes."
+      }
+    },
+    "relationships": {
+      "previewFiles.0": {
+        "links": {
+          "self": "../samples/jpeg-simple.jpg"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/jpeg-simple.jpg"
+        }
+      },
+      "previewFiles.1": {
+        "links": {
+          "self": "../samples/jpeg-moderate.jpg"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/jpeg-moderate.jpg"
+        }
+      },
+      "previewFiles.2": {
+        "links": {
+          "self": "../samples/jpeg-complex.jpg"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/jpeg-complex.jpg"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../format-preview",
+        "name": "FileDefFormatPreview"
+      }
+    }
+  }
+}

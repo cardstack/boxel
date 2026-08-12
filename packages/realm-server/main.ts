@@ -9,8 +9,10 @@ import {
   logger,
   Deferred,
   CachingDefinitionLookup,
+  DEFAULT_AUDIO_SIZE_LIMIT_BYTES,
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
+  DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
 } from '@cardstack/runtime-common';
 import { NodeAdapter } from './node-realm.ts';
 import {
@@ -634,6 +636,14 @@ const reportHostShellToManager = async () => {
           ),
           fileSizeLimitBytes: Number(
             process.env.FILE_SIZE_LIMIT_BYTES ?? DEFAULT_FILE_SIZE_LIMIT_BYTES,
+          ),
+          audioSizeLimitBytes: Number(
+            process.env.AUDIO_SIZE_LIMIT_BYTES ??
+              DEFAULT_AUDIO_SIZE_LIMIT_BYTES,
+          ),
+          videoSizeLimitBytes: Number(
+            process.env.VIDEO_SIZE_LIMIT_BYTES ??
+              DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
           ),
         },
         {

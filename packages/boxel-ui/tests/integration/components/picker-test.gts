@@ -1,10 +1,9 @@
 import { type PickerOption, Picker } from '@cardstack/boxel-ui/components';
+import { validateSelectAllOption } from '@cardstack/boxel-ui/components/picker/index';
 import {
   click,
   fillIn,
   render,
-  resetOnerror,
-  setupOnerror,
   triggerKeyEvent,
   waitFor,
 } from '@ember/test-helpers';
@@ -33,8 +32,6 @@ module('Integration | Component | picker', function (hooks) {
     selectAllOption,
     ...testOptions,
   ];
-
-  const emptyArray: PickerOption[] = [];
 
   // Helper to get option IDs from the main dropdown list only (excludes before-options)
   const getMainListOptionIds = () =>
@@ -632,28 +629,16 @@ module('Integration | Component | picker', function (hooks) {
     );
   });
 
-  test('picker throws when select-all option is missing', async function (assert) {
-    setupOnerror((error: Error) => {
-      assert.ok(
-        /select-all option/i.test(error.message),
-        'throws expected select-all option error',
-      );
-    });
-
-    try {
-      await render(
-        <template>
-          <Picker
-            @options={{testOptions}}
-            @selected={{emptyArray}}
-            @onChange={{noop}}
-            @label='Test'
-          />
-        </template>,
-      );
-    } finally {
-      resetOnerror();
-    }
+  test('picker throws when select-all option is missing', function (assert) {
+    // The component performs this validation in its constructor; a
+    // constructor throw aborts the glimmer render mid-flight and cannot be
+    // recovered from in a rendering test, so the validation is asserted
+    // directly.
+    assert.throws(
+      () => validateSelectAllOption(testOptions),
+      /select-all option/i,
+      'throws expected select-all option error',
+    );
   });
 
   test('picker limits displayed items when maxSelectedDisplay is set', async function (assert) {

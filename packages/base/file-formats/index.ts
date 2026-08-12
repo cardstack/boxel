@@ -52,6 +52,24 @@ export {
   type FilePreviewSignature,
 } from './file-preview-stage';
 
+export { ImagePreview } from './image-preview';
+
+// The compound metadata shapes an extractor writes into. Shared per metadata
+// family rather than per file extension, so a camera or a color profile reads
+// the same wherever the bytes came from. A family that only needs the shapes
+// should import this module directly rather than through this barrel, which also
+// pulls in the four shells.
+export {
+  CameraCaptureField,
+  CodedValueField,
+  ColorProfileField,
+  ExifMetadataField,
+  GeoLocationField,
+  METADATA_VOCABULARIES,
+  QuantityField,
+  labelForCode,
+} from './metadata-fields';
+
 export { FileAtomShell } from './file-shell-atom';
 export { FileEmbeddedShell } from './file-shell-embedded';
 export { FileFittedShell } from './file-shell-fitted';

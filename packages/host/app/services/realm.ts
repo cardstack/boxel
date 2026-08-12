@@ -20,12 +20,18 @@ import {
 } from 'ember-concurrency';
 import window from 'ember-window-mock';
 
-import { TrackedSet, TrackedObject, TrackedArray } from 'tracked-built-ins';
+import {
+  TrackedSet,
+  TrackedObject,
+  TrackedArray,
+  TrackedMap,
+} from 'tracked-built-ins';
 
 import type {
   DecklistInput,
   Permissions,
   JWTPayload,
+  PublishProgress,
   RealmClient,
   RealmIdentifier,
   RealmPermissions,
@@ -47,6 +53,7 @@ import {
   rri,
   SupportedMimeType,
   type DecklistLink,
+  type RealmIndexCounts,
   type RealmInfo,
   RealmPaths,
 } from '@cardstack/runtime-common';
@@ -94,6 +101,12 @@ const sessionWaiter = buildWaiter('realm:session-login');
 // (e.g. SearchResultSection's render-race diagnostic) can detect the
 // placeholder without duplicating the literal string.
 export const UNKNOWN_REALM_NAME = 'Unknown Workspace';
+
+// How long `loadIndexCounts` waits before re-waking consumers to retry realms
+// left stale by a failed/omitted fetch. Long enough that a persistently failing
+// realm polls slowly rather than hot-looping; short enough that a transient blip
+// recovers without a reload.
+const INDEX_COUNTS_RETRY_MS = 5000;
 
 export type EnhancedRealmInfo = RealmInfo & {
   isIndexing: boolean;
@@ -163,6 +176,11 @@ class RealmResource {
 
   @tracked private _isPublishing = false;
   private _publishingRealms = new TrackedArray<string>();
+  // Latest progress reading per in-flight publish target, keyed by the URL the
+  // caller asked to publish to (the same key `_publishingRealms` holds) so the
+  // UI listing those targets can look a reading up directly. Cleared with the
+  // target when its publish settles.
+  private _publishProgress = new TrackedMap<string, PublishProgress>();
   private _unPublishingRealms = new TrackedArray<string>();
 
   // Hassan: in general i'm questioning the usefulness of using Tasks in this
@@ -359,6 +377,26 @@ class RealmResource {
               ) {
                 this.loadDecklist();
               }
+              // A write to a source realm advances its `updated_at` server-side
+              // (see Realm#touchSourceRealmUpdatedAt), so reflect that in the
+              // chooser footer immediately rather than waiting for a reload.
+              // Optimistic and client-clock based — no round-trip, so it can't
+              // fail, log, or fire a stray request mid-test; the next federated
+              // info load reconciles it with the authoritative value. Scoped to
+              // incremental indexes: full/copy re-indexes are rebuilds, not user
+              // writes, and only source realms actually move (a non-source realm
+              // would self-correct on that next load).
+              if (data.indexType === 'incremental' && this.info) {
+                this.info.updatedAt = new Date().toISOString();
+              }
+              // Tile counts derive from the index, so any completed index makes
+              // them stale — no need to narrow to the config card as above, and
+              // no publish state to clobber. Marked rather than refetched here:
+              // the realm server has already dropped its own memo, and whoever
+              // is displaying the counts re-requests them on its next render
+              // (see `loadIndexCounts`). A realm nobody is looking at costs
+              // nothing.
+              this.realmService.markIndexCountsStale(this.realmURL);
               break;
             default:
               throw assertNever(data);
@@ -442,6 +480,20 @@ class RealmResource {
         return;
       }
       await this.realmService.waitForBulkInfoIfNeeded();
+      if (this.info) {
+        return;
+      }
+      // A realm that wasn't part of the boot-time batch (e.g. a workspace
+      // created mid-session) still needs its lifecycle timestamps: the
+      // workspace chooser's menu footer and its createdAt sort read them, and
+      // only the federated `/_info` batch carries them — the per-realm
+      // `/_info` fallback below is the lean variant without timestamps. Ask
+      // the batch for just this realm first; it populates `this.info` via
+      // `applyRealmInfo` when the realm is on our own realm server, and no-ops
+      // (falling through here) for a federated realm, or before the matrix
+      // client exists — `prefetchRealmInfos` gates on that itself, since the
+      // batch needs a realm-server session.
+      await this.realmService.prefetchRealmInfos([this.realmURL]);
       if (this.info) {
         return;
       }
@@ -938,13 +990,16 @@ class RealmResource {
           // readiness check so "Open Site" only enables once the page is
           // actually viewable. Poll the URL the server actually published to —
           // a server-side domain override can make that differ from `url`.
-          await this.realmServer.waitForRealmReady(result.publishedRealmURL);
+          await this.realmServer.waitForRealmReady(result.publishedRealmURL, {
+            onProgress: (progress) => this._publishProgress.set(url, progress),
+          });
           return result;
         } catch (error) {
           console.error(`Error publishing to URL ${url}:`, error);
           throw error; // Re-throw so Promise.allSettled can capture it as rejected
         } finally {
           this._publishingRealms.splice(this._publishingRealms.indexOf(url), 1);
+          this._publishProgress.delete(url);
         }
       });
 
@@ -991,6 +1046,10 @@ class RealmResource {
 
   get publishingRealms(): string[] {
     return this._publishingRealms;
+  }
+
+  publishProgress(publishedRealmURL: string): PublishProgress | undefined {
+    return this._publishProgress.get(publishedRealmURL);
   }
 
   async unpublish(url: string) {
@@ -1045,6 +1104,17 @@ export default class RealmService extends Service {
   private currentKnownRealms = new TrackedSet<string>();
   private reauthentications = new Map<string, Promise<string | undefined>>();
   private bulkInfoPromise: Promise<void> | undefined;
+  // Lazily-loaded tile counts, keyed by trailing-slashed realm URL. A
+  // TrackedMap so a tile re-renders when its counts land. `inFlightIndexCounts`
+  // dedupes concurrent requests for the same realm — the workspace chooser can
+  // ask on every render pass.
+  private indexCountsByRealm = new TrackedMap<string, RealmIndexCounts>();
+  private inFlightIndexCounts = new Set<string>();
+  // Realms whose displayed counts are known to be behind the index. Values stay
+  // in `indexCountsByRealm` so the tile keeps its numbers while a refetch is
+  // pending; `indexCountsEpoch` is what wakes the loader up.
+  private staleIndexCounts = new Set<string>();
+  @tracked private indexCountsEpoch = 0;
   // realmOf runs once per instance added to the store, so its per-call costs
   // multiply by instance count during large renders. RealmPaths is a pure
   // function of the realm URL string (cache entries never go stale), and a
@@ -1161,6 +1231,15 @@ export default class RealmService extends Service {
       return;
     }
 
+    // The federated `/_info` batch authenticates with a realm-server session,
+    // which can't be minted until the matrix client exists. On the pre-login
+    // path (app boot, anonymous access) this is a no-op and callers fall
+    // through to their lean per-realm fetches; the post-login boot re-runs
+    // the batch for every available realm.
+    if (!this.realmServer.hasClient) {
+      return;
+    }
+
     if (this.bulkInfoPromise) {
       await this.bulkInfoPromise;
     }
@@ -1201,6 +1280,144 @@ export default class RealmService extends Service {
       if (this.bulkInfoPromise === bulkPromise) {
         this.bulkInfoPromise = undefined;
       }
+    }
+  }
+
+  // Cards / files / definitions for a realm, or `undefined` until they've been
+  // loaded. Held apart from `info` because they arrive on their own schedule:
+  // `info` is fetched for every realm at boot, while the counts are an
+  // aggregate over the realm's whole index and are only requested for realms
+  // whose tile actually shows a stats row (see `loadIndexCounts`).
+  indexCounts(
+    realmURL: RealmResourceIdentifier | string,
+  ): RealmIndexCounts | undefined {
+    return this.indexCountsByRealm.get(ensureTrailingSlash(String(realmURL)));
+  }
+
+  // Bumped whenever a realm's counts go stale. Consumers include this in what
+  // their loader reads, so a re-index re-triggers `loadIndexCounts` on the next
+  // render — otherwise a loader keyed only on *which* realms it wants would
+  // never re-run when the answer for those realms changed.
+  get indexCountsRevision(): number {
+    return this.indexCountsEpoch;
+  }
+
+  // Marks a realm's counts as needing a refetch, without clearing the values:
+  // the tile keeps showing the previous numbers until fresh ones land, rather
+  // than blanking its stats row on every write. Nothing is fetched here — see
+  // `indexCountsRevision`.
+  markIndexCountsStale(realmURL: string): void {
+    let key = ensureTrailingSlash(realmURL);
+    if (
+      !this.indexCountsByRealm.has(key) &&
+      !this.inFlightIndexCounts.has(key)
+    ) {
+      // Nobody has asked for this realm's counts, so there's nothing to
+      // refresh; a first request will read through to the server anyway. An
+      // in-flight request, though, was computed against the pre-swap index, so
+      // it still counts as displayed data that just went stale — mark it so
+      // `loadIndexCounts` refetches rather than storing that response as fresh.
+      return;
+    }
+    this.staleIndexCounts.add(key);
+    this.indexCountsEpoch++;
+  }
+
+  // Fetches counts for the given realms, skipping any already loaded-and-fresh
+  // or in flight. Fire-and-forget by design: callers render first and let the
+  // numbers land, so nothing here should be awaited on a render path.
+  loadIndexCounts(realmURLs: string[]): void {
+    let wanted = Array.from(
+      new Set(realmURLs.map((realmURL) => ensureTrailingSlash(realmURL))),
+    ).filter(
+      (realmURL) =>
+        (!this.indexCountsByRealm.has(realmURL) ||
+          this.staleIndexCounts.has(realmURL)) &&
+        !this.inFlightIndexCounts.has(realmURL),
+    );
+    if (wanted.length === 0) {
+      return;
+    }
+    for (let realmURL of wanted) {
+      // We're now servicing this realm's staleness. If a fresh index swap
+      // marks it stale again while the request is in flight, `markIndexCountsStale`
+      // re-adds it below and the retry picks it up — so its pre-swap response
+      // isn't stored as if it were current.
+      this.staleIndexCounts.delete(realmURL);
+      this.inFlightIndexCounts.add(realmURL);
+    }
+    (async () => {
+      try {
+        let data = await this.realmServer.fetchRealmIndexCounts(wanted);
+        if (this.isDestroyed) {
+          return;
+        }
+        let returned = new Set<string>();
+        for (let entry of data) {
+          let key = ensureTrailingSlash(entry.id);
+          returned.add(key);
+          this.indexCountsByRealm.set(key, entry.attributes);
+        }
+        // A realm we asked for but the server left out couldn't compute its
+        // counts (its `getIndexCounts` threw). Mark it stale so a later pass
+        // retries rather than leaving the tile blank for the session.
+        for (let realmURL of wanted) {
+          if (!returned.has(realmURL)) {
+            this.staleIndexCounts.add(realmURL);
+          }
+        }
+      } catch (error) {
+        // Transient failure (offline, 5xx): keep the tiles as they were and
+        // mark every realm we were fetching stale so the retry below tries
+        // again rather than the numbers never arriving.
+        log.warn(`Failed to fetch realm index counts: ${error}`);
+        if (!this.isDestroyed) {
+          for (let realmURL of wanted) {
+            this.staleIndexCounts.add(realmURL);
+          }
+        }
+      } finally {
+        if (!this.isDestroyed) {
+          for (let realmURL of wanted) {
+            this.inFlightIndexCounts.delete(realmURL);
+          }
+          // Anything still stale — re-marked mid-flight, omitted by the server,
+          // or a failed request — needs another attempt. Wake consumers after a
+          // short delay so a persistent failure polls slowly instead of hot-
+          // looping the request on every render.
+          if (wanted.some((realmURL) => this.staleIndexCounts.has(realmURL))) {
+            this.scheduleIndexCountsRetry();
+          }
+        }
+      }
+    })();
+  }
+
+  private indexCountsRetryTimer: ReturnType<typeof setTimeout> | undefined;
+
+  // Wakes the index-count loaders once, after a delay, so realms left stale by
+  // a failed/omitted fetch (or re-marked mid-flight) get another attempt. The
+  // delay is what keeps a persistently failing realm to a slow poll rather than
+  // a per-render hot loop; a successful retry clears the staleness and the
+  // chain stops on its own.
+  private scheduleIndexCountsRetry(): void {
+    if (this.indexCountsRetryTimer != null || this.isDestroyed) {
+      return;
+    }
+    this.indexCountsRetryTimer = setTimeout(() => {
+      this.indexCountsRetryTimer = undefined;
+      if (this.isDestroyed || this.staleIndexCounts.size === 0) {
+        return;
+      }
+      this.indexCountsEpoch++;
+    }, INDEX_COUNTS_RETRY_MS);
+  }
+
+  willDestroy(): void {
+    super.willDestroy();
+    if (this.indexCountsRetryTimer != null) {
+      clearTimeout(this.indexCountsRetryTimer);
+      this.indexCountsRetryTimer = undefined;
     }
   }
 
@@ -1260,6 +1477,8 @@ export default class RealmService extends Service {
         isIndexing: false,
         isPublic: false,
         lastPublishedAt: null,
+        createdAt: null,
+        updatedAt: null,
       };
     }
 
@@ -1279,6 +1498,8 @@ export default class RealmService extends Service {
         isIndexing: false,
         isPublic: false,
         lastPublishedAt: null,
+        createdAt: null,
+        updatedAt: null,
       };
     } else {
       return resource.info;
@@ -1703,6 +1924,14 @@ export default class RealmService extends Service {
   publishingRealms = (realmURL: string): string[] => {
     let resource = this.getOrCreateRealmResource(realmURL);
     return resource.publishingRealms;
+  };
+
+  publishProgress = (
+    realmURL: string,
+    publishedRealmURL: string,
+  ): PublishProgress | undefined => {
+    let resource = this.getOrCreateRealmResource(realmURL);
+    return resource.publishProgress(publishedRealmURL);
   };
 
   // By default, this does a tracked read from currentKnownRealms so that your

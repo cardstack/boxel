@@ -17,6 +17,24 @@
 // so a new test file runs — on exactly one shard — without the timings
 // file needing regeneration.
 
+// The timings record only what QUnit clocks per test — the test callbacks
+// themselves. Fetching and evaluating the file's module, registering it,
+// and running its hooks all cost real time that never appears there, so a
+// file of fast assertions can be recorded at (or rounded to) zero.
+//
+// Zero is also pathological for the pack below: adding it never changes a
+// bucket's running weight, so every zero-weight file is assigned to
+// whichever bucket is lightest — and that bucket stays lightest, so they
+// all land together. Floor every weight at a nominal per-file cost, which
+// both stands in for what the data can't see and keeps such files
+// distributed.
+//
+// scripts/generate-test-module-timings.mjs floors identically, because the
+// drift gate deciding whether to rewrite the timings file predicts the
+// slowest shard by replaying this pack. A floor here and not there would
+// gate regeneration on an assignment that never runs.
+const MIN_MODULE_WEIGHT_SECONDS = 1;
+
 export function selectShardModules(
   moduleIds: string[],
   shard: number,
@@ -34,11 +52,18 @@ export function selectShardModules(
     );
   }
 
-  let knownWeights = Object.values(timings).sort((a, b) => a - b);
+  let knownWeights = Object.values(timings)
+    .map((weight) => Math.max(weight, MIN_MODULE_WEIGHT_SECONDS))
+    .sort((a, b) => a - b);
   let defaultWeight = knownWeights.length
     ? knownWeights[Math.floor(knownWeights.length / 2)]
-    : 1;
-  let weightOf = (id: string) => timings[id] ?? defaultWeight;
+    : MIN_MODULE_WEIGHT_SECONDS;
+  let weightOf = (id: string) => {
+    let measured = timings[id];
+    return measured == null
+      ? defaultWeight
+      : Math.max(measured, MIN_MODULE_WEIGHT_SECONDS);
+  };
 
   let ordered = [...moduleIds].sort((a, b) => {
     let diff = weightOf(b) - weightOf(a);

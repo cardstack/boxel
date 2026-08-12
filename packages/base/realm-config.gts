@@ -181,7 +181,10 @@ class RoutingRuleEdit extends Component<typeof RoutingRuleField> {
   }
 
   @action
-  setStatusCode(code: number) {
+  setStatusCode(code: number | null) {
+    if (code == null) {
+      return;
+    }
     this.args.model.statusCode = code;
   }
 

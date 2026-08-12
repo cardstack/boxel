@@ -7,6 +7,7 @@ import { setupInteractSubmodeTests } from '../../helpers/interact-submode-setup'
 
 module('Acceptance | interact submode | no stacks tests', function (hooks) {
   setupInteractSubmodeTests(hooks, {
+    reuseIndexAcrossTests: 'interactNoStacks',
     setRealm() {},
   });
 
