@@ -98,26 +98,18 @@ export async function awaitPublishedHtmlReady(
 ): Promise<boolean> {
   let timeoutMs = opts?.timeoutMs ?? 60_000;
   let pollIntervalMs = opts?.pollIntervalMs ?? 1000;
-  let [genRow] = (await query(dbAdapter, [
-    'SELECT current_generation FROM realm_generations WHERE realm_url =',
-    param(realmURL),
-  ])) as { current_generation: number }[];
-  let currentGeneration = genRow?.current_generation;
+  // `const`, and read once: this wait is for the generation that was current
+  // when it began. A later pass bumping the generation must not move the target
+  // out from under a caller already waiting on an earlier one — so only the
+  // landed-HTML predicate re-runs below, never the generation read.
+  const currentGeneration = await currentRealmGeneration(dbAdapter, realmURL);
   if (currentGeneration == null) {
     // The realm has never been indexed — there is no generation to await.
     return true;
   }
 
-  let hasCaughtUp = async () => {
-    let rows = await query(dbAdapter, [
-      'SELECT 1 FROM prerendered_html WHERE realm_url =',
-      param(realmURL),
-      'AND generation >=',
-      param(currentGeneration),
-      'LIMIT 1',
-    ]);
-    return rows.length > 0;
-  };
+  let hasCaughtUp = () =>
+    prerenderedHtmlHasLanded(dbAdapter, realmURL, currentGeneration);
 
   if (await hasCaughtUp()) {
     return true;
@@ -184,6 +176,63 @@ export async function awaitPublishedHtmlReady(
     clearTimeout(timer);
     await subscription?.unsubscribe();
   }
+}
+
+// The realm's current index generation, or undefined when it has never been
+// indexed.
+async function currentRealmGeneration(
+  dbAdapter: DBAdapter,
+  realmURL: string,
+): Promise<number | undefined> {
+  let [row] = (await query(dbAdapter, [
+    'SELECT current_generation FROM realm_generations WHERE realm_url =',
+    param(realmURL),
+  ])) as { current_generation: number }[];
+  return row?.current_generation ?? undefined;
+}
+
+// Whether the prerender channel has produced HTML for `generation` or later.
+// `batch.done()` swaps a generation's rendered rows into the production table
+// atomically, so one row at or beyond the generation means that generation's
+// render batch has landed.
+//
+// This comparison is the whole definition of "the realm's HTML is live", and it
+// has exactly one home on purpose: `awaitPublishedHtmlReady` gates a publish's
+// readiness on it and `publishedHtmlHasCaughtUp` reports progress against it,
+// so a change to the semantics here can't leave the two disagreeing about
+// whether a publish has finished.
+async function prerenderedHtmlHasLanded(
+  dbAdapter: DBAdapter,
+  realmURL: string,
+  generation: number,
+): Promise<boolean> {
+  let rows = await query(dbAdapter, [
+    'SELECT 1 FROM prerendered_html WHERE realm_url =',
+    param(realmURL),
+    'AND generation >=',
+    param(generation),
+    'LIMIT 1',
+  ]);
+  return rows.length > 0;
+}
+
+// A point-in-time read of the same signal `awaitPublishedHtmlReady` waits on:
+// is the realm's published HTML live for the generation that is current *now*?
+// Unlike the wait, this pins nothing — a caller sampling it repeatedly (the
+// publish-progress endpoint) wants the latest generation on every read, not the
+// one that was current when it started sampling.
+//
+// A realm with no generation has never been indexed and has no render to wait
+// on, which reads as caught up.
+export async function publishedHtmlHasCaughtUp(
+  dbAdapter: DBAdapter,
+  realmURL: string,
+): Promise<boolean> {
+  let currentGeneration = await currentRealmGeneration(dbAdapter, realmURL);
+  if (currentGeneration == null) {
+    return true;
+  }
+  return prerenderedHtmlHasLanded(dbAdapter, realmURL, currentGeneration);
 }
 
 // Publish a `prerender_html` job through the normal queue-publish path. The

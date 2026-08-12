@@ -54,12 +54,12 @@ module('Acceptance | code submode | file def live reload', function (hooks) {
       codePath: `${testRealmURL}readme.md`,
     });
 
-    await waitFor('[data-test-markdown-isolated]');
+    await waitFor('[data-test-markdown-preview]');
     assert
-      .dom('[data-test-markdown-isolated]')
+      .dom('[data-test-markdown-preview]')
       .containsText('Hello', 'initial content is rendered');
     assert
-      .dom('[data-test-markdown-isolated]')
+      .dom('[data-test-markdown-preview]')
       .containsText('Initial content.', 'initial paragraph is rendered');
 
     // Simulate the user editing and saving the file
@@ -68,18 +68,18 @@ module('Acceptance | code submode | file def live reload', function (hooks) {
     await waitUntil(
       () =>
         document
-          .querySelector('[data-test-markdown-isolated]')
+          .querySelector('[data-test-markdown-preview]')
           ?.textContent?.includes('Updated Title'),
       { timeout: 5000, timeoutMessage: 'preview did not update after save' },
     );
     assert
-      .dom('[data-test-markdown-isolated]')
+      .dom('[data-test-markdown-preview]')
       .containsText(
         'Updated Title',
         'preview updates to show new title after save',
       );
     assert
-      .dom('[data-test-markdown-isolated]')
+      .dom('[data-test-markdown-preview]')
       .containsText(
         'New paragraph.',
         'preview updates to show new paragraph after save',
