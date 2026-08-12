@@ -1705,33 +1705,83 @@ export async function buildPromptForModel(
     tools,
     disabledSkillIds,
   );
-  // The context should be placed where it explains the state of the host.
-  // This is either:
-  // * After the last tool call message, if the last message was a tool call
-  // * At the front of the last user message otherwise
+  // The context always trails the conversation as its own message, for two
+  // reasons that lock together:
   //
-  // Providers disagree about where a `system` message may sit, and the array
-  // has to satisfy the strictest of them: OpenAI rejects one placed between an
-  // assistant and its tool messages, and Anthropic requires one to immediately
-  // precede an `assistant` message or end the array. A `system` message before
-  // the last user turn always has a `user` after it, so it can never satisfy
-  // Anthropic — the context is folded into that user turn instead of standing
-  // as its own message. Trailing it after a tool result keeps its own message,
-  // which is legal everywhere because it ends the array.
-  let lastMessage = messages[messages.length - 1];
-  if (lastMessage.role === 'tool') {
-    messages.push({ role: 'system', content: contextContent });
-  } else {
-    let lastUserIndex = findLastIndex(messages, (msg) => msg.role === 'user');
-    if (lastUserIndex !== -1) {
-      messages[lastUserIndex] = prependContextToMessage(
-        messages[lastUserIndex],
-        contextContent,
-      );
-    }
-  }
+  // Caching. The context carries the current time, so its bytes change on
+  // every request, and prompt caching is an exact prefix match. Trailing it
+  // keeps every history message byte-stable across requests, which is what
+  // lets the cache breakpoint below actually get read back. Folding the
+  // context into the last user message instead — which this assembly used to
+  // do — rewrote that message's bytes on every request and on every new user
+  // turn, guaranteeing a cache miss for the entire history after it, every
+  // time.
+  //
+  // Placement. Providers disagree about where a `system` message may sit,
+  // and the array has to satisfy the strictest of them: OpenAI rejects one
+  // placed between an assistant and its tool messages, and Anthropic
+  // requires one to immediately precede an `assistant` message or end the
+  // array. A trailing `system` message ends the array, which is legal
+  // everywhere.
+  //
+  // The breakpoint marks the last real message — the end of the stable
+  // history. When the turn ends with a tool result, that is where pulled
+  // skill files land, and they are exactly the content that must not be
+  // re-billed at full price on every later request.
+  normalizeHistoryContentShape(messages);
+  addHistoryCacheBreakpoint(messages, messages.length - 1);
+  messages.push({ role: 'system', content: contextContent });
 
   return messages;
+}
+
+// Serializes every history message's content in the parts-array form, every
+// turn, whether or not it carries the cache marker. The marker needs the
+// parts form, and it moves forward each turn — if only the marked message
+// were converted, each message would flip between the string shape and the
+// parts shape as the marker passed through it. String and parts-array
+// content are semantically the same message, but they are not the same bytes
+// on the wire, and prompt caching is an exact byte match: the flip made the
+// previous turn's cache entry unreadable at exactly the marked position,
+// every turn. A message with empty content (an assistant turn that is only
+// tool calls) stays as it is — an empty text part would be rejected.
+function normalizeHistoryContentShape(messages: OpenAIPromptMessage[]) {
+  for (let i = 1; i < messages.length; i++) {
+    let message = messages[i];
+    if (typeof message.content === 'string' && message.content) {
+      message.content = [{ type: 'text', text: message.content }];
+    }
+  }
+}
+
+// Marks the end of the stable conversation prefix as cacheable, so the
+// provider re-reads the history at the cached-input price instead of
+// re-billing it fresh on every request. This is the second of the prompt's
+// two cache breakpoints — the first sits on the system message — and it is
+// what keeps skills pulled mid-conversation (readRealmFile results) from
+// costing full price on every turn for the rest of the session.
+//
+// Walks backward from `index` past messages that cannot carry a marker (an
+// empty body, e.g. an assistant turn that is only tool calls). Never marks
+// messages[0]: that is the system message, which has its own breakpoint. The
+// mutation is safe because every message here was freshly built by this
+// prompt assembly.
+function addHistoryCacheBreakpoint(
+  messages: OpenAIPromptMessage[],
+  index: number,
+) {
+  for (let i = Math.min(index, messages.length - 1); i >= 1; i--) {
+    // Contents were normalized to the parts form before this runs; anything
+    // still a string is empty and cannot carry a marker.
+    let { content } = messages[i];
+    if (Array.isArray(content) && content.length > 0) {
+      content[content.length - 1] = {
+        ...content[content.length - 1],
+        cache_control: { type: 'ephemeral' },
+      };
+      return;
+    }
+  }
 }
 
 function collectPendingCodePatchCorrectnessCheck(
@@ -2290,29 +2340,6 @@ export const buildAttachmentsMessagePart = async (
   }
   return { text, mediaParts };
 };
-
-// Puts the host-state context at the front of a user turn, so it reads as the
-// setting for what the user then asks. String content stays a string; content
-// already split into parts gains one leading text part, which keeps any image,
-// file, or audio parts — and their `cache_control` — exactly as they were.
-function prependContextToMessage(
-  message: OpenAIPromptMessage,
-  contextContent: string,
-): OpenAIPromptMessage {
-  if (typeof message.content === 'string') {
-    return {
-      ...message,
-      content: `${contextContent}\n\n${message.content}`,
-    };
-  }
-  return {
-    ...message,
-    content: [
-      { type: 'text', text: contextContent } as TextContent,
-      ...message.content,
-    ],
-  };
-}
 
 export const buildContextMessage = async (
   client: MatrixClient,
