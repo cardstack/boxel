@@ -32,7 +32,7 @@ import ProfileSubscription from './profile-subscription';
 
 import type { IAuthData } from 'matrix-js-sdk';
 
-// Subscription sits below the fold in this 70vh modal
+// Subscription sits below the fold in this fixed-height modal
 const scrollIntoViewIfRequested = modifier(
   (element: HTMLElement, [requested]: [boolean]) => {
     if (requested) {
@@ -239,7 +239,7 @@ export default class ProfileSettingsModal extends Component<Signature> {
         .profile-settings-change-pw-button {
           margin-right: auto;
           padding-inline: var(--boxel-sp-xs);
-          font-size: 0.8175rem;
+          font-size: 0.8125rem;
         }
         .buttons {
           gap: var(--boxel-sp-xs);

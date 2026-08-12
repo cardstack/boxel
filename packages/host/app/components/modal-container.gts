@@ -131,6 +131,11 @@ export default class ModalContainer extends Component<Signature> {
           'footer';
         grid-template-rows: auto 1fr auto;
         box-shadow: var(--boxel-deep-box-shadow);
+        /* container-type applies layout containment, which makes .dialog-box
+           the containing block for position: fixed descendants. A nested
+           modal rendered inside :content gets trapped by it (sized and
+           positioned against this box instead of the viewport), so nested
+           modals must portal out to the app root via in-element. */
         container-type: inline-size;
         container-name: dialog-box;
       }
