@@ -1,0 +1,47 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "m4a · Format Preview",
+      "cardInfo": {
+        "name": "m4a · Format Preview",
+        "summary": "Simple, moderate, and complex m4a fixtures across atom, embedded, isolated, and the 16 fitted envelopes."
+      }
+    },
+    "relationships": {
+      "previewFiles.0": {
+        "links": {
+          "self": "../samples/m4a-simple.m4a"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/m4a-simple.m4a"
+        }
+      },
+      "previewFiles.1": {
+        "links": {
+          "self": "../samples/m4a-moderate.m4a"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/m4a-moderate.m4a"
+        }
+      },
+      "previewFiles.2": {
+        "links": {
+          "self": "../samples/m4a-complex.m4a"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/m4a-complex.m4a"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../format-preview",
+        "name": "FileDefFormatPreview"
+      }
+    }
+  }
+}

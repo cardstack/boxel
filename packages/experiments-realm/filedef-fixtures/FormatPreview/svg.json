@@ -1,0 +1,47 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "svg · Format Preview",
+      "cardInfo": {
+        "name": "svg · Format Preview",
+        "summary": "Simple, moderate, and complex svg fixtures across atom, embedded, isolated, and the 16 fitted envelopes."
+      }
+    },
+    "relationships": {
+      "previewFiles.0": {
+        "links": {
+          "self": "../samples/svg-simple.svg"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/svg-simple.svg"
+        }
+      },
+      "previewFiles.1": {
+        "links": {
+          "self": "../samples/svg-moderate.svg"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/svg-moderate.svg"
+        }
+      },
+      "previewFiles.2": {
+        "links": {
+          "self": "../samples/svg-complex.svg"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/svg-complex.svg"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../format-preview",
+        "name": "FileDefFormatPreview"
+      }
+    }
+  }
+}

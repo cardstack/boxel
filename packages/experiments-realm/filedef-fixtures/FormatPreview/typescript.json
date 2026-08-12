@@ -1,0 +1,47 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "typescript · Format Preview",
+      "cardInfo": {
+        "name": "typescript · Format Preview",
+        "summary": "Simple, moderate, and complex typescript fixtures across atom, embedded, isolated, and the 16 fitted envelopes."
+      }
+    },
+    "relationships": {
+      "previewFiles.0": {
+        "links": {
+          "self": "../samples/typescript-simple.ts"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/typescript-simple.ts"
+        }
+      },
+      "previewFiles.1": {
+        "links": {
+          "self": "../samples/typescript-moderate.ts"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/typescript-moderate.ts"
+        }
+      },
+      "previewFiles.2": {
+        "links": {
+          "self": "../samples/typescript-complex.ts"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/typescript-complex.ts"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../format-preview",
+        "name": "FileDefFormatPreview"
+      }
+    }
+  }
+}

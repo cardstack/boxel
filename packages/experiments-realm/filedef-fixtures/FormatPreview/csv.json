@@ -1,0 +1,47 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "csv · Format Preview",
+      "cardInfo": {
+        "name": "csv · Format Preview",
+        "summary": "Simple, moderate, and complex csv fixtures across atom, embedded, isolated, and the 16 fitted envelopes."
+      }
+    },
+    "relationships": {
+      "previewFiles.0": {
+        "links": {
+          "self": "../samples/csv-simple.csv"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/csv-simple.csv"
+        }
+      },
+      "previewFiles.1": {
+        "links": {
+          "self": "../samples/csv-moderate.csv"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/csv-moderate.csv"
+        }
+      },
+      "previewFiles.2": {
+        "links": {
+          "self": "../samples/csv-complex.csv"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/csv-complex.csv"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../format-preview",
+        "name": "FileDefFormatPreview"
+      }
+    }
+  }
+}
