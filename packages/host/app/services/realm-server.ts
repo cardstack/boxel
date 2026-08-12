@@ -22,6 +22,7 @@ import {
   testRealmURL,
   unpublishRealm as unpublishRealmOperation,
   waitForReady as waitForReadyOperation,
+  type PublishProgress,
   type RealmClient,
   type RealmIdentifier,
   type RealmIndexCounts,
@@ -1309,13 +1310,18 @@ export default class RealmServerService extends Service {
   // keeps its "Publishing…" state until this resolves.
   async waitForRealmReady(
     publishedRealmURL: string,
-    opts?: { timeoutMs?: number; pollIntervalMs?: number },
+    opts?: {
+      timeoutMs?: number;
+      pollIntervalMs?: number;
+      onProgress?: (progress: PublishProgress) => void;
+    },
   ) {
     await this.login();
     return waitForReadyOperation(this.realmClient, {
       publishedRealmURL,
       timeoutMs: opts?.timeoutMs,
       pollIntervalMs: opts?.pollIntervalMs,
+      onProgress: opts?.onProgress,
       // A published realm's rendered HTML is its deliverable, so hold the
       // Publish UI's "Publishing…" state until the HTML is live, not just the
       // index.
