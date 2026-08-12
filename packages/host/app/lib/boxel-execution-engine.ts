@@ -397,10 +397,22 @@ export class BoxelExecutionSession {
       });
       let source: BoxelSourceClassification;
       try {
-        source = await this.classifySource(
-          request.moduleIdentifier,
-          request.source,
-        );
+        // A Host-authorized Direct request has already made the strongest
+        // relevant admission decision: the policy below ignores authored
+        // source classification and retains the canonical Store instance in
+        // the Host. Running Babel/content-tag and walking the module graph in
+        // this case adds no safety or rendering information. More
+        // importantly, ordinary Host tests deliberately exercise all legacy
+        // card behavior through Direct RP, and many dynamically-created GTS
+        // fixtures would otherwise accumulate compiler graph cost despite
+        // never being candidates for Capsule or Sandbox execution.
+        source =
+          request.hostRequestedMode === 'direct'
+            ? hostRequestedDirectSource(request.moduleIdentifier)
+            : await this.classifySource(
+                request.moduleIdentifier,
+                request.source,
+              );
         classifyStage.finish({
           counters: { modules: source.moduleGraph.length },
         });
@@ -614,6 +626,20 @@ export class BoxelExecutionSession {
       listener(snapshot);
     }
   }
+}
+
+function hostRequestedDirectSource(
+  moduleIdentifier: string,
+): BoxelSourceClassification {
+  return {
+    tier: 'capsule',
+    reason: 'host-requested-direct',
+    imports: [],
+    signals: [],
+    moduleGraph: [moduleIdentifier],
+    propagatesToImporters: false,
+    authoredEditTemplate: false,
+  };
 }
 
 /** Creates stable per-surface sessions over the shared runtime router. */

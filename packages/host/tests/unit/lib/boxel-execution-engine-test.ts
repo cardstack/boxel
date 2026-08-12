@@ -356,6 +356,50 @@ module('Unit | Boxel execution engine', function () {
     }
   });
 
+  test('Host-requested Direct uses RP without classifying authored source', async function (assert) {
+    let direct = new TestRuntime('direct');
+    let capsule = new TestRuntime('capsule');
+    let sandbox = new TestRuntime('sandbox');
+    let router = new BoxelRuntimeRouter(
+      direct as unknown as DirectBoxelRuntime,
+      () => capsule as unknown as CapsuleBoxelRuntime,
+      () => sandbox as unknown as SandboxRuntimeProcess,
+    );
+    let classifications = 0;
+    let engine = new BoxelExecutionEngine(router, async () => {
+      classifications++;
+      return sandboxSource;
+    });
+    let session = engine.createSession();
+
+    try {
+      let generation = await session.update({
+        ...executionRequest('document.createElement("canvas")'),
+        hostRequestedMode: 'direct',
+        canonicalCard: {} as never,
+      });
+
+      assert.strictEqual(
+        generation?.lease.runtime.mode,
+        'direct',
+        'the request still materializes through the Direct RP adapter',
+      );
+      assert.strictEqual(
+        classifications,
+        0,
+        'Direct admission does not parse or walk an irrelevant authored module graph',
+      );
+      assert.strictEqual(
+        generation?.source.reason,
+        'host-requested-direct',
+        'the generation records why classification was intentionally bypassed',
+      );
+    } finally {
+      await session.destroy();
+      engine.destroy();
+    }
+  });
+
   test('a live Sandbox generation switches isolated/edit format without rematerializing its card', async function (assert) {
     let direct = new TestRuntime('direct');
     let capsule = new TestRuntime('capsule');

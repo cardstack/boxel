@@ -550,21 +550,31 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
               relativeTo,
               execution === 'direct' ? 'direct' : undefined,
             );
-            let source = await this.boxelExecution.classifyForExecution(
-              request.moduleIdentifier,
-              request.source,
-            );
+            // Host-authorized Direct requests cannot reserve a Sandbox and
+            // the engine has an explicit Direct admission path that does not
+            // consume source classification. Keep this pre-mount classifier
+            // solely on the automatic policy path where its result can
+            // actually select the Sandbox process.
+            let source =
+              execution === 'direct'
+                ? undefined
+                : await this.boxelExecution.classifyForExecution(
+                    request.moduleIdentifier,
+                    request.source,
+                  );
             if (!active) {
               return;
             }
-            let reservation = this.boxelExecution.reserveSandboxProcess(
-              request.principal,
-              request.surfaceId,
-              request.trusted,
-              request.format,
-              source,
-              this.boxelExecution.isVolatile(request.moduleIdentifier),
-            );
+            let reservation = source
+              ? this.boxelExecution.reserveSandboxProcess(
+                  request.principal,
+                  request.surfaceId,
+                  request.trusted,
+                  request.format,
+                  source,
+                  this.boxelExecution.isVolatile(request.moduleIdentifier),
+                )
+              : undefined;
             // RP-15.3: a Sandbox bootstrap failure must fail closed no matter
             // which of its two possible paths it takes — a connect (or later
             // render) failure the process itself observes and reports via
