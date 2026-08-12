@@ -1,12 +1,12 @@
-import { AuthorizationError } from './errors.js';
+import { AuthorizationError } from './errors.ts';
 import {
   parseObjectReference,
   parseSubjectReference,
   type EntityReference,
   type SubjectReference,
-} from './identifiers.js';
-import type { CompiledAuthorizationGraph } from './ir.js';
-import type { RelationshipTuple } from './graph-model.js';
+} from './identifiers.ts';
+import type { CompiledAuthorizationGraph } from './ir.ts';
+import type { RelationshipTuple } from './graph-model.ts';
 
 export interface IndexedRelationshipTuple extends RelationshipTuple {
   parsedSubject: SubjectReference;
@@ -16,7 +16,10 @@ export interface IndexedRelationshipTuple extends RelationshipTuple {
 export interface AuthorizationTupleIndex {
   readonly tuples: readonly IndexedRelationshipTuple[];
   readonly objectsByType: ReadonlyMap<string, ReadonlySet<string>>;
-  forObjectRelation(object: string, relation: string): readonly IndexedRelationshipTuple[];
+  forObjectRelation(
+    object: string,
+    relation: string,
+  ): readonly IndexedRelationshipTuple[];
 }
 
 export interface AuthorizationTupleIndexOptions {
@@ -69,9 +72,13 @@ export function buildAuthorizationTupleIndex(
     const objectType = model.types.get(parsedObject.type);
     if (!objectType) {
       if (options.invalidTuplePolicy === 'ignore') continue;
-      throw new AuthorizationError('unknown-type', `Unknown object type ${parsedObject.type}.`, {
-        path: `${path}.object`,
-      });
+      throw new AuthorizationError(
+        'unknown-type',
+        `Unknown object type ${parsedObject.type}.`,
+        {
+          path: `${path}.object`,
+        },
+      );
     }
     const relation = objectType.relations.get(tuple.relation);
     if (!relation || !relation.assignable) {
@@ -84,9 +91,13 @@ export function buildAuthorizationTupleIndex(
     }
     if (!model.types.has(parsedSubject.type)) {
       if (options.invalidTuplePolicy === 'ignore') continue;
-      throw new AuthorizationError('unknown-type', `Unknown subject type ${parsedSubject.type}.`, {
-        path: `${path}.subject`,
-      });
+      throw new AuthorizationError(
+        'unknown-type',
+        `Unknown subject type ${parsedSubject.type}.`,
+        {
+          path: `${path}.subject`,
+        },
+      );
     }
     if (
       !relation.allowedSubjects.some((allowed) =>

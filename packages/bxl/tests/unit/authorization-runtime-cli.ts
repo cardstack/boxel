@@ -5,7 +5,7 @@ import {
   prepareNativeJq,
   type AuthorizationGraphModel,
   type RelationshipTuple,
-} from '../../src/index.js';
+} from '../../src/index.ts';
 
 deepStrictEqual(classifyBxlProfileFunction('derive', 'auth_check'), {
   safety: 'allow',
@@ -62,7 +62,6 @@ const tuples: RelationshipTuple[] = [
 ];
 
 const prepared = prepareAuthorizationGraphSafe(model, tuples);
-strictEqual(prepared.ok, true);
 if (!prepared.ok) throw new Error(prepared.error.message);
 
 const publicUsers = prepared.value.listUsers({
@@ -96,7 +95,10 @@ const objects = prepared.value.listObjects({
 });
 strictEqual(objects.ok, true);
 if (objects.ok) {
-  deepStrictEqual(objects.value.objects, ['document:private', 'document:public']);
+  deepStrictEqual(objects.value.objects, [
+    'document:private',
+    'document:public',
+  ]);
 }
 
 const candidateLimited = prepared.value.listObjects({
@@ -132,10 +134,10 @@ if (!stepLimited.ok) {
   strictEqual(stepLimited.error.kind, 'evaluation-limit-exceeded');
 }
 
-const checkProgram = prepareNativeJq(
-  'auth_check(.model; .tuples; .request)',
-  { libraries: ['core', 'authorization'], readableSyntax: false },
-);
+const checkProgram = prepareNativeJq('auth_check(.model; .tuples; .request)', {
+  libraries: ['core', 'authorization'],
+  readableSyntax: false,
+});
 deepStrictEqual(
   checkProgram.run({
     model,

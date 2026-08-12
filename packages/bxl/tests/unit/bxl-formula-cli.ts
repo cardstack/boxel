@@ -1,10 +1,10 @@
 import { deepStrictEqual, ok, strictEqual } from 'node:assert';
-import { runNativeJqAsync } from '../../src/index.js';
+import { runNativeJqAsync } from '../../src/index.ts';
 import {
   bxlFormulaExampleInput,
   bxlFormulaExamples,
   bxlFormulaExampleSchema,
-} from '../../examples/bxl-formula-examples.js';
+} from '../../examples/bxl-formula-examples.ts';
 
 interface Failure {
   id: number;
@@ -40,7 +40,10 @@ for (const example of bxlFormulaExamples) {
       `example ${example.id} should compile without warnings`,
     );
 
-    if (typeof example.expected === 'number' && example.tolerance !== undefined) {
+    if (
+      typeof example.expected === 'number' &&
+      example.tolerance !== undefined
+    ) {
       ok(
         typeof value === 'number' &&
           Math.abs(value - example.expected) <= example.tolerance,
@@ -53,11 +56,9 @@ for (const example of bxlFormulaExamples) {
     let compiledSource: string | undefined;
     try {
       compiledSource = (
-        await runNativeJqAsync(
-          example.expression,
-          bxlFormulaExampleInput,
-          { schema: bxlFormulaExampleSchema },
-        )
+        await runNativeJqAsync(example.expression, bxlFormulaExampleInput, {
+          schema: bxlFormulaExampleSchema,
+        })
       ).compiledSource;
     } catch {
       compiledSource = undefined;

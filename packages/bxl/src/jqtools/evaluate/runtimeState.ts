@@ -1,5 +1,5 @@
-import { deepClone } from './utils/utils.js';
-import { JqEvaluateError } from '../errors.js';
+import { deepClone } from './utils/utils.ts';
+import { JqEvaluateError } from '../errors.ts';
 
 export interface NativeRuntimeDiagnostics {
   debugMessages: string[];
@@ -44,18 +44,26 @@ function currentRuntimeContext(): RuntimeContext | undefined {
 }
 
 export class HaltSignal extends Error {
-  constructor(public readonly exitCode: number) {
+  readonly exitCode: number;
+
+  constructor(exitCode: number) {
     super(`jq halted with exit code ${exitCode}`);
+    this.exitCode = exitCode;
     this.name = 'HaltSignal';
   }
 }
 
 export class RuntimeLimitError extends JqEvaluateError {
+  readonly limit:
+    | keyof Required<Omit<NativeRuntimeLimits, 'signal'>>
+    | 'signal';
+
   constructor(
-    public readonly limit: keyof Required<Omit<NativeRuntimeLimits, 'signal'>> | 'signal',
+    limit: keyof Required<Omit<NativeRuntimeLimits, 'signal'>> | 'signal',
     message: string,
   ) {
     super(message);
+    this.limit = limit;
     this.name = 'RuntimeLimitError';
   }
 }

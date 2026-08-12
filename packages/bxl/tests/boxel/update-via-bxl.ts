@@ -7,7 +7,7 @@ import {
   snapshotBxlCard,
   updateViaBxl,
   type BxlBoxelField,
-} from '../../src/index.js';
+} from '../../src/index.ts';
 
 type Shape = (new () => object) & {
   displayName?: string;
@@ -60,7 +60,9 @@ class CardInfo {
     summary: {
       fieldType: 'contains',
       card: StringValue,
-      computeVia() { return ''; },
+      computeVia() {
+        return '';
+      },
     },
   };
   name = '';
@@ -85,7 +87,9 @@ class Invoice {
     total: {
       fieldType: 'contains',
       card: NumberValue,
-      computeVia() { return 0; },
+      computeVia() {
+        return 0;
+      },
     },
   };
 
@@ -106,7 +110,9 @@ class GuardedCard {
   };
   title = 'Before';
   #locked = 'safe';
-  get locked() { return this.#locked; }
+  get locked() {
+    return this.#locked;
+  }
   set locked(value: string) {
     if (value === 'boom') throw new Error('locked setter rejected value');
     this.#locked = value;
@@ -114,7 +120,9 @@ class GuardedCard {
 }
 
 const getFields = (value: unknown): Record<string, BxlBoxelField> => {
-  const shape = (typeof value === 'function' ? value : value?.constructor) as Shape | undefined;
+  const shape = (typeof value === 'function' ? value : value?.constructor) as
+    | Shape
+    | undefined;
   return shape?.fields ?? {};
 };
 
@@ -146,7 +154,10 @@ function invoiceFixture() {
   invoice.cardInfo.name = 'Coastal Maine';
   invoice.cardInfo.theme = theme('card:theme/original', 'Original');
   invoice.lineItems = [item('COPY-03', 1), item('PAPER-01', 4, false)];
-  invoice.collaborators = [collaborator('card:ada', 'Ada'), collaborator('card:grace', 'Grace')];
+  invoice.collaborators = [
+    collaborator('card:ada', 'Ada'),
+    collaborator('card:grace', 'Grace'),
+  ];
   invoice.reviewer = invoice.collaborators[0]!;
   return invoice;
 }
@@ -157,7 +168,10 @@ function check(name: string, callback: () => void) {
     callback();
     pass++;
   } catch (error) {
-    throw new Error(`${name}: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+    throw new Error(
+      `${name}: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    );
   }
 }
 
@@ -167,9 +181,18 @@ check('derives readable schema from CardDef/FieldDef metadata', () => {
   const lineItems = schema.fields.find((field) => field.key === 'lineItems');
   strictEqual(lineItems?.label, 'Line Item');
   strictEqual(lineItems?.fieldType, 'containsMany');
-  strictEqual(lineItems?.item?.fields.find((field) => field.key === 'quantity')?.writable, true);
-  strictEqual(schema.fields.find((field) => field.key === 'id')?.writable, false);
-  strictEqual(schema.fields.find((field) => field.key === 'searchResults')?.writable, false);
+  strictEqual(
+    lineItems?.item?.fields.find((field) => field.key === 'quantity')?.writable,
+    true,
+  );
+  strictEqual(
+    schema.fields.find((field) => field.key === 'id')?.writable,
+    false,
+  );
+  strictEqual(
+    schema.fields.find((field) => field.key === 'searchResults')?.writable,
+    false,
+  );
   strictEqual(
     schema.fields.find((field) => field.key === 'total')?.writeBehavior,
     'skip',
@@ -185,26 +208,29 @@ check('derives readable schema from CardDef/FieldDef metadata', () => {
   deepStrictEqual(promotedTheme?.path, ['cardInfo', 'theme']);
 });
 
-check('snapshots the loaded model and represents relationships only by Card ID', () => {
-  const snapshot = snapshotBxlCard(invoiceFixture(), { getFields });
-  deepStrictEqual(snapshot, {
-    id: 'card:invoice/42',
-    cardInfo: {
-      name: 'Coastal Maine',
-      theme: { id: 'card:theme/original' },
-      summary: 'Computed summary',
-    },
-    title: 'Draft',
-    lineItems: [
-      { sku: 'COPY-03', bookingId: 'COPY-03', quantity: 1, taxable: true },
-      { sku: 'PAPER-01', bookingId: 'PAPER-01', quantity: 4, taxable: false },
-    ],
-    collaborators: [{ id: 'card:ada' }, { id: 'card:grace' }],
-    reviewer: { id: 'card:ada' },
-    searchResults: [],
-    total: 0,
-  });
-});
+check(
+  'snapshots the loaded model and represents relationships only by Card ID',
+  () => {
+    const snapshot = snapshotBxlCard(invoiceFixture(), { getFields });
+    deepStrictEqual(snapshot, {
+      id: 'card:invoice/42',
+      cardInfo: {
+        name: 'Coastal Maine',
+        theme: { id: 'card:theme/original' },
+        summary: 'Computed summary',
+      },
+      title: 'Draft',
+      lineItems: [
+        { sku: 'COPY-03', bookingId: 'COPY-03', quantity: 1, taxable: true },
+        { sku: 'PAPER-01', bookingId: 'PAPER-01', quantity: 4, taxable: false },
+      ],
+      collaborators: [{ id: 'card:ada' }, { id: 'card:grace' }],
+      reviewer: { id: 'card:ada' },
+      searchResults: [],
+      total: 0,
+    });
+  },
+);
 
 check('computed writes are skipped without evaluating their values', () => {
   const card = invoiceFixture();
@@ -233,7 +259,9 @@ check('updates one nested field without replacing contained identity', () => {
   const card = invoiceFixture();
   const first = card.lineItems[0];
   const second = card.lineItems[1];
-  const update = updateViaBxl('"Line Item"[SKU = "COPY-03"].Quantity += 1;', { getFields });
+  const update = updateViaBxl('"Line Item"[SKU = "COPY-03"].Quantity += 1;', {
+    getFields,
+  });
   const plan = update.call(card, { programId: 'tool-call-1' });
   strictEqual(card.lineItems[0], first);
   strictEqual(card.lineItems[1], second);
@@ -243,30 +271,36 @@ check('updates one nested field without replacing contained identity', () => {
   deepStrictEqual(plan.paths, [['lineItems', 0, 'quantity']]);
 });
 
-check('runs a complete multi-statement program against sequential state', () => {
-  const card = invoiceFixture();
-  const update = updateViaBxl(
-    'Title = "Final"; "Line Item"[SKU = "COPY-03"].Quantity += 2;',
-    { getFields },
-  );
-  const plan = update.call(card, { programId: 'tool-call-2' });
-  strictEqual(card.title, 'Final');
-  strictEqual(card.lineItems[0]?.quantity, 3);
-  strictEqual(plan.statements.length, 2);
-});
+check(
+  'runs a complete multi-statement program against sequential state',
+  () => {
+    const card = invoiceFixture();
+    const update = updateViaBxl(
+      'Title = "Final"; "Line Item"[SKU = "COPY-03"].Quantity += 2;',
+      { getFields },
+    );
+    const plan = update.call(card, { programId: 'tool-call-2' });
+    strictEqual(card.title, 'Final');
+    strictEqual(card.lineItems[0]?.quantity, 3);
+    strictEqual(plan.statements.length, 2);
+  },
+);
 
-check('materializes inserted contained objects with the natural Field class', () => {
-  const card = invoiceFixture();
-  const update = updateViaBxl(
-    'insert_item_after({ sku: "INK-02", quantity: 2, taxable: true }, "Line Item"[SKU = "COPY-03"]);',
-    { getFields },
-  );
-  update.call(card, { programId: 'tool-call-3' });
-  strictEqual(card.lineItems.length, 3);
-  ok(card.lineItems[1] instanceof LineItem);
-  strictEqual(card.lineItems[1]?.sku, 'INK-02');
-  strictEqual(card.lineItems[1]?.quantity, 2);
-});
+check(
+  'materializes inserted contained objects with the natural Field class',
+  () => {
+    const card = invoiceFixture();
+    const update = updateViaBxl(
+      'insert_item_after({ sku: "INK-02", quantity: 2, taxable: true }, "Line Item"[SKU = "COPY-03"]);',
+      { getFields },
+    );
+    update.call(card, { programId: 'tool-call-3' });
+    strictEqual(card.lineItems.length, 3);
+    ok(card.lineItems[1] instanceof LineItem);
+    strictEqual(card.lineItems[1]?.sku, 'INK-02');
+    strictEqual(card.lineItems[1]?.quantity, 2);
+  },
+);
 
 check('moves contained items without losing object identity', () => {
   const card = invoiceFixture();
@@ -290,47 +324,66 @@ check('reorder_by compiles its key in collection-item scope', () => {
   );
   const plan = update.call(card, { programId: 'tool-call-reorder' });
   deepStrictEqual(card.lineItems, [paper, copy]);
-  strictEqual(plan.statements[0]?.canonical, 'reorder_by(.lineItems;.bookingId;["PAPER-01","COPY-03"])');
+  strictEqual(
+    plan.statements[0]?.canonical,
+    'reorder_by(.lineItems;.bookingId;["PAPER-01","COPY-03"])',
+  );
 });
 
-check('resolves and inserts relationship Cards through the Card own store', () => {
-  const card = invoiceFixture();
-  const lin = collaborator('card:lin', 'Lin');
-  const store = { getCard(id: string) { return id === lin.id ? lin : undefined; } };
-  const update = updateViaBxl('append(Collaborators, card("card:lin"));', {
-    getFields,
-    getStore() { return store; },
-  });
-  const plan = update.call(card, { programId: 'tool-call-5' });
-  strictEqual(card.collaborators.at(-1), lin);
-  deepStrictEqual(plan.intents.at(-1), {
-    op: 'relate',
-    field: ['collaborators'],
-    cardId: 'card:lin',
-    index: 2,
-  });
-});
+check(
+  'resolves and inserts relationship Cards through the Card own store',
+  () => {
+    const card = invoiceFixture();
+    const lin = collaborator('card:lin', 'Lin');
+    const store = {
+      getCard(id: string) {
+        return id === lin.id ? lin : undefined;
+      },
+    };
+    const update = updateViaBxl('append(Collaborators, card("card:lin"));', {
+      getFields,
+      getStore() {
+        return store;
+      },
+    });
+    const plan = update.call(card, { programId: 'tool-call-5' });
+    strictEqual(card.collaborators.at(-1), lin);
+    deepStrictEqual(plan.intents.at(-1), {
+      op: 'relate',
+      field: ['collaborators'],
+      cardId: 'card:lin',
+      index: 2,
+    });
+  },
+);
 
-check('promotes inherited CardInfo relationships as root readable aliases', () => {
-  const card = invoiceFixture();
-  const fieldNotes = theme('card:theme/field-notes', 'Field Notes');
-  const store = {
-    getCard(id: string) {
-      return id === fieldNotes.id ? fieldNotes : undefined;
-    },
-  };
-  const plan = updateViaBxl('Theme = card("card:theme/field-notes");', {
-    getFields,
-    getStore() { return store; },
-  }).call(card, { programId: 'tool-call-theme' });
-  strictEqual(card.cardInfo.theme, fieldNotes);
-  deepStrictEqual(plan.paths, [['cardInfo', 'theme']]);
-  deepStrictEqual(plan.intents, [{
-    op: 'relate',
-    field: ['cardInfo', 'theme'],
-    cardId: 'card:theme/field-notes',
-  }]);
-});
+check(
+  'promotes inherited CardInfo relationships as root readable aliases',
+  () => {
+    const card = invoiceFixture();
+    const fieldNotes = theme('card:theme/field-notes', 'Field Notes');
+    const store = {
+      getCard(id: string) {
+        return id === fieldNotes.id ? fieldNotes : undefined;
+      },
+    };
+    const plan = updateViaBxl('Theme = card("card:theme/field-notes");', {
+      getFields,
+      getStore() {
+        return store;
+      },
+    }).call(card, { programId: 'tool-call-theme' });
+    strictEqual(card.cardInfo.theme, fieldNotes);
+    deepStrictEqual(plan.paths, [['cardInfo', 'theme']]);
+    deepStrictEqual(plan.intents, [
+      {
+        op: 'relate',
+        field: ['cardInfo', 'theme'],
+        cardId: 'card:theme/field-notes',
+      },
+    ]);
+  },
+);
 
 check('unrelates and reorders relationships as live Card objects', () => {
   const card = invoiceFixture();
@@ -341,9 +394,12 @@ check('unrelates and reorders relationships as live Card objects', () => {
     { getFields },
   ).call(card, { programId: 'tool-call-6' });
   deepStrictEqual(card.collaborators, [grace, ada]);
-  updateViaBxl('del(Collaborators[ID = "card:ada"]);', { getFields }).call(card, {
-    programId: 'tool-call-7',
-  });
+  updateViaBxl('del(Collaborators[ID = "card:ada"]);', { getFields }).call(
+    card,
+    {
+      programId: 'tool-call-7',
+    },
+  );
   deepStrictEqual(card.collaborators, [grace]);
 });
 
@@ -351,8 +407,12 @@ check('planner failures leave the live card untouched', () => {
   const card = invoiceFixture();
   const before = snapshotBxlCard(card, { getFields });
   throws(
-    () => updateViaBxl('"Line Item"[Quantity >= 1].Quantity += 1;', { getFields }).call(card),
-    (error) => error instanceof BxlMutationError && error.code === 'target-ambiguous',
+    () =>
+      updateViaBxl('"Line Item"[Quantity >= 1].Quantity += 1;', {
+        getFields,
+      }).call(card),
+    (error) =>
+      error instanceof BxlMutationError && error.code === 'target-ambiguous',
   );
   deepStrictEqual(snapshotBxlCard(card, { getFields }), before);
 });
@@ -360,38 +420,51 @@ check('planner failures leave the live card untouched', () => {
 check('authorization failures leave the live card untouched', () => {
   const card = invoiceFixture();
   throws(
-    () => updateViaBxl('Title = "Denied";', { getFields }).call(card, {
-      authorize() { return false; },
-    }),
-    (error) => error instanceof BxlMutationError && error.code === 'authorization-denied',
+    () =>
+      updateViaBxl('Title = "Denied";', { getFields }).call(card, {
+        authorize() {
+          return false;
+        },
+      }),
+    (error) =>
+      error instanceof BxlMutationError &&
+      error.code === 'authorization-denied',
   );
   strictEqual(card.title, 'Draft');
 });
 
-check('low-level plan application rejects a Card changed since planning', () => {
-  const card = invoiceFixture();
-  const snapshot = snapshotBxlCard(card, { getFields });
-  const plan = prepareBxlMutation('Title = "Planned";', {
-    targetKind: 'card',
-    schema: mutationSchemaForCard(card, { getFields }),
-  }).plan(snapshot, {
-    programId: 'detached-plan',
-    targetId: card.id,
-  });
-  card.title = 'Changed elsewhere';
-  throws(
-    () => applyBxlMutationPlanToCard(card, plan, { getFields }),
-    (error) => error instanceof BxlMutationError && error.code === 'plan-snapshot-mismatch',
-  );
-  strictEqual(card.title, 'Changed elsewhere');
-});
+check(
+  'low-level plan application rejects a Card changed since planning',
+  () => {
+    const card = invoiceFixture();
+    const snapshot = snapshotBxlCard(card, { getFields });
+    const plan = prepareBxlMutation('Title = "Planned";', {
+      targetKind: 'card',
+      schema: mutationSchemaForCard(card, { getFields }),
+    }).plan(snapshot, {
+      programId: 'detached-plan',
+      targetId: card.id,
+    });
+    card.title = 'Changed elsewhere';
+    throws(
+      () => applyBxlMutationPlanToCard(card, plan, { getFields }),
+      (error) =>
+        error instanceof BxlMutationError &&
+        error.code === 'plan-snapshot-mismatch',
+    );
+    strictEqual(card.title, 'Changed elsewhere');
+  },
+);
 
 check('commit setter failures roll back earlier writes', () => {
   const card = new GuardedCard();
-  const update = updateViaBxl('Title = "Changed"; Locked = "boom";', { getFields });
+  const update = updateViaBxl('Title = "Changed"; Locked = "boom";', {
+    getFields,
+  });
   throws(
     () => update.call(card, { programId: 'tool-call-rollback' }),
-    (error) => error instanceof BxlMutationError && error.code === 'commit-failed',
+    (error) =>
+      error instanceof BxlMutationError && error.code === 'commit-failed',
   );
   strictEqual(card.title, 'Before');
   strictEqual(card.locked, 'safe');
@@ -400,8 +473,12 @@ check('commit setter failures roll back earlier writes', () => {
 check('query-backed relationship fields remain read-only', () => {
   const card = invoiceFixture();
   throws(
-    () => updateViaBxl('append("Search Results", card("card:ada"));', { getFields }).call(card),
-    (error) => error instanceof BxlMutationError && error.code === 'field-read-only',
+    () =>
+      updateViaBxl('append("Search Results", card("card:ada"));', {
+        getFields,
+      }).call(card),
+    (error) =>
+      error instanceof BxlMutationError && error.code === 'field-read-only',
   );
 });
 

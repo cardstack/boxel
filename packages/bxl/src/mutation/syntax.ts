@@ -1,20 +1,20 @@
-import { parseNativeJq } from '../bxl/bridge/native.js';
-import { parseBxlAst, visitBxlAst } from '../bxl/ast/index.js';
+import { parseNativeJq } from '../bxl/bridge/native.ts';
+import { parseBxlAst, visitBxlAst } from '../bxl/ast/index.ts';
 import {
   compileReadableSyntax,
   type ReadableSyntaxWarning,
-} from '../bxl/compiler/readable-syntax.js';
+} from '../bxl/compiler/readable-syntax.ts';
 import type {
   ExpressionAst,
   FilterAst,
   IndexAst,
-} from '../jqtools/parser/AST.js';
+} from '../jqtools/parser/AST.ts';
 import type {
   BxlMutationField,
   BxlMutationPrepareOptions,
   BxlMutationSchema,
-} from './types.js';
-import { BxlMutationError } from './types.js';
+} from './types.ts';
+import { BxlMutationError } from './types.ts';
 
 export type MutationAssignmentOperator =
   | '='
@@ -200,7 +200,11 @@ export class BxlMutationStatementStream {
   private buffer = '';
   private cursor = 0;
   private emitted = 0;
-  private state: ScannedCharacterState = { depth: 0, quote: null, escaped: false };
+  private state: ScannedCharacterState = {
+    depth: 0,
+    quote: null,
+    escaped: false,
+  };
   private readonly maxBufferedCharacters: number;
   private readonly maxStatements: number;
 
@@ -215,7 +219,11 @@ export class BxlMutationStatementStream {
     let consumed = 0;
     for (let index = this.cursor; index < this.buffer.length; index++) {
       const character = this.buffer[index]!;
-      if (character === ';' && this.state.quote === null && this.state.depth === 0) {
+      if (
+        character === ';' &&
+        this.state.quote === null &&
+        this.state.depth === 0
+      ) {
         const statement = this.buffer.slice(consumed, index + 1).trim();
         if (statement !== ';') {
           complete.push(statement);
@@ -305,10 +313,12 @@ function splitTopLevel(source: string, separator: ',' | ';'): string[] {
   return parts;
 }
 
-function findTopLevelAssignment(source: string): {
-  index: number;
-  operator: MutationAssignmentOperator;
-} | undefined {
+function findTopLevelAssignment(source: string):
+  | {
+      index: number;
+      operator: MutationAssignmentOperator;
+    }
+  | undefined {
   const operators: MutationAssignmentOperator[] = [
     '//=',
     '|=',
@@ -327,7 +337,13 @@ function findTopLevelAssignment(source: string): {
         if (operator === '=') {
           const previous = source[index - 1];
           const next = source[index + 1];
-          if (previous === '=' || previous === '!' || previous === '<' || previous === '>' || next === '=') {
+          if (
+            previous === '=' ||
+            previous === '!' ||
+            previous === '<' ||
+            previous === '>' ||
+            next === '='
+          ) {
             continue;
           }
         }
@@ -339,7 +355,9 @@ function findTopLevelAssignment(source: string): {
   return undefined;
 }
 
-function parseOuterCall(source: string): { name: string; body: string } | undefined {
+function parseOuterCall(
+  source: string,
+): { name: string; body: string } | undefined {
   const match = /^([A-Za-z_][A-Za-z0-9_]*)\s*\(/.exec(source);
   if (!match) return undefined;
   const open = source.indexOf('(', match[1]!.length);
@@ -440,10 +458,10 @@ function readableMutationSchema(options: BxlMutationPrepareOptions) {
         label: root.label,
         kind:
           root.fieldType === 'containsMany' || root.fieldType === 'linksToMany'
-            ? 'array' as const
+            ? ('array' as const)
             : root.item
-              ? 'object' as const
-              : 'scalar' as const,
+              ? ('object' as const)
+              : ('scalar' as const),
         item: root.item ?? { fields: options.schema.fields },
       },
     ],
@@ -456,7 +474,10 @@ interface MutationAstSchemaResult {
   item?: BxlMutationSchema;
 }
 
-function schemaField(schema: BxlMutationSchema | undefined, key: string): BxlMutationField | undefined {
+function schemaField(
+  schema: BxlMutationSchema | undefined,
+  key: string,
+): BxlMutationField | undefined {
   return schema?.fields.find((field) => field.key === key);
 }
 
@@ -503,7 +524,9 @@ function schemaResultForLocation(
 }
 
 function isFirstCall(node: ExpressionAst): node is FilterAst {
-  return node.type === 'filter' && node.name === 'first/1' && node.args.length === 1;
+  return (
+    node.type === 'filter' && node.name === 'first/1' && node.args.length === 1
+  );
 }
 
 function identityIndex(index: IndexAst['index']): IndexAst {
@@ -595,7 +618,9 @@ export function printMutationAst(node: ExpressionAst): string {
       return 'null';
     case 'str':
       if (node.interpolated) {
-        throw new Error('Interpolated strings are not supported in mutation canonicalization.');
+        throw new Error(
+          'Interpolated strings are not supported in mutation canonicalization.',
+        );
       }
       return quoted(node.value);
     case 'unary':
@@ -621,12 +646,17 @@ export function printMutationAst(node: ExpressionAst): string {
     case 'array':
       return `[${node.expr ? printMutationAst(node.expr) : ''}]`;
     case 'object':
-      return `{${node.entries.map((entry) => {
-        const key = typeof entry.key === 'string' ? entry.key : printMutationAst(entry.key);
-        return entry.value === undefined
-          ? key
-          : `${/^[A-Za-z_][A-Za-z0-9_]*$/.test(key) ? key : quoted(key)}:${printMutationAst(entry.value)}`;
-      }).join(',')}}`;
+      return `{${node.entries
+        .map((entry) => {
+          const key =
+            typeof entry.key === 'string'
+              ? entry.key
+              : printMutationAst(entry.key);
+          return entry.value === undefined
+            ? key
+            : `${/^[A-Za-z_][A-Za-z0-9_]*$/.test(key) ? key : quoted(key)}:${printMutationAst(entry.value)}`;
+        })
+        .join(',')}}`;
     case 'if':
       return `if ${printMutationAst(node.cond)} then ${printMutationAst(node.then)}${node.else ? ` else ${printMutationAst(node.else)}` : ''} end`;
     case 'try':
@@ -634,8 +664,13 @@ export function printMutationAst(node: ExpressionAst): string {
     case 'var':
       return node.name;
     case 'varDeclaration':
-      if (node.destructuring.length !== 1 || node.destructuring[0]?.type !== 'var') {
-        throw new Error('Complex bindings are not supported in mutation canonicalization.');
+      if (
+        node.destructuring.length !== 1 ||
+        node.destructuring[0]?.type !== 'var'
+      ) {
+        throw new Error(
+          'Complex bindings are not supported in mutation canonicalization.',
+        );
       }
       return `${printMutationAst(node.expr)}as${node.destructuring[0].name}|${printMutationAst(node.next)}`;
     default:
@@ -648,50 +683,73 @@ function parseExpression(
   options: BxlMutationPrepareOptions,
   statement: number,
   location: boolean,
-): { ast: ExpressionAst; canonical: string; warnings: ReadableSyntaxWarning[] } {
+): {
+  ast: ExpressionAst;
+  canonical: string;
+  warnings: ReadableSyntaxWarning[];
+} {
   let candidate = source.trim();
   if (location) {
     candidate = insertExplicitBulkDots(candidate);
   }
   const schema = readableMutationSchema(options);
   try {
-    const compiled = options.syntax === 'solidified'
-      ? { source: candidate, warnings: [] as ReadableSyntaxWarning[] }
-      : compileReadableSyntax(candidate, { schema });
+    const compiled =
+      options.syntax === 'solidified'
+        ? { source: candidate, warnings: [] as ReadableSyntaxWarning[] }
+        : compileReadableSyntax(candidate, { schema });
     // Solidified filter-all is profile syntax rather than ordinary jq. Pass it
     // through the readable path compiler only when that marker is present.
-    const normalized = options.syntax === 'solidified' && location && candidate.includes('[*')
-      ? { source: solidifiedBulkLocation(candidate), warnings: [] as ReadableSyntaxWarning[] }
-      : compiled;
+    const normalized =
+      options.syntax === 'solidified' && location && candidate.includes('[*')
+        ? {
+            source: solidifiedBulkLocation(candidate),
+            warnings: [] as ReadableSyntaxWarning[],
+          }
+        : compiled;
     const parsed = parseNativeJq(normalized.source, { readableSyntax: false });
     if (!parsed.ast.expr) {
       throw new Error('Expression is empty.');
     }
     const withoutSyntheticRoot = stripSyntheticFieldRoot(parsed.ast.expr);
-    const ast = location ? normalizeLocationAst(withoutSyntheticRoot) : withoutSyntheticRoot;
+    const ast = location
+      ? normalizeLocationAst(withoutSyntheticRoot)
+      : withoutSyntheticRoot;
     const profile = parseBxlAst(printMutationAst(ast), {
       readableSyntax: false,
       profile: 'mutation',
     });
-    const errors = profile.profileIssues.filter((issue) => issue.severity === 'error');
+    const errors = profile.profileIssues.filter(
+      (issue) => issue.severity === 'error',
+    );
     if (errors.length > 0) {
-      throw new Error(errors.map((issue) => `${issue.code}: ${issue.message}`).join('\n'));
+      throw new Error(
+        errors.map((issue) => `${issue.code}: ${issue.message}`).join('\n'),
+      );
     }
     if (profile.body) {
       let nestedAssignment: string | undefined;
       visitBxlAst(profile.body, (node) => {
         if (
           node.type === 'binary' &&
-          ['=', '|=', '+=', '-=', '*=', '/=', '%=', '//='].includes(node.operator)
+          ['=', '|=', '+=', '-=', '*=', '/=', '%=', '//='].includes(
+            node.operator,
+          )
         ) {
           nestedAssignment = node.operator;
         }
       });
       if (nestedAssignment) {
-        throw new Error(`Mutation ${location ? 'locations' : 'value expressions'} cannot contain nested assignment ${nestedAssignment}.`);
+        throw new Error(
+          `Mutation ${location ? 'locations' : 'value expressions'} cannot contain nested assignment ${nestedAssignment}.`,
+        );
       }
     }
-    return { ast, canonical: printMutationAst(ast), warnings: normalized.warnings };
+    return {
+      ast,
+      canonical: printMutationAst(ast),
+      warnings: normalized.warnings,
+    };
   } catch (error) {
     throw new BxlMutationError(
       'parse',
@@ -740,7 +798,9 @@ export function parseBxlMutationProgram(
     const assignment = findTopLevelAssignment(statementSource);
     if (assignment) {
       const left = statementSource.slice(0, assignment.index).trim();
-      const right = statementSource.slice(assignment.index + assignment.operator.length).trim();
+      const right = statementSource
+        .slice(assignment.index + assignment.operator.length)
+        .trim();
       if (!left || !right) {
         throw new BxlMutationError(
           'parse',
@@ -782,7 +842,10 @@ export function parseBxlMutationProgram(
     const semicolonArgs = splitTopLevel(call.body, ';');
     const commaArgs = splitTopLevel(call.body, ',');
     const rawArgs = semicolonArgs.length > 1 ? semicolonArgs : commaArgs;
-    if (rawArgs.length !== CALL_ARITIES[name] || rawArgs.some((value) => value.length === 0)) {
+    if (
+      rawArgs.length !== CALL_ARITIES[name] ||
+      rawArgs.some((value) => value.length === 0)
+    ) {
       throw new BxlMutationError(
         'parse',
         'call-arity',
@@ -792,10 +855,19 @@ export function parseBxlMutationProgram(
     }
     const args = rawArgs.map((raw, index) => {
       if (name === 'reorder_by' && index === 1) {
-        const collection = argument(rawArgs[0]!, options, statementNumber, true);
+        const collection = argument(
+          rawArgs[0]!,
+          options,
+          statementNumber,
+          true,
+        );
         const rootSchema = readableMutationSchema(options) as BxlMutationSchema;
-        const collectionField = schemaResultForLocation(collection.argument.ast, rootSchema).field;
-        const itemSchema = collectionField?.item ?? options.schema.rootField?.item;
+        const collectionField = schemaResultForLocation(
+          collection.argument.ast,
+          rootSchema,
+        ).field;
+        const itemSchema =
+          collectionField?.item ?? options.schema.rootField?.item;
         if (itemSchema) {
           return argument(
             raw,
@@ -805,7 +877,12 @@ export function parseBxlMutationProgram(
           );
         }
       }
-      return argument(raw, options, statementNumber, LOCATION_ARGUMENTS[name].has(index));
+      return argument(
+        raw,
+        options,
+        statementNumber,
+        LOCATION_ARGUMENTS[name].has(index),
+      );
     });
     warnings.push(...args.flatMap((entry) => entry.warnings));
     statements.push({
@@ -820,7 +897,9 @@ export function parseBxlMutationProgram(
 
   return {
     statements,
-    canonicalSource: statements.map((statement) => `${statement.canonical};`).join('\n'),
+    canonicalSource: statements
+      .map((statement) => `${statement.canonical};`)
+      .join('\n'),
     warnings,
   };
 }

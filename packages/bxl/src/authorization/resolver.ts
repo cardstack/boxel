@@ -1,24 +1,24 @@
-import { AuthorizationError, type AuthorizationSafeResult } from './errors.js';
+import { AuthorizationError, type AuthorizationSafeResult } from './errors.ts';
 import {
   parseObjectReference,
   parseSubjectReference,
   type EntityReference,
   type SubjectReference,
-} from './identifiers.js';
+} from './identifiers.ts';
 import type {
   AuthorizationRelationExpression,
   CompiledAuthorizationGraph,
-} from './ir.js';
-import type { RelationshipTuple } from './graph-model.js';
+} from './ir.ts';
+import type { RelationshipTuple } from './graph-model.ts';
 import {
   breadthFirstRecursiveMatchSync,
   OPENFGA_RECURSIVE_PORT_INFO,
-} from './openfga-recursive.js';
+} from './openfga-recursive.ts';
 import {
   buildAuthorizationTupleIndex,
   type AuthorizationTupleIndex,
   type IndexedRelationshipTuple,
-} from './tuple-index.js';
+} from './tuple-index.ts';
 
 export interface AuthorizationRuntimeLimits {
   maxDepth?: number;
@@ -127,11 +127,18 @@ function resolvedLimits(
   return result;
 }
 
-function relationKey(subject: string, object: string, relation: string): string {
+function relationKey(
+  subject: string,
+  object: string,
+  relation: string,
+): string {
   return `${subject}\0${object}\0${relation}`;
 }
 
-function tick(state: ResolutionState, depth: number): AuthorizationError | undefined {
+function tick(
+  state: ResolutionState,
+  depth: number,
+): AuthorizationError | undefined {
   state.metrics.steps++;
   state.metrics.maxDepth = Math.max(state.metrics.maxDepth, depth);
   if (depth > state.limits.maxDepth) {
@@ -163,7 +170,8 @@ function tuplesFor(
   relation: string,
 ): readonly IndexedRelationshipTuple[] | AuthorizationError {
   const stored = state.stored.forObjectRelation(object, relation);
-  const contextual = state.contextual?.forObjectRelation(object, relation) ?? [];
+  const contextual =
+    state.contextual?.forObjectRelation(object, relation) ?? [];
   const reads = stored.length + contextual.length;
   state.metrics.tupleReads += reads;
   if (state.metrics.tupleReads > state.limits.maxTupleReads) {
@@ -187,7 +195,9 @@ function mergeUnion(outcomes: readonly ResolutionOutcome[]): ResolutionOutcome {
   return sawCycle ? cycle() : deny();
 }
 
-function mergeIntersection(outcomes: readonly ResolutionOutcome[]): ResolutionOutcome {
+function mergeIntersection(
+  outcomes: readonly ResolutionOutcome[],
+): ResolutionOutcome {
   let firstError: AuthorizationError | undefined;
   for (const outcome of outcomes) {
     if (outcome.status === 'deny' || outcome.status === 'cycle') return deny();
@@ -221,7 +231,9 @@ function directTupleMatchesSubject(
   if (tuple.parsedSubject.canonical === subject.canonical) return true;
   if (tuple.parsedSubject.relation !== undefined) return false;
   if (tuple.parsedSubject.type !== subject.type) return false;
-  return tuple.parsedSubject.id === '*' || tuple.parsedSubject.id === subject.id;
+  return (
+    tuple.parsedSubject.id === '*' || tuple.parsedSubject.id === subject.id
+  );
 }
 
 function tupleConditionOutcome(
@@ -240,7 +252,9 @@ function tupleConditionOutcome(
     );
   }
   try {
-    return condition.evaluate(state.context, tuple.condition.context) ? allow() : deny();
+    return condition.evaluate(state.context, tuple.condition.context)
+      ? allow()
+      : deny();
   } catch (error) {
     return errorOutcome(
       error instanceof AuthorizationError
@@ -338,7 +352,10 @@ function resolveOpenFgaRecursiveUsersets(
       `synchronous port @ ${OPENFGA_RECURSIVE_PORT_INFO.commit.slice(0, 12)}` +
       (result.cyclePruned > 0 ? `; ${result.cyclePruned} revisits pruned` : '');
     const traceVisits = result.matched
-      ? result.path.map((userset, usersetDepth) => ({ userset, depth: usersetDepth }))
+      ? result.path.map((userset, usersetDepth) => ({
+          userset,
+          depth: usersetDepth,
+        }))
       : result.visited;
     for (const visit of [...traceVisits].reverse()) {
       const subject = parseSubjectReference(visit.userset, 'recursive.trace');
@@ -436,7 +453,10 @@ function resolveDirect(
 
 function resolveTupleToUserset(
   model: CompiledAuthorizationGraph,
-  expression: Extract<AuthorizationRelationExpression, { kind: 'tupleToUserset' }>,
+  expression: Extract<
+    AuthorizationRelationExpression,
+    { kind: 'tupleToUserset' }
+  >,
   object: EntityReference,
   state: ResolutionState,
   visited: ReadonlySet<string>,
@@ -447,7 +467,10 @@ function resolveTupleToUserset(
 
   const outcomes: ResolutionOutcome[] = [];
   for (const tuple of tuples) {
-    if (tuple.parsedSubject.wildcard || tuple.parsedSubject.relation !== undefined) {
+    if (
+      tuple.parsedSubject.wildcard ||
+      tuple.parsedSubject.relation !== undefined
+    ) {
       continue;
     }
     const condition = tupleConditionOutcome(model, tuple, state);
@@ -498,7 +521,14 @@ function resolveExpression(
         depth + 1,
       );
     case 'tupleToUserset':
-      return resolveTupleToUserset(model, expression, object, state, visited, depth);
+      return resolveTupleToUserset(
+        model,
+        expression,
+        object,
+        state,
+        visited,
+        depth,
+      );
     case 'union': {
       const outcomes: ResolutionOutcome[] = [];
       for (const child of expression.children) {
@@ -646,12 +676,18 @@ export function checkAuthorization(
     const subject = parseSubjectReference(request.subject, 'request.subject');
     const object = parseObjectReference(request.object, 'request.object');
     if (!model.types.has(subject.type)) {
-      throw new AuthorizationError('unknown-type', `Unknown subject type ${subject.type}.`, {
-        path: 'request.subject',
-      });
+      throw new AuthorizationError(
+        'unknown-type',
+        `Unknown subject type ${subject.type}.`,
+        {
+          path: 'request.subject',
+        },
+      );
     }
     if (subject.relation !== undefined) {
-      const subjectRelation = model.types.get(subject.type)?.relations.get(subject.relation);
+      const subjectRelation = model.types
+        .get(subject.type)
+        ?.relations.get(subject.relation);
       if (!subjectRelation) {
         throw new AuthorizationError(
           'unknown-relation',
@@ -662,9 +698,13 @@ export function checkAuthorization(
     }
     const objectType = model.types.get(object.type);
     if (!objectType) {
-      throw new AuthorizationError('unknown-type', `Unknown object type ${object.type}.`, {
-        path: 'request.object',
-      });
+      throw new AuthorizationError(
+        'unknown-type',
+        `Unknown object type ${object.type}.`,
+        {
+          path: 'request.object',
+        },
+      );
     }
     if (!objectType.relations.has(request.relation)) {
       throw new AuthorizationError(
@@ -696,7 +736,14 @@ export function checkAuthorization(
       ...(request.trace ? { trace: [] } : {}),
     };
 
-    const outcome = resolveRelation(model, object, request.relation, state, new Set(), 0);
+    const outcome = resolveRelation(
+      model,
+      object,
+      request.relation,
+      state,
+      new Set(),
+      0,
+    );
     if (outcome.status === 'error') {
       return { ok: false, error: outcome.error.toRecord() };
     }

@@ -1,5 +1,6 @@
-import { IdentToken, OpToken, Token, Tokenizer, TokenType } from './Tokenizer.js';
-import {
+import type { IdentToken, OpToken, Token, TokenType } from './Tokenizer.ts';
+import { Tokenizer } from './Tokenizer.ts';
+import type {
   ArgAst,
   ArrayAst,
   ArrayDestructuringAst,
@@ -29,8 +30,8 @@ import {
   UnaryOperator,
   VarAst,
   VarDeclarationAst,
-} from './AST.js';
-import { InputStream } from './InputStream.js';
+} from './AST.ts';
+import { InputStream } from './InputStream.ts';
 
 export class Parser {
   private static precedence = {
@@ -101,7 +102,11 @@ export class Parser {
     return Number(filterName.split('/')[1]);
   }
 
-  constructor(private input: Tokenizer) {}
+  private input: Tokenizer;
+
+  constructor(input: Tokenizer) {
+    this.input = input;
+  }
 
   private static staticIndexPath(
     expr: ExpressionAst,
@@ -125,13 +130,13 @@ export class Parser {
 
   private unexpected() {
     return this.input.croak(
-      `Unexpected ${Tokenizer.stringifyToken(this.input.peek())}`
+      `Unexpected ${Tokenizer.stringifyToken(this.input.peek())}`,
     );
   }
 
   private expected<Type extends TokenType, T extends Token<Type>>(
     type: Type,
-    value?: T['value']
+    value?: T['value'],
   ) {
     const peek = this.input.peek();
     return this.input.croak(
@@ -139,13 +144,13 @@ export class Parser {
         value
           ? Tokenizer.stringifyToken({ type, value } as Token)
           : Tokenizer.stringifyTokenType(type)
-      }, received ${Tokenizer.stringifyToken(peek)}`
+      }, received ${Tokenizer.stringifyToken(peek)}`,
     );
   }
 
   private is<Type extends TokenType, T extends Token<Type>>(
     type: Type,
-    val?: T['value']
+    val?: T['value'],
   ): T | null {
     const token = this.input.peek();
     return (((token && token.type === type && (!val || val === token.value)) ||
@@ -155,7 +160,7 @@ export class Parser {
 
   private skip<Type extends TokenType, T extends Token<Type>>(
     type: Type,
-    val?: T['value']
+    val?: T['value'],
   ): T {
     if (this.is(type, val as any)) {
       return this.input.next() as any;
@@ -228,20 +233,8 @@ export class Parser {
     return this.skip('op', val);
   }
 
-  private skipBool(val?: boolean) {
-    return this.skip('bool', val);
-  }
-
   private skipStr(val?: string) {
     return this.skip('str', val);
-  }
-
-  private skipNum(val?: number) {
-    return this.skip('num', val);
-  }
-
-  private skipNull() {
-    return this.skip('null');
   }
 
   private parseTopLevel(): ProgAst {
@@ -288,7 +281,7 @@ export class Parser {
     parser: () => T,
     minCount = 0,
     maxCount?: number,
-    allowTrailingSeparator?: boolean
+    allowTrailingSeparator?: boolean,
   ) {
     this.skipPunc(start);
     const out: T[] = [];
@@ -422,7 +415,7 @@ export class Parser {
   maybeBinary(
     left: ExpressionAst,
     parentPrecedence = 0,
-    ignoreOp: string[] = []
+    ignoreOp: string[] = [],
   ): ExpressionAst {
     const op = this.isOp() || this.isKw('and') || this.isKw('or');
     if (op && !ignoreOp.includes(op.value)) {
@@ -437,11 +430,11 @@ export class Parser {
             right: this.maybeBinary(
               this.parseAtomOrControlStructure(),
               precedence,
-              ignoreOp
+              ignoreOp,
             ),
           }),
           parentPrecedence,
-          ignoreOp
+          ignoreOp,
         );
       }
     }
@@ -460,7 +453,7 @@ export class Parser {
 
   atomMaybe(cb: () => ExpressionAst): ExpressionAst {
     return this.maybeShortTry(() =>
-      this.maybeBracketIndex(() => this.maybeSimpleIndex(cb))
+      this.maybeBracketIndex(() => this.maybeSimpleIndex(cb)),
     );
   }
 
@@ -499,7 +492,7 @@ export class Parser {
     return {
       type: 'arrayDestructuring',
       destructuring: this.delimited('[', ']', { type: 'op', value: ',' }, () =>
-        this.parseDestructuring()
+        this.parseDestructuring(),
       ),
     };
   }
@@ -624,7 +617,7 @@ export class Parser {
         () => this.parseEntry(),
         undefined,
         undefined,
-        true
+        true,
       ),
     };
   }
@@ -753,7 +746,7 @@ export class Parser {
       ';',
       () => this.parseExpression(),
       2,
-      2
+      2,
     );
 
     return {
@@ -776,7 +769,7 @@ export class Parser {
       ';',
       () => this.parseExpression(),
       2,
-      3
+      3,
     );
 
     return {

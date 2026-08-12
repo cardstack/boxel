@@ -1,9 +1,4 @@
-import {
-  deepStrictEqual,
-  ok,
-  strictEqual,
-  throws,
-} from 'node:assert';
+import { deepStrictEqual, ok, strictEqual, throws } from 'node:assert';
 import {
   BxlMutationError,
   applyBxlMutationPlanToCardSource,
@@ -13,7 +8,22 @@ import {
   snapshotBxlCardSource,
   type BxlBoxelSourceDefinition,
   type BxlCardSourceDocument,
-} from '../../src/mutation/index.js';
+  type BxlCardSourceRelationship,
+} from '../../src/mutation/index.ts';
+
+// A resource's `relationships` map holds either a single relationship or an
+// array of them. Every assertion below is about a single one, addressed by its
+// full dotted key, so this narrows and fails loudly on anything else.
+function relationship(
+  document: BxlCardSourceDocument,
+  key: string,
+): BxlCardSourceRelationship {
+  const value = document.data.relationships?.[key];
+  if (value === undefined || Array.isArray(value)) {
+    throw new Error(`expected a single relationship at "${key}"`);
+  }
+  return value;
+}
 
 const ref = (name: string) => ({ module: 'https://example.test/types', name });
 const field = (
@@ -70,10 +80,9 @@ const tierItemDefinition: BxlBoxelSourceDefinition = {
 };
 
 const definitions = new Map(
-  [cardInfoDefinition, themeDefinition, tierItemDefinition].map((definition) => [
-    JSON.stringify(definition.codeRef),
-    definition,
-  ]),
+  [cardInfoDefinition, themeDefinition, tierItemDefinition].map(
+    (definition) => [JSON.stringify(definition.codeRef), definition],
+  ),
 );
 
 const schema = await mutationSchemaForCardSource(tierItemDefinition, {
@@ -148,17 +157,20 @@ const projectionOptions = {
   },
 };
 
-deepStrictEqual(snapshotBxlCardSource(sourceFixture(), schema, projectionOptions), {
-  id: 'https://example.test/TierItem/typescript',
-  cardInfo: {
-    name: 'TypeScript',
-    theme: { id: 'https://example.test/Theme/original' },
+deepStrictEqual(
+  snapshotBxlCardSource(sourceFixture(), schema, projectionOptions),
+  {
+    id: 'https://example.test/TierItem/typescript',
+    cardInfo: {
+      name: 'TypeScript',
+      theme: { id: 'https://example.test/Theme/original' },
+    },
+    image: 'https://example.test/typescript.svg',
+    tags: ['language', 'web'],
+    computedLabel: null,
+    recommendations: [],
   },
-  image: 'https://example.test/typescript.svg',
-  tags: ['language', 'web'],
-  computedLabel: null,
-  recommendations: [],
-});
+);
 
 const original = sourceFixture();
 const before = structuredClone(original);
@@ -416,19 +428,14 @@ deepStrictEqual(
 );
 deepStrictEqual(
   (
-    (moved.data.meta?.fields as Record<string, unknown>)
-      .examples as Array<Record<string, unknown>>
+    (moved.data.meta?.fields as Record<string, unknown>).examples as Array<
+      Record<string, unknown>
+    >
   ).map((item) => (item.adoptsFrom as Record<string, unknown>).name),
   ['GammaExample', 'AlphaExample', 'BetaExample'],
 );
-strictEqual(
-  moved.data.relationships?.['examples.0.friend'].meta?.slot,
-  'c',
-);
-strictEqual(
-  moved.data.relationships?.['examples.1.friend'].links?.related,
-  'keep-a',
-);
+strictEqual(relationship(moved, 'examples.0.friend').meta?.slot, 'c');
+strictEqual(relationship(moved, 'examples.1.friend').links?.related, 'keep-a');
 
 function assertExampleSidecarsAligned(document: BxlCardSourceDocument): void {
   const values = document.data.attributes?.examples as Array<
@@ -446,7 +453,7 @@ function assertExampleSidecarsAligned(document: BxlCardSourceDocument): void {
     const key = value.key as string;
     strictEqual(metas[index].adoptsFrom.name, typeForKey[key]);
     strictEqual(
-      document.data.relationships?.[`examples.${index}.friend`].meta?.slot,
+      relationship(document, `examples.${index}.friend`).meta?.slot,
       key,
     );
   });
@@ -546,40 +553,28 @@ const nested = mutateBxlCardSource(
   },
 ).document;
 deepStrictEqual(
-  (
-    (nested.data.attributes?.examples as Array<Record<string, unknown>>)[0]
-      .aliases
-  ),
+  (nested.data.attributes?.examples as Array<Record<string, unknown>>)[0]
+    .aliases,
   ['A-two'],
 );
 const nestedFields = (
-  (
-    (nested.data.meta?.fields as Record<string, unknown>)
-      .examples as Array<Record<string, unknown>>
-  )[0].fields as Record<string, unknown>
-);
+  (nested.data.meta?.fields as Record<string, unknown>).examples as Array<
+    Record<string, unknown>
+  >
+)[0].fields as Record<string, unknown>;
 strictEqual(nestedFields['aliases.1'], undefined);
 strictEqual(
-  (
-    nestedFields['aliases.0'] as Record<string, Record<string, unknown>>
-  ).adoptsFrom.name,
+  (nestedFields['aliases.0'] as Record<string, Record<string, unknown>>)
+    .adoptsFrom.name,
   'SecondAlias',
 );
 strictEqual(
-  (
-    (nestedFields.parts as Array<Record<string, Record<string, unknown>>>)[0]
-      .adoptsFrom
-  ).name,
+  (nestedFields.parts as Array<Record<string, Record<string, unknown>>>)[0]
+    .adoptsFrom.name,
   'SecondPart',
 );
-strictEqual(
-  nested.data.relationships?.['examples.0.parts.0.owner'].meta?.part,
-  'p2',
-);
-strictEqual(
-  nested.data.relationships?.['examples.0.parts.1.owner'].meta?.part,
-  'p1',
-);
+strictEqual(relationship(nested, 'examples.0.parts.0.owner').meta?.part, 'p2');
+strictEqual(relationship(nested, 'examples.0.parts.1.owner').meta?.part, 'p1');
 
 const deleted = mutateBxlCardSource(
   richSourceFixture(),
@@ -598,16 +593,14 @@ deepStrictEqual(
 );
 strictEqual(
   (
-    (deleted.data.meta?.fields as Record<string, unknown>)[
-      'codes.1'
-    ] as Record<string, Record<string, unknown>>
+    (deleted.data.meta?.fields as Record<string, unknown>)['codes.1'] as Record<
+      string,
+      Record<string, unknown>
+    >
   ).adoptsFrom.name,
   'ThirdCode',
 );
-strictEqual(
-  deleted.data.relationships?.['examples.1.friend'].meta?.slot,
-  'c',
-);
+strictEqual(relationship(deleted, 'examples.1.friend').meta?.slot, 'c');
 strictEqual(deleted.data.relationships?.['examples.2.friend'], undefined);
 
 const reordered = mutateBxlCardSource(
@@ -626,7 +619,7 @@ deepStrictEqual(
   ),
   ['b', 'c', 'a'],
 );
-strictEqual(reordered.data.relationships?.['examples.0.friend'].meta?.slot, 'b');
+strictEqual(relationship(reordered, 'examples.0.friend').meta?.slot, 'b');
 strictEqual(
   (
     (
@@ -674,14 +667,15 @@ const inserted = mutateBxlCardSource(
 strictEqual(
   (
     (
-      (inserted.data.meta?.fields as Record<string, unknown>)
-        .examples as Array<Record<string, unknown>>
+      (inserted.data.meta?.fields as Record<string, unknown>).examples as Array<
+        Record<string, unknown>
+      >
     )[0].adoptsFrom as Record<string, unknown>
   ).name,
   'ZetaExample',
 );
-strictEqual(inserted.data.relationships?.['examples.0.friend'].meta?.slot, 'z');
-strictEqual(inserted.data.relationships?.['examples.1.friend'].meta?.slot, 'a');
+strictEqual(relationship(inserted, 'examples.0.friend').meta?.slot, 'z');
+strictEqual(relationship(inserted, 'examples.1.friend').meta?.slot, 'a');
 strictEqual(
   (
     (inserted.data.meta?.fields as Record<string, unknown>)[
@@ -722,18 +716,20 @@ const copied = mutateBxlCardSource(
 strictEqual(
   (
     (
-      (copied.data.meta?.fields as Record<string, unknown>)
-        .examples as Array<Record<string, unknown>>
+      (copied.data.meta?.fields as Record<string, unknown>).examples as Array<
+        Record<string, unknown>
+      >
     )[1].adoptsFrom as Record<string, unknown>
   ).name,
   'AlphaExample',
 );
-strictEqual(copied.data.relationships?.['examples.1.friend'].meta?.slot, 'a');
+strictEqual(relationship(copied, 'examples.1.friend').meta?.slot, 'a');
 strictEqual(
   (
-    (copied.data.meta?.fields as Record<string, unknown>)[
-      'codes.2'
-    ] as Record<string, Record<string, unknown>>
+    (copied.data.meta?.fields as Record<string, unknown>)['codes.2'] as Record<
+      string,
+      Record<string, unknown>
+    >
   ).adoptsFrom.name,
   'ThirdCode',
   'copying a primitive value preserves the destination Field override',
@@ -765,11 +761,9 @@ const replacedCollections = mutateBxlCardSource(
 ).document;
 strictEqual(
   (
-    (
-      (replacedCollections.data.meta?.fields as Record<string, unknown>)
-        .examples as Array<Record<string, Record<string, unknown>>>
-    )[0].adoptsFrom
-  ).name,
+    (replacedCollections.data.meta?.fields as Record<string, unknown>)
+      .examples as Array<Record<string, Record<string, unknown>>>
+  )[0].adoptsFrom.name,
   'NewExample',
 );
 strictEqual(
@@ -781,7 +775,7 @@ strictEqual(
   'NewCode',
 );
 strictEqual(
-  replacedCollections.data.relationships?.['examples.0.friend'].links?.self,
+  relationship(replacedCollections, 'examples.0.friend').links?.self,
   '../Friend/new',
 );
 strictEqual(
@@ -802,12 +796,10 @@ const deletedPrimitiveLeaf = mutateBxlCardSource(
 strictEqual(
   (
     (
-      (
-        (deletedPrimitiveLeaf.data.meta?.fields as Record<string, unknown>)
-          .examples as Array<Record<string, unknown>>
-      )[0].fields as Record<string, Record<string, Record<string, unknown>>>
-    ).label.adoptsFrom
-  ).name,
+      (deletedPrimitiveLeaf.data.meta?.fields as Record<string, unknown>)
+        .examples as Array<Record<string, unknown>>
+    )[0].fields as Record<string, Record<string, Record<string, unknown>>>
+  ).label.adoptsFrom.name,
   'FancyString',
 );
 
@@ -841,11 +833,11 @@ const normalizedDataArray = mutateBxlCardSource(
 ).document;
 strictEqual(normalizedDataArray.data.relationships?.linked, undefined);
 strictEqual(
-  normalizedDataArray.data.relationships?.['linked.1'].meta?.source,
+  relationship(normalizedDataArray, 'linked.1').meta?.source,
   'data-array',
 );
 strictEqual(
-  normalizedDataArray.data.relationships?.['linked.2'].links?.related,
+  relationship(normalizedDataArray, 'linked.2').links?.related,
   'preserve-array-link',
 );
 
@@ -868,7 +860,7 @@ const populatedEmptyLinks = mutateBxlCardSource(
 ).document;
 strictEqual(populatedEmptyLinks.data.relationships?.linked, undefined);
 strictEqual(
-  populatedEmptyLinks.data.relationships?.['linked.0'].links?.self,
+  relationship(populatedEmptyLinks, 'linked.0').links?.self,
   '../Friend/a',
 );
 
@@ -887,12 +879,9 @@ const related = mutateBxlCardSource(
     },
   },
 ).document;
-strictEqual(related.data.relationships?.['linked.0'].meta?.edge, 'c');
-strictEqual(related.data.relationships?.['linked.1'].meta?.edge, 'b');
-strictEqual(
-  related.data.relationships?.['linked.2'].links?.self,
-  '../Friend/d',
-);
+strictEqual(relationship(related, 'linked.0').meta?.edge, 'c');
+strictEqual(relationship(related, 'linked.1').meta?.edge, 'b');
+strictEqual(relationship(related, 'linked.2').links?.self, '../Friend/d');
 
 const matrixCardInfoDefinition: BxlBoxelSourceDefinition = {
   type: 'field-def',
@@ -936,11 +925,9 @@ const linkMatrixDefinition: BxlBoxelSourceDefinition = {
 };
 
 const matrixDefinitions = new Map(
-  [
-    matrixCardInfoDefinition,
-    matrixHolderDefinition,
-    linkMatrixDefinition,
-  ].map((definition) => [JSON.stringify(definition.codeRef), definition]),
+  [matrixCardInfoDefinition, matrixHolderDefinition, linkMatrixDefinition].map(
+    (definition) => [JSON.stringify(definition.codeRef), definition],
+  ),
 );
 const linkMatrixSchema = await mutationSchemaForCardSource(
   linkMatrixDefinition,
@@ -1086,67 +1073,67 @@ strictEqual(
   undefined,
 );
 strictEqual(
-  matrixResult.document.data.relationships?.['cardInfo.theme'].links?.self,
+  relationship(matrixResult.document, 'cardInfo.theme').links?.self,
   '@catalog/theme/dark',
 );
 strictEqual(
-  matrixResult.document.data.relationships?.['cardInfo.theme'].meta?.slot,
+  relationship(matrixResult.document, 'cardInfo.theme').meta?.slot,
   'card-info-one',
 );
 deepStrictEqual(
-  matrixResult.document.data.relationships?.['cardInfo.theme'].extension,
+  relationship(matrixResult.document, 'cardInfo.theme').extension,
   { preserve: true },
 );
 strictEqual(
-  matrixResult.document.data.relationships?.['cardInfo.themes.0'].links?.self,
+  relationship(matrixResult.document, 'cardInfo.themes.0').links?.self,
   '../Theme/new',
 );
 strictEqual(
-  matrixResult.document.data.relationships?.['cardInfo.themes.1'].meta?.slot,
+  relationship(matrixResult.document, 'cardInfo.themes.1').meta?.slot,
   'card-info-many-rri',
 );
 strictEqual(
-  matrixResult.document.data.relationships?.['cardInfo.themes.2'].meta?.slot,
+  relationship(matrixResult.document, 'cardInfo.themes.2').meta?.slot,
   'card-info-many-absolute',
 );
 strictEqual(
-  matrixResult.document.data.relationships?.primary.links?.self,
+  relationship(matrixResult.document, 'primary').links?.self,
   '../Person/new',
 );
 strictEqual(
-  matrixResult.document.data.relationships?.primary.meta?.slot,
+  relationship(matrixResult.document, 'primary').meta?.slot,
   'root-one',
 );
 strictEqual(
-  matrixResult.document.data.relationships?.['collaborators.0'].links?.self,
+  relationship(matrixResult.document, 'collaborators.0').links?.self,
   '@catalog/person/new',
 );
 strictEqual(
-  matrixResult.document.data.relationships?.['collaborators.1'].meta?.slot,
+  relationship(matrixResult.document, 'collaborators.1').meta?.slot,
   'root-many-relative',
 );
 strictEqual(
-  matrixResult.document.data.relationships?.['collaborators.2'].meta?.slot,
+  relationship(matrixResult.document, 'collaborators.2').meta?.slot,
   'root-many-rri',
 );
 strictEqual(
-  matrixResult.document.data.relationships?.['holders.0.owner'].links?.self,
+  relationship(matrixResult.document, 'holders.0.owner').links?.self,
   '../Person/nested',
 );
 strictEqual(
-  matrixResult.document.data.relationships?.['holders.0.owner'].meta?.slot,
+  relationship(matrixResult.document, 'holders.0.owner').meta?.slot,
   'nested-one',
 );
 strictEqual(
-  matrixResult.document.data.relationships?.['holders.0.peers.0'].links?.self,
+  relationship(matrixResult.document, 'holders.0.peers.0').links?.self,
   'https://external.test/Person/new',
 );
 strictEqual(
-  matrixResult.document.data.relationships?.['holders.0.peers.1'].meta?.slot,
+  relationship(matrixResult.document, 'holders.0.peers.1').meta?.slot,
   'nested-many-relative',
 );
 strictEqual(
-  matrixResult.document.data.relationships?.['holders.0.peers.2'].meta?.slot,
+  relationship(matrixResult.document, 'holders.0.peers.2').meta?.slot,
   'nested-many-absolute',
 );
 deepStrictEqual(matrixResult.document.data.meta, matrixBefore.data.meta);
@@ -1184,8 +1171,7 @@ ok(result.plan.affected === 3);
 const computedSkipSource = sourceFixture();
 const computedSkip = mutateBxlCardSource(
   computedSkipSource,
-  '.computedLabel = (1 / 0);\n' +
-    '.image = "computed-write-was-skipped";',
+  '.computedLabel = (1 / 0);\n' + '.image = "computed-write-was-skipped";',
   {
     schema,
     syntax: 'solidified',
@@ -1196,10 +1182,7 @@ const computedSkip = mutateBxlCardSource(
 strictEqual(computedSkip.plan.statements[0].affected, 0);
 deepStrictEqual(computedSkip.plan.statements[0].intents, []);
 strictEqual(computedSkip.plan.affected, 1);
-strictEqual(
-  computedSkip.document.data.attributes?.computedLabel,
-  undefined,
-);
+strictEqual(computedSkip.document.data.attributes?.computedLabel, undefined);
 strictEqual(
   computedSkip.document.data.attributes?.image,
   'computed-write-was-skipped',

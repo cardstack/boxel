@@ -1,8 +1,8 @@
-import { parseBxlAst } from '../bxl/ast/index.js';
-import { prepareNativeJq } from '../bxl/bridge/native.js';
-import { AuthorizationError } from './errors.js';
-import type { CompiledAuthorizationCondition } from './ir.js';
-import type { AuthorizationGraphCondition } from './graph-model.js';
+import { parseBxlAst } from '../bxl/ast/index.ts';
+import { prepareNativeJq } from '../bxl/bridge/native.ts';
+import { AuthorizationError } from './errors.ts';
+import type { CompiledAuthorizationCondition } from './ir.ts';
+import type { AuthorizationGraphCondition } from './graph-model.ts';
 
 function validParameter(value: unknown, type: string): boolean {
   switch (type) {
@@ -33,11 +33,15 @@ export function compileAuthorizationCondition(
   path: string,
 ): CompiledAuthorizationCondition {
   const program = parseBxlAst(definition.expression, { profile: 'policy' });
-  const profileErrors = program.profileIssues.filter((issue) => issue.severity === 'error');
+  const profileErrors = program.profileIssues.filter(
+    (issue) => issue.severity === 'error',
+  );
   if (profileErrors.length > 0) {
     throw new AuthorizationError(
       'unsafe-expression',
-      profileErrors.map((issue) => `${issue.code}: ${issue.message}`).join('\n'),
+      profileErrors
+        .map((issue) => `${issue.code}: ${issue.message}`)
+        .join('\n'),
       { path },
     );
   }

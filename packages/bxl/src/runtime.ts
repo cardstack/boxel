@@ -17,7 +17,7 @@ export {
   prepareNativeJqAsync,
   tokenizeNativeJq,
   extractNativeJqDeps,
-} from './bxl/bridge/native.js';
+} from './bxl/bridge/native.ts';
 
 export type {
   NativeDialectOptions,
@@ -27,21 +27,21 @@ export type {
   NativeToken,
   AstNode,
   NativeJqDialectError,
-} from './bxl/bridge/native.js';
+} from './bxl/bridge/native.ts';
 
-export type { NativeRuntimeLimits } from './jqtools/evaluate/runtimeState.js';
+export type { NativeRuntimeLimits } from './jqtools/evaluate/runtimeState.ts';
 
 export {
   BXL_REGISTRY,
   DEFAULT_BUILTIN_LIBRARIES,
   resolveBuiltinRegistry,
-} from './bxl/registry/index.js';
+} from './bxl/registry/index.ts';
 
 export type {
   BuiltinLibrary,
   BuiltinLibraryName,
   ResolvedBuiltinRegistry,
-} from './bxl/registry/index.js';
+} from './bxl/registry/index.ts';
 
 export {
   beginBxlComputeCycle,
@@ -52,7 +52,7 @@ export {
   evaluateBxlSafe,
   prepareBxl,
   prepareBxlSafe,
-} from './index.js';
+} from './index.ts';
 export type {
   BxlErrorRecord,
   BxlOptions,
@@ -60,7 +60,7 @@ export type {
   BxlSafeResult,
   PreparedBxl,
   PreparedBxlRunOptions,
-} from './index.js';
+} from './index.ts';
 
 export {
   __runBoxelRuntimeWorker,
@@ -74,7 +74,7 @@ export {
   prepareBoxelRuntimeAsync,
   prepareBoxelRuntimeSafe,
   prepareBoxelRuntime,
-} from './boxel-runtime.js';
+} from './boxel-runtime.ts';
 export type {
   BoxelAnnotationActor,
   BoxelAnnotationCardDraft,
@@ -104,4 +104,4 @@ export type {
   BoxelRuntimeWarning,
   PreparedBoxelRuntimeAsync,
   PreparedBoxelRuntime,
-} from './boxel-runtime.js';
+} from './boxel-runtime.ts';

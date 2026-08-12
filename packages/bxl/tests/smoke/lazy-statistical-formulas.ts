@@ -5,7 +5,7 @@ import {
   prepareBoxelRuntimeAsync,
   runNativeJqAsync,
   type BoxelRuntimeDefinition,
-} from '../../src/index.js';
+} from '../../src/index.ts';
 
 function approx(actual: unknown, expected: number, tolerance = 1e-12) {
   ok(typeof actual === 'number', `expected number, got ${typeof actual}`);
@@ -31,9 +31,13 @@ strictEqual(
   'readable syntax should rewrite dotted FormulaJS names to BXL identifiers',
 );
 
-const explicitLibrary = await runNativeJqAsync('1 + 1', {}, {
-  libraries: ['core', 'formula-statistical'],
-});
+const explicitLibrary = await runNativeJqAsync(
+  '1 + 1',
+  {},
+  {
+    libraries: ['core', 'formula-statistical'],
+  },
+);
 strictEqual(explicitLibrary.outputs[0], 2);
 
 const definition: BoxelRuntimeDefinition = {

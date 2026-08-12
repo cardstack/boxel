@@ -4,34 +4,34 @@ import type {
   DestructuringAst,
   ExpressionAst,
   ProgAst,
-} from '../../jqtools/parser/AST.js';
-import { InputStream } from '../../jqtools/parser/InputStream.js';
-import { Parser } from '../../jqtools/parser/Parser.js';
-import { Tokenizer } from '../../jqtools/parser/Tokenizer.js';
-import type { Token } from '../../jqtools/parser/Tokenizer.js';
-import { evaluateWithRegistry } from '../../jqtools/evaluate/evaluate.js';
+} from '../../jqtools/parser/AST.ts';
+import { InputStream } from '../../jqtools/parser/InputStream.ts';
+import { Parser } from '../../jqtools/parser/Parser.ts';
+import { Tokenizer } from '../../jqtools/parser/Tokenizer.ts';
+import type { Token } from '../../jqtools/parser/Tokenizer.ts';
+import { evaluateWithRegistry } from '../../jqtools/evaluate/evaluate.ts';
 import {
   compileScalarExpression,
   type CompiledScalarExpression,
-} from '../../jqtools/evaluate/compiledScalar.js';
+} from '../../jqtools/evaluate/compiledScalar.ts';
+import type { BuiltinLibraryName } from '../registry/index.ts';
 import {
-  BuiltinLibraryName,
   DEFAULT_BUILTIN_LIBRARIES,
   resolveBuiltinRegistry,
   type ResolvedBuiltinRegistry,
-} from '../registry/index.js';
-import { resolveLazyBuiltinLibrariesForAst } from './lazy-formulas.js';
+} from '../registry/index.ts';
+import { resolveLazyBuiltinLibrariesForAst } from './lazy-formulas.ts';
+import type { NativeRuntimeLimits } from '../../jqtools/evaluate/runtimeState.ts';
 import {
-  NativeRuntimeLimits,
   recordRuntimeOutput,
   HaltSignal,
   withRuntimeDiagnostics,
-} from '../../jqtools/evaluate/runtimeState.js';
-import {
-  compileReadableSyntax,
+} from '../../jqtools/evaluate/runtimeState.ts';
+import type {
   ReadableSchema,
   ReadableSyntaxWarning,
-} from '../compiler/readable-syntax.js';
+} from '../compiler/readable-syntax.ts';
+import { compileReadableSyntax } from '../compiler/readable-syntax.ts';
 
 export type NativeToken = Token;
 export type AstNode = ProgAst;
@@ -79,11 +79,11 @@ interface ParsedNativeProgram {
 }
 
 export class NativeJqDialectError extends Error {
-  constructor(
-    public readonly phase: 'tokenize' | 'parse' | 'evaluate',
-    message: string,
-  ) {
+  readonly phase: 'tokenize' | 'parse' | 'evaluate';
+
+  constructor(phase: 'tokenize' | 'parse' | 'evaluate', message: string) {
     super(message);
+    this.phase = phase;
     this.name = 'NativeJqDialectError';
   }
 }
@@ -245,7 +245,9 @@ export async function runNativeJqAsync(
   return runParsedNativeProgram(parsed, input, registry, options.runtimeLimits);
 }
 
-function stringLiteralValue(node: ExpressionAst | undefined): string | undefined {
+function stringLiteralValue(
+  node: ExpressionAst | undefined,
+): string | undefined {
   return node?.type === 'str' && !node.interpolated ? node.value : undefined;
 }
 
@@ -267,7 +269,8 @@ function collectExcelContribFilterDeps(
 ) {
   const addStringKeyFromArg = (rowsIndex: number, keyIndex: number) => {
     if (
-      expressionOutputOrigin(node.args[rowsIndex], scope, currentOrigin) === 'root'
+      expressionOutputOrigin(node.args[rowsIndex], scope, currentOrigin) ===
+      'root'
     ) {
       const key = stringLiteralValue(node.args[keyIndex]);
       if (key) {
@@ -277,9 +280,7 @@ function collectExcelContribFilterDeps(
   };
 
   const addCriteriaObjectKeys = (criteriaIndex: number) => {
-    if (
-      expressionOutputOrigin(node.args[0], scope, currentOrigin) === 'root'
-    ) {
+    if (expressionOutputOrigin(node.args[0], scope, currentOrigin) === 'root') {
       for (const key of objectLiteralKeys(node.args[criteriaIndex])) {
         deps.add(key);
       }
@@ -396,7 +397,12 @@ function collectDestructuringDeps(
       case 'var':
         break;
       case 'arrayDestructuring':
-        collectDestructuringDeps(destructuring.destructuring, deps, scope, 'derived');
+        collectDestructuringDeps(
+          destructuring.destructuring,
+          deps,
+          scope,
+          'derived',
+        );
         break;
       case 'objectDestructuring':
         for (const entry of destructuring.entries) {
@@ -408,12 +414,20 @@ function collectDestructuringDeps(
             } else {
               collectExpressionDeps(entry.key, deps, scope, origin);
             }
-          } else if (typeof entry.key !== 'string' && entry.key.type !== 'var') {
+          } else if (
+            typeof entry.key !== 'string' &&
+            entry.key.type !== 'var'
+          ) {
             collectExpressionDeps(entry.key, deps, scope, origin);
           }
 
           if (entry.destructuring) {
-            collectDestructuringDeps([entry.destructuring], deps, scope, 'derived');
+            collectDestructuringDeps(
+              [entry.destructuring],
+              deps,
+              scope,
+              'derived',
+            );
           }
         }
         break;
@@ -439,7 +453,11 @@ function expressionOutputOrigin(
       return expressionOutputOrigin(node.next, nextScope, currentOrigin);
     }
     case 'varDeclaration': {
-      const exprOrigin = expressionOutputOrigin(node.expr, scope, currentOrigin);
+      const exprOrigin = expressionOutputOrigin(
+        node.expr,
+        scope,
+        currentOrigin,
+      );
       const nextScope = extendDependencyScope(scope);
       bindDestructuringOrigins(nextScope, node.destructuring, exprOrigin);
       return expressionOutputOrigin(node.next, nextScope, currentOrigin);
@@ -450,7 +468,11 @@ function expressionOutputOrigin(
       return expressionOutputOrigin(node.body, scope, currentOrigin);
     case 'binary':
       if (node.operator === '|') {
-        const leftOrigin = expressionOutputOrigin(node.left, scope, currentOrigin);
+        const leftOrigin = expressionOutputOrigin(
+          node.left,
+          scope,
+          currentOrigin,
+        );
         return expressionOutputOrigin(node.right, scope, leftOrigin);
       }
       return 'derived';
@@ -533,7 +555,11 @@ function collectExpressionDeps(
     }
     case 'varDeclaration': {
       collectExpressionDeps(node.expr, deps, scope, currentOrigin);
-      const exprOrigin = expressionOutputOrigin(node.expr, scope, currentOrigin);
+      const exprOrigin = expressionOutputOrigin(
+        node.expr,
+        scope,
+        currentOrigin,
+      );
       collectDestructuringDeps(node.destructuring, deps, scope, exprOrigin);
       const nextScope = extendDependencyScope(scope);
       bindDestructuringOrigins(nextScope, node.destructuring, exprOrigin);
@@ -632,23 +658,17 @@ function annotateBuiltinFilters(
   switch (node.type) {
     case 'binary': {
       const leftSingle = annotateBuiltinFilters(node.left, registry, localDefs);
-      const rightSingle = annotateBuiltinFilters(node.right, registry, localDefs);
+      const rightSingle = annotateBuiltinFilters(
+        node.right,
+        registry,
+        localDefs,
+      );
       return mark(
         leftSingle &&
           rightSingle &&
-          [
-            '==',
-            '!=',
-            '<',
-            '>',
-            '<=',
-            '>=',
-            '+',
-            '-',
-            '*',
-            '/',
-            '%',
-          ].includes(node.operator),
+          ['==', '!=', '<', '>', '<=', '>=', '+', '-', '*', '/', '%'].includes(
+            node.operator,
+          ),
       );
     }
     case 'def': {
@@ -699,7 +719,7 @@ function annotateBuiltinFilters(
       return mark(annotateBuiltinFilters(node.next, registry, localDefs));
     case 'unary':
       return mark(annotateBuiltinFilters(node.expr, registry, localDefs));
-    case 'index':
+    case 'index': {
       const exprSingle = annotateBuiltinFilters(node.expr, registry, localDefs);
       if (typeof node.index !== 'string') {
         return mark(
@@ -707,6 +727,7 @@ function annotateBuiltinFilters(
         );
       }
       return mark(exprSingle);
+    }
     case 'slice':
       annotateBuiltinFilters(node.expr, registry, localDefs);
       annotateBuiltinFilters(node.from, registry, localDefs);
@@ -874,4 +895,4 @@ export function extractNativeJqDeps(
   }
 }
 
-export type { BuiltinLibraryName } from '../registry/index.js';
+export type { BuiltinLibraryName } from '../registry/index.ts';

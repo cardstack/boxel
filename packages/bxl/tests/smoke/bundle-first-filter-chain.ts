@@ -72,10 +72,7 @@ try {
   const scopedEqualsCompile = bundle.compileReadableSyntax(
     '[range(0; 3) as $r | ($r = 0)]',
   );
-  deepStrictEqual(
-    scopedEqualsCompile.source,
-    '[range(0; 3) as $r |($r == 0)]',
-  );
+  deepStrictEqual(scopedEqualsCompile.source, '[range(0; 3) as $r |($r == 0)]');
 
   const scopedEqualsResult = bundle.evaluateBxl(
     '[range(0; 3) as $r | ($r = 0)]',

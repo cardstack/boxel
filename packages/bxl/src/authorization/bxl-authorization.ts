@@ -1,13 +1,23 @@
-import { parseBxlAst } from '../bxl/ast/index.js';
-import { parseNativeJq } from '../bxl/bridge/native.js';
-import type { ExpressionAst } from '../jqtools/parser/AST.js';
-import { AuthorizationError, toAuthorizationErrorRecord, type AuthorizationSafeResult } from './errors.js';
-import type { AuthorizationRuntimeLimits, AuthorizationTraceEvent } from './resolver.js';
-import { prepareAuthorizationGraphSafe, type PreparedAuthorizationGraph } from './index.js';
+import { parseBxlAst } from '../bxl/ast/index.ts';
+import { parseNativeJq } from '../bxl/bridge/native.ts';
+import type { ExpressionAst } from '../jqtools/parser/AST.ts';
+import {
+  AuthorizationError,
+  toAuthorizationErrorRecord,
+  type AuthorizationSafeResult,
+} from './errors.ts';
+import type {
+  AuthorizationRuntimeLimits,
+  AuthorizationTraceEvent,
+} from './resolver.ts';
+import {
+  prepareAuthorizationGraphSafe,
+  type PreparedAuthorizationGraph,
+} from './index.ts';
 import type {
   AuthorizationGraphModel,
   RelationshipTuple,
-} from './graph-model.js';
+} from './graph-model.ts';
 
 export const BXL_AUTHORIZATION_SCHEMA = 'bxl-authorization/1' as const;
 
@@ -171,12 +181,18 @@ export interface BxlAuthorizationListCapabilitiesResult {
 }
 
 export interface PreparedBxlAuthorization {
-  checkCapability(request: BxlAuthorizationCheckRequest): AuthorizationSafeResult<BxlAuthorizationCheckResult>;
+  checkCapability(
+    request: BxlAuthorizationCheckRequest,
+  ): AuthorizationSafeResult<BxlAuthorizationCheckResult>;
   checkCapabilities(
     requests: readonly BxlAuthorizationCheckRequest[],
   ): readonly AuthorizationSafeResult<BxlAuthorizationCheckResult>[];
-  listResources(request: BxlAuthorizationListResourcesRequest): AuthorizationSafeResult<BxlAuthorizationListResourcesResult>;
-  listParties(request: BxlAuthorizationListPartiesRequest): AuthorizationSafeResult<BxlAuthorizationListPartiesResult>;
+  listResources(
+    request: BxlAuthorizationListResourcesRequest,
+  ): AuthorizationSafeResult<BxlAuthorizationListResourcesResult>;
+  listParties(
+    request: BxlAuthorizationListPartiesRequest,
+  ): AuthorizationSafeResult<BxlAuthorizationListPartiesResult>;
   listCapabilities(
     request: BxlAuthorizationListCapabilitiesRequest,
   ): AuthorizationSafeResult<BxlAuthorizationListCapabilitiesResult>;
@@ -209,9 +225,13 @@ function uniqueByHandle<T extends { name: string }>(
     const value = values![index]!;
     const key = handle(value.name, `${path}[${index}].name`);
     if (result.has(key)) {
-      throw new AuthorizationError('invalid-model', `Duplicate handle ${value.name}.`, {
-        path: `${path}[${index}].name`,
-      });
+      throw new AuthorizationError(
+        'invalid-model',
+        `Duplicate handle ${value.name}.`,
+        {
+          path: `${path}[${index}].name`,
+        },
+      );
     }
     result.set(key, value);
   }
@@ -220,7 +240,10 @@ function uniqueByHandle<T extends { name: string }>(
 
 function encoded(value: string): string {
   if (value.trim() === '') {
-    throw new AuthorizationError('invalid-identifier', 'Resource references cannot be empty.');
+    throw new AuthorizationError(
+      'invalid-identifier',
+      'Resource references cannot be empty.',
+    );
   }
   return encodeURIComponent(value);
 }
@@ -273,12 +296,18 @@ function compilePolicyExpression(
   try {
     program = parseBxlAst(source, { profile: 'authorization' });
   } catch (cause) {
-    throw new AuthorizationError('invalid-expression', 'Could not parse BXL authorization expression.', {
-      path,
-      cause,
-    });
+    throw new AuthorizationError(
+      'invalid-expression',
+      'Could not parse BXL authorization expression.',
+      {
+        path,
+        cause,
+      },
+    );
   }
-  const errors = program.profileIssues.filter((issue) => issue.severity === 'error');
+  const errors = program.profileIssues.filter(
+    (issue) => issue.severity === 'error',
+  );
   if (errors.length > 0) {
     throw new AuthorizationError(
       'unsafe-expression',
@@ -286,11 +315,17 @@ function compilePolicyExpression(
       { path },
     );
   }
-  const parsed = parseNativeJq(program.canonicalSource, { readableSyntax: false });
+  const parsed = parseNativeJq(program.canonicalSource, {
+    readableSyntax: false,
+  });
   if (!parsed.ast.expr) {
-    throw new AuthorizationError('invalid-expression', 'BXL authorization expression is empty.', {
-      path,
-    });
+    throw new AuthorizationError(
+      'invalid-expression',
+      'BXL authorization expression is empty.',
+      {
+        path,
+      },
+    );
   }
 
   visitExpression(parsed.ast.expr, (node) => {
@@ -315,11 +350,18 @@ function compilePolicyExpression(
       }
       return false;
     }
-    if (nodePath?.[0] === 'party' && RESERVED_AUDIENCES.has(nodePath[1] ?? '')) {
+    if (
+      nodePath?.[0] === 'party' &&
+      RESERVED_AUDIENCES.has(nodePath[1] ?? '')
+    ) {
       if (nodePath.length !== 2) {
-        throw new AuthorizationError('invalid-expression', 'Party audiences cannot be traversed.', {
-          path,
-        });
+        throw new AuthorizationError(
+          'invalid-expression',
+          'Party audiences cannot be traversed.',
+          {
+            path,
+          },
+        );
       }
       return false;
     }
@@ -349,9 +391,13 @@ function compilePolicyExpression(
       }
       const link = owner.links.get(linkPath[1]!);
       if (!link) {
-        throw new AuthorizationError('unknown-relation', `Unknown Resource link Resource.${linkPath[1]}.`, {
-          path,
-        });
+        throw new AuthorizationError(
+          'unknown-relation',
+          `Unknown Resource link Resource.${linkPath[1]}.`,
+          {
+            path,
+          },
+        );
       }
       const target = scopesByName.get(handle(link.to, `${path}.via.to`));
       if (!target?.capabilities.has(capabilityPath[1]!)) {
@@ -393,7 +439,12 @@ function refusalDefinitions(
 ): readonly BxlAuthorizationRefusal[] {
   if (!capability.refuse) return [];
   if (typeof capability.refuse === 'string') {
-    return [{ when: capability.refuse, because: `Refused by ${capability.displayName ?? capability.name}.` }];
+    return [
+      {
+        when: capability.refuse,
+        because: `Refused by ${capability.displayName ?? capability.name}.`,
+      },
+    ];
   }
   return capability.refuse;
 }
@@ -434,11 +485,17 @@ interface CompiledBxlAuthorization {
   partiesByRef: Map<string, BxlAuthorizationParty>;
   objectToResource: Map<string, string>;
   relationLabels: Map<string, string>;
-  refusalRelations: Map<string, readonly { relation: string; because: string }[]>;
+  refusalRelations: Map<
+    string,
+    readonly { relation: string; because: string }[]
+  >;
   contextBase: Readonly<Record<string, unknown>>;
 }
 
-function sourceField(source: string, path: string): { root: 'resource' | 'policy'; field: string } {
+function sourceField(
+  source: string,
+  path: string,
+): { root: 'resource' | 'policy'; field: string } {
   const match = /^(Resource|Policy)\.([A-Z][A-Za-z0-9]*)$/.exec(source);
   if (!match) {
     throw new AuthorizationError(
@@ -453,7 +510,9 @@ function sourceField(source: string, path: string): { root: 'resource' | 'policy
   };
 }
 
-function asLinks(value: string | readonly string[] | undefined): readonly string[] {
+function asLinks(
+  value: string | readonly string[] | undefined,
+): readonly string[] {
   if (value === undefined) return [];
   return typeof value === 'string' ? [value] : value;
 }
@@ -470,9 +529,13 @@ function compileBxlAuthorization(
     );
   }
   if (!Array.isArray(document.scopes) || document.scopes.length === 0) {
-    throw new AuthorizationError('invalid-model', 'A BXL authorization must declare at least one scope.', {
-      path: 'scopes',
-    });
+    throw new AuthorizationError(
+      'invalid-model',
+      'A BXL authorization must declare at least one scope.',
+      {
+        path: 'scopes',
+      },
+    );
   }
 
   const scopesByName = new Map<string, ScopeCompilation>();
@@ -480,9 +543,13 @@ function compileBxlAuthorization(
     const definition = document.scopes[index]!;
     const name = handle(definition.name, `scopes[${index}].name`);
     if (scopesByName.has(name)) {
-      throw new AuthorizationError('invalid-model', `Duplicate authorization scope ${definition.name}.`, {
-        path: `scopes[${index}]`,
-      });
+      throw new AuthorizationError(
+        'invalid-model',
+        `Duplicate authorization scope ${definition.name}.`,
+        {
+          path: `scopes[${index}]`,
+        },
+      );
     }
     const compilation: ScopeCompilation = {
       definition,
@@ -494,27 +561,45 @@ function compileBxlAuthorization(
         `scopes[${index}].capabilities`,
       ),
     };
-    for (let linkIndex = 0; linkIndex < (definition.links?.length ?? 0); linkIndex++) {
-      handle(definition.links![linkIndex]!.to, `scopes[${index}].links[${linkIndex}].to`);
+    for (
+      let linkIndex = 0;
+      linkIndex < (definition.links?.length ?? 0);
+      linkIndex++
+    ) {
+      handle(
+        definition.links![linkIndex]!.to,
+        `scopes[${index}].links[${linkIndex}].to`,
+      );
     }
     for (const key of compilation.links.keys()) {
       if (compilation.seats.has(key) || compilation.capabilities.has(key)) {
-        throw new AuthorizationError('invalid-model', `Authorization handle ${key} is ambiguous.`, {
-          path: `scopes[${index}]`,
-        });
+        throw new AuthorizationError(
+          'invalid-model',
+          `Authorization handle ${key} is ambiguous.`,
+          {
+            path: `scopes[${index}]`,
+          },
+        );
       }
     }
     for (const key of compilation.seats.keys()) {
       if (compilation.capabilities.has(key)) {
-        throw new AuthorizationError('invalid-model', `Authorization handle ${key} is ambiguous.`, {
-          path: `scopes[${index}]`,
-        });
+        throw new AuthorizationError(
+          'invalid-model',
+          `Authorization handle ${key} is ambiguous.`,
+          {
+            path: `scopes[${index}]`,
+          },
+        );
       }
     }
     scopesByName.set(name, compilation);
   }
 
-  const types: Record<string, import('./graph-model.js').AuthorizationGraphType> = {
+  const types: Record<
+    string,
+    import('./graph-model.ts').AuthorizationGraphType
+  > = {
     party: {
       relations: {
         member: { subjects: ['party', 'party#member'], rewrite: 'direct()' },
@@ -522,17 +607,28 @@ function compileBxlAuthorization(
     },
   };
   const relationLabels = new Map<string, string>();
-  const refusalRelations = new Map<string, readonly { relation: string; because: string }[]>();
+  const refusalRelations = new Map<
+    string,
+    readonly { relation: string; because: string }[]
+  >();
 
   for (const scope of scopesByName.values()) {
-    const relations: Record<string, import('./graph-model.js').AuthorizationGraphRelationDefinition> = {
+    const relations: Record<
+      string,
+      import('./graph-model.ts').AuthorizationGraphRelationDefinition
+    > = {
       __party_anyone: ['party:*'],
       __party_member: ['party', 'party#member'],
       __party_guest: ['party', 'party#member'],
     };
     const permissions: Record<string, string> = {};
     for (const [name, link] of scope.links) {
-      const target = scopesByName.get(handle(link.to, `scopes.${scope.definition.name}.links.${link.name}.to`));
+      const target = scopesByName.get(
+        handle(
+          link.to,
+          `scopes.${scope.definition.name}.links.${link.name}.to`,
+        ),
+      );
       if (!target) {
         throw new AuthorizationError(
           'unknown-type',
@@ -540,12 +636,22 @@ function compileBxlAuthorization(
         );
       }
       relations[name] = [target.internalType];
-      relationLabels.set(`${scope.internalType}\0${name}`, link.displayName ?? link.name);
+      relationLabels.set(
+        `${scope.internalType}\0${name}`,
+        link.displayName ?? link.name,
+      );
     }
     for (const [name, seat] of scope.seats) {
-      if (seat.from) sourceField(seat.from, `scopes.${scope.definition.name}.seats.${seat.name}.from`);
+      if (seat.from)
+        sourceField(
+          seat.from,
+          `scopes.${scope.definition.name}.seats.${seat.name}.from`,
+        );
       relations[name] = ['party', 'party#member', 'party:*'];
-      relationLabels.set(`${scope.internalType}\0${name}`, seat.displayName ?? seat.name);
+      relationLabels.set(
+        `${scope.internalType}\0${name}`,
+        seat.displayName ?? seat.name,
+      );
     }
     for (const [name, capability] of scope.capabilities) {
       const where = compilePolicyExpression(
@@ -588,9 +694,14 @@ function compileBxlAuthorization(
   const objectToResource = new Map<string, string>();
   for (const resource of snapshot.resources) {
     if (resourcesByRef.has(resource.resource)) {
-      throw new AuthorizationError('invalid-model', `Duplicate resource snapshot ${resource.resource}.`);
+      throw new AuthorizationError(
+        'invalid-model',
+        `Duplicate resource snapshot ${resource.resource}.`,
+      );
     }
-    const scope = scopesByName.get(handle(resource.type, `resources.${resource.resource}.type`));
+    const scope = scopesByName.get(
+      handle(resource.type, `resources.${resource.resource}.type`),
+    );
     if (!scope) {
       throw new AuthorizationError(
         'unknown-type',
@@ -614,7 +725,10 @@ function compileBxlAuthorization(
   };
   for (const party of snapshot.parties) {
     if (partiesByRef.has(party.party)) {
-      throw new AuthorizationError('invalid-model', `Duplicate party snapshot ${party.party}.`);
+      throw new AuthorizationError(
+        'invalid-model',
+        `Duplicate party snapshot ${party.party}.`,
+      );
     }
     partiesByRef.set(party.party, party);
   }
@@ -643,21 +757,42 @@ function compileBxlAuthorization(
     const scope = scopesByName.get(
       handle(sourceResource.type, `resources.${sourceResource.resource}.type`),
     )!;
-    const internal = internalObject(scope.internalType, sourceResource.resource);
-    tuples.push({ subject: 'party:*', relation: '__party_anyone', object: internal });
+    const internal = internalObject(
+      scope.internalType,
+      sourceResource.resource,
+    );
+    tuples.push({
+      subject: 'party:*',
+      relation: '__party_anyone',
+      object: internal,
+    });
     for (const party of snapshot.members ?? []) {
-      tuples.push({ subject: partySubject(party), relation: '__party_member', object: internal });
+      tuples.push({
+        subject: partySubject(party),
+        relation: '__party_member',
+        object: internal,
+      });
     }
     for (const party of snapshot.guests ?? []) {
-      tuples.push({ subject: partySubject(party), relation: '__party_guest', object: internal });
+      tuples.push({
+        subject: partySubject(party),
+        relation: '__party_guest',
+        object: internal,
+      });
     }
     for (const [name, link] of scope.links) {
       for (const targetRef of asLinks(sourceResource.links?.[name])) {
         const targetResource = resourcesByRef.get(targetRef);
         const targetScope =
           targetResource &&
-          scopesByName.get(handle(targetResource.type, `resources.${targetRef}.type`));
-        if (!targetResource || !targetScope || targetScope.definition.name !== link.to) {
+          scopesByName.get(
+            handle(targetResource.type, `resources.${targetRef}.type`),
+          );
+        if (
+          !targetResource ||
+          !targetScope ||
+          targetScope.definition.name !== link.to
+        ) {
           throw new AuthorizationError(
             'invalid-model',
             `Resource.${link.name} on ${sourceResource.resource} points to ${targetRef}, which is absent or has the wrong authorization type.`,
@@ -677,9 +812,15 @@ function compileBxlAuthorization(
         `scopes.${scope.definition.name}.seats.${seat.name}.from`,
       );
       const links =
-        source.root === 'resource' ? sourceResource.links : snapshot.policy?.links;
+        source.root === 'resource'
+          ? sourceResource.links
+          : snapshot.policy?.links;
       for (const holder of asLinks(links?.[source.field])) {
-        tuples.push({ subject: partySubject(holder), relation: name, object: internal });
+        tuples.push({
+          subject: partySubject(holder),
+          relation: name,
+          object: internal,
+        });
       }
     }
   }
@@ -776,12 +917,21 @@ function requestContext(
 function resolveRequest(
   compiled: CompiledBxlAuthorization,
   request: { party: string; capability: string; resource: string },
-): { subject: string; relation: string; object: string; scope: ScopeCompilation } {
+): {
+  subject: string;
+  relation: string;
+  object: string;
+  scope: ScopeCompilation;
+} {
   const resource = compiled.resourcesByRef.get(request.resource);
   if (!resource) {
-    throw new AuthorizationError('invalid-identifier', `Unknown authorization resource ${request.resource}.`, {
-      path: 'request.resource',
-    });
+    throw new AuthorizationError(
+      'invalid-identifier',
+      `Unknown authorization resource ${request.resource}.`,
+      {
+        path: 'request.resource',
+      },
+    );
   }
   const scope = compiled.scopesByType.get(
     handle(resource.type, `resources.${resource.resource}.type`),
@@ -806,7 +956,9 @@ function decodeParty(value: string): string {
   const hash = value.lastIndexOf('#');
   const entity = hash === -1 ? value : value.slice(0, hash);
   const separator = entity.indexOf(':');
-  return separator === -1 ? value : decodeURIComponent(entity.slice(separator + 1));
+  return separator === -1
+    ? value
+    : decodeURIComponent(entity.slice(separator + 1));
 }
 
 function decodeTraceResource(
@@ -830,7 +982,8 @@ function translateTrace(
     const separator = event.object.indexOf(':');
     const type = separator === -1 ? '' : event.object.slice(0, separator);
     const capability =
-      compiled.relationLabels.get(`${type}\0${event.relation}`) ?? event.relation;
+      compiled.relationLabels.get(`${type}\0${event.relation}`) ??
+      event.relation;
     return {
       depth: event.depth,
       operation: event.operation,
@@ -862,9 +1015,13 @@ function checkCapabilityCompiled(
     const because: BxlAuthorizationReason[] = [];
     if (result.value.allowed) {
       const label =
-        compiled.relationLabels.get(`${resolved.scope.internalType}\0${resolved.relation}`) ??
-        request.capability;
-      because.push({ kind: 'capability', message: `Capability ${label} allowed this party.` });
+        compiled.relationLabels.get(
+          `${resolved.scope.internalType}\0${resolved.relation}`,
+        ) ?? request.capability;
+      because.push({
+        kind: 'capability',
+        message: `Capability ${label} allowed this party.`,
+      });
     } else {
       for (const refusal of compiled.refusalRelations.get(
         `${resolved.scope.internalType}\0${resolved.relation}`,
@@ -909,7 +1066,9 @@ export function prepareBxlAuthorizationSafe(
           return checkCapabilityCompiled(compiled, request);
         },
         checkCapabilities(requests) {
-          return requests.map((request) => checkCapabilityCompiled(compiled, request));
+          return requests.map((request) =>
+            checkCapabilityCompiled(compiled, request),
+          );
         },
         listResources(request) {
           try {
@@ -956,7 +1115,10 @@ export function prepareBxlAuthorizationSafe(
                 );
               }
             }
-            return { ok: true, value: { resources: result.sort(), metrics: total } };
+            return {
+              ok: true,
+              value: { resources: result.sort(), metrics: total },
+            };
           } catch (error) {
             return { ok: false, error: toAuthorizationErrorRecord(error) };
           }
@@ -1001,7 +1163,10 @@ export function prepareBxlAuthorizationSafe(
                 );
               }
             }
-            return { ok: true, value: { parties: result.sort(), metrics: total } };
+            return {
+              ok: true,
+              value: { parties: result.sort(), metrics: total },
+            };
           } catch (error) {
             return { ok: false, error: toAuthorizationErrorRecord(error) };
           }

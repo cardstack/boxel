@@ -1,29 +1,29 @@
-import type { AstNode } from './native.js';
+import type { AstNode } from './native.ts';
 import {
   DEFAULT_BUILTIN_LIBRARIES,
   registerBuiltinLibrary,
   type BuiltinLibraryName,
-} from '../registry/index.js';
+} from '../registry/index.ts';
 import {
   FORMULA_STATISTICAL_FILTERS,
   sourceUsesStatisticalFormula,
-} from './formula-statistical-manifest.js';
+} from './formula-statistical-manifest.ts';
 import {
   FORMULA_BESSEL_FILTERS,
   sourceUsesBesselFormula,
-} from './formula-bessel-manifest.js';
+} from './formula-bessel-manifest.ts';
 import {
   FORMULA_ENGINEERING_FILTERS,
   sourceUsesEngineeringFormula,
-} from './formula-engineering-manifest.js';
+} from './formula-engineering-manifest.ts';
 import {
   FORMULA_FINANCIAL_FILTERS,
   sourceUsesFinancialFormula,
-} from './formula-financial-manifest.js';
+} from './formula-financial-manifest.ts';
 import {
   VALIDATION_FILTERS,
   sourceUsesValidationFunction,
-} from './validation-manifest.js';
+} from './validation-manifest.ts';
 
 // Lazy chunks, one per usage persona:
 //   - formula-statistical (~164 KB) — jstat distributions
@@ -66,7 +66,7 @@ function astUsesFilterSet(node: unknown, filters: Set<string>): boolean {
 }
 
 async function ensureStatisticalLoaded() {
-  formulaStatisticalLoad ??= import('../registry/formula-statistical.js').then(
+  formulaStatisticalLoad ??= import('../registry/formula-statistical.ts').then(
     ({ formulaStatisticalLibrary }) => {
       registerBuiltinLibrary('formula-statistical', formulaStatisticalLibrary);
     },
@@ -75,7 +75,7 @@ async function ensureStatisticalLoaded() {
 }
 
 async function ensureBesselLoaded() {
-  formulaBesselLoad ??= import('../registry/formula-bessel.js').then(
+  formulaBesselLoad ??= import('../registry/formula-bessel.ts').then(
     ({ formulaBesselLibrary }) => {
       registerBuiltinLibrary('formula-bessel', formulaBesselLibrary);
     },
@@ -84,18 +84,19 @@ async function ensureBesselLoaded() {
 }
 
 async function ensureExtrasBundleLoaded() {
-  formulaExtrasBundleLoad ??= import('../registry/bundles/formula-extras.js').then(
-    ({ formulaExtrasBundle }) => {
-      for (const [name, library] of Object.entries(formulaExtrasBundle)) {
-        registerBuiltinLibrary(name as BuiltinLibraryName, library);
-      }
-    },
-  );
+  formulaExtrasBundleLoad ??=
+    import('../registry/bundles/formula-extras.ts').then(
+      ({ formulaExtrasBundle }) => {
+        for (const [name, library] of Object.entries(formulaExtrasBundle)) {
+          registerBuiltinLibrary(name as BuiltinLibraryName, library);
+        }
+      },
+    );
   await formulaExtrasBundleLoad;
 }
 
 async function ensureValidationLoaded() {
-  validationLoad ??= import('../registry/validation.js').then(
+  validationLoad ??= import('../registry/validation.ts').then(
     ({ validationLibrary }) => {
       registerBuiltinLibrary('validation', validationLibrary);
     },
@@ -175,12 +176,16 @@ export async function resolveLazyBuiltinLibrariesForAst(
     EXTRAS_LIBRARIES.some((name) => next.includes(name)) ||
     astUsesFilterSet(ast, FORMULA_ENGINEERING_FILTERS) ||
     astUsesFilterSet(ast, FORMULA_FINANCIAL_FILTERS);
-  await maybeLoadBundle(next, EXTRAS_LIBRARIES, extrasNeeded, ensureExtrasBundleLoaded);
+  await maybeLoadBundle(
+    next,
+    EXTRAS_LIBRARIES,
+    extrasNeeded,
+    ensureExtrasBundleLoaded,
+  );
   await maybeLoadSingle(
     next,
     'validation',
-    next.includes('validation') ||
-      astUsesFilterSet(ast, VALIDATION_FILTERS),
+    next.includes('validation') || astUsesFilterSet(ast, VALIDATION_FILTERS),
     ensureValidationLoaded,
   );
   return next;
@@ -195,7 +200,9 @@ export async function resolveLazyBuiltinLibrariesForExpressions(
     next,
     'formula-statistical',
     next.includes('formula-statistical') ||
-      expressions.some((expression) => sourceUsesStatisticalFormula(expression)),
+      expressions.some((expression) =>
+        sourceUsesStatisticalFormula(expression),
+      ),
     ensureStatisticalLoaded,
   );
   await maybeLoadSingle(
@@ -207,14 +214,23 @@ export async function resolveLazyBuiltinLibrariesForExpressions(
   );
   const extrasNeeded =
     EXTRAS_LIBRARIES.some((name) => next.includes(name)) ||
-    expressions.some((expression) => sourceUsesEngineeringFormula(expression)) ||
+    expressions.some((expression) =>
+      sourceUsesEngineeringFormula(expression),
+    ) ||
     expressions.some((expression) => sourceUsesFinancialFormula(expression));
-  await maybeLoadBundle(next, EXTRAS_LIBRARIES, extrasNeeded, ensureExtrasBundleLoaded);
+  await maybeLoadBundle(
+    next,
+    EXTRAS_LIBRARIES,
+    extrasNeeded,
+    ensureExtrasBundleLoaded,
+  );
   await maybeLoadSingle(
     next,
     'validation',
     next.includes('validation') ||
-      expressions.some((expression) => sourceUsesValidationFunction(expression)),
+      expressions.some((expression) =>
+        sourceUsesValidationFunction(expression),
+      ),
     ensureValidationLoaded,
   );
   return next;

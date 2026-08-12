@@ -3,13 +3,13 @@
 // canonical jq source on failure for debugging.
 
 import { deepStrictEqual } from 'node:assert';
-import { evaluateBxl } from '../../src/index.js';
+import { evaluateBxl } from '../../src/index.ts';
 import {
   bxlContextExampleInput,
   bxlContextExampleSchema,
   bxlContextExamples,
   type BxlContext,
-} from '../../examples/bxl-contexts-examples.js';
+} from '../../examples/bxl-contexts-examples.ts';
 
 interface Failure {
   id: number;
@@ -89,4 +89,6 @@ const summary = [...perContext.entries()]
   .map(([ctx, n]) => `${ctx}×${n}`)
   .join(' · ');
 
-console.log(`BXL context examples: ${bxlContextExamples.length} cases passed (${summary})`);
+console.log(
+  `BXL context examples: ${bxlContextExamples.length} cases passed (${summary})`,
+);

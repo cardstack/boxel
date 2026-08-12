@@ -1,7 +1,7 @@
 import {
   type BareNativeFilter,
   wrapBareNativeFilters,
-} from '../../jqtools/evaluate/filters/lib/nativeFilter.js';
+} from '../../jqtools/evaluate/filters/lib/nativeFilter.ts';
 import {
   prepareAuthorizationGraphSafe,
   type AuthorizationCheckRequest,
@@ -10,8 +10,8 @@ import {
   type AuthorizationSafeResult,
   type AuthorizationGraphModel,
   type RelationshipTuple,
-} from '../../authorization/index.js';
-import type { AuthorizationErrorRecord } from '../../authorization/errors.js';
+} from '../../authorization/index.ts';
+import type { AuthorizationErrorRecord } from '../../authorization/errors.ts';
 
 function ipv4ToInteger(value: unknown): number | undefined {
   if (typeof value !== 'string') return undefined;
@@ -126,4 +126,5 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   },
 };
 
-export const authorizationNativeFilters = wrapBareNativeFilters(bareNativeFilters);
+export const authorizationNativeFilters =
+  wrapBareNativeFilters(bareNativeFilters);

@@ -1,5 +1,5 @@
-import { parseExcelNumber } from './common.js';
-import { EXCEL_ERROR, throwExcelError } from './errors.js';
+import { parseExcelNumber } from './common.ts';
+import { EXCEL_ERROR, throwExcelError } from './errors.ts';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const WEEKEND_TYPES: Record<number, number[]> = {
@@ -221,14 +221,22 @@ export function yearFrac(
 // Date helper functions
 // ═══════════════════════════════════════════════════════════════
 
-export function excelDatedif(startLike: unknown, endLike: unknown, unitLike: unknown) {
+export function excelDatedif(
+  startLike: unknown,
+  endLike: unknown,
+  unitLike: unknown,
+) {
   const start = parseExcelDate(startLike);
   const end = parseExcelDate(endLike);
   const unit = String(unitLike).toUpperCase();
   if (end < start) throwExcelError(EXCEL_ERROR.num);
 
-  const sy = start.getUTCFullYear(), sm = start.getUTCMonth(), sd = start.getUTCDate();
-  const ey = end.getUTCFullYear(), em = end.getUTCMonth(), ed = end.getUTCDate();
+  const sy = start.getUTCFullYear(),
+    sm = start.getUTCMonth(),
+    sd = start.getUTCDate();
+  const ey = end.getUTCFullYear(),
+    em = end.getUTCMonth(),
+    ed = end.getUTCDate();
 
   switch (unit) {
     case 'Y': {
@@ -244,7 +252,9 @@ export function excelDatedif(startLike: unknown, endLike: unknown, unitLike: unk
     case 'D':
       return daysBetween(start, end);
     case 'MD':
-      return ed >= sd ? ed - sd : new Date(Date.UTC(ey, em, 0)).getUTCDate() - sd + ed;
+      return ed >= sd
+        ? ed - sd
+        : new Date(Date.UTC(ey, em, 0)).getUTCDate() - sd + ed;
     case 'YM': {
       let m = em - sm;
       if (ed < sd) m--;
@@ -265,10 +275,16 @@ export function excelDatevalue(textLike: unknown) {
   const text = String(textLike);
   const date = parseExcelDate(text);
   // Return just the date serial (no time component)
-  return excelDateToSerial(utcDate(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  return excelDateToSerial(
+    utcDate(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
+  );
 }
 
-export function excelDays360(startLike: unknown, endLike: unknown, methodLike: unknown = false) {
+export function excelDays360(
+  startLike: unknown,
+  endLike: unknown,
+  methodLike: unknown = false,
+) {
   const start = parseExcelDate(startLike);
   const end = parseExcelDate(endLike);
   const european = Boolean(methodLike);
@@ -299,7 +315,8 @@ export function excelWeeknum(serialLike: unknown, returnTypeLike: unknown = 1) {
   const dayOfYear = Math.floor((date.getTime() - jan1.getTime()) / MS_PER_DAY);
   // returnType 1: week starts Sunday, 2: week starts Monday
   const jan1Dow = jan1.getUTCDay();
-  const startOffset = returnType === 2 ? (jan1Dow === 0 ? 6 : jan1Dow - 1) : jan1Dow;
+  const startOffset =
+    returnType === 2 ? (jan1Dow === 0 ? 6 : jan1Dow - 1) : jan1Dow;
   return Math.floor((dayOfYear + startOffset) / 7) + 1;
 }
 
@@ -346,7 +363,11 @@ function isWeekendIntl(date: Date, weekends: Set<number>) {
   return weekends.has(date.getUTCDay());
 }
 
-export function excelNetworkdays(startLike: unknown, endLike: unknown, holidaysLike?: unknown) {
+export function excelNetworkdays(
+  startLike: unknown,
+  endLike: unknown,
+  holidaysLike?: unknown,
+) {
   const start = parseExcelDate(startLike);
   const end = parseExcelDate(endLike);
   const holidays = holidaySerials(holidaysLike);
@@ -365,7 +386,11 @@ export function excelNetworkdays(startLike: unknown, endLike: unknown, holidaysL
   return sign * count;
 }
 
-export function excelWorkday(startLike: unknown, daysLike: unknown, holidaysLike?: unknown) {
+export function excelWorkday(
+  startLike: unknown,
+  daysLike: unknown,
+  holidaysLike?: unknown,
+) {
   const start = parseExcelDate(startLike);
   let days = Math.trunc(parseExcelNumber(daysLike));
   const holidays = holidaySerials(holidaysLike);

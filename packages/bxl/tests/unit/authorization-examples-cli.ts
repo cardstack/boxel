@@ -2,10 +2,12 @@ import { spawnSync } from 'node:child_process';
 import { strictEqual } from 'node:assert';
 import { join } from 'node:path';
 
+const packageRoot = join(import.meta.dirname, '..', '..');
+
 const result = spawnSync(
   process.execPath,
-  [join('scripts', 'run-ts-entry.mjs'), join('examples', 'authorization', 'run.ts')],
-  { cwd: process.cwd(), encoding: 'utf8' },
+  [join(packageRoot, 'examples', 'authorization', 'run.ts')],
+  { cwd: packageRoot, encoding: 'utf8' },
 );
 
 strictEqual(result.status, 0, result.stderr);

@@ -12,12 +12,10 @@ import {
   excelWorkdayIntl,
   excelYear,
   yearFrac,
-} from '../../formulajs/dateSerial.js';
-import { parseExcelNumber } from '../../formulajs/common.js';
-import {
-  BareNativeFilter,
-  wrapBareNativeFilters,
-} from '../../jqtools/evaluate/filters/lib/nativeFilter.js';
+} from '../../formulajs/dateSerial.ts';
+import { parseExcelNumber } from '../../formulajs/common.ts';
+import type { BareNativeFilter } from '../../jqtools/evaluate/filters/lib/nativeFilter.ts';
+import { wrapBareNativeFilters } from '../../jqtools/evaluate/filters/lib/nativeFilter.ts';
 
 const bareNativeFilters: Record<string, BareNativeFilter> = {
   *'DATE/3'(_input, year, month, day) {

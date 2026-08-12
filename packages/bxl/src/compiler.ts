@@ -10,24 +10,22 @@ import {
   compileReadableSyntax,
   type ReadableSchema,
   type ReadableSyntaxCompileResult,
-} from './bxl/compiler/readable-syntax.js';
+} from './bxl/compiler/readable-syntax.ts';
 import {
   parseBxlAst,
   type BxlAstProgram,
   type BxlAttachment,
   type BxlProfile,
-} from './bxl/ast/index.js';
+} from './bxl/ast/index.ts';
 
-export {
-  compileReadableSyntax,
-} from './bxl/compiler/readable-syntax.js';
+export { compileReadableSyntax } from './bxl/compiler/readable-syntax.ts';
 
 export {
   assertValidBxlProfile,
   parseBxlAst,
   validateBxlAst,
   visitBxlAst,
-} from './bxl/ast/index.js';
+} from './bxl/ast/index.ts';
 
 export {
   BXL_AGGREGATE_CALLS,
@@ -43,21 +41,21 @@ export {
   BXL_VOLATILE_CALLS,
   categoryForBxlFunction,
   classifyBxlProfileFunction,
-} from './bxl/profiles/function-safety.js';
+} from './bxl/profiles/function-safety.ts';
 
 export {
   BxlPredicateSqlError,
   SQL_PREDICATE_MODULE,
   compileBxlPredicateAstToSql,
   compileBxlPredicateToSql,
-} from './bxl/sql/index.js';
+} from './bxl/sql/index.ts';
 
 export type {
   ReadableSchema,
   ReadableField,
   ReadableSyntaxCompileResult,
   ReadableSyntaxWarning,
-} from './bxl/compiler/readable-syntax.js';
+} from './bxl/compiler/readable-syntax.ts';
 
 export type {
   BxlAstNode,
@@ -69,14 +67,14 @@ export type {
   BxlProfile,
   BxlProfileIssue,
   BxlProfileValidationOptions,
-} from './bxl/ast/index.js';
+} from './bxl/ast/index.ts';
 
 export type {
   BxlFunctionSafetyCategory,
   BxlFunctionSafetyDecision,
   BxlProfileFunctionPolicy,
   BxlProfileFunctionSafety,
-} from './bxl/profiles/function-safety.js';
+} from './bxl/profiles/function-safety.ts';
 
 export type {
   BxlPredicateSqlOptions,
@@ -86,7 +84,7 @@ export type {
   BxlPredicateSqlValue,
   BxlSqlPredicateMapping,
   BxlSqlPredicateModule,
-} from './bxl/sql/index.js';
+} from './bxl/sql/index.ts';
 
 export {
   bxlToStorageExpression,
@@ -96,7 +94,7 @@ export {
   solidifyBxlExpression,
   expandBxlExpression,
   collapseBxlExpression,
-} from './bxl/formatter/index.js';
+} from './bxl/formatter/index.ts';
 
 export type {
   BxlConversionOptions,
@@ -104,7 +102,7 @@ export type {
   BxlRewrite,
   BxlSolidifyResult,
   JqToReadableBxlResult,
-} from './bxl/formatter/index.js';
+} from './bxl/formatter/index.ts';
 
 export interface CompileBxlOptions {
   schema?: ReadableSchema;

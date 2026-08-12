@@ -1,4 +1,4 @@
-import { JqParseError } from '../errors.js';
+import { JqParseError } from '../errors.ts';
 
 export class InputStream {
   private state = {
@@ -14,7 +14,11 @@ export class InputStream {
     lineStart: 0,
   };
 
-  constructor(private input: string) {}
+  private input: string;
+
+  constructor(input: string) {
+    this.input = input;
+  }
 
   next() {
     const ch = this.input.charAt(this.state.pos++);
@@ -41,7 +45,7 @@ export class InputStream {
     return new JqParseError(
       `${msg} (${this.state.line}:${
         this.state.col
-      })\n\n${this.getLine()}\n${this.getErrorPointer()}`
+      })\n\n${this.getLine()}\n${this.getErrorPointer()}`,
     );
   }
 

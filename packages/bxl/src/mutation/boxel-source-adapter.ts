@@ -1,6 +1,6 @@
-import type { BuiltinLibraryName } from '../bxl/registry/index.js';
-import type { NativeRuntimeLimits } from '../jqtools/evaluate/runtimeState.js';
-import { prepareBxlMutation } from './planner.js';
+import type { BuiltinLibraryName } from '../bxl/registry/index.ts';
+import type { NativeRuntimeLimits } from '../jqtools/evaluate/runtimeState.ts';
+import { prepareBxlMutation } from './planner.ts';
 import {
   BxlMutationError,
   type BxlMutationField,
@@ -9,7 +9,7 @@ import {
   type BxlMutationPlan,
   type BxlMutationPlanOptions,
   type BxlMutationSchema,
-} from './types.js';
+} from './types.ts';
 
 export interface BxlBoxelSourceFieldDefinition<CodeReference = unknown> {
   type: 'contains' | 'containsMany' | 'linksTo' | 'linksToMany';
@@ -77,8 +77,7 @@ export interface BxlCardSourceProjectionOptions {
   resolveReference?: (reference: string, field: BxlMutationPath) => string;
 }
 
-export interface BxlCardSourceCommitOptions
-  extends BxlCardSourceProjectionOptions {
+export interface BxlCardSourceCommitOptions extends BxlCardSourceProjectionOptions {
   /** Format a logical Card ID for `relationships[path].links.self`. */
   formatReference?: (cardId: string, field: BxlMutationPath) => string;
   /**
@@ -109,7 +108,8 @@ export interface BxlCardSourceContainedValueSerialization {
 }
 
 export interface BxlMutateCardSourceOptions
-  extends BxlCardSourceCommitOptions,
+  extends
+    BxlCardSourceCommitOptions,
     Omit<BxlMutationPlanOptions, 'programId' | 'targetId'> {
   schema: BxlMutationSchema;
   programId: string;
@@ -217,13 +217,14 @@ async function schemaForDefinition<CodeReference>(
       key,
       ...(label ? { label, displayName: label } : {}),
       fieldType: field.type,
-      writable:
-        !field.isComputed && key !== 'id' && field.query === undefined,
+      writable: !field.isComputed && key !== 'id' && field.query === undefined,
       ...(field.isComputed ? { writeBehavior: 'skip' as const } : {}),
       boxelSource: {
         isPrimitive: field.isPrimitive,
         fieldOrCard: cloneJson(field.fieldOrCard),
-        ...(field.serializerName ? { serializerName: field.serializerName } : {}),
+        ...(field.serializerName
+          ? { serializerName: field.serializerName }
+          : {}),
       },
     };
 
@@ -282,11 +283,7 @@ export async function mutationSchemaForCardSource<CodeReference>(
   definition: BxlBoxelSourceDefinition<CodeReference>,
   options: BxlCardSourceSchemaOptions<CodeReference>,
 ): Promise<BxlMutationSchema> {
-  return schemaForDefinition(
-    definition,
-    options.lookupDefinition,
-    new Set(),
-  );
+  return schemaForDefinition(definition, options.lookupDefinition, new Set());
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -417,11 +414,7 @@ function projectObject(
             `Singular relationship ${JSON.stringify(path.join('.'))} is an array.`,
           );
         }
-        output[field.key] = relationshipReference(
-          relationship,
-          path,
-          options,
-        );
+        output[field.key] = relationshipReference(relationship, path, options);
         break;
       }
       case 'linksToMany':
@@ -560,7 +553,10 @@ function resolveSourceField(
     }
     field = candidate;
     traversed = [...traversed, part];
-    if (candidate.fieldType === 'linksTo' || candidate.fieldType === 'linksToMany') {
+    if (
+      candidate.fieldType === 'linksTo' ||
+      candidate.fieldType === 'linksToMany'
+    ) {
       relationshipPath = [...traversed];
     }
     item = false;
@@ -887,10 +883,9 @@ function permuteRelationshipIndexes(
   if (!resource.relationships) return;
   const prefix = collectionPath.join('.');
   normalizeToManyRelationship(resource, prefix);
-  const replacements: Array<[
-    string,
-    BxlCardSourceRelationship | BxlCardSourceRelationship[],
-  ]> = [];
+  const replacements: Array<
+    [string, BxlCardSourceRelationship | BxlCardSourceRelationship[]]
+  > = [];
   for (const [key, relationship] of Object.entries(resource.relationships)) {
     const indexed = relationshipIndex(key, prefix);
     if (!indexed) continue;
@@ -904,7 +899,9 @@ function permuteRelationshipIndexes(
     }
   }
   replacements
-    .sort(([left], [right]) => left.localeCompare(right, undefined, { numeric: true }))
+    .sort(([left], [right]) =>
+      left.localeCompare(right, undefined, { numeric: true }),
+    )
     .forEach(([key, relationship]) => {
       resource.relationships![key] = relationship;
     });
@@ -988,7 +985,12 @@ function writeContainedMeta(
   const last = path.at(-1);
   if (typeof last === 'number') {
     const collectionPath = path.slice(0, -1);
-    const slot = metaSlotForField(resource, collectionPath, schema, Boolean(meta));
+    const slot = metaSlotForField(
+      resource,
+      collectionPath,
+      schema,
+      Boolean(meta),
+    );
     if (!slot.fields) return;
     if (isCompositeContained(slot.field)) {
       let values = slot.fields[slot.name];
@@ -1025,10 +1027,7 @@ function writeContainedRelationships(
   resource: BxlCardSourceResource,
   path: BxlMutationPath,
   relationships:
-    | Record<
-        string,
-        BxlCardSourceRelationship | BxlCardSourceRelationship[]
-      >
+    | Record<string, BxlCardSourceRelationship | BxlCardSourceRelationship[]>
     | undefined,
 ): void {
   if (!relationships) return;
@@ -1139,13 +1138,17 @@ function copyValueSidecars(
 
   const fromPrefix = from.join('.');
   const toPrefix = to.join('.');
-  const copied: Array<[
-    string,
-    BxlCardSourceRelationship | BxlCardSourceRelationship[],
-  ]> = [];
-  for (const [key, relationship] of Object.entries(resource.relationships ?? {})) {
+  const copied: Array<
+    [string, BxlCardSourceRelationship | BxlCardSourceRelationship[]]
+  > = [];
+  for (const [key, relationship] of Object.entries(
+    resource.relationships ?? {},
+  )) {
     if (key === fromPrefix || key.startsWith(`${fromPrefix}.`)) {
-      copied.push([`${toPrefix}${key.slice(fromPrefix.length)}`, cloneJson(relationship)]);
+      copied.push([
+        `${toPrefix}${key.slice(fromPrefix.length)}`,
+        cloneJson(relationship),
+      ]);
     }
   }
   removeRelationshipSubtree(resource, to);
@@ -1226,11 +1229,7 @@ export function applyBxlMutationPlanToCardSource(
           resolved.field.fieldType === 'containsMany' &&
           typeof intent.path.at(-1) === 'string';
         const requiresAdoptsFrom = replacingCollection
-          ? collectionUsesPerValueAdoptsFrom(
-              resource,
-              intent.path,
-              schema,
-            )
+          ? collectionUsesPerValueAdoptsFrom(resource, intent.path, schema)
           : typeof intent.path.at(-1) === 'number'
             ? collectionUsesPerValueAdoptsFrom(
                 resource,
@@ -1242,7 +1241,9 @@ export function applyBxlMutationPlanToCardSource(
         parent[key] = cloneJson(intent.after);
         const replacingComposite =
           isCompositeContained(resolved.field) &&
-          (replacingCollection || typeof intent.path.at(-1) === 'number' || resolved.field.fieldType === 'contains');
+          (replacingCollection ||
+            typeof intent.path.at(-1) === 'number' ||
+            resolved.field.fieldType === 'contains');
         if (replacingComposite) {
           if (replacingCollection) {
             permuteCollectionSidecars(
@@ -1390,7 +1391,9 @@ export function applyBxlMutationPlanToCardSource(
         const order = collection.map((_, index) => index);
         const [movedIndex] = order.splice(fromIndex, 1);
         order.splice(intent.toIndex, 0, movedIndex!);
-        const oldToNew = new Map(order.map((oldIndex, newIndex) => [oldIndex, newIndex]));
+        const oldToNew = new Map(
+          order.map((oldIndex, newIndex) => [oldIndex, newIndex]),
+        );
         const [moved] = collection.splice(fromIndex, 1);
         collection.splice(intent.toIndex, 0, moved);
         permuteCollectionSidecars(
@@ -1421,8 +1424,14 @@ export function applyBxlMutationPlanToCardSource(
           return oldIndex;
         });
         const oldValues = [...collection];
-        collection.splice(0, collection.length, ...order.map((index) => oldValues[index]));
-        const oldToNew = new Map(order.map((oldIndex, newIndex) => [oldIndex, newIndex]));
+        collection.splice(
+          0,
+          collection.length,
+          ...order.map((index) => oldValues[index]),
+        );
+        const oldToNew = new Map(
+          order.map((oldIndex, newIndex) => [oldIndex, newIndex]),
+        );
         permuteCollectionSidecars(
           resource,
           intent.collection,
@@ -1442,9 +1451,14 @@ export function applyBxlMutationPlanToCardSource(
           );
         }
         const reference =
-          options.formatReference?.(intent.cardId, intent.field) ?? intent.cardId;
+          options.formatReference?.(intent.cardId, intent.field) ??
+          intent.cardId;
         if (resolved.field.fieldType === 'linksToMany') {
-          const current = relationshipValues(resource.relationships, intent.field, options);
+          const current = relationshipValues(
+            resource.relationships,
+            intent.field,
+            options,
+          );
           const index = intent.index ?? current.length;
           const oldToNew = new Map<number, number>();
           for (let oldIndex = 0; oldIndex < current.length; oldIndex++) {
@@ -1470,7 +1484,11 @@ export function applyBxlMutationPlanToCardSource(
           );
         }
         if (resolved.field.fieldType === 'linksToMany') {
-          const current = relationshipValues(resource.relationships, intent.field, options);
+          const current = relationshipValues(
+            resource.relationships,
+            intent.field,
+            options,
+          );
           const index = current.findIndex(
             (value) => isRecord(value) && value.id === intent.cardId,
           );
@@ -1499,7 +1517,11 @@ export function applyBxlMutationPlanToCardSource(
         break;
       }
       case 'move-relation': {
-        const current = relationshipValues(resource.relationships, intent.field, options);
+        const current = relationshipValues(
+          resource.relationships,
+          intent.field,
+          options,
+        );
         const fromIndex = current.findIndex(
           (value) => isRecord(value) && value.id === intent.cardId,
         );
@@ -1542,8 +1564,7 @@ export function mutateBxlCardSource(
   const snapshot = snapshotBxlCardSource(document, options.schema, options);
   const plan = prepared.plan(snapshot, {
     programId: options.programId,
-    targetId:
-      options.targetId ?? document.data.id ?? document.data.lid,
+    targetId: options.targetId ?? document.data.id ?? document.data.lid,
     delivery: options.delivery,
     transaction: options.transaction,
     baseRevision: options.baseRevision,

@@ -5,8 +5,8 @@ import {
   parseExcelBool,
   parseExcelNumber,
   parseExcelNumberArray,
-} from './common.js';
-import { EXCEL_ERROR, throwExcelError } from './errors.js';
+} from './common.ts';
+import { EXCEL_ERROR, throwExcelError } from './errors.ts';
 
 const jStat = jStatImport as any;
 
@@ -84,7 +84,9 @@ export function excelBetaDist(
   }
   const scaled = (x - a) / (b - a);
   return checkedNumber(
-    cumulative ? jStat.beta.cdf(scaled, alpha, beta) : jStat.beta.pdf(scaled, alpha, beta),
+    cumulative
+      ? jStat.beta.cdf(scaled, alpha, beta)
+      : jStat.beta.pdf(scaled, alpha, beta),
   );
 }
 
@@ -100,7 +102,13 @@ export function excelBetaInv(
   const beta = parseExcelNumber(betaLike);
   const a = parseExcelNumber(aLike);
   const b = parseExcelNumber(bLike);
-  if (probability < 0 || probability > 1 || alpha <= 0 || beta <= 0 || a === b) {
+  if (
+    probability < 0 ||
+    probability > 1 ||
+    alpha <= 0 ||
+    beta <= 0 ||
+    a === b
+  ) {
     throwExcelError(EXCEL_ERROR.num);
   }
   return checkedNumber(jStat.beta.inv(probability, alpha, beta) * (b - a) + a);
@@ -116,7 +124,13 @@ export function excelBinomDist(
   const trials = Math.floor(parseExcelNumber(trialsLike));
   const probabilityS = parseExcelNumber(probabilitySLike);
   const cumulative = parseExcelBool(cumulativeLike);
-  if (numberS < 0 || trials < 0 || numberS > trials || probabilityS < 0 || probabilityS > 1) {
+  if (
+    numberS < 0 ||
+    trials < 0 ||
+    numberS > trials ||
+    probabilityS < 0 ||
+    probabilityS > 1
+  ) {
     throwExcelError(EXCEL_ERROR.num);
   }
   return checkedNumber(
@@ -148,7 +162,10 @@ export function excelBinomDistRange(
   }
   let result = 0;
   for (let index = numberS; index <= numberS2; index++) {
-    result += combin(trials, index) * probabilityS ** index * (1 - probabilityS) ** (trials - index);
+    result +=
+      combin(trials, index) *
+      probabilityS ** index *
+      (1 - probabilityS) ** (trials - index);
   }
   return checkedNumber(result);
 }
@@ -161,7 +178,13 @@ export function excelBinomInv(
   const trials = Math.floor(parseExcelNumber(trialsLike));
   const probabilityS = parseExcelNumber(probabilitySLike);
   const alpha = parseExcelNumber(alphaLike);
-  if (trials < 0 || probabilityS < 0 || probabilityS > 1 || alpha < 0 || alpha > 1) {
+  if (
+    trials < 0 ||
+    probabilityS < 0 ||
+    probabilityS > 1 ||
+    alpha < 0 ||
+    alpha > 1
+  ) {
     throwExcelError(EXCEL_ERROR.num);
   }
   for (let value = 0; value <= trials; value++) {
@@ -199,7 +222,10 @@ export function excelChisqDistRt(xLike: unknown, degFreedomLike: unknown) {
   return checkedNumber(1 - jStat.chisquare.cdf(x, degFreedom));
 }
 
-export function excelChisqInv(probabilityLike: unknown, degFreedomLike: unknown) {
+export function excelChisqInv(
+  probabilityLike: unknown,
+  degFreedomLike: unknown,
+) {
   const probability = parseExcelNumber(probabilityLike);
   const degFreedom = parseExcelNumber(degFreedomLike);
   if (probability < 0 || probability > 1 || degFreedom < 1) {
@@ -214,7 +240,12 @@ export function excelChisqInvRt(
 ) {
   const probability = parseExcelNumber(probabilityLike);
   const degFreedom = parseExcelNumber(degFreedomLike);
-  if (probability < 0 || probability > 1 || degFreedom < 1 || degFreedom > 1.0e10) {
+  if (
+    probability < 0 ||
+    probability > 1 ||
+    degFreedom < 1 ||
+    degFreedom > 1.0e10
+  ) {
     throwExcelError(EXCEL_ERROR.num);
   }
   return checkedNumber(jStat.chisquare.inv(1 - probability, degFreedom));
@@ -238,7 +269,8 @@ export function excelChisqTest(actualLike: unknown, expectedLike: unknown) {
       if (expected[row]![col] === 0) {
         throwExcelError(EXCEL_ERROR.div0);
       }
-      statistic += (actual[row]![col]! - expected[row]![col]!) ** 2 / expected[row]![col]!;
+      statistic +=
+        (actual[row]![col]! - expected[row]![col]!) ** 2 / expected[row]![col]!;
     }
   }
   return checkedNumber(1 - jStat.chisquare.cdf(statistic, degrees));
@@ -332,10 +364,17 @@ export function excelFInv(
   const probability = parseExcelNumber(probabilityLike);
   const degFreedom1 = parseExcelNumber(degFreedom1Like);
   const degFreedom2 = parseExcelNumber(degFreedom2Like);
-  if (probability < 0 || probability > 1 || degFreedom1 < 1 || degFreedom2 < 1) {
+  if (
+    probability < 0 ||
+    probability > 1 ||
+    degFreedom1 < 1 ||
+    degFreedom2 < 1
+  ) {
     throwExcelError(EXCEL_ERROR.num);
   }
-  return checkedNumber(jStat.centralF.inv(probability, degFreedom1, degFreedom2));
+  return checkedNumber(
+    jStat.centralF.inv(probability, degFreedom1, degFreedom2),
+  );
 }
 
 export function excelFInvRt(
@@ -346,10 +385,17 @@ export function excelFInvRt(
   const probability = parseExcelNumber(probabilityLike);
   const degFreedom1 = parseExcelNumber(degFreedom1Like);
   const degFreedom2 = parseExcelNumber(degFreedom2Like);
-  if (probability < 0 || probability > 1 || degFreedom1 < 1 || degFreedom2 < 1) {
+  if (
+    probability < 0 ||
+    probability > 1 ||
+    degFreedom1 < 1 ||
+    degFreedom2 < 1
+  ) {
     throwExcelError(EXCEL_ERROR.num);
   }
-  return checkedNumber(jStat.centralF.inv(1 - probability, degFreedom1, degFreedom2));
+  return checkedNumber(
+    jStat.centralF.inv(1 - probability, degFreedom1, degFreedom2),
+  );
 }
 
 export function excelFTest(array1Like: unknown, array2Like: unknown) {
@@ -360,9 +406,11 @@ export function excelFTest(array1Like: unknown, array2Like: unknown) {
   }
   const variance1 = jStat.variance(array1, true);
   const variance2 = jStat.variance(array2, true);
-  const statistic = variance1 > variance2 ? variance1 / variance2 : variance2 / variance1;
+  const statistic =
+    variance1 > variance2 ? variance1 / variance2 : variance2 / variance1;
   return checkedNumber(
-    (1 - jStat.centralF.cdf(statistic, array1.length - 1, array2.length - 1)) * 2,
+    (1 - jStat.centralF.cdf(statistic, array1.length - 1, array2.length - 1)) *
+      2,
   );
 }
 
@@ -388,7 +436,9 @@ export function excelGammaDist(
     throwExcelError(EXCEL_ERROR.num);
   }
   return checkedNumber(
-    cumulative ? jStat.gamma.cdf(value, alpha, beta) : jStat.gamma.pdf(value, alpha, beta),
+    cumulative
+      ? jStat.gamma.cdf(value, alpha, beta)
+      : jStat.gamma.pdf(value, alpha, beta),
   );
 }
 
@@ -449,7 +499,9 @@ export function excelHypgeomDist(
     }
     return checkedNumber(result);
   }
-  return checkedNumber(jStat.hypgeom.pdf(sampleS, numberPop, populationS, numberSample));
+  return checkedNumber(
+    jStat.hypgeom.pdf(sampleS, numberPop, populationS, numberSample),
+  );
 }
 
 export function excelLognormDist(
@@ -523,7 +575,9 @@ export function excelNormDist(
     throwExcelError(EXCEL_ERROR.num);
   }
   return checkedNumber(
-    cumulative ? jStat.normal.cdf(x, mean, standardDev) : jStat.normal.pdf(x, mean, standardDev),
+    cumulative
+      ? jStat.normal.cdf(x, mean, standardDev)
+      : jStat.normal.pdf(x, mean, standardDev),
   );
 }
 
@@ -596,7 +650,9 @@ export function excelTDist(
     throwExcelError(EXCEL_ERROR.num);
   }
   return checkedNumber(
-    cumulative ? jStat.studentt.cdf(x, degFreedom) : jStat.studentt.pdf(x, degFreedom),
+    cumulative
+      ? jStat.studentt.cdf(x, degFreedom)
+      : jStat.studentt.pdf(x, degFreedom),
   );
 }
 
@@ -633,7 +689,9 @@ export function excelTInv2T(probabilityLike: unknown, degFreedomLike: unknown) {
   if (probability <= 0 || probability > 1 || degFreedom < 1) {
     throwExcelError(EXCEL_ERROR.num);
   }
-  return checkedNumber(Math.abs(jStat.studentt.inv(probability / 2, degFreedom)));
+  return checkedNumber(
+    Math.abs(jStat.studentt.inv(probability / 2, degFreedom)),
+  );
 }
 
 export function excelTTest(array1Like: unknown, array2Like: unknown) {
@@ -646,7 +704,9 @@ export function excelTTest(array1Like: unknown, array2Like: unknown) {
   const meanY = jStat.mean(array2);
   const sx = jStat.variance(array1, true);
   const sy = jStat.variance(array2, true);
-  const statistic = Math.abs(meanX - meanY) / Math.sqrt(sx / array1.length + sy / array2.length);
+  const statistic =
+    Math.abs(meanX - meanY) /
+    Math.sqrt(sx / array1.length + sy / array2.length);
   return excelTDist2T(statistic, array1.length + array2.length - 2);
 }
 
@@ -664,7 +724,9 @@ export function excelWeibullDist(
     throwExcelError(EXCEL_ERROR.num);
   }
   return checkedNumber(
-    cumulative ? jStat.weibull.cdf(x, alpha, beta) : jStat.weibull.pdf(x, alpha, beta),
+    cumulative
+      ? jStat.weibull.cdf(x, alpha, beta)
+      : jStat.weibull.pdf(x, alpha, beta),
   );
 }
 
@@ -678,11 +740,19 @@ export function excelZTest(
     throwExcelError(EXCEL_ERROR.na);
   }
   const x = parseExcelNumber(xLike);
-  const sigma = sigmaLike === undefined
-    ? Math.sqrt(jStat.variance(array, true))
-    : parseExcelNumber(sigmaLike);
+  const sigma =
+    sigmaLike === undefined
+      ? Math.sqrt(jStat.variance(array, true))
+      : parseExcelNumber(sigmaLike);
   if (sigma <= 0) {
     throwExcelError(EXCEL_ERROR.num);
   }
-  return checkedNumber(1 - jStat.normal.cdf((jStat.mean(array) - x) / (sigma / Math.sqrt(array.length)), 0, 1));
+  return checkedNumber(
+    1 -
+      jStat.normal.cdf(
+        (jStat.mean(array) - x) / (sigma / Math.sqrt(array.length)),
+        0,
+        1,
+      ),
+  );
 }

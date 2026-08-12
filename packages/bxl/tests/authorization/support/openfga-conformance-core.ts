@@ -6,7 +6,7 @@ import {
   type AuthorizationGraphRelationDefinition,
   type RelationshipTuple,
   type SubjectTypeReference,
-} from '../../../src/authorization/index.js';
+} from '../../../src/authorization/index.ts';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -124,7 +124,10 @@ function openFgaRewriteToBxl(node: unknown, path: string): string {
     return `userset_from(${JSON.stringify(
       relationName(ttu.tupleset, `${path}.tupleToUserset.tupleset`),
     )}; ${JSON.stringify(
-      relationName(ttu.computedUserset, `${path}.tupleToUserset.computedUserset`),
+      relationName(
+        ttu.computedUserset,
+        `${path}.tupleToUserset.computedUserset`,
+      ),
     )})`;
   }
   for (const [property, operator] of [
@@ -137,7 +140,10 @@ function openFgaRewriteToBxl(node: unknown, path: string): string {
         throw new Error(`${path}.${property}.child must be a non-empty array`);
       }
       return children
-        .map((child, index) => `(${openFgaRewriteToBxl(child, `${path}.${property}.child[${index}]`)})`)
+        .map(
+          (child, index) =>
+            `(${openFgaRewriteToBxl(child, `${path}.${property}.child[${index}]`)})`,
+        )
         .join(` ${operator} `);
     }
   }
@@ -154,7 +160,10 @@ function openFgaRewriteToBxl(node: unknown, path: string): string {
   throw new Error(`${path} has an unsupported OpenFGA rewrite shape`);
 }
 
-function subjectConstraint(reference: unknown, path: string): SubjectTypeReference {
+function subjectConstraint(
+  reference: unknown,
+  path: string,
+): SubjectTypeReference {
   const value = record(reference, path);
   if (typeof value.type !== 'string' || value.type === '') {
     throw new Error(`${path}.type must be a non-empty string`);
@@ -184,7 +193,9 @@ function subjectConstraint(reference: unknown, path: string): SubjectTypeReferen
 function conditionParameterType(value: unknown, path: string): string {
   const typeName = record(value, path).type_name;
   if (typeof typeName !== 'string' || !typeName.startsWith('TYPE_NAME_')) {
-    throw new Error(`${path}.type_name is not a recognized OpenFGA condition type`);
+    throw new Error(
+      `${path}.type_name is not a recognized OpenFGA condition type`,
+    );
   }
   return typeName.slice('TYPE_NAME_'.length).toLowerCase();
 }
@@ -214,10 +225,15 @@ function translateCelFixtureExpression(
   return translated;
 }
 
-export function convertOpenFgaDslToBxlModel(dsl: string): AuthorizationGraphModel {
-  const upstream = transformer.transformDSLToJSONObject(dsl) as unknown as JsonRecord;
+export function convertOpenFgaDslToBxlModel(
+  dsl: string,
+): AuthorizationGraphModel {
+  const upstream = transformer.transformDSLToJSONObject(
+    dsl,
+  ) as unknown as JsonRecord;
   const definitions = upstream.type_definitions;
-  if (!Array.isArray(definitions)) throw new Error('type_definitions must be an array');
+  if (!Array.isArray(definitions))
+    throw new Error('type_definitions must be an array');
 
   const types: Record<
     string,
@@ -226,7 +242,11 @@ export function convertOpenFgaDslToBxlModel(dsl: string): AuthorizationGraphMode
       permissions: Record<string, string>;
     }
   > = {};
-  const conditions: NonNullable<AuthorizationGraphModel['conditions']> = {};
+  // Built up entry by entry, then handed back as the model's readonly shape.
+  const conditions: Record<
+    string,
+    NonNullable<AuthorizationGraphModel['conditions']>[string]
+  > = {};
 
   const upstreamConditions = record(upstream.conditions ?? {}, 'conditions');
   for (const [name, rawCondition] of Object.entries(upstreamConditions)) {
@@ -234,43 +254,69 @@ export function convertOpenFgaDslToBxlModel(dsl: string): AuthorizationGraphMode
     if (typeof condition.expression !== 'string') {
       throw new Error(`conditions.${name}.expression must be a string`);
     }
-    const rawParameters = record(condition.parameters ?? {}, `conditions.${name}.parameters`);
+    const rawParameters = record(
+      condition.parameters ?? {},
+      `conditions.${name}.parameters`,
+    );
     const parameters = Object.fromEntries(
       Object.entries(rawParameters).map(([parameter, type]) => [
         parameter,
-        conditionParameterType(type, `conditions.${name}.parameters.${parameter}`),
+        conditionParameterType(
+          type,
+          `conditions.${name}.parameters.${parameter}`,
+        ),
       ]),
     );
     conditions[name] = {
-      expression: translateCelFixtureExpression(condition.expression, parameters),
+      expression: translateCelFixtureExpression(
+        condition.expression,
+        parameters,
+      ),
       parameters,
     };
   }
 
   for (let typeIndex = 0; typeIndex < definitions.length; typeIndex++) {
-    const definition = record(definitions[typeIndex], `type_definitions[${typeIndex}]`);
+    const definition = record(
+      definitions[typeIndex],
+      `type_definitions[${typeIndex}]`,
+    );
     if (typeof definition.type !== 'string' || definition.type === '') {
-      throw new Error(`type_definitions[${typeIndex}].type must be a non-empty string`);
+      throw new Error(
+        `type_definitions[${typeIndex}].type must be a non-empty string`,
+      );
     }
-    const relations = record(definition.relations ?? {}, `type_definitions[${typeIndex}].relations`);
-    const metadata = definition.metadata == null
-      ? {}
-      : record(definition.metadata, `type_definitions[${typeIndex}].metadata`);
-    const relationMetadata = metadata.relations == null
-      ? {}
-      : record(metadata.relations, `type_definitions[${typeIndex}].metadata.relations`);
+    const relations = record(
+      definition.relations ?? {},
+      `type_definitions[${typeIndex}].relations`,
+    );
+    const metadata =
+      definition.metadata == null
+        ? {}
+        : record(
+            definition.metadata,
+            `type_definitions[${typeIndex}].metadata`,
+          );
+    const relationMetadata =
+      metadata.relations == null
+        ? {}
+        : record(
+            metadata.relations,
+            `type_definitions[${typeIndex}].metadata.relations`,
+          );
     const converted = {
       relations: {} as Record<string, AuthorizationGraphRelationDefinition>,
       permissions: {} as Record<string, string>,
     };
 
     for (const [name, rewrite] of Object.entries(relations)) {
-      const relationMeta = relationMetadata[name] == null
-        ? {}
-        : record(
-            relationMetadata[name],
-            `type_definitions[${typeIndex}].metadata.relations.${name}`,
-          );
+      const relationMeta =
+        relationMetadata[name] == null
+          ? {}
+          : record(
+              relationMetadata[name],
+              `type_definitions[${typeIndex}].metadata.relations.${name}`,
+            );
       const directTypes = relationMeta.directly_related_user_types;
       const subjects = Array.isArray(directTypes)
         ? directTypes.map((reference, index) =>
@@ -309,7 +355,9 @@ function convertTuple(tuple: UpstreamTuple): RelationshipTuple {
       ? {
           condition: {
             name: tuple.condition.name,
-            ...(tuple.condition.context ? { context: tuple.condition.context } : {}),
+            ...(tuple.condition.context
+              ? { context: tuple.condition.context }
+              : {}),
           },
         }
       : {}),
@@ -323,10 +371,15 @@ function addFailure(
   if (report.failures.length < 100) report.failures.push(failure);
 }
 
-function sameStringSet(actual: readonly string[], expected: readonly string[]): boolean {
+function sameStringSet(
+  actual: readonly string[],
+  expected: readonly string[],
+): boolean {
   if (actual.length !== expected.length) return false;
   const expectedSorted = [...expected].sort();
-  return [...actual].sort().every((value, index) => value === expectedSorted[index]);
+  return [...actual]
+    .sort()
+    .every((value, index) => value === expectedSorted[index]);
 }
 
 export interface OpenFgaFixtureSource {
@@ -384,7 +437,9 @@ export function runOpenFgaConformanceFixtures(
         const listObjectsAssertions = stage.listObjectsAssertions ?? [];
         const listUsersAssertions = stage.listUsersAssertions ?? [];
         const stageAssertionCount =
-          assertions.length + listObjectsAssertions.length + listUsersAssertions.length;
+          assertions.length +
+          listObjectsAssertions.length +
+          listUsersAssertions.length;
         report.discovered += stageAssertionCount;
         report.check.discovered += assertions.length;
         report.listObjects.discovered += listObjectsAssertions.length;
@@ -425,7 +480,11 @@ export function runOpenFgaConformanceFixtures(
           continue;
         }
 
-        for (let assertionIndex = 0; assertionIndex < assertions.length; assertionIndex++) {
+        for (
+          let assertionIndex = 0;
+          assertionIndex < assertions.length;
+          assertionIndex++
+        ) {
           const assertion = assertions[assertionIndex]!;
           const tuple = assertion.tuple;
           const result = prepared.value.check({
@@ -434,7 +493,10 @@ export function runOpenFgaConformanceFixtures(
             object: tuple?.object ?? '',
             ...(assertion.context ? { context: assertion.context } : {}),
             ...(assertion.contextualTuples
-              ? { contextualTuples: assertion.contextualTuples.map(convertTuple) }
+              ? {
+                  contextualTuples:
+                    assertion.contextualTuples.map(convertTuple),
+                }
               : {}),
           });
 
@@ -502,7 +564,10 @@ export function runOpenFgaConformanceFixtures(
             relation: assertion.request.relation,
             ...(assertion.context ? { context: assertion.context } : {}),
             ...(assertion.contextualTuples
-              ? { contextualTuples: assertion.contextualTuples.map(convertTuple) }
+              ? {
+                  contextualTuples:
+                    assertion.contextualTuples.map(convertTuple),
+                }
               : {}),
           });
 
@@ -567,7 +632,10 @@ export function runOpenFgaConformanceFixtures(
             filters: assertion.request.filters,
             ...(assertion.context ? { context: assertion.context } : {}),
             ...(assertion.contextualTuples
-              ? { contextualTuples: assertion.contextualTuples.map(convertTuple) }
+              ? {
+                  contextualTuples:
+                    assertion.contextualTuples.map(convertTuple),
+                }
               : {}),
           });
 
@@ -623,7 +691,11 @@ export function runOpenFgaConformanceFixtures(
     }
   }
 
-  const classified = report.passed + report.failed + report.importerFailures + report.unsupported;
+  const classified =
+    report.passed +
+    report.failed +
+    report.importerFailures +
+    report.unsupported;
   if (classified !== report.discovered) {
     throw new Error(
       `Conformance accounting error: discovered ${report.discovered}, classified ${classified}.`,

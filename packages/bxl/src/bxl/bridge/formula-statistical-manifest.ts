@@ -137,8 +137,9 @@ export const FORMULA_STATISTICAL_DOTTED_ALIASES = new Map([
   ['Z.TEST', 'Z_TEST'],
 ]);
 
-const DOTTED_ALIASES_DESC = [...FORMULA_STATISTICAL_DOTTED_ALIASES.entries()]
-  .sort((left, right) => right[0].length - left[0].length);
+const DOTTED_ALIASES_DESC = [
+  ...FORMULA_STATISTICAL_DOTTED_ALIASES.entries(),
+].sort((left, right) => right[0].length - left[0].length);
 
 const STATISTICAL_NAME_SET = new Set(FORMULA_STATISTICAL_FUNCTIONS);
 
@@ -156,7 +157,11 @@ function isCallAfter(source: string, index: number) {
 
 function scanFormulaSource(
   source: string,
-  visitor: (entry: { start: number; end: number; replacement?: string }) => void,
+  visitor: (entry: {
+    start: number;
+    end: number;
+    replacement?: string;
+  }) => void,
 ) {
   let inString = false;
   let escaped = false;
@@ -280,7 +285,9 @@ export function sourceUsesStatisticalFormula(source: string): boolean {
     }
     const name = match[0].toUpperCase();
     if (
-      STATISTICAL_NAME_SET.has(name as (typeof FORMULA_STATISTICAL_FUNCTIONS)[number]) &&
+      STATISTICAL_NAME_SET.has(
+        name as (typeof FORMULA_STATISTICAL_FUNCTIONS)[number],
+      ) &&
       !isIdentifierChar(source[index + match[0].length]) &&
       isCallAfter(source, index + match[0].length)
     ) {

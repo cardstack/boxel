@@ -1,4 +1,4 @@
-import { parseNativeJq } from '../bridge/native.js';
+import { parseNativeJq } from '../bridge/native.ts';
 import {
   analyzeReadableFunctionCall,
   compileReadableSyntax,
@@ -6,10 +6,10 @@ import {
   type ReadableSyntaxOptions,
   type ReadableSyntaxToken,
   tokenizeReadableSyntax,
-} from '../compiler/readable-syntax.js';
-import { validationFunctionDefinition } from '../bridge/validation-manifest.js';
+} from '../compiler/readable-syntax.ts';
+import { validationFunctionDefinition } from '../bridge/validation-manifest.ts';
 // Shared with readable-syntax.ts — single source of truth in lexicon.ts.
-import { JQ_KEYWORDS as KEYWORDS } from '../compiler/lexicon.js';
+import { JQ_KEYWORDS as KEYWORDS } from '../compiler/lexicon.ts';
 
 export type BxlLintSeverity = 'error' | 'warning' | 'info';
 
@@ -69,13 +69,22 @@ function errorMessage(error: unknown): string {
 function codeForCompileError(message: string): string {
   if (/1-based/i.test(message)) return 'human-row-zero';
   if (/must be increasing/i.test(message)) return 'descending-row-range';
-  if (/Unsupported predicate operator/i.test(message)) return 'unsupported-predicate-op';
-  if (/CSS-style pseudo-class syntax was removed/i.test(message)) return 'legacy-pseudo-class-removed';
-  if (/Unsupported positional selector keyword/i.test(message)) return 'unsupported-positional-selector';
-  if (/Filter-all \[\* \.\.\.\] predicates must use explicit current-item paths/i.test(message)) return 'filter-all-requires-dot';
+  if (/Unsupported predicate operator/i.test(message))
+    return 'unsupported-predicate-op';
+  if (/CSS-style pseudo-class syntax was removed/i.test(message))
+    return 'legacy-pseudo-class-removed';
+  if (/Unsupported positional selector keyword/i.test(message))
+    return 'unsupported-positional-selector';
+  if (
+    /Filter-all \[\* \.\.\.\] predicates must use explicit current-item paths/i.test(
+      message,
+    )
+  )
+    return 'filter-all-requires-dot';
   if (/Unclosed '/i.test(message)) return 'unclosed-bracket';
   if (/Unterminated string/i.test(message)) return 'unterminated-string';
-  if (/Cannot tokenize character/i.test(message)) return 'untokenizable-character';
+  if (/Cannot tokenize character/i.test(message))
+    return 'untokenizable-character';
   if (/Unexpected opener/i.test(message)) return 'unexpected-opener';
   if (/Expected opening punctuation/i.test(message)) return 'missing-opener';
   return 'compile-error';
@@ -125,7 +134,7 @@ function collectLabels(
     const child =
       field.kind === 'array'
         ? field.item
-        : field.item ?? (field.fields ? { fields: field.fields } : undefined);
+        : (field.item ?? (field.fields ? { fields: field.fields } : undefined));
     labels.push(...collectLabels(child, nextPath));
   }
 
@@ -136,11 +145,16 @@ function tokenText(token: ReadableSyntaxToken): string {
   return token.type === 'string' ? `"${token.value}"` : token.value;
 }
 
-function identLower(token: ReadableSyntaxToken | undefined): string | undefined {
+function identLower(
+  token: ReadableSyntaxToken | undefined,
+): string | undefined {
   return token?.type === 'ident' ? token.value.toLowerCase() : undefined;
 }
 
-function isIdent(token: ReadableSyntaxToken | undefined, value: string): boolean {
+function isIdent(
+  token: ReadableSyntaxToken | undefined,
+  value: string,
+): boolean {
   return identLower(token) === value.toLowerCase();
 }
 
@@ -202,7 +216,11 @@ function lintMissingQuotedLabels(
   );
 
   for (let start = 0; start < tokens.length; start++) {
-    for (let length = 2; length <= 5 && start + length <= tokens.length; length++) {
+    for (
+      let length = 2;
+      length <= 5 && start + length <= tokens.length;
+      length++
+    ) {
       const phraseTokens = tokens.slice(start, start + length);
       if (!isIdentifierPhrase(phraseTokens)) {
         continue;
@@ -302,8 +320,7 @@ function isRawIndex(tokens: ReadableSyntaxToken[]): boolean {
 function isAllSelector(tokens: ReadableSyntaxToken[]): boolean {
   return (
     tokens.length === 1 &&
-    (isIdent(tokens[0], 'all') ||
-      tokens[0].value === '...')
+    (isIdent(tokens[0], 'all') || tokens[0].value === '...')
   );
 }
 
@@ -342,21 +359,44 @@ function isPredicateSelector(tokens: ReadableSyntaxToken[]): boolean {
 // same call context before suggesting a spelling.
 const COLLISION_STYLE_NAMES = new Set<string>([
   // Trig
-  'sin', 'cos', 'tan',
-  'asin', 'acos', 'atan', 'atan2',
+  'sin',
+  'cos',
+  'tan',
+  'asin',
+  'acos',
+  'atan',
+  'atan2',
   // Hyperbolic
-  'sinh', 'cosh', 'tanh',
-  'asinh', 'acosh', 'atanh',
+  'sinh',
+  'cosh',
+  'tanh',
+  'asinh',
+  'acosh',
+  'atanh',
   // Exp / Log
-  'exp', 'log', 'log10', 'log2', 'sqrt',
+  'exp',
+  'log',
+  'log10',
+  'log2',
+  'sqrt',
   // Special
-  'gamma', 'erf', 'erfc',
+  'gamma',
+  'erf',
+  'erfc',
   // Rounding
-  'floor', 'round', 'trunc',
+  'floor',
+  'round',
+  'trunc',
   // Practical same-name collisions.
-  'index', 'match', 'now', 'trim', 'type',
+  'index',
+  'match',
+  'now',
+  'trim',
+  'type',
   // Array (Excel SORT/UNIQUE/TRANSPOSE — single-arg call sites only)
-  'sort', 'unique', 'transpose',
+  'sort',
+  'unique',
+  'transpose',
 ]);
 
 const JQ_BARE_STYLE_NAMES = new Set<string>([

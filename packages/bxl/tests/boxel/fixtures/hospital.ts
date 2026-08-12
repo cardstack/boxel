@@ -90,8 +90,18 @@ export const baselinePatient: Patient = {
     pharmacy: 310,
   },
   medications: [
-    { name: 'Metoprolol', doseMg: 50, frequency: 'twice daily', startDate: '2024-11-01' },
-    { name: 'Warfarin', doseMg: 5, frequency: 'once daily', startDate: '2024-11-02' },
+    {
+      name: 'Metoprolol',
+      doseMg: 50,
+      frequency: 'twice daily',
+      startDate: '2024-11-01',
+    },
+    {
+      name: 'Warfarin',
+      doseMg: 5,
+      frequency: 'once daily',
+      startDate: '2024-11-02',
+    },
   ],
 };
 
@@ -151,7 +161,10 @@ export const fuzzBadTypes: Patient = {
   },
 };
 
-export const fuzzShellRecord: Partial<Patient> & { patientId: string; today: string } = {
+export const fuzzShellRecord: Partial<Patient> & {
+  patientId: string;
+  today: string;
+} = {
   patientId: 'PT-FUZZ-SHELL',
   today: '2024-11-15',
 };
@@ -208,8 +221,18 @@ export const icuWarner: IcuPatient = {
     pharmacy: 1850,
   },
   medications: [
-    { name: 'Norepinephrine', doseMg: 0.1, frequency: 'continuous infusion', startDate: '2024-11-10' },
-    { name: 'Vancomycin', doseMg: 1500, frequency: 'every 12 hours', startDate: '2024-11-10' },
+    {
+      name: 'Norepinephrine',
+      doseMg: 0.1,
+      frequency: 'continuous infusion',
+      startDate: '2024-11-10',
+    },
+    {
+      name: 'Vancomycin',
+      doseMg: 1500,
+      frequency: 'every 12 hours',
+      startDate: '2024-11-10',
+    },
   ],
   icuAdmissionDate: '2024-11-11',
   ventilatorRequired: true,

@@ -1,18 +1,15 @@
 import validatorPackage from 'validator';
-import {
-  BareNativeFilter,
-  wrapBareNativeFilters,
-} from '../../jqtools/evaluate/filters/lib/nativeFilter.js';
-import { VALIDATION_FUNCTION_DEFINITIONS } from './validation-manifest.js';
+import type { BareNativeFilter } from '../../jqtools/evaluate/filters/lib/nativeFilter.ts';
+import { wrapBareNativeFilters } from '../../jqtools/evaluate/filters/lib/nativeFilter.ts';
+import { VALIDATION_FUNCTION_DEFINITIONS } from './validation-manifest.ts';
 
 type ValidatorFunction = (value: string, ...args: any[]) => unknown;
 type ValidatorPackage = Record<string, unknown> & {
   default?: Record<string, unknown>;
 };
 
-const validator = (
-  (validatorPackage as ValidatorPackage).default ?? validatorPackage
-) as Record<string, unknown>;
+const validator = ((validatorPackage as ValidatorPackage).default ??
+  validatorPackage) as Record<string, unknown>;
 
 function validatorFunction(name: string): ValidatorFunction | undefined {
   const candidate = validator[name];
@@ -54,5 +51,4 @@ for (const definition of VALIDATION_FUNCTION_DEFINITIONS) {
   }
 }
 
-export const validationNativeFilters =
-  wrapBareNativeFilters(bareNativeFilters);
+export const validationNativeFilters = wrapBareNativeFilters(bareNativeFilters);

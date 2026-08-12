@@ -10,26 +10,26 @@
  * v0.2) and register them explicitly.
  */
 
-export { runNativeJq } from './bxl/bridge/native.js';
+export { runNativeJq } from './bxl/bridge/native.ts';
 export type {
   NativeDialectOptions,
   NativeDialectRun,
-} from './bxl/bridge/native.js';
+} from './bxl/bridge/native.ts';
 
 export {
   resolveCoreRegistry,
   CORE_REGISTRY,
-} from './jqtools/evaluate/filters/registry.js';
+} from './jqtools/evaluate/filters/registry.ts';
 export type {
   BuiltinLibrary,
   ResolvedBuiltinRegistry,
-} from './jqtools/evaluate/filters/registry.js';
+} from './jqtools/evaluate/filters/registry.ts';
 
-export type { NativeRuntimeLimits } from './jqtools/evaluate/runtimeState.js';
+export type { NativeRuntimeLimits } from './jqtools/evaluate/runtimeState.ts';
 
-import { runNativeJq } from './bxl/bridge/native.js';
-import type { ReadableSchema } from './bxl/compiler/readable-syntax.js';
-import type { NativeRuntimeLimits } from './jqtools/evaluate/runtimeState.js';
+import { runNativeJq } from './bxl/bridge/native.ts';
+import type { ReadableSchema } from './bxl/compiler/readable-syntax.ts';
+import type { NativeRuntimeLimits } from './jqtools/evaluate/runtimeState.ts';
 
 export interface BxlBareOptions {
   schema?: ReadableSchema;
@@ -58,12 +58,14 @@ export function evaluateBxlBare(
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const missingFormula = message.match(/'([A-Z][A-Z0-9_]*\/\d+)' is not defined/);
+    const missingFormula = message.match(
+      /'([A-Z][A-Z0-9_]*\/\d+)' is not defined/,
+    );
     if (missingFormula) {
       throw new Error(
         `runtime-bare contains jq core only; ${missingFormula[1]} is a ` +
-        `spreadsheet formula. Import from '@cardstack/bxl/runtime' (or the ` +
-        `main '@cardstack/bxl' entry) to enable the formula library.`,
+          `spreadsheet formula. Import from '@cardstack/bxl/runtime' (or the ` +
+          `main '@cardstack/bxl' entry) to enable the formula library.`,
       );
     }
     throw error;

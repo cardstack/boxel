@@ -5,12 +5,14 @@ import {
   type BxlAuthorizationCheckRequest,
   type BxlAuthorizationDocument,
   type BxlAuthorizationSnapshot,
-} from '../src/authorization/index.js';
+} from '../src/authorization/index.ts';
 
 interface CapabilityFixture {
   document: BxlAuthorizationDocument;
   snapshot: BxlAuthorizationSnapshot;
-  checks: Array<BxlAuthorizationCheckRequest & { domain: string; allowed: boolean }>;
+  checks: Array<
+    BxlAuthorizationCheckRequest & { domain: string; allowed: boolean }
+  >;
 }
 
 interface ReleaseGovernanceFixture {
@@ -38,7 +40,11 @@ const releaseGovernanceFixture = JSON.parse(
   ),
 ) as ReleaseGovernanceFixture;
 
-function benchmark(name: string, iterations: number, operation: () => void): void {
+function benchmark(
+  name: string,
+  iterations: number,
+  operation: () => void,
+): void {
   for (let index = 0; index < Math.min(iterations, 100); index++) operation();
   const started = performance.now();
   for (let index = 0; index < iterations; index++) operation();
@@ -49,7 +55,10 @@ function benchmark(name: string, iterations: number, operation: () => void): voi
   );
 }
 
-const prepared = prepareBxlAuthorizationSafe(fixture.document, fixture.snapshot);
+const prepared = prepareBxlAuthorizationSafe(
+  fixture.document,
+  fixture.snapshot,
+);
 if (!prepared.ok) throw new Error(prepared.error.message);
 const checks = fixture.checks.map(
   ({ allowed: _allowed, domain: _domain, ...request }) => request,
@@ -66,7 +75,10 @@ const releaseGovernanceChecks = releaseGovernanceFixture.checks.map(
 );
 
 benchmark('cold prepare', 1_000, () => {
-  const result = prepareBxlAuthorizationSafe(fixture.document, fixture.snapshot);
+  const result = prepareBxlAuthorizationSafe(
+    fixture.document,
+    fixture.snapshot,
+  );
   if (!result.ok) throw new Error(result.error.message);
 });
 

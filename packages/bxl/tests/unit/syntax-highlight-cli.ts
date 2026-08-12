@@ -48,7 +48,10 @@ for (const key of requiredRepositories) {
   ok(grammar.repository[key], `expected ${key} repository`);
 }
 
-function visitPatterns(patterns: TextMatePattern[], visitor: (pattern: TextMatePattern) => void) {
+function visitPatterns(
+  patterns: TextMatePattern[],
+  visitor: (pattern: TextMatePattern) => void,
+) {
   for (const pattern of patterns) {
     visitor(pattern);
     if (pattern.patterns) {
@@ -73,25 +76,51 @@ for (const collection of Object.values(grammar.repository)) {
 
 function firstMatch(repositoryKey: string, sample: string): string | undefined {
   const patterns = grammar.repository[repositoryKey].patterns;
-  return patterns.find((pattern) => pattern.match && new RegExp(pattern.match).test(sample))?.name;
+  return patterns.find(
+    (pattern) => pattern.match && new RegExp(pattern.match).test(sample),
+  )?.name;
 }
 
-strictEqual(firstMatch('comments', '# comment'), 'comment.line.number-sign.bxl');
+strictEqual(
+  firstMatch('comments', '# comment'),
+  'comment.line.number-sign.bxl',
+);
 strictEqual(firstMatch('comments', '#3'), undefined);
 strictEqual(firstMatch('variables', '$root'), 'variable.other.dollar.bxl');
 strictEqual(firstMatch('formats', '@json'), 'support.function.format.bxl');
-strictEqual(firstMatch('excel-functions', 'ROUND('), 'support.function.excel.bxl');
-strictEqual(firstMatch('validation-functions', 'isEmail('), 'support.function.validation.bxl');
+strictEqual(
+  firstMatch('excel-functions', 'ROUND('),
+  'support.function.excel.bxl',
+);
+strictEqual(
+  firstMatch('validation-functions', 'isEmail('),
+  'support.function.validation.bxl',
+);
 strictEqual(firstMatch('jq-functions', 'map('), 'support.function.jq.bxl');
 strictEqual(firstMatch('selectors', 'row 4'), 'keyword.other.selector-row.bxl');
-strictEqual(firstMatch('selectors', '#3'), 'constant.numeric.zero-based-index.bxl');
-strictEqual(firstMatch('selectors', '#-2'), 'constant.numeric.zero-based-index.bxl');
-strictEqual(firstMatch('selectors', '#last'), 'keyword.other.selector-hash.bxl');
-strictEqual(firstMatch('selectors', '#last-3'), 'keyword.other.selector-hash.bxl');
+strictEqual(
+  firstMatch('selectors', '#3'),
+  'constant.numeric.zero-based-index.bxl',
+);
+strictEqual(
+  firstMatch('selectors', '#-2'),
+  'constant.numeric.zero-based-index.bxl',
+);
+strictEqual(
+  firstMatch('selectors', '#last'),
+  'keyword.other.selector-hash.bxl',
+);
+strictEqual(
+  firstMatch('selectors', '#last-3'),
+  'keyword.other.selector-hash.bxl',
+);
 strictEqual(firstMatch('numbers', '89.04'), 'constant.numeric.bxl');
 strictEqual(firstMatch('keywords', 'IN'), 'keyword.operator.predicate.bxl');
 strictEqual(firstMatch('keywords', 'LIKE'), 'keyword.operator.predicate.bxl');
-strictEqual(firstMatch('keywords', 'BETWEEN'), 'keyword.operator.predicate.bxl');
+strictEqual(
+  firstMatch('keywords', 'BETWEEN'),
+  'keyword.operator.predicate.bxl',
+);
 strictEqual(firstMatch('jq-functions', 'overlaps('), 'support.function.jq.bxl');
 
 console.log('BXL syntax highlighting grammar: validation passed');

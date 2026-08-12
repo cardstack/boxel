@@ -7,7 +7,7 @@ import {
   type BxlAuthorizationDocument,
   type BxlAuthorizationSnapshot,
   type RelationshipTuple,
-} from '../../src/index.js';
+} from '../../src/index.ts';
 
 const model: AuthorizationGraphModel = {
   schema: 'bxl-authorization-ir/1',
@@ -32,7 +32,11 @@ const model: AuthorizationGraphModel = {
 const tuples: RelationshipTuple[] = [
   // Reviewer A belongs to a security team, that team belongs to Change A's
   // review group, and the group userset holds the change-scoped relation.
-  { subject: 'user:reviewer-a', relation: 'member', object: 'group:product-security' },
+  {
+    subject: 'user:reviewer-a',
+    relation: 'member',
+    object: 'group:product-security',
+  },
   {
     subject: 'group:product-security#member',
     relation: 'member',
@@ -44,7 +48,11 @@ const tuples: RelationshipTuple[] = [
     object: 'change_request:change-a',
   },
 
-  { subject: 'user:reviewer-b', relation: 'member', object: 'group:change-b-reviewers' },
+  {
+    subject: 'user:reviewer-b',
+    relation: 'member',
+    object: 'group:change-b-reviewers',
+  },
   {
     subject: 'group:change-b-reviewers#member',
     relation: 'reviewer',
@@ -52,8 +60,16 @@ const tuples: RelationshipTuple[] = [
   },
 
   // A deliberately cyclic userset proves visited-userset pruning terminates.
-  { subject: 'group:cycle-b#member', relation: 'member', object: 'group:cycle-a' },
-  { subject: 'group:cycle-a#member', relation: 'member', object: 'group:cycle-b' },
+  {
+    subject: 'group:cycle-b#member',
+    relation: 'member',
+    object: 'group:cycle-a',
+  },
+  {
+    subject: 'group:cycle-a#member',
+    relation: 'member',
+    object: 'group:cycle-b',
+  },
   {
     subject: 'group:cycle-a#member',
     relation: 'reviewer',
@@ -62,7 +78,6 @@ const tuples: RelationshipTuple[] = [
 ];
 
 const prepared = prepareAuthorizationGraphSafe(model, tuples);
-strictEqual(prepared.ok, true);
 if (!prepared.ok) throw new Error(prepared.error.message);
 
 const check = (subject: string, object: string) =>
@@ -74,7 +89,6 @@ const check = (subject: string, object: string) =>
   });
 
 const reviewerAChangeA = check('user:reviewer-a', 'change_request:change-a');
-strictEqual(reviewerAChangeA.ok, true);
 if (!reviewerAChangeA.ok) throw new Error(reviewerAChangeA.error.message);
 strictEqual(reviewerAChangeA.value.allowed, true);
 strictEqual(reviewerAChangeA.value.metrics.maxDepth, 3);
@@ -101,7 +115,6 @@ strictEqual(reviewerBChangeB.ok, true);
 if (reviewerBChangeB.ok) strictEqual(reviewerBChangeB.value.allowed, true);
 
 const cyclic = check('user:nobody', 'change_request:cycle-change');
-strictEqual(cyclic.ok, true);
 if (!cyclic.ok) throw new Error(cyclic.error.message);
 strictEqual(cyclic.value.allowed, false);
 strictEqual(
@@ -170,7 +183,6 @@ strictEqual(
   'the BXL authorization names the relationship without embedding traversal syntax',
 );
 const preparedBxl = prepareBxlAuthorizationSafe(bxlDocument, bxlSnapshot);
-strictEqual(preparedBxl.ok, true);
 if (!preparedBxl.ok) throw new Error(preparedBxl.error.message);
 const bxlDecision = preparedBxl.value.checkCapability({
   party: '../Person/reviewer-a',
@@ -178,7 +190,6 @@ const bxlDecision = preparedBxl.value.checkCapability({
   resource: '../ChangeRequest/change-a',
   trace: true,
 });
-strictEqual(bxlDecision.ok, true);
 if (!bxlDecision.ok) throw new Error(bxlDecision.error.message);
 strictEqual(bxlDecision.value.allowed, true);
 strictEqual(

@@ -1,4 +1,4 @@
-import { parseBuiltinJqFilters } from './lib/parseBuiltinJqFilters.js';
+import { parseBuiltinJqFilters } from './lib/parseBuiltinJqFilters.ts';
 
 // https://github.com/stedolan/jq/blob/master/src/builtin.jq
 export const builtinJqFilters = parseBuiltinJqFilters(`

@@ -7,4 +7,4 @@ export {
   type FormulaBundleStep,
   type FormulaBundleStepResult,
   type FormulaBundleValue,
-} from './formula-bundles.js';
+} from './formula-bundles.ts';

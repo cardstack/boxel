@@ -1,5 +1,5 @@
 import { deepStrictEqual } from 'node:assert';
-import { evaluateBxl, runNativeJq } from '../../src/index.js';
+import { evaluateBxl, runNativeJq } from '../../src/index.ts';
 
 const input = {
   total: 89.04,

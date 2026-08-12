@@ -96,9 +96,15 @@ function countFixture(source: string): OpenFgaFixtureCounts {
   ) as unknown as OpenFgaFixtureCounts;
 }
 
-function assertEqual(actual: unknown, expected: unknown, message: string): void {
+function assertEqual(
+  actual: unknown,
+  expected: unknown,
+  message: string,
+): void {
   if (actual !== expected) {
-    throw new Error(`${message}: expected ${String(expected)}, got ${String(actual)}`);
+    throw new Error(
+      `${message}: expected ${String(expected)}, got ${String(actual)}`,
+    );
   }
 }
 
@@ -109,11 +115,16 @@ export function verifyOpenFgaFixtureInventory(): VerifiedOpenFgaFixtureInventory
   ) as FixtureManifest;
 
   assertEqual(manifest.schemaVersion, 1, 'fixture manifest schema version');
-  assertEqual(manifest.source.commit, OPENFGA_FIXTURE_COMMIT, 'fixture source commit');
+  assertEqual(
+    manifest.source.commit,
+    OPENFGA_FIXTURE_COMMIT,
+    'fixture source commit',
+  );
   assertEqual(manifest.files.length, 2, 'fixture file count');
 
-  const totals = Object.fromEntries(countKeys.map((key) => [key, 0])) as
-    OpenFgaFixtureCounts;
+  const totals = Object.fromEntries(
+    countKeys.map((key) => [key, 0]),
+  ) as OpenFgaFixtureCounts;
 
   for (const file of manifest.files) {
     const contents = readFileSync(join(root, file.path));
@@ -134,7 +145,11 @@ export function verifyOpenFgaFixtureInventory(): VerifiedOpenFgaFixtureInventory
   for (const key of countKeys) {
     assertEqual(totals[key], manifest.totals[key], `fixture total ${key}`);
   }
-  assertEqual(assertions, manifest.totals.assertions, 'fixture total assertions');
+  assertEqual(
+    assertions,
+    manifest.totals.assertions,
+    'fixture total assertions',
+  );
 
   return {
     root,

@@ -1,5 +1,5 @@
-import type { BuiltinLibrary } from '../../jqtools/evaluate/filters/registry.js';
-import { formulaStatisticalNativeFilters } from '../bridge/formula-statistical-native.js';
+import type { BuiltinLibrary } from '../../jqtools/evaluate/filters/registry.ts';
+import { formulaStatisticalNativeFilters } from '../bridge/formula-statistical-native.ts';
 
 export const formulaStatisticalLibrary: BuiltinLibrary = {
   jq: {},

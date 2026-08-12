@@ -4,26 +4,26 @@ export {
   planBxlMutation,
   prepareBxlMutation,
   printBxlMutationValueExpression,
-} from './planner.js';
+} from './planner.ts';
 
 export {
   prepareBxlMutationOperations,
   solidifyBxlMutationOperations,
-} from './operations.js';
+} from './operations.ts';
 
 export {
   BxlMutationStatementStream,
   createBxlMutationStatementStream,
   frameBxlMutationStatements,
-} from './syntax.js';
-export type { BxlMutationStatementStreamOptions } from './syntax.js';
+} from './syntax.ts';
+export type { BxlMutationStatementStreamOptions } from './syntax.ts';
 
 export {
   applyBxlMutationPlanToCard,
   mutationSchemaForCard,
   snapshotBxlCard,
   updateViaBxl,
-} from './boxel-adapter.js';
+} from './boxel-adapter.ts';
 export type {
   BxlBoxelAdapterOptions,
   BxlBoxelCardStore,
@@ -34,14 +34,14 @@ export type {
   BxlUpdateViaFunction,
   BxlUpdateViaMetadata,
   BxlUpdateViaOptions,
-} from './boxel-adapter.js';
+} from './boxel-adapter.ts';
 
 export {
   applyBxlMutationPlanToCardSource,
   mutateBxlCardSource,
   mutationSchemaForCardSource,
   snapshotBxlCardSource,
-} from './boxel-source-adapter.js';
+} from './boxel-source-adapter.ts';
 export type {
   BxlBoxelSourceDefinition,
   BxlBoxelSourceDefinitionLookup,
@@ -56,11 +56,9 @@ export type {
   BxlCardSourceResource,
   BxlCardSourceSchemaOptions,
   BxlMutateCardSourceOptions,
-} from './boxel-source-adapter.js';
+} from './boxel-source-adapter.ts';
 
-export {
-  BxlMutationError,
-} from './types.js';
+export { BxlMutationError } from './types.ts';
 
 export type {
   BxlMutationErrorPhase,
@@ -78,4 +76,4 @@ export type {
   BxlMutationStatementPlan,
   BxlStructuredMutationOperation,
   PreparedBxlMutation,
-} from './types.js';
+} from './types.ts';

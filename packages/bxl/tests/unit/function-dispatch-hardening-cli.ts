@@ -5,7 +5,7 @@ import {
   lintBxlExpression,
   solidifyBxlExpression,
   type ReadableSchema,
-} from '../../src/index.js';
+} from '../../src/index.ts';
 
 const schema: ReadableSchema = {
   fields: [

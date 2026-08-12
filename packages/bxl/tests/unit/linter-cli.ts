@@ -1,6 +1,6 @@
 import { deepStrictEqual, strictEqual } from 'node:assert';
-import { lintBxlExpression } from '../../src/index.js';
-import { bxlExampleSchema } from '../../examples/bxl-150-examples.js';
+import { lintBxlExpression } from '../../src/index.ts';
+import { bxlExampleSchema } from '../../examples/bxl-150-examples.ts';
 
 function issueCodes(source: string): string[] {
   return lintBxlExpression(source, { schema: bxlExampleSchema }).issues.map(
@@ -28,9 +28,7 @@ const missingQuotes = lintBxlExpression('Invoice Number', {
   schema: bxlExampleSchema,
 });
 strictEqual(missingQuotes.ok, true);
-deepStrictEqual(issueCodes('Invoice Number').sort(), [
-  'unquoted-label-phrase',
-]);
+deepStrictEqual(issueCodes('Invoice Number').sort(), ['unquoted-label-phrase']);
 
 const autoRootAfterPipe = lintBxlExpression(
   '"Line Item"[all]."Line Total" | add == Subtotal',
@@ -38,7 +36,9 @@ const autoRootAfterPipe = lintBxlExpression(
 );
 strictEqual(autoRootAfterPipe.ok, true);
 strictEqual(
-  autoRootAfterPipe.issues.some((issue) => issue.code === 'root-label-after-pipe'),
+  autoRootAfterPipe.issues.some(
+    (issue) => issue.code === 'root-label-after-pipe',
+  ),
   false,
 );
 
@@ -57,8 +57,14 @@ strictEqual(
   true,
 );
 // `=` at top level is now canonical BXL — no info code. `==` nudges.
-strictEqual(issueCodes('Subtotal = 80').includes('prefer-excel-equality'), false);
-strictEqual(issueCodes('Subtotal == 80').includes('prefer-excel-equality'), true);
+strictEqual(
+  issueCodes('Subtotal = 80').includes('prefer-excel-equality'),
+  false,
+);
+strictEqual(
+  issueCodes('Subtotal == 80').includes('prefer-excel-equality'),
+  true,
+);
 strictEqual(
   issueCodes('"Line Item"[SKU IN ["COPY-03"]].SKU').includes(
     'in-predicate-needs-helper',
@@ -70,7 +76,9 @@ const removedPseudo = lintBxlExpression('"Line Item":odd.SKU', {
 });
 strictEqual(removedPseudo.ok, false);
 strictEqual(
-  removedPseudo.issues.some((issue) => issue.code === 'legacy-pseudo-class-removed'),
+  removedPseudo.issues.some(
+    (issue) => issue.code === 'legacy-pseudo-class-removed',
+  ),
   true,
 );
 
@@ -78,44 +86,62 @@ const badRow = lintBxlExpression('"Line Item"[row 0].SKU', {
   schema: bxlExampleSchema,
 });
 strictEqual(badRow.ok, false);
-strictEqual(badRow.issues.some((issue) => issue.code === 'human-row-zero'), true);
+strictEqual(
+  badRow.issues.some((issue) => issue.code === 'human-row-zero'),
+  true,
+);
 
 // ─────────────────────────────────────────────────────────────────────
 // excel-name-uppercase-preferred — fires on lowercase Excel-name call sites
 // ─────────────────────────────────────────────────────────────────────
 
 // Lowercase Excel call site → info-level nudge.
-const lowerAtan2 = lintBxlExpression('atan2(.x, .y)', { schema: bxlExampleSchema });
+const lowerAtan2 = lintBxlExpression('atan2(.x, .y)', {
+  schema: bxlExampleSchema,
+});
 strictEqual(lowerAtan2.ok, true, 'lint should be info, not error');
 strictEqual(
   lowerAtan2.issues.some(
     (issue) =>
-      issue.code === 'excel-name-uppercase-preferred' && issue.severity === 'info',
+      issue.code === 'excel-name-uppercase-preferred' &&
+      issue.severity === 'info',
   ),
   true,
   'lowercase atan2(...) should emit excel-name-uppercase-preferred',
 );
 
 // UPPERCASE call site → no lint.
-const upperAtan2 = lintBxlExpression('ATAN2(.x, .y)', { schema: bxlExampleSchema });
+const upperAtan2 = lintBxlExpression('ATAN2(.x, .y)', {
+  schema: bxlExampleSchema,
+});
 strictEqual(
-  upperAtan2.issues.some((issue) => issue.code === 'excel-name-uppercase-preferred'),
+  upperAtan2.issues.some(
+    (issue) => issue.code === 'excel-name-uppercase-preferred',
+  ),
   false,
   'ATAN2(...) is canonical — no lint',
 );
 
 // Mixed case → also lints (only all-UPPERCASE is exempt).
-const mixedAtan2 = lintBxlExpression('Atan2(.x, .y)', { schema: bxlExampleSchema });
+const mixedAtan2 = lintBxlExpression('Atan2(.x, .y)', {
+  schema: bxlExampleSchema,
+});
 strictEqual(
-  mixedAtan2.issues.some((issue) => issue.code === 'excel-name-uppercase-preferred'),
+  mixedAtan2.issues.some(
+    (issue) => issue.code === 'excel-name-uppercase-preferred',
+  ),
   true,
   'Atan2(...) (mixed case) should still emit the nudge',
 );
 
 // Pipe form `x | sqrt` → no lint (no `(` after the name).
-const pipeSqrt = lintBxlExpression('.value | sqrt', { schema: bxlExampleSchema });
+const pipeSqrt = lintBxlExpression('.value | sqrt', {
+  schema: bxlExampleSchema,
+});
 strictEqual(
-  pipeSqrt.issues.some((issue) => issue.code === 'excel-name-uppercase-preferred'),
+  pipeSqrt.issues.some(
+    (issue) => issue.code === 'excel-name-uppercase-preferred',
+  ),
   false,
   'pipe form `x | sqrt` is canonical jq idiom — no lint',
 );

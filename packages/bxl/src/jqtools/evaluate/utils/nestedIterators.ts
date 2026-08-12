@@ -1,6 +1,6 @@
 export function* nestedIterators<Outer, Inner>(
   outer: IterableIterator<Outer>,
-  inner: IterableIterator<Inner>
+  inner: IterableIterator<Inner>,
 ): IterableIterator<[Outer, IterableIterator<Inner>]> {
   let first = true;
   const memorizedInnerItems: Inner[] = [];
@@ -21,7 +21,7 @@ export function* nestedIterators<Outer, Inner>(
 
 export function* combineIterators<Outer, Inner>(
   outer: IterableIterator<Outer>,
-  inner: IterableIterator<Inner>
+  inner: IterableIterator<Inner>,
 ): IterableIterator<[Outer, Inner]> {
   for (const [outerItem, innerIterator] of nestedIterators(outer, inner)) {
     for (const innerItem of innerIterator) {

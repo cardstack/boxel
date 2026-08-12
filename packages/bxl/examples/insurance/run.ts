@@ -8,16 +8,18 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { expression } from '../../src/index.js';
-import { insuranceExpressions } from './expressions.js';
+import { expression } from '../../src/index.ts';
+import { insuranceExpressions } from './expressions.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const policy: unknown = JSON.parse(
   readFileSync(join(here, 'policy.json'), 'utf8'),
 );
 
-console.log(`Policy: ${(policy as { policyId: string }).policyId} ` +
-            `(${(policy as { productLine: string }).productLine})`);
+console.log(
+  `Policy: ${(policy as { policyId: string }).policyId} ` +
+    `(${(policy as { productLine: string }).productLine})`,
+);
 console.log('');
 
 let pass = 0;

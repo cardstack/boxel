@@ -1,24 +1,24 @@
-import { AuthorizationError, type AuthorizationSafeResult } from './errors.js';
+import { AuthorizationError, type AuthorizationSafeResult } from './errors.ts';
 import {
   parseObjectReference,
   parseSubjectReference,
   parseSubjectTypeConstraint,
   type EntityReference,
-} from './identifiers.js';
+} from './identifiers.ts';
 import type {
   AuthorizationRelationExpression,
   CompiledAuthorizationGraph,
-} from './ir.js';
-import type { RelationshipTuple } from './graph-model.js';
+} from './ir.ts';
+import type { RelationshipTuple } from './graph-model.ts';
 import {
   checkAuthorization,
   type AuthorizationCheckMetrics,
   type AuthorizationRuntimeLimits,
-} from './resolver.js';
+} from './resolver.ts';
 import {
   buildAuthorizationTupleIndex,
   type AuthorizationTupleIndex,
-} from './tuple-index.js';
+} from './tuple-index.ts';
 
 interface EnumerationRequest {
   context?: Readonly<Record<string, unknown>>;
@@ -83,9 +83,13 @@ function assertKnownSubject(
   const subject = parseSubjectReference(value, 'request.subject');
   const type = model.types.get(subject.type);
   if (!type) {
-    throw new AuthorizationError('unknown-type', `Unknown subject type ${subject.type}.`, {
-      path: 'request.subject',
-    });
+    throw new AuthorizationError(
+      'unknown-type',
+      `Unknown subject type ${subject.type}.`,
+      {
+        path: 'request.subject',
+      },
+    );
   }
   if (subject.relation !== undefined && !type.relations.has(subject.relation)) {
     throw new AuthorizationError(
@@ -101,7 +105,7 @@ function tuplesFor(
   contextual: AuthorizationTupleIndex | undefined,
   object: string,
   relation: string,
-): readonly import('./tuple-index.js').IndexedRelationshipTuple[] {
+): readonly import('./tuple-index.ts').IndexedRelationshipTuple[] {
   const base = stored.forObjectRelation(object, relation);
   const extra = contextual?.forObjectRelation(object, relation) ?? [];
   return extra.length === 0 ? base : [...base, ...extra];
@@ -109,7 +113,7 @@ function tuplesFor(
 
 function tupleConditionAllows(
   model: CompiledAuthorizationGraph,
-  tuple: import('./tuple-index.js').IndexedRelationshipTuple,
+  tuple: import('./tuple-index.ts').IndexedRelationshipTuple,
   context: Readonly<Record<string, unknown>>,
 ): boolean {
   if (!tuple.condition) return true;
@@ -191,7 +195,9 @@ function wildcardTypes(subjects: ExpandedSubjects): Set<string> {
   );
 }
 
-function unionSubjects(children: readonly ExpandedSubjects[]): ExpandedSubjects {
+function unionSubjects(
+  children: readonly ExpandedSubjects[],
+): ExpandedSubjects {
   const result = emptySubjects();
   for (const child of children) {
     for (const subject of child.values) result.values.add(subject);
@@ -286,7 +292,10 @@ function subtractSubjects(
   const result: ExpandedSubjects = {
     values: new Set(),
     wildcardExclusions: new Map(
-      [...base.wildcardExclusions].map(([type, values]) => [type, new Set(values)]),
+      [...base.wildcardExclusions].map(([type, values]) => [
+        type,
+        new Set(values),
+      ]),
     ),
   };
   for (const value of base.values) {
@@ -294,7 +303,8 @@ function subtractSubjects(
     if (subject.wildcard) {
       if (subtract.values.has(value)) continue;
       result.values.add(value);
-      const excluded = result.wildcardExclusions.get(subject.type) ?? new Set<string>();
+      const excluded =
+        result.wildcardExclusions.get(subject.type) ?? new Set<string>();
       for (const candidate of subtract.values) {
         const other = parseSubjectReference(candidate);
         if (
@@ -305,7 +315,8 @@ function subtractSubjects(
           excluded.add(candidate);
         }
       }
-      if (excluded.size > 0) result.wildcardExclusions.set(subject.type, excluded);
+      if (excluded.size > 0)
+        result.wildcardExclusions.set(subject.type, excluded);
       continue;
     }
     const removed = [...subtract.values].some((candidate) => {
@@ -315,9 +326,7 @@ function subtractSubjects(
         (other.wildcard &&
           subject.relation === undefined &&
           other.type === subject.type &&
-          !subtract.wildcardExclusions
-            .get(other.type)
-            ?.has(subject.canonical))
+          !subtract.wildcardExclusions.get(other.type)?.has(subject.canonical))
       );
     });
     if (!removed) result.values.add(value);
@@ -382,8 +391,15 @@ function expandConcreteExpression(
         const target = parseObjectReference(
           `${tuple.parsedSubject.type}:${tuple.parsedSubject.id}`,
         );
-        if (!state.model.types.get(target.type)?.relations.has(expression.computed)) continue;
-        children.push(expandConcreteRelation(target, expression.computed, state));
+        if (
+          !state.model.types
+            .get(target.type)
+            ?.relations.has(expression.computed)
+        )
+          continue;
+        children.push(
+          expandConcreteRelation(target, expression.computed, state),
+        );
       }
       return unionSubjects(children);
     }
@@ -433,7 +449,9 @@ function expandConcreteRelation(
   }
   state.metrics.maxDepth = Math.max(state.metrics.maxDepth, state.depth);
   if (state.visited.has(key)) return emptySubjects();
-  const compiledRelation = state.model.types.get(object.type)?.relations.get(relation);
+  const compiledRelation = state.model.types
+    .get(object.type)
+    ?.relations.get(relation);
   if (!compiledRelation) return emptySubjects();
   const previousVisited = state.visited;
   const previousDepth = state.depth;
@@ -476,7 +494,9 @@ function expandUsersetExpression(
           continue;
         }
         expandUsersetRelation(
-          parseObjectReference(`${tuple.parsedSubject.type}:${tuple.parsedSubject.id}`),
+          parseObjectReference(
+            `${tuple.parsedSubject.type}:${tuple.parsedSubject.id}`,
+          ),
           tuple.parsedSubject.relation,
           state,
           output,
@@ -504,7 +524,12 @@ function expandUsersetExpression(
         const target = parseObjectReference(
           `${tuple.parsedSubject.type}:${tuple.parsedSubject.id}`,
         );
-        if (!state.model.types.get(target.type)?.relations.has(expression.computed)) continue;
+        if (
+          !state.model.types
+            .get(target.type)
+            ?.relations.has(expression.computed)
+        )
+          continue;
         expandUsersetRelation(target, expression.computed, state, output);
       }
       return;
@@ -545,7 +570,9 @@ function expandUsersetRelation(
   }
   state.metrics.maxDepth = Math.max(state.metrics.maxDepth, state.depth);
   if (state.visited.has(key)) return;
-  const compiledRelation = state.model.types.get(object.type)?.relations.get(relation);
+  const compiledRelation = state.model.types
+    .get(object.type)
+    ?.relations.get(relation);
   if (!compiledRelation) return;
   const previousVisited = state.visited;
   const previousDepth = state.depth;
@@ -574,9 +601,13 @@ export function listAuthorizationObjects(
     assertKnownSubject(model, request.subject);
     const objectType = model.types.get(request.type);
     if (!objectType) {
-      throw new AuthorizationError('unknown-type', `Unknown object type ${request.type}.`, {
-        path: 'request.type',
-      });
+      throw new AuthorizationError(
+        'unknown-type',
+        `Unknown object type ${request.type}.`,
+        {
+          path: 'request.type',
+        },
+      );
     }
     if (!objectType.relations.has(request.relation)) {
       throw new AuthorizationError(
@@ -658,9 +689,13 @@ export function listAuthorizationUsers(
     const object = parseObjectReference(request.object, 'request.object');
     const objectType = model.types.get(object.type);
     if (!objectType) {
-      throw new AuthorizationError('unknown-type', `Unknown object type ${object.type}.`, {
-        path: 'request.object',
-      });
+      throw new AuthorizationError(
+        'unknown-type',
+        `Unknown object type ${object.type}.`,
+        {
+          path: 'request.object',
+        },
+      );
     }
     if (!objectType.relations.has(request.relation)) {
       throw new AuthorizationError(
@@ -670,14 +705,24 @@ export function listAuthorizationUsers(
       );
     }
     const filters = request.filters.map((filter, index) => {
-      const parsed = parseSubjectTypeConstraint(filter, `request.filters[${index}]`);
+      const parsed = parseSubjectTypeConstraint(
+        filter,
+        `request.filters[${index}]`,
+      );
       const type = model.types.get(parsed.type);
       if (!type) {
-        throw new AuthorizationError('unknown-type', `Unknown filter type ${parsed.type}.`, {
-          path: `request.filters[${index}]`,
-        });
+        throw new AuthorizationError(
+          'unknown-type',
+          `Unknown filter type ${parsed.type}.`,
+          {
+            path: `request.filters[${index}]`,
+          },
+        );
       }
-      if (parsed.relation !== undefined && !type.relations.has(parsed.relation)) {
+      if (
+        parsed.relation !== undefined &&
+        !type.relations.has(parsed.relation)
+      ) {
         throw new AuthorizationError(
           'unknown-relation',
           `Unknown filter userset ${parsed.type}#${parsed.relation}.`,
@@ -753,7 +798,8 @@ export function listAuthorizationUsers(
       if (
         filters.some(
           (filter) =>
-            filter.type === subject.type && filter.relation === subject.relation,
+            filter.type === subject.type &&
+            filter.relation === subject.relation,
         )
       ) {
         allowed.add(userset);

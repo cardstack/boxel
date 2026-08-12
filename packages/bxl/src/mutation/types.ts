@@ -2,9 +2,9 @@ import type {
   ReadableField,
   ReadableSchema,
   ReadableSyntaxWarning,
-} from '../bxl/compiler/readable-syntax.js';
-import type { BuiltinLibraryName } from '../bxl/registry/index.js';
-import type { NativeRuntimeLimits } from '../jqtools/evaluate/runtimeState.js';
+} from '../bxl/compiler/readable-syntax.ts';
+import type { BuiltinLibraryName } from '../bxl/registry/index.ts';
+import type { NativeRuntimeLimits } from '../jqtools/evaluate/runtimeState.ts';
 
 export type BxlMutationJson =
   | null
@@ -214,14 +214,23 @@ export type BxlMutationErrorPhase =
 
 export class BxlMutationError extends Error {
   readonly name = 'BxlMutationError';
+  readonly phase: BxlMutationErrorPhase;
+  readonly code: string;
+  readonly statement: number;
 
   constructor(
-    public readonly phase: BxlMutationErrorPhase,
-    public readonly code: string,
-    public readonly statement: number,
+    phase: BxlMutationErrorPhase,
+    code: string,
+    statement: number,
     message: string,
     options: { cause?: unknown } = {},
   ) {
-    super(message, options.cause === undefined ? undefined : { cause: options.cause });
+    super(
+      message,
+      options.cause === undefined ? undefined : { cause: options.cause },
+    );
+    this.phase = phase;
+    this.code = code;
+    this.statement = statement;
   }
 }

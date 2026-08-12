@@ -1,10 +1,6 @@
 import { ok, strictEqual, throws } from 'node:assert';
-import {
-  bxl,
-  evaluateBxl,
-  prepareBxlSafe,
-} from '../../src/index.js';
-import { evaluateBxlBare } from '../../src/runtime-bare.js';
+import { bxl, evaluateBxl, prepareBxlSafe } from '../../src/index.ts';
+import { evaluateBxlBare } from '../../src/runtime-bare.ts';
 
 const preparedDef = prepareBxlSafe('def twice(x): x * 2; twice(3)');
 ok(preparedDef.ok, 'the unrestricted prepare/evaluate surface accepts jq def');

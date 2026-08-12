@@ -1,5 +1,5 @@
-import { AuthorizationError } from './errors.js';
-import type { SubjectTypeReference } from './graph-model.js';
+import { AuthorizationError } from './errors.ts';
+import type { SubjectTypeReference } from './graph-model.ts';
 
 const TYPE_OR_RELATION = /^[A-Za-z0-9_][A-Za-z0-9_-]*$/;
 
@@ -47,7 +47,10 @@ function splitEntity(value: string, path: string): [string, string] {
   return [type, id];
 }
 
-export function parseObjectReference(value: string, path = 'object'): EntityReference {
+export function parseObjectReference(
+  value: string,
+  path = 'object',
+): EntityReference {
   if (value.includes('#')) {
     throw new AuthorizationError(
       'invalid-identifier',
@@ -59,7 +62,10 @@ export function parseObjectReference(value: string, path = 'object'): EntityRefe
   return { type, id, canonical: `${type}:${id}` };
 }
 
-export function parseSubjectReference(value: string, path = 'subject'): SubjectReference {
+export function parseSubjectReference(
+  value: string,
+  path = 'subject',
+): SubjectReference {
   const hash = value.lastIndexOf('#');
   const entity = hash === -1 ? value : value.slice(0, hash);
   const relation = hash === -1 ? undefined : value.slice(hash + 1);
@@ -128,7 +134,8 @@ export function parseSubjectTypeConstraint(
   const type = parts[0]!;
   const relation = parts[1];
   assertTypeOrRelationName(type, `${path}.type`);
-  if (relation !== undefined) assertTypeOrRelationName(relation, `${path}.relation`);
+  if (relation !== undefined)
+    assertTypeOrRelationName(relation, `${path}.relation`);
   return {
     type,
     ...(relation === undefined ? {} : { relation }),

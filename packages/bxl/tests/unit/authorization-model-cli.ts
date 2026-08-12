@@ -2,7 +2,7 @@ import { deepStrictEqual, strictEqual } from 'node:assert';
 import {
   prepareAuthorizationGraphSafe,
   type AuthorizationGraphModel,
-} from '../../src/authorization/index.js';
+} from '../../src/authorization/index.ts';
 
 const model: AuthorizationGraphModel = {
   schema: 'bxl-authorization-ir/1',
@@ -28,8 +28,7 @@ const model: AuthorizationGraphModel = {
       permissions: {
         can_invoke:
           'except(userset("owner") or userset("actors"); userset("blocked"))',
-        can_use_team_capability:
-          'userset_from("team"; "operator")',
+        can_use_team_capability: 'userset_from("team"; "operator")',
       },
     },
   },
@@ -48,13 +47,15 @@ const prepared = prepareAuthorizationGraphSafe(model, [
   },
 ]);
 
-strictEqual(prepared.ok, true);
 if (!prepared.ok) throw new Error(prepared.error.message);
 
 const workflow = prepared.value.model.types.get('workflow')!;
 strictEqual(workflow.relations.get('owner')?.expression.kind, 'direct');
 strictEqual(workflow.relations.get('actors')?.expression.kind, 'union');
-strictEqual(workflow.relations.get('can_invoke')?.expression.kind, 'difference');
+strictEqual(
+  workflow.relations.get('can_invoke')?.expression.kind,
+  'difference',
+);
 deepStrictEqual(
   prepared.value.tupleIndex
     .forObjectRelation('workflow:6', 'owner')
@@ -85,10 +86,10 @@ if (mixedPredicate.ok) {
     .relations.get('active_viewer')!.expression;
   strictEqual(expression.kind, 'intersection');
   if (expression.kind === 'intersection') {
-    deepStrictEqual(expression.children.map((child) => child.kind), [
-      'computed',
-      'predicate',
-    ]);
+    deepStrictEqual(
+      expression.children.map((child) => child.kind),
+      ['computed', 'predicate'],
+    );
   }
 
   const active = mixedPredicate.value.check({
@@ -151,7 +152,8 @@ const dynamicUserset = prepareAuthorizationGraphSafe({
   },
 });
 strictEqual(dynamicUserset.ok, false);
-if (!dynamicUserset.ok) strictEqual(dynamicUserset.error.kind, 'invalid-expression');
+if (!dynamicUserset.ok)
+  strictEqual(dynamicUserset.error.kind, 'invalid-expression');
 
 const unknownRelation = prepareAuthorizationGraphSafe({
   schema: 'bxl-authorization-ir/1',
@@ -163,7 +165,8 @@ const unknownRelation = prepareAuthorizationGraphSafe({
   },
 });
 strictEqual(unknownRelation.ok, false);
-if (!unknownRelation.ok) strictEqual(unknownRelation.error.kind, 'unknown-relation');
+if (!unknownRelation.ok)
+  strictEqual(unknownRelation.error.kind, 'unknown-relation');
 
 const invalidTuple = prepareAuthorizationGraphSafe(model, [
   {
@@ -175,4 +178,6 @@ const invalidTuple = prepareAuthorizationGraphSafe(model, [
 strictEqual(invalidTuple.ok, false);
 if (!invalidTuple.ok) strictEqual(invalidTuple.error.kind, 'invalid-tuple');
 
-console.log('Authorization model: BXL graph AST lowering, validation, and tuple indexes passed');
+console.log(
+  'Authorization model: BXL graph AST lowering, validation, and tuple indexes passed',
+);

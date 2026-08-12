@@ -1,5 +1,9 @@
-import { flattenExcelArgs, parseExcelNumber, parseExcelString } from './common.js';
-import { EXCEL_ERROR, throwExcelError } from './errors.js';
+import {
+  flattenExcelArgs,
+  parseExcelNumber,
+  parseExcelString,
+} from './common.ts';
+import { EXCEL_ERROR, throwExcelError } from './errors.ts';
 
 const MAX_BITWISE = 281474976710655n;
 const DEC2BIN_MIN = -512;
@@ -114,11 +118,12 @@ function parseComplex(value: unknown): ComplexNumber {
 
   const realPart = Number(body.slice(0, splitIndex));
   const imaginaryPart = body.slice(splitIndex);
-  const imaginary = imaginaryPart === '+'
-    ? 1
-    : imaginaryPart === '-'
-      ? -1
-      : Number(imaginaryPart);
+  const imaginary =
+    imaginaryPart === '+'
+      ? 1
+      : imaginaryPart === '-'
+        ? -1
+        : Number(imaginaryPart);
 
   if (Number.isNaN(realPart) || Number.isNaN(imaginary)) {
     throwExcelError(EXCEL_ERROR.num);
@@ -161,7 +166,9 @@ export function excelBitLShift(numberLike: unknown, shiftLike: unknown) {
     throwExcelError(EXCEL_ERROR.num);
   }
 
-  return Number(shift >= 0 ? number << BigInt(shift) : number >> BigInt(-shift));
+  return Number(
+    shift >= 0 ? number << BigInt(shift) : number >> BigInt(-shift),
+  );
 }
 
 export function excelBitRShift(numberLike: unknown, shiftLike: unknown) {
@@ -172,7 +179,9 @@ export function excelBitRShift(numberLike: unknown, shiftLike: unknown) {
     throwExcelError(EXCEL_ERROR.num);
   }
 
-  return Number(shift >= 0 ? number >> BigInt(shift) : number << BigInt(-shift));
+  return Number(
+    shift >= 0 ? number >> BigInt(shift) : number << BigInt(-shift),
+  );
 }
 
 export function excelBin2Dec(numberLike: unknown) {
@@ -208,7 +217,11 @@ export function excelBin2Oct(numberLike: unknown, placesLike?: unknown) {
 
 export function excelDec2Bin(numberLike: unknown, placesLike?: unknown) {
   const number = parseEngineeringInteger(numberLike);
-  if (!/^-?[0-9]{1,3}$/.test(String(number)) || number < DEC2BIN_MIN || number > DEC2BIN_MAX) {
+  if (
+    !/^-?[0-9]{1,3}$/.test(String(number)) ||
+    number < DEC2BIN_MIN ||
+    number > DEC2BIN_MAX
+  ) {
     throwExcelError(EXCEL_ERROR.num);
   }
 
@@ -221,7 +234,11 @@ export function excelDec2Bin(numberLike: unknown, placesLike?: unknown) {
 
 export function excelDec2Hex(numberLike: unknown, placesLike?: unknown) {
   const number = parseEngineeringInteger(numberLike);
-  if (!/^-?[0-9]{1,12}$/.test(String(number)) || number < DEC2HEX_MIN || number > DEC2HEX_MAX) {
+  if (
+    !/^-?[0-9]{1,12}$/.test(String(number)) ||
+    number < DEC2HEX_MIN ||
+    number > DEC2HEX_MAX
+  ) {
     throwExcelError(EXCEL_ERROR.num);
   }
 
@@ -234,7 +251,11 @@ export function excelDec2Hex(numberLike: unknown, placesLike?: unknown) {
 
 export function excelDec2Oct(numberLike: unknown, placesLike?: unknown) {
   const number = parseEngineeringInteger(numberLike);
-  if (!/^-?[0-9]{1,9}$/.test(String(number)) || number < DEC2OCT_MIN || number > DEC2OCT_MAX) {
+  if (
+    !/^-?[0-9]{1,9}$/.test(String(number)) ||
+    number < DEC2OCT_MIN ||
+    number > DEC2OCT_MAX
+  ) {
     throwExcelError(EXCEL_ERROR.num);
   }
 
@@ -250,7 +271,9 @@ export function excelHex2Bin(numberLike: unknown, placesLike?: unknown) {
   ensureMatches(number, /^[0-9A-Fa-f]{1,10}$/);
 
   const negative = number.length === 10 && number[0]!.toLowerCase() === 'f';
-  const decimal = negative ? parseInt(number, 16) - 1099511627776 : parseInt(number, 16);
+  const decimal = negative
+    ? parseInt(number, 16) - 1099511627776
+    : parseInt(number, 16);
   if (decimal < DEC2BIN_MIN || decimal > DEC2BIN_MAX) {
     throwExcelError(EXCEL_ERROR.num);
   }
@@ -290,7 +313,9 @@ export function excelOct2Bin(numberLike: unknown, placesLike?: unknown) {
   ensureMatches(number, /^[0-7]{1,10}$/);
 
   const negative = number.length === 10 && number.startsWith('7');
-  const decimal = negative ? parseInt(number, 8) - 1073741824 : parseInt(number, 8);
+  const decimal = negative
+    ? parseInt(number, 8) - 1073741824
+    : parseInt(number, 8);
   if (decimal < DEC2BIN_MIN || decimal > DEC2BIN_MAX) {
     throwExcelError(EXCEL_ERROR.num);
   }
@@ -329,7 +354,11 @@ export function excelGestep(numberLike: unknown, stepLike: unknown = 0) {
   return parseExcelNumber(numberLike) >= parseExcelNumber(stepLike) ? 1 : 0;
 }
 
-export function excelBase(numberLike: unknown, radixLike: unknown, minLengthLike = 0) {
+export function excelBase(
+  numberLike: unknown,
+  radixLike: unknown,
+  minLengthLike = 0,
+) {
   const number = parseExcelNumber(numberLike);
   const radix = parseExcelNumber(radixLike);
   const minLength = parseExcelNumber(minLengthLike);
@@ -355,7 +384,11 @@ export function excelDecimal(textLike: unknown, radixLike: unknown) {
   return result;
 }
 
-export function excelComplex(realLike: unknown, imaginaryLike: unknown, unitLike: unknown = 'i') {
+export function excelComplex(
+  realLike: unknown,
+  imaginaryLike: unknown,
+  unitLike: unknown = 'i',
+) {
   const real = parseExcelNumber(realLike);
   const imaginary = parseExcelNumber(imaginaryLike);
   const unitText = unitLike === undefined ? 'i' : parseExcelString(unitLike);
@@ -389,7 +422,11 @@ export function excelImSub(leftLike: unknown, rightLike: unknown) {
   const left = parseComplex(leftLike);
   const right = parseComplex(rightLike);
   const unit = left.unit === 'j' || right.unit === 'j' ? 'j' : 'i';
-  return formatComplex(left.real - right.real, left.imaginary - right.imaginary, unit);
+  return formatComplex(
+    left.real - right.real,
+    left.imaginary - right.imaginary,
+    unit,
+  );
 }
 
 export function excelImSum(valuesLike: unknown) {
@@ -510,7 +547,11 @@ export function excelImLog10(valueLike: unknown) {
   const r = Math.sqrt(z.real ** 2 + z.imaginary ** 2);
   if (r === 0) throwExcelError(EXCEL_ERROR.num);
   const ln10 = Math.log(10);
-  return formatComplex(Math.log(r) / ln10, Math.atan2(z.imaginary, z.real) / ln10, z.unit);
+  return formatComplex(
+    Math.log(r) / ln10,
+    Math.atan2(z.imaginary, z.real) / ln10,
+    z.unit,
+  );
 }
 
 export function excelImLog2(valueLike: unknown) {
@@ -518,7 +559,11 @@ export function excelImLog2(valueLike: unknown) {
   const r = Math.sqrt(z.real ** 2 + z.imaginary ** 2);
   if (r === 0) throwExcelError(EXCEL_ERROR.num);
   const ln2 = Math.log(2);
-  return formatComplex(Math.log(r) / ln2, Math.atan2(z.imaginary, z.real) / ln2, z.unit);
+  return formatComplex(
+    Math.log(r) / ln2,
+    Math.atan2(z.imaginary, z.real) / ln2,
+    z.unit,
+  );
 }
 
 export function excelImDiv(leftLike: unknown, rightLike: unknown) {
@@ -557,7 +602,11 @@ export function excelImPower(valueLike: unknown, powerLike: unknown) {
   const r = Math.sqrt(z.real ** 2 + z.imaginary ** 2);
   const theta = Math.atan2(z.imaginary, z.real);
   const rn = Math.pow(r, n);
-  return formatComplex(rn * Math.cos(n * theta), rn * Math.sin(n * theta), z.unit);
+  return formatComplex(
+    rn * Math.cos(n * theta),
+    rn * Math.sin(n * theta),
+    z.unit,
+  );
 }
 
 export function excelImSqrt(valueLike: unknown) {
@@ -584,11 +633,16 @@ export function excelImArgument(valueLike: unknown) {
 // Horner approximation of erf (Abramowitz and Stegun 7.1.26)
 export function excelErf(lowerLike: unknown, upperLike?: unknown) {
   function erf1(x: number) {
-    const a1 = 0.254829592, a2 = -0.284496736, a3 = 1.421413741;
-    const a4 = -1.453152027, a5 = 1.061405429, p = 0.3275911;
+    const a1 = 0.254829592,
+      a2 = -0.284496736,
+      a3 = 1.421413741;
+    const a4 = -1.453152027,
+      a5 = 1.061405429,
+      p = 0.3275911;
     const sign = x < 0 ? -1 : 1;
     const t = 1 / (1 + p * Math.abs(x));
-    const y = 1 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
+    const y =
+      1 - ((((a5 * t + a4) * t + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
     return sign * y;
   }
   const lower = parseExcelNumber(lowerLike);
@@ -756,18 +810,39 @@ const UNITS: UnitDef[] = [
 
 // SI prefixes: [abbreviation, multiplier]
 const SI_PREFIXES: [string, number][] = [
-  ['Y', 1e24], ['Z', 1e21], ['E', 1e18], ['P', 1e15], ['T', 1e12],
-  ['G', 1e9], ['M', 1e6], ['k', 1e3], ['h', 1e2], ['da', 1e1],
-  ['e', 1e1], ['d', 1e-1], ['c', 1e-2], ['m', 1e-3], ['u', 1e-6],
-  ['n', 1e-9], ['p', 1e-12], ['f', 1e-15], ['a', 1e-18],
-  ['z', 1e-21], ['y', 1e-24],
+  ['Y', 1e24],
+  ['Z', 1e21],
+  ['E', 1e18],
+  ['P', 1e15],
+  ['T', 1e12],
+  ['G', 1e9],
+  ['M', 1e6],
+  ['k', 1e3],
+  ['h', 1e2],
+  ['da', 1e1],
+  ['e', 1e1],
+  ['d', 1e-1],
+  ['c', 1e-2],
+  ['m', 1e-3],
+  ['u', 1e-6],
+  ['n', 1e-9],
+  ['p', 1e-12],
+  ['f', 1e-15],
+  ['a', 1e-18],
+  ['z', 1e-21],
+  ['y', 1e-24],
 ];
 
 // Binary prefixes for information units
 const BINARY_PREFIXES: [string, number][] = [
-  ['Yi', 1208925819614629174706176], ['Zi', 1180591620717411303424],
-  ['Ei', 1152921504606846976], ['Pi', 1125899906842624],
-  ['Ti', 1099511627776], ['Gi', 1073741824], ['Mi', 1048576], ['ki', 1024],
+  ['Yi', 1208925819614629174706176],
+  ['Zi', 1180591620717411303424],
+  ['Ei', 1152921504606846976],
+  ['Pi', 1125899906842624],
+  ['Ti', 1099511627776],
+  ['Gi', 1073741824],
+  ['Mi', 1048576],
+  ['ki', 1024],
 ];
 
 interface ResolvedUnit {
@@ -793,7 +868,10 @@ function resolveUnit(unitStr: string): ResolvedUnit | null {
     for (const [abbr, mult] of BINARY_PREFIXES) {
       if (abbr === bPrefix) {
         for (const def of UNITS) {
-          if (def[2] === 'information' && (def[0] === bBase || (def[1] && def[1].includes(bBase)))) {
+          if (
+            def[2] === 'information' &&
+            (def[0] === bBase || (def[1] && def[1].includes(bBase)))
+          ) {
             return { def, multiplier: mult };
           }
         }
@@ -830,7 +908,11 @@ function resolveUnit(unitStr: string): ResolvedUnit | null {
 }
 
 // Temperature requires special offset handling
-function convertTemperature(value: number, fromSym: string, toSym: string): number {
+function convertTemperature(
+  value: number,
+  fromSym: string,
+  toSym: string,
+): number {
   // Normalize symbols
   const from = fromSym === 'kel' ? 'K' : fromSym === 'Rank' ? 'Rank' : fromSym;
   const to = toSym === 'kel' ? 'K' : toSym === 'Rank' ? 'Rank' : toSym;
@@ -842,19 +924,23 @@ function convertTemperature(value: number, fromSym: string, toSym: string): numb
   let kelvin: number;
 
   if (from === 'K') kelvin = value;
-  else if (from === 'Rank') kelvin = value * 5 / 9;
+  else if (from === 'Rank') kelvin = (value * 5) / 9;
   else if (isCelsius(from)) kelvin = value + 273.15;
-  else if (isFahrenheit(from)) kelvin = (value + 459.67) * 5 / 9;
+  else if (isFahrenheit(from)) kelvin = ((value + 459.67) * 5) / 9;
   else return NaN;
 
   if (to === 'K') return kelvin;
-  if (to === 'Rank') return kelvin * 9 / 5;
+  if (to === 'Rank') return (kelvin * 9) / 5;
   if (isCelsius(to)) return kelvin - 273.15;
-  if (isFahrenheit(to)) return kelvin * 9 / 5 - 459.67;
+  if (isFahrenheit(to)) return (kelvin * 9) / 5 - 459.67;
   return NaN;
 }
 
-export function excelConvert(numberLike: unknown, fromUnit: unknown, toUnit: unknown) {
+export function excelConvert(
+  numberLike: unknown,
+  fromUnit: unknown,
+  toUnit: unknown,
+) {
   const number = parseExcelNumber(numberLike);
   const fromStr = parseExcelString(fromUnit);
   const toStr = parseExcelString(toUnit);

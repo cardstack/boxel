@@ -1,4 +1,4 @@
-import { isExcelBlank } from './common.js';
+import { isExcelBlank } from './common.ts';
 
 export type CriteriaMatcher = (value: unknown) => boolean;
 
@@ -110,10 +110,7 @@ function compareStrings(left: string, right: string, operator: string) {
 }
 
 function compareValues(left: unknown, right: unknown, operator: string) {
-  if (
-    typeof right === 'string' &&
-    (operator === '=' || operator === '<>')
-  ) {
+  if (typeof right === 'string' && (operator === '=' || operator === '<>')) {
     if (right === '') {
       const matched = isExcelBlank(left);
       return operator === '=' ? matched : !matched;

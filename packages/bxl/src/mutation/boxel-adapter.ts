@@ -1,6 +1,6 @@
-import type { BuiltinLibraryName } from '../bxl/registry/index.js';
-import type { NativeRuntimeLimits } from '../jqtools/evaluate/runtimeState.js';
-import { prepareBxlMutation } from './planner.js';
+import type { BuiltinLibraryName } from '../bxl/registry/index.ts';
+import type { NativeRuntimeLimits } from '../jqtools/evaluate/runtimeState.ts';
+import { prepareBxlMutation } from './planner.ts';
 import {
   BxlMutationError,
   type BxlMutationField,
@@ -11,7 +11,7 @@ import {
   type BxlMutationPlan,
   type BxlMutationPlanOptions,
   type BxlMutationSchema,
-} from './types.js';
+} from './types.ts';
 
 const GET_FIELDS_KEY = '__cardstackGetFields' as const;
 const GET_STORE_KEY = '__cardstackGetStore' as const;
@@ -32,7 +32,9 @@ export interface BxlBoxelCardStore {
   getCard(id: string): unknown;
 }
 
-export type BxlBoxelGetStore = (instance: unknown) => BxlBoxelCardStore | undefined;
+export type BxlBoxelGetStore = (
+  instance: unknown,
+) => BxlBoxelCardStore | undefined;
 
 export interface BxlBoxelAdapterOptions {
   /** Normally supplied by the Realm bundle's Card API bridge. */
@@ -49,8 +51,10 @@ export interface BxlUpdateViaOptions extends BxlBoxelAdapterOptions {
   runtimeLimits?: NativeRuntimeLimits;
 }
 
-export interface BxlUpdateViaExecutionOptions
-  extends Omit<BxlMutationPlanOptions, 'programId' | 'targetId' | 'cards' | 'resolveCard'> {
+export interface BxlUpdateViaExecutionOptions extends Omit<
+  BxlMutationPlanOptions,
+  'programId' | 'targetId' | 'cards' | 'resolveCard'
+> {
   /** Tool callers should provide their stable tool-call ID. Local card code may omit it. */
   programId?: string;
   targetId?: string;
@@ -117,12 +121,19 @@ function adapterRuntime(options: BxlBoxelAdapterOptions): AdapterRuntime {
   }
   return {
     getFields,
-    getStore: options.getStore ?? globalFunction<BxlBoxelGetStore>(GET_STORE_KEY),
+    getStore:
+      options.getStore ?? globalFunction<BxlBoxelGetStore>(GET_STORE_KEY),
   };
 }
 
-function safeFields(runtime: AdapterRuntime, value: unknown): Record<string, BxlBoxelField> {
-  if ((typeof value !== 'object' || value === null) && typeof value !== 'function') {
+function safeFields(
+  runtime: AdapterRuntime,
+  value: unknown,
+): Record<string, BxlBoxelField> {
+  if (
+    (typeof value !== 'object' || value === null) &&
+    typeof value !== 'function'
+  ) {
     return {};
   }
   try {
@@ -203,37 +214,44 @@ function schemaForShape(
   const result: BxlMutationField[] = [];
   const displayNameCounts = new Map<string, number>();
   for (const [key, field] of Object.entries(fields)) {
-    const value = sample && typeof sample === 'object'
-      ? (sample as Record<string, unknown>)[key]
-      : undefined;
+    const value =
+      sample && typeof sample === 'object'
+        ? (sample as Record<string, unknown>)[key]
+        : undefined;
     if (
       field.fieldType === 'linksTo' ||
       field.fieldType === 'linksToMany' ||
       structuredShape(runtime, field, Array.isArray(value) ? value[0] : value)
     ) {
       const name = displayName(field.card);
-      if (name) displayNameCounts.set(name, (displayNameCounts.get(name) ?? 0) + 1);
+      if (name)
+        displayNameCounts.set(name, (displayNameCounts.get(name) ?? 0) + 1);
     }
   }
   const ambiguousDisplayNames = new Set(
-    [...displayNameCounts].filter(([, count]) => count > 1).map(([name]) => name),
+    [...displayNameCounts]
+      .filter(([, count]) => count > 1)
+      .map(([name]) => name),
   );
 
   for (const [key, field] of Object.entries(fields)) {
     const fieldType = field.fieldType;
     if (!fieldType) continue;
-    const value = sample && typeof sample === 'object'
-      ? (sample as Record<string, unknown>)[key]
-      : undefined;
+    const value =
+      sample && typeof sample === 'object'
+        ? (sample as Record<string, unknown>)[key]
+        : undefined;
     const writable =
       !field.computeVia && key !== 'id' && !field.queryDefinition;
     const label = fieldLabel(runtime, field, value, ambiguousDisplayNames);
     const entry: BxlMutationField = {
       key,
-      ...(label ? {
-        label,
-        displayName: label,
-      } : {}),
+      ...(label
+        ? {
+            label,
+            displayName: label,
+          }
+        : {}),
       fieldType,
       writable,
       ...(field.computeVia ? { writeBehavior: 'skip' as const } : {}),
@@ -241,12 +259,16 @@ function schemaForShape(
 
     if (fieldType === 'linksTo' || fieldType === 'linksToMany') {
       const idSchema: BxlMutationSchema = {
-        fields: [{ key: 'id', label: 'ID', displayName: 'ID', writable: false }],
+        fields: [
+          { key: 'id', label: 'ID', displayName: 'ID', writable: false },
+        ],
       };
       entry.kind = fieldType === 'linksToMany' ? 'array' : 'object';
       entry.item = idSchema;
       entry.fields = idSchema.fields;
-    } else if (structuredShape(runtime, field, Array.isArray(value) ? value[0] : value)) {
+    } else if (
+      structuredShape(runtime, field, Array.isArray(value) ? value[0] : value)
+    ) {
       const child = schemaForShape(
         runtime,
         field.card,
@@ -273,15 +295,19 @@ function schemaForShape(
   // synthetic alias property.
   const cardInfo = result.find((field) => field.key === 'cardInfo');
   const occupied = new Set(
-    result.flatMap((field) => [field.key, field.label, field.displayName])
+    result
+      .flatMap((field) => [field.key, field.label, field.displayName])
       .filter((name): name is string => Boolean(name))
       .map(normalizedReadableName),
   );
   for (const child of cardInfo?.fields ?? []) {
-    if (child.fieldType !== 'linksTo' && child.fieldType !== 'linksToMany') continue;
-    const names = [child.key, child.label, child.displayName]
-      .filter((name): name is string => Boolean(name));
-    if (names.some((name) => occupied.has(normalizedReadableName(name)))) continue;
+    if (child.fieldType !== 'linksTo' && child.fieldType !== 'linksToMany')
+      continue;
+    const names = [child.key, child.label, child.displayName].filter(
+      (name): name is string => Boolean(name),
+    );
+    if (names.some((name) => occupied.has(normalizedReadableName(name))))
+      continue;
     result.push({
       ...child,
       path: ['cardInfo', child.key],
@@ -319,11 +345,16 @@ function jsonScalar(value: unknown, seen: Set<object>): BxlMutationJson {
     );
   }
   if (seen.has(value)) {
-    throw mutationError('validate', 'boxel-value-cycle', 'Card field values must not contain cycles.');
+    throw mutationError(
+      'validate',
+      'boxel-value-cycle',
+      'Card field values must not contain cycles.',
+    );
   }
   seen.add(value);
   try {
-    if (Array.isArray(value)) return value.map((item) => jsonScalar(item, seen));
+    if (Array.isArray(value))
+      return value.map((item) => jsonScalar(item, seen));
     if (value instanceof Date) return value.toISOString();
     const toJSON = (value as { toJSON?: unknown }).toJSON;
     if (typeof toJSON === 'function') {
@@ -352,7 +383,11 @@ function projectModel(
   ancestors: Set<object>,
 ): BxlMutationJson {
   if (ancestors.has(model)) {
-    throw mutationError('validate', 'boxel-value-cycle', 'Contained Card values must not contain cycles.');
+    throw mutationError(
+      'validate',
+      'boxel-value-cycle',
+      'Contained Card values must not contain cycles.',
+    );
   }
   ancestors.add(model);
   const output: Record<string, BxlMutationJson> = {};
@@ -383,7 +418,11 @@ function projectModel(
             break;
           }
           if (!Array.isArray(value)) {
-            throw mutationError('validate', 'relationship-not-array', `Relationship ${key} is not an array.`);
+            throw mutationError(
+              'validate',
+              'relationship-not-array',
+              `Relationship ${key} is not an array.`,
+            );
           }
           output[key] = value.map((related) => {
             const id = cardId(related);
@@ -400,9 +439,12 @@ function projectModel(
           break;
         }
         case 'contains': {
-          output[key] = value && typeof value === 'object' && structuredShape(runtime, field, value)
-            ? projectModel(value, runtime, relationshipModels, ancestors)
-            : jsonScalar(value, new Set());
+          output[key] =
+            value &&
+            typeof value === 'object' &&
+            structuredShape(runtime, field, value)
+              ? projectModel(value, runtime, relationshipModels, ancestors)
+              : jsonScalar(value, new Set());
           break;
         }
         case 'containsMany': {
@@ -411,10 +453,16 @@ function projectModel(
             break;
           }
           if (!Array.isArray(value)) {
-            throw mutationError('validate', 'contained-value-not-array', `Contained field ${key} is not an array.`);
+            throw mutationError(
+              'validate',
+              'contained-value-not-array',
+              `Contained field ${key} is not an array.`,
+            );
           }
           output[key] = value.map((item) =>
-            item && typeof item === 'object' && structuredShape(runtime, field, item)
+            item &&
+            typeof item === 'object' &&
+            structuredShape(runtime, field, item)
               ? projectModel(item, runtime, relationshipModels, ancestors)
               : jsonScalar(item, new Set()),
           );
@@ -437,7 +485,10 @@ export function snapshotBxlCard(
   return projectModel(card, runtime, new Map(), new Set());
 }
 
-function projectionForCard(model: object, runtime: AdapterRuntime): ModelProjection {
+function projectionForCard(
+  model: object,
+  runtime: AdapterRuntime,
+): ModelProjection {
   const relationshipModels = new Map<string, object>();
   return {
     snapshot: projectModel(model, runtime, relationshipModels, new Set()),
@@ -454,13 +505,24 @@ function valueAt(root: unknown, path: BxlMutationPath): unknown {
   return value;
 }
 
-function parentAt(root: object, path: BxlMutationPath): { parent: object; key: string | number } {
+function parentAt(
+  root: object,
+  path: BxlMutationPath,
+): { parent: object; key: string | number } {
   if (path.length === 0) {
-    throw mutationError('commit', 'card-root-write', 'The Boxel adapter cannot replace a complete Card.');
+    throw mutationError(
+      'commit',
+      'card-root-write',
+      'The Boxel adapter cannot replace a complete Card.',
+    );
   }
   const parent = valueAt(root, path.slice(0, -1));
   if (!parent || typeof parent !== 'object') {
-    throw mutationError('commit', 'commit-path-missing', `Mutation path ${JSON.stringify(path)} has no live parent.`);
+    throw mutationError(
+      'commit',
+      'commit-path-missing',
+      `Mutation path ${JSON.stringify(path)} has no live parent.`,
+    );
   }
   return { parent, key: path[path.length - 1]! };
 }
@@ -468,7 +530,11 @@ function parentAt(root: object, path: BxlMutationPath): { parent: object; key: s
 function collectionAt(root: object, path: BxlMutationPath): unknown[] {
   const value = valueAt(root, path);
   if (!Array.isArray(value)) {
-    throw mutationError('commit', 'commit-collection-missing', `Mutation path ${JSON.stringify(path)} is not a live collection.`);
+    throw mutationError(
+      'commit',
+      'commit-collection-missing',
+      `Mutation path ${JSON.stringify(path)} is not a live collection.`,
+    );
   }
   return value;
 }
@@ -485,9 +551,10 @@ function fieldAtPath(
     if (typeof part === 'string') {
       field = safeFields(runtime, model)[part];
       item = false;
-      model = model && typeof model === 'object'
-        ? (model as Record<string, unknown>)[part]
-        : undefined;
+      model =
+        model && typeof model === 'object'
+          ? (model as Record<string, unknown>)[part]
+          : undefined;
     } else {
       item = true;
       model = Array.isArray(model) ? model[part] : undefined;
@@ -501,18 +568,29 @@ function materializeShape(
   shape: unknown,
   runtime: AdapterRuntime,
 ): unknown {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return value;
+  if (value === null || typeof value !== 'object' || Array.isArray(value))
+    return value;
   if (typeof shape !== 'function') return jsonScalar(value, new Set());
   let instance: Record<string, unknown>;
   try {
     instance = new (shape as new () => Record<string, unknown>)();
   } catch (error) {
-    throw mutationError('commit', 'boxel-shape-construction-failed', 'Could not construct a contained Field value.', error);
+    throw mutationError(
+      'commit',
+      'boxel-shape-construction-failed',
+      'Could not construct a contained Field value.',
+      error,
+    );
   }
   const fields = shapeFields(runtime, shape, instance);
   for (const [key, child] of Object.entries(value)) {
     const field = fields[key];
-    if (!field || field.computeVia || field.fieldType === 'linksTo' || field.fieldType === 'linksToMany') {
+    if (
+      !field ||
+      field.computeVia ||
+      field.fieldType === 'linksTo' ||
+      field.fieldType === 'linksToMany'
+    ) {
       continue;
     }
     instance[key] = materializeForField(child, field, runtime, false);
@@ -538,11 +616,7 @@ function materializeForField(
   return value;
 }
 
-function setLive(
-  root: object,
-  path: BxlMutationPath,
-  value: unknown,
-): Undo {
+function setLive(root: object, path: BxlMutationPath, value: unknown): Undo {
   const { parent, key } = parentAt(root, path);
   const record = parent as Record<string | number, unknown>;
   const before = record[key];
@@ -585,25 +659,40 @@ function applyIntent(
       const { parent, key } = parentAt(card, intent.path);
       if (Array.isArray(parent) && typeof key === 'number') {
         const [removed] = parent.splice(key, 1);
-        return () => { parent.splice(key, 0, removed); };
+        return () => {
+          parent.splice(key, 0, removed);
+        };
       }
       const record = parent as Record<string, unknown>;
       const before = record[key as string];
       record[key as string] = undefined;
-      return () => { record[key as string] = before; };
+      return () => {
+        record[key as string] = before;
+      };
     }
     case 'insert': {
       const collection = collectionAt(card, intent.collection);
       const target = fieldAtPath(card, intent.collection, runtime);
-      const value = materializeForField(intent.value, target.field, runtime, true);
+      const value = materializeForField(
+        intent.value,
+        target.field,
+        runtime,
+        true,
+      );
       collection.splice(intent.index, 0, value);
-      return () => { collection.splice(collection.indexOf(value), 1); };
+      return () => {
+        collection.splice(collection.indexOf(value), 1);
+      };
     }
     case 'move': {
       const source = collectionAt(card, intent.from.slice(0, -1));
       const sourceIndex = intent.from.at(-1);
       if (typeof sourceIndex !== 'number') {
-        throw mutationError('commit', 'move-source-not-item', 'Move source is not a collection item.');
+        throw mutationError(
+          'commit',
+          'move-source-not-item',
+          'Move source is not a collection item.',
+        );
       }
       const [value] = source.splice(sourceIndex, 1);
       const target = collectionAt(card, intent.toCollection);
@@ -617,16 +706,20 @@ function applyIntent(
     case 'reorder': {
       const collection = collectionAt(card, intent.collection);
       const before = [...collection];
-      const byKey = new Map(collection.map((item) => [
-        JSON.stringify(valueAt(item, intent.key)),
-        item,
-      ]));
+      const byKey = new Map(
+        collection.map((item) => [
+          JSON.stringify(valueAt(item, intent.key)),
+          item,
+        ]),
+      );
       collection.splice(
         0,
         collection.length,
         ...intent.order.map((key) => byKey.get(JSON.stringify(key))),
       );
-      return () => { collection.splice(0, collection.length, ...before); };
+      return () => {
+        collection.splice(0, collection.length, ...before);
+      };
     }
     case 'relate': {
       const target = fieldAtPath(card, intent.field, runtime);
@@ -635,7 +728,9 @@ function applyIntent(
         const collection = collectionAt(card, intent.field);
         const index = intent.index ?? collection.length;
         collection.splice(index, 0, related);
-        return () => { collection.splice(collection.indexOf(related), 1); };
+        return () => {
+          collection.splice(collection.indexOf(related), 1);
+        };
       }
       return setLive(card, intent.field, related);
     }
@@ -645,10 +740,16 @@ function applyIntent(
         const collection = collectionAt(card, intent.field);
         const index = cardById(collection, intent.cardId);
         if (index < 0) {
-          throw mutationError('commit', 'relationship-card-missing', `Related Card ${intent.cardId} is not in the live collection.`);
+          throw mutationError(
+            'commit',
+            'relationship-card-missing',
+            `Related Card ${intent.cardId} is not in the live collection.`,
+          );
         }
         const [removed] = collection.splice(index, 1);
-        return () => { collection.splice(index, 0, removed); };
+        return () => {
+          collection.splice(index, 0, removed);
+        };
       }
       return setLive(card, intent.field, null);
     }
@@ -656,7 +757,11 @@ function applyIntent(
       const collection = collectionAt(card, intent.field);
       const index = cardById(collection, intent.cardId);
       if (index < 0) {
-        throw mutationError('commit', 'relationship-card-missing', `Related Card ${intent.cardId} is not in the live collection.`);
+        throw mutationError(
+          'commit',
+          'relationship-card-missing',
+          `Related Card ${intent.cardId} is not in the live collection.`,
+        );
       }
       const [related] = collection.splice(index, 1);
       collection.splice(intent.toIndex, 0, related);
@@ -678,7 +783,11 @@ export function applyBxlMutationPlanToCard(
   } = {},
 ): BxlMutationPlan {
   if (plan.target.kind !== 'card') {
-    throw mutationError('commit', 'boxel-target-not-card', 'The single-Card adapter only accepts Card-target plans.');
+    throw mutationError(
+      'commit',
+      'boxel-target-not-card',
+      'The single-Card adapter only accepts Card-target plans.',
+    );
   }
   const runtime = adapterRuntime(options);
   const projection = projectionForCard(card, runtime);
@@ -704,7 +813,11 @@ export function applyBxlMutationPlanToCard(
       options.resolveCard?.(id) ??
       store?.getCard(id);
     if (!value || typeof value !== 'object') {
-      throw mutationError('commit', 'card-not-loaded', `Card ${JSON.stringify(id)} is not loaded in this Card Store.`);
+      throw mutationError(
+        'commit',
+        'card-not-loaded',
+        `Card ${JSON.stringify(id)} is not loaded in this Card Store.`,
+      );
     }
     return value;
   };
@@ -749,14 +862,22 @@ export function updateViaBxl(
     execution: BxlUpdateViaExecutionOptions = {},
   ): BxlMutationPlan {
     if (!this || typeof this !== 'object') {
-      throw mutationError('validate', 'boxel-card-required', 'updateViaBxl must be called with a Card model as this.');
+      throw mutationError(
+        'validate',
+        'boxel-card-required',
+        'updateViaBxl must be called with a Card model as this.',
+      );
     }
     const runtime = adapterRuntime(options);
     const projection = projectionForCard(this, runtime);
-    const schema = options.schema ?? schemaForShape(runtime, this.constructor, this, new Set());
+    const schema =
+      options.schema ??
+      schemaForShape(runtime, this.constructor, this, new Set());
     const store = execution.cardStore ?? runtime.getStore?.(this);
     const resolveModel = (id: string): unknown =>
-      projection.relationshipModels.get(id) ?? execution.resolveCard?.(id) ?? store?.getCard(id);
+      projection.relationshipModels.get(id) ??
+      execution.resolveCard?.(id) ??
+      store?.getCard(id);
     const prepared = prepareBxlMutation(source, {
       schema,
       targetKind: 'card',
@@ -784,7 +905,11 @@ export function updateViaBxl(
   } as BxlUpdateViaFunction;
 
   Object.defineProperty(update, 'bxl', {
-    value: Object.freeze({ source, syntax, targetKind: 'card' } satisfies BxlUpdateViaMetadata),
+    value: Object.freeze({
+      source,
+      syntax,
+      targetKind: 'card',
+    } satisfies BxlUpdateViaMetadata),
     enumerable: false,
   });
   return update;

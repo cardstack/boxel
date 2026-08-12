@@ -19,14 +19,14 @@ import {
   runNativeJqAsync,
   type PreparedNativeJq,
   tokenizeNativeJq,
-} from './bxl/bridge/native.js';
-import type { NativeRuntimeLimits } from './jqtools/evaluate/runtimeState.js';
-import {
-  compileReadableSyntax,
+} from './bxl/bridge/native.ts';
+import type { NativeRuntimeLimits } from './jqtools/evaluate/runtimeState.ts';
+import type {
   ReadableSchema,
   ReadableSyntaxCompileResult,
   ReadableSyntaxWarning,
-} from './bxl/compiler/readable-syntax.js';
+} from './bxl/compiler/readable-syntax.ts';
+import { compileReadableSyntax } from './bxl/compiler/readable-syntax.ts';
 import {
   bxlToJqExpression,
   bxlToStorageExpression,
@@ -35,25 +35,23 @@ import {
   jqToReadableBxlExpression,
   solidifyBxlExpression,
   storageToReadableBxlExpression,
-} from './bxl/formatter/index.js';
+} from './bxl/formatter/index.ts';
 import type {
   BxlConversionOptions,
   BxlFormatResult,
   BxlRewrite,
   BxlSolidifyResult,
   JqToReadableBxlResult,
-} from './bxl/formatter/index.js';
-import { lintBxlExpression } from './bxl/linter/index.js';
+} from './bxl/formatter/index.ts';
+import { lintBxlExpression } from './bxl/linter/index.ts';
 import type {
   BxlLintIssue,
   BxlLintOptions,
   BxlLintResult,
   BxlLintSeverity,
-} from './bxl/linter/index.js';
-import {
-  DEFAULT_BUILTIN_LIBRARIES,
-  BuiltinLibraryName,
-} from './bxl/registry/index.js';
+} from './bxl/linter/index.ts';
+import type { BuiltinLibraryName } from './bxl/registry/index.ts';
+import { DEFAULT_BUILTIN_LIBRARIES } from './bxl/registry/index.ts';
 import {
   assertValidBxlProfile,
   bxlAstProgramFromNativeParsed,
@@ -66,13 +64,13 @@ import {
   type BxlProfile,
   type BxlProfileIssue,
   type BxlProfileValidationOptions,
-} from './bxl/ast/index.js';
+} from './bxl/ast/index.ts';
 import {
   BxlPredicateSqlError,
   SQL_PREDICATE_MODULE,
   compileBxlPredicateAstToSql,
   compileBxlPredicateToSql,
-} from './bxl/sql/index.js';
+} from './bxl/sql/index.ts';
 import {
   BXL_AGGREGATE_CALLS,
   BXL_AUTHORIZATION_CALLS,
@@ -87,7 +85,7 @@ import {
   BXL_VOLATILE_CALLS,
   categoryForBxlFunction,
   classifyBxlProfileFunction,
-} from './bxl/profiles/function-safety.js';
+} from './bxl/profiles/function-safety.ts';
 import type {
   BxlPredicateSqlOptions,
   BxlPredicateSqlPath,
@@ -96,14 +94,18 @@ import type {
   BxlPredicateSqlValue,
   BxlSqlPredicateMapping,
   BxlSqlPredicateModule,
-} from './bxl/sql/index.js';
+} from './bxl/sql/index.ts';
 import type {
   BxlFunctionSafetyCategory,
   BxlFunctionSafetyDecision,
   BxlProfileFunctionPolicy,
   BxlProfileFunctionSafety,
-} from './bxl/profiles/function-safety.js';
-import { toBxlErrorRecord, type BxlErrorRecord, type BxlSafeResult } from './error-utils.js';
+} from './bxl/profiles/function-safety.ts';
+import {
+  toBxlErrorRecord,
+  type BxlErrorRecord,
+  type BxlSafeResult,
+} from './error-utils.ts';
 export {
   __runBoxelRuntimeWorker,
   getBoxelValue,
@@ -116,7 +118,7 @@ export {
   prepareBoxelRuntimeAsync,
   prepareBoxelRuntimeSafe,
   prepareBoxelRuntime,
-} from './boxel-runtime.js';
+} from './boxel-runtime.ts';
 export type {
   BoxelAnnotationActor,
   BoxelAnnotationCardDraft,
@@ -146,7 +148,7 @@ export type {
   BoxelRuntimeWarning,
   PreparedBoxelRuntimeAsync,
   PreparedBoxelRuntime,
-} from './boxel-runtime.js';
+} from './boxel-runtime.ts';
 
 export const VERSION = '0.5.1';
 
@@ -181,11 +183,11 @@ export const BXL_BUILD_INFO = {
   version: VERSION,
   buildTime: 'dev',
   features: [
-    'null-tolerance',       // port-doc §6–9
-    'jq-fx-tags',           // §10, §11
-    'as-materialize',       // §11a
-    'pascalcase-fallback',  // §12
-    'jq-keywords-guard',    // §13
+    'null-tolerance', // port-doc §6–9
+    'jq-fx-tags', // §10, §11
+    'as-materialize', // §11a
+    'pascalcase-fallback', // §12
+    'jq-keywords-guard', // §13
     'authorization-kernel',
     'bxl-authorization',
     'mutation-planner',
@@ -278,7 +280,7 @@ export {
   compileAuthorizationGraph,
   prepareBxlAuthorizationSafe,
   prepareAuthorizationGraphSafe,
-} from './authorization/index.js';
+} from './authorization/index.ts';
 
 export {
   applyBxlMutationPlanToCard,
@@ -300,7 +302,7 @@ export {
   snapshotBxlCardSource,
   solidifyBxlMutationOperations,
   updateViaBxl,
-} from './mutation/index.js';
+} from './mutation/index.ts';
 export type {
   BxlBoxelAdapterOptions,
   BxlBoxelCardStore,
@@ -340,7 +342,7 @@ export type {
   BxlUpdateViaMetadata,
   BxlUpdateViaOptions,
   PreparedBxlMutation,
-} from './mutation/index.js';
+} from './mutation/index.ts';
 export type {
   AuthorizationCheckRequest,
   AuthorizationCheckResult,
@@ -380,7 +382,7 @@ export type {
   PreparedBxlAuthorization,
   RelationshipTuple,
   SubjectTypeReference,
-} from './authorization/index.js';
+} from './authorization/index.ts';
 
 /**
  * Shared options for the BXL surface. Every entry-point function
@@ -587,7 +589,8 @@ function schemaInputWarnings(
   for (const field of schema.fields) {
     if (!Object.prototype.hasOwnProperty.call(record, field.key)) {
       const casingMatch = keys.find(
-        (key) => key !== field.key && key.toLowerCase() === field.key.toLowerCase(),
+        (key) =>
+          key !== field.key && key.toLowerCase() === field.key.toLowerCase(),
       );
       if (casingMatch) {
         warnings.push({
@@ -605,12 +608,20 @@ function schemaInputWarnings(
     if (field.kind === 'array' && Array.isArray(value) && field.item) {
       value.forEach((entry, index) => {
         warnings.push(
-          ...schemaInputWarnings(entry, field.item, `${path}.${field.key}[${index}]`),
+          ...schemaInputWarnings(
+            entry,
+            field.item,
+            `${path}.${field.key}[${index}]`,
+          ),
         );
       });
     } else if (field.kind === 'object' && field.fields) {
       warnings.push(
-        ...schemaInputWarnings(value, { fields: field.fields }, `${path}.${field.key}`),
+        ...schemaInputWarnings(
+          value,
+          { fields: field.fields },
+          `${path}.${field.key}`,
+        ),
       );
     }
   }
@@ -830,7 +841,14 @@ function makeTagged(
 type GetFieldsFn = (
   instance: unknown,
   options?: { includeComputeds?: boolean },
-) => Record<string, { fieldType?: string; card?: unknown; computeVia?: (...args: unknown[]) => unknown }>;
+) => Record<
+  string,
+  {
+    fieldType?: string;
+    card?: unknown;
+    computeVia?: (...args: unknown[]) => unknown;
+  }
+>;
 
 const GET_FIELDS_KEY = '__cardstackGetFields' as const;
 
@@ -869,7 +887,10 @@ function hasStructuredFields(value: unknown): value is new () => unknown {
   }
 }
 
-function materializeShape(raw: unknown, ShapeClass: new () => unknown): unknown {
+function materializeShape(
+  raw: unknown,
+  ShapeClass: new () => unknown,
+): unknown {
   if (raw == null) return null;
   if (typeof raw !== 'object' || Array.isArray(raw)) return raw;
   const instance = new ShapeClass() as Record<string, unknown>;
@@ -957,7 +978,8 @@ function memoEpochFor(mode: BxlComputeMemoizationMode): number | null {
 }
 
 function objectMemoKey(value: unknown): object | null {
-  return value !== null && (typeof value === 'object' || typeof value === 'function')
+  return value !== null &&
+    (typeof value === 'object' || typeof value === 'function')
     ? (value as object)
     : null;
 }

@@ -5,7 +5,7 @@ import {
   type BxlAuthorizationCheckRequest,
   type BxlAuthorizationDocument,
   type BxlAuthorizationSnapshot,
-} from '../../src/authorization/index.js';
+} from '../../src/authorization/index.ts';
 
 interface CapabilityCheck extends BxlAuthorizationCheckRequest {
   domain: string;
@@ -34,8 +34,10 @@ const fixture = JSON.parse(
   capabilityLists: CapabilityListExpectation[];
 };
 
-const prepared = prepareBxlAuthorizationSafe(fixture.document, fixture.snapshot);
-strictEqual(prepared.ok, true);
+const prepared = prepareBxlAuthorizationSafe(
+  fixture.document,
+  fixture.snapshot,
+);
 if (!prepared.ok) throw new Error(prepared.error.message);
 const authorization = prepared.value;
 
@@ -62,7 +64,11 @@ for (let index = 0; index < decisions.length; index++) {
   strictEqual(decision.ok, true, label);
   if (!decision.ok) continue;
   strictEqual(decision.value.allowed, expected.allowed, label);
-  strictEqual(decision.value.decision, expected.allowed ? 'allow' : 'refuse', label);
+  strictEqual(
+    decision.value.decision,
+    expected.allowed ? 'allow' : 'refuse',
+    label,
+  );
   strictEqual(decision.value.metrics.steps > 0, true, label);
   strictEqual(decision.value.trace.length > 0, true, label);
   strictEqual(
@@ -84,7 +90,11 @@ for (let index = 0; index < decisions.length; index++) {
     (event) => event.resource === '../Team/spring-judges',
   );
 }
-strictEqual(decodedUsersetTraceFound, true, 'userset trace exposes the original resource identifier');
+strictEqual(
+  decodedUsersetTraceFound,
+  true,
+  'userset trace exposes the original resource identifier',
+);
 
 for (const expectation of fixture.capabilityLists) {
   const listed = authorization.listCapabilities({
@@ -102,7 +112,9 @@ for (const expectation of fixture.capabilityLists) {
   const resource = fixture.snapshot.resources.find(
     (candidate) => candidate.resource === expectation.resource,
   )!;
-  const scope = fixture.document.scopes.find((candidate) => candidate.name === resource.type)!;
+  const scope = fixture.document.scopes.find(
+    (candidate) => candidate.name === resource.type,
+  )!;
   for (const capability of scope.capabilities) {
     const checked = authorization.checkCapability({
       party: expectation.party,

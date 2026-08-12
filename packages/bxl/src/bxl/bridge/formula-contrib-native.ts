@@ -13,11 +13,15 @@ import {
   populationStdDev,
   sampleStdDev,
   sumExcelRange,
-} from '../../formulajs/common.js';
-import { createCriteriaMatcher, matchesCriteria } from '../../formulajs/criteria.js';
-import { EXCEL_ERROR, throwExcelError } from '../../formulajs/errors.js';
-import { compare } from '../../jqtools/evaluate/compare.js';
-import { BareNativeFilter, wrapBareNativeFilters } from '../../jqtools/evaluate/filters/lib/nativeFilter.js';
+} from '../../formulajs/common.ts';
+import {
+  createCriteriaMatcher,
+  matchesCriteria,
+} from '../../formulajs/criteria.ts';
+import { EXCEL_ERROR, throwExcelError } from '../../formulajs/errors.ts';
+import { compare } from '../../jqtools/evaluate/compare.ts';
+import type { BareNativeFilter } from '../../jqtools/evaluate/filters/lib/nativeFilter.ts';
+import { wrapBareNativeFilters } from '../../jqtools/evaluate/filters/lib/nativeFilter.ts';
 
 function asRowObject(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -63,7 +67,11 @@ function filterRowsByCriteria(
   );
 }
 
-function roundBase(numberLike: unknown, digitsLike: unknown, roundFn: Math['round']) {
+function roundBase(
+  numberLike: unknown,
+  digitsLike: unknown,
+  roundFn: Math['round'],
+) {
   const number = parseExcelNumber(numberLike);
   const digits = parseExcelNumber(digitsLike);
   const sign = number >= 0 ? 1 : -1;
@@ -130,7 +138,9 @@ function truncValue(numberLike: unknown, digitsLike = 0) {
   const number = parseExcelNumber(numberLike);
   const digits = Math.trunc(parseExcelNumber(digitsLike));
   const factor = 10 ** digits;
-  return (number < 0 ? -1 : 1) * Math.floor(Math.abs(number) * factor) / factor;
+  return (
+    ((number < 0 ? -1 : 1) * Math.floor(Math.abs(number) * factor)) / factor
+  );
 }
 
 function multinomialValue(valuesLike: unknown) {
@@ -186,11 +196,9 @@ const NOW_SERIAL_LEAP_BUG_BOUNDARY_MS = Date.UTC(1900, 1, 28);
 
 function nowSerial() {
   const now = new Date();
-  const day = new Date(Date.UTC(
-    now.getUTCFullYear(),
-    now.getUTCMonth(),
-    now.getUTCDate(),
-  ));
+  const day = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+  );
   const seconds =
     now.getUTCHours() * 3600 +
     now.getUTCMinutes() * 60 +
@@ -203,7 +211,12 @@ function nowSerial() {
   return daySerial + seconds / 86400;
 }
 
-function replaceNth(text: string, oldText: string, newText: string, instance: number) {
+function replaceNth(
+  text: string,
+  oldText: string,
+  newText: string,
+  instance: number,
+) {
   let index = 0;
   let found = 0;
 
@@ -211,7 +224,9 @@ function replaceNth(text: string, oldText: string, newText: string, instance: nu
     index = text.indexOf(oldText, index + 1);
     found++;
     if (index > -1 && found === instance) {
-      return text.slice(0, index) + newText + text.slice(index + oldText.length);
+      return (
+        text.slice(0, index) + newText + text.slice(index + oldText.length)
+      );
     }
   }
 
@@ -306,7 +321,11 @@ function excelText(valueLike: unknown, formatTextLike: unknown) {
   return rendered;
 }
 
-function fixedValue(numberLike: unknown, decimalsLike = 2, noCommasLike = false) {
+function fixedValue(
+  numberLike: unknown,
+  decimalsLike = 2,
+  noCommasLike = false,
+) {
   let number = parseExcelNumber(numberLike);
   const decimals = parseExcelNumber(decimalsLike);
   const noCommas = parseExcelBool(noCommasLike);
@@ -365,9 +384,13 @@ function numberValue(
   }
 
   const decimalSeparator =
-    decimalSeparatorLike === undefined ? '.' : parseExcelString(decimalSeparatorLike);
+    decimalSeparatorLike === undefined
+      ? '.'
+      : parseExcelString(decimalSeparatorLike);
   const groupSeparator =
-    groupSeparatorLike === undefined ? ',' : parseExcelString(groupSeparatorLike);
+    groupSeparatorLike === undefined
+      ? ','
+      : parseExcelString(groupSeparatorLike);
   if (decimalSeparator === groupSeparator) {
     throwExcelError(EXCEL_ERROR.value);
   }
@@ -399,7 +422,9 @@ const ROMAN_TOKEN_VALUES: Record<string, number> = {
 
 function arabicValue(textLike: unknown) {
   const text = parseExcelString(textLike);
-  if (!/^M*(?:D?C{0,3}|C[MD])(?:L?X{0,3}|X[CL])(?:V?I{0,3}|I[XV])$/.test(text)) {
+  if (
+    !/^M*(?:D?C{0,3}|C[MD])(?:L?X{0,3}|X[CL])(?:V?I{0,3}|I[XV])$/.test(text)
+  ) {
     throwExcelError(EXCEL_ERROR.value);
   }
 
@@ -463,17 +488,23 @@ function romanValue(numberLike: unknown) {
 function properValue(textLike: unknown) {
   return parseExcelString(textLike).replace(
     /\w\S*/g,
-    (entry) =>
-      entry.charAt(0).toUpperCase() + entry.slice(1).toLowerCase(),
+    (entry) => entry.charAt(0).toUpperCase() + entry.slice(1).toLowerCase(),
   );
 }
 
-function textJoin(delimiterLike: unknown, ignoreEmptyLike: unknown, valuesLike: unknown) {
-  const delimiter = delimiterLike === null || delimiterLike === undefined
-    ? ''
-    : Array.isArray(delimiterLike)
-      ? flattenExcelArgs(delimiterLike).map((entry) => toTextForConcat(entry)).join('')
-      : String(delimiterLike);
+function textJoin(
+  delimiterLike: unknown,
+  ignoreEmptyLike: unknown,
+  valuesLike: unknown,
+) {
+  const delimiter =
+    delimiterLike === null || delimiterLike === undefined
+      ? ''
+      : Array.isArray(delimiterLike)
+        ? flattenExcelArgs(delimiterLike)
+            .map((entry) => toTextForConcat(entry))
+            .join('')
+        : String(delimiterLike);
   const ignoreEmpty = parseExcelBool(ignoreEmptyLike);
   const values = flattenExcelArgs(valuesLike)
     .filter((entry) => !ignoreEmpty || !isExcelBlank(entry))
@@ -552,7 +583,11 @@ function countIf(rangeLike: unknown, criteriaLike: unknown) {
   );
 }
 
-function sumIf(rangeLike: unknown, criteriaLike: unknown, sumRangeLike?: unknown) {
+function sumIf(
+  rangeLike: unknown,
+  criteriaLike: unknown,
+  sumRangeLike?: unknown,
+) {
   const range = flattenExcelArgs(rangeLike);
   const sumRange = flattenExcelArgs(sumRangeLike ?? rangeLike);
   const matcher = createCriteriaMatcher(criteriaLike);
@@ -626,7 +661,10 @@ function matchValue(
         return idx + 1;
       }
       if ((entry as never) < (lookupValue as never)) {
-        if (indexValue === undefined || (entry as never) > (indexValue as never)) {
+        if (
+          indexValue === undefined ||
+          (entry as never) > (indexValue as never)
+        ) {
           index = idx + 1;
           indexValue = entry;
         }
@@ -654,7 +692,10 @@ function matchValue(
         return idx + 1;
       }
       if ((entry as never) > (lookupValue as never)) {
-        if (indexValue === undefined || (entry as never) < (indexValue as never)) {
+        if (
+          indexValue === undefined ||
+          (entry as never) < (indexValue as never)
+        ) {
           index = idx + 1;
           indexValue = entry;
         }
@@ -695,8 +736,10 @@ function indexValue(
   }
 
   let rowNum = parseExcelNumber(rowNumLike);
-  let columnNum = columnNumLike === undefined ? undefined : parseExcelNumber(columnNumLike);
-  const isOneDimensionRange = arrayLike.length > 0 && !Array.isArray(arrayLike[0]);
+  let columnNum =
+    columnNumLike === undefined ? undefined : parseExcelNumber(columnNumLike);
+  const isOneDimensionRange =
+    arrayLike.length > 0 && !Array.isArray(arrayLike[0]);
 
   if (isOneDimensionRange && columnNum === undefined) {
     columnNum = rowNum;
@@ -720,7 +763,7 @@ function indexValue(
 
   const table = arrayLike as unknown[][];
   if (rowNum <= table.length && (columnNum ?? 0) <= table[rowNum - 1]!.length) {
-    return table[rowNum - 1]![((columnNum ?? 1) - 1)];
+    return table[rowNum - 1]![(columnNum ?? 1) - 1];
   }
 
   throwExcelError(EXCEL_ERROR.ref);
@@ -732,9 +775,10 @@ function lookupValue(
   resultArrayLike?: unknown,
 ) {
   const lookupArray = flattenExcelArgs(arrayLike);
-  const resultArray = resultArrayLike === undefined
-    ? lookupArray
-    : flattenExcelArgs(resultArrayLike);
+  const resultArray =
+    resultArrayLike === undefined
+      ? lookupArray
+      : flattenExcelArgs(resultArrayLike);
   const isNumberLookup = typeof lookupLike === 'number';
 
   let result: unknown = undefined;
@@ -748,7 +792,9 @@ function lookupValue(
     }
 
     if (
-      (isNumberLookup && typeof entry === 'number' && entry <= (lookupLike as number)) ||
+      (isNumberLookup &&
+        typeof entry === 'number' &&
+        entry <= (lookupLike as number)) ||
       (typeof entry === 'string' &&
         typeof lookupLike === 'string' &&
         entry.localeCompare(lookupLike) < 0)
@@ -758,7 +804,11 @@ function lookupValue(
       continue;
     }
 
-    if (isNumberLookup && typeof entry === 'number' && entry > (lookupLike as number)) {
+    if (
+      isNumberLookup &&
+      typeof entry === 'number' &&
+      entry > (lookupLike as number)
+    ) {
       if (found) {
         return result;
       }
@@ -823,10 +873,7 @@ function xlookupValue(
 
       if (typeof entry === 'string' && typeof lookupLike === 'string') {
         const order = entry.localeCompare(lookupLike);
-        if (
-          (matchMode === -1 && order < 0) ||
-          (matchMode === 1 && order > 0)
-        ) {
+        if ((matchMode === -1 && order < 0) || (matchMode === 1 && order > 0)) {
           if (
             bestIndex === undefined ||
             (matchMode === -1 &&
@@ -872,9 +919,8 @@ function vlookupValue(
   }
 
   const table = toLookupTable(tableLike);
-  const rangeLookup = rangeLookupLike === undefined
-    ? true
-    : parseExcelBool(rangeLookupLike);
+  const rangeLookup =
+    rangeLookupLike === undefined ? true : parseExcelBool(rangeLookupLike);
   const lookupValueNormalized =
     typeof lookupLike === 'string' ? lookupLike.toLowerCase() : lookupLike;
   const isNumberLookup = typeof lookupLike === 'number';
@@ -896,12 +942,12 @@ function vlookupValue(
     if (
       !exactMatchOnly &&
       rangeLookup &&
-      (
-        (isNumberLookup && typeof rowValue === 'number' && rowValue <= (lookupLike as number)) ||
+      ((isNumberLookup &&
+        typeof rowValue === 'number' &&
+        rowValue <= (lookupLike as number)) ||
         (typeof rowValue === 'string' &&
           typeof lookupValueNormalized === 'string' &&
-          rowValue.localeCompare(lookupValueNormalized) < 0)
-      )
+          rowValue.localeCompare(lookupValueNormalized) < 0))
     ) {
       if (colIndex > row.length) {
         throwExcelError(EXCEL_ERROR.ref);
@@ -910,7 +956,11 @@ function vlookupValue(
       found = true;
     }
 
-    if (isNumberLookup && typeof rowValue === 'number' && rowValue > (lookupLike as number)) {
+    if (
+      isNumberLookup &&
+      typeof rowValue === 'number' &&
+      rowValue > (lookupLike as number)
+    ) {
       exactMatchOnly = true;
     }
   }
@@ -945,7 +995,10 @@ function vlookupByRows(
   const lookupKey = parseExcelString(lookupKeyLike);
   const resultKey = parseExcelString(resultKeyLike);
   const rows = expectRows(rowsLike);
-  const table = rows.map((row) => [row[lookupKey] ?? null, row[resultKey] ?? null]);
+  const table = rows.map((row) => [
+    row[lookupKey] ?? null,
+    row[resultKey] ?? null,
+  ]);
   return vlookupValue(lookupValueLike, table, 2, rangeLookupLike);
 }
 
@@ -1034,7 +1087,11 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
     yield averageIf(range, criteria, averageRange);
   },
   *'AVERAGEIF_BY/4'(_input, rows, valueKey, criteriaKey, criteria) {
-    yield averageIf(colValues(rows, criteriaKey), criteria, colValues(rows, valueKey));
+    yield averageIf(
+      colValues(rows, criteriaKey),
+      criteria,
+      colValues(rows, valueKey),
+    );
   },
   *'AVERAGEIFS_BY/3'(_input, rows, valueKey, criteriaObject) {
     const filteredRows = filterRowsByCriteria(rows, criteriaObject);
@@ -1051,6 +1108,8 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
     yield chooseValue(index, options);
   },
   *'CLEAN/1'(_input, value) {
+    /* eslint-disable-next-line no-control-regex -- CLEAN's contract is to strip
+       the non-printable ASCII control range, so matching it is the point. */
     yield parseExcelString(value).replace(/[\0-\x1F]/g, '');
   },
   *'CODE/1'(_input, value) {
@@ -1075,10 +1134,14 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
     yield Array.isArray(value[0]) ? value[0].length : value.length;
   },
   *'CONCAT/1'(_input, value) {
-    yield flattenExcelArgs(value).map((entry) => toTextForConcat(entry)).join('');
+    yield flattenExcelArgs(value)
+      .map((entry) => toTextForConcat(entry))
+      .join('');
   },
   *'CONCATENATE/1'(_input, value) {
-    yield flattenExcelArgs(value).map((entry) => toTextForConcat(entry)).join('');
+    yield flattenExcelArgs(value)
+      .map((entry) => toTextForConcat(entry))
+      .join('');
   },
   *'COUNT/1'(_input, value) {
     yield countExcelNumbers(value);
@@ -1145,7 +1208,9 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
     yield false;
   },
   *'FIND/2'(_input, findText, withinText) {
-    const found = parseExcelString(withinText).indexOf(parseExcelString(findText));
+    const found = parseExcelString(withinText).indexOf(
+      parseExcelString(findText),
+    );
     if (found === -1) {
       throwExcelError(EXCEL_ERROR.value);
     }
@@ -1186,7 +1251,12 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
     yield vlookupValue(lookupValueLike, transposeLookupTable(table), rowIndex);
   },
   *'HLOOKUP/4'(_input, lookupValueLike, table, rowIndex, rangeLookup) {
-    yield vlookupValue(lookupValueLike, transposeLookupTable(table), rowIndex, rangeLookup);
+    yield vlookupValue(
+      lookupValueLike,
+      transposeLookupTable(table),
+      rowIndex,
+      rangeLookup,
+    );
   },
   *'INDEX/2'(_input, array, rowNum) {
     yield indexValue(array, rowNum);
@@ -1207,7 +1277,9 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
     yield value === null || value === undefined;
   },
   *'ISNUMBER/1'(_input, value) {
-    yield typeof value === 'number' && !Number.isNaN(value) && Number.isFinite(value);
+    yield typeof value === 'number' &&
+      !Number.isNaN(value) &&
+      Number.isFinite(value);
   },
   *'ISTEXT/1'(_input, value) {
     yield typeof value === 'string';
@@ -1325,11 +1397,9 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   },
   *'REPLACE/4'(_input, oldText, startNum, length, newText) {
     const text = parseExcelString(oldText);
-    yield (
-      text.slice(0, parseExcelNumber(startNum) - 1) +
+    yield text.slice(0, parseExcelNumber(startNum) - 1) +
       parseExcelString(newText) +
-      text.slice(parseExcelNumber(startNum) - 1 + parseExcelNumber(length))
-    );
+      text.slice(parseExcelNumber(startNum) - 1 + parseExcelNumber(length));
   },
   *'REPT/2'(_input, text, count) {
     yield new Array(parseExcelNumber(count) + 1).join(parseExcelString(text));
@@ -1438,7 +1508,11 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
     yield sumIf(range, criteria, sumRange);
   },
   *'SUMIF_BY/4'(_input, rows, valueKey, criteriaKey, criteria) {
-    yield sumIf(colValues(rows, criteriaKey), criteria, colValues(rows, valueKey));
+    yield sumIf(
+      colValues(rows, criteriaKey),
+      criteria,
+      colValues(rows, valueKey),
+    );
   },
   *'SUMIFS_BY/3'(_input, rows, valueKey, criteriaObject) {
     const filteredRows = filterRowsByCriteria(rows, criteriaObject);
@@ -1522,8 +1596,21 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   *'VLOOKUP_BY/4'(_input, rows, lookupKey, lookupValueLike, resultKey) {
     yield vlookupByRows(rows, lookupKey, lookupValueLike, resultKey, false);
   },
-  *'VLOOKUP_BY/5'(_input, rows, lookupKey, lookupValueLike, resultKey, rangeLookup) {
-    yield vlookupByRows(rows, lookupKey, lookupValueLike, resultKey, rangeLookup);
+  *'VLOOKUP_BY/5'(
+    _input,
+    rows,
+    lookupKey,
+    lookupValueLike,
+    resultKey,
+    rangeLookup,
+  ) {
+    yield vlookupByRows(
+      rows,
+      lookupKey,
+      lookupValueLike,
+      resultKey,
+      rangeLookup,
+    );
   },
   *'XLOOKUP/3'(_input, lookupValueLike, lookupArray, returnArray) {
     yield xlookupValue(lookupValueLike, lookupArray, returnArray);
@@ -1531,10 +1618,31 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   *'XLOOKUP/4'(_input, lookupValueLike, lookupArray, returnArray, ifNotFound) {
     yield xlookupValue(lookupValueLike, lookupArray, returnArray, ifNotFound);
   },
-  *'XLOOKUP/5'(_input, lookupValueLike, lookupArray, returnArray, ifNotFound, matchMode) {
-    yield xlookupValue(lookupValueLike, lookupArray, returnArray, ifNotFound, matchMode);
+  *'XLOOKUP/5'(
+    _input,
+    lookupValueLike,
+    lookupArray,
+    returnArray,
+    ifNotFound,
+    matchMode,
+  ) {
+    yield xlookupValue(
+      lookupValueLike,
+      lookupArray,
+      returnArray,
+      ifNotFound,
+      matchMode,
+    );
   },
-  *'XLOOKUP/6'(_input, lookupValueLike, lookupArray, returnArray, ifNotFound, matchMode, searchMode) {
+  *'XLOOKUP/6'(
+    _input,
+    lookupValueLike,
+    lookupArray,
+    returnArray,
+    ifNotFound,
+    matchMode,
+    searchMode,
+  ) {
     yield xlookupValue(
       lookupValueLike,
       lookupArray,
@@ -1584,18 +1692,26 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
     yield n >= 0 ? result : -result;
   },
   *'GCD/1'(_input, values) {
-    const nums = flattenExcelArgs(values).map(parseExcelNumber).map(Math.abs).map(Math.floor);
+    const nums = flattenExcelArgs(values)
+      .map(parseExcelNumber)
+      .map(Math.abs)
+      .map(Math.floor);
     if (nums.length === 0) yield 0;
     else {
-      const gcd2 = (a: number, b: number): number => (b === 0 ? a : gcd2(b, a % b));
+      const gcd2 = (a: number, b: number): number =>
+        b === 0 ? a : gcd2(b, a % b);
       yield nums.reduce(gcd2);
     }
   },
   *'LCM/1'(_input, values) {
-    const nums = flattenExcelArgs(values).map(parseExcelNumber).map(Math.abs).map(Math.floor);
+    const nums = flattenExcelArgs(values)
+      .map(parseExcelNumber)
+      .map(Math.abs)
+      .map(Math.floor);
     if (nums.length === 0) yield 0;
     else {
-      const gcd2 = (a: number, b: number): number => (b === 0 ? a : gcd2(b, a % b));
+      const gcd2 = (a: number, b: number): number =>
+        b === 0 ? a : gcd2(b, a % b);
       const lcm2 = (a: number, b: number) => (a * b) / gcd2(a, b);
       yield nums.reduce(lcm2);
     }
@@ -1603,7 +1719,10 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   *'FACT/1'(_input, value) {
     const n = Math.floor(parseExcelNumber(value));
     if (n < 0) throwExcelError(EXCEL_ERROR.num);
-    if (n === 0) { yield 1; return; }
+    if (n === 0) {
+      yield 1;
+      return;
+    }
     let result = 1;
     for (let i = 2; i <= n; i++) result *= i;
     yield result;
@@ -1611,7 +1730,10 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   *'FACTDOUBLE/1'(_input, value) {
     const n = Math.floor(parseExcelNumber(value));
     if (n < -1) throwExcelError(EXCEL_ERROR.num);
-    if (n <= 0) { yield 1; return; }
+    if (n <= 0) {
+      yield 1;
+      return;
+    }
     let result = 1;
     for (let i = n; i > 1; i -= 2) result *= i;
     yield result;
@@ -1639,7 +1761,7 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
     const kk = Math.floor(parseExcelNumber(k));
     if (nn < 0 || kk < 0 || kk > nn) throwExcelError(EXCEL_ERROR.num);
     let result = 1;
-    for (let i = 0; i < kk; i++) result *= (nn - i);
+    for (let i = 0; i < kk; i++) result *= nn - i;
     yield result;
   },
   *'RAND/0'() {
@@ -1654,7 +1776,10 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   *'MROUND/2'(_input, number, multiple) {
     const n = parseExcelNumber(number);
     const m = parseExcelNumber(multiple);
-    if (m === 0) { yield 0; return; }
+    if (m === 0) {
+      yield 0;
+      return;
+    }
     if (n * m < 0) throwExcelError(EXCEL_ERROR.num);
     yield Math.round(n / m) * m;
   },
@@ -1672,7 +1797,10 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   },
   *'SUMPRODUCT/1'(_input, arrays) {
     // arrays should be array of arrays. Product element-wise then sum.
-    if (!Array.isArray(arrays) || arrays.length === 0) { yield 0; return; }
+    if (!Array.isArray(arrays) || arrays.length === 0) {
+      yield 0;
+      return;
+    }
     // If it's an array of arrays, multiply pairwise and sum
     if (Array.isArray(arrays[0])) {
       const len = (arrays[0] as unknown[]).length;
@@ -1701,18 +1829,24 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
     yield total;
   },
   *'SUMX2MY2/2'(_input, left, right) {
-    yield sumPairValue(left, right, (leftValue, rightValue) =>
-      leftValue ** 2 - rightValue ** 2,
+    yield sumPairValue(
+      left,
+      right,
+      (leftValue, rightValue) => leftValue ** 2 - rightValue ** 2,
     );
   },
   *'SUMX2PY2/2'(_input, left, right) {
-    yield sumPairValue(left, right, (leftValue, rightValue) =>
-      leftValue ** 2 + rightValue ** 2,
+    yield sumPairValue(
+      left,
+      right,
+      (leftValue, rightValue) => leftValue ** 2 + rightValue ** 2,
     );
   },
   *'SUMXMY2/2'(_input, left, right) {
-    yield sumPairValue(left, right, (leftValue, rightValue) =>
-      (leftValue - rightValue) ** 2,
+    yield sumPairValue(
+      left,
+      right,
+      (leftValue, rightValue) => (leftValue - rightValue) ** 2,
     );
   },
 
@@ -1723,7 +1857,8 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   *'SWITCH/1'(_input, args) {
     // SWITCH(expr; val1; result1; val2; result2; ...; default)
     // In jqxl, called as SWITCH([expr, val1, result1, val2, result2, ...])
-    if (!Array.isArray(args) || args.length < 3) throwExcelError(EXCEL_ERROR.value);
+    if (!Array.isArray(args) || args.length < 3)
+      throwExcelError(EXCEL_ERROR.value);
     const expr = args[0];
     for (let i = 1; i < args.length - 1; i += 2) {
       if (args[i] === expr) {
@@ -1792,8 +1927,9 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   },
   *'VAR/1'(_input, values) {
     // VAR = sample variance (VAR.S)
-    const nums = flattenExcelArgs(values)
-      .filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+    const nums = flattenExcelArgs(values).filter(
+      (v): v is number => typeof v === 'number' && Number.isFinite(v),
+    );
     if (nums.length < 2) throwExcelError(EXCEL_ERROR.div0);
     const mean = nums.reduce((a, b) => a + b, 0) / nums.length;
     const sumSqDev = nums.reduce((acc, v) => acc + (v - mean) ** 2, 0);
@@ -1801,8 +1937,9 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   },
   *'VAR_P/1'(_input, values) {
     // VAR.P = population variance
-    const nums = flattenExcelArgs(values)
-      .filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+    const nums = flattenExcelArgs(values).filter(
+      (v): v is number => typeof v === 'number' && Number.isFinite(v),
+    );
     if (nums.length === 0) throwExcelError(EXCEL_ERROR.div0);
     const mean = nums.reduce((a, b) => a + b, 0) / nums.length;
     const sumSqDev = nums.reduce((acc, v) => acc + (v - mean) ** 2, 0);
@@ -1810,8 +1947,9 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   },
   *'VAR_S/1'(_input, values) {
     // alias for VAR (sample variance)
-    const nums = flattenExcelArgs(values)
-      .filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+    const nums = flattenExcelArgs(values).filter(
+      (v): v is number => typeof v === 'number' && Number.isFinite(v),
+    );
     if (nums.length < 2) throwExcelError(EXCEL_ERROR.div0);
     const mean = nums.reduce((a, b) => a + b, 0) / nums.length;
     const sumSqDev = nums.reduce((acc, v) => acc + (v - mean) ** 2, 0);
@@ -1820,7 +1958,8 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   *'MAXIFS/1'(_input, args) {
     // MAXIFS([values, criteria_range, criteria, ...])
     // Simplified: MAXIFS_BY pattern preferred. This is array-based.
-    if (!Array.isArray(args) || args.length < 3) throwExcelError(EXCEL_ERROR.value);
+    if (!Array.isArray(args) || args.length < 3)
+      throwExcelError(EXCEL_ERROR.value);
     const vals = Array.isArray(args[0]) ? args[0] : [args[0]];
     const criteriaRange = Array.isArray(args[1]) ? args[1] : [args[1]];
     const criteria = args[2];
@@ -1830,13 +1969,17 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
     for (let i = 0; i < vals.length; i++) {
       if (matcher(criteriaRange[i] ?? null)) {
         const v = parseExcelNumber(vals[i]);
-        if (v > max) { max = v; found = true; }
+        if (v > max) {
+          max = v;
+          found = true;
+        }
       }
     }
     yield found ? max : 0;
   },
   *'MINIFS/1'(_input, args) {
-    if (!Array.isArray(args) || args.length < 3) throwExcelError(EXCEL_ERROR.value);
+    if (!Array.isArray(args) || args.length < 3)
+      throwExcelError(EXCEL_ERROR.value);
     const vals = Array.isArray(args[0]) ? args[0] : [args[0]];
     const criteriaRange = Array.isArray(args[1]) ? args[1] : [args[1]];
     const criteria = args[2];
@@ -1846,19 +1989,28 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
     for (let i = 0; i < vals.length; i++) {
       if (matcher(criteriaRange[i] ?? null)) {
         const v = parseExcelNumber(vals[i]);
-        if (v < min) { min = v; found = true; }
+        if (v < min) {
+          min = v;
+          found = true;
+        }
       }
     }
     yield found ? min : 0;
   },
   *'CORREL/2'(_input, array1, array2) {
-    const x = flattenExcelArgs(array1).filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
-    const y = flattenExcelArgs(array2).filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+    const x = flattenExcelArgs(array1).filter(
+      (v): v is number => typeof v === 'number' && Number.isFinite(v),
+    );
+    const y = flattenExcelArgs(array2).filter(
+      (v): v is number => typeof v === 'number' && Number.isFinite(v),
+    );
     const n = Math.min(x.length, y.length);
     if (n < 2) throwExcelError(EXCEL_ERROR.div0);
     const meanX = x.slice(0, n).reduce((a, b) => a + b, 0) / n;
     const meanY = y.slice(0, n).reduce((a, b) => a + b, 0) / n;
-    let sumXY = 0, sumX2 = 0, sumY2 = 0;
+    let sumXY = 0,
+      sumX2 = 0,
+      sumY2 = 0;
     for (let i = 0; i < n; i++) {
       const dx = x[i] - meanX;
       const dy = y[i] - meanY;
@@ -1871,13 +2023,18 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
     yield sumXY / denom;
   },
   *'SLOPE/2'(_input, knownY, knownX) {
-    const y = flattenExcelArgs(knownY).filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
-    const x = flattenExcelArgs(knownX).filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+    const y = flattenExcelArgs(knownY).filter(
+      (v): v is number => typeof v === 'number' && Number.isFinite(v),
+    );
+    const x = flattenExcelArgs(knownX).filter(
+      (v): v is number => typeof v === 'number' && Number.isFinite(v),
+    );
     const n = Math.min(x.length, y.length);
     if (n < 2) throwExcelError(EXCEL_ERROR.div0);
     const meanX = x.slice(0, n).reduce((a, b) => a + b, 0) / n;
     const meanY = y.slice(0, n).reduce((a, b) => a + b, 0) / n;
-    let sumXY = 0, sumX2 = 0;
+    let sumXY = 0,
+      sumX2 = 0;
     for (let i = 0; i < n; i++) {
       sumXY += (x[i] - meanX) * (y[i] - meanY);
       sumX2 += (x[i] - meanX) ** 2;
@@ -1886,13 +2043,18 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
     yield sumXY / sumX2;
   },
   *'INTERCEPT/2'(_input, knownY, knownX) {
-    const y = flattenExcelArgs(knownY).filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
-    const x = flattenExcelArgs(knownX).filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+    const y = flattenExcelArgs(knownY).filter(
+      (v): v is number => typeof v === 'number' && Number.isFinite(v),
+    );
+    const x = flattenExcelArgs(knownX).filter(
+      (v): v is number => typeof v === 'number' && Number.isFinite(v),
+    );
     const n = Math.min(x.length, y.length);
     if (n < 2) throwExcelError(EXCEL_ERROR.div0);
     const meanX = x.slice(0, n).reduce((a, b) => a + b, 0) / n;
     const meanY = y.slice(0, n).reduce((a, b) => a + b, 0) / n;
-    let sumXY = 0, sumX2 = 0;
+    let sumXY = 0,
+      sumX2 = 0;
     for (let i = 0; i < n; i++) {
       sumXY += (x[i] - meanX) * (y[i] - meanY);
       sumX2 += (x[i] - meanX) ** 2;
@@ -1902,13 +2064,18 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   },
   *'FORECAST/3'(_input, x, knownY, knownX) {
     const xVal = parseExcelNumber(x);
-    const yArr = flattenExcelArgs(knownY).filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
-    const xArr = flattenExcelArgs(knownX).filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+    const yArr = flattenExcelArgs(knownY).filter(
+      (v): v is number => typeof v === 'number' && Number.isFinite(v),
+    );
+    const xArr = flattenExcelArgs(knownX).filter(
+      (v): v is number => typeof v === 'number' && Number.isFinite(v),
+    );
     const n = Math.min(xArr.length, yArr.length);
     if (n < 2) throwExcelError(EXCEL_ERROR.div0);
     const meanX = xArr.slice(0, n).reduce((a, b) => a + b, 0) / n;
     const meanY = yArr.slice(0, n).reduce((a, b) => a + b, 0) / n;
-    let sumXY = 0, sumX2 = 0;
+    let sumXY = 0,
+      sumX2 = 0;
     for (let i = 0; i < n; i++) {
       sumXY += (xArr[i] - meanX) * (yArr[i] - meanY);
       sumX2 += (xArr[i] - meanX) ** 2;
@@ -1920,7 +2087,9 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   },
   *'RANK_EQ/2'(_input, number, ref) {
     const n = parseExcelNumber(number);
-    const nums = flattenExcelArgs(ref).filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+    const nums = flattenExcelArgs(ref).filter(
+      (v): v is number => typeof v === 'number' && Number.isFinite(v),
+    );
     const sorted = [...nums].sort((a, b) => b - a); // descending by default
     const idx = sorted.indexOf(n);
     if (idx === -1) throwExcelError(EXCEL_ERROR.na);
@@ -1928,18 +2097,27 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   },
   *'RANK_EQ/3'(_input, number, ref, order) {
     const n = parseExcelNumber(number);
-    const nums = flattenExcelArgs(ref).filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+    const nums = flattenExcelArgs(ref).filter(
+      (v): v is number => typeof v === 'number' && Number.isFinite(v),
+    );
     const asc = parseExcelNumber(order) !== 0;
-    const sorted = asc ? [...nums].sort((a, b) => a - b) : [...nums].sort((a, b) => b - a);
+    const sorted = asc
+      ? [...nums].sort((a, b) => a - b)
+      : [...nums].sort((a, b) => b - a);
     const idx = sorted.indexOf(n);
     if (idx === -1) throwExcelError(EXCEL_ERROR.na);
     yield idx + 1;
   },
   *'RANK_AVG/2'(_input, number, ref) {
     const n = parseExcelNumber(number);
-    const nums = flattenExcelArgs(ref).filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+    const nums = flattenExcelArgs(ref).filter(
+      (v): v is number => typeof v === 'number' && Number.isFinite(v),
+    );
     const sorted = [...nums].sort((a, b) => b - a);
-    const indices = sorted.reduce<number[]>((acc, v, i) => { if (v === n) acc.push(i + 1); return acc; }, []);
+    const indices = sorted.reduce<number[]>((acc, v, i) => {
+      if (v === n) acc.push(i + 1);
+      return acc;
+    }, []);
     if (indices.length === 0) throwExcelError(EXCEL_ERROR.na);
     yield indices.reduce((a, b) => a + b, 0) / indices.length;
   },
@@ -1977,29 +2155,33 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
     }
   },
   *'AVEDEV/1'(_input, values) {
-    const nums = flattenExcelArgs(values)
-      .filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+    const nums = flattenExcelArgs(values).filter(
+      (v): v is number => typeof v === 'number' && Number.isFinite(v),
+    );
     if (nums.length === 0) throwExcelError(EXCEL_ERROR.num);
     const mean = nums.reduce((a, b) => a + b, 0) / nums.length;
     yield nums.reduce((acc, v) => acc + Math.abs(v - mean), 0) / nums.length;
   },
   *'DEVSQ/1'(_input, values) {
-    const nums = flattenExcelArgs(values)
-      .filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+    const nums = flattenExcelArgs(values).filter(
+      (v): v is number => typeof v === 'number' && Number.isFinite(v),
+    );
     if (nums.length === 0) throwExcelError(EXCEL_ERROR.num);
     const mean = nums.reduce((a, b) => a + b, 0) / nums.length;
     yield nums.reduce((acc, v) => acc + (v - mean) ** 2, 0);
   },
   *'GEOMEAN/1'(_input, values) {
-    const nums = flattenExcelArgs(values)
-      .filter((v): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0);
+    const nums = flattenExcelArgs(values).filter(
+      (v): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0,
+    );
     if (nums.length === 0) throwExcelError(EXCEL_ERROR.num);
     const logSum = nums.reduce((acc, v) => acc + Math.log(v), 0);
     yield Math.exp(logSum / nums.length);
   },
   *'HARMEAN/1'(_input, values) {
-    const nums = flattenExcelArgs(values)
-      .filter((v): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0);
+    const nums = flattenExcelArgs(values).filter(
+      (v): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0,
+    );
     if (nums.length === 0) throwExcelError(EXCEL_ERROR.num);
     const recipSum = nums.reduce((acc, v) => acc + 1 / v, 0);
     yield nums.length / recipSum;
@@ -2009,30 +2191,37 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
       .filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
       .sort((a, b) => a - b);
     const pct = parseExcelNumber(percent);
-    if (pct < 0 || pct >= 1 || nums.length === 0) throwExcelError(EXCEL_ERROR.num);
-    const trim = Math.floor(nums.length * pct / 2);
+    if (pct < 0 || pct >= 1 || nums.length === 0)
+      throwExcelError(EXCEL_ERROR.num);
+    const trim = Math.floor((nums.length * pct) / 2);
     const trimmed = nums.slice(trim, nums.length - trim);
     if (trimmed.length === 0) throwExcelError(EXCEL_ERROR.num);
     yield trimmed.reduce((a, b) => a + b, 0) / trimmed.length;
   },
   *'SKEW/1'(_input, values) {
-    const nums = flattenExcelArgs(values)
-      .filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+    const nums = flattenExcelArgs(values).filter(
+      (v): v is number => typeof v === 'number' && Number.isFinite(v),
+    );
     const n = nums.length;
     if (n < 3) throwExcelError(EXCEL_ERROR.div0);
     const mean = nums.reduce((a, b) => a + b, 0) / n;
-    const s = Math.sqrt(nums.reduce((acc, v) => acc + (v - mean) ** 2, 0) / (n - 1));
+    const s = Math.sqrt(
+      nums.reduce((acc, v) => acc + (v - mean) ** 2, 0) / (n - 1),
+    );
     if (s === 0) throwExcelError(EXCEL_ERROR.div0);
     const sum3 = nums.reduce((acc, v) => acc + ((v - mean) / s) ** 3, 0);
     yield (n / ((n - 1) * (n - 2))) * sum3;
   },
   *'KURT/1'(_input, values) {
-    const nums = flattenExcelArgs(values)
-      .filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+    const nums = flattenExcelArgs(values).filter(
+      (v): v is number => typeof v === 'number' && Number.isFinite(v),
+    );
     const n = nums.length;
     if (n < 4) throwExcelError(EXCEL_ERROR.div0);
     const mean = nums.reduce((a, b) => a + b, 0) / n;
-    const s = Math.sqrt(nums.reduce((acc, v) => acc + (v - mean) ** 2, 0) / (n - 1));
+    const s = Math.sqrt(
+      nums.reduce((acc, v) => acc + (v - mean) ** 2, 0) / (n - 1),
+    );
     if (s === 0) throwExcelError(EXCEL_ERROR.div0);
     const sum4 = nums.reduce((acc, v) => acc + ((v - mean) / s) ** 4, 0);
     const coeff = (n * (n + 1)) / ((n - 1) * (n - 2) * (n - 3));
@@ -2095,7 +2284,11 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
     const serial = Math.floor(parseExcelNumber(serialDate));
     const epoch = new Date(1899, 11, 30);
     const date = new Date(epoch.getTime() + serial * 86400000);
-    const dayOfYear = Math.floor((date.getTime() - new Date(date.getFullYear(), 0, 1).getTime()) / 86400000) + 1;
+    const dayOfYear =
+      Math.floor(
+        (date.getTime() - new Date(date.getFullYear(), 0, 1).getTime()) /
+          86400000,
+      ) + 1;
     const dow = date.getDay() || 7; // Mon=1..Sun=7
     const woy = Math.floor((dayOfYear - dow + 10) / 7);
     yield woy;
@@ -2147,7 +2340,8 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
       .sort((a, b) => a - b);
     const kk = parseExcelNumber(k);
     const n = nums.length;
-    if (kk <= 1 / (n + 1) || kk >= n / (n + 1) || n === 0) throwExcelError(EXCEL_ERROR.num);
+    if (kk <= 1 / (n + 1) || kk >= n / (n + 1) || n === 0)
+      throwExcelError(EXCEL_ERROR.num);
     const rank = kk * (n + 1) - 1;
     const intPart = Math.floor(rank);
     const frac = rank - intPart;
@@ -2182,10 +2376,17 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
       .sort((a, b) => a - b);
     const xVal = parseExcelNumber(x);
     const n = nums.length;
-    if (n === 0 || xVal < nums[0] || xVal > nums[n - 1]) throwExcelError(EXCEL_ERROR.na);
-    if (n === 1) { yield 0; return; }
+    if (n === 0 || xVal < nums[0] || xVal > nums[n - 1])
+      throwExcelError(EXCEL_ERROR.na);
+    if (n === 1) {
+      yield 0;
+      return;
+    }
     for (let i = 0; i < n; i++) {
-      if (nums[i] === xVal) { yield i / (n - 1); return; }
+      if (nums[i] === xVal) {
+        yield i / (n - 1);
+        return;
+      }
       if (i + 1 < n && nums[i] < xVal && xVal < nums[i + 1]) {
         yield (i + (xVal - nums[i]) / (nums[i + 1] - nums[i])) / (n - 1);
         return;
@@ -2199,9 +2400,13 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
       .sort((a, b) => a - b);
     const xVal = parseExcelNumber(x);
     const n = nums.length;
-    if (n === 0 || xVal < nums[0] || xVal > nums[n - 1]) throwExcelError(EXCEL_ERROR.na);
+    if (n === 0 || xVal < nums[0] || xVal > nums[n - 1])
+      throwExcelError(EXCEL_ERROR.na);
     for (let i = 0; i < n; i++) {
-      if (nums[i] === xVal) { yield (i + 1) / (n + 1); return; }
+      if (nums[i] === xVal) {
+        yield (i + 1) / (n + 1);
+        return;
+      }
       if (i + 1 < n && nums[i] < xVal && xVal < nums[i + 1]) {
         yield (i + 1 + (xVal - nums[i]) / (nums[i + 1] - nums[i])) / (n + 1);
         return;
@@ -2211,13 +2416,19 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   },
   *'PEARSON/2'(_input, array1, array2) {
     // PEARSON is identical to CORREL
-    const x = flattenExcelArgs(array1).filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
-    const y = flattenExcelArgs(array2).filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+    const x = flattenExcelArgs(array1).filter(
+      (v): v is number => typeof v === 'number' && Number.isFinite(v),
+    );
+    const y = flattenExcelArgs(array2).filter(
+      (v): v is number => typeof v === 'number' && Number.isFinite(v),
+    );
     const n = Math.min(x.length, y.length);
     if (n < 2) throwExcelError(EXCEL_ERROR.div0);
     const meanX = x.slice(0, n).reduce((a, b) => a + b, 0) / n;
     const meanY = y.slice(0, n).reduce((a, b) => a + b, 0) / n;
-    let sumXY = 0, sumX2 = 0, sumY2 = 0;
+    let sumXY = 0,
+      sumX2 = 0,
+      sumY2 = 0;
     for (let i = 0; i < n; i++) {
       const dx = x[i] - meanX;
       const dy = y[i] - meanY;
@@ -2240,7 +2451,7 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
 // merge into the eager `formula` library — DATE/YEAR/NETWORKDAYS et al
 // are common enough that lazy-loading the 3 KB chunk would cost more in
 // first-call latency than the bytes save.
-import { formulaDateSerialNativeFilters } from './formula-dateSerial-native.js';
+import { formulaDateSerialNativeFilters } from './formula-dateSerial-native.ts';
 
 export const formulaContribNativeFilters = {
   ...wrapBareNativeFilters(bareNativeFilters),

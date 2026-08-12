@@ -1,10 +1,10 @@
 import { deepStrictEqual, strictEqual } from 'node:assert';
-import { evaluateBxl, lintBxlExpression } from '../../src/index.js';
+import { evaluateBxl, lintBxlExpression } from '../../src/index.ts';
 import {
   bxlEdgeExampleInput,
   bxlEdgeExampleSchema,
   bxlEdgeExamples,
-} from '../../examples/bxl-edge-examples.js';
+} from '../../examples/bxl-edge-examples.ts';
 
 interface Failure {
   id: number;

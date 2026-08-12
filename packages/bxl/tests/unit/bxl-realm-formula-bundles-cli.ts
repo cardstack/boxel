@@ -2,7 +2,7 @@ import { deepStrictEqual, ok } from 'node:assert';
 import {
   realmFormulaBundles,
   runFormulaBundle,
-} from '../../src/examples/index.js';
+} from '../../src/examples/index.ts';
 
 const failures: string[] = [];
 
@@ -28,8 +28,14 @@ const allExpressions = realmFormulaBundles
   .flatMap((bundle) => bundle.steps.map((step) => step.expression))
   .join('\n');
 
-ok(allExpressions.includes('BESSELJ'), 'bundle should cover lazy Bessel formulas');
-ok(allExpressions.includes('PMT('), 'bundle should cover lazy financial formulas');
+ok(
+  allExpressions.includes('BESSELJ'),
+  'bundle should cover lazy Bessel formulas',
+);
+ok(
+  allExpressions.includes('PMT('),
+  'bundle should cover lazy financial formulas',
+);
 ok(allExpressions.includes('NPV('), 'bundle should cover financial aggregates');
 ok(
   allExpressions.includes('LOGNORM.INV'),

@@ -1,4 +1,4 @@
-import {
+import type {
   DefAst,
   DestructuringAst,
   ExpressionAst,
@@ -6,7 +6,7 @@ import {
   NormalBinaryOperator,
   ProgAst,
   RuntimeAnnotatedExpressionAst,
-} from '../parser/AST.js';
+} from '../parser/AST.ts';
 import {
   applyNormalBinaryOperator,
   evaluateAlternativeOperator,
@@ -14,56 +14,56 @@ import {
   evaluateBooleanOperator,
   evaluateNormalBinaryOperator,
   evaluateSimpleAssignment,
-} from './applyBinary.js';
+} from './applyBinary.ts';
+import type {
+  EvaluateInput,
+  EvaluateOutput,
+  Item,
+  ItemIterator,
+} from './utils/utils.ts';
 import {
   access,
   collectValues,
   createItem,
   createSliceAccessor,
   deepClone,
-  EvaluateInput,
-  EvaluateOutput,
   generateItems,
   generatePaths,
   generateValues,
   isAtom,
   isTrue,
-  Item,
-  ItemIterator,
   recursiveDescent,
   relativizePath,
   single,
   Type,
   typeIsOneOf,
   typeOf,
-} from './utils/utils.js';
-import { generateObjects } from './generateObjects.js';
-import { generateCombinations } from './generateCombinations.js';
-import { JqEvaluateError } from '../errors.js';
-import { applyFormat } from './applyFormat.js';
-import { Parser } from '../parser/Parser.js';
+} from './utils/utils.ts';
+import { generateObjects } from './generateObjects.ts';
+import { generateCombinations } from './generateCombinations.ts';
+import { JqEvaluateError } from '../errors.ts';
+import { applyFormat } from './applyFormat.ts';
+import { Parser } from '../parser/Parser.ts';
+import type { NativeFilter } from './filters/lib/nativeFilter.ts';
 import {
   getBareNativeFilter,
   isNativeFilter,
-  NativeFilter,
   type BareNativeFilter,
-} from './filters/lib/nativeFilter.js';
+} from './filters/lib/nativeFilter.ts';
 import {
   cannotSliceError,
   notDefinedError,
   notImplementedError,
-} from './evaluateErrors.js';
-import { setPath } from './utils/setPath.js';
+} from './evaluateErrors.ts';
+import { setPath } from './utils/setPath.ts';
 import {
   BinaryOperatorType,
   isBinaryOperatorType,
-} from './utils/binaryOperator.js';
-import { getPath } from './utils/getPath.js';
-import {
-  ResolvedBuiltinRegistry,
-  resolveCoreRegistry,
-} from './filters/registry.js';
-import { checkRuntimeBudget } from './runtimeState.js';
+} from './utils/binaryOperator.ts';
+import { getPath } from './utils/getPath.ts';
+import type { ResolvedBuiltinRegistry } from './filters/registry.ts';
+import { resolveCoreRegistry } from './filters/registry.ts';
+import { checkRuntimeBudget } from './runtimeState.ts';
 
 interface Var<T = any> {
   scope: Environment | null;
@@ -80,8 +80,11 @@ function invalidSliceIndicesError() {
 }
 
 class BreakError extends JqEvaluateError {
-  constructor(public readonly value: string) {
+  readonly value: string;
+
+  constructor(value: string) {
     super(`Label ${value} is not defined`);
+    this.value = value;
   }
 }
 
@@ -107,7 +110,9 @@ function appendStaticPath(base: Item['path'], path: string[]): Item['path'] {
 function hasSingleOutput(
   ast: ExpressionAst | undefined,
 ): ast is RuntimeAnnotatedExpressionAst {
-  return Boolean((ast as RuntimeAnnotatedExpressionAst | undefined)?.singleOutput);
+  return Boolean(
+    (ast as RuntimeAnnotatedExpressionAst | undefined)?.singleOutput,
+  );
 }
 
 function isNormalBinaryOperator(op: string): op is NormalBinaryOperator {
@@ -172,12 +177,16 @@ export function* evaluateItemsWithRegistry(
 
 class Environment {
   private readonly vars: Record<string, Var>;
+  private parent: Environment | null;
+  private readonly builtins: ResolvedBuiltinRegistry;
 
   constructor(
-    private parent: Environment | null = null,
-    private readonly builtins: ResolvedBuiltinRegistry = parent?.builtins ??
+    parent: Environment | null = null,
+    builtins: ResolvedBuiltinRegistry = parent?.builtins ??
       resolveCoreRegistry(),
   ) {
+    this.parent = parent;
+    this.builtins = builtins;
     this.vars = Object.create(this.parent ? this.parent.vars : null);
   }
 
@@ -263,7 +272,9 @@ class Environment {
         break;
     }
 
-    throw new Error(`Cannot evaluate ${ast.type} as a single-output expression`);
+    throw new Error(
+      `Cannot evaluate ${ast.type} as a single-output expression`,
+    );
   }
 
   evaluateFilterArg(arg: ExpressionAst, rootItem: Item): Item[] {
@@ -397,14 +408,14 @@ class Environment {
 
   evaluateConditions(ast: ExpressionAst, input: ItemIterator) {
     return Array.from(this.evaluate(ast, input)).map((item) =>
-      isTrue(item.value)
+      isTrue(item.value),
     );
   }
 
   *evaluateForeach(
     ast: ForeachAst,
     input: ItemIterator,
-    reduceMode = false
+    reduceMode = false,
   ): ItemIterator {
     for (const inputItem of input) {
       checkRuntimeBudget();
@@ -503,7 +514,7 @@ class Environment {
                 let newValue = undefined;
                 for (const valItem of this.evaluate(
                   ast.right,
-                  single(createItem(getPath(item.value, relativePath)))
+                  single(createItem(getPath(item.value, relativePath))),
                 )) {
                   newValue = deepClone(valItem.value);
                   break;
@@ -518,7 +529,7 @@ class Environment {
                 ast.operator,
                 item,
                 left,
-                right
+                right,
               );
             }
           } else {
@@ -541,8 +552,8 @@ class Environment {
                 typeof part === 'string'
                   ? [part]
                   : Array.from(this.evaluate(part, single(inputItem))).map(
-                      (item) => applyFormat(ast.format, item.value)
-                    )
+                      (item) => applyFormat(ast.format, item.value),
+                    ),
               )
               .reverse();
             for (const combination of generateCombinations(parts)) {
@@ -596,10 +607,10 @@ class Environment {
               switch (argDefAst.type) {
                 case 'varArg':
                   argSets.push(
-                    collectValues(this.evaluate(argExprAst, single(item)))
+                    collectValues(this.evaluate(argExprAst, single(item))),
                   );
                   break;
-                case 'filterArg':
+                case 'filterArg': {
                   const def: DefAst = {
                     type: 'def',
                     name: argDefAst.name,
@@ -608,6 +619,7 @@ class Environment {
                   };
                   argSets.push([def]);
                   break;
+                }
               }
             }
             for (const combination of generateCombinations(argSets)) {
@@ -634,7 +646,7 @@ class Environment {
           if (condResults[0].includes(false) && ast.elifs) {
             for (const elif of ast.elifs) {
               condResults.push(
-                this.evaluateConditions(elif.cond, single(item))
+                this.evaluateConditions(elif.cond, single(item)),
               );
               expressions.push(elif.then);
               if (!condResults[condResults.length - 1].includes(false)) break;
@@ -647,13 +659,13 @@ class Environment {
             if (!expressions[i]) return [];
             if (!exprResults[i]) {
               exprResults[i] = Array.from(
-                this.evaluate(expressions[i], single(item))
+                this.evaluate(expressions[i], single(item)),
               );
             }
             return exprResults[i];
           };
 
-          function* generateBlock(i: number): IterableIterator<any> {
+          const generateBlock = function* (i: number): IterableIterator<any> {
             if (condResults[i]) {
               for (const condRes of condResults[i]) {
                 checkRuntimeBudget();
@@ -666,7 +678,7 @@ class Environment {
             } else {
               yield* getExprResult(i);
             }
-          }
+          };
 
           yield* generateBlock(0);
         }
@@ -702,14 +714,14 @@ class Environment {
           for (const val of this.evaluate(ast.expr, single(item))) {
             checkRuntimeBudget();
             const allVarNames = new Set(
-              Environment.extractVariableNames(ast.destructuring)
+              Environment.extractVariableNames(ast.destructuring),
             );
             for (let i = 0; i < ast.destructuring.length; i++) {
               const destructuring = ast.destructuring[i];
               try {
                 for (const vars of this.destructureValue(
                   val.value,
-                  destructuring
+                  destructuring,
                 )) {
                   checkRuntimeBudget();
                   const scope = this.extend();
@@ -748,7 +760,7 @@ class Environment {
         break;
       case 'break':
         throw new BreakError(ast.value);
-      case 'unary':
+      case 'unary': {
         const { operator, type } = ast;
         if (ast.operator === '-') {
           for (const item of input) {
@@ -762,6 +774,7 @@ class Environment {
         }
 
         throw notImplementedError(`${type}:${operator}`);
+      }
       case 'index':
         if (ast.staticPath) {
           for (const item of input) {
@@ -820,7 +833,7 @@ class Environment {
                 }
                 const accessor = createSliceAccessor(
                   from?.value ?? null,
-                  to?.value ?? null
+                  to?.value ?? null,
                 );
                 yield createItem(access(val.value, accessor), [
                   ...val.path,
@@ -835,7 +848,10 @@ class Environment {
         if (ast.expr.type === 'index' && ast.expr.staticPath) {
           for (const item of input) {
             checkRuntimeBudget();
-            const value = accessStaticStringPath(item.value, ast.expr.staticPath);
+            const value = accessStaticStringPath(
+              item.value,
+              ast.expr.staticPath,
+            );
             const basePath = appendStaticPath(item.path, ast.expr.staticPath);
             switch (typeOf(value)) {
               case 'array':
@@ -890,7 +906,7 @@ class Environment {
           checkRuntimeBudget();
           if (ast.expr) {
             yield createItem(
-              collectValues(this.evaluate(ast.expr, single(item)))
+              collectValues(this.evaluate(ast.expr, single(item))),
             );
           } else {
             yield createItem([]);
@@ -911,8 +927,8 @@ class Environment {
                     ? [item.value[key]]
                     : collectValues(this.evaluate(value, single(item))),
                 ];
-              })
-            )
+              }),
+            ),
           );
         }
         break;
@@ -929,7 +945,7 @@ class Environment {
   }
 
   static *extractVariableNames(
-    destructurings: DestructuringAst[]
+    destructurings: DestructuringAst[],
   ): IterableIterator<string> {
     for (const destructuring of destructurings) {
       switch (destructuring.type) {
@@ -957,7 +973,7 @@ class Environment {
 
   *destructureValue(
     val: any,
-    destructuring: DestructuringAst
+    destructuring: DestructuringAst,
   ): IterableIterator<Record<string, any>> {
     switch (destructuring.type) {
       case 'var':
@@ -966,23 +982,23 @@ class Environment {
       case 'arrayDestructuring': {
         if (typeOf(val) !== 'array') {
           throw new JqEvaluateError(
-            `${typeOf(val)} cannot be destructured as an array`
+            `${typeOf(val)} cannot be destructured as an array`,
           );
         }
-        const results = destructuring.destructuring.map((item, i) =>
+        const results = destructuring.destructuring.map((_item, i) =>
           Array.from(
-            this.destructureValue(val[i], destructuring.destructuring[i])
-          )
+            this.destructureValue(val[i], destructuring.destructuring[i]),
+          ),
         );
         for (const combination of generateCombinations(results)) {
           yield Object.assign({}, ...combination);
         }
         break;
       }
-      case 'objectDestructuring':
+      case 'objectDestructuring': {
         if (typeOf(val) !== 'object') {
           throw new JqEvaluateError(
-            `${typeOf(val)} cannot be destructured as an object`
+            `${typeOf(val)} cannot be destructured as an object`,
           );
         }
 
@@ -990,17 +1006,17 @@ class Environment {
           if (entry.destructuring) {
             if (typeof entry.key === 'string') {
               return Array.from(
-                this.destructureValue(val[entry.key], entry.destructuring)
+                this.destructureValue(val[entry.key], entry.destructuring),
               );
             } else {
               const keys = collectValues(
-                this.evaluate(entry.key, single(createItem(val)))
+                this.evaluate(entry.key, single(createItem(val))),
               );
               return keys
                 .map((key) =>
                   Array.from(
-                    this.destructureValue(val[key], entry.destructuring)
-                  )
+                    this.destructureValue(val[key], entry.destructuring),
+                  ),
                 )
                 .flat();
             }
@@ -1018,6 +1034,7 @@ class Environment {
           yield Object.assign({}, ...combination.reverse());
         }
         break;
+      }
     }
   }
 }

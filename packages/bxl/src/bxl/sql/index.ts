@@ -8,18 +8,14 @@ import {
   type BxlLiteralNode,
   type BxlPathNode,
   type BxlPathPart,
-} from '../ast/index.js';
-export { SQL_PREDICATE_MODULE } from './predicate-module.js';
+} from '../ast/index.ts';
+export { SQL_PREDICATE_MODULE } from './predicate-module.ts';
 export type {
   BxlSqlPredicateMapping,
   BxlSqlPredicateModule,
-} from './predicate-module.js';
+} from './predicate-module.ts';
 
-export type BxlPredicateSqlPathUsage =
-  | 'value'
-  | 'text'
-  | 'array'
-  | 'timestamp';
+export type BxlPredicateSqlPathUsage = 'value' | 'text' | 'array' | 'timestamp';
 
 export interface BxlPredicateSqlPath {
   root: 'current' | 'Record';
@@ -31,8 +27,7 @@ export interface BxlPredicateSqlValue {
   usage: BxlPredicateSqlPathUsage;
 }
 
-export interface BxlPredicateSqlOptions
-  extends Omit<BxlAstOptions, 'profile'> {
+export interface BxlPredicateSqlOptions extends Omit<BxlAstOptions, 'profile'> {
   context?: Record<string, unknown>;
   placeholder?: (index: number, value: unknown) => string;
   pathToSql?: (
@@ -80,9 +75,8 @@ export function compileBxlPredicateAstToSql(
   options: BxlPredicateSqlOptions = {},
 ): BxlPredicateSqlResult {
   assertValidBxlProfile(programOrNode, { profile: 'predicate' });
-  const node = programOrNode.type === 'program'
-    ? programOrNode.body
-    : programOrNode;
+  const node =
+    programOrNode.type === 'program' ? programOrNode.body : programOrNode;
   if (!node) {
     throw new BxlPredicateSqlError('Cannot compile an empty BXL predicate.');
   }
@@ -92,8 +86,11 @@ export function compileBxlPredicateAstToSql(
 
 class PredicateSqlCompiler {
   private readonly params: unknown[] = [];
+  private readonly options: BxlPredicateSqlOptions;
 
-  constructor(private readonly options: BxlPredicateSqlOptions) {}
+  constructor(options: BxlPredicateSqlOptions) {
+    this.options = options;
+  }
 
   compile(node: BxlAstNode): BxlPredicateSqlResult {
     return {
@@ -156,7 +153,9 @@ class PredicateSqlCompiler {
 
   private compilePredicatePipe(left: BxlAstNode, right: BxlAstNode): string {
     if (right.type !== 'call') {
-      throw new BxlPredicateSqlError('Only IN(...), overlaps(...), and not predicate pipes can compile to SQL.');
+      throw new BxlPredicateSqlError(
+        'Only IN(...), overlaps(...), and not predicate pipes can compile to SQL.',
+      );
     }
 
     if (right.name === 'IN') {
@@ -173,7 +172,9 @@ class PredicateSqlCompiler {
       return `(NOT (${this.compileBoolean(left)}))`;
     }
 
-    throw new BxlPredicateSqlError(`Cannot compile pipe into ${right.name}() as a SQL predicate.`);
+    throw new BxlPredicateSqlError(
+      `Cannot compile pipe into ${right.name}() as a SQL predicate.`,
+    );
   }
 
   private compileComparison(
@@ -185,13 +186,17 @@ class PredicateSqlCompiler {
     const right = this.compileValue(rightNode, 'value');
 
     if (isNullLiteral(leftNode)) {
-      return this.compileNullComparison(right.sql, reverseComparisonOperator(operator));
+      return this.compileNullComparison(
+        right.sql,
+        reverseComparisonOperator(operator),
+      );
     }
     if (isNullLiteral(rightNode)) {
       return this.compileNullComparison(left.sql, operator);
     }
 
-    const sqlOperator = operator === '==' ? '=' : operator === '!=' ? '<>' : operator;
+    const sqlOperator =
+      operator === '==' ? '=' : operator === '!=' ? '<>' : operator;
     return `((${left.sql}) ${sqlOperator} (${right.sql}))`;
   }
 
@@ -219,7 +224,9 @@ class PredicateSqlCompiler {
     if (operator === '!=' || operator === '<>') {
       return `((${sql}) IS NOT NULL)`;
     }
-    throw new BxlPredicateSqlError(`Cannot use ${operator} with null in a SQL predicate.`);
+    throw new BxlPredicateSqlError(
+      `Cannot use ${operator} with null in a SQL predicate.`,
+    );
   }
 
   private compileIn(valueNode: BxlAstNode, collectionNode: BxlAstNode): string {
@@ -227,7 +234,9 @@ class PredicateSqlCompiler {
     const staticCollection = this.staticValue(collectionNode);
     if (staticCollection !== undefined) {
       if (!Array.isArray(staticCollection)) {
-        throw new BxlPredicateSqlError('IN expects an array on the right-hand side.');
+        throw new BxlPredicateSqlError(
+          'IN expects an array on the right-hand side.',
+        );
       }
       if (staticCollection.length === 0) {
         return 'FALSE';
@@ -313,12 +322,16 @@ class PredicateSqlCompiler {
     if (node.type === 'array') {
       const value = this.staticValue(node);
       if (!Array.isArray(value)) {
-        throw new BxlPredicateSqlError('Only literal arrays can compile as SQL values.');
+        throw new BxlPredicateSqlError(
+          'Only literal arrays can compile as SQL values.',
+        );
       }
       return { sql: this.sqlArray(value), usage: 'array' };
     }
 
-    throw new BxlPredicateSqlError(`Cannot compile ${node.type} as a SQL value.`);
+    throw new BxlPredicateSqlError(
+      `Cannot compile ${node.type} as a SQL value.`,
+    );
   }
 
   private literalSql(node: BxlLiteralNode): string {
@@ -330,14 +343,18 @@ class PredicateSqlCompiler {
       case 'null':
         return 'NULL';
       case 'interpolated-string':
-        throw new BxlPredicateSqlError('Interpolated strings cannot compile to SQL predicate parameters.');
+        throw new BxlPredicateSqlError(
+          'Interpolated strings cannot compile to SQL predicate parameters.',
+        );
     }
   }
 
   private staticValue(node: BxlAstNode): unknown | undefined {
     if (node.type === 'literal') {
       if (node.valueType === 'interpolated-string') {
-        throw new BxlPredicateSqlError('Interpolated strings cannot compile to SQL predicate parameters.');
+        throw new BxlPredicateSqlError(
+          'Interpolated strings cannot compile to SQL predicate parameters.',
+        );
       }
       return node.value;
     }
@@ -346,7 +363,9 @@ class PredicateSqlCompiler {
       return this.arrayItems(node).map((item) => {
         const value = this.staticValue(item);
         if (value === undefined) {
-          throw new BxlPredicateSqlError('Only literal or context-backed arrays can compile to SQL arrays.');
+          throw new BxlPredicateSqlError(
+            'Only literal or context-backed arrays can compile to SQL arrays.',
+          );
         }
         return value;
       });
@@ -359,7 +378,9 @@ class PredicateSqlCompiler {
     return undefined;
   }
 
-  private arrayItems(node: Extract<BxlAstNode, { type: 'array' }>): BxlAstNode[] {
+  private arrayItems(
+    node: Extract<BxlAstNode, { type: 'array' }>,
+  ): BxlAstNode[] {
     if (!node.expr) {
       return [];
     }
@@ -377,14 +398,20 @@ class PredicateSqlCompiler {
     node: BxlPathNode,
     usage: BxlPredicateSqlPathUsage,
   ): string {
-    return this.sqlForPath({ root: 'current', parts: pathParts(node.parts) }, usage);
+    return this.sqlForPath(
+      { root: 'current', parts: pathParts(node.parts) },
+      usage,
+    );
   }
 
   private sqlForRecordPath(
     node: BxlContextPathNode,
     usage: BxlPredicateSqlPathUsage,
   ): string {
-    return this.sqlForPath({ root: 'Record', parts: pathParts(node.parts) }, usage);
+    return this.sqlForPath(
+      { root: 'Record', parts: pathParts(node.parts) },
+      usage,
+    );
   }
 
   private sqlForPath(
@@ -420,11 +447,15 @@ class PredicateSqlCompiler {
 
     for (const part of node.parts) {
       if (part.type !== 'field' && part.type !== 'index') {
-        throw new BxlPredicateSqlError(`Context path ${node.root} contains an unpushable path segment.`);
+        throw new BxlPredicateSqlError(
+          `Context path ${node.root} contains an unpushable path segment.`,
+        );
       }
       const key = part.type === 'field' ? part.key : part.value;
       if (value == null || typeof value !== 'object') {
-        throw new BxlPredicateSqlError(`Missing context value for ${node.root}.${String(key)}.`);
+        throw new BxlPredicateSqlError(
+          `Missing context value for ${node.root}.${String(key)}.`,
+        );
       }
       value = (value as Record<string | number, unknown>)[key];
     }
@@ -439,9 +470,14 @@ class PredicateSqlCompiler {
       : `$${index}`;
   }
 
-  private expectArity(node: Extract<BxlAstNode, { type: 'call' }>, arity: number): void {
+  private expectArity(
+    node: Extract<BxlAstNode, { type: 'call' }>,
+    arity: number,
+  ): void {
     if (node.args.length !== arity) {
-      throw new BxlPredicateSqlError(`${node.name}() expects ${arity} argument${arity === 1 ? '' : 's'}.`);
+      throw new BxlPredicateSqlError(
+        `${node.name}() expects ${arity} argument${arity === 1 ? '' : 's'}.`,
+      );
     }
   }
 }
@@ -461,7 +497,9 @@ function pathParts(parts: BxlPathPart[]): string[] {
     if (part.type === 'index') {
       return String(part.value);
     }
-    throw new BxlPredicateSqlError('Iterator, slice, and dynamic paths cannot compile to SQL predicates.');
+    throw new BxlPredicateSqlError(
+      'Iterator, slice, and dynamic paths cannot compile to SQL predicates.',
+    );
   });
 }
 

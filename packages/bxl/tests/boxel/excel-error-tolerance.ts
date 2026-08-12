@@ -9,8 +9,8 @@
 // Maps to port-doc §11a (Excel-error catch).
 
 import { ok, strictEqual } from 'node:assert';
-import { evaluateBxl, expression, fx } from '../../src/index.js';
-import { baselinePatient, fuzzShellRecord } from './fixtures/hospital.js';
+import { evaluateBxl, expression, fx } from '../../src/index.ts';
+import { baselinePatient, fuzzShellRecord } from './fixtures/hospital.ts';
 
 let pass = 0;
 let fail = 0;
@@ -79,7 +79,7 @@ check('non-Excel runtime errors still throw', () => {
   // need to bubble so the realm sees them and the author can fix.
   let threw = false;
   try {
-    const compute = expression('this is not valid bxl(',  {
+    const compute = expression('this is not valid bxl(', {
       readableSyntax: false,
     });
     compute.call({});
@@ -107,14 +107,17 @@ check('Excel error in a path expression on a real card returns null', () => {
   strictEqual(compute.call(baselinePatient), null);
 });
 
-check('division by zero returns null (runtime relaxation, not Excel catch)', () => {
-  // 1/0 returns null via the §7 arithmetic relaxation, which doesn't
-  // even reach the Excel-error catch path. Confirms the two
-  // mechanisms agree on the surface contract.
-  strictEqual(evaluateBxl('1 / 0', null).value, null);
-});
+check(
+  'division by zero returns null (runtime relaxation, not Excel catch)',
+  () => {
+    // 1/0 returns null via the §7 arithmetic relaxation, which doesn't
+    // even reach the Excel-error catch path. Confirms the two
+    // mechanisms agree on the surface contract.
+    strictEqual(evaluateBxl('1 / 0', null).value, null);
+  },
+);
 
-check('shell-record path that misses doesn\'t synthesize an error', () => {
+check("shell-record path that misses doesn't synthesize an error", () => {
   // `.medications[]?` on a record without `medications` is empty —
   // no error to catch, no null to surface, just an empty stream
   // that evaluateBxl normalizes to null.

@@ -12,13 +12,13 @@ import {
   type ReadableSyntaxCompileResult,
   type ReadableSyntaxOptions,
   type ReadableSyntaxToken,
-} from '../compiler/readable-syntax.js';
-import { validationFunctionDefinition } from '../bridge/validation-manifest.js';
+} from '../compiler/readable-syntax.ts';
+import { validationFunctionDefinition } from '../bridge/validation-manifest.ts';
 import {
   lintBxlExpression,
   type BxlLintIssue,
   type BxlLintResult,
-} from '../linter/index.js';
+} from '../linter/index.ts';
 
 export interface BxlConversionOptions extends ReadableSyntaxOptions {
   schema?: ReadableSchema;
@@ -184,7 +184,10 @@ function collectLabelCandidates(
   );
 }
 
-function findField(scope: ReadableSchema | undefined, key: string): FieldPath | undefined {
+function findField(
+  scope: ReadableSchema | undefined,
+  key: string,
+): FieldPath | undefined {
   const field = scope?.fields.find((candidate) => candidate.key === key);
   if (!field) {
     return undefined;
@@ -197,16 +200,20 @@ function findField(scope: ReadableSchema | undefined, key: string): FieldPath | 
 }
 
 function dedupeEdits(edits: Edit[]): Edit[] {
-  const sorted = [...edits].sort((left, right) =>
-    left.start - right.start ||
-    right.end - left.end ||
-    left.code.localeCompare(right.code),
+  const sorted = [...edits].sort(
+    (left, right) =>
+      left.start - right.start ||
+      right.end - left.end ||
+      left.code.localeCompare(right.code),
   );
   const output: Edit[] = [];
   let occupiedUntil = -1;
 
   for (const edit of sorted) {
-    if (edit.start < occupiedUntil || edit.start === edit.end && edit.text === '') {
+    if (
+      edit.start < occupiedUntil ||
+      (edit.start === edit.end && edit.text === '')
+    ) {
       continue;
     }
     output.push(edit);
@@ -220,7 +227,9 @@ function applyEdits(source: string, edits: Edit[]) {
   const safeEdits = dedupeEdits(edits);
   let output = source;
 
-  for (const edit of [...safeEdits].sort((left, right) => right.start - left.start)) {
+  for (const edit of [...safeEdits].sort(
+    (left, right) => right.start - left.start,
+  )) {
     output = `${output.slice(0, edit.start)}${edit.text}${output.slice(edit.end)}`;
   }
 
@@ -256,7 +265,10 @@ function isTopLevel(tokens: ReadableSyntaxToken[], index: number) {
   return depth.paren === 0 && depth.bracket === 0 && depth.object === 0;
 }
 
-function normalizationEdits(source: string, options: BxlConversionOptions): Edit[] {
+function normalizationEdits(
+  source: string,
+  options: BxlConversionOptions,
+): Edit[] {
   let tokens: ReadableSyntaxToken[];
   try {
     tokens = tokenizeReadableSyntax(source);
@@ -334,7 +346,11 @@ function normalizationEdits(source: string, options: BxlConversionOptions): Edit
 
     if (next?.value === '(' && BXL_FORMULA_FUNCTIONS.has(upper)) {
       const raw = tokenRaw(source, token);
-      if (raw !== upper && token.start !== undefined && token.end !== undefined) {
+      if (
+        raw !== upper &&
+        token.start !== undefined &&
+        token.end !== undefined
+      ) {
         edits.push({
           start: token.start,
           end: token.end,
@@ -357,7 +373,11 @@ function normalizationEdits(source: string, options: BxlConversionOptions): Edit
       continue;
     }
 
-    for (let length = Math.min(maxLabelTokens, tokens.length - index); length >= 1; length--) {
+    for (
+      let length = Math.min(maxLabelTokens, tokens.length - index);
+      length >= 1;
+      length--
+    ) {
       const phraseTokens = tokens.slice(index, index + length);
       if (
         phraseTokens.some(
@@ -590,7 +610,7 @@ function normalizationEdits(source: string, options: BxlConversionOptions): Edit
         inner.start !== undefined &&
         inner.end !== undefined
       ) {
-        const displayName = isFormula ? call?.dispatch.name ?? upper : lower;
+        const displayName = isFormula ? (call?.dispatch.name ?? upper) : lower;
         edits.push({
           start: inner.start,
           end: inner.end,
@@ -627,7 +647,10 @@ function hasOuterParens(source: string) {
   return depth === 0;
 }
 
-function parenthesizePipedComparison(source: string): { source: string; rewrite?: BxlRewrite } {
+function parenthesizePipedComparison(source: string): {
+  source: string;
+  rewrite?: BxlRewrite;
+} {
   const tokens = tokenizeReadableSyntax(source);
   let sawPipe = false;
 
@@ -672,10 +695,8 @@ function issueCodes(issues: BxlLintIssue[]) {
 function isValueToken(token: ReadableSyntaxToken | undefined) {
   return Boolean(
     token &&
-      (
-        ['ident', 'number', 'string', 'var', 'format'].includes(token.type) ||
-        [')', ']'].includes(token.value)
-      ),
+    (['ident', 'number', 'string', 'var', 'format'].includes(token.type) ||
+      [')', ']'].includes(token.value)),
   );
 }
 
@@ -772,7 +793,23 @@ function shouldInsertReadableSpace(
   // space — `or(.x)` would be parsed as a call to `or/1` by jq. Only
   // collapse `(` when it's a call or parenthesized expression attached
   // to a value token.
-  const JQ_BINDING_KEYWORDS = new Set(['as', 'if', 'then', 'else', 'elif', 'end', 'and', 'or', 'not', 'try', 'catch', 'reduce', 'foreach', 'label', 'def']);
+  const JQ_BINDING_KEYWORDS = new Set([
+    'as',
+    'if',
+    'then',
+    'else',
+    'elif',
+    'end',
+    'and',
+    'or',
+    'not',
+    'try',
+    'catch',
+    'reduce',
+    'foreach',
+    'label',
+    'def',
+  ]);
   if (
     current.value === '(' &&
     previous.type === 'ident' &&
@@ -826,7 +863,10 @@ function shouldInsertReadableSpace(
   ) {
     return true;
   }
-  if (previous.value === '.' && (isValueToken(current) || current.value === '.')) {
+  if (
+    previous.value === '.' &&
+    (isValueToken(current) || current.value === '.')
+  ) {
     return false;
   }
   if (current.value === '[' && isValueToken(previous)) {
@@ -845,9 +885,9 @@ function shouldInsertReadableSpace(
   const valueStart = (tok: ReadableSyntaxToken | undefined) =>
     Boolean(
       tok &&
-        (isValueToken(tok) ||
-          (tok.type === 'op' && tok.value === '.') ||
-          (tok.type === 'punc' && tok.value === '(')),
+      (isValueToken(tok) ||
+        (tok.type === 'op' && tok.value === '.') ||
+        (tok.type === 'punc' && tok.value === '(')),
     );
   if (
     current.type === 'op' &&
@@ -868,7 +908,9 @@ function shouldInsertReadableSpace(
       previous.value === '*' &&
       prevPrev &&
       prevPrev.type === 'punc' &&
-      (prevPrev.value === '[' || prevPrev.value === ',' || prevPrev.value === ';')
+      (prevPrev.value === '[' ||
+        prevPrev.value === ',' ||
+        prevPrev.value === ';')
     ) {
       return false;
     }
@@ -968,11 +1010,16 @@ export function solidifyBxlExpression(
     rewrites.push(...pre.rewrites);
   }
 
-  const firstPass = applyEdits(nextSource, normalizationEdits(nextSource, options));
+  const firstPass = applyEdits(
+    nextSource,
+    normalizationEdits(nextSource, options),
+  );
   nextSource = firstPass.source;
   rewrites.push(...firstPass.rewrites);
 
-  const currentIssues = issueCodes(lintBxlExpression(nextSource, options).issues);
+  const currentIssues = issueCodes(
+    lintBxlExpression(nextSource, options).issues,
+  );
   if (currentIssues.has('root-label-after-pipe')) {
     const pipeFix = parenthesizePipedComparison(nextSource);
     nextSource = pipeFix.source;
@@ -981,7 +1028,10 @@ export function solidifyBxlExpression(
     }
   }
 
-  const secondPass = applyEdits(nextSource, normalizationEdits(nextSource, options));
+  const secondPass = applyEdits(
+    nextSource,
+    normalizationEdits(nextSource, options),
+  );
   nextSource = secondPass.source;
   rewrites.push(...secondPass.rewrites);
 
@@ -1040,7 +1090,10 @@ export function bxlToStorageExpression(
   return compileReadableSyntax(source, options);
 }
 
-function parseJqPath(source: string, start: number): { end: number; parts: PathPart[] } | undefined {
+function parseJqPath(
+  source: string,
+  start: number,
+): { end: number; parts: PathPart[] } | undefined {
   if (source[start] !== '.' || !/[A-Za-z_]/.test(source[start + 1] ?? '')) {
     return undefined;
   }
@@ -1100,7 +1153,9 @@ function readablePathFromParts(
       if (!resolved) {
         return undefined;
       }
-      output += output ? `.${quoteLabel(preferredLabel(resolved.field))}` : quoteLabel(preferredLabel(resolved.field));
+      output += output
+        ? `.${quoteLabel(preferredLabel(resolved.field))}`
+        : quoteLabel(preferredLabel(resolved.field));
       scope = resolved.scope;
       pendingArrayItemScope = resolved.itemScope;
       continue;
@@ -1143,7 +1198,10 @@ function readableJqPath(
     : undefined;
 }
 
-function convertFirstSelect(source: string, schema: ReadableSchema | undefined) {
+function convertFirstSelect(
+  source: string,
+  schema: ReadableSchema | undefined,
+) {
   return source.replace(
     /first\((\.[A-Za-z_][A-Za-z0-9_]*)\[\]\s*\|\s*select\((\.[A-Za-z_][A-Za-z0-9_]*)\s*(==|!=|<=|>=|<|>)\s*([^)]*)\)\)(\.[A-Za-z_][A-Za-z0-9_]*)/g,
     (match, collectionPath, predicatePath, operator, value, outputPath) => {
@@ -1158,8 +1216,14 @@ function convertFirstSelect(source: string, schema: ReadableSchema | undefined) 
         [...collection.parts, { type: 'iterator' }],
         schema,
       )?.replace(/\[all\]$/, '');
-      const predicateReadable = readablePathFromParts(predicate.parts, itemScopeForPath(collection.parts, schema));
-      const outputReadable = readablePathFromParts(output.parts, itemScopeForPath(collection.parts, schema));
+      const predicateReadable = readablePathFromParts(
+        predicate.parts,
+        itemScopeForPath(collection.parts, schema),
+      );
+      const outputReadable = readablePathFromParts(
+        output.parts,
+        itemScopeForPath(collection.parts, schema),
+      );
       if (!collectionReadable || !predicateReadable || !outputReadable) {
         return match;
       }
@@ -1194,7 +1258,10 @@ function itemScopeForPath(
   return pendingArrayItemScope ?? scope;
 }
 
-function convertAggregateComparison(source: string, schema: ReadableSchema | undefined) {
+function convertAggregateComparison(
+  source: string,
+  schema: ReadableSchema | undefined,
+) {
   return source.replace(
     /\(\s*\[\s*(\.[A-Za-z_][A-Za-z0-9_]*(?:\[\])?(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\s*\]\s*\|\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)\s*(==|!=|<=|>=|<|>)\s*(\.[A-Za-z_][A-Za-z0-9_.]*)/g,
     (match, path, filter, operator, rightPath) => {
@@ -1208,7 +1275,10 @@ function convertAggregateComparison(source: string, schema: ReadableSchema | und
   );
 }
 
-function convertSimpleJqPaths(source: string, schema: ReadableSchema | undefined) {
+function convertSimpleJqPaths(
+  source: string,
+  schema: ReadableSchema | undefined,
+) {
   let output = '';
   let index = 0;
   let inString = false;
@@ -1265,7 +1335,8 @@ export function jqToReadableBxlExpression(
   if (firstSelect !== nextSource) {
     rewrites.push({
       code: 'jq-first-select-to-readable-predicate',
-      message: 'Converted first(select(...)) jq shape to a readable BXL predicate selector.',
+      message:
+        'Converted first(select(...)) jq shape to a readable BXL predicate selector.',
     });
     nextSource = firstSelect;
   }
@@ -1274,7 +1345,8 @@ export function jqToReadableBxlExpression(
   if (aggregate !== nextSource) {
     rewrites.push({
       code: 'jq-aggregate-comparison-to-readable',
-      message: 'Converted a materialized jq aggregate comparison to readable BXL.',
+      message:
+        'Converted a materialized jq aggregate comparison to readable BXL.',
     });
     nextSource = aggregate;
   }
@@ -1291,12 +1363,15 @@ export function jqToReadableBxlExpression(
   const solid = solidifyBxlExpression(nextSource, options);
   const readableSource = formatReadableBxlSource(solid.source);
   const readableLint = lintBxlExpression(readableSource, options);
-  const spacingRewrite: BxlRewrite[] = readableSource === solid.source
-    ? []
-    : [{
-        code: 'readable-spacing-normalized',
-        message: 'Expanded BXL spacing for readability.',
-      }];
+  const spacingRewrite: BxlRewrite[] =
+    readableSource === solid.source
+      ? []
+      : [
+          {
+            code: 'readable-spacing-normalized',
+            message: 'Expanded BXL spacing for readability.',
+          },
+        ];
 
   return {
     source: readableSource,
@@ -1381,7 +1456,10 @@ function computeMultiLineWraps(
   return wraps;
 }
 
-function findMatchingBracket(tokens: ReadableSyntaxToken[], openIndex: number): number {
+function findMatchingBracket(
+  tokens: ReadableSyntaxToken[],
+  openIndex: number,
+): number {
   const open = tokens[openIndex].value;
   const close = open === '(' ? ')' : open === '[' ? ']' : '}';
   let depth = 1;

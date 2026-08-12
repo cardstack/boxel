@@ -1,6 +1,6 @@
-import { DefAst } from '../../../parser/AST.js';
-import { parse } from '../../../parser/Parser.js';
-import { JqEvaluateError } from '../../../errors.js';
+import type { DefAst } from '../../../parser/AST.ts';
+import { parse } from '../../../parser/Parser.ts';
+import { JqEvaluateError } from '../../../errors.ts';
 
 export function parseBuiltinJqFilters(code: string): Record<string, DefAst> {
   const out: Record<string, DefAst> = {};

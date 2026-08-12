@@ -13,13 +13,13 @@
 //         using the raw `input` afterward).
 
 import { deepStrictEqual, strictEqual } from 'node:assert';
-import { evaluateBxl, jq, expression } from '../../src/index.js';
+import { evaluateBxl, jq, expression } from '../../src/index.ts';
 import {
   baselinePatient,
   fuzzBadTypes,
   fuzzEmptyVitals,
   fuzzShellRecord,
-} from './fixtures/hospital.js';
+} from './fixtures/hospital.ts';
 
 let pass = 0;
 let fail = 0;
@@ -44,11 +44,9 @@ check('§6 null[] yields an empty stream (no crash)', () => {
 
 check('§6 iterating a missing field on a shell record is empty', () => {
   // `.medications[]` on a record with no `medications` key.
-  const result = evaluateBxl(
-    jq`[.medications[]?]`.source,
-    fuzzShellRecord,
-    { readableSyntax: false },
-  );
+  const result = evaluateBxl(jq`[.medications[]?]`.source, fuzzShellRecord, {
+    readableSyntax: false,
+  });
   deepStrictEqual(result.value, []);
 });
 
@@ -130,20 +128,16 @@ check('§8 string concat with a null operand uses null-as-identity', () => {
 // ---------------------------------------------------------------- §9
 
 check('§9 null | startswith("a") returns false', () => {
-  const result = evaluateBxl(
-    'null | startswith("a")',
-    null,
-    { readableSyntax: false },
-  );
+  const result = evaluateBxl('null | startswith("a")', null, {
+    readableSyntax: false,
+  });
   strictEqual(result.value, false);
 });
 
 check('§9 null | endswith("z") returns false', () => {
-  const result = evaluateBxl(
-    'null | endswith("z")',
-    null,
-    { readableSyntax: false },
-  );
+  const result = evaluateBxl('null | endswith("z")', null, {
+    readableSyntax: false,
+  });
   strictEqual(result.value, false);
 });
 
@@ -171,9 +165,7 @@ check('§9 startswith on a record where the field is the wrong type', () => {
 // ---------------------------- §11a — bxl() factory smoke ----------
 
 check('§11a expression(jq`…`).call(card) returns the resolved value', () => {
-  const compute = expression(
-    jq`.vitals.bpSystolic / .vitals.bpDiastolic`,
-  );
+  const compute = expression(jq`.vitals.bpSystolic / .vitals.bpDiastolic`);
   const ratio = compute.call(baselinePatient);
   strictEqual(typeof ratio, 'number');
   // 138/88 ≈ 1.568… — assert a tolerance.
@@ -181,9 +173,7 @@ check('§11a expression(jq`…`).call(card) returns the resolved value', () => {
 });
 
 check('§11a empty-vitals card returns null instead of throwing', () => {
-  const compute = expression(
-    jq`.vitals.bpSystolic / .vitals.bpDiastolic`,
-  );
+  const compute = expression(jq`.vitals.bpSystolic / .vitals.bpDiastolic`);
   strictEqual(compute.call(fuzzEmptyVitals), null);
 });
 
@@ -204,7 +194,11 @@ check('paren regression: 100 - (50 + 30) === 20', () => {
 
 check('paren regression: A - (B + C) over a card', () => {
   strictEqual(
-    evaluateBxl('.a - (.b + .c)', { a: 100, b: 50, c: 30 }, { readableSyntax: false }).value,
+    evaluateBxl(
+      '.a - (.b + .c)',
+      { a: 100, b: 50, c: 30 },
+      { readableSyntax: false },
+    ).value,
     20,
   );
 });

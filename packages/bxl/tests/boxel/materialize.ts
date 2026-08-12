@@ -9,8 +9,8 @@
 // Maps to port-doc §11a (`as` materialization).
 
 import { ok, strictEqual } from 'node:assert';
-import { expression, jq } from '../../src/index.js';
-import { baselinePatient, icuWarner } from './fixtures/hospital.js';
+import { expression, jq } from '../../src/index.ts';
+import { baselinePatient, icuWarner } from './fixtures/hospital.ts';
 
 let pass = 0;
 let fail = 0;
@@ -34,10 +34,9 @@ class StatusPanel {
 }
 
 check('object literal materializes as Cls instance', () => {
-  const compute = expression(
-    jq`{ label: "Stable", tone: "blue" }`,
-    { as: StatusPanel },
-  );
+  const compute = expression(jq`{ label: "Stable", tone: "blue" }`, {
+    as: StatusPanel,
+  });
   const out = compute.call(baselinePatient) as StatusPanel;
   ok(out instanceof StatusPanel);
   strictEqual(out.label, 'Stable');
@@ -57,10 +56,9 @@ check('keys in source but not on Cls survive via Object.assign', () => {
   // the instance even though they're not declared on the class. Boxel's
   // serializer will silently drop them later, but BXL doesn't try to
   // mirror the schema rules in the no-getFields path.
-  const compute = expression(
-    jq`{ label: "X", tone: "y", uncategorized: 42 }`,
-    { as: StatusPanel },
-  );
+  const compute = expression(jq`{ label: "X", tone: "y", uncategorized: 42 }`, {
+    as: StatusPanel,
+  });
   const out = compute.call(baselinePatient) as StatusPanel & {
     uncategorized?: number;
   };
@@ -147,21 +145,24 @@ class StatusPanelWithSub {
   meta: { since: string } = { since: '' };
 }
 
-check('nested object lands as a plain object via Object.assign (no getFields)', () => {
-  // Without Boxel's getFields, the materialize path is a single
-  // Object.assign — nested values are NOT recursively wrapped. The
-  // `meta` field gets the raw plain object from jq. The realm's own
-  // integration suite covers the recursive `getFields` walk.
-  const compute = expression(
-    jq`{ label: "Stable", meta: { since: "2024-11-15" } }`,
-    { as: StatusPanelWithSub },
-  );
-  const out = compute.call(baselinePatient) as StatusPanelWithSub;
-  ok(out instanceof StatusPanelWithSub);
-  strictEqual(out.label, 'Stable');
-  // Note: `out.meta` is the raw object literal jq produced.
-  strictEqual(out.meta.since, '2024-11-15');
-});
+check(
+  'nested object lands as a plain object via Object.assign (no getFields)',
+  () => {
+    // Without Boxel's getFields, the materialize path is a single
+    // Object.assign — nested values are NOT recursively wrapped. The
+    // `meta` field gets the raw plain object from jq. The realm's own
+    // integration suite covers the recursive `getFields` walk.
+    const compute = expression(
+      jq`{ label: "Stable", meta: { since: "2024-11-15" } }`,
+      { as: StatusPanelWithSub },
+    );
+    const out = compute.call(baselinePatient) as StatusPanelWithSub;
+    ok(out instanceof StatusPanelWithSub);
+    strictEqual(out.label, 'Stable');
+    // Note: `out.meta` is the raw object literal jq produced.
+    strictEqual(out.meta.since, '2024-11-15');
+  },
+);
 
 console.log(
   `BXL Boxel materialize-as fallback: ${pass}/${pass + fail} cases passed`,

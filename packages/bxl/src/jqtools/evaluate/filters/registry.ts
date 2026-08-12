@@ -10,11 +10,11 @@
  * src/formulajs/.
  */
 
-import type { DefAst } from '../../parser/AST.js';
-import { createItem } from '../utils/utils.js';
-import { builtinJqFilters } from './builtinJqFilters.js';
-import { builtinNativeFilters } from './builtinNativeFilters.js';
-import type { NativeFilter } from './lib/nativeFilter.js';
+import type { DefAst } from '../../parser/AST.ts';
+import { createItem } from '../utils/utils.ts';
+import { builtinJqFilters } from './builtinJqFilters.ts';
+import { builtinNativeFilters } from './builtinNativeFilters.ts';
+import type { NativeFilter } from './lib/nativeFilter.ts';
 
 export interface BuiltinLibrary {
   jq: Record<string, DefAst>;

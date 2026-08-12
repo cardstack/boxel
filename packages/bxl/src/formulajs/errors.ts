@@ -7,8 +7,11 @@
  * catches and rewraps as the jq-side error type.
  */
 export class ExcelError extends Error {
-  constructor(public readonly code: string) {
+  readonly code: string;
+
+  constructor(code: string) {
     super(code);
+    this.code = code;
     this.name = 'ExcelError';
   }
 }

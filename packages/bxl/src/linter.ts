@@ -11,13 +11,11 @@
  * RELEASE-PLAN as pre-release blocker #3.
  */
 
-export {
-  lintBxlExpression,
-} from './bxl/linter/index.js';
+export { lintBxlExpression } from './bxl/linter/index.ts';
 
 export type {
   BxlLintIssue,
   BxlLintOptions,
   BxlLintResult,
   BxlLintSeverity,
-} from './bxl/linter/index.js';
+} from './bxl/linter/index.ts';

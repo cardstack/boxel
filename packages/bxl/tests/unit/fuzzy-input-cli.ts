@@ -3,11 +3,11 @@ import {
   compileReadableSyntax,
   evaluateBxl,
   lintBxlExpression,
-} from '../../src/index.js';
+} from '../../src/index.ts';
 import {
   bxlExampleInput,
   bxlExampleSchema,
-} from '../../examples/bxl-150-examples.js';
+} from '../../examples/bxl-150-examples.ts';
 
 const cases: Array<{
   name: string;
@@ -96,7 +96,8 @@ const cases: Array<{
   },
   {
     name: 'rounded balance with lowercase formula and fuzzy spacing',
-    expression: ' round ( total - payment [ status = "captured" ] . amount , 2 ) ',
+    expression:
+      ' round ( total - payment [ status = "captured" ] . amount , 2 ) ',
     expected: 59.04,
   },
 ];
@@ -114,10 +115,9 @@ for (const testCase of cases) {
   strictEqual(lint.ok, true, testCase.name);
 }
 
-const compiled = compileReadableSyntax(
-  ' round ( total , 2 ) ',
-  { schema: bxlExampleSchema },
-);
+const compiled = compileReadableSyntax(' round ( total , 2 ) ', {
+  schema: bxlExampleSchema,
+});
 strictEqual(compiled.source, 'ROUND(.total; 2)');
 
 console.log(`BXL fuzzy input: ${cases.length} cases passed`);

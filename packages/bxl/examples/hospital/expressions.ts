@@ -1,5 +1,5 @@
-import { jq, fx } from '../../src/index.js';
-import type { BxlTaggedSource } from '../../src/index.js';
+import { jq, fx } from '../../src/index.ts';
+import type { BxlTaggedSource } from '../../src/index.ts';
 
 export interface HospitalExpression {
   name: string;

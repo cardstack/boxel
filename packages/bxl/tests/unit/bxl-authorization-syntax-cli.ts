@@ -3,7 +3,7 @@ import {
   prepareBxlAuthorizationSafe,
   type BxlAuthorizationDocument,
   type BxlAuthorizationSnapshot,
-} from '../../src/authorization/index.js';
+} from '../../src/authorization/index.ts';
 
 const document: BxlAuthorizationDocument = {
   schema: 'bxl-authorization/1',
@@ -30,7 +30,8 @@ const document: BxlAuthorizationDocument = {
         { name: 'Contribute', where: 'Seat.Contributor' },
         {
           name: 'Edit',
-          where: 'via(Resource.Project; Capability.View) or Capability.Contribute',
+          where:
+            'via(Resource.Project; Capability.View) or Capability.Contribute',
         },
         { name: 'PublicPreview', where: 'Party.Anyone' },
         { name: 'MemberPreview', where: 'Party.Member' },
@@ -93,7 +94,6 @@ const snapshot: BxlAuthorizationSnapshot = {
 };
 
 const prepared = prepareBxlAuthorizationSafe(document, snapshot);
-strictEqual(prepared.ok, true);
 if (!prepared.ok) throw new Error(prepared.error.message);
 
 const expected = [
@@ -113,10 +113,19 @@ const expected = [
 ] as const;
 
 for (const [party, capability, resource, allowed] of expected) {
-  const result = prepared.value.checkCapability({ party, capability, resource, trace: true });
+  const result = prepared.value.checkCapability({
+    party,
+    capability,
+    resource,
+    trace: true,
+  });
   strictEqual(result.ok, true, `${party} ${capability} ${resource}`);
   if (!result.ok) continue;
-  strictEqual(result.value.allowed, allowed, `${party} ${capability} ${resource}`);
+  strictEqual(
+    result.value.allowed,
+    allowed,
+    `${party} ${capability} ${resource}`,
+  );
 }
 
 const refused = prepared.value.checkCapability({

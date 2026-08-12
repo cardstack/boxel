@@ -5,7 +5,8 @@ import {
   type AcceptedMutationFixture,
   type BxlMutationExample,
   type MutationJson,
-} from '../../examples/bxl-mutation-examples.js';
+  type RejectedMutationFixture,
+} from '../../examples/bxl-mutation-examples.ts';
 import {
   BxlMutationError,
   createBxlMutationStatementStream,
@@ -16,7 +17,7 @@ import {
   type BxlMutationJson,
   type BxlMutationSchema,
   type BxlStructuredMutationOperation,
-} from '../../src/index.js';
+} from '../../src/index.ts';
 
 function titleCase(key: string): string {
   return key
@@ -25,11 +26,18 @@ function titleCase(key: string): string {
 }
 
 function fieldFromFixture(key: string, fixture: any): BxlMutationField {
-  const fieldType = ['contains', 'containsMany', 'linksTo', 'linksToMany'].includes(fixture.kind)
-    ? fixture.kind as BxlMutationFieldType
+  const fieldType = [
+    'contains',
+    'containsMany',
+    'linksTo',
+    'linksToMany',
+  ].includes(fixture.kind)
+    ? (fixture.kind as BxlMutationFieldType)
     : undefined;
   const itemFields = fixture.itemFields
-    ? Object.entries(fixture.itemFields).map(([itemKey, value]) => fieldFromFixture(itemKey, value))
+    ? Object.entries(fixture.itemFields).map(([itemKey, value]) =>
+        fieldFromFixture(itemKey, value),
+      )
     : fieldType === 'linksTo' || fieldType === 'linksToMany'
       ? [{ key: 'id', label: 'ID' }]
       : undefined;
@@ -57,13 +65,17 @@ function plannerSchema(example: BxlMutationExample): {
     return {
       targetKind: 'card',
       schema: {
-        fields: Object.entries(fixture.fields).map(([key, value]) => fieldFromFixture(key, value)),
+        fields: Object.entries(fixture.fields).map(([key, value]) =>
+          fieldFromFixture(key, value),
+        ),
       },
     };
   }
   const root = fixture.field;
   const itemFields = root.itemFields
-    ? Object.entries(root.itemFields).map(([key, value]) => fieldFromFixture(key, value))
+    ? Object.entries(root.itemFields).map(([key, value]) =>
+        fieldFromFixture(key, value),
+      )
     : root.kind === 'linksTo' || root.kind === 'linksToMany'
       ? [{ key: 'id', label: 'ID' }]
       : [];
@@ -73,7 +85,12 @@ function plannerSchema(example: BxlMutationExample): {
       fields: itemFields,
       rootField: {
         label: root.label,
-        fieldType: ['contains', 'containsMany', 'linksTo', 'linksToMany'].includes(root.kind)
+        fieldType: [
+          'contains',
+          'containsMany',
+          'linksTo',
+          'linksToMany',
+        ].includes(root.kind)
           ? root.kind
           : undefined,
         writable: root.writable,
@@ -88,7 +105,10 @@ function normalizeNumbers(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(normalizeNumbers);
   if (value && typeof value === 'object') {
     return Object.fromEntries(
-      Object.entries(value).map(([key, entry]) => [key, normalizeNumbers(entry)]),
+      Object.entries(value).map(([key, entry]) => [
+        key,
+        normalizeNumbers(entry),
+      ]),
     );
   }
   return value;
@@ -114,7 +134,8 @@ function planFixture(fixture: AcceptedMutationFixture) {
 }
 
 const accepted = bxlMutationExamples.filter(
-  (fixture): fixture is AcceptedMutationFixture => fixture.outcome === 'accepted',
+  (fixture): fixture is AcceptedMutationFixture =>
+    fixture.outcome === 'accepted',
 );
 
 for (const fixture of accepted) {
@@ -125,11 +146,27 @@ for (const fixture of accepted) {
     `${fixture.id}: planner output`,
   );
   deepStrictEqual(
-    normalizeNumbers(plan.statements.map(({ canonical: _canonical, source: _source, statement: _statement, paths: _paths, ...value }) => value)),
-    normalizeNumbers(fixture.plan.map(({ canonical: _canonical, ...value }) => value)),
+    normalizeNumbers(
+      plan.statements.map(
+        ({
+          canonical: _canonical,
+          source: _source,
+          statement: _statement,
+          paths: _paths,
+          ...value
+        }) => value,
+      ),
+    ),
+    normalizeNumbers(
+      fixture.plan.map(({ canonical: _canonical, ...value }) => value),
+    ),
     `${fixture.id}: statement intents and affected count`,
   );
-  strictEqual(plan.programId, fixture.execution.programId, `${fixture.id}: program identity`);
+  strictEqual(
+    plan.programId,
+    fixture.execution.programId,
+    `${fixture.id}: program identity`,
+  );
 
   const shape = plannerSchema(fixture);
   const operationsPlan = prepareBxlMutationOperations(
@@ -161,20 +198,25 @@ for (const fixture of accepted) {
 // card-shaped regression: field-root fixtures synthesize an item schema and
 // did not expose the live updateCard failure.
 const primitiveArrayCardSchema: BxlMutationSchema = {
-  fields: [{
-    key: 'tags',
-    label: 'Tag',
-    kind: 'array',
-    fieldType: 'containsMany',
-  }],
+  fields: [
+    {
+      key: 'tags',
+      label: 'Tag',
+      kind: 'array',
+      fieldType: 'containsMany',
+    },
+  ],
 };
 const primitiveExactPlan = prepareBxlMutation('del(Tag[. = "obsolete"]);', {
   schema: primitiveArrayCardSchema,
   targetKind: 'card',
   syntax: 'readable',
-}).plan({ tags: ['customer', 'obsolete', 'urgent'] }, {
-  programId: 'primitive-array:exact',
-});
+}).plan(
+  { tags: ['customer', 'obsolete', 'urgent'] },
+  {
+    programId: 'primitive-array:exact',
+  },
+);
 deepStrictEqual(
   primitiveExactPlan.output,
   { tags: ['customer', 'urgent'] },
@@ -190,9 +232,12 @@ const primitiveBulkPlan = prepareBxlMutation('del(Tag[* . = "obsolete"]);', {
   schema: primitiveArrayCardSchema,
   targetKind: 'card',
   syntax: 'readable',
-}).plan({ tags: ['obsolete', 'customer', 'obsolete'] }, {
-  programId: 'primitive-array:bulk',
-});
+}).plan(
+  { tags: ['obsolete', 'customer', 'obsolete'] },
+  {
+    programId: 'primitive-array:bulk',
+  },
+);
 deepStrictEqual(
   primitiveBulkPlan.output,
   { tags: ['customer'] },
@@ -208,25 +253,30 @@ deepStrictEqual(
 );
 
 const rejectedPlannerCases = bxlMutationExamples.filter(
-  (fixture) =>
+  (fixture): fixture is RejectedMutationFixture =>
     fixture.outcome === 'rejected' &&
-    !['revision-conflict', 'authorization-denied', 'duplicate-operation-id'].includes(fixture.error.code),
+    ![
+      'revision-conflict',
+      'authorization-denied',
+      'duplicate-operation-id',
+    ].includes(fixture.error.code),
 );
 
 for (const fixture of rejectedPlannerCases) {
   const shape = plannerSchema(fixture);
   throws(
-    () => prepareBxlMutation(fixture.source, {
-      ...shape,
-      syntax: 'solidified',
-    }).plan(fixture.before as BxlMutationJson, {
-      programId: fixture.execution.programId,
-      delivery: fixture.execution.delivery,
-      transaction: fixture.execution.transaction,
-      baseRevision: fixture.execution.baseRevision,
-      currentRevision: fixture.execution.baseRevision,
-      cards: fixture.store as Record<string, BxlMutationJson> | undefined,
-    }),
+    () =>
+      prepareBxlMutation(fixture.source, {
+        ...shape,
+        syntax: 'solidified',
+      }).plan(fixture.before as BxlMutationJson, {
+        programId: fixture.execution.programId,
+        delivery: fixture.execution.delivery,
+        transaction: fixture.execution.transaction,
+        baseRevision: fixture.execution.baseRevision,
+        currentRevision: fixture.execution.baseRevision,
+        cards: fixture.store as Record<string, BxlMutationJson> | undefined,
+      }),
     (error: unknown) =>
       error instanceof BxlMutationError && error.code === fixture.error.code,
     `${fixture.id}: rejects with ${fixture.error.code}`,
@@ -238,15 +288,17 @@ const revisionFixture = bxlMutationExamples.find(
 )!;
 const revisionShape = plannerSchema(revisionFixture);
 throws(
-  () => prepareBxlMutation(revisionFixture.source, {
-    ...revisionShape,
-    syntax: 'solidified',
-  }).plan(revisionFixture.before as BxlMutationJson, {
-    programId: revisionFixture.execution.programId,
-    baseRevision: revisionFixture.execution.baseRevision,
-    currentRevision: 'rev-current',
-  }),
-  (error: unknown) => error instanceof BxlMutationError && error.code === 'revision-conflict',
+  () =>
+    prepareBxlMutation(revisionFixture.source, {
+      ...revisionShape,
+      syntax: 'solidified',
+    }).plan(revisionFixture.before as BxlMutationJson, {
+      programId: revisionFixture.execution.programId,
+      baseRevision: revisionFixture.execution.baseRevision,
+      currentRevision: 'rev-current',
+    }),
+  (error: unknown) =>
+    error instanceof BxlMutationError && error.code === 'revision-conflict',
   'revision mismatch rejects before planning',
 );
 
@@ -255,16 +307,18 @@ const authorizationFixture = bxlMutationExamples.find(
 )!;
 const authorizationShape = plannerSchema(authorizationFixture);
 throws(
-  () => prepareBxlMutation(authorizationFixture.source, {
-    ...authorizationShape,
-    syntax: 'solidified',
-  }).plan(authorizationFixture.before as BxlMutationJson, {
-    programId: authorizationFixture.execution.programId,
-    authorize(statement) {
-      return statement.statement !== 2;
-    },
-  }),
-  (error: unknown) => error instanceof BxlMutationError && error.code === 'authorization-denied',
+  () =>
+    prepareBxlMutation(authorizationFixture.source, {
+      ...authorizationShape,
+      syntax: 'solidified',
+    }).plan(authorizationFixture.before as BxlMutationJson, {
+      programId: authorizationFixture.execution.programId,
+      authorize(statement) {
+        return statement.statement !== 2;
+      },
+    }),
+  (error: unknown) =>
+    error instanceof BxlMutationError && error.code === 'authorization-denied',
   'authorization sees and rejects the concrete second-statement write set',
 );
 
@@ -273,38 +327,48 @@ const duplicateFixture = bxlMutationExamples.find(
 )!;
 const duplicateShape = plannerSchema(duplicateFixture);
 throws(
-  () => prepareBxlMutationOperations(
-    duplicateFixture.operations as BxlStructuredMutationOperation[],
-    duplicateShape,
-  ),
-  (error: unknown) => error instanceof BxlMutationError && error.code === 'duplicate-operation-id',
+  () =>
+    prepareBxlMutationOperations(
+      duplicateFixture.operations as BxlStructuredMutationOperation[],
+      duplicateShape,
+    ),
+  (error: unknown) =>
+    error instanceof BxlMutationError &&
+    error.code === 'duplicate-operation-id',
   'structured operation IDs are unique within a program',
 );
 
 // Planning is pure: a rejected atomic program never mutates the supplied snapshot.
 const atomicInput: MutationJson = { title: 'Draft', status: 'draft' };
 const atomicBefore = structuredClone(atomicInput);
-throws(() => prepareBxlMutation('Title = "Final"; Status = "published";', {
-  schema: {
-    fields: [
-      { key: 'title', label: 'Title' },
-      { key: 'status', label: 'Status' },
-    ],
-  },
-  targetKind: 'card',
-}).plan(atomicInput, {
-  programId: 'atomic:purity',
-  authorize(statement) {
-    return statement.statement === 1;
-  },
-}));
-deepStrictEqual(atomicInput, atomicBefore, 'rejected atomic planning leaves caller snapshot untouched');
+throws(() =>
+  prepareBxlMutation('Title = "Final"; Status = "published";', {
+    schema: {
+      fields: [
+        { key: 'title', label: 'Title' },
+        { key: 'status', label: 'Status' },
+      ],
+    },
+    targetKind: 'card',
+  }).plan(atomicInput, {
+    programId: 'atomic:purity',
+    authorize(statement) {
+      return statement.statement === 1;
+    },
+  }),
+);
+deepStrictEqual(
+  atomicInput,
+  atomicBefore,
+  'rejected atomic planning leaves caller snapshot untouched',
+);
 
 throws(
-  () => prepareBxlMutation('Title = RAND();', {
-    schema: { fields: [{ key: 'title', label: 'Title' }] },
-    targetKind: 'card',
-  }),
+  () =>
+    prepareBxlMutation('Title = RAND();', {
+      schema: { fields: [{ key: 'title', label: 'Title' }] },
+      targetKind: 'card',
+    }),
   (error: unknown) =>
     error instanceof BxlMutationError &&
     error.code === 'expression-syntax' &&
@@ -313,19 +377,24 @@ throws(
 );
 
 throws(
-  () => prepareBxlMutation('.__proto__.polluted = true;', {
-    schema: {
-      fields: [{
-        key: '__proto__',
-        label: '__proto__',
-        kind: 'object',
-        fields: [{ key: 'polluted', label: 'polluted' }],
-      }],
-    },
-    targetKind: 'card',
-    syntax: 'solidified',
-  }).plan({} as BxlMutationJson, { programId: 'unsafe:path' }),
-  (error: unknown) => error instanceof BxlMutationError && error.code === 'prototype-path-forbidden',
+  () =>
+    prepareBxlMutation('.__proto__.polluted = true;', {
+      schema: {
+        fields: [
+          {
+            key: '__proto__',
+            label: '__proto__',
+            kind: 'object',
+            fields: [{ key: 'polluted', label: 'polluted' }],
+          },
+        ],
+      },
+      targetKind: 'card',
+      syntax: 'solidified',
+    }).plan({} as BxlMutationJson, { programId: 'unsafe:path' }),
+  (error: unknown) =>
+    error instanceof BxlMutationError &&
+    error.code === 'prototype-path-forbidden',
   'prototype paths are rejected even if supplied by a hostile schema',
 );
 
@@ -341,20 +410,29 @@ for (let split = 0; split <= streamedSource.length; split++) {
     ...stream.push(streamedSource.slice(split)),
   ];
   stream.finish();
-  deepStrictEqual(statements, expectedStreamedStatements, `stream split ${split}`);
+  deepStrictEqual(
+    statements,
+    expectedStreamedStatements,
+    `stream split ${split}`,
+  );
 }
 const characterStream = createBxlMutationStatementStream();
 const characterStatements = [...streamedSource].flatMap((character) =>
   characterStream.push(character),
 );
 characterStream.finish();
-deepStrictEqual(characterStatements, expectedStreamedStatements, 'one-character chunks frame complete statements only');
+deepStrictEqual(
+  characterStatements,
+  expectedStreamedStatements,
+  'one-character chunks frame complete statements only',
+);
 
 const incompleteStream = createBxlMutationStatementStream();
 incompleteStream.push('Title = "Final"');
 throws(
   () => incompleteStream.finish(),
-  (error: unknown) => error instanceof BxlMutationError && error.code === 'stream-incomplete',
+  (error: unknown) =>
+    error instanceof BxlMutationError && error.code === 'stream-incomplete',
   'stream finish rejects an unterminated final statement',
 );
 

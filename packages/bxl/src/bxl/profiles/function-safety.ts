@@ -1,13 +1,10 @@
-import type { BxlProfile } from '../ast/index.js';
+import type { BxlProfile } from '../ast/index.ts';
 import {
   DETERMINISTIC_VALIDATION_FUNCTIONS,
   VOLATILE_VALIDATION_FUNCTIONS,
-} from '../bridge/validation-manifest.js';
+} from '../bridge/validation-manifest.ts';
 
-export type BxlProfileFunctionSafety =
-  | 'allow'
-  | 'deny'
-  | 'unclassified';
+export type BxlProfileFunctionSafety = 'allow' | 'deny' | 'unclassified';
 
 export type BxlFunctionSafetyCategory =
   | 'aggregate'
@@ -22,7 +19,9 @@ export type BxlFunctionSafetyCategory =
 export interface BxlProfileFunctionPolicy {
   readonly allowedCalls?: ReadonlySet<string>;
   readonly deniedCalls?: ReadonlySet<string>;
-  readonly denyMessageByCategory?: Partial<Record<BxlFunctionSafetyCategory, string>>;
+  readonly denyMessageByCategory?: Partial<
+    Record<BxlFunctionSafetyCategory, string>
+  >;
 }
 
 export interface BxlFunctionSafetyDecision {
@@ -325,14 +324,26 @@ export const BXL_FUNCTION_SAFETY_CATEGORIES: ReadonlyMap<
   BxlFunctionSafetyCategory
 > = new Map([
   ...[...BXL_AGGREGATE_CALLS].map((name) => [name, 'aggregate'] as const),
-  ...[...BXL_AUTHORIZATION_CALLS].map((name) => [name, 'authorization'] as const),
-  ...[...BXL_AUTHORIZATION_GRAPH_CALLS].map((name) => [name, 'authorization'] as const),
-  ...[...BXL_BOUNDED_SCALAR_CALLS].map((name) => [name, 'boundedScalar'] as const),
-  ...[...BXL_ERROR_MASKING_CALLS].map((name) => [name, 'errorMasking'] as const),
+  ...[...BXL_AUTHORIZATION_CALLS].map(
+    (name) => [name, 'authorization'] as const,
+  ),
+  ...[...BXL_AUTHORIZATION_GRAPH_CALLS].map(
+    (name) => [name, 'authorization'] as const,
+  ),
+  ...[...BXL_BOUNDED_SCALAR_CALLS].map(
+    (name) => [name, 'boundedScalar'] as const,
+  ),
+  ...[...BXL_ERROR_MASKING_CALLS].map(
+    (name) => [name, 'errorMasking'] as const,
+  ),
   ...[...BXL_VOLATILE_CALLS].map((name) => [name, 'volatile'] as const),
-  ...[...BXL_CONTROL_OR_SIDE_EFFECT_CALLS].map((name) => [name, 'controlOrSideEffect'] as const),
+  ...[...BXL_CONTROL_OR_SIDE_EFFECT_CALLS].map(
+    (name) => [name, 'controlOrSideEffect'] as const,
+  ),
   ...[...BXL_METADATA_CALLS].map((name) => [name, 'metadata'] as const),
-  ...[...BXL_PREDICATE_LOWERABLE_CALLS].map((name) => [name, 'predicateLowerable'] as const),
+  ...[...BXL_PREDICATE_LOWERABLE_CALLS].map(
+    (name) => [name, 'predicateLowerable'] as const,
+  ),
 ]);
 
 const POLICY_DENIED_CALLS = new Set([
@@ -364,20 +375,27 @@ export const BXL_PROFILE_FUNCTION_POLICIES: Record<
     deniedCalls: POLICY_DENIED_CALLS,
     denyMessageByCategory: {
       aggregate: 'aggregate calls can pull work across collections',
-      authorization: 'authorization conditions cannot recursively invoke the authorization kernel',
-      controlOrSideEffect: 'control/side-effect calls are not request-time authorization predicates',
-      errorMasking: 'error-masking calls can hide fail-closed authorization errors',
+      authorization:
+        'authorization conditions cannot recursively invoke the authorization kernel',
+      controlOrSideEffect:
+        'control/side-effect calls are not request-time authorization predicates',
+      errorMasking:
+        'error-masking calls can hide fail-closed authorization errors',
       metadata: 'runtime metadata calls are not authorization predicates',
-      volatile: 'volatile calls are not stable request-time authorization predicates',
+      volatile:
+        'volatile calls are not stable request-time authorization predicates',
     },
   },
   authorization: {
     deniedCalls: AUTHORIZATION_DENIED_CALLS,
     denyMessageByCategory: {
       aggregate: 'aggregate calls can pull work across collections',
-      authorization: 'authorization rewrites cannot recursively invoke the authorization kernel',
-      controlOrSideEffect: 'control/side-effect calls are not relationship-graph predicates',
-      errorMasking: 'error-masking calls can hide fail-closed authorization errors',
+      authorization:
+        'authorization rewrites cannot recursively invoke the authorization kernel',
+      controlOrSideEffect:
+        'control/side-effect calls are not relationship-graph predicates',
+      errorMasking:
+        'error-masking calls can hide fail-closed authorization errors',
       metadata: 'runtime metadata calls are not relationship-graph predicates',
       volatile: 'volatile calls are not stable relationship-graph predicates',
     },
@@ -388,7 +406,8 @@ export const BXL_PROFILE_FUNCTION_POLICIES: Record<
   derive: {
     deniedCalls: BXL_DERIVE_DENIED_CALLS,
     denyMessageByCategory: {
-      controlOrSideEffect: 'control/side-effect calls are not stable write-time derivations',
+      controlOrSideEffect:
+        'control/side-effect calls are not stable write-time derivations',
       metadata: 'runtime metadata calls are not stable write-time derivations',
       volatile: 'volatile calls are not stable write-time derivations',
     },
@@ -396,8 +415,10 @@ export const BXL_PROFILE_FUNCTION_POLICIES: Record<
   mutation: {
     deniedCalls: BXL_DERIVE_DENIED_CALLS,
     denyMessageByCategory: {
-      controlOrSideEffect: 'control/side-effect calls are not pure mutation-plan expressions',
-      metadata: 'runtime metadata calls are not stable mutation-plan expressions',
+      controlOrSideEffect:
+        'control/side-effect calls are not pure mutation-plan expressions',
+      metadata:
+        'runtime metadata calls are not stable mutation-plan expressions',
       volatile: 'volatile calls are not repeatable mutation-plan expressions',
     },
   },

@@ -1,27 +1,28 @@
-import { parseNativeJq } from '../bxl/bridge/native.js';
+import { parseNativeJq } from '../bxl/bridge/native.ts';
 import {
   DEFAULT_BUILTIN_LIBRARIES,
   resolveBuiltinRegistry,
   type ResolvedBuiltinRegistry,
-} from '../bxl/registry/index.js';
-import { applyNormalBinaryOperator } from '../jqtools/evaluate/applyBinary.js';
-import { evaluateItemsWithRegistry } from '../jqtools/evaluate/evaluate.js';
+} from '../bxl/registry/index.ts';
+import { applyNormalBinaryOperator } from '../jqtools/evaluate/applyBinary.ts';
+import { evaluateItemsWithRegistry } from '../jqtools/evaluate/evaluate.ts';
 import {
   createItem,
   type Item,
   isTrue,
-} from '../jqtools/evaluate/utils/utils.js';
-import {
-  withRuntimeDiagnostics,
-} from '../jqtools/evaluate/runtimeState.js';
-import type { ExpressionAst, NormalBinaryOperator } from '../jqtools/parser/AST.js';
+} from '../jqtools/evaluate/utils/utils.ts';
+import { withRuntimeDiagnostics } from '../jqtools/evaluate/runtimeState.ts';
+import type {
+  ExpressionAst,
+  NormalBinaryOperator,
+} from '../jqtools/parser/AST.ts';
 import {
   parseBxlMutationProgram,
   printMutationAst,
   type MutationAssignmentOperator,
   type ParsedMutationArgument,
   type ParsedMutationStatement,
-} from './syntax.js';
+} from './syntax.ts';
 import {
   BxlMutationError,
   type BxlMutationField,
@@ -36,7 +37,7 @@ import {
   type BxlMutationSchema,
   type BxlMutationStatementPlan,
   type PreparedBxlMutation,
-} from './types.js';
+} from './types.ts';
 
 interface CardReference {
   readonly kind: 'card-reference';
@@ -91,17 +92,25 @@ function hasAt(root: BxlMutationJson, path: BxlMutationPath): boolean {
   for (const part of path) {
     if (current === null || typeof current !== 'object') return false;
     if (Array.isArray(current)) {
-      if (typeof part !== 'number' || part < 0 || part >= current.length) return false;
+      if (typeof part !== 'number' || part < 0 || part >= current.length)
+        return false;
       current = current[part];
     } else {
-      if (typeof part !== 'string' || !Object.prototype.hasOwnProperty.call(current, part)) return false;
+      if (
+        typeof part !== 'string' ||
+        !Object.prototype.hasOwnProperty.call(current, part)
+      )
+        return false;
       current = (current as Record<string, unknown>)[part];
     }
   }
   return true;
 }
 
-function valueAt(root: BxlMutationJson, path: BxlMutationPath): BxlMutationJson | undefined {
+function valueAt(
+  root: BxlMutationJson,
+  path: BxlMutationPath,
+): BxlMutationJson | undefined {
   let current: unknown = root;
   for (const part of path) {
     if (current === null || typeof current !== 'object') return undefined;
@@ -126,10 +135,13 @@ function setAt(
       ? current[part as number]
       : current[part as string];
     if (next === null || typeof next !== 'object') {
-      const replacement: BxlMutationJson = typeof nextPart === 'number' ? [] : {};
+      const replacement: BxlMutationJson =
+        typeof nextPart === 'number' ? [] : {};
       if (Array.isArray(current)) current[part as number] = replacement;
       else current[part as string] = replacement;
-      current = replacement as BxlMutationJson[] | Record<string, BxlMutationJson>;
+      current = replacement as
+        | BxlMutationJson[]
+        | Record<string, BxlMutationJson>;
     } else {
       current = next as BxlMutationJson[] | Record<string, BxlMutationJson>;
     }
@@ -140,7 +152,10 @@ function setAt(
   return root;
 }
 
-function deleteAt(root: BxlMutationJson, path: BxlMutationPath): BxlMutationJson {
+function deleteAt(
+  root: BxlMutationJson,
+  path: BxlMutationPath,
+): BxlMutationJson {
   if (path.length === 0) {
     throw new Error('The planner cannot delete its root value.');
   }
@@ -151,14 +166,19 @@ function deleteAt(root: BxlMutationJson, path: BxlMutationPath): BxlMutationJson
   return root;
 }
 
-function collectionAt(root: BxlMutationJson, path: BxlMutationPath): BxlMutationJson[] {
+function collectionAt(
+  root: BxlMutationJson,
+  path: BxlMutationPath,
+): BxlMutationJson[] {
   const value = valueAt(root, path);
-  if (!Array.isArray(value)) throw new Error(`Location ${pathKey(path)} is not a collection.`);
+  if (!Array.isArray(value))
+    throw new Error(`Location ${pathKey(path)} is not a collection.`);
   return value;
 }
 
 function objectId(value: BxlMutationJson | undefined): string | undefined {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    return undefined;
   return typeof value.id === 'string' ? value.id : undefined;
 }
 
@@ -186,7 +206,11 @@ function evaluateSingleJson(
     argument.ast.name === 'card/1' &&
     argument.ast.args.length === 1
   ) {
-    const cardIdItems = evaluateItems(argument.ast.args[0]!, [createItem(input)], context);
+    const cardIdItems = evaluateItems(
+      argument.ast.args[0]!,
+      [createItem(input)],
+      context,
+    );
     if (cardIdItems.length !== 1 || typeof cardIdItems[0]!.value !== 'string') {
       throw new BxlMutationError(
         'plan',
@@ -229,7 +253,11 @@ function resolveLocations(
     );
   }
   const locations = items.map((item) => {
-    if (!item.path.every((part) => typeof part === 'string' || typeof part === 'number')) {
+    if (
+      !item.path.every(
+        (part) => typeof part === 'string' || typeof part === 'number',
+      )
+    ) {
       throw new BxlMutationError(
         'validate',
         'location-not-concrete',
@@ -240,7 +268,9 @@ function resolveLocations(
     const path = item.path as BxlMutationPath;
     return { path, value: valueAt(root, path), exists: hasAt(root, path) };
   });
-  const unique = new Map(locations.map((location) => [pathKey(location.path), location]));
+  const unique = new Map(
+    locations.map((location) => [pathKey(location.path), location]),
+  );
   if (unique.size !== locations.length) {
     throw new BxlMutationError(
       'plan',
@@ -251,7 +281,12 @@ function resolveLocations(
   }
   const deduplicated = [...unique.values()];
   if (cardinality === 'one' && deduplicated.length === 0) {
-    throw new BxlMutationError('plan', 'target-not-found', statement, 'Mutation target matched no locations.');
+    throw new BxlMutationError(
+      'plan',
+      'target-not-found',
+      statement,
+      'Mutation target matched no locations.',
+    );
   }
   if (cardinality === 'one' && deduplicated.length > 1) {
     throw new BxlMutationError(
@@ -262,12 +297,20 @@ function resolveLocations(
     );
   }
   if (cardinality === 'bulk' && deduplicated.length === 0) {
-    throw new BxlMutationError('plan', 'bulk-target-empty', statement, 'Explicit bulk target matched no locations.');
+    throw new BxlMutationError(
+      'plan',
+      'bulk-target-empty',
+      statement,
+      'Explicit bulk target matched no locations.',
+    );
   }
   return deduplicated;
 }
 
-function fieldByKey(schema: BxlMutationSchema, key: string): BxlMutationField | undefined {
+function fieldByKey(
+  schema: BxlMutationSchema,
+  key: string,
+): BxlMutationField | undefined {
   return schema.fields.find((field) => field.key === key);
 }
 
@@ -301,11 +344,17 @@ function resolveField(
   }
   if (path.length === 0) {
     const root = context.prepare.schema.rootField;
-    const relationship = root?.fieldType === 'linksTo' || root?.fieldType === 'linksToMany'
-      ? { type: root.fieldType, path: [] as BxlMutationPath }
-      : undefined;
+    const relationship =
+      root?.fieldType === 'linksTo' || root?.fieldType === 'linksToMany'
+        ? { type: root.fieldType, path: [] as BxlMutationPath }
+        : undefined;
     if (root?.writable === false && root.writeBehavior !== 'skip') {
-      throw new BxlMutationError('validate', 'field-read-only', statement, 'The targeted Field is read-only.');
+      throw new BxlMutationError(
+        'validate',
+        'field-read-only',
+        statement,
+        'The targeted Field is read-only.',
+      );
     }
     return {
       fieldType: root?.fieldType,
@@ -316,9 +365,10 @@ function resolveField(
   }
 
   let schema = context.prepare.schema;
-  const rootField = context.prepare.targetKind === 'field'
-    ? context.prepare.schema.rootField
-    : undefined;
+  const rootField =
+    context.prepare.targetKind === 'field'
+      ? context.prepare.schema.rootField
+      : undefined;
   let field: BxlMutationField | undefined = rootField
     ? {
         key: '',
@@ -327,7 +377,8 @@ function resolveField(
         writeBehavior: rootField.writeBehavior,
         item: rootField.item,
         kind:
-          rootField.fieldType === 'containsMany' || rootField.fieldType === 'linksToMany'
+          rootField.fieldType === 'containsMany' ||
+          rootField.fieldType === 'linksToMany'
             ? 'array'
             : rootField.item
               ? 'object'
@@ -341,7 +392,12 @@ function resolveField(
       : undefined;
   let writeBehavior = rootField?.writeBehavior;
   if (rootField?.writable === false && writeBehavior !== 'skip') {
-    throw new BxlMutationError('validate', 'field-read-only', statement, 'The targeted Field is read-only.');
+    throw new BxlMutationError(
+      'validate',
+      'field-read-only',
+      statement,
+      'The targeted Field is read-only.',
+    );
   }
   for (let index = 0; index < path.length; index++) {
     const part = path[index]!;
@@ -358,8 +414,18 @@ function resolveField(
       );
     }
     if (typeof part === 'number') {
-      if (!field || (field.fieldType !== 'containsMany' && field.fieldType !== 'linksToMany' && field.kind !== 'array')) {
-        throw new BxlMutationError('validate', 'path-schema-mismatch', statement, `Unexpected collection index at ${pathKey(path.slice(0, index + 1))}.`);
+      if (
+        !field ||
+        (field.fieldType !== 'containsMany' &&
+          field.fieldType !== 'linksToMany' &&
+          field.kind !== 'array')
+      ) {
+        throw new BxlMutationError(
+          'validate',
+          'path-schema-mismatch',
+          statement,
+          `Unexpected collection index at ${pathKey(path.slice(0, index + 1))}.`,
+        );
       }
       const item = nestedSchema(field);
       if (item) schema = item;
@@ -418,7 +484,10 @@ function validateWritableLocations(
   context: PlannerContext,
   statement: number,
 ): FieldResolution[] {
-  if (context.prepare.targetKind === 'card' && locations.some((location) => location.path.length === 0)) {
+  if (
+    context.prepare.targetKind === 'card' &&
+    locations.some((location) => location.path.length === 0)
+  ) {
     throw new BxlMutationError(
       'plan',
       'card-root-write',
@@ -438,10 +507,16 @@ function validateWritableLocations(
       'Numeric collection positions require a pinned base revision during streaming execution.',
     );
   }
-  return locations.map((location) => resolveField(location.path, context, statement));
+  return locations.map((location) =>
+    resolveField(location.path, context, statement),
+  );
 }
 
-function loadedCard(id: string, context: PlannerContext, statement: number): BxlMutationJson {
+function loadedCard(
+  id: string,
+  context: PlannerContext,
+  statement: number,
+): BxlMutationJson {
   const card = context.plan.resolveCard?.(id) ?? context.plan.cards?.[id];
   if (card === undefined) {
     throw new BxlMutationError(
@@ -459,7 +534,12 @@ function applyCompound(
   current: BxlMutationJson | undefined,
   right: BxlMutationJson,
 ): BxlMutationJson {
-  if (operator === '//=') return (current !== null && current !== false && current !== undefined ? current : right) as BxlMutationJson;
+  if (operator === '//=')
+    return (
+      current !== null && current !== false && current !== undefined
+        ? current
+        : right
+    ) as BxlMutationJson;
   return applyNormalBinaryOperator(
     operator.slice(0, -1) as NormalBinaryOperator,
     current,
@@ -502,7 +582,11 @@ function statementPlan(
     statement: statement.statement,
     source: statement.source,
     canonical: statement.canonical,
-    affected: intents.reduce((count, intent) => count + (intent.op === 'reorder' ? intent.order.length : 1), 0),
+    affected: intents.reduce(
+      (count, intent) =>
+        count + (intent.op === 'reorder' ? intent.order.length : 1),
+      0,
+    ),
     intents,
     paths,
   };
@@ -513,8 +597,18 @@ function planAssignment(
   root: BxlMutationJson,
   context: PlannerContext,
 ): { root: BxlMutationJson; plan: BxlMutationStatementPlan } {
-  const locations = resolveLocations(statement.location, root, context, statement.statement);
-  const fields = validateWritableLocations(locations, statement.location, context, statement.statement);
+  const locations = resolveLocations(
+    statement.location,
+    root,
+    context,
+    statement.statement,
+  );
+  const fields = validateWritableLocations(
+    locations,
+    statement.location,
+    context,
+    statement.statement,
+  );
   const intents: BxlMutationIntent[] = [];
   let output = root;
 
@@ -524,7 +618,12 @@ function planAssignment(
     if (field.writeBehavior === 'skip') continue;
     let next: BxlMutationJson | CardReference;
     if (statement.operator === '=') {
-      next = evaluateSingleJson(statement.value, output, context, statement.statement);
+      next = evaluateSingleJson(
+        statement.value,
+        output,
+        context,
+        statement.statement,
+      );
     } else if (statement.operator === '|=') {
       next = evaluateSingleJson(
         statement.value,
@@ -533,11 +632,25 @@ function planAssignment(
         statement.statement,
       );
     } else {
-      const right = evaluateSingleJson(statement.value, output, context, statement.statement);
+      const right = evaluateSingleJson(
+        statement.value,
+        output,
+        context,
+        statement.statement,
+      );
       if (isCardReference(right)) {
-        throw new BxlMutationError('validate', 'relationship-arithmetic', statement.statement, 'Relationship references cannot be used with compound assignment.');
+        throw new BxlMutationError(
+          'validate',
+          'relationship-arithmetic',
+          statement.statement,
+          'Relationship references cannot be used with compound assignment.',
+        );
       }
-      next = applyCompound(statement.operator, location.value, right as BxlMutationJson);
+      next = applyCompound(
+        statement.operator,
+        location.value,
+        right as BxlMutationJson,
+      );
     }
 
     if (field.relationship) {
@@ -557,12 +670,25 @@ function planAssignment(
           'Use relationship collection operations instead of replacing linksToMany wholesale.',
         );
       }
-      intents.push({ op: 'relate', field: field.relationship.path, cardId: next.id });
-      output = setAt(output, field.relationship.path, loadedCard(next.id, context, statement.statement));
+      intents.push({
+        op: 'relate',
+        field: field.relationship.path,
+        cardId: next.id,
+      });
+      output = setAt(
+        output,
+        field.relationship.path,
+        loadedCard(next.id, context, statement.statement),
+      );
       continue;
     }
     if (isCardReference(next)) {
-      throw new BxlMutationError('validate', 'card-reference-destination', statement.statement, 'card(id) may only be assigned to a relationship Field.');
+      throw new BxlMutationError(
+        'validate',
+        'card-reference-destination',
+        statement.statement,
+        'card(id) may only be assigned to a relationship Field.',
+      );
     }
     const intent: BxlMutationIntent = {
       op: 'set',
@@ -583,7 +709,12 @@ function exactLocation(
   statement: number,
 ): { location: ResolvedLocation; field: FieldResolution } {
   const locations = resolveLocations(argument, root, context, statement, 'one');
-  const fields = validateWritableLocations(locations, argument, context, statement);
+  const fields = validateWritableLocations(
+    locations,
+    argument,
+    context,
+    statement,
+  );
   return { location: locations[0]!, field: fields[0]! };
 }
 
@@ -607,7 +738,11 @@ function planCall(
 
   switch (statement.name) {
     case 'assert': {
-      const condition = evaluateItems(statement.args[0]!.ast, [createItem(root)], context);
+      const condition = evaluateItems(
+        statement.args[0]!.ast,
+        [createItem(root)],
+        context,
+      );
       if (condition.length !== 1 || !isTrue(condition[0]!.value)) {
         const message = jsonValue(statement.args[1]!, root, context, number);
         throw new BxlMutationError(
@@ -620,42 +755,101 @@ function planCall(
       break;
     }
     case 'replace': {
-      const { location, field } = exactLocation(statement.args[0]!, root, context, number);
+      const { location, field } = exactLocation(
+        statement.args[0]!,
+        root,
+        context,
+        number,
+      );
       if (field.writeBehavior === 'skip') break;
       if (!location.exists) {
-        throw new BxlMutationError('plan', 'replace-target-missing', number, 'replace requires an existing target.');
+        throw new BxlMutationError(
+          'plan',
+          'replace-target-missing',
+          number,
+          'replace requires an existing target.',
+        );
       }
       if (field.relationship) {
-        throw new BxlMutationError('validate', 'replace-relationship-forbidden', number, 'Use relationship operations for relationship Fields.');
+        throw new BxlMutationError(
+          'validate',
+          'replace-relationship-forbidden',
+          number,
+          'Use relationship operations for relationship Fields.',
+        );
       }
       const value = jsonValue(statement.args[1]!, root, context, number);
       if (isCardReference(value)) {
-        throw new BxlMutationError('validate', 'card-reference-destination', number, 'card(id) may only target relationships.');
+        throw new BxlMutationError(
+          'validate',
+          'card-reference-destination',
+          number,
+          'card(id) may only target relationships.',
+        );
       }
-      intents.push({ op: 'set', path: location.path, before: clone(location.value!), after: clone(value as BxlMutationJson) });
+      intents.push({
+        op: 'set',
+        path: location.path,
+        before: clone(location.value!),
+        after: clone(value as BxlMutationJson),
+      });
       output = setAt(output, location.path, value as BxlMutationJson);
       break;
     }
     case 'copy_value_to': {
       const source = exactLocation(statement.args[0]!, root, context, number);
-      const destination = exactLocation(statement.args[1]!, root, context, number);
+      const destination = exactLocation(
+        statement.args[1]!,
+        root,
+        context,
+        number,
+      );
       if (destination.field.writeBehavior === 'skip') break;
-      if (!source.location.exists) throw new BxlMutationError('plan', 'copy-source-missing', number, 'Copy source does not exist.');
+      if (!source.location.exists)
+        throw new BxlMutationError(
+          'plan',
+          'copy-source-missing',
+          number,
+          'Copy source does not exist.',
+        );
       if (source.field.relationship || destination.field.relationship) {
-        throw new BxlMutationError('validate', 'copy-relationship-forbidden', number, 'Relationship edges must be changed with relationship operations.');
+        throw new BxlMutationError(
+          'validate',
+          'copy-relationship-forbidden',
+          number,
+          'Relationship edges must be changed with relationship operations.',
+        );
       }
-      intents.push({ op: 'copy', from: source.location.path, path: destination.location.path });
+      intents.push({
+        op: 'copy',
+        from: source.location.path,
+        path: destination.location.path,
+      });
       output = setAt(output, destination.location.path, source.location.value!);
       break;
     }
     case 'del': {
-      const locations = resolveLocations(statement.args[0]!, root, context, number);
-      const fields = validateWritableLocations(locations, statement.args[0]!, context, number);
+      const locations = resolveLocations(
+        statement.args[0]!,
+        root,
+        context,
+        number,
+      );
+      const fields = validateWritableLocations(
+        locations,
+        statement.args[0]!,
+        context,
+        number,
+      );
       const ordered = [...locations.keys()].sort((a, b) => {
         const ap = locations[a]!.path;
         const bp = locations[b]!.path;
         const sameParent = equalJson(ap.slice(0, -1), bp.slice(0, -1));
-        if (sameParent && typeof ap.at(-1) === 'number' && typeof bp.at(-1) === 'number') {
+        if (
+          sameParent &&
+          typeof ap.at(-1) === 'number' &&
+          typeof bp.at(-1) === 'number'
+        ) {
           return (bp.at(-1) as number) - (ap.at(-1) as number);
         }
         return b - a;
@@ -664,13 +858,33 @@ function planCall(
         const location = locations[index]!;
         const field = fields[index]!;
         if (field.writeBehavior === 'skip') continue;
-        if (!location.exists) throw new BxlMutationError('plan', 'delete-target-missing', number, 'Delete target does not exist.');
+        if (!location.exists)
+          throw new BxlMutationError(
+            'plan',
+            'delete-target-missing',
+            number,
+            'Delete target does not exist.',
+          );
         if (field.relationship) {
           const id = objectId(location.value);
-          if (!id) throw new BxlMutationError('plan', 'relationship-card-id-missing', number, 'Loaded related Card has no string id.');
-          intents.push({ op: 'unrelate', field: field.relationship.path, cardId: id });
+          if (!id)
+            throw new BxlMutationError(
+              'plan',
+              'relationship-card-id-missing',
+              number,
+              'Loaded related Card has no string id.',
+            );
+          intents.push({
+            op: 'unrelate',
+            field: field.relationship.path,
+            cardId: id,
+          });
         } else {
-          intents.push({ op: 'delete', path: location.path, before: clone(location.value!) });
+          intents.push({
+            op: 'delete',
+            path: location.path,
+            before: clone(location.value!),
+          });
         }
         output = deleteAt(output, location.path);
       }
@@ -686,11 +900,26 @@ function planCall(
       let valueArg = statement.args[1]!;
       if (statement.name === 'insert_at') {
         if (!context.plan.baseRevision) {
-          throw new BxlMutationError('validate', 'position-requires-revision', number, 'insert_at requires a pinned base revision.');
+          throw new BxlMutationError(
+            'validate',
+            'position-requires-revision',
+            number,
+            'insert_at requires a pinned base revision.',
+          );
         }
         const requested = jsonValue(statement.args[1]!, root, context, number);
-        if (typeof requested !== 'number' || !Number.isInteger(requested) || requested < 0 || requested > collection.length) {
-          throw new BxlMutationError('plan', 'insert-index-invalid', number, 'insert_at index must be an in-range non-negative integer.');
+        if (
+          typeof requested !== 'number' ||
+          !Number.isInteger(requested) ||
+          requested < 0 ||
+          requested > collection.length
+        ) {
+          throw new BxlMutationError(
+            'plan',
+            'insert-index-invalid',
+            number,
+            'insert_at index must be an in-range non-negative integer.',
+          );
         }
         index = requested;
         valueArg = statement.args[2]!;
@@ -698,15 +927,35 @@ function planCall(
       const value = jsonValue(valueArg, root, context, number);
       if (target.field.relationship) {
         if (!isCardReference(value)) {
-          throw new BxlMutationError('validate', 'relationship-value-required', number, 'Relationship insertion requires card("id").');
+          throw new BxlMutationError(
+            'validate',
+            'relationship-value-required',
+            number,
+            'Relationship insertion requires card("id").',
+          );
         }
-        intents.push({ op: 'relate', field: target.field.relationship.path, cardId: value.id, index });
+        intents.push({
+          op: 'relate',
+          field: target.field.relationship.path,
+          cardId: value.id,
+          index,
+        });
         collection.splice(index, 0, loadedCard(value.id, context, number));
       } else {
         if (isCardReference(value)) {
-          throw new BxlMutationError('validate', 'card-reference-destination', number, 'card(id) may only target relationships.');
+          throw new BxlMutationError(
+            'validate',
+            'card-reference-destination',
+            number,
+            'card(id) may only target relationships.',
+          );
         }
-        intents.push({ op: 'insert', collection: target.location.path, index, value: clone(value as BxlMutationJson) });
+        intents.push({
+          op: 'insert',
+          collection: target.location.path,
+          index,
+          value: clone(value as BxlMutationJson),
+        });
         collection.splice(index, 0, clone(value as BxlMutationJson));
       }
       break;
@@ -716,22 +965,49 @@ function planCall(
       const anchor = exactLocation(statement.args[1]!, root, context, number);
       if (anchor.field.writeBehavior === 'skip') break;
       const anchorIndex = anchor.location.path.at(-1);
-      if (typeof anchorIndex !== 'number') throw new BxlMutationError('plan', 'anchor-not-item', number, 'Insertion anchor must be a collection item.');
+      if (typeof anchorIndex !== 'number')
+        throw new BxlMutationError(
+          'plan',
+          'anchor-not-item',
+          number,
+          'Insertion anchor must be a collection item.',
+        );
       const collectionPath = anchor.location.path.slice(0, -1);
       const collection = collectionAt(output, collectionPath);
-      const index = anchorIndex + (statement.name === 'insert_item_after' ? 1 : 0);
+      const index =
+        anchorIndex + (statement.name === 'insert_item_after' ? 1 : 0);
       const value = jsonValue(statement.args[0]!, root, context, number);
       if (anchor.field.relationship) {
         if (!isCardReference(value)) {
-          throw new BxlMutationError('validate', 'relationship-value-required', number, 'Relationship insertion requires card("id").');
+          throw new BxlMutationError(
+            'validate',
+            'relationship-value-required',
+            number,
+            'Relationship insertion requires card("id").',
+          );
         }
-        intents.push({ op: 'relate', field: anchor.field.relationship.path, cardId: value.id, index });
+        intents.push({
+          op: 'relate',
+          field: anchor.field.relationship.path,
+          cardId: value.id,
+          index,
+        });
         collection.splice(index, 0, loadedCard(value.id, context, number));
       } else {
         if (isCardReference(value)) {
-          throw new BxlMutationError('validate', 'card-reference-destination', number, 'card(id) may only target relationships.');
+          throw new BxlMutationError(
+            'validate',
+            'card-reference-destination',
+            number,
+            'card(id) may only target relationships.',
+          );
         }
-        intents.push({ op: 'insert', collection: collectionPath, index, value: clone(value as BxlMutationJson) });
+        intents.push({
+          op: 'insert',
+          collection: collectionPath,
+          index,
+          value: clone(value as BxlMutationJson),
+        });
         collection.splice(index, 0, clone(value as BxlMutationJson));
       }
       break;
@@ -743,43 +1019,103 @@ function planCall(
       const item = exactLocation(statement.args[0]!, root, context, number);
       if (item.field.writeBehavior === 'skip') break;
       const sourceIndex = item.location.path.at(-1);
-      if (typeof sourceIndex !== 'number') throw new BxlMutationError('plan', 'move-source-not-item', number, 'Move source must be a collection item.');
+      if (typeof sourceIndex !== 'number')
+        throw new BxlMutationError(
+          'plan',
+          'move-source-not-item',
+          number,
+          'Move source must be a collection item.',
+        );
       const sourceCollectionPath = item.location.path.slice(0, -1);
       let targetCollectionPath: BxlMutationPath;
       let targetIndex: number;
-      if (statement.name === 'move_item_before' || statement.name === 'move_item_after') {
+      if (
+        statement.name === 'move_item_before' ||
+        statement.name === 'move_item_after'
+      ) {
         const anchor = exactLocation(statement.args[1]!, root, context, number);
         if (equalJson(anchor.location.path, item.location.path)) {
-          throw new BxlMutationError('plan', 'source-is-anchor', number, 'Move source and anchor must be different items.');
+          throw new BxlMutationError(
+            'plan',
+            'source-is-anchor',
+            number,
+            'Move source and anchor must be different items.',
+          );
         }
         const anchorIndex = anchor.location.path.at(-1);
-        if (typeof anchorIndex !== 'number') throw new BxlMutationError('plan', 'anchor-not-item', number, 'Move anchor must be a collection item.');
+        if (typeof anchorIndex !== 'number')
+          throw new BxlMutationError(
+            'plan',
+            'anchor-not-item',
+            number,
+            'Move anchor must be a collection item.',
+          );
         targetCollectionPath = anchor.location.path.slice(0, -1);
         if (!equalJson(sourceCollectionPath, targetCollectionPath)) {
-          throw new BxlMutationError('validate', 'cross-collection-move', number, 'Version 1 moves require source and anchor in the same collection.');
+          throw new BxlMutationError(
+            'validate',
+            'cross-collection-move',
+            number,
+            'Version 1 moves require source and anchor in the same collection.',
+          );
         }
-        const adjustedAnchor = anchorIndex - (sourceIndex < anchorIndex ? 1 : 0);
-        targetIndex = adjustedAnchor + (statement.name === 'move_item_after' ? 1 : 0);
+        const adjustedAnchor =
+          anchorIndex - (sourceIndex < anchorIndex ? 1 : 0);
+        targetIndex =
+          adjustedAnchor + (statement.name === 'move_item_after' ? 1 : 0);
       } else {
-        const collection = exactLocation(statement.args[1]!, root, context, number);
+        const collection = exactLocation(
+          statement.args[1]!,
+          root,
+          context,
+          number,
+        );
         targetCollectionPath = collection.location.path;
         if (!equalJson(sourceCollectionPath, targetCollectionPath)) {
-          throw new BxlMutationError('validate', 'cross-collection-move', number, 'Version 1 moves require the same source and target collection.');
+          throw new BxlMutationError(
+            'validate',
+            'cross-collection-move',
+            number,
+            'Version 1 moves require the same source and target collection.',
+          );
         }
-        targetIndex = statement.name === 'move_item_to_start'
-          ? 0
-          : collectionAt(output, targetCollectionPath).length - 1;
+        targetIndex =
+          statement.name === 'move_item_to_start'
+            ? 0
+            : collectionAt(output, targetCollectionPath).length - 1;
       }
       const sourceCollection = collectionAt(output, sourceCollectionPath);
       const [moved] = sourceCollection.splice(sourceIndex, 1);
-      if (moved === undefined) throw new BxlMutationError('plan', 'move-source-missing', number, 'Move source no longer exists.');
+      if (moved === undefined)
+        throw new BxlMutationError(
+          'plan',
+          'move-source-missing',
+          number,
+          'Move source no longer exists.',
+        );
       sourceCollection.splice(targetIndex, 0, moved);
       if (item.field.relationship) {
         const id = objectId(moved);
-        if (!id) throw new BxlMutationError('plan', 'relationship-card-id-missing', number, 'Loaded related Card has no string id.');
-        intents.push({ op: 'move-relation', field: item.field.relationship.path, cardId: id, toIndex: targetIndex });
+        if (!id)
+          throw new BxlMutationError(
+            'plan',
+            'relationship-card-id-missing',
+            number,
+            'Loaded related Card has no string id.',
+          );
+        intents.push({
+          op: 'move-relation',
+          field: item.field.relationship.path,
+          cardId: id,
+          toIndex: targetIndex,
+        });
       } else {
-        intents.push({ op: 'move', from: item.location.path, toCollection: targetCollectionPath, toIndex: targetIndex });
+        intents.push({
+          op: 'move',
+          from: item.location.path,
+          toCollection: targetCollectionPath,
+          toIndex: targetIndex,
+        });
       }
       break;
     }
@@ -787,20 +1123,53 @@ function planCall(
       const target = exactLocation(statement.args[0]!, root, context, number);
       if (target.field.writeBehavior === 'skip') break;
       if (target.field.relationship) {
-        throw new BxlMutationError('validate', 'relationship-reorder-operation', number, 'Use relationship move operations to reorder linksToMany.');
+        throw new BxlMutationError(
+          'validate',
+          'relationship-reorder-operation',
+          number,
+          'Use relationship move operations to reorder linksToMany.',
+        );
       }
       const collection = collectionAt(output, target.location.path);
-      const keyPathItems = evaluateItems(statement.args[1]!.ast, [createItem(collection[0] ?? null)], context);
-      if (keyPathItems.length !== 1 || !keyPathItems[0]!.path.every((part) => typeof part === 'string' || typeof part === 'number')) {
-        throw new BxlMutationError('plan', 'reorder-key-invalid', number, 'reorder_by key must resolve to one item-relative path.');
+      const keyPathItems = evaluateItems(
+        statement.args[1]!.ast,
+        [createItem(collection[0] ?? null)],
+        context,
+      );
+      if (
+        keyPathItems.length !== 1 ||
+        !keyPathItems[0]!.path.every(
+          (part) => typeof part === 'string' || typeof part === 'number',
+        )
+      ) {
+        throw new BxlMutationError(
+          'plan',
+          'reorder-key-invalid',
+          number,
+          'reorder_by key must resolve to one item-relative path.',
+        );
       }
       const keyPath = keyPathItems[0]!.path as BxlMutationPath;
       const order = jsonValue(statement.args[2]!, root, context, number);
-      if (!Array.isArray(order) || order.some((value) => value !== null && !['string', 'number', 'boolean'].includes(typeof value))) {
-        throw new BxlMutationError('plan', 'order-invalid', number, 'reorder_by order must be an array of scalar keys.');
+      if (
+        !Array.isArray(order) ||
+        order.some(
+          (value) =>
+            value !== null &&
+            !['string', 'number', 'boolean'].includes(typeof value),
+        )
+      ) {
+        throw new BxlMutationError(
+          'plan',
+          'order-invalid',
+          number,
+          'reorder_by order must be an array of scalar keys.',
+        );
       }
       const currentKeys = collection.map((item) => valueAt(item, keyPath));
-      const uniqueCurrent = new Set(currentKeys.map((value) => JSON.stringify(value)));
+      const uniqueCurrent = new Set(
+        currentKeys.map((value) => JSON.stringify(value)),
+      );
       const uniqueOrder = new Set(order.map((value) => JSON.stringify(value)));
       if (
         currentKeys.length !== order.length ||
@@ -808,9 +1177,19 @@ function planCall(
         uniqueOrder.size !== order.length ||
         [...uniqueCurrent].some((key) => !uniqueOrder.has(key))
       ) {
-        throw new BxlMutationError('plan', 'order-not-permutation', number, 'reorder_by order must be an exact permutation of unique current keys.');
+        throw new BxlMutationError(
+          'plan',
+          'order-not-permutation',
+          number,
+          'reorder_by order must be an exact permutation of unique current keys.',
+        );
       }
-      const byKey = new Map(collection.map((value) => [JSON.stringify(valueAt(value, keyPath)), value]));
+      const byKey = new Map(
+        collection.map((value) => [
+          JSON.stringify(valueAt(value, keyPath)),
+          value,
+        ]),
+      );
       const reordered = order.map((key) => byKey.get(JSON.stringify(key))!);
       collection.splice(0, collection.length, ...reordered);
       intents.push({
@@ -825,7 +1204,10 @@ function planCall(
   return { root: output, plan: statementPlan(statement, intents) };
 }
 
-function projection(root: BxlMutationJson, paths: BxlMutationPath[]): BxlMutationJson {
+function projection(
+  root: BxlMutationJson,
+  paths: BxlMutationPath[],
+): BxlMutationJson {
   if (paths.some((path) => path.length === 0)) return clone(root);
   let result: BxlMutationJson = {};
   for (const path of paths) {
@@ -860,25 +1242,42 @@ export function prepareBxlMutation(
   const syntax = options.syntax ?? 'readable';
   const preparedOptions = { ...options, syntax };
   const parsed = parseBxlMutationProgram(source, preparedOptions);
-  const registry = resolveBuiltinRegistry(options.libraries ?? DEFAULT_BUILTIN_LIBRARIES);
+  const registry = resolveBuiltinRegistry(
+    options.libraries ?? DEFAULT_BUILTIN_LIBRARIES,
+  );
 
   return Object.freeze({
     language: 'bxl-mutation/1' as const,
     source,
     canonicalSource: parsed.canonicalSource,
     syntax,
-    warnings: Object.freeze([...parsed.warnings]) as unknown as typeof parsed.warnings,
+    warnings: Object.freeze([
+      ...parsed.warnings,
+    ]) as unknown as typeof parsed.warnings,
     statementCount: parsed.statements.length,
-    plan(snapshot: BxlMutationJson, planOptions: BxlMutationPlanOptions): BxlMutationPlan {
+    plan(
+      snapshot: BxlMutationJson,
+      planOptions: BxlMutationPlanOptions,
+    ): BxlMutationPlan {
       if (!planOptions.programId) {
-        throw new BxlMutationError('plan', 'program-id-required', 1, 'Mutation planning requires a stable programId.');
+        throw new BxlMutationError(
+          'plan',
+          'program-id-required',
+          1,
+          'Mutation planning requires a stable programId.',
+        );
       }
       if (
         planOptions.baseRevision !== undefined &&
         planOptions.currentRevision !== undefined &&
         planOptions.baseRevision !== planOptions.currentRevision
       ) {
-        throw new BxlMutationError('commit', 'revision-conflict', 1, 'The loaded Card revision does not match baseRevision.');
+        throw new BxlMutationError(
+          'commit',
+          'revision-conflict',
+          1,
+          'The loaded Card revision does not match baseRevision.',
+        );
       }
       const context: PlannerContext = {
         prepare: preparedOptions,
@@ -897,9 +1296,10 @@ export function prepareBxlMutation(
         const draft = clone(working);
         let result: { root: BxlMutationJson; plan: BxlMutationStatementPlan };
         try {
-          result = statement.kind === 'assignment'
-            ? planAssignment(statement, draft, context)
-            : planCall(statement, draft, context);
+          result =
+            statement.kind === 'assignment'
+              ? planAssignment(statement, draft, context)
+              : planCall(statement, draft, context);
         } catch (error) {
           if (error instanceof BxlMutationError) throw error;
           throw new BxlMutationError(
@@ -913,7 +1313,8 @@ export function prepareBxlMutation(
         if (context.plan.authorize && result.plan.intents.length > 0) {
           try {
             const allowed = context.plan.authorize(result.plan);
-            if (allowed === false) throw new Error('Authorization hook returned false.');
+            if (allowed === false)
+              throw new Error('Authorization hook returned false.');
           } catch (error) {
             throw new BxlMutationError(
               'authorize',
@@ -929,8 +1330,15 @@ export function prepareBxlMutation(
       }
 
       const intents = statementPlans.flatMap((statement) => statement.intents);
-      const affected = statementPlans.reduce((sum, statement) => sum + statement.affected, 0);
-      const pathMap = new Map(statementPlans.flatMap((statement) => statement.paths).map((path) => [pathKey(path), path]));
+      const affected = statementPlans.reduce(
+        (sum, statement) => sum + statement.affected,
+        0,
+      );
+      const pathMap = new Map(
+        statementPlans
+          .flatMap((statement) => statement.paths)
+          .map((path) => [pathKey(path), path]),
+      );
       const paths = [...pathMap.values()];
       return {
         language: 'bxl-mutation/1',
@@ -938,7 +1346,9 @@ export function prepareBxlMutation(
         target: {
           kind: options.targetKind,
           ...(planOptions.targetId ? { id: planOptions.targetId } : {}),
-          ...(planOptions.targetPath ? { path: [...planOptions.targetPath] } : {}),
+          ...(planOptions.targetPath
+            ? { path: [...planOptions.targetPath] }
+            : {}),
         },
         source,
         canonicalSource: parsed.canonicalSource,
@@ -949,7 +1359,14 @@ export function prepareBxlMutation(
         intents,
         affected,
         paths,
-        returning: returningProjection(planOptions.returning, before, working, intents, affected, paths),
+        returning: returningProjection(
+          planOptions.returning,
+          before,
+          working,
+          intents,
+          affected,
+          paths,
+        ),
       };
     },
   });

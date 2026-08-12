@@ -1,5 +1,5 @@
-import { JqEvaluateError, NotImplementedError } from '../errors.js';
-import { typeOf } from './utils/utils.js';
+import { JqEvaluateError, NotImplementedError } from '../errors.ts';
+import { typeOf } from './utils/utils.ts';
 
 export function notDefinedError(name: string) {
   return new JqEvaluateError(`'${name}' is not defined`);
@@ -11,7 +11,7 @@ export function notImplementedError(featureName: string) {
 
 export function cannotIndexError(val: any, index: any) {
   return new JqEvaluateError(
-    `Cannot index ${typeOf(val)} with ${typeOf(index)}`
+    `Cannot index ${typeOf(val)} with ${typeOf(index)}`,
   );
 }
 

@@ -1,19 +1,19 @@
 import {
   DEFAULT_BUILTIN_LIBRARIES,
   type BuiltinLibraryName,
-} from './bxl/registry/index.js';
+} from './bxl/registry/index.ts';
 import type {
   ReadableField,
   ReadableSchema,
   ReadableSyntaxWarning,
-} from './bxl/compiler/readable-syntax.js';
-import { prepareNativeJq } from './bxl/bridge/native.js';
-import { resolveLazyBuiltinLibrariesForExpressions } from './bxl/bridge/lazy-formulas.js';
-import type { NativeRuntimeLimits } from './jqtools/evaluate/runtimeState.js';
-import { getPath } from './jqtools/evaluate/utils/getPath.js';
-import { setPath } from './jqtools/evaluate/utils/setPath.js';
-import type { Path } from './jqtools/evaluate/utils/utils.js';
-import { toBxlErrorRecord, type BxlSafeResult } from './error-utils.js';
+} from './bxl/compiler/readable-syntax.ts';
+import { prepareNativeJq } from './bxl/bridge/native.ts';
+import { resolveLazyBuiltinLibrariesForExpressions } from './bxl/bridge/lazy-formulas.ts';
+import type { NativeRuntimeLimits } from './jqtools/evaluate/runtimeState.ts';
+import { getPath } from './jqtools/evaluate/utils/getPath.ts';
+import { setPath } from './jqtools/evaluate/utils/setPath.ts';
+import type { Path } from './jqtools/evaluate/utils/utils.ts';
+import { toBxlErrorRecord, type BxlSafeResult } from './error-utils.ts';
 
 export interface BoxelExpressionValue {
   expression: string;
@@ -233,8 +233,10 @@ export interface PreparedBoxelRuntime {
   createSession(initialInput: unknown): BoxelRuntimeSession;
 }
 
-export interface BoxelRuntimeAsyncOptions
-  extends Omit<BoxelRuntimeOptions, 'now'> {
+export interface BoxelRuntimeAsyncOptions extends Omit<
+  BoxelRuntimeOptions,
+  'now'
+> {
   cacheKey?: string;
   guideUrl?: string;
   contentHash?: string;
@@ -394,9 +396,9 @@ function normalizeExpressionSlot(value: BoxelGuideExpression): string {
 function isExpressionValue(value: unknown): value is BoxelExpressionValue {
   return Boolean(
     value &&
-      typeof value === 'object' &&
-      'expression' in value &&
-      typeof (value as { expression: unknown }).expression === 'string',
+    typeof value === 'object' &&
+    'expression' in value &&
+    typeof (value as { expression: unknown }).expression === 'string',
   );
 }
 
@@ -497,7 +499,9 @@ function cloneField(field: ReadableField): ReadableField {
     displayName: field.displayName,
     kind: field.kind,
     fields: field.fields?.map(cloneField),
-    item: field.item ? { fields: field.item.fields.map(cloneField) } : undefined,
+    item: field.item
+      ? { fields: field.item.fields.map(cloneField) }
+      : undefined,
   };
 }
 
@@ -507,7 +511,10 @@ function cloneSchema(schema?: ReadableSchema): ReadableSchema {
   };
 }
 
-function findField(schema: ReadableSchema, key: string): ReadableField | undefined {
+function findField(
+  schema: ReadableSchema,
+  key: string,
+): ReadableField | undefined {
   return schema.fields.find((field) => field.key === key);
 }
 
@@ -531,14 +538,20 @@ function ensureFieldForPath(
 
     const next = segments[index + 1];
     const desiredKind =
-      next === undefined ? 'scalar' : typeof next === 'number' ? 'array' : 'object';
+      next === undefined
+        ? 'scalar'
+        : typeof next === 'number'
+          ? 'array'
+          : 'object';
     let field = findField(scope, segment);
 
     if (!field) {
       field = {
         key: segment,
         label:
-          index === segments.length - 1 && leafLabel ? leafLabel : humanizeKey(segment),
+          index === segments.length - 1 && leafLabel
+            ? leafLabel
+            : humanizeKey(segment),
       };
       if (desiredKind === 'object') {
         field.kind = 'object';
@@ -637,7 +650,9 @@ function coerceString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : String(value);
 }
 
-function collectRuntimeExpressions(definition: BoxelRuntimeDefinition): string[] {
+function collectRuntimeExpressions(
+  definition: BoxelRuntimeDefinition,
+): string[] {
   const expressions: string[] = [];
   const add = (value: BoxelGuideExpression | undefined) => {
     if (value) {
@@ -713,7 +728,12 @@ function resolveLiteralOrExpression(
 function collectRuleWarnings(rule: AnyPreparedRule): BoxelRuntimeWarning[] {
   const preparedWarnings =
     'prepared' in rule
-      ? [{ expression: rule.prepared.expression, warnings: rule.prepared.warnings }]
+      ? [
+          {
+            expression: rule.prepared.expression,
+            warnings: rule.prepared.warnings,
+          },
+        ]
       : [
           rule.when && {
             expression: rule.when.expression,
@@ -751,7 +771,13 @@ function collectRuleWarnings(rule: AnyPreparedRule): BoxelRuntimeWarning[] {
 
   return preparedWarnings.flatMap((entry) =>
     entry && entry.warnings.length > 0
-      ? [{ ruleId: rule.id, expression: entry.expression, warnings: entry.warnings }]
+      ? [
+          {
+            ruleId: rule.id,
+            expression: entry.expression,
+            warnings: entry.warnings,
+          },
+        ]
       : [],
   );
 }
@@ -830,7 +856,9 @@ function buildRuleSummary(rule: AnyPreparedRule): BoxelRuntimeRuleSummary {
   };
 }
 
-function isAnnotationRule(rule: AnyPreparedRule): rule is PreparedAnnotationRule {
+function isAnnotationRule(
+  rule: AnyPreparedRule,
+): rule is PreparedAnnotationRule {
   return rule.kind === 'annotation';
 }
 
@@ -979,7 +1007,11 @@ function prepareBoxelRuntimeInternals(
 
     if (isExpressionValue(fieldGuide.required)) {
       const id = createRuleId('field-required', ++counter);
-      const prepared = prepareExpression(fieldGuide.required.expression, baseSchema, options);
+      const prepared = prepareExpression(
+        fieldGuide.required.expression,
+        baseSchema,
+        options,
+      );
       const rule: PreparedFieldDynamicRule = {
         id,
         kind: 'field-required',
@@ -1091,7 +1123,9 @@ function prepareBoxelRuntimeInternals(
     const id = annotation.id ?? createRuleId('annotation', ++counter);
     const deps = new Set<string>();
 
-    const prepareOptional = (value: BoxelLiteralOrExpression<string> | undefined) => {
+    const prepareOptional = (
+      value: BoxelLiteralOrExpression<string> | undefined,
+    ) => {
       if (!isExpressionValue(value)) {
         return undefined;
       }
@@ -1103,7 +1137,11 @@ function prepareBoxelRuntimeInternals(
     };
 
     const when = annotation.when
-      ? prepareExpression(normalizeExpressionSlot(annotation.when), baseSchema, options)
+      ? prepareExpression(
+          normalizeExpressionSlot(annotation.when),
+          baseSchema,
+          options,
+        )
       : undefined;
     for (const dep of when?.deps ?? []) {
       deps.add(dep);
@@ -1124,7 +1162,9 @@ function prepareBoxelRuntimeInternals(
       targetCardId: annotation.targetCardId,
       targetCardType: annotation.targetCardType,
       cardTitle:
-        typeof annotation.cardTitle === 'string' ? annotation.cardTitle : undefined,
+        typeof annotation.cardTitle === 'string'
+          ? annotation.cardTitle
+          : undefined,
       cardTitleExpression,
       annotationKind: annotation.kind,
       actor: annotation.actor,
@@ -1145,10 +1185,14 @@ function prepareBoxelRuntimeInternals(
           : undefined,
       previousValueExpression,
       newValue:
-        typeof annotation.newValue === 'string' ? annotation.newValue : undefined,
+        typeof annotation.newValue === 'string'
+          ? annotation.newValue
+          : undefined,
       newValueExpression,
       createdAt:
-        typeof annotation.createdAt === 'string' ? annotation.createdAt : undefined,
+        typeof annotation.createdAt === 'string'
+          ? annotation.createdAt
+          : undefined,
       createdAtExpression,
     };
 
@@ -1265,7 +1309,7 @@ function evaluateAnnotationRule(
   now: (() => string) | undefined,
 ): AnnotationRuleOutput {
   try {
-    if (rule.when && !Boolean(rule.when.evaluate(state))) {
+    if (rule.when && !rule.when.evaluate(state)) {
       return { entry: null };
     }
 
@@ -1273,9 +1317,21 @@ function evaluateAnnotationRule(
       ruleId: rule.id,
       targetPath: rule.targetPath,
       kind: rule.annotationKind,
-      summary: resolveLiteralOrExpression(rule.summary, state, rule.summaryExpression),
-      details: resolveLiteralOrExpression(rule.details, state, rule.detailsExpression),
-      snippet: resolveLiteralOrExpression(rule.snippet, state, rule.snippetExpression),
+      summary: resolveLiteralOrExpression(
+        rule.summary,
+        state,
+        rule.summaryExpression,
+      ),
+      details: resolveLiteralOrExpression(
+        rule.details,
+        state,
+        rule.detailsExpression,
+      ),
+      snippet: resolveLiteralOrExpression(
+        rule.snippet,
+        state,
+        rule.snippetExpression,
+      ),
       previousValue: resolveLiteralOrExpression(
         rule.previousValue,
         state,
@@ -1350,23 +1406,21 @@ function buildFieldState(
       continue;
     }
     const path = rule.fieldPath;
-    const current =
-      fieldState.get(path) ??
-      {
-        path,
-        label: defaultFieldLabel(path),
-        altLabel: null,
-        helperText: null,
-        placeholder: null,
-        required: false,
-        visible: true,
-        min: null,
-        max: null,
-        pattern: null,
-        suggested: null,
-        note: null,
-        errors: [],
-      };
+    const current = fieldState.get(path) ?? {
+      path,
+      label: defaultFieldLabel(path),
+      altLabel: null,
+      helperText: null,
+      placeholder: null,
+      required: false,
+      visible: true,
+      min: null,
+      max: null,
+      pattern: null,
+      suggested: null,
+      note: null,
+      errors: [],
+    };
 
     if (rule.kind === 'field-visible') {
       current.visible = Boolean(output.value);
@@ -1385,30 +1439,30 @@ function buildFieldState(
       continue;
     }
     violations.push(output.violation);
-    const current =
-      fieldState.get(output.violation.fieldPath) ??
-      {
-        path: output.violation.fieldPath,
-        label: defaultFieldLabel(output.violation.fieldPath),
-        altLabel: null,
-        helperText: null,
-        placeholder: null,
-        required: false,
-        visible: true,
-        min: null,
-        max: null,
-        pattern: null,
-        suggested: null,
-        note: null,
-        errors: [],
-      };
+    const current = fieldState.get(output.violation.fieldPath) ?? {
+      path: output.violation.fieldPath,
+      label: defaultFieldLabel(output.violation.fieldPath),
+      altLabel: null,
+      helperText: null,
+      placeholder: null,
+      required: false,
+      visible: true,
+      min: null,
+      max: null,
+      pattern: null,
+      suggested: null,
+      note: null,
+      errors: [],
+    };
     current.errors.push(output.violation);
     fieldState.set(output.violation.fieldPath, current);
   }
 
   const orderedPaths = [
     ...runtime.fieldOrder,
-    ...[...fieldState.keys()].filter((path) => !runtime.fieldOrder.includes(path)),
+    ...[...fieldState.keys()].filter(
+      (path) => !runtime.fieldOrder.includes(path),
+    ),
   ];
 
   return {
@@ -1595,7 +1649,10 @@ export function prepareBoxelRuntime(
             continue;
           }
           if (rule.kind === 'constraint') {
-            constraintOutputs.set(rule.id, evaluateConstraintRule(rule, resolvedState));
+            constraintOutputs.set(
+              rule.id,
+              evaluateConstraintRule(rule, resolvedState),
+            );
             continue;
           }
           if (
@@ -1656,7 +1713,10 @@ export function prepareBoxelRuntime(
           }
           const rule = runtime.rulesById.get(ruleId)!;
           if (rule.kind === 'constraint') {
-            constraintOutputs.set(rule.id, evaluateConstraintRule(rule, resolvedState));
+            constraintOutputs.set(
+              rule.id,
+              evaluateConstraintRule(rule, resolvedState),
+            );
             continue;
           }
           if (
@@ -1711,7 +1771,11 @@ export function prepareBoxelRuntime(
           const normalizedPath = normalizePath(path);
           const root = pathRoot(normalizedPath);
           sourceState = setPath(sourceState, parsePath(normalizedPath), value);
-          resolvedState = setPath(resolvedState, parsePath(normalizedPath), value);
+          resolvedState = setPath(
+            resolvedState,
+            parsePath(normalizedPath),
+            value,
+          );
           return runAffected(root ? [root] : []);
         },
       };
@@ -1789,62 +1853,67 @@ interface PreparePlanPayload {
 
 type WorkerRequest =
   | ({ requestId: string; type: 'ensure-plan' } & PreparePlanPayload)
-  | ({
+  | {
       requestId: string;
       type: 'invalidate-plans';
       cacheKey?: string;
       cacheNamespace?: string;
-    })
-  | ({ requestId: string; type: 'evaluate-plan'; cacheKey: string; input: unknown })
-  | ({
+    }
+  | {
+      requestId: string;
+      type: 'evaluate-plan';
+      cacheKey: string;
+      input: unknown;
+    }
+  | {
       requestId: string;
       type: 'create-session';
       cacheKey: string;
       sessionId: string;
       initialInput: unknown;
-    })
-  | ({ requestId: string; type: 'session-evaluate'; sessionId: string })
-  | ({
+    }
+  | { requestId: string; type: 'session-evaluate'; sessionId: string }
+  | {
       requestId: string;
       type: 'session-replace';
       sessionId: string;
       input: unknown;
-    })
-  | ({
+    }
+  | {
       requestId: string;
       type: 'session-apply-patch';
       sessionId: string;
       path: string;
       value: unknown;
-    })
-  | ({
+    }
+  | {
       requestId: string;
       type: 'session-swap-plan';
       sessionId: string;
       cacheKey: string;
-    })
-  | ({ requestId: string; type: 'session-dispose'; sessionId: string });
+    }
+  | { requestId: string; type: 'session-dispose'; sessionId: string };
 
 type WorkerRequestWithoutId =
   | ({ type: 'ensure-plan' } & PreparePlanPayload)
-  | ({ type: 'invalidate-plans'; cacheKey?: string; cacheNamespace?: string })
-  | ({ type: 'evaluate-plan'; cacheKey: string; input: unknown })
-  | ({
+  | { type: 'invalidate-plans'; cacheKey?: string; cacheNamespace?: string }
+  | { type: 'evaluate-plan'; cacheKey: string; input: unknown }
+  | {
       type: 'create-session';
       cacheKey: string;
       sessionId: string;
       initialInput: unknown;
-    })
-  | ({ type: 'session-evaluate'; sessionId: string })
-  | ({ type: 'session-replace'; sessionId: string; input: unknown })
-  | ({
+    }
+  | { type: 'session-evaluate'; sessionId: string }
+  | { type: 'session-replace'; sessionId: string; input: unknown }
+  | {
       type: 'session-apply-patch';
       sessionId: string;
       path: string;
       value: unknown;
-    })
-  | ({ type: 'session-swap-plan'; sessionId: string; cacheKey: string })
-  | ({ type: 'session-dispose'; sessionId: string });
+    }
+  | { type: 'session-swap-plan'; sessionId: string; cacheKey: string }
+  | { type: 'session-dispose'; sessionId: string };
 
 type WorkerResponse =
   | { requestId: string; ok: true; value: unknown }
@@ -1864,7 +1933,10 @@ interface WorkerLike {
     type: 'message',
     listener: (event: MessageEventLike<WorkerResponse>) => void,
   ): void;
-  addEventListener(type: 'error', listener: (event: ErrorEventLike) => void): void;
+  addEventListener(
+    type: 'error',
+    listener: (event: ErrorEventLike) => void,
+  ): void;
   postMessage(message: WorkerRequest): void;
 }
 
@@ -2041,10 +2113,10 @@ function canUseBrowserWorkerRuntime(
 
   return Boolean(
     scope.window &&
-      typeof scope.Worker === 'function' &&
-      typeof scope.Blob === 'function' &&
-      scope.URL &&
-      typeof scope.URL.createObjectURL === 'function',
+    typeof scope.Worker === 'function' &&
+    typeof scope.Blob === 'function' &&
+    scope.URL &&
+    typeof scope.URL.createObjectURL === 'function',
   );
 }
 
@@ -2070,7 +2142,9 @@ function fromSerializedWorkerError(error: SerializedWorkerError): Error {
   return output;
 }
 
-function snapshotSession(session: BoxelRuntimeSession): BoxelRuntimeSessionSnapshot {
+function snapshotSession(
+  session: BoxelRuntimeSession,
+): BoxelRuntimeSessionSnapshot {
   return {
     source: cloneValue(session.source),
     state: cloneValue(session.state),
@@ -2087,8 +2161,8 @@ function isWorkerRuntimeScope(): boolean {
 
   return Boolean(
     typeof scope.document === 'undefined' &&
-      typeof scope.postMessage === 'function' &&
-      typeof scope.addEventListener === 'function',
+    typeof scope.postMessage === 'function' &&
+    typeof scope.addEventListener === 'function',
   );
 }
 
@@ -2114,12 +2188,17 @@ export function __runBoxelRuntimeWorker() {
   const plans = new Map<string, WorkerPlanEntry>();
   const sessions = new Map<string, BoxelRuntimeSession>();
 
-  const ensurePlan = async (payload: PreparePlanPayload): Promise<WorkerPlanEntry> => {
+  const ensurePlan = async (
+    payload: PreparePlanPayload,
+  ): Promise<WorkerPlanEntry> => {
     let entry = plans.get(payload.cacheKey);
     if (!entry) {
       const prepared = prepareBoxelRuntime(
         payload.definition,
-        await resolveLazyBoxelRuntimeOptions(payload.definition, payload.options),
+        await resolveLazyBoxelRuntimeOptions(
+          payload.definition,
+          payload.options,
+        ),
       );
       entry = {
         prepared,
@@ -2180,7 +2259,9 @@ export function __runBoxelRuntimeWorker() {
         case 'evaluate-plan': {
           const entry = plans.get(request.cacheKey);
           if (!entry) {
-            throw new Error(`No prepared Boxel runtime plan for ${request.cacheKey}`);
+            throw new Error(
+              `No prepared Boxel runtime plan for ${request.cacheKey}`,
+            );
           }
           scope.postMessage({
             requestId: request.requestId,
@@ -2192,7 +2273,9 @@ export function __runBoxelRuntimeWorker() {
         case 'create-session': {
           const entry = plans.get(request.cacheKey);
           if (!entry) {
-            throw new Error(`No prepared Boxel runtime plan for ${request.cacheKey}`);
+            throw new Error(
+              `No prepared Boxel runtime plan for ${request.cacheKey}`,
+            );
           }
           const session = entry.prepared.createSession(request.initialInput);
           sessions.set(request.sessionId, session);
@@ -2249,7 +2332,9 @@ export function __runBoxelRuntimeWorker() {
           }
           const entry = plans.get(request.cacheKey);
           if (!entry) {
-            throw new Error(`No prepared Boxel runtime plan for ${request.cacheKey}`);
+            throw new Error(
+              `No prepared Boxel runtime plan for ${request.cacheKey}`,
+            );
           }
           const nextSession = entry.prepared.createSession(session.source);
           nextSession.evaluate();
@@ -2459,9 +2544,9 @@ function getCachedPreparedAsyncRuntime(cacheKey: string) {
 
   preparedAsyncRuntimeCache.delete(cacheKey);
   if (entry.workerBacked && boxelRuntimeWorkerManager) {
-    void boxelRuntimeWorkerManager.invalidatePlans(cacheKey).catch(
-      () => undefined,
-    );
+    void boxelRuntimeWorkerManager
+      .invalidatePlans(cacheKey)
+      .catch(() => undefined);
   }
   return undefined;
 }
@@ -2474,9 +2559,7 @@ function deleteCachedPreparedAsyncRuntime(cacheKey: string) {
   preparedAsyncRuntimeCache.delete(cacheKey);
 }
 
-function cleanupStalePreparedAsyncRuntimes(
-  cacheKeyOrNamespace?: string,
-) {
+function cleanupStalePreparedAsyncRuntimes(cacheKeyOrNamespace?: string) {
   for (const [cacheKey, entry] of preparedAsyncRuntimeCache.entries()) {
     if (
       cacheKeyOrNamespace &&
@@ -2493,9 +2576,9 @@ function cleanupStalePreparedAsyncRuntimes(
     }
     preparedAsyncRuntimeCache.delete(cacheKey);
     if (entry.workerBacked && boxelRuntimeWorkerManager) {
-      void boxelRuntimeWorkerManager.invalidatePlans(cacheKey).catch(
-        () => undefined,
-      );
+      void boxelRuntimeWorkerManager
+        .invalidatePlans(cacheKey)
+        .catch(() => undefined);
     }
   }
 }
@@ -2547,16 +2630,21 @@ function getLocalAsyncPreparedRuntime(
   prepared: PreparedBoxelRuntimeAsync,
 ): PreparedBoxelRuntime | null {
   return (
-    prepared as LocalAsyncPreparedRuntimeHandle
-  )[LOCAL_ASYNC_PREPARED_RUNTIME] ?? null;
+    (prepared as LocalAsyncPreparedRuntimeHandle)[
+      LOCAL_ASYNC_PREPARED_RUNTIME
+    ] ?? null
+  );
 }
 
-function getWorkerAsyncPreparedRuntime(
-  prepared: PreparedBoxelRuntimeAsync,
-): { manager: BoxelRuntimeWorkerManager; metadata: PreparedPlanMetadata } | null {
+function getWorkerAsyncPreparedRuntime(prepared: PreparedBoxelRuntimeAsync): {
+  manager: BoxelRuntimeWorkerManager;
+  metadata: PreparedPlanMetadata;
+} | null {
   return (
-    prepared as WorkerAsyncPreparedRuntimeHandle
-  )[WORKER_ASYNC_PREPARED_RUNTIME] ?? null;
+    (prepared as WorkerAsyncPreparedRuntimeHandle)[
+      WORKER_ASYNC_PREPARED_RUNTIME
+    ] ?? null
+  );
 }
 
 abstract class BaseAsyncBoxelRuntimeSession implements BoxelRuntimeAsyncSession {
@@ -2591,7 +2679,9 @@ abstract class BaseAsyncBoxelRuntimeSession implements BoxelRuntimeAsyncSession 
     this.#result = snapshot.result;
   }
 
-  protected queue<TResult>(operation: () => Promise<TResult>): Promise<TResult> {
+  protected queue<TResult>(
+    operation: () => Promise<TResult>,
+  ): Promise<TResult> {
     const next = this.#operationQueue.then(operation, operation);
     this.#operationQueue = next.then(
       () => undefined,
@@ -2748,7 +2838,9 @@ class WorkerBackedBoxelRuntimeSession extends BaseAsyncBoxelRuntimeSession {
     return this.#manager.evaluateSession(this.#sessionId);
   }
 
-  protected replaceRemote(input: unknown): Promise<BoxelRuntimeSessionSnapshot> {
+  protected replaceRemote(
+    input: unknown,
+  ): Promise<BoxelRuntimeSessionSnapshot> {
     return this.#manager.replaceSession(this.#sessionId, input);
   }
 
@@ -2865,9 +2957,7 @@ export async function prepareBoxelRuntimeAsync(
           await getBoxelRuntimeWorkerManager().ensurePlan(payload),
         );
 
-    cacheEntry.workerBacked = Boolean(
-      getWorkerAsyncPreparedRuntime(prepared),
-    );
+    cacheEntry.workerBacked = Boolean(getWorkerAsyncPreparedRuntime(prepared));
     cacheEntry.runtimeRef =
       typeof WeakRef === 'function' ? new WeakRef(prepared) : undefined;
     cacheEntry.promise = cacheEntry.runtimeRef
@@ -2903,9 +2993,8 @@ export async function invalidateBoxelRuntimeAsyncCache(
   )
     ? cacheKeyOrNamespace
     : undefined;
-  const localInvalidated = invalidateLocalPreparedAsyncRuntimeCache(
-    cacheKeyOrNamespace,
-  );
+  const localInvalidated =
+    invalidateLocalPreparedAsyncRuntimeCache(cacheKeyOrNamespace);
 
   let workerInvalidated = 0;
   if (boxelRuntimeWorkerManager) {

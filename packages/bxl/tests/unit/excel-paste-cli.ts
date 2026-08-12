@@ -21,11 +21,14 @@ import {
   lintBxlExpression,
   solidifyBxlExpression,
   type ReadableSchema,
-} from '../../src/index.js';
-import { registerBuiltinLibrary } from '../../src/bxl/registry/index.js';
-import { formulaEngineeringLibrary } from '../../src/bxl/registry/formula-engineering.js';
-import { formulaFinancialLibrary } from '../../src/bxl/registry/formula-financial.js';
-import { bxlExampleInput, bxlExampleSchema } from '../../examples/bxl-150-examples.js';
+} from '../../src/index.ts';
+import { registerBuiltinLibrary } from '../../src/bxl/registry/index.ts';
+import { formulaEngineeringLibrary } from '../../src/bxl/registry/formula-engineering.ts';
+import { formulaFinancialLibrary } from '../../src/bxl/registry/formula-financial.ts';
+import {
+  bxlExampleInput,
+  bxlExampleSchema,
+} from '../../examples/bxl-150-examples.ts';
 
 // The 150-example pasted-from-Excel suite was authored before engineering /
 // financial moved into lazy chunks. Force-register them so the sync path
@@ -120,7 +123,8 @@ const idiomCases: TestCase[] = [
   // for the earlier "wrap each side in parens" workaround.
   {
     name: '& across [#first] and [#last]',
-    expression: '"Line Item"[#first].SKU & " through " & "Line Item"[#last].SKU',
+    expression:
+      '"Line Item"[#first].SKU & " through " & "Line Item"[#last].SKU',
     expected: 'PAPER-01 through HARD-02',
   },
   {
@@ -156,20 +160,64 @@ const coverageCases: TestCase[] = [
   { name: 'math: POWER(2, 8)', expression: 'POWER(2, 8)', expected: 256 },
   { name: 'math: POWER(2, 10)', expression: 'POWER(2, 10)', expected: 1024 },
   { name: 'math: SQRT(16)', expression: 'SQRT(16)', expected: 4 },
-  { name: 'math: SQRT(2)', expression: 'SQRT(2)', expected: 1.4142135623730951, tolerance: 1e-9 },
-  { name: 'math: ROUND(3.14159, 2)', expression: 'ROUND(3.14159, 2)', expected: 3.14 },
-  { name: 'math: ROUND(123.456, 1)', expression: 'ROUND(123.456, 1)', expected: 123.5 },
-  { name: 'math: ROUNDUP(3.141, 2)', expression: 'ROUNDUP(3.141, 2)', expected: 3.15 },
-  { name: 'math: ROUNDDOWN(3.149, 2)', expression: 'ROUNDDOWN(3.149, 2)', expected: 3.14 },
-  { name: 'math: CEILING(12.1, 1)', expression: 'CEILING(12.1, 1)', expected: 13 },
+  {
+    name: 'math: SQRT(2)',
+    expression: 'SQRT(2)',
+    expected: 1.4142135623730951,
+    tolerance: 1e-9,
+  },
+  {
+    name: 'math: ROUND(3.14159, 2)',
+    expression: 'ROUND(3.14159, 2)',
+    expected: 3.14,
+  },
+  {
+    name: 'math: ROUND(123.456, 1)',
+    expression: 'ROUND(123.456, 1)',
+    expected: 123.5,
+  },
+  {
+    name: 'math: ROUNDUP(3.141, 2)',
+    expression: 'ROUNDUP(3.141, 2)',
+    expected: 3.15,
+  },
+  {
+    name: 'math: ROUNDDOWN(3.149, 2)',
+    expression: 'ROUNDDOWN(3.149, 2)',
+    expected: 3.14,
+  },
+  {
+    name: 'math: CEILING(12.1, 1)',
+    expression: 'CEILING(12.1, 1)',
+    expected: 13,
+  },
   { name: 'math: FLOOR(12.9, 1)', expression: 'FLOOR(12.9, 1)', expected: 12 },
   { name: 'math: MOD(22, 5)', expression: 'MOD(22, 5)', expected: 2 },
   { name: 'math: MOD(17, 6)', expression: 'MOD(17, 6)', expected: 5 },
-  { name: 'math: TRUNC(3.14159, 2)', expression: 'TRUNC(3.14159, 2)', expected: 3.14 },
+  {
+    name: 'math: TRUNC(3.14159, 2)',
+    expression: 'TRUNC(3.14159, 2)',
+    expected: 3.14,
+  },
   { name: 'math: INT(3.9)', expression: 'INT(3.9)', expected: 3 },
-  { name: 'math: PI()', expression: 'PI()', expected: 3.141592653589793, tolerance: 1e-9 },
-  { name: 'math: EXP(1)', expression: 'EXP(1)', expected: 2.718281828459045, tolerance: 1e-9 },
-  { name: 'math: LN(EXP(1))', expression: 'LN(EXP(1))', expected: 1, tolerance: 1e-9 },
+  {
+    name: 'math: PI()',
+    expression: 'PI()',
+    expected: 3.141592653589793,
+    tolerance: 1e-9,
+  },
+  {
+    name: 'math: EXP(1)',
+    expression: 'EXP(1)',
+    expected: 2.718281828459045,
+    tolerance: 1e-9,
+  },
+  {
+    name: 'math: LN(EXP(1))',
+    expression: 'LN(EXP(1))',
+    expected: 1,
+    tolerance: 1e-9,
+  },
   { name: 'math: LOG10(100)', expression: 'LOG10(100)', expected: 2 },
   { name: 'math: LOG(8, 2)', expression: 'LOG(8, 2)', expected: 3 },
   { name: 'math: SIGN(-5)', expression: 'SIGN(-5)', expected: -1 },
@@ -183,21 +231,77 @@ const coverageCases: TestCase[] = [
   { name: 'math: ARABIC("IV")', expression: 'ARABIC("IV")', expected: 4 },
 
   // --- Text ---
-  { name: 'text: UPPER("hello")', expression: 'UPPER("hello")', expected: 'HELLO' },
-  { name: 'text: LOWER("HELLO")', expression: 'LOWER("HELLO")', expected: 'hello' },
-  { name: 'text: PROPER("hello world")', expression: 'PROPER("hello world")', expected: 'Hello World' },
+  {
+    name: 'text: UPPER("hello")',
+    expression: 'UPPER("hello")',
+    expected: 'HELLO',
+  },
+  {
+    name: 'text: LOWER("HELLO")',
+    expression: 'LOWER("HELLO")',
+    expected: 'hello',
+  },
+  {
+    name: 'text: PROPER("hello world")',
+    expression: 'PROPER("hello world")',
+    expected: 'Hello World',
+  },
   { name: 'text: LEN("hello")', expression: 'LEN("hello")', expected: 5 },
-  { name: 'text: LEFT("Sale Price", 4)', expression: 'LEFT("Sale Price", 4)', expected: 'Sale' },
-  { name: 'text: RIGHT("Sale Price", 5)', expression: 'RIGHT("Sale Price", 5)', expected: 'Price' },
-  { name: 'text: MID("Fluid Flow", 1, 5)', expression: 'MID("Fluid Flow", 1, 5)', expected: 'Fluid' },
-  { name: 'text: TRIM("  hello  ")', expression: 'TRIM("  hello  ")', expected: 'hello' },
-  { name: 'text: REPT("ab", 3)', expression: 'REPT("ab", 3)', expected: 'ababab' },
-  { name: 'text: REPLACE("Hello World", 7, 5, "BXL")', expression: 'REPLACE("Hello World", 7, 5, "BXL")', expected: 'Hello BXL' },
-  { name: 'text: SUBSTITUTE("Copy Toner", "Toner", "Ink")', expression: 'SUBSTITUTE("Copy Toner", "Toner", "Ink")', expected: 'Copy Ink' },
-  { name: 'text: FIND("b", "abc")', expression: 'FIND("b", "abc")', expected: 2 },
-  { name: 'text: SEARCH("B", "abc")', expression: 'SEARCH("B", "abc")', expected: 2 },
-  { name: 'text: EXACT("a", "a")', expression: 'EXACT("a", "a")', expected: true },
-  { name: 'text: EXACT("a", "b")', expression: 'EXACT("a", "b")', expected: false },
+  {
+    name: 'text: LEFT("Sale Price", 4)',
+    expression: 'LEFT("Sale Price", 4)',
+    expected: 'Sale',
+  },
+  {
+    name: 'text: RIGHT("Sale Price", 5)',
+    expression: 'RIGHT("Sale Price", 5)',
+    expected: 'Price',
+  },
+  {
+    name: 'text: MID("Fluid Flow", 1, 5)',
+    expression: 'MID("Fluid Flow", 1, 5)',
+    expected: 'Fluid',
+  },
+  {
+    name: 'text: TRIM("  hello  ")',
+    expression: 'TRIM("  hello  ")',
+    expected: 'hello',
+  },
+  {
+    name: 'text: REPT("ab", 3)',
+    expression: 'REPT("ab", 3)',
+    expected: 'ababab',
+  },
+  {
+    name: 'text: REPLACE("Hello World", 7, 5, "BXL")',
+    expression: 'REPLACE("Hello World", 7, 5, "BXL")',
+    expected: 'Hello BXL',
+  },
+  {
+    name: 'text: SUBSTITUTE("Copy Toner", "Toner", "Ink")',
+    expression: 'SUBSTITUTE("Copy Toner", "Toner", "Ink")',
+    expected: 'Copy Ink',
+  },
+  {
+    name: 'text: FIND("b", "abc")',
+    expression: 'FIND("b", "abc")',
+    expected: 2,
+  },
+  {
+    name: 'text: SEARCH("B", "abc")',
+    expression: 'SEARCH("B", "abc")',
+    expected: 2,
+  },
+  {
+    name: 'text: EXACT("a", "a")',
+    expression: 'EXACT("a", "a")',
+    expected: true,
+  },
+  {
+    name: 'text: EXACT("a", "b")',
+    expression: 'EXACT("a", "b")',
+    expected: false,
+  },
   { name: 'text: T("text")', expression: 'T("text")', expected: 'text' },
   { name: 'text: CHAR(65)', expression: 'CHAR(65)', expected: 'A' },
   { name: 'text: CODE("A")', expression: 'CODE("A")', expected: 65 },
@@ -218,15 +322,52 @@ const coverageCases: TestCase[] = [
   // --- Logical ---
   { name: 'logic: NOT(true)', expression: 'NOT(true)', expected: false },
   { name: 'logic: NOT(false)', expression: 'NOT(false)', expected: true },
-  { name: 'logic: IF(true, "y", "n")', expression: 'IF(true, "yes", "no")', expected: 'yes' },
-  { name: 'logic: IF(5 > 3, 1, 0)', expression: 'IF(5 > 3, 1, 0)', expected: 1 },
-  { name: 'logic: IFS(...)', expression: 'IFS(1 > 2, "a", 3 > 2, "b")', expected: 'b' },
-  { name: 'logic: AND(true, true)', expression: 'AND(true, true)', expected: true, expectedJq: 'AND ([true, true])' },
-  { name: 'logic: AND([true, true])', expression: 'AND([true, true])', expected: true },
-  { name: 'logic: AND([true, false])', expression: 'AND([true, false])', expected: false },
-  { name: 'logic: OR([true, false])', expression: 'OR([true, false])', expected: true },
-  { name: 'logic: OR([false, false])', expression: 'OR([false, false])', expected: false },
-  { name: 'logic: XOR([true, false])', expression: 'XOR([true, false])', expected: true },
+  {
+    name: 'logic: IF(true, "y", "n")',
+    expression: 'IF(true, "yes", "no")',
+    expected: 'yes',
+  },
+  {
+    name: 'logic: IF(5 > 3, 1, 0)',
+    expression: 'IF(5 > 3, 1, 0)',
+    expected: 1,
+  },
+  {
+    name: 'logic: IFS(...)',
+    expression: 'IFS(1 > 2, "a", 3 > 2, "b")',
+    expected: 'b',
+  },
+  {
+    name: 'logic: AND(true, true)',
+    expression: 'AND(true, true)',
+    expected: true,
+    expectedJq: 'AND ([true, true])',
+  },
+  {
+    name: 'logic: AND([true, true])',
+    expression: 'AND([true, true])',
+    expected: true,
+  },
+  {
+    name: 'logic: AND([true, false])',
+    expression: 'AND([true, false])',
+    expected: false,
+  },
+  {
+    name: 'logic: OR([true, false])',
+    expression: 'OR([true, false])',
+    expected: true,
+  },
+  {
+    name: 'logic: OR([false, false])',
+    expression: 'OR([false, false])',
+    expected: false,
+  },
+  {
+    name: 'logic: XOR([true, false])',
+    expression: 'XOR([true, false])',
+    expected: true,
+  },
   {
     name: 'logic: SWITCH(2, 1, "one", 2, "two", "other")',
     expression: 'SWITCH(2, 1, "one", 2, "two", "other")',
@@ -241,19 +382,57 @@ const coverageCases: TestCase[] = [
   },
 
   // --- Lookup ---
-  { name: 'lookup: XLOOKUP exact', expression: 'XLOOKUP("B", ["A", "B"], [10, 20])', expected: 20 },
-  { name: 'lookup: XLOOKUP fallback', expression: 'XLOOKUP("C", ["A", "B"], [10, 20], "missing")', expected: 'missing' },
+  {
+    name: 'lookup: XLOOKUP exact',
+    expression: 'XLOOKUP("B", ["A", "B"], [10, 20])',
+    expected: 20,
+  },
+  {
+    name: 'lookup: XLOOKUP fallback',
+    expression: 'XLOOKUP("C", ["A", "B"], [10, 20], "missing")',
+    expected: 'missing',
+  },
 
   // --- Statistical ---
-  { name: 'stat: SUM([1, 2, 3, 4, 5])', expression: 'SUM([1, 2, 3, 4, 5])', expected: 15 },
-  { name: 'stat: AVERAGE([1, 2, 3, 4, 5])', expression: 'AVERAGE([1, 2, 3, 4, 5])', expected: 3 },
-  { name: 'stat: MAX(1, 2, 3)', expression: 'MAX(1, 2, 3)', expected: 3, expectedJq: 'MAX([1, 2, 3])' },
+  {
+    name: 'stat: SUM([1, 2, 3, 4, 5])',
+    expression: 'SUM([1, 2, 3, 4, 5])',
+    expected: 15,
+  },
+  {
+    name: 'stat: AVERAGE([1, 2, 3, 4, 5])',
+    expression: 'AVERAGE([1, 2, 3, 4, 5])',
+    expected: 3,
+  },
+  {
+    name: 'stat: MAX(1, 2, 3)',
+    expression: 'MAX(1, 2, 3)',
+    expected: 3,
+    expectedJq: 'MAX([1, 2, 3])',
+  },
   { name: 'stat: MAX([1, 2, 3])', expression: 'MAX([1, 2, 3])', expected: 3 },
   { name: 'stat: MIN([1, 2, 3])', expression: 'MIN([1, 2, 3])', expected: 1 },
-  { name: 'stat: COUNT([1, 2, 3, "a", null])', expression: 'COUNT([1, 2, 3, "a", null])', expected: 3 },
-  { name: 'stat: COUNTA([1, 2, 3, "a", null])', expression: 'COUNTA([1, 2, 3, "a", null])', expected: 4 },
-  { name: 'stat: MEDIAN([1, 2, 3, 4, 5])', expression: 'MEDIAN([1, 2, 3, 4, 5])', expected: 3 },
-  { name: 'stat: STDEV(known sample)', expression: 'STDEV([2, 4, 4, 4, 5, 5, 7, 9])', expected: 2.138089935299395, tolerance: 1e-9 },
+  {
+    name: 'stat: COUNT([1, 2, 3, "a", null])',
+    expression: 'COUNT([1, 2, 3, "a", null])',
+    expected: 3,
+  },
+  {
+    name: 'stat: COUNTA([1, 2, 3, "a", null])',
+    expression: 'COUNTA([1, 2, 3, "a", null])',
+    expected: 4,
+  },
+  {
+    name: 'stat: MEDIAN([1, 2, 3, 4, 5])',
+    expression: 'MEDIAN([1, 2, 3, 4, 5])',
+    expected: 3,
+  },
+  {
+    name: 'stat: STDEV(known sample)',
+    expression: 'STDEV([2, 4, 4, 4, 5, 5, 7, 9])',
+    expected: 2.138089935299395,
+    tolerance: 1e-9,
+  },
 
   // --- Engineering ---
   { name: 'eng: DEC2BIN(10)', expression: 'DEC2BIN(10)', expected: '1010' },
@@ -270,14 +449,38 @@ const coverageCases: TestCase[] = [
   { name: 'info: ISBLANK(null)', expression: 'ISBLANK(null)', expected: true },
   { name: 'info: ISBLANK("")', expression: 'ISBLANK("")', expected: false },
   { name: 'info: ISNUMBER(42)', expression: 'ISNUMBER(42)', expected: true },
-  { name: 'info: ISTEXT("hello")', expression: 'ISTEXT("hello")', expected: true },
-  { name: 'info: ISLOGICAL(true)', expression: 'ISLOGICAL(true)', expected: true },
+  {
+    name: 'info: ISTEXT("hello")',
+    expression: 'ISTEXT("hello")',
+    expected: true,
+  },
+  {
+    name: 'info: ISLOGICAL(true)',
+    expression: 'ISLOGICAL(true)',
+    expected: true,
+  },
 
   // --- Date & Time ---
-  { name: 'date: YEAR(DATE(2026, 4, 22))', expression: 'YEAR(DATE(2026, 4, 22))', expected: 2026 },
-  { name: 'date: MONTH(DATE(2026, 4, 22))', expression: 'MONTH(DATE(2026, 4, 22))', expected: 4 },
-  { name: 'date: DAY(DATE(2026, 4, 22))', expression: 'DAY(DATE(2026, 4, 22))', expected: 22 },
-  { name: 'date: DAYS(end, start)', expression: 'DAYS(DATE(2026, 4, 30), DATE(2026, 4, 22))', expected: 8 },
+  {
+    name: 'date: YEAR(DATE(2026, 4, 22))',
+    expression: 'YEAR(DATE(2026, 4, 22))',
+    expected: 2026,
+  },
+  {
+    name: 'date: MONTH(DATE(2026, 4, 22))',
+    expression: 'MONTH(DATE(2026, 4, 22))',
+    expected: 4,
+  },
+  {
+    name: 'date: DAY(DATE(2026, 4, 22))',
+    expression: 'DAY(DATE(2026, 4, 22))',
+    expected: 22,
+  },
+  {
+    name: 'date: DAYS(end, start)',
+    expression: 'DAYS(DATE(2026, 4, 30), DATE(2026, 4, 22))',
+    expected: 8,
+  },
 ];
 
 const documentedLookupSchema: ReadableSchema = {
@@ -314,15 +517,19 @@ const documentedLookupCases: TestCase[] = [
   },
   {
     name: 'lookup docs: XLOOKUP over aligned BXL projections',
-    expression: 'XLOOKUP("Target SKU", "Line Item".SKU, "Line Item"."Unit Price", null)',
+    expression:
+      'XLOOKUP("Target SKU", "Line Item".SKU, "Line Item"."Unit Price", null)',
     expected: 20,
-    expectedJq: 'XLOOKUP(.targetSku; [.lineItems[].sku]; [.lineItems[].unitPrice]; null)',
+    expectedJq:
+      'XLOOKUP(.targetSku; [.lineItems[].sku]; [.lineItems[].unitPrice]; null)',
   },
   {
     name: 'lookup docs: VLOOKUP over explicit projected table',
-    expression: 'VLOOKUP("Target SKU", (["Line Item".SKU, "Line Item"."Unit Price"] | transpose), 2, false)',
+    expression:
+      'VLOOKUP("Target SKU", (["Line Item".SKU, "Line Item"."Unit Price"] | transpose), 2, false)',
     expected: 20,
-    expectedJq: 'VLOOKUP(.targetSku; ([[.lineItems[].sku], [.lineItems[].unitPrice]] | transpose); 2; false)',
+    expectedJq:
+      'VLOOKUP(.targetSku; ([[.lineItems[].sku], [.lineItems[].unitPrice]] | transpose); 2; false)',
   },
 ];
 
@@ -332,7 +539,11 @@ const documentedLookupCases: TestCase[] = [
 //   - MODE not implemented
 //   - DEC2HEX returns lowercase; Excel returns uppercase
 
-function valuesMatch(actual: unknown, expected: Expected, tolerance?: number): boolean {
+function valuesMatch(
+  actual: unknown,
+  expected: Expected,
+  tolerance?: number,
+): boolean {
   if (
     typeof tolerance === 'number' &&
     typeof actual === 'number' &&
@@ -363,7 +574,9 @@ function runCase(c: TestCase): string | undefined {
       return `value mismatch: expected ${JSON.stringify(c.expected)}, got ${JSON.stringify(value)}`;
     }
     if (c.expectedSolid !== undefined) {
-      const solid = solidifyBxlExpression(c.expression, { schema: bxlExampleSchema });
+      const solid = solidifyBxlExpression(c.expression, {
+        schema: bxlExampleSchema,
+      });
       if (solid.source !== c.expectedSolid) {
         return `solid mismatch: expected ${JSON.stringify(c.expectedSolid)}, got ${JSON.stringify(solid.source)}`;
       }
@@ -375,7 +588,9 @@ function runCase(c: TestCase): string | undefined {
       }
     }
     if (c.expectedRewrites !== undefined) {
-      const solid = solidifyBxlExpression(c.expression, { schema: bxlExampleSchema });
+      const solid = solidifyBxlExpression(c.expression, {
+        schema: bxlExampleSchema,
+      });
       const codes = solid.rewrites.map((r) => r.code);
       for (const expected of c.expectedRewrites) {
         if (!codes.includes(expected)) {
@@ -405,18 +620,21 @@ for (const test of documentedLookupCases) {
   try {
     const value = evaluateBxl(test.expression, documentedLookupInput, {
       schema: documentedLookupSchema,
-      libraries: [
-        'core',
-        'formula',
-      ],
+      libraries: ['core', 'formula'],
     }).value;
     if (!valuesMatch(value, test.expected, test.tolerance)) {
-      throw new Error(`value mismatch: expected ${JSON.stringify(test.expected)}, got ${JSON.stringify(value)}`);
+      throw new Error(
+        `value mismatch: expected ${JSON.stringify(test.expected)}, got ${JSON.stringify(value)}`,
+      );
     }
     if (test.expectedJq !== undefined) {
-      const jq = bxlToJqExpression(test.expression, { schema: documentedLookupSchema });
+      const jq = bxlToJqExpression(test.expression, {
+        schema: documentedLookupSchema,
+      });
       if (jq.source !== test.expectedJq) {
-        throw new Error(`jq mismatch: expected ${JSON.stringify(test.expectedJq)}, got ${JSON.stringify(jq.source)}`);
+        throw new Error(
+          `jq mismatch: expected ${JSON.stringify(test.expectedJq)}, got ${JSON.stringify(jq.source)}`,
+        );
       }
     }
   } catch (error) {
@@ -428,19 +646,22 @@ for (const test of documentedLookupCases) {
 }
 
 // Graceful unknown-character handling — no crashes allowed.
-const hostileInputs = [
-  'foo£bar',
-  'A ~ B',
-  '\u203c!',
-];
+const hostileInputs = ['foo£bar', 'A ~ B', '\u203c!'];
 for (const source of hostileInputs) {
   try {
     const solid = solidifyBxlExpression(source, { schema: bxlExampleSchema });
     strictEqual(typeof solid.source, 'string');
     const lint = lintBxlExpression(source, { schema: bxlExampleSchema });
-    strictEqual(lint.ok, false, `hostile input should lint as error: ${source}`);
+    strictEqual(
+      lint.ok,
+      false,
+      `hostile input should lint as error: ${source}`,
+    );
     const codes = lint.issues.map((issue) => issue.code);
-    if (!codes.includes('untokenizable-character') && !codes.includes('tokenize-error')) {
+    if (
+      !codes.includes('untokenizable-character') &&
+      !codes.includes('tokenize-error')
+    ) {
       throw new Error(
         `hostile input ${JSON.stringify(source)} should surface 'untokenizable-character' lint, got ${JSON.stringify(codes)}`,
       );

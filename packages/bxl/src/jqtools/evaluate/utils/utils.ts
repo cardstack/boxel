@@ -1,6 +1,6 @@
-import { JqEvaluateError } from '../../errors.js';
-import { cannotIndexError, cannotSliceError } from '../evaluateErrors.js';
-import { compare } from '../compare.js';
+import { JqEvaluateError } from '../../errors.ts';
+import { cannotIndexError, cannotSliceError } from '../evaluateErrors.ts';
+import { compare } from '../compare.ts';
 
 export type EvaluateInput<T = any> = IterableIterator<T> | T[];
 export type EvaluateOutput<T = any> = IterableIterator<T>;
@@ -13,7 +13,7 @@ export type NormalizedSliceAccessor = { start: number; end: number };
 
 export function createSliceAccessor(
   start: number | null,
-  end: number | null
+  end: number | null,
 ): SliceAccessor {
   return { start, end };
 }
@@ -59,14 +59,16 @@ export function collectValues(items: ItemIterator | Item[]) {
   return Array.from(generateValues(items));
 }
 
-export enum Type {
-  null = 'null',
-  boolean = 'boolean',
-  number = 'number',
-  string = 'string',
-  array = 'array',
-  object = 'object',
-}
+export const Type = {
+  null: 'null',
+  boolean: 'boolean',
+  number: 'number',
+  string: 'string',
+  array: 'array',
+  object: 'object',
+} as const;
+
+export type Type = (typeof Type)[keyof typeof Type];
 
 export function typeOf(value: any): Type {
   if (Array.isArray(value)) return Type.array;
@@ -91,7 +93,7 @@ export function typesMatchCommutative(
   a: any,
   b: any,
   typeA: Type,
-  typeB: Type
+  typeB: Type,
 ) {
   return typesMatch(a, b, typeA, typeB) || typesMatch(a, b, typeB, typeA);
 }
@@ -180,7 +182,7 @@ export function toString(val: any): string {
 
 export function indices<T extends string | any[]>(
   haystack: T,
-  needle: T
+  needle: T,
 ): number[] {
   // TODO optimize
   const out: number[] = [];
@@ -226,16 +228,16 @@ export function normalizeArrayIndex(arrayLength: number, index: number) {
 
 export function normalizeSliceAccessor(
   arrayLength: number,
-  sliceAccessor: SliceAccessor
+  sliceAccessor: SliceAccessor,
 ): NormalizedSliceAccessor {
   const { start, end } = sliceAccessor;
   const newEnd = Math.max(
     0,
-    Math.min(normalizeArrayIndex(arrayLength, end ?? arrayLength), arrayLength)
+    Math.min(normalizeArrayIndex(arrayLength, end ?? arrayLength), arrayLength),
   );
   const newStart = Math.max(
     0,
-    Math.min(normalizeArrayIndex(arrayLength, start ?? 0), newEnd)
+    Math.min(normalizeArrayIndex(arrayLength, start ?? 0), newEnd),
   );
 
   return {
@@ -250,7 +252,7 @@ type PathWithNormalizedLeadingSliceAccessors =
 // TODO test
 export function normalizeLeadingSliceAccessors(
   arrayLength: number,
-  path: Path
+  path: Path,
 ): PathWithNormalizedLeadingSliceAccessors {
   if (!isSliceAccessor(path[0])) {
     return path as any;
@@ -259,7 +261,7 @@ export function normalizeLeadingSliceAccessors(
   let pos = 1;
   let accessor: NormalizedSliceAccessor = normalizeSliceAccessor(
     arrayLength,
-    path[0]
+    path[0],
   );
   while (isSliceAccessor(path[pos])) {
     arrayLength = accessor.end - accessor.start;
@@ -283,7 +285,7 @@ export function normalizeLeadingSliceAccessors(
 }
 
 export function resolveNormalizedSliceAccessor(
-  accessor: NormalizedSliceAccessor
+  accessor: NormalizedSliceAccessor,
 ): number[] {
   const out: number[] = [];
   for (let i = accessor.start; i < accessor.end; i++) {
@@ -371,7 +373,7 @@ export function getChildPaths(paths: Path[]): Record<string, Path[]> {
       // function was not applied on each of the input paths,
       // or it does not work properly
       throw new JqEvaluateError(
-        'getChildPaths: Cannot handle paths that are longer than 1, and start in a slice accessor'
+        'getChildPaths: Cannot handle paths that are longer than 1, and start in a slice accessor',
       );
     }
 
@@ -390,8 +392,8 @@ export function delPaths(value: any, paths: Path[]) {
     const normalizedPaths = paths.map((path) =>
       normalizeLeadingSliceAccessors(
         typeOf(value) === Type.array ? value.length : 0,
-        path
-      )
+        path,
+      ),
     );
     for (const path of normalizedPaths) {
       if (path.length !== 1) continue;
@@ -400,7 +402,7 @@ export function delPaths(value: any, paths: Path[]) {
       if (isSliceAccessor(accessor)) {
         const normalizedAccessor = normalizeSliceAccessor(
           value.length,
-          accessor
+          accessor,
         );
         for (const key of resolveNormalizedSliceAccessor(normalizedAccessor)) {
           delete clone[key];
@@ -413,7 +415,7 @@ export function delPaths(value: any, paths: Path[]) {
       clone = clone.filter((item: any) => item !== undefined);
 
     for (const [key, childPaths] of Object.entries(
-      getChildPaths(normalizedPaths)
+      getChildPaths(normalizedPaths),
     )) {
       if (key in clone) clone[key] = delPaths(clone[key], childPaths);
     }
@@ -428,12 +430,12 @@ export function range(from: number, upto: number): IterableIterator<number>;
 export function range(
   from: number,
   upto: number,
-  by: number
+  by: number,
 ): IterableIterator<number>;
 export function* range(
   a: number,
   b?: number,
-  c?: number
+  c?: number,
 ): IterableIterator<number> {
   let from: number, upto: number, by: number;
   if (b !== undefined && c !== undefined) {
@@ -491,7 +493,7 @@ export function has(value: any[] | Record<string, any>, key: string | number) {
     !typesMatch(value, key, Type.object, Type.string)
   ) {
     throw new JqEvaluateError(
-      `Cannot check whether ${typeOf(value)} has a ${typeOf(key)} key`
+      `Cannot check whether ${typeOf(value)} has a ${typeOf(key)} key`,
     );
   }
   return key in value;

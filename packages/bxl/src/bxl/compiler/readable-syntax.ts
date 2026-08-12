@@ -1,12 +1,15 @@
 // Shared lexical sets live in lexicon.ts — single source of truth for jq
 // keywords and BXL literals, also imported by linter.ts.
-import { JQ_KEYWORDS as KEYWORDS, BXL_LITERALS as LITERALS } from './lexicon.js';
+import {
+  JQ_KEYWORDS as KEYWORDS,
+  BXL_LITERALS as LITERALS,
+} from './lexicon.ts';
 import {
   FORMULA_STATISTICAL_FUNCTIONS,
   rewriteStatisticalDottedFormulaNames,
-} from '../bridge/formula-statistical-manifest.js';
-import { FORMULA_BESSEL_FUNCTIONS } from '../bridge/formula-bessel-manifest.js';
-import { canonicalValidationFunctionName } from '../bridge/validation-manifest.js';
+} from '../bridge/formula-statistical-manifest.ts';
+import { FORMULA_BESSEL_FUNCTIONS } from '../bridge/formula-bessel-manifest.ts';
+import { canonicalValidationFunctionName } from '../bridge/validation-manifest.ts';
 
 export type ReadableFieldKind = 'scalar' | 'object' | 'array';
 
@@ -102,7 +105,6 @@ export class ReadableSyntaxError extends Error {
     this.name = 'ReadableSyntaxError';
   }
 }
-
 
 const FORMULA_FUNCTIONS = new Set([
   'ABS',
@@ -428,8 +430,7 @@ function removedStringOperatorMessage(operator: string): string {
 function isRemovedStringWordOperator(value: string): boolean {
   const lower = value.toLowerCase();
   return (
-    value !== lower &&
-    REMOVED_STRING_WORD_OPERATORS.has(value.toUpperCase())
+    value !== lower && REMOVED_STRING_WORD_OPERATORS.has(value.toUpperCase())
   );
 }
 
@@ -543,13 +544,7 @@ const JQ_ZERO_ARG_CASE_FOLD_FILTERS = new Set([
   'type',
 ]);
 
-const PATH_RESERVED = new Set([
-  'all',
-  'item',
-  'last',
-  'position',
-  'row',
-]);
+const PATH_RESERVED = new Set(['all', 'item', 'last', 'position', 'row']);
 
 const POSITIONAL_SELECTOR_KEYWORDS = new Set([
   'first',
@@ -594,10 +589,7 @@ export function dispatchReadableFunctionCall({
       return { name: 'NOW', dialect: 'excel' };
     }
 
-    if (
-      explicitArity === 0 &&
-      JQ_ZERO_ARG_CASE_FOLD_FILTERS.has(lower)
-    ) {
+    if (explicitArity === 0 && JQ_ZERO_ARG_CASE_FOLD_FILTERS.has(lower)) {
       return { name: lower, dialect: 'jq' };
     }
 
@@ -660,11 +652,7 @@ export function dispatchReadableFunctionCall({
     return { name: validationName, dialect: 'bxl-helper' };
   }
 
-  if (
-    LOWERCASE_BXL_HELPERS.has(lower) ||
-    lower === 'all' ||
-    lower === 'any'
-  ) {
+  if (LOWERCASE_BXL_HELPERS.has(lower) || lower === 'all' || lower === 'any') {
     return { name: lower, dialect: 'bxl-helper' };
   }
 
@@ -693,11 +681,13 @@ function formatFunctionCallSource(name: string, args: CompileChunk[]): string {
     return `${name}([${args.map((arg) => arg.source).join(', ')}])`;
   }
 
-  const trailingArrayPrefix = TRAILING_ARRAY_PACKED_VARIADIC_FORMULAS.get(upper);
-  if (trailingArrayPrefix !== undefined && args.length > trailingArrayPrefix + 1) {
-    const leading = args
-      .slice(0, trailingArrayPrefix)
-      .map((arg) => arg.source);
+  const trailingArrayPrefix =
+    TRAILING_ARRAY_PACKED_VARIADIC_FORMULAS.get(upper);
+  if (
+    trailingArrayPrefix !== undefined &&
+    args.length > trailingArrayPrefix + 1
+  ) {
+    const leading = args.slice(0, trailingArrayPrefix).map((arg) => arg.source);
     const trailing = `[${args
       .slice(trailingArrayPrefix)
       .map((arg) => arg.source)
@@ -744,7 +734,10 @@ function itemScope(field: ReadableField): ReadableSchema | undefined {
     // though it exposes no readable child fields. Keeping that scope explicit
     // lets selectors such as `Tag[. = "obsolete"]` take the same predicate
     // lowering path as selectors over compound items.
-    return field.item ?? (field.fields ? { fields: field.fields } : EMPTY_READABLE_SCHEMA);
+    return (
+      field.item ??
+      (field.fields ? { fields: field.fields } : EMPTY_READABLE_SCHEMA)
+    );
   }
   return undefined;
 }
@@ -777,11 +770,9 @@ function schemaIndex(scope: ReadableSchema): CompiledSchemaIndex {
   };
 
   for (const field of scope.fields) {
-    const labels = [
-      field.displayName,
-      field.label,
-      field.key,
-    ].filter((entry): entry is string => Boolean(entry));
+    const labels = [field.displayName, field.label, field.key].filter(
+      (entry): entry is string => Boolean(entry),
+    );
 
     for (const label of labels) {
       addIndexedField(cached.exact, label, field);
@@ -841,9 +832,11 @@ function readableFieldPath(field: ReadableField): string[] {
 
 function jqPathSuffix(field: ReadableField): string {
   return readableFieldPath(field)
-    .map((key) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key)
-      ? `.${key}`
-      : `[${JSON.stringify(key)}]`)
+    .map((key) =>
+      /^[A-Za-z_][A-Za-z0-9_]*$/.test(key)
+        ? `.${key}`
+        : `[${JSON.stringify(key)}]`,
+    )
     .join('');
 }
 
@@ -891,7 +884,10 @@ function isIdentifierChar(char: string): boolean {
   return /[A-Za-z0-9_]/.test(char);
 }
 
-function previousNonWhitespaceChar(source: string, index: number): string | undefined {
+function previousNonWhitespaceChar(
+  source: string,
+  index: number,
+): string | undefined {
   for (let cursor = index - 1; cursor >= 0; cursor--) {
     const value = source[cursor];
     if (!/\s/.test(value)) {
@@ -901,7 +897,11 @@ function previousNonWhitespaceChar(source: string, index: number): string | unde
   return undefined;
 }
 
-function previousNonWhitespaceChars(source: string, index: number, count: number): string {
+function previousNonWhitespaceChars(
+  source: string,
+  index: number,
+  count: number,
+): string {
   const values: string[] = [];
   for (let cursor = index - 1; cursor >= 0 && values.length < count; cursor--) {
     const value = source[cursor];
@@ -953,7 +953,11 @@ function tokenize(source: string): Token[] {
       continue;
     }
 
-    if (char === '#' && !startsHashSelector(source, index) && !/[0-9]/.test(source[index + 1] ?? '')) {
+    if (
+      char === '#' &&
+      !startsHashSelector(source, index) &&
+      !/[0-9]/.test(source[index + 1] ?? '')
+    ) {
       while (index < source.length && source[index] !== '\n') {
         index++;
       }
@@ -1215,8 +1219,12 @@ function appendPart(parts: string[], source: string) {
   }
   if (
     previous &&
-    (isWordLike(previous) || KEYWORDS.has(previous) || endsWithWordBoundary(previous)) &&
-    (isWordLike(source) || KEYWORDS.has(source) || startsWithWordBoundary(source))
+    (isWordLike(previous) ||
+      KEYWORDS.has(previous) ||
+      endsWithWordBoundary(previous)) &&
+    (isWordLike(source) ||
+      KEYWORDS.has(source) ||
+      startsWithWordBoundary(source))
   ) {
     parts.push(' ');
   }
@@ -1409,7 +1417,11 @@ function parseSelectorRangeEndpoint(
   tokens: Token[],
   options: { allowBareNumber?: boolean } = {},
 ): SelectorRangeEndpoint | undefined {
-  if (options.allowBareNumber && tokens.length === 1 && tokens[0].type === 'number') {
+  if (
+    options.allowBareNumber &&
+    tokens.length === 1 &&
+    tokens[0].type === 'number'
+  ) {
     const oneBased = Number(tokens[0].value);
     if (!Number.isInteger(oneBased) || oneBased < 1) {
       throw new ReadableSyntaxError(
@@ -1423,7 +1435,11 @@ function parseSelectorRangeEndpoint(
     };
   }
 
-  if (tokens.length === 2 && tokens[0].value === '#' && tokens[1].type === 'number') {
+  if (
+    tokens.length === 2 &&
+    tokens[0].value === '#' &&
+    tokens[1].type === 'number'
+  ) {
     const oneBased = Number(tokens[1].value);
     if (!Number.isInteger(oneBased) || oneBased < 1) {
       throw new ReadableSyntaxError(
@@ -1437,7 +1453,11 @@ function parseSelectorRangeEndpoint(
     };
   }
 
-  if (tokens.length === 2 && tokens[0].value === '#' && tokens[1].type === 'ident') {
+  if (
+    tokens.length === 2 &&
+    tokens[0].value === '#' &&
+    tokens[1].type === 'ident'
+  ) {
     const keyword = tokens[1].value.toLowerCase();
     if (keyword === 'first') {
       return {
@@ -1497,7 +1517,10 @@ function selectorRangeIsIncreasing(
   return false;
 }
 
-function selectorEndpointIndexExpr(endpoint: SelectorRangeEndpoint, lengthExpr: string): string {
+function selectorEndpointIndexExpr(
+  endpoint: SelectorRangeEndpoint,
+  lengthExpr: string,
+): string {
   if (endpoint.family === 'front') {
     return `${endpoint.oneBased - 1}`;
   }
@@ -1506,11 +1529,17 @@ function selectorEndpointIndexExpr(endpoint: SelectorRangeEndpoint, lengthExpr: 
     : `(${lengthExpr} - ${endpoint.offsetFromLast + 1})`;
 }
 
-function selectorRangeStartExpr(endpoint: SelectorRangeEndpoint, lengthExpr: string): string {
+function selectorRangeStartExpr(
+  endpoint: SelectorRangeEndpoint,
+  lengthExpr: string,
+): string {
   return selectorEndpointIndexExpr(endpoint, lengthExpr);
 }
 
-function selectorRangeEndExpr(endpoint: SelectorRangeEndpoint, lengthExpr: string): string {
+function selectorRangeEndExpr(
+  endpoint: SelectorRangeEndpoint,
+  lengthExpr: string,
+): string {
   if (endpoint.family === 'front') {
     return `${endpoint.oneBased}`;
   }
@@ -1519,7 +1548,9 @@ function selectorRangeEndExpr(endpoint: SelectorRangeEndpoint, lengthExpr: strin
     : `(${lengthExpr} - ${endpoint.offsetFromLast})`;
 }
 
-function parseSelectorUnionTerm(tokens: Token[]): SelectorUnionTerm | undefined {
+function parseSelectorUnionTerm(
+  tokens: Token[],
+): SelectorUnionTerm | undefined {
   const rangeParts = splitTopLevel(tokens, 0, tokens.length, '..');
   if (rangeParts.length === 1) {
     const endpoint = parseSelectorRangeEndpoint(tokens);
@@ -1533,10 +1564,15 @@ function parseSelectorUnionTerm(tokens: Token[]): SelectorUnionTerm | undefined 
     };
   }
   if (rangeParts.length === 2) {
-    const startEndpoint = parseSelectorRangeEndpoint(tokens.slice(...rangeParts[0]));
-    const endEndpoint = parseSelectorRangeEndpoint(tokens.slice(...rangeParts[1]), {
-      allowBareNumber: true,
-    });
+    const startEndpoint = parseSelectorRangeEndpoint(
+      tokens.slice(...rangeParts[0]),
+    );
+    const endEndpoint = parseSelectorRangeEndpoint(
+      tokens.slice(...rangeParts[1]),
+      {
+        allowBareNumber: true,
+      },
+    );
     if (!startEndpoint || !endEndpoint) {
       return undefined;
     }
@@ -1586,7 +1622,11 @@ function indexTextFromHumanIndex(tokens: Token[]): string | undefined {
     return String(start - 1);
   }
 
-  if (tokens.length === 4 && tokens[2].type === 'op' && tokens[2].value === '..') {
+  if (
+    tokens.length === 4 &&
+    tokens[2].type === 'op' &&
+    tokens[2].value === '..'
+  ) {
     const end = Number(tokens[3].value);
     if (!Number.isInteger(end) || end < start) {
       throw new ReadableSyntaxError('Human row/item range must be increasing');
@@ -1627,7 +1667,8 @@ function isPredicateLike(tokens: Token[]): boolean {
 
 function hasExplicitCurrentItem(tokens: Token[]): boolean {
   return tokens.some(
-    (token) => token.type === 'op' && (token.value === '.' || token.value === '?.'),
+    (token) =>
+      token.type === 'op' && (token.value === '.' || token.value === '?.'),
   );
 }
 
@@ -1718,9 +1759,10 @@ function compilePredicate(
     );
   }
 
-  const opIndex = tokens.findIndex((token) =>
-    ['=', '==', '!=', '<', '<=', '>', '>='].includes(token.value) ||
-    token.value.toUpperCase() === 'IN',
+  const opIndex = tokens.findIndex(
+    (token) =>
+      ['=', '==', '!=', '<', '<=', '>', '>='].includes(token.value) ||
+      token.value.toUpperCase() === 'IN',
   );
 
   if (opIndex === -1) {
@@ -1738,9 +1780,10 @@ function compilePredicate(
   }
 
   const left = compileValue(tokens.slice(0, opIndex), context);
-  const op = tokens[opIndex].value.toUpperCase() === 'IN'
-    ? tokens[opIndex].value.toUpperCase()
-    : tokens[opIndex].value;
+  const op =
+    tokens[opIndex].value.toUpperCase() === 'IN'
+      ? tokens[opIndex].value.toUpperCase()
+      : tokens[opIndex].value;
   const right = compileValue(tokens.slice(opIndex + 1), context);
   const warnings = [...left.warnings, ...right.warnings];
   const needsRootBinding = Boolean(
@@ -1816,7 +1859,10 @@ function compileSqlPredicateConstruct(
     const andIndex = findTopLevelWord(tokens, 'and', betweenIndex + 1);
     if (andIndex > betweenIndex + 1 && andIndex < tokens.length - 1) {
       const left = compileValue(tokens.slice(0, leftEnd), context);
-      const lower = compileValue(tokens.slice(betweenIndex + 1, andIndex), context);
+      const lower = compileValue(
+        tokens.slice(betweenIndex + 1, andIndex),
+        context,
+      );
       const upper = compileValue(tokens.slice(andIndex + 1), context);
       const source = `between(${left.source}; ${lower.source}; ${upper.source})`;
       return {
@@ -1826,7 +1872,7 @@ function compileSqlPredicateConstruct(
         needsRootBinding: Boolean(
           left.needsRootBinding ||
           lower.needsRootBinding ||
-          upper.needsRootBinding
+          upper.needsRootBinding,
         ),
       };
     }
@@ -1844,7 +1890,7 @@ function compileSqlPredicateConstruct(
       changed: true,
       warnings: [...left.warnings, ...pattern.warnings],
       needsRootBinding: Boolean(
-        left.needsRootBinding || pattern.needsRootBinding
+        left.needsRootBinding || pattern.needsRootBinding,
       ),
     };
   }
@@ -1866,7 +1912,7 @@ function compileSqlPredicateConstruct(
         },
       ],
       needsRootBinding: Boolean(
-        left.needsRootBinding || right.needsRootBinding
+        left.needsRootBinding || right.needsRootBinding,
       ),
     };
   }
@@ -1881,7 +1927,11 @@ function findTopLevelWord(tokens: Token[], word: string, start = 0): number {
     if (token.type === 'punc') {
       if (token.value === '(' || token.value === '[' || token.value === '{') {
         depth++;
-      } else if (token.value === ')' || token.value === ']' || token.value === '}') {
+      } else if (
+        token.value === ')' ||
+        token.value === ']' ||
+        token.value === '}'
+      ) {
         depth--;
       }
       continue;
@@ -1909,8 +1959,10 @@ class Compiler {
   private readonly end: number;
   private readonly schema?: ReadableSchema;
 
+  private readonly tokens: Token[];
+
   constructor(
-    private readonly tokens: Token[],
+    tokens: Token[],
     options: {
       schema?: ReadableSchema;
       rootPathPrefix?: string;
@@ -1920,6 +1972,7 @@ class Compiler {
     start = 0,
     end = tokens.length,
   ) {
+    this.tokens = tokens;
     this.index = start;
     this.end = end;
     this.schema = options.schema;
@@ -1945,7 +1998,8 @@ class Compiler {
     // Current `.` scope. Before a pipe it equals `scope` (the root). After
     // a pipe, it is the stream-item scope of the last expression, so that
     // `.field` inside the RHS resolves against the per-element shape.
-    let itemScope: ReadableSchema | undefined = this.constructorItemScope ?? scope;
+    let itemScope: ReadableSchema | undefined =
+      this.constructorItemScope ?? scope;
 
     while (this.index < this.end) {
       const token = this.tokens[this.index];
@@ -1982,7 +2036,8 @@ class Compiler {
           ).compile(scope);
           appendPart(parts, `((${inner.source}) | not)`);
           warnings.push(...inner.warnings);
-          needsRootBinding = needsRootBinding || Boolean(inner.needsRootBinding);
+          needsRootBinding =
+            needsRootBinding || Boolean(inner.needsRootBinding);
           changed = true;
           this.index = close + 1;
           continue;
@@ -1995,7 +2050,11 @@ class Compiler {
           this.tokens[this.index + 2]?.value === '('
         ) {
           this.index++; // consume `not`
-          const fn = this.compileFunctionCall(scope, readableRootPrefix, itemScope);
+          const fn = this.compileFunctionCall(
+            scope,
+            readableRootPrefix,
+            itemScope,
+          );
           appendPart(parts, `((${fn.source}) | not)`);
           warnings.push(...fn.warnings);
           needsRootBinding = needsRootBinding || Boolean(fn.needsRootBinding);
@@ -2006,11 +2065,16 @@ class Compiler {
         // NOT <path>  → compile the path, then pipe to not.
         if (nextTok?.type === 'ident' || nextTok?.value === '.') {
           this.index++; // consume `not`
-          const path = this.tryCompilePath(scope, readableRootPrefix, itemScope);
+          const path = this.tryCompilePath(
+            scope,
+            readableRootPrefix,
+            itemScope,
+          );
           if (path) {
             appendPart(parts, `((${path.source}) | not)`);
             warnings.push(...path.warnings);
-            needsRootBinding = needsRootBinding || Boolean(path.needsRootBinding);
+            needsRootBinding =
+              needsRootBinding || Boolean(path.needsRootBinding);
             streamItemScope = path.streamItemScope ?? streamItemScope;
             changed = true;
             continue;
@@ -2035,13 +2099,16 @@ class Compiler {
         // keyword.
         !KEYWORDS.has(token.value) &&
         !(
-          ['and', 'or'].includes(token.value.toLowerCase()) &&
-          parts.length > 0
+          ['and', 'or'].includes(token.value.toLowerCase()) && parts.length > 0
         ) &&
         !resolveField(scope, token.value) &&
         !resolveField(itemScope, token.value)
       ) {
-        const fn = this.compileFunctionCall(scope, readableRootPrefix, itemScope);
+        const fn = this.compileFunctionCall(
+          scope,
+          readableRootPrefix,
+          itemScope,
+        );
         appendPart(parts, fn.source);
         warnings.push(...fn.warnings);
         changed = changed || fn.changed;
@@ -2142,19 +2209,19 @@ class Compiler {
       }
       const colon = this.findTopLevelToken(start, end, ':');
       if (colon === -1) {
-        entries.push(
-          this.tokens
-            .slice(start, end)
-            .map(tokenSource)
-            .join(''),
-        );
+        entries.push(this.tokens.slice(start, end).map(tokenSource).join(''));
         continue;
       }
 
       const key = this.tokens.slice(start, colon).map(tokenSource).join('');
       const value = new Compiler(
         this.tokens,
-        { schema: this.schema, rootPathPrefix, itemScope, bindings: this.bindings },
+        {
+          schema: this.schema,
+          rootPathPrefix,
+          itemScope,
+          bindings: this.bindings,
+        },
         colon + 1,
         end,
       ).compile(scope);
@@ -2179,7 +2246,10 @@ class Compiler {
       const token = this.tokens[i];
       if (token.type === 'punc' && ['(', '[', '{'].includes(token.value)) {
         depth++;
-      } else if (token.type === 'punc' && [')', ']', '}'].includes(token.value)) {
+      } else if (
+        token.type === 'punc' &&
+        [')', ']', '}'].includes(token.value)
+      ) {
         depth--;
       } else if (depth === 0 && token.value === value) {
         return i;
@@ -2227,7 +2297,12 @@ class Compiler {
     const args = ranges.map(([start, end]) =>
       new Compiler(
         this.tokens,
-        { schema: this.schema, rootPathPrefix, itemScope, bindings: this.bindings },
+        {
+          schema: this.schema,
+          rootPathPrefix,
+          itemScope,
+          bindings: this.bindings,
+        },
         start,
         end,
       ).compile(scope),
@@ -2397,9 +2472,10 @@ class Compiler {
         valueScope = resolved?.valueScope;
         arrayItemScope = resolved?.arrayItemScope;
         pendingImplicitArray = Boolean(resolved?.field.kind === 'array');
-        changed = changed
-          || Boolean(resolved && resolved.field.key !== label.value)
-          || Boolean(fallbackKey);
+        changed =
+          changed ||
+          Boolean(resolved && resolved.field.key !== label.value) ||
+          Boolean(fallbackKey);
       }
     } else if (first?.type === 'op' && first.value === '?.') {
       out = '.';
@@ -2427,9 +2503,8 @@ class Compiler {
       // labels resolve item-first and root-second. This keeps `Bidder`
       // intuitive inside a Book predicate while allowing `Intent.Bidder`
       // to capture the envelope through `$root`.
-      const nestedItemScope = itemScope && itemScope !== scope
-        ? itemScope
-        : undefined;
+      const nestedItemScope =
+        itemScope && itemScope !== scope ? itemScope : undefined;
       const label = this.readLabelToken(nestedItemScope ?? scope, scope);
       if (!label || this.tokens[this.index]?.value === '(') {
         this.index = start;
@@ -2444,7 +2519,9 @@ class Compiler {
         this.index = start;
         return null;
       }
-      const suffix = resolved ? jqPathSuffix(resolved.field) : `.${fallbackKey!}`;
+      const suffix = resolved
+        ? jqPathSuffix(resolved.field)
+        : `.${fallbackKey!}`;
       const resolvesAgainstItem = Boolean(itemResolved);
       out = resolvesAgainstItem
         ? suffix
@@ -2467,7 +2544,10 @@ class Compiler {
         continue;
       }
 
-      if (token.type === 'op' && (token.value === '.' || token.value === '?.')) {
+      if (
+        token.type === 'op' &&
+        (token.value === '.' || token.value === '?.')
+      ) {
         const optional = token.value === '?.';
         // Implicit [all] iteration. When the previous path step landed
         // on an array-typed field AND the user navigates straight into
@@ -2506,7 +2586,10 @@ class Compiler {
         valueScope = resolved?.valueScope;
         arrayItemScope = resolved?.arrayItemScope;
         pendingImplicitArray = Boolean(resolved?.field.kind === 'array');
-        changed = changed || optional || Boolean(resolved && resolved.field.key !== label.value);
+        changed =
+          changed ||
+          optional ||
+          Boolean(resolved && resolved.field.key !== label.value);
         continue;
       }
 
@@ -2554,7 +2637,8 @@ class Compiler {
       arrayItemScope,
       streamItemScope,
       needsRootBinding:
-        needsRootBinding || Boolean(rootPathPrefix && out.includes(rootPathPrefix)),
+        needsRootBinding ||
+        Boolean(rootPathPrefix && out.includes(rootPathPrefix)),
     };
   }
 
@@ -2633,8 +2717,7 @@ class Compiler {
 
     if (
       inner.length === 1 &&
-      (isIdent(inner[0], 'all') ||
-        inner[0].value === '...')
+      (isIdent(inner[0], 'all') || inner[0].value === '...')
     ) {
       return {
         source: `[${base}[]`,
@@ -2698,8 +2781,12 @@ class Compiler {
       const parsedTerms = selectorTerms.map(([start, end]) =>
         parseSelectorUnionTerm(inner.slice(start, end)),
       );
-      if (parsedTerms.every((term): term is SelectorUnionTerm => Boolean(term))) {
-        const closedBase = hasUnclosedMaterializedArray(base) ? `${base}]` : base;
+      if (
+        parsedTerms.every((term): term is SelectorUnionTerm => Boolean(term))
+      ) {
+        const closedBase = hasUnclosedMaterializedArray(base)
+          ? `${base}]`
+          : base;
         return {
           source:
             `[(${closedBase}) as $__seq | ($__seq | length) as $__len | ` +
@@ -2739,7 +2826,11 @@ class Compiler {
       };
     }
 
-    if (inner.length === 2 && inner[0].value === '#' && inner[1].type === 'ident') {
+    if (
+      inner.length === 2 &&
+      inner[0].value === '#' &&
+      inner[1].type === 'ident'
+    ) {
       const keyword = inner[1].value.toLowerCase();
       const closedBase = hasUnclosedMaterializedArray(base) ? `${base}]` : base;
 
@@ -2816,7 +2907,11 @@ class Compiler {
       };
     }
 
-    if (inner.length === 2 && inner[0].value === '#' && inner[1].type === 'number') {
+    if (
+      inner.length === 2 &&
+      inner[0].value === '#' &&
+      inner[1].type === 'number'
+    ) {
       // `[#N]` — one-based, human-friendly single-row selector. Compiles
       // to zero-based jq by subtracting 1.
       const oneBased = Number(inner[1].value);
@@ -2842,10 +2937,15 @@ class Compiler {
     // reverse traversal in the syntax.
     const rangeParts = splitTopLevel(inner, 0, inner.length, '..');
     if (rangeParts.length === 2) {
-      const startEndpoint = parseSelectorRangeEndpoint(inner.slice(...rangeParts[0]));
-      const endEndpoint = parseSelectorRangeEndpoint(inner.slice(...rangeParts[1]), {
-        allowBareNumber: true,
-      });
+      const startEndpoint = parseSelectorRangeEndpoint(
+        inner.slice(...rangeParts[0]),
+      );
+      const endEndpoint = parseSelectorRangeEndpoint(
+        inner.slice(...rangeParts[1]),
+        {
+          allowBareNumber: true,
+        },
+      );
       if (startEndpoint && endEndpoint) {
         if (!selectorRangeIsIncreasing(startEndpoint, endEndpoint)) {
           throw new ReadableSyntaxError(
@@ -2862,7 +2962,9 @@ class Compiler {
         // "Cannot index string with string"). The seq-binding template
         // emits one extra `as $__seq | $__seq[...][...]` indirection
         // that the parser handles reliably, and the cost is one binding.
-        const closedBase = hasUnclosedMaterializedArray(base) ? `${base}]` : base;
+        const closedBase = hasUnclosedMaterializedArray(base)
+          ? `${base}]`
+          : base;
         const seqVar = '$__seq';
         const lengthExpr = `(${seqVar} | length)`;
         return {
@@ -2882,7 +2984,10 @@ class Compiler {
     }
 
     const commaRanges = splitTopLevel(inner, 0, inner.length, ',');
-    if (commaRanges.length === 2 && isSimpleHumanIndex(inner.slice(...commaRanges[0]))) {
+    if (
+      commaRanges.length === 2 &&
+      isSimpleHumanIndex(inner.slice(...commaRanges[0]))
+    ) {
       const indexText = indexTextFromHumanIndex(inner.slice(...commaRanges[0]));
       const predicate = compilePredicate(inner.slice(...commaRanges[1]), {
         itemScope: item,
@@ -2907,7 +3012,9 @@ class Compiler {
         // above — emitting `arr[a:b][]` directly trips the bundled
         // native-jq parser when a trailing `.field` access follows.
         // Bind the array first, then slice/iterate via $__seq.
-        const closedBase = hasUnclosedMaterializedArray(base) ? `${base}]` : base;
+        const closedBase = hasUnclosedMaterializedArray(base)
+          ? `${base}]`
+          : base;
         return {
           source: `[(${closedBase}) as $__seq | $__seq[${humanIndex}][]`,
           changed: true,
@@ -2932,7 +3039,11 @@ class Compiler {
 
     if (isLastCall(inner)) {
       let indexText = '-1';
-      if (inner.length === 5 && inner[3].value === '-' && inner[4].type === 'number') {
+      if (
+        inner.length === 5 &&
+        inner[3].value === '-' &&
+        inner[4].type === 'number'
+      ) {
         indexText = `-${Number(inner[4].value) + 1}`;
       }
       return {
@@ -3000,14 +3111,16 @@ class Compiler {
       needsRootBinding: compiled.needsRootBinding,
     };
   }
-
 }
 
 // Strip a leading `=` (Excel cell-formula prefix) so that a user can
 // paste `=SUM(A, B, C)` from a formula bar and have it work as BXL. We
 // only strip a SOLO leading `=`; `==` starts a comparison expression and
 // must be preserved.
-export function stripExcelCellPrefix(source: string): { source: string; changed: boolean } {
+export function stripExcelCellPrefix(source: string): {
+  source: string;
+  changed: boolean;
+} {
   const match = source.match(/^(\s*)=(?!=)/);
   if (!match) {
     return { source, changed: false };
@@ -3032,9 +3145,10 @@ export function stripExcelCellPrefix(source: string): { source: string; changed:
  *   .email | contains("@")
  *   .code  | startswith("INV-")
  */
-export function rewriteWordBinaryOperators(
-  source: string,
-): { source: string; changed: boolean } {
+export function rewriteWordBinaryOperators(source: string): {
+  source: string;
+  changed: boolean;
+} {
   let current = source;
   let guard = 0;
   while (guard++ < 1024) {
@@ -3057,15 +3171,21 @@ export function rewriteWordBinaryOperators(
         next.start === tok.end;
 
       if (isRemovedStringWordOperator(tok.value)) {
-        if (isCall || (excelOperandExtent(tokens, i, -1) && excelOperandExtent(tokens, i, +1))) {
-          throw new ReadableSyntaxError(removedStringOperatorMessage(tok.value));
+        if (
+          isCall ||
+          (excelOperandExtent(tokens, i, -1) &&
+            excelOperandExtent(tokens, i, +1))
+        ) {
+          throw new ReadableSyntaxError(
+            removedStringOperatorMessage(tok.value),
+          );
         }
         continue;
       }
 
       if (isIdent(tok, 'is')) {
         const left = excelOperandExtent(tokens, i, -1);
-        const notIndex = isIdent(tokens[i + 1], 'not') ? i + 1 : -1;
+        const notIndex: number = isIdent(tokens[i + 1], 'not') ? i + 1 : -1;
         const literalIndex = notIndex === -1 ? i + 1 : i + 2;
         const literal = sqlIsLiteral(tokens[literalIndex]);
         const literalToken = tokens[literalIndex];
@@ -3082,10 +3202,17 @@ export function rewriteWordBinaryOperators(
 
       if (isIdent(tok, 'between')) {
         const notIndex = isIdent(tokens[i - 1], 'not') ? i - 1 : -1;
-        const left = excelOperandExtent(tokens, notIndex === -1 ? i : notIndex, -1);
+        const left = excelOperandExtent(
+          tokens,
+          notIndex === -1 ? i : notIndex,
+          -1,
+        );
         const lower = excelOperandExtent(tokens, i, +1);
         const andIndex = findTopLevelWord(tokens, 'and', i + 1);
-        const upper = andIndex === -1 ? undefined : excelOperandExtent(tokens, andIndex, +1);
+        const upper =
+          andIndex === -1
+            ? undefined
+            : excelOperandExtent(tokens, andIndex, +1);
         if (left && lower && upper && andIndex > i) {
           const leftSource = current.slice(left.start, left.end);
           const lowerSource = current.slice(lower.start, lower.end);
@@ -3102,7 +3229,11 @@ export function rewriteWordBinaryOperators(
 
       if (isIdent(tok, 'like')) {
         const notIndex = isIdent(tokens[i - 1], 'not') ? i - 1 : -1;
-        const left = excelOperandExtent(tokens, notIndex === -1 ? i : notIndex, -1);
+        const left = excelOperandExtent(
+          tokens,
+          notIndex === -1 ? i : notIndex,
+          -1,
+        );
         const right = excelOperandExtent(tokens, i, +1);
         if (left && right) {
           const leftSource = current.slice(left.start, left.end);
@@ -3117,16 +3248,16 @@ export function rewriteWordBinaryOperators(
         }
       }
 
-      const operator =
-        tok.value.toUpperCase() === 'IN'
-          ? 'IN'
-          : undefined;
+      const operator = tok.value.toUpperCase() === 'IN' ? 'IN' : undefined;
       if (!operator || isCall) continue;
 
-      const notIndex = operator === 'IN' && isIdent(tokens[i - 1], 'not')
-        ? i - 1
-        : -1;
-      const left = excelOperandExtent(tokens, notIndex === -1 ? i : notIndex, -1);
+      const notIndex =
+        operator === 'IN' && isIdent(tokens[i - 1], 'not') ? i - 1 : -1;
+      const left = excelOperandExtent(
+        tokens,
+        notIndex === -1 ? i : notIndex,
+        -1,
+      );
       const right = excelOperandExtent(tokens, i, +1);
       if (!left || !right) continue;
 
@@ -3140,9 +3271,7 @@ export function rewriteWordBinaryOperators(
           : undefined;
       if (!replacement) continue;
       current =
-        current.slice(0, left.start) +
-        replacement +
-        current.slice(right.end);
+        current.slice(0, left.start) + replacement + current.slice(right.end);
       rewroteThisPass = true;
       break;
     }
@@ -3154,9 +3283,10 @@ export function rewriteWordBinaryOperators(
   return { source: current, changed: current !== source };
 }
 
-export function rewriteExcelOperators(
-  source: string,
-): { source: string; changed: boolean } {
+export function rewriteExcelOperators(source: string): {
+  source: string;
+  changed: boolean;
+} {
   let current = source;
   let changed = false;
   let guard = 0;
@@ -3166,16 +3296,19 @@ export function rewriteExcelOperators(
     let rewroteThisPass = false;
     for (let i = tokens.length - 1; i >= 0; i--) {
       const tok = tokens[i];
-      if (tok.type !== 'op' || (tok.value !== '^' && tok.value !== '&')) continue;
+      if (tok.type !== 'op' || (tok.value !== '^' && tok.value !== '&'))
+        continue;
       const lhs = excelOperandExtent(tokens, i, -1);
       const rhs = excelOperandExtent(tokens, i, +1);
       if (!lhs || !rhs) continue;
       const lhsText = current.slice(lhs.start, lhs.end);
       const rhsText = current.slice(rhs.start, rhs.end);
-      const replacement = tok.value === '^'
-        ? `POWER(${lhsText}, ${rhsText})`
-        : `((${lhsText}|tostring) + (${rhsText}|tostring))`;
-      current = current.slice(0, lhs.start) + replacement + current.slice(rhs.end);
+      const replacement =
+        tok.value === '^'
+          ? `POWER(${lhsText}, ${rhsText})`
+          : `((${lhsText}|tostring) + (${rhsText}|tostring))`;
+      current =
+        current.slice(0, lhs.start) + replacement + current.slice(rhs.end);
       changed = true;
       rewroteThisPass = true;
       break;
@@ -3206,7 +3339,8 @@ function excelOperandExtent(
 ): { start: number; end: number } | undefined {
   const startIdx = opIndex + direction;
   const first = tokens[startIdx];
-  if (!first || first.start === undefined || first.end === undefined) return undefined;
+  if (!first || first.start === undefined || first.end === undefined)
+    return undefined;
 
   if (direction === -1) {
     // LHS: anchor at the token just before the op and walk left over
@@ -3225,12 +3359,17 @@ function excelOperandExtent(
     // operators like `&` / `^` absorb the full chain on their left.
     while (anchor > 0) {
       const current = tokens[anchor];
-      if (current.type === 'punc' && (current.value === ')' || current.value === ']')) {
+      if (
+        current.type === 'punc' &&
+        (current.value === ')' || current.value === ']')
+      ) {
         anchor = matchOpen(tokens, anchor);
         if (anchor < 0) return undefined;
         if (
           anchor > 0 &&
-          ['ident', 'number', 'string', 'format'].includes(tokens[anchor - 1].type)
+          ['ident', 'number', 'string', 'format'].includes(
+            tokens[anchor - 1].type,
+          )
         ) {
           anchor -= 1;
         }
@@ -3244,9 +3383,16 @@ function excelOperandExtent(
         // tokens but they must stop the walker — they separate function
         // args or jq generators. See bug #7 regression.
         const okPunc =
-          beforeDot && beforeDot.type === 'punc' &&
-          (beforeDot.value === ')' || beforeDot.value === ']' || beforeDot.value === '}');
-        if (beforeDot && (okPunc || ['ident', 'number', 'string', 'format'].includes(beforeDot.type))) {
+          beforeDot &&
+          beforeDot.type === 'punc' &&
+          (beforeDot.value === ')' ||
+            beforeDot.value === ']' ||
+            beforeDot.value === '}');
+        if (
+          beforeDot &&
+          (okPunc ||
+            ['ident', 'number', 'string', 'format'].includes(beforeDot.type))
+        ) {
           anchor -= 2;
           continue;
         }
@@ -3257,7 +3403,8 @@ function excelOperandExtent(
     }
     const startTok = tokens[anchor];
     const endTok = tokens[startIdx];
-    if (startTok.start === undefined || endTok.end === undefined) return undefined;
+    if (startTok.start === undefined || endTok.end === undefined)
+      return undefined;
     return { start: startTok.start, end: endTok.end };
   }
 
@@ -3280,7 +3427,10 @@ function excelOperandExtent(
     const next = tokens[endIdx + 1];
     if (next.type === 'op' && (next.value === '.' || next.value === '?.')) {
       const afterDot = tokens[endIdx + 2];
-      if (afterDot && ['ident', 'number', 'string', 'format'].includes(afterDot.type)) {
+      if (
+        afterDot &&
+        ['ident', 'number', 'string', 'format'].includes(afterDot.type)
+      ) {
         endIdx += 2;
         continue;
       }
@@ -3296,7 +3446,8 @@ function excelOperandExtent(
   }
   const startTok = tokens[anchor];
   const endTok = tokens[endIdx];
-  if (startTok.start === undefined || endTok.end === undefined) return undefined;
+  if (startTok.start === undefined || endTok.end === undefined)
+    return undefined;
   return { start: startTok.start, end: endTok.end };
 }
 
@@ -3330,7 +3481,10 @@ function matchClose(tokens: Token[], openIndex: number): number {
   return -1;
 }
 
-function opensSuffixBracketContext(tokens: Token[], openIndex: number): boolean {
+function opensSuffixBracketContext(
+  tokens: Token[],
+  openIndex: number,
+): boolean {
   const previous = tokens[openIndex - 1];
   if (!previous) {
     return false;
@@ -3351,7 +3505,10 @@ function opensSuffixBracketContext(tokens: Token[], openIndex: number): boolean 
   return false;
 }
 
-function isPredicateBracketContext(tokens: Token[], openIndex: number): boolean {
+function isPredicateBracketContext(
+  tokens: Token[],
+  openIndex: number,
+): boolean {
   if (!opensSuffixBracketContext(tokens, openIndex)) {
     return false;
   }
@@ -3413,7 +3570,10 @@ function predicateBracketDepths(tokens: Token[]): number[] {
 // Rewrite `<>` (Excel inequality) to canonical `!=` at the source level,
 // skipping occurrences inside string literals. Done via the tokenizer so
 // string boundaries are handled for free.
-function rewriteInequality(source: string): { source: string; changed: boolean } {
+function rewriteInequality(source: string): {
+  source: string;
+  changed: boolean;
+} {
   const tokens = tokenizeQuietly(source);
   if (!tokens) return { source, changed: false };
   const edits: Array<[number, number]> = [];
@@ -3449,7 +3609,10 @@ function rewriteInequality(source: string): { source: string; changed: boolean }
 // Pre-existing `==`, `!=`, `<=`, `>=`, `^=`, `$=`, `*=`, `/=`, `%=`,
 // `+=`, `-=`, `|=`, `//=` stay untouched — the tokenizer emits those as
 // separate multi-char ops, so our scan only ever sees the bare `=`.
-function rewriteTopLevelEquals(source: string): { source: string; changed: boolean } {
+function rewriteTopLevelEquals(source: string): {
+  source: string;
+  changed: boolean;
+} {
   const tokens = tokenizeQuietly(source);
   if (!tokens) return { source, changed: false };
   const predicateDepths = predicateBracketDepths(tokens);
@@ -3479,9 +3642,10 @@ function rewriteTopLevelEquals(source: string): { source: string; changed: boole
 
 // Preprocess readable BXL source to absorb Excel-specific idioms
 // before the compiler/linter sees the tokens.
-export function preprocessReadableSource(
-  source: string,
-): { source: string; rewrites: { code: string; message: string }[] } {
+export function preprocessReadableSource(source: string): {
+  source: string;
+  rewrites: { code: string; message: string }[];
+} {
   const rewrites: { code: string; message: string }[] = [];
   let next = source;
   const prefix = stripExcelCellPrefix(next);
@@ -3496,7 +3660,8 @@ export function preprocessReadableSource(
   if (statisticalDotted.changed) {
     rewrites.push({
       code: 'statistical-dotted-formula-rewritten',
-      message: 'Rewrote dotted statistical FormulaJS names to BXL underscore names.',
+      message:
+        'Rewrote dotted statistical FormulaJS names to BXL underscore names.',
     });
     next = statisticalDotted.source;
   }
@@ -3569,6 +3734,8 @@ export function compileReadableSyntax(
 // We can't import the formatter directly without introducing a cycle, so
 // the conversion module registers itself here.
 let formatCompiledJq: (source: string) => string = (source) => source;
-export function registerCompiledJqFormatter(fn: (source: string) => string): void {
+export function registerCompiledJqFormatter(
+  fn: (source: string) => string,
+): void {
   formatCompiledJq = fn;
 }

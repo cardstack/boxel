@@ -3,10 +3,10 @@ import { join } from 'node:path';
 import {
   runOpenFgaConformanceFixtures,
   type OpenFgaConformanceReport,
-} from './openfga-conformance-core.js';
-import { verifyOpenFgaFixtureInventory } from './openfga-fixtures.js';
+} from './openfga-conformance-core.ts';
+import { verifyOpenFgaFixtureInventory } from './openfga-fixtures.ts';
 
-export * from './openfga-conformance-core.js';
+export * from './openfga-conformance-core.ts';
 
 export function runOpenFgaConformance(): OpenFgaConformanceReport {
   const inventory = verifyOpenFgaFixtureInventory();

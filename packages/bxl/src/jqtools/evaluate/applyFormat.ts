@@ -1,7 +1,7 @@
-import { FormatAst } from '../parser/AST.js';
-import { JqEvaluateError } from '../errors.js';
-import { notDefinedError } from './evaluateErrors.js';
-import { toString, Type, typeOf } from './utils/utils.js';
+import type { FormatAst } from '../parser/AST.ts';
+import { JqEvaluateError } from '../errors.ts';
+import { notDefinedError } from './evaluateErrors.ts';
+import { toString, Type, typeOf } from './utils/utils.ts';
 
 const URI_UNRESERVED = /^[A-Za-z0-9\-._~]$/;
 
@@ -67,10 +67,7 @@ function decodeBase64(value: string): string {
   }
 }
 
-function formatTabularValue(
-  value: unknown,
-  mode: 'csv' | 'tsv',
-): string {
+function formatTabularValue(value: unknown, mode: 'csv' | 'tsv'): string {
   if (typeOf(value) !== Type.array) {
     throw new JqEvaluateError(
       `${typeDescription(value)} cannot be ${mode}-formatted, only array`,

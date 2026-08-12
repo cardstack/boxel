@@ -30,7 +30,10 @@ export class AuthorizationError extends Error {
     message: string,
     options: { path?: string; cause?: unknown } = {},
   ) {
-    super(message, options.cause === undefined ? undefined : { cause: options.cause });
+    super(
+      message,
+      options.cause === undefined ? undefined : { cause: options.cause },
+    );
     this.name = 'AuthorizationError';
     this.kind = kind;
     this.path = options.path;
@@ -46,7 +49,9 @@ export class AuthorizationError extends Error {
   }
 }
 
-export function toAuthorizationErrorRecord(error: unknown): AuthorizationErrorRecord {
+export function toAuthorizationErrorRecord(
+  error: unknown,
+): AuthorizationErrorRecord {
   if (error instanceof AuthorizationError) return error.toRecord();
   return {
     kind: 'invalid-model',

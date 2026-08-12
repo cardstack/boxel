@@ -11,7 +11,7 @@
 // the same time. The headless test is the enforcement mechanism.
 
 import { strictEqual } from 'node:assert';
-import { evaluateBxl, compileReadableSyntax } from '../../src/index.js';
+import { evaluateBxl, compileReadableSyntax } from '../../src/index.ts';
 
 // ─────────────────────────────────────────────────────────────────────────
 // The 26 rules — each is { id, label, expression, breakBy }.
@@ -57,7 +57,10 @@ const RULES: Rule[] = [
     id: 5,
     label: 'Display name is in Title Case',
     expression: 'PROPER(.profile.displayName) == .profile.displayName',
-    breakBy: (f) => ({ ...f, profile: { ...f.profile, displayName: 'ada lovelace' } }),
+    breakBy: (f) => ({
+      ...f,
+      profile: { ...f.profile, displayName: 'ada lovelace' },
+    }),
   },
   {
     id: 6,
@@ -69,13 +72,20 @@ const RULES: Rule[] = [
     id: 7,
     label: 'Email contains @',
     expression: '.profile.email | contains("@")',
-    breakBy: (f) => ({ ...f, profile: { ...f.profile, email: 'ada-at-bxl.dev' } }),
+    breakBy: (f) => ({
+      ...f,
+      profile: { ...f.profile, email: 'ada-at-bxl.dev' },
+    }),
   },
   {
     id: 8,
     label: 'Email starts with username',
-    expression: '. as $root | .profile.email | startswith($root.profile.username)',
-    breakBy: (f) => ({ ...f, profile: { ...f.profile, email: 'someone@else.org' } }),
+    expression:
+      '. as $root | .profile.email | startswith($root.profile.username)',
+    breakBy: (f) => ({
+      ...f,
+      profile: { ...f.profile, email: 'someone@else.org' },
+    }),
   },
   {
     id: 9,
@@ -95,7 +105,8 @@ const RULES: Rule[] = [
   {
     id: 11,
     label: 'Favorite number equals length of favorite color',
-    expression: '.preferences.favoriteNumber == LEN(.preferences.favoriteColor)',
+    expression:
+      '.preferences.favoriteNumber == LEN(.preferences.favoriteColor)',
     breakBy: (f) => ({
       ...f,
       preferences: { ...f.preferences, favoriteNumber: 99 },
@@ -104,8 +115,7 @@ const RULES: Rule[] = [
   {
     id: 12,
     label: 'Theme is dark or light',
-    expression:
-      '.preferences.theme == "dark" OR .preferences.theme == "light"',
+    expression: '.preferences.theme == "dark" OR .preferences.theme == "light"',
     breakBy: (f) => ({
       ...f,
       preferences: { ...f.preferences, theme: 'neon' },
@@ -225,8 +235,7 @@ const RULES: Rule[] = [
   },
   {
     id: 26,
-    label:
-      'Backup code equals UPPER(first 3 of username) + UPPER(color) + age',
+    label: 'Backup code equals UPPER(first 3 of username) + UPPER(color) + age',
     expression:
       '.security.backupCode == UPPER(LEFT(.profile.username, 3)) + UPPER(.preferences.favoriteColor) + (.profile.age | tostring)',
     breakBy: (f) => ({
@@ -280,7 +289,9 @@ for (const rule of RULES) {
   try {
     compiled = compileReadableSyntax(rule.expression).source;
   } catch (e) {
-    failures.push(`${label}: compile threw — ${(e as Error).message}\n  expr: ${rule.expression}`);
+    failures.push(
+      `${label}: compile threw — ${(e as Error).message}\n  expr: ${rule.expression}`,
+    );
     continue;
   }
 
@@ -322,12 +333,23 @@ for (const rule of RULES) {
   passedCount += 1;
 }
 
-function diffShallow(a: unknown, b: unknown): Record<string, [unknown, unknown]> {
+function diffShallow(
+  a: unknown,
+  b: unknown,
+): Record<string, [unknown, unknown]> {
   const diff: Record<string, [unknown, unknown]> = {};
-  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) {
+  if (
+    typeof a !== 'object' ||
+    typeof b !== 'object' ||
+    a === null ||
+    b === null
+  ) {
     return { root: [a, b] };
   }
-  const keys = new Set([...Object.keys(a as object), ...Object.keys(b as object)]);
+  const keys = new Set([
+    ...Object.keys(a as object),
+    ...Object.keys(b as object),
+  ]);
   for (const k of keys) {
     const av = (a as Record<string, unknown>)[k];
     const bv = (b as Record<string, unknown>)[k];

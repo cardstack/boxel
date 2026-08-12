@@ -2,8 +2,8 @@ import { strictEqual } from 'node:assert';
 import {
   prepareAuthorizationGraphSafe,
   type AuthorizationGraphModel,
-} from '../../src/authorization/index.js';
-import { ipv4InCidr } from '../../src/bxl/bridge/authorization-native.js';
+} from '../../src/authorization/index.ts';
+import { ipv4InCidr } from '../../src/bxl/bridge/authorization-native.ts';
 
 strictEqual(ipv4InCidr('192.168.0.1', '192.168.0.0/24'), true);
 strictEqual(ipv4InCidr('192.168.1.1', '192.168.0.0/24'), false);
@@ -51,7 +51,6 @@ const prepared = prepareAuthorizationGraphSafe(model, [
     condition: { name: 'on_network', context: { cidr: '192.168.0.0/24' } },
   },
 ]);
-strictEqual(prepared.ok, true);
 if (!prepared.ok) throw new Error(prepared.error.message);
 
 const allowed = prepared.value.check({
@@ -101,6 +100,12 @@ const invalidFacet = prepareAuthorizationGraphSafe(model, [
     object: 'document:1',
   },
 ]);
-strictEqual(invalidFacet.ok, false, 'conditioned type restrictions reject unconditioned tuples');
+strictEqual(
+  invalidFacet.ok,
+  false,
+  'conditioned type restrictions reject unconditioned tuples',
+);
 
-console.log('Authorization conditions: BXL predicates, typed context, facets, and IPv4 CIDR passed');
+console.log(
+  'Authorization conditions: BXL predicates, typed context, facets, and IPv4 CIDR passed',
+);

@@ -11,7 +11,11 @@
 //
 // Each test asserts both compile output (jq surface) and evaluation value.
 import { deepStrictEqual, strictEqual, ok, throws } from 'node:assert';
-import { compileReadableSyntax, evaluateBxl, type ReadableSchema } from '../../src/index.js';
+import {
+  compileReadableSyntax,
+  evaluateBxl,
+  type ReadableSchema,
+} from '../../src/index.ts';
 
 const schema: ReadableSchema = {
   fields: [
@@ -21,22 +25,30 @@ const schema: ReadableSchema = {
     { key: 'email', label: 'Email' },
     { key: 'campaign', label: 'Campaign' },
     {
-      key: 'billing', label: 'Bill To', kind: 'object',
+      key: 'billing',
+      label: 'Bill To',
+      kind: 'object',
       fields: [{ key: 'zip', label: 'Zip' }],
     },
   ],
 };
 
 const grace = {
-  amount: 5000, anonymous: false,
-  donor: 'Grace Lin', email: 'grace@school.org',
+  amount: 5000,
+  anonymous: false,
+  donor: 'Grace Lin',
+  email: 'grace@school.org',
   campaign: 'Spring Drive',
   billing: { zip: '94609' },
 };
 
 function assertCompile(bxl: string, expectedJq: string, label: string) {
   const r = compileReadableSyntax(bxl, { schema });
-  strictEqual(r.source, expectedJq, `${label}\n  BXL: ${bxl}\n  got: ${r.source}`);
+  strictEqual(
+    r.source,
+    expectedJq,
+    `${label}\n  BXL: ${bxl}\n  got: ${r.source}`,
+  );
 }
 
 function assertEval(bxl: string, expected: unknown, label: string) {
@@ -61,22 +73,39 @@ for (const expr of [
   );
 }
 
-assertEval('Donor | startswith("Grace")', true, '#1 jq startswith pipe evaluates');
-assertEval('Campaign | endswith("Drive")', true, '#1 jq endswith pipe evaluates');
+assertEval(
+  'Donor | startswith("Grace")',
+  true,
+  '#1 jq startswith pipe evaluates',
+);
+assertEval(
+  'Campaign | endswith("Drive")',
+  true,
+  '#1 jq endswith pipe evaluates',
+);
 assertEval('Email | contains("@")', true, '#1 jq contains pipe evaluates');
-assertEval('Donor | startswith("Mr.")', false, '#1 jq startswith negative case');
+assertEval(
+  'Donor | startswith("Mr.")',
+  false,
+  '#1 jq startswith negative case',
+);
 
 // Inside predicate brackets, removed word-ops reject and jq pipe form works.
 const itemScheme: ReadableSchema = {
   fields: [
     {
-      key: 'lineItems', label: 'Line Item', kind: 'array',
+      key: 'lineItems',
+      label: 'Line Item',
+      kind: 'array',
       item: { fields: [{ key: 'sku', label: 'SKU' }] },
     },
   ],
 };
 throws(
-  () => compileReadableSyntax('"Line Item"[SKU STARTSWITH "A"].SKU', { schema: itemScheme }),
+  () =>
+    compileReadableSyntax('"Line Item"[SKU STARTSWITH "A"].SKU', {
+      schema: itemScheme,
+    }),
   /Readable string operator/,
   '#1 predicate STARTSWITH rejects',
 );
@@ -95,7 +124,10 @@ const predicateCompile = compileReadableSyntax(
   '"Line Item"[SKU | startswith("A")].SKU',
   { schema: itemScheme },
 );
-ok(predicateCompile.source.includes('startswith'), `#1 predicate jq pipe compiles: ${predicateCompile.source}`);
+ok(
+  predicateCompile.source.includes('startswith'),
+  `#1 predicate jq pipe compiles: ${predicateCompile.source}`,
+);
 
 // ─────────────────────────────────────────────────────────────────────────
 // Bug #2 — keyword-vs-identifier spacing (and.foo / not.foo / or.foo)
@@ -126,7 +158,11 @@ assertCompile(
 );
 
 // Must evaluate — that was the observable symptom (jq rejected `and.amount`).
-assertEval('Anonymous = true AND Amount >= 5000', false, '#2 evaluates (not jq-parse-error)');
+assertEval(
+  'Anonymous = true AND Amount >= 5000',
+  false,
+  '#2 evaluates (not jq-parse-error)',
+);
 assertEval('Anonymous = false AND Amount >= 5000', true, '#2 truthy branch');
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -145,7 +181,11 @@ assertCompile(
   '#3 nested `=` all converted',
 );
 
-assertEval('(Amount = 5000)', true, '#3 evaluates (was jq assignment before fix)');
+assertEval(
+  '(Amount = 5000)',
+  true,
+  '#3 evaluates (was jq assignment before fix)',
+);
 assertEval('(Amount = 100)', false, '#3 evaluates negative case');
 
 // Predicate brackets `[...]` still skip conversion — compilePredicate
@@ -166,7 +206,9 @@ throws(
 const rangeScheme: ReadableSchema = {
   fields: [
     {
-      key: 'lineItems', label: 'Line Item', kind: 'array',
+      key: 'lineItems',
+      label: 'Line Item',
+      kind: 'array',
       item: { fields: [{ key: 'sku', label: 'SKU' }] },
     },
   ],
@@ -184,25 +226,35 @@ const rangeInput = {
 };
 
 deepStrictEqual(
-  evaluateBxl('"Line Item"[#2..#last-1].SKU', rangeInput, { schema: rangeScheme }).value,
+  evaluateBxl('"Line Item"[#2..#last-1].SKU', rangeInput, {
+    schema: rangeScheme,
+  }).value,
   ['B', 'C', 'D', 'E'],
   '#3 anchored front-to-back range evaluates',
 );
 
 deepStrictEqual(
-  evaluateBxl('"Line Item"[#last-3..#last-1].SKU', rangeInput, { schema: rangeScheme }).value,
+  evaluateBxl('"Line Item"[#last-3..#last-1].SKU', rangeInput, {
+    schema: rangeScheme,
+  }).value,
   ['C', 'D', 'E'],
   '#3 anchored back-to-back range evaluates',
 );
 
 throws(
-  () => compileReadableSyntax('"Line Item"[#last-3..#4].SKU', { schema: rangeScheme }),
+  () =>
+    compileReadableSyntax('"Line Item"[#last-3..#4].SKU', {
+      schema: rangeScheme,
+    }),
   /\[#last-3\.\.#4\] range must move forward in collection order/,
   '#3 back-to-front anchored range is rejected',
 );
 
 throws(
-  () => compileReadableSyntax('"Line Item"[#last-1..#last-3].SKU', { schema: rangeScheme }),
+  () =>
+    compileReadableSyntax('"Line Item"[#last-1..#last-3].SKU', {
+      schema: rangeScheme,
+    }),
   /\[#last-1\.\.#last-3\] range must move forward in collection order/,
   '#3 reverse anchored end-relative range is rejected',
 );
@@ -261,19 +313,19 @@ assertEval(
 );
 
 strictEqual(
-  evaluateBxl(
-    '. as $root | .bio | contains($root.name)',
-    { bio: 'hello grace', name: 'grace' },
-  ).value,
+  evaluateBxl('. as $root | .bio | contains($root.name)', {
+    bio: 'hello grace',
+    name: 'grace',
+  }).value,
   true,
   '#6 cross-field RHS evaluates correctly',
 );
 
 strictEqual(
-  evaluateBxl(
-    '. as $root | .code | endswith($root.age | tostring)',
-    { code: 'ADA42', age: 42 },
-  ).value,
+  evaluateBxl('. as $root | .code | endswith($root.age | tostring)', {
+    code: 'ADA42',
+    age: 42,
+  }).value,
   true,
   '#6 grouped-RHS with internal pipe evaluates correctly',
 );
@@ -352,11 +404,15 @@ deepStrictEqual(
 const rootAwareSchema: ReadableSchema = {
   fields: [
     {
-      key: 'books', label: 'Book', kind: 'array',
+      key: 'books',
+      label: 'Book',
+      kind: 'array',
       item: { fields: [{ key: 'bidder', label: 'Bidder' }] },
     },
     {
-      key: 'intent', label: 'Intent', kind: 'object',
+      key: 'intent',
+      label: 'Intent',
+      kind: 'object',
       fields: [{ key: 'bidder', label: 'Bidder' }],
     },
   ],
@@ -397,9 +453,10 @@ deepStrictEqual(
 );
 
 throws(
-  () => compileReadableSyntax('Book."Standing Count"', {
-    schema: rootAwareSchema,
-  }),
+  () =>
+    compileReadableSyntax('Book."Standing Count"', {
+      schema: rootAwareSchema,
+    }),
   /Unknown field 'Standing Count' in schema-aware path/,
   '#9 invalid array-item member is a compiler diagnostic',
 );

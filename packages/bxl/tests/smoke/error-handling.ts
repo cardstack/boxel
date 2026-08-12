@@ -6,7 +6,7 @@ import {
   prepareBoxelRuntimeSafe,
   type BoxelRuntimeDefinition,
   type ReadableSchema,
-} from '../../src/index.js';
+} from '../../src/index.ts';
 
 const schema: ReadableSchema = {
   fields: [{ key: 'recurring', label: 'Recurring' }],
@@ -61,11 +61,14 @@ if (!runtimeFailure.ok) {
   );
 }
 
-const asyncRuntimeFailure = await prepareBoxelRuntimeAsyncSafe(invalidDefinition, {
-  schema,
-  cacheKey: 'error-handling-smoke',
-  worker: false,
-});
+const asyncRuntimeFailure = await prepareBoxelRuntimeAsyncSafe(
+  invalidDefinition,
+  {
+    schema,
+    cacheKey: 'error-handling-smoke',
+    worker: false,
+  },
+);
 strictEqual(
   asyncRuntimeFailure.ok,
   false,

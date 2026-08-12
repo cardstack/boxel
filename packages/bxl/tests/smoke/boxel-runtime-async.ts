@@ -5,7 +5,7 @@ import {
   prepareBoxelRuntimeAsync,
   type BoxelRuntimeDefinition,
   type ReadableSchema,
-} from '../../src/index.js';
+} from '../../src/index.ts';
 
 const schema: ReadableSchema = {
   fields: [
@@ -68,15 +68,13 @@ const definition: BoxelRuntimeDefinition = {
       {
         fieldPath: '.totalAnnual',
         label: 'Total Annual Gift',
-        computedVia:
-          'IF(Recurring, "Donation Amount" * 12, "Donation Amount")',
+        computedVia: 'IF(Recurring, "Donation Amount" * 12, "Donation Amount")',
       },
     ],
     constraints: [
       {
         fieldPath: '.',
-        expression:
-          'Recurring = false OR (Payment <> null AND Payment <> "")',
+        expression: 'Recurring = false OR (Payment <> null AND Payment <> "")',
         message: 'Recurring gifts require payment method',
       },
     ],
@@ -95,8 +93,7 @@ const definition: BoxelRuntimeDefinition = {
       kind: 'suggestion',
       targetPath: '.matchingProgram',
       targetCardType: 'DonationPledge',
-      when:
-        '"Donation Amount" >= 300 AND ("Matching Program" = null OR "Matching Program" = "")',
+      when: '"Donation Amount" >= 300 AND ("Matching Program" = null OR "Matching Program" = "")',
       summary: 'Ask about employer matching',
       details: 'Matching program is empty for a gift that qualifies.',
     },
@@ -109,7 +106,8 @@ updatedDefinition.guide!.fieldGuides = updatedDefinition.guide!.fieldGuides.map(
     fieldGuide.fieldPath === '.totalAnnual'
       ? {
           ...fieldGuide,
-          computedVia: 'IF(Recurring, "Donation Amount" * 24, "Donation Amount")',
+          computedVia:
+            'IF(Recurring, "Donation Amount" * 24, "Donation Amount")',
         }
       : fieldGuide,
 );
@@ -118,10 +116,13 @@ const prepared = await prepareBoxelRuntimeAsync(definition, {
   cacheKey: 'boxel-runtime-async-smoke',
   worker: false,
 });
-const preparedAgain = await prepareBoxelRuntimeAsync(structuredClone(definition), {
-  cacheKey: 'boxel-runtime-async-smoke',
-  worker: false,
-});
+const preparedAgain = await prepareBoxelRuntimeAsync(
+  structuredClone(definition),
+  {
+    cacheKey: 'boxel-runtime-async-smoke',
+    worker: false,
+  },
+);
 
 strictEqual(
   prepared,
@@ -180,11 +181,15 @@ strictEqual(
 );
 
 ok(
-  prepared.rules.some((rule) => rule.kind === 'formula' && rule.targetPath === '.isLargeGift'),
+  prepared.rules.some(
+    (rule) => rule.kind === 'formula' && rule.targetPath === '.isLargeGift',
+  ),
   'prepared runtime should expose explicit formula rules',
 );
 ok(
-  prepared.rules.some((rule) => rule.kind === 'field-visible' && rule.fieldPath === '.note'),
+  prepared.rules.some(
+    (rule) => rule.kind === 'field-visible' && rule.fieldPath === '.note',
+  ),
   'prepared runtime should expose guide-driven visibility rules',
 );
 
@@ -273,7 +278,9 @@ strictEqual(
   'guide visibility should react to formula recomputation',
 );
 ok(
-  second.violations.some((violation) => violation.message === 'Note required for large gifts'),
+  second.violations.some(
+    (violation) => violation.message === 'Note required for large gifts',
+  ),
   'large gifts without a note should violate note guidance',
 );
 ok(
@@ -288,7 +295,10 @@ strictEqual(
   'payment change should reveal billing guide state',
 );
 ok(
-  !third.violations.some((violation) => violation.message === 'Recurring gifts require payment method'),
+  !third.violations.some(
+    (violation) =>
+      violation.message === 'Recurring gifts require payment method',
+  ),
   'root constraint should clear once payment is present',
 );
 
@@ -297,7 +307,9 @@ const fourth = await session.applyPatch(
   'Discussed with donor services.',
 );
 ok(
-  !fourth.violations.some((violation) => violation.message === 'Note required for large gifts'),
+  !fourth.violations.some(
+    (violation) => violation.message === 'Note required for large gifts',
+  ),
   'note constraint should clear once note content is present',
 );
 

@@ -1,4 +1,4 @@
-import { Type, typeOf } from './utils/utils.js';
+import { Type, typeOf } from './utils/utils.ts';
 
 const typesOrder: Record<Type, number> = {
   null: 0,
@@ -42,7 +42,7 @@ export function compare(a: any, b: any): number {
         if (comp !== 0) return comp;
       }
       return 0;
-    case Type.object:
+    case Type.object: {
       const aKeys = Object.keys(a).sort();
       const bKeys = Object.keys(b).sort();
       const keysComp = compare(aKeys, bKeys);
@@ -50,5 +50,6 @@ export function compare(a: any, b: any): number {
       const aValues = aKeys.map((key) => a[key]);
       const bValues = bKeys.map((key) => b[key]);
       return compare(aValues, bValues);
+    }
   }
 }

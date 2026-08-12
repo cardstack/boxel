@@ -1,10 +1,6 @@
-import { DefAst } from '../../../parser/AST.js';
-import {
-  collectValues,
-  generateItems,
-  Item,
-  ItemIterator,
-} from '../../utils/utils.js';
+import type { DefAst } from '../../../parser/AST.ts';
+import type { Item, ItemIterator } from '../../utils/utils.ts';
+import { collectValues, generateItems } from '../../utils/utils.ts';
 
 export type NativeFilter = (input: Item, ...args: Item[]) => ItemIterator;
 export type BareNativeFilter = (
@@ -23,7 +19,7 @@ export function getBareNativeFilter(
 }
 
 export function wrapBareNativeFilters(
-  impls: Record<string, BareNativeFilter>
+  impls: Record<string, BareNativeFilter>,
 ): Record<string, NativeFilter> {
   return Object.fromEntries(
     Object.entries(impls).map(([key, bareFilter]) => {
@@ -32,16 +28,13 @@ export function wrapBareNativeFilters(
           bareFilter(input.value, ...collectValues(args)),
         )) as unknown as WrappedBareNativeFilter;
       wrapped.bareNativeFilter = bareFilter;
-      return [
-        key,
-        wrapped,
-      ];
-    })
+      return [key, wrapped];
+    }),
   );
 }
 
 export function isNativeFilter(
-  val: DefAst | NativeFilter
+  val: DefAst | NativeFilter,
 ): val is NativeFilter {
   return typeof val === 'function';
 }

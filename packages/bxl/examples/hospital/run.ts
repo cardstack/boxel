@@ -12,17 +12,19 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { expression, evaluateBxl } from '../../src/index.js';
-import { hospitalExpressions } from './expressions.js';
-import { hospitalSchema } from './schema.js';
+import { expression, evaluateBxl } from '../../src/index.ts';
+import { hospitalExpressions } from './expressions.ts';
+import { hospitalSchema } from './schema.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const patient: unknown = JSON.parse(
   readFileSync(join(here, 'patient.json'), 'utf8'),
 );
 
-console.log(`Patient: ${(patient as { firstName: string }).firstName} ` +
-            `${(patient as { lastName: string }).lastName}`);
+console.log(
+  `Patient: ${(patient as { firstName: string }).firstName} ` +
+    `${(patient as { lastName: string }).lastName}`,
+);
 console.log('');
 
 let pass = 0;
@@ -61,7 +63,9 @@ console.log(`${pass}/${pass + fail} expressions evaluated successfully`);
 // source. Realms don't usually call it directly, but tooling does.
 const direct = evaluateBxl('Severity', patient, { schema: hospitalSchema });
 if (direct.value !== 'Moderate') {
-  console.log(`evaluateBxl smoke check failed: got ${JSON.stringify(direct.value)}`);
+  console.log(
+    `evaluateBxl smoke check failed: got ${JSON.stringify(direct.value)}`,
+  );
   fail++;
 }
 

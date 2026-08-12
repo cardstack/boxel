@@ -17,13 +17,10 @@ import type {
   TryAst,
   UnaryAst,
   VarDeclarationAst,
-} from '../../jqtools/parser/AST.js';
-import {
-  parseNativeJq,
-  type NativeDialectOptions,
-} from '../bridge/native.js';
-import type { ReadableSyntaxWarning } from '../compiler/readable-syntax.js';
-import { classifyBxlProfileFunction } from '../profiles/function-safety.js';
+} from '../../jqtools/parser/AST.ts';
+import { parseNativeJq, type NativeDialectOptions } from '../bridge/native.ts';
+import type { ReadableSyntaxWarning } from '../compiler/readable-syntax.ts';
+import { classifyBxlProfileFunction } from '../profiles/function-safety.ts';
 
 export type BxlProfile =
   | 'compute'
@@ -92,7 +89,12 @@ export type BxlAstNode =
   | BxlRecursiveDescentNode;
 
 export type BxlLiteralNode =
-  | { type: 'literal'; value: string; valueType: 'string'; interpolated?: false }
+  | {
+      type: 'literal';
+      value: string;
+      valueType: 'string';
+      interpolated?: false;
+    }
   | { type: 'literal'; value: number; valueType: 'number' }
   | { type: 'literal'; value: boolean; valueType: 'boolean' }
   | { type: 'literal'; value: null; valueType: 'null' }
@@ -325,10 +327,7 @@ export function validateBxlAst(
       validateSandboxProfileNode(node, options.profile, issues);
     }
 
-    if (
-      options.profile === 'policy' ||
-      options.profile === 'authorization'
-    ) {
+    if (options.profile === 'policy' || options.profile === 'authorization') {
       validatePolicyNode(node, options.profile, issues);
     }
 
@@ -480,9 +479,10 @@ function validatePolicyNode(
   const decision = classifyBxlProfileFunction(profile, node.name);
   if (decision.safety === 'deny') {
     issues.push({
-      code: decision.category === 'aggregate'
-        ? `${profile}-aggregate-banned`
-        : `${profile}-call-banned`,
+      code:
+        decision.category === 'aggregate'
+          ? `${profile}-aggregate-banned`
+          : `${profile}-call-banned`,
       severity: 'error',
       message: `${profileMessagePrefix(profile)} does not allow call ${node.name}${decision.message ? `: ${decision.message}` : ''}.`,
       nodeType: node.type,
@@ -499,7 +499,8 @@ function validatePredicateNode(
     issues.push({
       code: 'predicate-binding-banned',
       severity: 'error',
-      message: 'Profile.predicate must compile to a query-time boolean predicate and cannot use local jq bindings.',
+      message:
+        'Profile.predicate must compile to a query-time boolean predicate and cannot use local jq bindings.',
       nodeType: node.type,
     });
   }
@@ -508,7 +509,8 @@ function validatePredicateNode(
     issues.push({
       code: 'predicate-variable-banned',
       severity: 'error',
-      message: 'Profile.predicate must compile to a query-time boolean predicate and cannot use free jq variables.',
+      message:
+        'Profile.predicate must compile to a query-time boolean predicate and cannot use free jq variables.',
       nodeType: node.type,
     });
   }
@@ -529,7 +531,8 @@ function validatePredicateNode(
     issues.push({
       code: 'predicate-dynamic-path-banned',
       severity: 'error',
-      message: 'Profile.predicate must compile to a query-time boolean predicate and cannot use iterator, slice, or dynamic-index paths.',
+      message:
+        'Profile.predicate must compile to a query-time boolean predicate and cannot use iterator, slice, or dynamic-index paths.',
       nodeType: node.type,
     });
   }
@@ -546,11 +549,7 @@ function validatePredicateNode(
     });
   }
 
-  if (
-    node.type === 'binary' &&
-    node.operator === ',' &&
-    isArrayComma(parent)
-  ) {
+  if (node.type === 'binary' && node.operator === ',' && isArrayComma(parent)) {
     return;
   }
 
@@ -625,18 +624,18 @@ function validateMutationNode(
 }
 
 function isArrayComma(parent: BxlAstNode | undefined): boolean {
-  return parent?.type === 'array' ||
-    (parent?.type === 'binary' && parent.operator === ',');
+  return (
+    parent?.type === 'array' ||
+    (parent?.type === 'binary' && parent.operator === ',')
+  );
 }
 
 function isPredicatePipe(node: BxlBinaryNode): boolean {
   return (
     node.right.type === 'call' &&
-    (
-      (['IN', 'overlaps'].includes(node.right.name) &&
-        node.right.args.length === 1) ||
-      (node.right.name === 'not' && node.right.args.length === 0)
-    )
+    ((['IN', 'overlaps'].includes(node.right.name) &&
+      node.right.args.length === 1) ||
+      (node.right.name === 'not' && node.right.args.length === 0))
   );
 }
 
@@ -679,10 +678,11 @@ function isPredicateOperator(operator: string): boolean {
 function isDynamicPathNode(node: BxlAstNode): boolean {
   return (
     (node.type === 'path' || node.type === 'contextPath') &&
-    node.parts.some((part) =>
-      part.type === 'iterator' ||
-      part.type === 'slice' ||
-      part.type === 'dynamic-index'
+    node.parts.some(
+      (part) =>
+        part.type === 'iterator' ||
+        part.type === 'slice' ||
+        part.type === 'dynamic-index',
     )
   );
 }
@@ -832,7 +832,10 @@ function fromJqObject(node: ObjectAst): BxlObjectNode {
     entries: node.entries.map((entry) => {
       if (entry.value !== undefined) {
         return {
-          key: typeof entry.key === 'string' ? entry.key : fromJqExpression(entry.key),
+          key:
+            typeof entry.key === 'string'
+              ? entry.key
+              : fromJqExpression(entry.key),
           value: fromJqExpression(entry.value),
         };
       }
@@ -915,11 +918,13 @@ function fromJqFormat(node: FormatAst): BxlFormatNode {
   };
 }
 
-function pathFromJq(node: ExpressionAst): BxlPathNode | BxlContextPathNode | undefined {
+function pathFromJq(
+  node: ExpressionAst,
+): BxlPathNode | BxlContextPathNode | undefined {
   const parts: BxlPathPart[] = [];
   let current: ExpressionAst = node;
 
-  while (true) {
+  for (;;) {
     if (current.type === 'index') {
       parts.unshift(indexPart(current));
       current = current.expr;
@@ -1048,7 +1053,9 @@ function childNodes(node: BxlAstNode): BxlAstNode[] {
   switch (node.type) {
     case 'literal':
       return node.valueType === 'interpolated-string'
-        ? node.parts.filter((part): part is BxlAstNode => typeof part !== 'string')
+        ? node.parts.filter(
+            (part): part is BxlAstNode => typeof part !== 'string',
+          )
         : [];
     case 'path':
     case 'contextPath':
@@ -1122,10 +1129,7 @@ function pathPartChildren(part: BxlPathPart): BxlAstNode[] {
     case 'dynamic-index':
       return [part.expr];
     case 'slice':
-      return [
-        ...(part.from ? [part.from] : []),
-        ...(part.to ? [part.to] : []),
-      ];
+      return [...(part.from ? [part.from] : []), ...(part.to ? [part.to] : [])];
     default:
       return [];
   }

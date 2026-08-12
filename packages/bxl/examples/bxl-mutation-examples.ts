@@ -179,12 +179,21 @@ export const mutationSchemaFixtures = {
     root: 'card',
     fields: {
       billingAddress: { kind: 'compound', label: 'Billing Address' },
-      shippingAddress: { kind: 'compound', label: 'Shipping Address', optional: true },
+      shippingAddress: {
+        kind: 'compound',
+        label: 'Shipping Address',
+        optional: true,
+      },
     },
   },
   'tag-list-field': {
     root: 'field',
-    field: { kind: 'containsMany', item: 'string', loadedAs: 'string[]', label: 'Tag' },
+    field: {
+      kind: 'containsMany',
+      item: 'string',
+      loadedAs: 'string[]',
+      label: 'Tag',
+    },
   },
   'ordered-sections-field': {
     root: 'field',
@@ -242,7 +251,8 @@ export const mutationSchemaFixtures = {
   },
   'contest-card': {
     root: 'card',
-    sourceEvidence: 'exports/Realm-Collaboration/policy.gts and Contest/spring-2026.json',
+    sourceEvidence:
+      'exports/Realm-Collaboration/policy.gts and Contest/spring-2026.json',
     fields: {
       submissions: {
         kind: 'linksToMany',
@@ -257,7 +267,8 @@ export const mutationSchemaFixtures = {
   },
   'classroom-card': {
     root: 'card',
-    sourceEvidence: 'stack.cards/ctse/tribeca-lms/directory.gts and Classroom/classroom-6.json',
+    sourceEvidence:
+      'stack.cards/ctse/tribeca-lms/directory.gts and Classroom/classroom-6.json',
     fields: {
       name: { kind: 'string' },
       roomNumber: { kind: 'string' },
@@ -274,7 +285,8 @@ export const mutationSchemaFixtures = {
   },
   'zine-issue-card': {
     root: 'card',
-    sourceEvidence: 'stack.cards/ctse/commonplace-lab/zine-issue.gts and ZineIssue/issue-01.json',
+    sourceEvidence:
+      'stack.cards/ctse/commonplace-lab/zine-issue.gts and ZineIssue/issue-01.json',
     fields: {
       title: { kind: 'string' },
       fragments: {
@@ -373,14 +385,17 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     id: 'replace-field-root',
     group: '01 replacement',
     name: 'replace an existing Field value',
-    intent: 'Replace the targeted Score Field while requiring its current value to exist.',
+    intent:
+      'Replace the targeted Score Field while requiring its current value to exist.',
     features: ['field-root', 'write-set'],
     schema: 'scalar-field',
     execution: execution('replace-field-root', scalarTarget),
     before: 41,
     readableSource: 'replace(Score, 42);',
     source: 'replace(.; 42);',
-    operations: [{ id: 'replace-score', op: 'replace', target: { path: [] }, value: 42 }],
+    operations: [
+      { id: 'replace-score', op: 'replace', target: { path: [] }, value: 42 },
+    ],
     outcome: 'accepted',
     plan: [
       {
@@ -390,20 +405,31 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       },
     ],
     after: 42,
-    notes: ['Unlike set/upsert, replace rejects a missing target before evaluating the write.'],
+    notes: [
+      'Unlike set/upsert, replace rejects a missing target before evaluating the write.',
+    ],
   },
   {
     id: 'append-contained-value',
     group: '02 containsMany collections',
     name: 'append a value to a containsMany field',
-    intent: 'Add urgent to the ordered tags Field without inventing set semantics.',
+    intent:
+      'Add urgent to the ordered tags Field without inventing set semantics.',
     features: ['field-root', 'collection-semantics'],
     schema: 'tag-list-field',
     execution: execution('append-contained-value', tagsTarget),
     before: ['customer', 'legal'],
     readableSource: 'append(Tag, "urgent");',
     source: 'append(.; "urgent");',
-    operations: [{ id: 'append-urgent', op: 'insert', into: { path: [] }, position: { at: 'end' }, value: 'urgent' }],
+    operations: [
+      {
+        id: 'append-urgent',
+        op: 'insert',
+        into: { path: [] },
+        position: { at: 'end' },
+        value: 'urgent',
+      },
+    ],
     outcome: 'accepted',
     plan: [
       {
@@ -413,7 +439,9 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       },
     ],
     after: ['customer', 'legal', 'urgent'],
-    notes: ['containsMany is ordered and permits repeated values; BXL preserves that behavior.'],
+    notes: [
+      'containsMany is ordered and permits repeated values; BXL preserves that behavior.',
+    ],
   },
   {
     id: 'prepend-contained-value',
@@ -426,7 +454,15 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     before: ['customer', 'legal'],
     readableSource: 'prepend(Tag, "urgent");',
     source: 'prepend(.; "urgent");',
-    operations: [{ id: 'prepend-urgent', op: 'insert', into: { path: [] }, position: { at: 'start' }, value: 'urgent' }],
+    operations: [
+      {
+        id: 'prepend-urgent',
+        op: 'insert',
+        into: { path: [] },
+        position: { at: 'start' },
+        value: 'urgent',
+      },
+    ],
     outcome: 'accepted',
     plan: [
       {
@@ -464,13 +500,16 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       },
     ],
     after: ['customer', 'urgent'],
-    notes: ['Exact-one cardinality rejects ambiguous duplicate matches; [* predicate] makes bulk removal explicit.'],
+    notes: [
+      'Exact-one cardinality rejects ambiguous duplicate matches; [* predicate] makes bulk removal explicit.',
+    ],
   },
   {
     id: 'explicit-bulk-delete',
     group: '02 containsMany collections',
     name: 'delete every explicitly selected contained value',
-    intent: 'Remove every obsolete tag while preserving repeated-value array semantics.',
+    intent:
+      'Remove every obsolete tag while preserving repeated-value array semantics.',
     features: ['field-root', 'collection-semantics', 'cardinality'],
     schema: 'tag-list-field',
     execution: execution('explicit-bulk-delete', tagsTarget),
@@ -496,7 +535,9 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       },
     ],
     after: ['customer'],
-    notes: ['Bulk array deletions lower to descending indexes so earlier removals cannot retarget later ones.'],
+    notes: [
+      'Bulk array deletions lower to descending indexes so earlier removals cannot retarget later ones.',
+    ],
   },
   {
     id: 'insert-after-stable-anchor',
@@ -510,21 +551,29 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       { id: 'overview', title: 'Overview' },
       { id: 'summary', title: 'Summary' },
     ],
-    readableSource: 'insert_item_after({ id: "details", title: "Details" }, Section[ID = "overview"]);',
-    source: 'insert_item_after({id: "details", title: "Details"}; .[] | select(.id == "overview"));',
+    readableSource:
+      'insert_item_after({ id: "details", title: "Details" }, Section[ID = "overview"]);',
+    source:
+      'insert_item_after({id: "details", title: "Details"}; .[] | select(.id == "overview"));',
     operations: [
       {
         id: 'insert-details',
         op: 'insert',
         into: { path: [] },
-        position: { after: { collection: [], where: [{ path: ['id'], equals: 'overview' }] } },
+        position: {
+          after: {
+            collection: [],
+            where: [{ path: ['id'], equals: 'overview' }],
+          },
+        },
         value: { id: 'details', title: 'Details' },
       },
     ],
     outcome: 'accepted',
     plan: [
       {
-        canonical: 'insert_item_after({id:"details",title:"Details"};.[]|select(.id=="overview"))',
+        canonical:
+          'insert_item_after({id:"details",title:"Details"};.[]|select(.id=="overview"))',
         affected: 1,
         intents: [
           {
@@ -546,7 +595,8 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     id: 'insert-before-stable-anchor',
     group: '03 stable positioning',
     name: 'insert before an identity-selected item',
-    intent: 'Insert the preface section before overview without using an index.',
+    intent:
+      'Insert the preface section before overview without using an index.',
     features: ['stable-position', 'collection-semantics', 'write-set'],
     schema: 'ordered-sections-field',
     execution: execution('insert-before-stable-anchor', sectionsTarget),
@@ -554,23 +604,38 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       { id: 'overview', title: 'Overview' },
       { id: 'summary', title: 'Summary' },
     ],
-    readableSource: 'insert_item_before({ id: "preface", title: "Preface" }, Section[ID = "overview"]);',
-    source: 'insert_item_before({id: "preface", title: "Preface"}; .[] | select(.id == "overview"));',
+    readableSource:
+      'insert_item_before({ id: "preface", title: "Preface" }, Section[ID = "overview"]);',
+    source:
+      'insert_item_before({id: "preface", title: "Preface"}; .[] | select(.id == "overview"));',
     operations: [
       {
         id: 'insert-preface',
         op: 'insert',
         into: { path: [] },
-        position: { before: { collection: [], where: [{ path: ['id'], equals: 'overview' }] } },
+        position: {
+          before: {
+            collection: [],
+            where: [{ path: ['id'], equals: 'overview' }],
+          },
+        },
         value: { id: 'preface', title: 'Preface' },
       },
     ],
     outcome: 'accepted',
     plan: [
       {
-        canonical: 'insert_item_before({id:"preface",title:"Preface"};.[]|select(.id=="overview"))',
+        canonical:
+          'insert_item_before({id:"preface",title:"Preface"};.[]|select(.id=="overview"))',
         affected: 1,
-        intents: [{ op: 'insert', collection: [], index: 0, value: { id: 'preface', title: 'Preface' } }],
+        intents: [
+          {
+            op: 'insert',
+            collection: [],
+            index: 0,
+            value: { id: 'preface', title: 'Preface' },
+          },
+        ],
       },
     ],
     after: [
@@ -583,15 +648,19 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     id: 'insert-at-revision-pinned-index',
     group: '03 stable positioning',
     name: 'insert at an index only against a pinned snapshot',
-    intent: 'Insert details at zero-based index one while the collection revision is pinned.',
+    intent:
+      'Insert details at zero-based index one while the collection revision is pinned.',
     features: ['collection-semantics', 'atomic'],
     schema: 'ordered-sections-field',
-    execution: execution('insert-at-revision-pinned-index', sectionsTarget, { baseRevision: 'rev-sections-7' }),
+    execution: execution('insert-at-revision-pinned-index', sectionsTarget, {
+      baseRevision: 'rev-sections-7',
+    }),
     before: [
       { id: 'overview', title: 'Overview' },
       { id: 'summary', title: 'Summary' },
     ],
-    readableSource: 'insert_at(Section, 1, { id: "details", title: "Details" });',
+    readableSource:
+      'insert_at(Section, 1, { id: "details", title: "Details" });',
     source: 'insert_at(.; 1; {id: "details", title: "Details"});',
     operations: [
       {
@@ -607,7 +676,14 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       {
         canonical: 'insert_at(.;1;{id:"details",title:"Details"})',
         affected: 1,
-        intents: [{ op: 'insert', collection: [], index: 1, value: { id: 'details', title: 'Details' } }],
+        intents: [
+          {
+            op: 'insert',
+            collection: [],
+            index: 1,
+            value: { id: 'details', title: 'Details' },
+          },
+        ],
       },
     ],
     after: [
@@ -615,7 +691,9 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       { id: 'details', title: 'Details' },
       { id: 'summary', title: 'Summary' },
     ],
-    notes: ['Index positioning is accepted only because the atomic execution carries a matching base revision.'],
+    notes: [
+      'Index positioning is accepted only because the atomic execution carries a matching base revision.',
+    ],
   },
   {
     id: 'move-before-stable-anchor',
@@ -630,21 +708,32 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       { id: 'round-one', title: 'Round One' },
       { id: 'summary', title: 'Summary' },
     ],
-    readableSource: 'move_item_before(Section[ID = "summary"], Section[ID = "round-one"]);',
-    source: 'move_item_before(.[] | select(.id == "summary"); .[] | select(.id == "round-one"));',
+    readableSource:
+      'move_item_before(Section[ID = "summary"], Section[ID = "round-one"]);',
+    source:
+      'move_item_before(.[] | select(.id == "summary"); .[] | select(.id == "round-one"));',
     operations: [
       {
         id: 'move-summary',
         op: 'move',
-        target: { collection: [], where: [{ path: ['id'], equals: 'summary' }] },
+        target: {
+          collection: [],
+          where: [{ path: ['id'], equals: 'summary' }],
+        },
         into: { path: [] },
-        position: { before: { collection: [], where: [{ path: ['id'], equals: 'round-one' }] } },
+        position: {
+          before: {
+            collection: [],
+            where: [{ path: ['id'], equals: 'round-one' }],
+          },
+        },
       },
     ],
     outcome: 'accepted',
     plan: [
       {
-        canonical: 'move_item_before(.[]|select(.id=="summary");.[]|select(.id=="round-one"))',
+        canonical:
+          'move_item_before(.[]|select(.id=="summary");.[]|select(.id=="round-one"))',
         affected: 1,
         intents: [{ op: 'move', from: [2], toCollection: [], toIndex: 1 }],
       },
@@ -668,21 +757,32 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       { id: 'round-one', title: 'Round One' },
       { id: 'overview', title: 'Overview' },
     ],
-    readableSource: 'move_item_after(Section[ID = "summary"], Section[ID = "round-one"]);',
-    source: 'move_item_after(.[] | select(.id == "summary"); .[] | select(.id == "round-one"));',
+    readableSource:
+      'move_item_after(Section[ID = "summary"], Section[ID = "round-one"]);',
+    source:
+      'move_item_after(.[] | select(.id == "summary"); .[] | select(.id == "round-one"));',
     operations: [
       {
         id: 'move-summary-after-round-one',
         op: 'move',
-        target: { collection: [], where: [{ path: ['id'], equals: 'summary' }] },
+        target: {
+          collection: [],
+          where: [{ path: ['id'], equals: 'summary' }],
+        },
         into: { path: [] },
-        position: { after: { collection: [], where: [{ path: ['id'], equals: 'round-one' }] } },
+        position: {
+          after: {
+            collection: [],
+            where: [{ path: ['id'], equals: 'round-one' }],
+          },
+        },
       },
     ],
     outcome: 'accepted',
     plan: [
       {
-        canonical: 'move_item_after(.[]|select(.id=="summary");.[]|select(.id=="round-one"))',
+        canonical:
+          'move_item_after(.[]|select(.id=="summary");.[]|select(.id=="round-one"))',
         affected: 1,
         intents: [{ op: 'move', from: [0], toCollection: [], toIndex: 1 }],
       },
@@ -712,7 +812,10 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       {
         id: 'move-summary-to-start',
         op: 'move',
-        target: { collection: [], where: [{ path: ['id'], equals: 'summary' }] },
+        target: {
+          collection: [],
+          where: [{ path: ['id'], equals: 'summary' }],
+        },
         into: { path: [] },
         position: { at: 'start' },
       },
@@ -750,7 +853,10 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       {
         id: 'move-summary-to-end',
         op: 'move',
-        target: { collection: [], where: [{ path: ['id'], equals: 'summary' }] },
+        target: {
+          collection: [],
+          where: [{ path: ['id'], equals: 'summary' }],
+        },
         into: { path: [] },
         position: { at: 'end' },
       },
@@ -773,7 +879,8 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     id: 'exact-reorder',
     group: '03 stable positioning',
     name: 'apply an exact identity permutation',
-    intent: 'Rearrange all sections without inserting, deleting, or replacing them.',
+    intent:
+      'Rearrange all sections without inserting, deleting, or replacing them.',
     features: ['stable-position', 'collection-semantics', 'atomic'],
     schema: 'ordered-sections-field',
     execution: execution('exact-reorder', sectionsTarget),
@@ -782,7 +889,8 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       { id: 'round-one', title: 'Round One' },
       { id: 'summary', title: 'Summary' },
     ],
-    readableSource: 'reorder_by(Section, ID, ["summary", "overview", "round-one"]);',
+    readableSource:
+      'reorder_by(Section, ID, ["summary", "overview", "round-one"]);',
     source: 'reorder_by(.; .id; ["summary", "overview", "round-one"]);',
     operations: [
       {
@@ -847,7 +955,14 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       {
         canonical: '(.lineItems[]|select(.sku=="COPY-03")|.quantity)|=.+1',
         affected: 1,
-        intents: [{ op: 'set', path: ['lineItems', 1, 'quantity'], before: 3, after: 4 }],
+        intents: [
+          {
+            op: 'set',
+            path: ['lineItems', 1, 'quantity'],
+            before: 3,
+            after: 4,
+          },
+        ],
       },
     ],
     after: {
@@ -892,8 +1007,18 @@ export const bxlMutationExamples: BxlMutationExample[] = [
         canonical: '(.lineItems[*.taxable].discount)|=.+0.05',
         affected: 2,
         intents: [
-          { op: 'set', path: ['lineItems', 0, 'discount'], before: 0, after: 0.05 },
-          { op: 'set', path: ['lineItems', 2, 'discount'], before: 0.1, after: 0.15 },
+          {
+            op: 'set',
+            path: ['lineItems', 0, 'discount'],
+            before: 0,
+            after: 0.05,
+          },
+          {
+            op: 'set',
+            path: ['lineItems', 2, 'discount'],
+            before: 0.1,
+            after: 0.15,
+          },
         ],
       },
     ],
@@ -909,7 +1034,8 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     id: 'explicit-bulk-set',
     group: '04 cardinality',
     name: 'set every explicitly selected field to one value',
-    intent: 'Reset the discount on every taxable line item without rebuilding the collection.',
+    intent:
+      'Reset the discount on every taxable line item without rebuilding the collection.',
     features: ['cardinality', 'write-set'],
     schema: 'invoice-card',
     execution: execution('explicit-bulk-set', cardTarget),
@@ -940,8 +1066,18 @@ export const bxlMutationExamples: BxlMutationExample[] = [
         canonical: '(.lineItems[*.taxable].discount)=0',
         affected: 2,
         intents: [
-          { op: 'set', path: ['lineItems', 0, 'discount'], before: 0.05, after: 0 },
-          { op: 'set', path: ['lineItems', 2, 'discount'], before: 0.15, after: 0 },
+          {
+            op: 'set',
+            path: ['lineItems', 0, 'discount'],
+            before: 0.05,
+            after: 0,
+          },
+          {
+            op: 'set',
+            path: ['lineItems', 2, 'discount'],
+            before: 0.15,
+            after: 0,
+          },
         ],
       },
     ],
@@ -957,13 +1093,22 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     id: 'sequential-statement-evaluation',
     group: '05 evaluation order',
     name: 'later statements observe earlier statement output',
-    intent: 'Recalculate subtotal and then calculate total from the new subtotal.',
+    intent:
+      'Recalculate subtotal and then calculate total from the new subtotal.',
     features: ['evaluation-order', 'atomic'],
     schema: 'invoice-card',
     execution: execution('sequential-statement-evaluation', cardTarget),
-    before: { quantity: 3, unitPrice: 20, subtotal: 50, shipping: 5, total: 55 },
-    readableSource: 'Subtotal = (Quantity * "Unit Price");\nTotal = (Subtotal + Shipping);',
-    source: '.subtotal = (.quantity * .unitPrice);\n.total = (.subtotal + .shipping);',
+    before: {
+      quantity: 3,
+      unitPrice: 20,
+      subtotal: 50,
+      shipping: 5,
+      total: 55,
+    },
+    readableSource:
+      'Subtotal = (Quantity * "Unit Price");\nTotal = (Subtotal + Shipping);',
+    source:
+      '.subtotal = (.quantity * .unitPrice);\n.total = (.subtotal + .shipping);',
     operations: [
       {
         id: 'calculate-subtotal',
@@ -1002,19 +1147,37 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     schema: 'invoice-card',
     execution: execution('assert-then-update', cardTarget),
     before: { status: 'draft' },
-    readableSource: 'assert(Status = "draft", "must still be a draft");\nStatus = "published";',
-    source: 'assert(.status == "draft"; "must still be a draft");\n.status = "published";',
+    readableSource:
+      'assert(Status = "draft", "must still be a draft");\nStatus = "published";',
+    source:
+      'assert(.status == "draft"; "must still be a draft");\n.status = "published";',
     operations: [
-      { id: 'still-draft', op: 'assert', expression: '.status == "draft"', message: 'must still be a draft' },
-      { id: 'publish', op: 'set', target: { path: ['status'] }, value: 'published' },
+      {
+        id: 'still-draft',
+        op: 'assert',
+        expression: '.status == "draft"',
+        message: 'must still be a draft',
+      },
+      {
+        id: 'publish',
+        op: 'set',
+        target: { path: ['status'] },
+        value: 'published',
+      },
     ],
     outcome: 'accepted',
     plan: [
-      { canonical: 'assert(.status=="draft";"must still be a draft")', affected: 0, intents: [] },
+      {
+        canonical: 'assert(.status=="draft";"must still be a draft")',
+        affected: 0,
+        intents: [],
+      },
       {
         canonical: '.status="published"',
         affected: 1,
-        intents: [{ op: 'set', path: ['status'], before: 'draft', after: 'published' }],
+        intents: [
+          { op: 'set', path: ['status'], before: 'draft', after: 'published' },
+        ],
       },
     ],
     after: { status: 'published' },
@@ -1023,7 +1186,8 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     id: 'returning-projection',
     group: '06 returning',
     name: 'returning is selected by the execution envelope',
-    intent: 'Return old/new values, affected count, paths, and changes after a terse edit.',
+    intent:
+      'Return old/new values, affected count, paths, and changes after a terse edit.',
     features: ['returning', 'write-set'],
     schema: 'invoice-card',
     execution: execution('returning-projection', cardTarget, {
@@ -1032,13 +1196,17 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     before: { title: 'Draft' },
     readableSource: 'Title = "Final";',
     source: '.title = "Final";',
-    operations: [{ id: 'rename', op: 'set', target: { path: ['title'] }, value: 'Final' }],
+    operations: [
+      { id: 'rename', op: 'set', target: { path: ['title'] }, value: 'Final' },
+    ],
     outcome: 'accepted',
     plan: [
       {
         canonical: '.title="Final"',
         affected: 1,
-        intents: [{ op: 'set', path: ['title'], before: 'Draft', after: 'Final' }],
+        intents: [
+          { op: 'set', path: ['title'], before: 'Draft', after: 'Final' },
+        ],
       },
     ],
     after: { title: 'Final' },
@@ -1047,15 +1215,20 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       new: { title: 'Final' },
       affected: 1,
       paths: [['title']],
-      changes: [{ op: 'set', path: ['title'], before: 'Draft', after: 'Final' }],
+      changes: [
+        { op: 'set', path: ['title'], before: 'Draft', after: 'Final' },
+      ],
     },
-    notes: ['Keeping returning in the envelope avoids adding a non-mutating statement form.'],
+    notes: [
+      'Keeping returning in the envelope avoids adding a non-mutating statement form.',
+    ],
   },
   {
     id: 'actor-revision-and-idempotency',
     group: '07 execution envelope',
     name: 'actor, revision, and program identity accompany the mutation',
-    intent: 'Attribute and compare-and-swap a status transition without changing statement syntax.',
+    intent:
+      'Attribute and compare-and-swap a status transition without changing statement syntax.',
     features: ['actor', 'idempotency', 'write-set'],
     schema: 'invoice-card',
     execution: execution('actor-revision-and-idempotency', cardTarget, {
@@ -1066,13 +1239,22 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     before: { status: 'draft' },
     readableSource: 'Status = "review";',
     source: '.status = "review";',
-    operations: [{ id: 'request-review', op: 'set', target: { path: ['status'] }, value: 'review' }],
+    operations: [
+      {
+        id: 'request-review',
+        op: 'set',
+        target: { path: ['status'] },
+        value: 'review',
+      },
+    ],
     outcome: 'accepted',
     plan: [
       {
         canonical: '.status="review"',
         affected: 1,
-        intents: [{ op: 'set', path: ['status'], before: 'draft', after: 'review' }],
+        intents: [
+          { op: 'set', path: ['status'], before: 'draft', after: 'review' },
+        ],
       },
     ],
     after: { status: 'review' },
@@ -1081,14 +1263,22 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     id: 'relate-card',
     group: '08 relationships',
     name: 'append a loaded Card to linksToMany',
-    intent: 'Resolve Grace through the Card Store and append her to the loaded reviewers field.',
+    intent:
+      'Resolve Grace through the Card Store and append her to the loaded reviewers field.',
     features: ['relationship', 'write-set'],
     schema: 'reviewers-relationship-field',
     execution: execution('relate-card', reviewersTarget),
     before: [{ id: 'card:ada', cardTitle: 'Ada' }],
     readableSource: 'append(Reviewer, card("card:grace"));',
     source: 'append(.; card("card:grace"));',
-    operations: [{ id: 'relate-grace', op: 'relate', target: { path: [] }, cardId: 'card:grace' }],
+    operations: [
+      {
+        id: 'relate-grace',
+        op: 'relate',
+        target: { path: [] },
+        cardId: 'card:grace',
+      },
+    ],
     store: {
       'card:grace': { id: 'card:grace', cardTitle: 'Grace' },
     },
@@ -1123,7 +1313,14 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     ],
     readableSource: 'del(Reviewer[ID = "card:ada"]);',
     source: 'del(.[] | select(.id == "card:ada"));',
-    operations: [{ id: 'unrelate-ada', op: 'unrelate', target: { path: [] }, cardId: 'card:ada' }],
+    operations: [
+      {
+        id: 'unrelate-ada',
+        op: 'unrelate',
+        target: { path: [] },
+        cardId: 'card:ada',
+      },
+    ],
     outcome: 'accepted',
     plan: [
       {
@@ -1133,7 +1330,9 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       },
     ],
     after: [{ id: 'card:grace', cardTitle: 'Grace' }],
-    notes: ['Schema-directed lowering turns deletion of a linked item into unrelate.'],
+    notes: [
+      'Schema-directed lowering turns deletion of a linked item into unrelate.',
+    ],
   },
   {
     id: 'move-relationship',
@@ -1144,36 +1343,52 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     schema: 'reviewers-relationship-field',
     execution: execution('move-relationship', reviewersTarget),
     before: [{ id: 'card:ada' }, { id: 'card:grace' }, { id: 'card:lin' }],
-    readableSource: 'move_item_before(Reviewer[ID = "card:grace"], Reviewer[ID = "card:ada"]);',
-    source: 'move_item_before(.[] | select(.id == "card:grace"); .[] | select(.id == "card:ada"));',
+    readableSource:
+      'move_item_before(Reviewer[ID = "card:grace"], Reviewer[ID = "card:ada"]);',
+    source:
+      'move_item_before(.[] | select(.id == "card:grace"); .[] | select(.id == "card:ada"));',
     operations: [
       {
         id: 'prioritize-grace',
         op: 'move-relation',
         target: { path: [] },
         cardId: 'card:grace',
-        position: { before: { collection: [], where: [{ path: ['id'], equals: 'card:ada' }] } },
+        position: {
+          before: {
+            collection: [],
+            where: [{ path: ['id'], equals: 'card:ada' }],
+          },
+        },
       },
     ],
     outcome: 'accepted',
     plan: [
       {
-        canonical: 'move_item_before(.[]|select(.id=="card:grace");.[]|select(.id=="card:ada"))',
+        canonical:
+          'move_item_before(.[]|select(.id=="card:grace");.[]|select(.id=="card:ada"))',
         affected: 1,
-        intents: [{ op: 'move-relation', field: [], cardId: 'card:grace', toIndex: 0 }],
+        intents: [
+          { op: 'move-relation', field: [], cardId: 'card:grace', toIndex: 0 },
+        ],
       },
     ],
     after: [{ id: 'card:grace' }, { id: 'card:ada' }, { id: 'card:lin' }],
-    notes: ['The same move syntax works for containsMany and linksToMany; the plan intent differs.'],
+    notes: [
+      'The same move syntax works for containsMany and linksToMany; the plan intent differs.',
+    ],
   },
   {
     id: 'workspace-append-entry-point',
     group: '08 relationships',
     name: 'append a real Workspace entry point through the Card Store',
-    intent: 'Pin the collaboration stage Card without authoring entryPoints.N JSON:API keys.',
+    intent:
+      'Pin the collaboration stage Card without authoring entryPoints.N JSON:API keys.',
     features: ['relationship', 'collection-semantics', 'write-set'],
     schema: 'workspace-card',
-    execution: execution('workspace-append-entry-point', { kind: 'card', id: 'card:workspace' }),
+    execution: execution('workspace-append-entry-point', {
+      kind: 'card',
+      id: 'card:workspace',
+    }),
     before: {
       signage: 'REALM COLLABORATION',
       entryPoints: [
@@ -1193,7 +1408,10 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       },
     ],
     store: {
-      'card:collab-stage': { id: 'card:collab-stage', cardTitle: 'Collaboration Stage' },
+      'card:collab-stage': {
+        id: 'card:collab-stage',
+        cardTitle: 'Collaboration Stage',
+      },
     },
     outcome: 'accepted',
     plan: [
@@ -1201,7 +1419,12 @@ export const bxlMutationExamples: BxlMutationExample[] = [
         canonical: 'append(.entryPoints;card("card:collab-stage"))',
         affected: 1,
         intents: [
-          { op: 'relate', field: ['entryPoints'], cardId: 'card:collab-stage', index: 2 },
+          {
+            op: 'relate',
+            field: ['entryPoints'],
+            cardId: 'card:collab-stage',
+            index: 2,
+          },
         ],
       },
     ],
@@ -1225,7 +1448,10 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     intent: 'Select the winning Submission through the Card Store.',
     features: ['relationship', 'write-set'],
     schema: 'contest-card',
-    execution: execution('contest-set-singular-link', { kind: 'card', id: 'card:contest/spring-2026' }),
+    execution: execution('contest-set-singular-link', {
+      kind: 'card',
+      id: 'card:contest/spring-2026',
+    }),
     before: {
       submissions: [{ id: 'card:submission/tidal', cardTitle: 'Tidal' }],
     },
@@ -1240,30 +1466,41 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       },
     ],
     store: {
-      'card:submission/tidal': { id: 'card:submission/tidal', cardTitle: 'Tidal' },
+      'card:submission/tidal': {
+        id: 'card:submission/tidal',
+        cardTitle: 'Tidal',
+      },
     },
     outcome: 'accepted',
     plan: [
       {
         canonical: '.winner=card("card:submission/tidal")',
         affected: 1,
-        intents: [{ op: 'relate', field: ['winner'], cardId: 'card:submission/tidal' }],
+        intents: [
+          { op: 'relate', field: ['winner'], cardId: 'card:submission/tidal' },
+        ],
       },
     ],
     after: {
       submissions: [{ id: 'card:submission/tidal', cardTitle: 'Tidal' }],
       winner: { id: 'card:submission/tidal', cardTitle: 'Tidal' },
     },
-    notes: ['The raw instance uses winner.links.self; the mutation surface sees winner as a loaded Submission.'],
+    notes: [
+      'The raw instance uses winner.links.self; the mutation surface sees winner as a loaded Submission.',
+    ],
   },
   {
     id: 'classroom-update-contained-schedule',
     group: '08 real Card shapes',
     name: 'edit containsMany beside loaded relationships',
-    intent: 'Mark the current classroom schedule item done without touching staff or students.',
+    intent:
+      'Mark the current classroom schedule item done without touching staff or students.',
     features: ['cardinality', 'write-set'],
     schema: 'classroom-card',
-    execution: execution('classroom-update-contained-schedule', { kind: 'card', id: 'card:classroom-6' }),
+    execution: execution('classroom-update-contained-schedule', {
+      kind: 'card',
+      id: 'card:classroom-6',
+    }),
     before: {
       name: 'Classroom 6',
       staff: [{ id: 'card:staff/dana', cardTitle: 'Dana Rivers' }],
@@ -1274,7 +1511,8 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       ],
     },
     readableSource: '"Schedule Item"[Time = "1:00 PM"].Status = "done";',
-    source: '(.scheduleItems[] | select(.time == "1:00 PM") | .status) = "done";',
+    source:
+      '(.scheduleItems[] | select(.time == "1:00 PM") | .status) = "done";',
     operations: [
       {
         id: 'complete-current-schedule-item',
@@ -1293,7 +1531,12 @@ export const bxlMutationExamples: BxlMutationExample[] = [
         canonical: '(.scheduleItems[]|select(.time=="1:00 PM")|.status)="done"',
         affected: 1,
         intents: [
-          { op: 'set', path: ['scheduleItems', 1, 'status'], before: 'current', after: 'done' },
+          {
+            op: 'set',
+            path: ['scheduleItems', 1, 'status'],
+            before: 'current',
+            after: 'done',
+          },
         ],
       },
     ],
@@ -1306,26 +1549,37 @@ export const bxlMutationExamples: BxlMutationExample[] = [
         { time: '1:00 PM', activity: 'OT push-in', status: 'done' },
       ],
     },
-    notes: ['Schema-directed lowering keeps this a contained leaf set, unlike linksToMany edits.'],
+    notes: [
+      'Schema-directed lowering keeps this a contained leaf set, unlike linksToMany edits.',
+    ],
   },
   {
     id: 'zine-reorder-linked-fragments',
     group: '08 real Card shapes',
     name: 'reorder real linksToMany cards with ordinary move syntax',
-    intent: 'Lead the issue with the personal-web fragment while preserving loaded fragment Cards.',
+    intent:
+      'Lead the issue with the personal-web fragment while preserving loaded fragment Cards.',
     features: ['relationship', 'stable-position', 'write-set'],
     schema: 'zine-issue-card',
-    execution: execution('zine-reorder-linked-fragments', { kind: 'card', id: 'card:zine/issue-01' }),
+    execution: execution('zine-reorder-linked-fragments', {
+      kind: 'card',
+      id: 'card:zine/issue-01',
+    }),
     before: {
       title: 'Small Audiences, Real Rooms',
       fragments: [
-        { id: 'card:fragment/opposite-viral', cardTitle: 'The Opposite of Going Viral' },
+        {
+          id: 'card:fragment/opposite-viral',
+          cardTitle: 'The Opposite of Going Viral',
+        },
         { id: 'card:fragment/supper', cardTitle: 'Supper as a Small Public' },
         { id: 'card:fragment/personal-web', cardTitle: 'The Personal Web' },
       ],
     },
-    readableSource: 'move_item_before(Fragment[ID = "card:fragment/personal-web"], Fragment[ID = "card:fragment/opposite-viral"]);',
-    source: 'move_item_before(.fragments[] | select(.id == "card:fragment/personal-web"); .fragments[] | select(.id == "card:fragment/opposite-viral"));',
+    readableSource:
+      'move_item_before(Fragment[ID = "card:fragment/personal-web"], Fragment[ID = "card:fragment/opposite-viral"]);',
+    source:
+      'move_item_before(.fragments[] | select(.id == "card:fragment/personal-web"); .fragments[] | select(.id == "card:fragment/opposite-viral"));',
     operations: [
       {
         id: 'lead-with-personal-web',
@@ -1343,7 +1597,8 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     outcome: 'accepted',
     plan: [
       {
-        canonical: 'move_item_before(.fragments[]|select(.id=="card:fragment/personal-web");.fragments[]|select(.id=="card:fragment/opposite-viral"))',
+        canonical:
+          'move_item_before(.fragments[]|select(.id=="card:fragment/personal-web");.fragments[]|select(.id=="card:fragment/opposite-viral"))',
         affected: 1,
         intents: [
           {
@@ -1359,7 +1614,10 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       title: 'Small Audiences, Real Rooms',
       fragments: [
         { id: 'card:fragment/personal-web', cardTitle: 'The Personal Web' },
-        { id: 'card:fragment/opposite-viral', cardTitle: 'The Opposite of Going Viral' },
+        {
+          id: 'card:fragment/opposite-viral',
+          cardTitle: 'The Opposite of Going Viral',
+        },
         { id: 'card:fragment/supper', cardTitle: 'Supper as a Small Public' },
       ],
     },
@@ -1368,23 +1626,38 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     id: 'authorization-write-set',
     group: '09 normalized write set',
     name: 'authorization receives concrete leaf intents',
-    intent: 'Change two fields while exposing their old and new values to policy.',
+    intent:
+      'Change two fields while exposing their old and new values to policy.',
     features: ['write-set', 'authorization', 'atomic'],
     schema: 'invoice-card',
-    execution: execution('authorization-write-set', cardTarget, { actor: 'user:ada' }),
+    execution: execution('authorization-write-set', cardTarget, {
+      actor: 'user:ada',
+    }),
     before: { status: 'draft', title: 'Quarterly report' },
     readableSource: 'Status = "review";\nTitle = (Title + " — reviewed");',
     source: '.status = "review";\n.title = (.title + " — reviewed");',
     operations: [
-      { id: 'status-review', op: 'set', target: { path: ['status'] }, value: 'review' },
-      { id: 'mark-title', op: 'set', target: { path: ['title'] }, expression: '.title + " — reviewed"' },
+      {
+        id: 'status-review',
+        op: 'set',
+        target: { path: ['status'] },
+        value: 'review',
+      },
+      {
+        id: 'mark-title',
+        op: 'set',
+        target: { path: ['title'] },
+        expression: '.title + " — reviewed"',
+      },
     ],
     outcome: 'accepted',
     plan: [
       {
         canonical: '.status="review"',
         affected: 1,
-        intents: [{ op: 'set', path: ['status'], before: 'draft', after: 'review' }],
+        intents: [
+          { op: 'set', path: ['status'], before: 'draft', after: 'review' },
+        ],
       },
       {
         canonical: '.title=(.title+" — reviewed")',
@@ -1418,15 +1691,27 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     source: '.status = "review";\n.count |= . + 1;',
     chunks: ['.status = "rev', 'iew";\n.count ', '|= . + ', '1;'],
     operations: [
-      { id: 'review', op: 'set', target: { path: ['status'] }, value: 'review' },
-      { id: 'increment', op: 'update', target: { path: ['count'] }, expression: '. + 1' },
+      {
+        id: 'review',
+        op: 'set',
+        target: { path: ['status'] },
+        value: 'review',
+      },
+      {
+        id: 'increment',
+        op: 'update',
+        target: { path: ['count'] },
+        expression: '. + 1',
+      },
     ],
     outcome: 'accepted',
     plan: [
       {
         canonical: '.status="review"',
         affected: 1,
-        intents: [{ op: 'set', path: ['status'], before: 'draft', after: 'review' }],
+        intents: [
+          { op: 'set', path: ['status'], before: 'draft', after: 'review' },
+        ],
       },
       {
         canonical: '.count|=.+1',
@@ -1452,7 +1737,12 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     source: '.note = "keep; this semicolon";\n.status = "ready";',
     chunks: ['.note = "keep;', ' this semi', 'colon";\n.status = ', '"ready";'],
     operations: [
-      { id: 'note', op: 'set', target: { path: ['note'] }, value: 'keep; this semicolon' },
+      {
+        id: 'note',
+        op: 'set',
+        target: { path: ['note'] },
+        value: 'keep; this semicolon',
+      },
       { id: 'ready', op: 'set', target: { path: ['status'] }, value: 'ready' },
     ],
     outcome: 'accepted',
@@ -1460,12 +1750,21 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       {
         canonical: '.note="keep; this semicolon"',
         affected: 1,
-        intents: [{ op: 'set', path: ['note'], before: null, after: 'keep; this semicolon' }],
+        intents: [
+          {
+            op: 'set',
+            path: ['note'],
+            before: null,
+            after: 'keep; this semicolon',
+          },
+        ],
       },
       {
         canonical: '.status="ready"',
         affected: 1,
-        intents: [{ op: 'set', path: ['status'], before: 'draft', after: 'ready' }],
+        intents: [
+          { op: 'set', path: ['status'], before: 'draft', after: 'ready' },
+        ],
       },
     ],
     after: { note: 'keep; this semicolon', status: 'ready' },
@@ -1474,14 +1773,22 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     id: 'field-root-update',
     group: '11 arbitrary roots',
     name: 'a scalar Field root can be updated',
-    intent: 'Increment a scalar Field without knowing its containing Card path.',
+    intent:
+      'Increment a scalar Field without knowing its containing Card path.',
     features: ['field-root', 'write-set'],
     schema: 'scalar-field',
     execution: execution('field-root-update', scalarTarget),
     before: 41,
     readableSource: 'Score += 1;',
     source: '. |= . + 1;',
-    operations: [{ id: 'increment-score', op: 'update', target: { path: [] }, expression: '. + 1' }],
+    operations: [
+      {
+        id: 'increment-score',
+        op: 'update',
+        target: { path: [] },
+        expression: '. + 1',
+      },
+    ],
     outcome: 'accepted',
     plan: [
       {
@@ -1503,13 +1810,17 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     before: { note: 'temporary' },
     readableSource: 'Note = null;',
     source: '.note = null;',
-    operations: [{ id: 'null-note', op: 'set', target: { path: ['note'] }, value: null }],
+    operations: [
+      { id: 'null-note', op: 'set', target: { path: ['note'] }, value: null },
+    ],
     outcome: 'accepted',
     plan: [
       {
         canonical: '.note=null',
         affected: 1,
-        intents: [{ op: 'set', path: ['note'], before: 'temporary', after: null }],
+        intents: [
+          { op: 'set', path: ['note'], before: 'temporary', after: null },
+        ],
       },
     ],
     after: { note: null },
@@ -1525,7 +1836,9 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     before: { title: 'Draft', note: null },
     readableSource: 'del(Note);',
     source: 'del(.note);',
-    operations: [{ id: 'delete-note', op: 'delete', target: { path: ['note'] } }],
+    operations: [
+      { id: 'delete-note', op: 'delete', target: { path: ['note'] } },
+    ],
     outcome: 'accepted',
     plan: [
       {
@@ -1549,7 +1862,14 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     execution: execution('reject-card-root-replacement', cardTarget),
     before: { title: 'Draft', status: 'draft' },
     source: '. = {title: "Final"};',
-    operations: [{ id: 'replace-card', op: 'set', target: { path: [] }, value: { title: 'Final' } }],
+    operations: [
+      {
+        id: 'replace-card',
+        op: 'set',
+        target: { path: [] },
+        value: { title: 'Final' },
+      },
+    ],
     outcome: 'rejected',
     error: { phase: 'plan', code: 'card-root-write', statement: 1 },
   },
@@ -1624,7 +1944,14 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     before: [{ id: 'a' }, { id: 'b' }],
     source: '.[1].title = "Changed";',
     chunks: ['.[1].title = ', '"Changed";'],
-    operations: [{ id: 'index-write', op: 'set', target: { path: [1, 'title'] }, value: 'Changed' }],
+    operations: [
+      {
+        id: 'index-write',
+        op: 'set',
+        target: { path: [1, 'title'] },
+        value: 'Changed',
+      },
+    ],
     outcome: 'rejected',
     error: { phase: 'validate', code: 'position-unstable', statement: 1 },
   },
@@ -1637,14 +1964,17 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     schema: 'ordered-sections-field',
     execution: execution('reject-source-is-anchor', sectionsTarget),
     before: [{ id: 'a' }, { id: 'b' }],
-    source: 'move_item_before(.[] | select(.id == "a"); .[] | select(.id == "a"));',
+    source:
+      'move_item_before(.[] | select(.id == "a"); .[] | select(.id == "a"));',
     operations: [
       {
         id: 'self-move',
         op: 'move',
         target: { collection: [], where: [{ path: ['id'], equals: 'a' }] },
         into: { path: [] },
-        position: { before: { collection: [], where: [{ path: ['id'], equals: 'a' }] } },
+        position: {
+          before: { collection: [], where: [{ path: ['id'], equals: 'a' }] },
+        },
       },
     ],
     outcome: 'rejected',
@@ -1661,7 +1991,13 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     before: [{ id: 'a' }, { id: 'b' }, { id: 'c' }],
     source: 'reorder_by(.; .id; ["c", "a", "new"]);',
     operations: [
-      { id: 'bad-order', op: 'reorder', target: { path: [] }, key: ['id'], order: ['c', 'a', 'new'] },
+      {
+        id: 'bad-order',
+        op: 'reorder',
+        target: { path: [] },
+        key: ['id'],
+        order: ['c', 'a', 'new'],
+      },
     ],
     outcome: 'rejected',
     error: { phase: 'plan', code: 'order-not-permutation', statement: 1 },
@@ -1670,7 +2006,8 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     id: 'reject-related-card-traversal',
     group: '15 rejected relationships',
     name: 'a relationship cannot be traversed for mutation',
-    intent: 'Require a separate target and authorization decision for the related Card.',
+    intent:
+      'Require a separate target and authorization decision for the related Card.',
     features: ['relationship', 'authorization'],
     schema: 'reviewers-relationship-field',
     execution: execution('reject-related-card-traversal', reviewersTarget),
@@ -1695,14 +2032,21 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     id: 'reject-jsonapi-relationship-path',
     group: '15 rejected relationships',
     name: 'raw JSON:API relationship storage is not part of the mutation root',
-    intent: 'Prevent authors from manufacturing entryPoints.N relationship records.',
+    intent:
+      'Prevent authors from manufacturing entryPoints.N relationship records.',
     features: ['relationship', 'write-set'],
     schema: 'workspace-card',
-    execution: execution('reject-jsonapi-relationship-path', { kind: 'card', id: 'card:workspace' }),
+    execution: execution('reject-jsonapi-relationship-path', {
+      kind: 'card',
+      id: 'card:workspace',
+    }),
     before: {
-      entryPoints: [{ id: 'card:architecture', cardTitle: 'Consistency Architecture' }],
+      entryPoints: [
+        { id: 'card:architecture', cardTitle: 'Consistency Architecture' },
+      ],
     },
-    source: '.relationships["entryPoints.1"].links.self = "./POCs/collab-stage/CollabPad/demo";',
+    source:
+      '.relationships["entryPoints.1"].links.self = "./POCs/collab-stage/CollabPad/demo";',
     operations: [
       {
         id: 'raw-jsonapi-link',
@@ -1712,7 +2056,11 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       },
     ],
     outcome: 'rejected',
-    error: { phase: 'plan', code: 'storage-projection-forbidden', statement: 1 },
+    error: {
+      phase: 'plan',
+      code: 'storage-projection-forbidden',
+      statement: 1,
+    },
     notes: [
       'The loaded Workspace has entryPoints: CardDef[] and no writable relationships object.',
       'Only the persistence adapter knows the indexed JSON:API representation.',
@@ -1722,10 +2070,14 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     id: 'reject-query-backed-links-to-many',
     group: '15 rejected relationships',
     name: 'query-backed linksToMany membership is read-only',
-    intent: 'Reject writes to relationship membership derived from a schema query.',
+    intent:
+      'Reject writes to relationship membership derived from a schema query.',
     features: ['relationship', 'collection-semantics'],
     schema: 'query-backed-directory-card',
-    execution: execution('reject-query-backed-links-to-many', { kind: 'card', id: 'card:student-directory' }),
+    execution: execution('reject-query-backed-links-to-many', {
+      kind: 'card',
+      id: 'card:student-directory',
+    }),
     before: {
       students: [
         { id: 'card:student/ava', firstName: 'Ava', lastName: 'Thompson' },
@@ -1743,11 +2095,17 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       },
     ],
     store: {
-      'card:student/leo': { id: 'card:student/leo', firstName: 'Leo', lastName: 'Park' },
+      'card:student/leo': {
+        id: 'card:student/leo',
+        firstName: 'Leo',
+        lastName: 'Park',
+      },
     },
     outcome: 'rejected',
     error: { phase: 'validate', code: 'field-read-only', statement: 1 },
-    notes: ['Change the fields used by the query or its source cards instead of assigning membership.'],
+    notes: [
+      'Change the fields used by the query or its source cards instead of assigning membership.',
+    ],
   },
   {
     id: 'reject-revision-conflict',
@@ -1762,7 +2120,14 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     }),
     before: { status: 'draft' },
     source: '.status = "review";',
-    operations: [{ id: 'review', op: 'set', target: { path: ['status'] }, value: 'review' }],
+    operations: [
+      {
+        id: 'review',
+        op: 'set',
+        target: { path: ['status'] },
+        value: 'review',
+      },
+    ],
     outcome: 'rejected',
     error: { phase: 'commit', code: 'revision-conflict', statement: 1 },
     committedStatements: 0,
@@ -1774,12 +2139,19 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     intent: 'Commit nothing when one leaf intent is denied.',
     features: ['authorization', 'write-set', 'atomic'],
     schema: 'invoice-card',
-    execution: execution('reject-authorization-write', cardTarget, { actor: 'user:viewer' }),
+    execution: execution('reject-authorization-write', cardTarget, {
+      actor: 'user:viewer',
+    }),
     before: { title: 'Draft', status: 'draft' },
     source: '.title = "Final";\n.status = "published";',
     operations: [
       { id: 'rename', op: 'set', target: { path: ['title'] }, value: 'Final' },
-      { id: 'publish', op: 'set', target: { path: ['status'] }, value: 'published' },
+      {
+        id: 'publish',
+        op: 'set',
+        target: { path: ['status'] },
+        value: 'published',
+      },
     ],
     outcome: 'rejected',
     error: { phase: 'authorize', code: 'authorization-denied', statement: 2 },
@@ -1819,7 +2191,12 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     source: '.title = "Final";\n.status = "review";',
     operations: [
       { id: 'change', op: 'set', target: { path: ['title'] }, value: 'Final' },
-      { id: 'change', op: 'set', target: { path: ['status'] }, value: 'review' },
+      {
+        id: 'change',
+        op: 'set',
+        target: { path: ['status'] },
+        value: 'review',
+      },
     ],
     outcome: 'rejected',
     error: { phase: 'parse', code: 'duplicate-operation-id', statement: 2 },
@@ -1840,9 +2217,10 @@ const realmMutationSchemas = new Set<MutationSchemaRef>([
  * This subset is the seam for replacing committed snapshots with Card Store
  * loads in integration tests without changing the mutation assertions.
  */
-export const realmMutationExamples: BxlMutationExample[] = bxlMutationExamples.filter(
-  (fixture) => realmMutationSchemas.has(fixture.schema),
-);
+export const realmMutationExamples: BxlMutationExample[] =
+  bxlMutationExamples.filter((fixture) =>
+    realmMutationSchemas.has(fixture.schema),
+  );
 
 const requiredFeatures: MutationFeature[] = [
   'copy',
@@ -1856,11 +2234,16 @@ const requiredFeatures: MutationFeature[] = [
   'write-set',
 ];
 
-if (new Set(bxlMutationExamples.map((fixture) => fixture.id)).size !== bxlMutationExamples.length) {
+if (
+  new Set(bxlMutationExamples.map((fixture) => fixture.id)).size !==
+  bxlMutationExamples.length
+) {
   throw new Error('BXL mutation fixture IDs must be unique');
 }
 
-const coveredFeatures = new Set(bxlMutationExamples.flatMap((fixture) => fixture.features));
+const coveredFeatures = new Set(
+  bxlMutationExamples.flatMap((fixture) => fixture.features),
+);
 for (const feature of requiredFeatures) {
   if (!coveredFeatures.has(feature)) {
     throw new Error(`BXL mutation fixture corpus does not cover ${feature}`);

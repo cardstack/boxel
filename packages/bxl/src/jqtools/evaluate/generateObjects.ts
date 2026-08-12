@@ -1,11 +1,11 @@
-import { generateCombinations } from './generateCombinations.js';
+import { generateCombinations } from './generateCombinations.ts';
 
 /**
  * @param potentialEntries Like entries, except that each entry key/value should get an array of possible evaluations.
  *    E.g. [ [["a","b"],[1,2]], [["x"],[0]] ] --> {a:1,x:0}, {a:2,x:0}, {b:1,x:0}, {b:2,x:0}
  */
 export function* generateObjects(
-  potentialEntries: [any[], any[]][]
+  potentialEntries: [any[], any[]][],
 ): IterableIterator<any[]> {
   const flatPotentialEntries = potentialEntries.flat();
   for (const combination of generateCombinations(flatPotentialEntries)) {

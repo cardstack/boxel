@@ -1,11 +1,15 @@
-import { EXCEL_ERROR, throwExcelError } from './errors.js';
+import { EXCEL_ERROR, throwExcelError } from './errors.ts';
 import {
   daysBetween,
   parseExcelDate,
   parseExcelDateArray,
   yearFrac,
-} from './dateSerial.js';
-import { flattenExcelArgs, parseExcelNumber, parseExcelNumberArray } from './common.js';
+} from './dateSerial.ts';
+import {
+  flattenExcelArgs,
+  parseExcelNumber,
+  parseExcelNumberArray,
+} from './common.ts';
 
 function parseCashFlows(values: unknown) {
   const parsed = parseExcelNumberArray(flattenExcelArgs(values));
@@ -105,8 +109,7 @@ export function excelPmt(
   const term = Math.pow(1 + rate, nper);
   const result =
     type === 1
-      ? ((fv * rate) / (term - 1) + (pv * rate) / (1 - 1 / term)) /
-        (1 + rate)
+      ? ((fv * rate) / (term - 1) + (pv * rate) / (1 - 1 / term)) / (1 + rate)
       : (fv * rate) / (term - 1) + (pv * rate) / (1 - 1 / term);
   return -result;
 }
@@ -158,7 +161,10 @@ export function excelPpmt(
   const fv = parseExcelNumber(fvLike);
   const type = parseExcelNumber(typeLike);
 
-  return excelPmt(rate, nper, pv, fv, type) - excelIpmt(rate, per, nper, pv, fv, type);
+  return (
+    excelPmt(rate, nper, pv, fv, type) -
+    excelIpmt(rate, per, nper, pv, fv, type)
+  );
 }
 
 export function excelPv(
@@ -393,7 +399,10 @@ export function excelIrr(valuesLike: unknown, guessLike = 0.1) {
     }
 
     const nextGuess = guess - resultValue / derivative;
-    if (Math.abs(nextGuess - guess) <= epsMax && Math.abs(resultValue) <= epsMax) {
+    if (
+      Math.abs(nextGuess - guess) <= epsMax &&
+      Math.abs(resultValue) <= epsMax
+    ) {
       return nextGuess;
     }
     guess = Math.max(-0.99999999, Math.min(nextGuess, 1000));
@@ -413,7 +422,8 @@ export function excelXnpv(
 
   let result = 0;
   for (let i = 0; i < values.length; i++) {
-    result += values[i] / Math.pow(1 + rate, daysBetween(dates[0], dates[i]) / 365);
+    result +=
+      values[i] / Math.pow(1 + rate, daysBetween(dates[0], dates[i]) / 365);
   }
 
   return result;
@@ -485,7 +495,8 @@ export function excelMirr(
   }
 
   const numerator =
-    -excelNpv(reinvestRate, incomes) * Math.pow(1 + reinvestRate, values.length - 1);
+    -excelNpv(reinvestRate, incomes) *
+    Math.pow(1 + reinvestRate, values.length - 1);
   const denominator = excelNpv(financeRate, payments) * (1 + financeRate);
 
   return Math.pow(numerator / denominator, 1 / (values.length - 1)) - 1;
@@ -522,7 +533,11 @@ export function excelAccrint(
   return par * rate * yearFrac(issue, settlement, basis);
 }
 
-export function excelSln(costLike: unknown, salvageLike: unknown, lifeLike: unknown) {
+export function excelSln(
+  costLike: unknown,
+  salvageLike: unknown,
+  lifeLike: unknown,
+) {
   const cost = parseExcelNumber(costLike);
   const salvage = parseExcelNumber(salvageLike);
   const life = parseExcelNumber(lifeLike);
@@ -558,8 +573,11 @@ export function excelSyd(
 // ═══════════════════════════════════════════════════════════════
 
 export function excelDb(
-  costLike: unknown, salvageLike: unknown, lifeLike: unknown,
-  periodLike: unknown, monthLike: unknown = 12,
+  costLike: unknown,
+  salvageLike: unknown,
+  lifeLike: unknown,
+  periodLike: unknown,
+  monthLike: unknown = 12,
 ) {
   const cost = parseExcelNumber(costLike);
   const salvage = parseExcelNumber(salvageLike);
@@ -567,7 +585,14 @@ export function excelDb(
   const period = Math.floor(parseExcelNumber(periodLike));
   const month = Math.floor(parseExcelNumber(monthLike));
 
-  if (cost < 0 || salvage < 0 || life <= 0 || period < 1 || month < 1 || month > 12) {
+  if (
+    cost < 0 ||
+    salvage < 0 ||
+    life <= 0 ||
+    period < 1 ||
+    month < 1 ||
+    month > 12
+  ) {
     throwExcelError(EXCEL_ERROR.num);
   }
 
@@ -576,9 +601,9 @@ export function excelDb(
   let depn: number;
   for (let i = 1; i <= period; i++) {
     if (i === 1) {
-      depn = cost * rate * month / 12;
+      depn = (cost * rate * month) / 12;
     } else if (i === life + 1) {
-      depn = (cost - total) * rate * (12 - month) / 12;
+      depn = ((cost - total) * rate * (12 - month)) / 12;
     } else {
       depn = (cost - total) * rate;
     }
@@ -588,8 +613,11 @@ export function excelDb(
 }
 
 export function excelDdb(
-  costLike: unknown, salvageLike: unknown, lifeLike: unknown,
-  periodLike: unknown, factorLike: unknown = 2,
+  costLike: unknown,
+  salvageLike: unknown,
+  lifeLike: unknown,
+  periodLike: unknown,
+  factorLike: unknown = 2,
 ) {
   const cost = parseExcelNumber(costLike);
   const salvage = parseExcelNumber(salvageLike);
@@ -611,7 +639,12 @@ export function excelDdb(
   return depn;
 }
 
-export function excelIspmt(rateLike: unknown, perLike: unknown, nperLike: unknown, pvLike: unknown) {
+export function excelIspmt(
+  rateLike: unknown,
+  perLike: unknown,
+  nperLike: unknown,
+  pvLike: unknown,
+) {
   const rate = parseExcelNumber(rateLike);
   const per = parseExcelNumber(perLike);
   const nper = parseExcelNumber(nperLike);
@@ -619,7 +652,11 @@ export function excelIspmt(rateLike: unknown, perLike: unknown, nperLike: unknow
   return pv * rate * (per / nper - 1);
 }
 
-export function excelPduration(rateLike: unknown, pvLike: unknown, fvLike: unknown) {
+export function excelPduration(
+  rateLike: unknown,
+  pvLike: unknown,
+  fvLike: unknown,
+) {
   const rate = parseExcelNumber(rateLike);
   const pv = parseExcelNumber(pvLike);
   const fv = parseExcelNumber(fvLike);
@@ -645,7 +682,7 @@ export function excelDollarde(fractionalLike: unknown, fractionLike: unknown) {
   const intPart = Math.floor(abs);
   const decPart = abs - intPart;
   const digits = Math.ceil(Math.log10(fraction));
-  return sign * (intPart + decPart * Math.pow(10, digits) / fraction);
+  return sign * (intPart + (decPart * Math.pow(10, digits)) / fraction);
 }
 
 export function excelDollarfr(decimalLike: unknown, fractionLike: unknown) {
@@ -658,15 +695,19 @@ export function excelDollarfr(decimalLike: unknown, fractionLike: unknown) {
   const intPart = Math.floor(abs);
   const decPart = abs - intPart;
   const digits = Math.ceil(Math.log10(fraction));
-  return sign * (intPart + decPart * fraction / Math.pow(10, digits));
+  return sign * (intPart + (decPart * fraction) / Math.pow(10, digits));
 }
 
 export function excelDisc(
-  settlementLike: unknown, maturityLike: unknown,
-  prLike: unknown, redemptionLike: unknown, basisLike: unknown = 0,
+  settlementLike: unknown,
+  maturityLike: unknown,
+  prLike: unknown,
+  redemptionLike: unknown,
+  basisLike: unknown = 0,
 ) {
-  const _settlement = parseExcelDate(settlementLike);
-  const _maturity = parseExcelDate(maturityLike);
+  // Called for validation only — parseExcelDate throws on a malformed date.
+  parseExcelDate(settlementLike);
+  parseExcelDate(maturityLike);
   const pr = parseExcelNumber(prLike);
   const redemption = parseExcelNumber(redemptionLike);
   if (pr <= 0 || redemption <= 0) throwExcelError(EXCEL_ERROR.num);
@@ -675,8 +716,11 @@ export function excelDisc(
 }
 
 export function excelPricedisc(
-  settlementLike: unknown, maturityLike: unknown,
-  discLike: unknown, redemptionLike: unknown, basisLike: unknown = 0,
+  settlementLike: unknown,
+  maturityLike: unknown,
+  discLike: unknown,
+  redemptionLike: unknown,
+  basisLike: unknown = 0,
 ) {
   const disc = parseExcelNumber(discLike);
   const redemption = parseExcelNumber(redemptionLike);
@@ -685,23 +729,36 @@ export function excelPricedisc(
 }
 
 export function excelCoupdays(
-  settlementLike: unknown, maturityLike: unknown,
-  frequencyLike: unknown, basisLike: unknown = 0,
+  _settlementLike: unknown,
+  _maturityLike: unknown,
+  frequencyLike: unknown,
+  basisLike: unknown = 0,
 ) {
   const frequency = Math.floor(parseExcelNumber(frequencyLike));
   const basis = Math.floor(Number(basisLike) || 0);
   if (![1, 2, 4].includes(frequency)) throwExcelError(EXCEL_ERROR.num);
-  // Simplified: return days in coupon period based on basis
+  // Coupon-period length comes from the basis convention alone, so the
+  // settlement and maturity dates do not participate.
   switch (basis) {
-    case 0: case 4: return 360 / frequency;
-    case 1: return 365 / frequency; // approximate for actual/actual
-    case 2: return 360 / frequency;
-    case 3: return 365 / frequency;
-    default: throwExcelError(EXCEL_ERROR.num);
+    case 0:
+    case 4:
+      return 360 / frequency;
+    case 1:
+      return 365 / frequency; // approximate for actual/actual
+    case 2:
+      return 360 / frequency;
+    case 3:
+      return 365 / frequency;
+    default:
+      throwExcelError(EXCEL_ERROR.num);
   }
 }
 
-export function excelTbilleq(settlementLike: unknown, maturityLike: unknown, discountLike: unknown) {
+export function excelTbilleq(
+  settlementLike: unknown,
+  maturityLike: unknown,
+  discountLike: unknown,
+) {
   const settlement = parseExcelDate(settlementLike);
   const maturity = parseExcelDate(maturityLike);
   const discount = parseExcelNumber(discountLike);
@@ -710,16 +767,24 @@ export function excelTbilleq(settlementLike: unknown, maturityLike: unknown, dis
   return (365 * discount) / (360 - discount * dsm);
 }
 
-export function excelTbillprice(settlementLike: unknown, maturityLike: unknown, discountLike: unknown) {
+export function excelTbillprice(
+  settlementLike: unknown,
+  maturityLike: unknown,
+  discountLike: unknown,
+) {
   const settlement = parseExcelDate(settlementLike);
   const maturity = parseExcelDate(maturityLike);
   const discount = parseExcelNumber(discountLike);
   const dsm = daysBetween(settlement, maturity);
   if (dsm <= 0 || discount <= 0) throwExcelError(EXCEL_ERROR.num);
-  return 100 * (1 - discount * dsm / 360);
+  return 100 * (1 - (discount * dsm) / 360);
 }
 
-export function excelTbillyield(settlementLike: unknown, maturityLike: unknown, priceLike: unknown) {
+export function excelTbillyield(
+  settlementLike: unknown,
+  maturityLike: unknown,
+  priceLike: unknown,
+) {
   const settlement = parseExcelDate(settlementLike);
   const maturity = parseExcelDate(maturityLike);
   const price = parseExcelNumber(priceLike);

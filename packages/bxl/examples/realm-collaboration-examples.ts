@@ -13,7 +13,7 @@ import type {
   BxlAttachment,
   BxlProfile,
   ReadableSchema,
-} from '../src/index.js';
+} from '../src/index.ts';
 
 export type RealmCollaborationStage =
   | 'admission'
@@ -161,7 +161,8 @@ export const realmCollaborationExamples: RealmCollaborationExample[] = [
     sourceRef: streamHarness,
     profile: 'policy',
     attachment: 'writeAccess',
-    feature: 'Root capture inside any() keeps command input visible in item scope.',
+    feature:
+      'Root capture inside any() keeps command input visible in item scope.',
     expression: `
       . as $root
       | (.state.status == "selling")
@@ -190,7 +191,8 @@ export const realmCollaborationExamples: RealmCollaborationExample[] = [
     sourceRef: streamHarness,
     profile: 'derive',
     attachment: 'formula',
-    feature: 'Immutable array rewrite with map(), item scope, and root capture.',
+    feature:
+      'Immutable array rewrite with map(), item scope, and root capture.',
     expression: `
       . as $root
       | {
@@ -262,7 +264,12 @@ export const realmCollaborationExamples: RealmCollaborationExample[] = [
     `,
     input: {
       eventIdentity: 'event-new',
-      input: { kind: 'chat', audienceId: 'audience-7', text: 'hello', amount: null },
+      input: {
+        kind: 'chat',
+        audienceId: 'audience-7',
+        text: 'hello',
+        amount: null,
+      },
       request: { receivedAt: '2026-07-27T19:01:00Z' },
       state: { overlay: oldOverlay },
     },
@@ -392,7 +399,8 @@ export const realmCollaborationExamples: RealmCollaborationExample[] = [
     sourceRef: streamHarness,
     profile: 'derive',
     attachment: 'formula',
-    feature: 'Modulo wraparound and indexed selection from gateway-supplied time.',
+    feature:
+      'Modulo wraparound and indexed selection from gateway-supplied time.',
     expression: `
       ((.state.questionIndex + 1) % (.state.questions | length)) as $next
       | .state.questions[$next] as $q
@@ -452,7 +460,8 @@ export const realmCollaborationExamples: RealmCollaborationExample[] = [
     sourceRef: `${liveAuctionLab}/auction-stream-plan.mjs`,
     profile: 'policy',
     attachment: 'writeAccess',
-    feature: 'A plain template declaration checks normalized time, bidder readiness, budget, and increment.',
+    feature:
+      'A plain template declaration checks normalized time, bidder readiness, budget, and increment.',
     expression: `
       (.targetUpcomingRound == false)
       and (.state.status == "running")
@@ -486,7 +495,8 @@ export const realmCollaborationExamples: RealmCollaborationExample[] = [
     sourceRef: ledgerLab,
     profile: 'policy',
     attachment: 'writeAccess',
-    feature: 'Corrected root-captured allowlist membership, null fallback, and nullable range validation.',
+    feature:
+      'Corrected root-captured allowlist membership, null fallback, and nullable range validation.',
     expression: `
       . as $root
       | $root.config.enabled
@@ -509,7 +519,11 @@ export const realmCollaborationExamples: RealmCollaborationExample[] = [
       },
       state: { status: 'running' },
       derived: { actorEnabled: true },
-      input: { kind: 'thinking', summary: 'private chain of thought', progress: null },
+      input: {
+        kind: 'thinking',
+        summary: 'private chain of thought',
+        progress: null,
+      },
     },
     expected: false,
   },
@@ -520,7 +534,8 @@ export const realmCollaborationExamples: RealmCollaborationExample[] = [
     sourceRef: ledgerLab,
     profile: 'derive',
     attachment: 'formula',
-    feature: 'A stable reason plus the corrected root-captured allowlist lookup.',
+    feature:
+      'A stable reason plus the corrected root-captured allowlist lookup.',
     expression: `
       . as $root
       | if ($root.config.enabled | not) then "profile-disabled"
@@ -545,7 +560,8 @@ export const realmCollaborationExamples: RealmCollaborationExample[] = [
     sourceRef: ledgerLab,
     profile: 'derive',
     attachment: 'formula',
-    feature: 'Merge a validated tick into the projection without changing holdings.',
+    feature:
+      'Merge a validated tick into the projection without changing holdings.',
     expression: `
       .state + {
         tickCount: (.state.tickCount + 1),
@@ -588,7 +604,8 @@ export const realmCollaborationExamples: RealmCollaborationExample[] = [
     sourceRef: ledgerLab,
     profile: 'derive',
     attachment: 'formula',
-    feature: 'Rejected attempts are projected as durable records, not discarded.',
+    feature:
+      'Rejected attempts are projected as durable records, not discarded.',
     expression: `
       {
         bidSeq: .attemptSequence,
@@ -631,7 +648,8 @@ export const realmCollaborationExamples: RealmCollaborationExample[] = [
     useCase: 'Matrix-bot decision table',
     stage: 'decision-test',
     sourceRef: `${matrixBot}/box-office/decision-table-test.gts`,
-    feature: 'Direct prepareBxlSafe() derives inspectable facts before table matching.',
+    feature:
+      'Direct prepareBxlSafe() derives inspectable facts before table matching.',
     expression: `
       . as $test
       | ((.command.seatId | type) == "string"
@@ -673,7 +691,8 @@ export const realmCollaborationExamples: RealmCollaborationExample[] = [
     useCase: 'Matrix-bot decision table',
     stage: 'decision-test',
     sourceRef: `${matrixBot}/box-office/decision-table-test.gts`,
-    feature: 'A generated def applies editable true/false/any cells to derived facts.',
+    feature:
+      'A generated def applies editable true/false/any cells to derived facts.',
     expression: `
       def _bxl_skill_expectation_matches($input):
         ($input.expected as $expected
@@ -695,12 +714,27 @@ export const realmCollaborationExamples: RealmCollaborationExample[] = [
     input: {
       facts: { saleReady: true, seatOpen: true },
       rules: [
-        { ruleId: 'reject-closed', saleReady: 'false', seatOpen: 'any', enabled: true },
-        { ruleId: 'grant-open', saleReady: 'true', seatOpen: 'true', enabled: true },
+        {
+          ruleId: 'reject-closed',
+          saleReady: 'false',
+          seatOpen: 'any',
+          enabled: true,
+        },
+        {
+          ruleId: 'grant-open',
+          saleReady: 'true',
+          seatOpen: 'true',
+          enabled: true,
+        },
       ],
     },
     expected: [
-      { ruleId: 'grant-open', saleReady: 'true', seatOpen: 'true', enabled: true },
+      {
+        ruleId: 'grant-open',
+        saleReady: 'true',
+        seatOpen: 'true',
+        enabled: true,
+      },
     ],
   },
   {
@@ -712,7 +746,8 @@ export const realmCollaborationExamples: RealmCollaborationExample[] = [
     attachment: 'writeAccess',
     readableSyntax: true,
     schema: policyRuleSchema,
-    feature: 'Card-authored readable condition text evaluates against a schema projection.',
+    feature:
+      'Card-authored readable condition text evaluates against a schema projection.',
     expression: 'Seat.Status = "open"',
     input: { seat: { status: 'open' } },
     expected: true,
@@ -726,7 +761,8 @@ export const realmCollaborationExamples: RealmCollaborationExample[] = [
     attachment: 'writeAccess',
     readableSyntax: true,
     schema: transcriptSchema,
-    feature: 'A persisted readable gate completes only when a matching attachment exists.',
+    feature:
+      'A persisted readable gate completes only when a matching attachment exists.',
     expression: 'present(Attachment[Type = "ticket-request"])',
     input: {
       attachments: [
@@ -743,7 +779,8 @@ export const realmCollaborationExamples: RealmCollaborationExample[] = [
     sourceRef: `${matrixBot}/DecisionTableTest/bxl-skill.json`,
     profile: 'derive',
     attachment: 'formula',
-    feature: 'A tri-state expected value checks recorded policy decisions; the prefix models skill-supplied variables.',
+    feature:
+      'A tri-state expected value checks recorded policy decisions; the prefix models skill-supplied variables.',
     expression: `
       .expected as $expected
       | .actual as $actual
@@ -762,7 +799,8 @@ export const realmCollaborationExamples: RealmCollaborationExample[] = [
     sourceRef: `${matrixBot}/StyledDecisionTest/box-office-sale.json`,
     profile: 'derive',
     attachment: 'formula',
-    feature: 'A recorded condition from the decision audit trail remains executable.',
+    feature:
+      'A recorded condition from the decision audit trail remains executable.',
     expression: `
       .schemaValid
         and .saleStatus == "selling"

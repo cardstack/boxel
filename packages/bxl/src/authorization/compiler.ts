@@ -1,36 +1,33 @@
-import { parseBxlAst } from '../bxl/ast/index.js';
+import { parseBxlAst } from '../bxl/ast/index.ts';
 import {
   parseNativeJq,
   prepareNativeJqExpression,
-} from '../bxl/bridge/native.js';
-import type { ExpressionAst } from '../jqtools/parser/AST.js';
-import { compileAuthorizationCondition } from './conditions.js';
-import { AuthorizationError } from './errors.js';
+} from '../bxl/bridge/native.ts';
+import type { ExpressionAst } from '../jqtools/parser/AST.ts';
+import { compileAuthorizationCondition } from './conditions.ts';
+import { AuthorizationError } from './errors.ts';
 import {
   assertTypeOrRelationName,
   parseSubjectTypeConstraint,
-} from './identifiers.js';
+} from './identifiers.ts';
 import type {
   AuthorizationRelationExpression,
   CompiledAuthorizationGraph,
   CompiledAuthorizationRelation,
   CompiledAuthorizationType,
-} from './ir.js';
+} from './ir.ts';
 import {
   BXL_AUTHORIZATION_IR_SCHEMA,
   type AuthorizationGraphRelation,
   type AuthorizationGraphModel,
   type AuthorizationGraphRelationDefinition,
   type SubjectTypeReference,
-} from './graph-model.js';
+} from './graph-model.ts';
 
 const GRAPH_CALLS = new Set(['direct', 'userset', 'userset_from', 'except']);
 
 function literalString(node: ExpressionAst, path: string): string {
-  if (
-    node.type !== 'str' ||
-    node.interpolated !== false
-  ) {
+  if (node.type !== 'str' || node.interpolated !== false) {
     throw new AuthorizationError(
       'invalid-expression',
       'Authorization graph targets must be literal strings.',
@@ -76,7 +73,10 @@ function lowerAuthorizationExpression(
   node: ExpressionAst,
   path: string,
 ): AuthorizationRelationExpression {
-  if (node.type === 'binary' && (node.operator === 'or' || node.operator === 'and')) {
+  if (
+    node.type === 'binary' &&
+    (node.operator === 'or' || node.operator === 'and')
+  ) {
     const kind = node.operator === 'or' ? 'union' : 'intersection';
     return flatten(kind, [
       lowerAuthorizationExpression(node.left, `${path}.left`),
@@ -86,9 +86,13 @@ function lowerAuthorizationExpression(
 
   if (node.type === 'filter' && filterName(node) === 'direct') {
     if (node.args.length !== 0) {
-      throw new AuthorizationError('invalid-expression', 'direct() accepts no arguments.', {
-        path,
-      });
+      throw new AuthorizationError(
+        'invalid-expression',
+        'direct() accepts no arguments.',
+        {
+          path,
+        },
+      );
     }
     return { kind: 'direct' };
   }
@@ -101,7 +105,10 @@ function lowerAuthorizationExpression(
         { path },
       );
     }
-    return { kind: 'computed', relation: literalString(node.args[0]!, `${path}.args[0]`) };
+    return {
+      kind: 'computed',
+      relation: literalString(node.args[0]!, `${path}.args[0]`),
+    };
   }
 
   if (node.type === 'filter' && filterName(node) === 'userset_from') {
@@ -188,9 +195,10 @@ function lowerAuthorizationExpression(
   };
 }
 
-function normalizedRelation(
-  definition: AuthorizationGraphRelationDefinition,
-): { subjects: readonly SubjectTypeReference[]; rewrite: string } {
+function normalizedRelation(definition: AuthorizationGraphRelationDefinition): {
+  subjects: readonly SubjectTypeReference[];
+  rewrite: string;
+} {
   if (Array.isArray(definition)) {
     return { subjects: definition, rewrite: 'direct()' };
   }
@@ -209,7 +217,10 @@ function compileRelation(
   const path = `types.${typeName}.${assignable ? 'relations' : 'permissions'}.${name}`;
   const normalized = assignable
     ? normalizedRelation(definition as AuthorizationGraphRelationDefinition)
-    : { subjects: [] as readonly SubjectTypeReference[], rewrite: definition as string };
+    : {
+        subjects: [] as readonly SubjectTypeReference[],
+        rewrite: definition as string,
+      };
 
   if (normalized.rewrite.trim() === '') {
     throw new AuthorizationError(
@@ -223,32 +234,48 @@ function compileRelation(
   try {
     program = parseBxlAst(normalized.rewrite, { profile: 'authorization' });
   } catch (cause) {
-    throw new AuthorizationError('invalid-expression', 'Could not parse authorization expression.', {
-      path,
-      cause,
-    });
+    throw new AuthorizationError(
+      'invalid-expression',
+      'Could not parse authorization expression.',
+      {
+        path,
+        cause,
+      },
+    );
   }
-  const profileErrors = program.profileIssues.filter((issue) => issue.severity === 'error');
+  const profileErrors = program.profileIssues.filter(
+    (issue) => issue.severity === 'error',
+  );
   if (profileErrors.length > 0) {
     throw new AuthorizationError(
       'unsafe-expression',
-      profileErrors.map((issue) => `${issue.code}: ${issue.message}`).join('\n'),
+      profileErrors
+        .map((issue) => `${issue.code}: ${issue.message}`)
+        .join('\n'),
       { path },
     );
   }
   if (!program.body) {
-    throw new AuthorizationError('invalid-expression', 'Authorization expression is empty.', {
-      path,
-    });
+    throw new AuthorizationError(
+      'invalid-expression',
+      'Authorization expression is empty.',
+      {
+        path,
+      },
+    );
   }
 
   const nativeProgram = parseNativeJq(program.canonicalSource, {
     readableSyntax: false,
   });
   if (!nativeProgram.ast.expr) {
-    throw new AuthorizationError('invalid-expression', 'Authorization expression is empty.', {
-      path,
-    });
+    throw new AuthorizationError(
+      'invalid-expression',
+      'Authorization expression is empty.',
+      {
+        path,
+      },
+    );
   }
   const expression = lowerAuthorizationExpression(
     nativeProgram.ast.expr,
@@ -283,7 +310,10 @@ function containsKind(
     case 'intersection':
       return expression.children.some((child) => containsKind(child, kind));
     case 'difference':
-      return containsKind(expression.base, kind) || containsKind(expression.subtract, kind);
+      return (
+        containsKind(expression.base, kind) ||
+        containsKind(expression.subtract, kind)
+      );
     default:
       return false;
   }
@@ -337,8 +367,18 @@ function validateExpressionReferences(
       }
       return;
     case 'difference':
-      validateExpressionReferences(model, ownerType, ownerRelation, expression.base);
-      validateExpressionReferences(model, ownerType, ownerRelation, expression.subtract);
+      validateExpressionReferences(
+        model,
+        ownerType,
+        ownerRelation,
+        expression.base,
+      );
+      validateExpressionReferences(
+        model,
+        ownerType,
+        ownerRelation,
+        expression.subtract,
+      );
       return;
     case 'direct':
     case 'predicate':
@@ -349,17 +389,29 @@ function validateExpressionReferences(
 export function compileAuthorizationGraph(
   input: AuthorizationGraphModel,
 ): CompiledAuthorizationGraph {
-  if (!input || typeof input !== 'object' || input.schema !== BXL_AUTHORIZATION_IR_SCHEMA) {
+  if (
+    !input ||
+    typeof input !== 'object' ||
+    input.schema !== BXL_AUTHORIZATION_IR_SCHEMA
+  ) {
     throw new AuthorizationError(
       'invalid-model',
       `Authorization model schema must be ${BXL_AUTHORIZATION_IR_SCHEMA}.`,
       { path: 'schema' },
     );
   }
-  if (!input.types || typeof input.types !== 'object' || Array.isArray(input.types)) {
-    throw new AuthorizationError('invalid-model', 'Authorization model types must be an object.', {
-      path: 'types',
-    });
+  if (
+    !input.types ||
+    typeof input.types !== 'object' ||
+    Array.isArray(input.types)
+  ) {
+    throw new AuthorizationError(
+      'invalid-model',
+      'Authorization model types must be an object.',
+      {
+        path: 'types',
+      },
+    );
   }
 
   const conditions = new Map(
@@ -381,7 +433,9 @@ export function compileAuthorizationGraph(
       assertTypeOrRelationName(name, `types.${typeName}.relations.${name}`);
       relations.set(name, compileRelation(typeName, name, relation, true));
     }
-    for (const [name, permission] of Object.entries(definition.permissions ?? {})) {
+    for (const [name, permission] of Object.entries(
+      definition.permissions ?? {},
+    )) {
       assertTypeOrRelationName(name, `types.${typeName}.permissions.${name}`);
       if (relations.has(name)) {
         throw new AuthorizationError(
@@ -412,14 +466,20 @@ export function compileAuthorizationGraph(
             { path: `types.${type.name}.${relation.name}` },
           );
         }
-        if (subject.relation !== undefined && !subjectType.relations.has(subject.relation)) {
+        if (
+          subject.relation !== undefined &&
+          !subjectType.relations.has(subject.relation)
+        ) {
           throw new AuthorizationError(
             'unknown-relation',
             `Unknown userset relation ${subject.canonical}.`,
             { path: `types.${type.name}.${relation.name}` },
           );
         }
-        if (subject.condition !== undefined && !conditions.has(subject.condition)) {
+        if (
+          subject.condition !== undefined &&
+          !conditions.has(subject.condition)
+        ) {
           throw new AuthorizationError(
             'invalid-model',
             `Unknown authorization condition ${subject.condition}.`,
@@ -427,7 +487,12 @@ export function compileAuthorizationGraph(
           );
         }
       }
-      validateExpressionReferences(compiled, type, relation, relation.expression);
+      validateExpressionReferences(
+        compiled,
+        type,
+        relation,
+        relation.expression,
+      );
     }
   }
 

@@ -5,7 +5,7 @@ import {
   prepareBoxelRuntimeAsync,
   runNativeJqAsync,
   type BoxelRuntimeDefinition,
-} from '../../src/index.js';
+} from '../../src/index.ts';
 
 let syncFailed = false;
 try {
@@ -27,9 +27,13 @@ strictEqual(
   'readable syntax should canonicalize to validator.js function casing',
 );
 
-const explicitLibrary = await runNativeJqAsync('1 + 1', {}, {
-  libraries: ['core', 'validation'],
-});
+const explicitLibrary = await runNativeJqAsync(
+  '1 + 1',
+  {},
+  {
+    libraries: ['core', 'validation'],
+  },
+);
 strictEqual(explicitLibrary.outputs[0], 2);
 
 const definition: BoxelRuntimeDefinition = {
@@ -59,4 +63,6 @@ const result = await prepared.evaluate({
 strictEqual(getBoxelValue(result.state, '.emailValid'), true);
 strictEqual(getBoxelValue(result.state, '.siteValid'), true);
 
-console.log('BXL lazy validator.js functions: async extension loaded on demand');
+console.log(
+  'BXL lazy validator.js functions: async extension loaded on demand',
+);

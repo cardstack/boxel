@@ -1,4 +1,4 @@
-import { EXCEL_ERROR, throwExcelError } from './errors.js';
+import { EXCEL_ERROR, throwExcelError } from './errors.ts';
 
 export function isDefined(value: unknown) {
   return value !== undefined && value !== null;
@@ -33,7 +33,11 @@ export function parseExcelNumber(value: unknown): number {
     return value;
   }
 
-  if (typeof value === 'string' && value !== '' && !Number.isNaN(Number(value))) {
+  if (
+    typeof value === 'string' &&
+    value !== '' &&
+    !Number.isNaN(Number(value))
+  ) {
     return parseFloat(value);
   }
 
@@ -127,7 +131,8 @@ export function averageExcelRange(value: unknown) {
   }
 
   const numbers = flat.filter(
-    (entry): entry is number => typeof entry === 'number' && Number.isFinite(entry),
+    (entry): entry is number =>
+      typeof entry === 'number' && Number.isFinite(entry),
   );
 
   if (numbers.length === 0) {

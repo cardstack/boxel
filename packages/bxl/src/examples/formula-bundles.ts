@@ -1,4 +1,4 @@
-import { runNativeJqAsync } from '../index.js';
+import { runNativeJqAsync } from '../index.ts';
 
 export type FormulaBundleValue =
   | null
@@ -128,7 +128,8 @@ export const realmFormulaBundles: FormulaBundle[] = [
           'ROUND(RepresentativeFareClass.AvgFareUsd * (1 - RepresentativeFareClass.RefundRate) * (1 - RepresentativeFareClass.CommissionPct) + RepresentativeFareClass.AncillaryUsdPerPax, 2)',
         outputKey: 'realizedRevenuePerPax',
         expected: 419.76,
-        illustrates: 'Fare net-of-refunds and commission plus ancillary revenue.',
+        illustrates:
+          'Fare net-of-refunds and commission plus ancillary revenue.',
       },
       {
         id: 'airline-total-airport-fees',
@@ -139,7 +140,8 @@ export const realmFormulaBundles: FormulaBundle[] = [
           'ROUND(Passengers * (OriginAirport.PassengerFacilityChargeUsd + OriginAirport.SecurityFeeUsd + DestinationAirport.PassengerFacilityChargeUsd + DestinationAirport.SecurityFeeUsd) + OriginAirport.LandingFeeUsd + DestinationAirport.LandingFeeUsd + OriginAirport.GateFeeUsdPerTurn + OriginAirport.GroundHandlingUsdPerTurn + OriginAirport.PeakSurchargeUsd + DestinationAirport.GateFeeUsdPerTurn + DestinationAirport.GroundHandlingUsdPerTurn + DestinationAirport.PeakSurchargeUsd, 2)',
         outputKey: 'totalAirportFeesUsd',
         expected: 18576.6,
-        illustrates: 'Nested FieldDef cost rollup with passenger and turn fees.',
+        illustrates:
+          'Nested FieldDef cost rollup with passenger and turn fees.',
       },
       {
         id: 'airline-crew-cost',
@@ -204,7 +206,8 @@ export const realmFormulaBundles: FormulaBundle[] = [
           'ROUND((FuelCostUsd + CrewCostUsd + TotalAirportFeesUsd + MaintenanceCostUsd + OwnershipCostUsd + Aircraft.FixedCostUsdPerFlight) / (Aircraft.Seats * (((Passengers * RealizedRevenuePerPax) + CargoRevenueUsd) / Passengers)), 4)',
         outputKey: 'breakevenLoadFactor',
         expected: 0.7665,
-        illustrates: 'Cost stack divided by seat count and realized revenue per passenger.',
+        illustrates:
+          'Cost stack divided by seat count and realized revenue per passenger.',
       },
       {
         id: 'airline-profit-flag',
@@ -301,7 +304,8 @@ export const realmFormulaBundles: FormulaBundle[] = [
           'ROUND(SQRT(POWER(RadialCutoffFrequency, 2) + POWER(LongitudinalFrequency, 2)) * 100) / 100',
         outputKey: 'combinedAcousticFrequency',
         expected: 1295.94,
-        illustrates: 'Root-sum-square combination of radial and longitudinal modes.',
+        illustrates:
+          'Root-sum-square combination of radial and longitudinal modes.',
       },
       {
         id: 'acoustic-frequency-ratio',
@@ -388,7 +392,8 @@ export const realmFormulaBundles: FormulaBundle[] = [
           'ROUND(DynamicStress / Segment.AllowableFatigueStress * 1000) / 1000',
         outputKey: 'fatigueUtilization',
         expected: 2.576,
-        illustrates: 'Dynamic stress as a multiple of allowable fatigue stress.',
+        illustrates:
+          'Dynamic stress as a multiple of allowable fatigue stress.',
       },
       {
         id: 'acoustic-fatigue-flag',
@@ -647,7 +652,8 @@ export const realmFormulaBundles: FormulaBundle[] = [
         name: 'Incurred loss total',
         sourceFile: 'Tracking/policy.gts',
         sourceField: 'Policy.incurredLossTotal',
-        expression: 'ROUND((PaidClaimsTotal + ReservedClaimsTotal) * 100) / 100',
+        expression:
+          'ROUND((PaidClaimsTotal + ReservedClaimsTotal) * 100) / 100',
         outputKey: 'incurredLossTotal',
         expected: 830,
         illustrates: 'Paid plus reserve rollup.',
@@ -657,8 +663,7 @@ export const realmFormulaBundles: FormulaBundle[] = [
         name: 'Loss ratio',
         sourceFile: 'Tracking/policy.gts',
         sourceField: 'Policy.lossRatio',
-        expression:
-          'ROUND(IncurredLossTotal / AnnualPremium * 10000) / 10000',
+        expression: 'ROUND(IncurredLossTotal / AnnualPremium * 10000) / 10000',
         outputKey: 'lossRatio',
         expected: 0.456,
         illustrates: 'Policy incurred loss divided by annual premium.',
@@ -727,7 +732,8 @@ export const realmFormulaBundles: FormulaBundle[] = [
           'ROUND((Claims[#1].PaidAmount + Claims[#1].ReserveAmount) * 100) / 100',
         outputKey: 'firstClaimIncurredAmount',
         expected: 350,
-        illustrates: 'Claim-level incurred amount using BXL one-based row access.',
+        illustrates:
+          'Claim-level incurred amount using BXL one-based row access.',
       },
       {
         id: 'claim-tail-factor',

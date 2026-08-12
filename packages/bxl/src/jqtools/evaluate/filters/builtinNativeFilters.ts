@@ -15,28 +15,29 @@ import {
   transformRegExpMatch,
   Type,
   typeOf,
-} from '../utils/utils.js';
-import { NativeFilter, wrapBareNativeFilters } from './lib/nativeFilter.js';
-import { notImplementedError } from '../evaluateErrors.js';
-import { compare } from '../compare.js';
-import { JqArgumentError, JqEvaluateError } from '../../errors.js';
-import { getPath } from '../utils/getPath.js';
-import { setPath } from '../utils/setPath.js';
-import { builtinJqFilters } from './builtinJqFilters.js';
-import { applyNamedFormat } from '../applyFormat.js';
+} from '../utils/utils.ts';
+import type { NativeFilter } from './lib/nativeFilter.ts';
+import { wrapBareNativeFilters } from './lib/nativeFilter.ts';
+import { notImplementedError } from '../evaluateErrors.ts';
+import { compare } from '../compare.ts';
+import { JqArgumentError, JqEvaluateError } from '../../errors.ts';
+import { getPath } from '../utils/getPath.ts';
+import { setPath } from '../utils/setPath.ts';
+import { builtinJqFilters } from './builtinJqFilters.ts';
+import { applyNamedFormat } from '../applyFormat.ts';
 import {
   gmtime as gmtimeValue,
   localtime as localtimeValue,
   mktime as mktimeValue,
   strftime as strftimeValue,
   strptime as strptimeValue,
-} from '../dateTime.js';
+} from '../dateTime.ts';
 import {
   emitDebugMessage,
   emitStderrChunk,
   halt,
   snapshotForDiagnostics,
-} from '../runtimeState.js';
+} from '../runtimeState.ts';
 
 const MIN_NORMAL = 2.2250738585072014e-308;
 const PUBLIC_SANDBOX_BLOCKED_BUILTINS = new Set(['env/0']);
@@ -51,10 +52,7 @@ function containsValue(haystack: unknown, needle: unknown): boolean {
       return Object.entries(needle as Record<string, unknown>).every(
         ([key, value]) =>
           Object.prototype.hasOwnProperty.call(haystack, key) &&
-          containsValue(
-            (haystack as Record<string, unknown>)[key],
-            value,
-          ),
+          containsValue((haystack as Record<string, unknown>)[key], value),
       );
     case Type.array:
       return (needle as unknown[]).every((needleItem) =>
@@ -65,16 +63,17 @@ function containsValue(haystack: unknown, needle: unknown): boolean {
     case Type.string: {
       const haystackString = haystack as string;
       const needleString = needle as string;
-      return (
-        needleString.length === 0 || haystackString.includes(needleString)
-      );
+      return needleString.length === 0 || haystackString.includes(needleString);
     }
     default:
       return compare(haystack, needle) === 0;
   }
 }
 
-function trimStringValue(input: unknown, mode: 'both' | 'left' | 'right'): string {
+function trimStringValue(
+  input: unknown,
+  mode: 'both' | 'left' | 'right',
+): string {
   if (typeOf(input) !== Type.string) {
     throw new JqEvaluateError('trim input must be a string');
   }
@@ -106,10 +105,10 @@ function publicBuiltinNames(): string[] {
 function rawCompactString(value: unknown): string {
   return typeOf(value) === Type.string
     ? (value as string)
-    : JSON.stringify(snapshotForDiagnostics(value)) ?? 'null';
+    : (JSON.stringify(snapshotForDiagnostics(value)) ?? 'null');
 }
 
-function applyUnaryMath(input: unknown, fnName: string, fn: (value: number) => number) {
+function applyUnaryMath(input: unknown, fn: (value: number) => number) {
   const number = assertNumber(input);
   const result = fn(number);
   if (Number.isNaN(result)) {
@@ -156,13 +155,21 @@ function ieeeNextafter(x: number, y: number): number {
   if (x === 0) return y > 0 ? Number.MIN_VALUE : -Number.MIN_VALUE;
   let { hi, lo } = f64ToBits(x);
   // Increase magnitude when (x < y) === (x > 0); else decrease.
-  const increasing = (x < y) === (x > 0);
+  const increasing = x < y === x > 0;
   if (increasing) {
-    if (lo === 0xffffffff) { hi = (hi + 1) >>> 0; lo = 0; }
-    else { lo = (lo + 1) >>> 0; }
+    if (lo === 0xffffffff) {
+      hi = (hi + 1) >>> 0;
+      lo = 0;
+    } else {
+      lo = (lo + 1) >>> 0;
+    }
   } else {
-    if (lo === 0) { hi = (hi - 1) >>> 0; lo = 0xffffffff; }
-    else { lo = (lo - 1) >>> 0; }
+    if (lo === 0) {
+      hi = (hi - 1) >>> 0;
+      lo = 0xffffffff;
+    } else {
+      lo = (lo - 1) >>> 0;
+    }
   }
   return bitsToF64(hi, lo);
 }
@@ -176,7 +183,7 @@ function roundHalfToEven(x: number): number {
   if (absFrac < 0.5) return truncated;
   if (absFrac > 0.5) return truncated + Math.sign(frac);
   // Tie: round to even.
-  return (truncated % 2 === 0) ? truncated : truncated + Math.sign(frac);
+  return truncated % 2 === 0 ? truncated : truncated + Math.sign(frac);
 }
 
 /** IEEE remainder: x - n*y where n = round-half-to-even(x/y). */
@@ -193,7 +200,7 @@ function frexp(x: number): [number, number] {
   const rawExp = (hi >>> 20) & 0x7ff;
   if (rawExp === 0) {
     // Subnormal — normalize via scaling.
-    const scaled = x * (2 ** 54);
+    const scaled = x * 2 ** 54;
     const [m, e] = frexp(scaled);
     return [m, e - 54];
   }
@@ -214,29 +221,24 @@ function logb(x: number): number {
 function erfApprox(x: number): number {
   const sign = Math.sign(x);
   const ax = Math.abs(x);
-  const a1 =  0.254829592;
+  const a1 = 0.254829592;
   const a2 = -0.284496736;
-  const a3 =  1.421413741;
+  const a3 = 1.421413741;
   const a4 = -1.453152027;
-  const a5 =  1.061405429;
-  const p  =  0.3275911;
+  const a5 = 1.061405429;
+  const p = 0.3275911;
   const t = 1 / (1 + p * ax);
-  const y = 1 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-ax * ax);
+  const y =
+    1 - ((((a5 * t + a4) * t + a3) * t + a2) * t + a1) * t * Math.exp(-ax * ax);
   return sign * y;
 }
 
 // ── Lanczos approximation for Γ(x) and ln Γ(x). ─────────────────────
 const LANCZOS_G = 7;
 const LANCZOS_C = [
-  0.99999999999980993,
-  676.5203681218851,
-  -1259.1392167224028,
-  771.32342877765313,
-  -176.61502916214059,
-  12.507343278686905,
-  -0.13857109526572012,
-  9.9843695780195716e-6,
-  1.5056327351493116e-7,
+  0.99999999999980993, 676.5203681218851, -1259.1392167224028,
+  771.32342877765313, -176.61502916214059, 12.507343278686905,
+  -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7,
 ];
 
 function gammaApprox(x: number): number {
@@ -257,7 +259,9 @@ function gammaApprox(x: number): number {
 function lgammaApprox(x: number): number {
   if (Number.isNaN(x)) return Number.NaN;
   if (x < 0.5) {
-    return Math.log(Math.abs(Math.PI / Math.sin(Math.PI * x))) - lgammaApprox(1 - x);
+    return (
+      Math.log(Math.abs(Math.PI / Math.sin(Math.PI * x))) - lgammaApprox(1 - x)
+    );
   }
   x -= 1;
   let a = LANCZOS_C[0];
@@ -265,7 +269,9 @@ function lgammaApprox(x: number): number {
   for (let i = 1; i < LANCZOS_C.length; i++) {
     a += LANCZOS_C[i] / (x + i);
   }
-  return 0.5 * Math.log(2 * Math.PI) + (x + 0.5) * Math.log(t) - t + Math.log(a);
+  return (
+    0.5 * Math.log(2 * Math.PI) + (x + 0.5) * Math.log(t) - t + Math.log(a)
+  );
 }
 
 // ── Bessel J0, J1, Y0, Y1 (Numerical Recipes / Abramowitz). ─────────
@@ -276,31 +282,34 @@ function besselJ0(x: number): number {
     const y = x * x;
     const num =
       57568490574.0 +
-      y * (-13362590354.0 +
-        y * (651619640.7 +
-          y * (-11214424.18 +
-            y * (77392.33017 + y * -184.9052456))));
+      y *
+        (-13362590354.0 +
+          y *
+            (651619640.7 +
+              y * (-11214424.18 + y * (77392.33017 + y * -184.9052456))));
     const den =
       57568490411.0 +
-      y * (1029532985.0 +
-        y * (9494680.718 +
-          y * (59272.64853 +
-            y * (267.8532712 + y * 1.0))));
+      y *
+        (1029532985.0 +
+          y * (9494680.718 + y * (59272.64853 + y * (267.8532712 + y * 1.0))));
     return num / den;
   }
   const z = 8 / ax;
   const y = z * z;
   const xx = ax - 0.785398164;
-  const p = 1.0 +
-    y * (-0.1098628627e-2 +
-      y * (0.2734510407e-4 +
-        y * (-0.2073370639e-5 + y * 0.2093887211e-6)));
-  const q = -0.1562499995e-1 +
-    y * (0.1430488765e-3 +
-      y * (-0.6911147651e-5 +
-        y * (0.7621095161e-6 + y * -0.934935152e-7)));
-  return Math.sqrt(0.636619772 / ax) *
-    (Math.cos(xx) * p - z * Math.sin(xx) * q);
+  const p =
+    1.0 +
+    y *
+      (-0.1098628627e-2 +
+        y * (0.2734510407e-4 + y * (-0.2073370639e-5 + y * 0.2093887211e-6)));
+  const q =
+    -0.1562499995e-1 +
+    y *
+      (0.1430488765e-3 +
+        y * (-0.6911147651e-5 + y * (0.7621095161e-6 + y * -0.934935152e-7)));
+  return (
+    Math.sqrt(0.636619772 / ax) * (Math.cos(xx) * p - z * Math.sin(xx) * q)
+  );
 }
 
 function besselJ1(x: number): number {
@@ -308,31 +317,36 @@ function besselJ1(x: number): number {
   const ax = Math.abs(x);
   if (ax < 8) {
     const y = x * x;
-    const num = x * (72362614232.0 +
-      y * (-7895059235.0 +
-        y * (242396853.1 +
-          y * (-2972611.439 +
-            y * (15704.48260 + y * -30.16036606)))));
-    const den = 144725228442.0 +
-      y * (2300535178.0 +
-        y * (18583304.74 +
-          y * (99447.43394 +
-            y * (376.9991397 + y * 1.0))));
+    const num =
+      x *
+      (72362614232.0 +
+        y *
+          (-7895059235.0 +
+            y *
+              (242396853.1 +
+                y * (-2972611.439 + y * (15704.4826 + y * -30.16036606)))));
+    const den =
+      144725228442.0 +
+      y *
+        (2300535178.0 +
+          y * (18583304.74 + y * (99447.43394 + y * (376.9991397 + y * 1.0))));
     return num / den;
   }
   const z = 8 / ax;
   const y = z * z;
   const xx = ax - 2.356194491;
-  const p = 1.0 +
-    y * (0.183105e-2 +
-      y * (-0.3516396496e-4 +
-        y * (0.2457520174e-5 + y * -0.240337019e-6)));
-  const q = 0.04687499995 +
-    y * (-0.2002690873e-3 +
-      y * (0.8449199096e-5 +
-        y * (-0.88228987e-6 + y * 0.105787412e-6)));
-  let result = Math.sqrt(0.636619772 / ax) *
-    (Math.cos(xx) * p - z * Math.sin(xx) * q);
+  const p =
+    1.0 +
+    y *
+      (0.183105e-2 +
+        y * (-0.3516396496e-4 + y * (0.2457520174e-5 + y * -0.240337019e-6)));
+  const q =
+    0.04687499995 +
+    y *
+      (-0.2002690873e-3 +
+        y * (0.8449199096e-5 + y * (-0.88228987e-6 + y * 0.105787412e-6)));
+  let result =
+    Math.sqrt(0.636619772 / ax) * (Math.cos(xx) * p - z * Math.sin(xx) * q);
   if (x < 0) result = -result;
   return result;
 }
@@ -341,63 +355,74 @@ function besselY0(x: number): number {
   if (x <= 0) return Number.NaN; // Y is undefined for x <= 0.
   if (x < 8) {
     const y = x * x;
-    const num = -2957821389.0 +
-      y * (7062834065.0 +
-        y * (-512359803.6 +
-          y * (10879881.29 +
-            y * (-86327.92757 + y * 228.4622733))));
-    const den = 40076544269.0 +
-      y * (745249964.8 +
-        y * (7189466.438 +
-          y * (47447.26470 +
-            y * (226.1030244 + y * 1.0))));
+    const num =
+      -2957821389.0 +
+      y *
+        (7062834065.0 +
+          y *
+            (-512359803.6 +
+              y * (10879881.29 + y * (-86327.92757 + y * 228.4622733))));
+    const den =
+      40076544269.0 +
+      y *
+        (745249964.8 +
+          y * (7189466.438 + y * (47447.2647 + y * (226.1030244 + y * 1.0))));
     return num / den + 0.636619772 * besselJ0(x) * Math.log(x);
   }
   const z = 8 / x;
   const y = z * z;
   const xx = x - 0.785398164;
-  const p = 1.0 +
-    y * (-0.1098628627e-2 +
-      y * (0.2734510407e-4 +
-        y * (-0.2073370639e-5 + y * 0.2093887211e-6)));
-  const q = -0.1562499995e-1 +
-    y * (0.1430488765e-3 +
-      y * (-0.6911147651e-5 +
-        y * (0.7621095161e-6 + y * -0.934935152e-7)));
-  return Math.sqrt(0.636619772 / x) *
-    (Math.sin(xx) * p + z * Math.cos(xx) * q);
+  const p =
+    1.0 +
+    y *
+      (-0.1098628627e-2 +
+        y * (0.2734510407e-4 + y * (-0.2073370639e-5 + y * 0.2093887211e-6)));
+  const q =
+    -0.1562499995e-1 +
+    y *
+      (0.1430488765e-3 +
+        y * (-0.6911147651e-5 + y * (0.7621095161e-6 + y * -0.934935152e-7)));
+  return Math.sqrt(0.636619772 / x) * (Math.sin(xx) * p + z * Math.cos(xx) * q);
 }
 
 function besselY1(x: number): number {
   if (x <= 0) return Number.NaN;
   if (x < 8) {
     const y = x * x;
-    const num = x * (-4.900604943e13 +
-      y * (1.275274390e13 +
-        y * (-5.153438139e11 +
-          y * (7.349264551e9 +
-            y * (-4.237922726e7 + y * 8.511937935e4)))));
-    const den = 2.499580570e14 +
-      y * (4.244419664e12 +
-        y * (3.733650367e10 +
-          y * (2.245904002e8 +
-            y * (1.020426050e6 +
-              y * (3.549632885e3 + y)))));
+    const num =
+      x *
+      (-4.900604943e13 +
+        y *
+          (1.27527439e13 +
+            y *
+              (-5.153438139e11 +
+                y *
+                  (7.349264551e9 + y * (-4.237922726e7 + y * 8.511937935e4)))));
+    const den =
+      2.49958057e14 +
+      y *
+        (4.244419664e12 +
+          y *
+            (3.733650367e10 +
+              y *
+                (2.245904002e8 +
+                  y * (1.02042605e6 + y * (3.549632885e3 + y)))));
     return num / den + 0.636619772 * (besselJ1(x) * Math.log(x) - 1 / x);
   }
   const z = 8 / x;
   const y = z * z;
   const xx = x - 2.356194491;
-  const p = 1.0 +
-    y * (0.183105e-2 +
-      y * (-0.3516396496e-4 +
-        y * (0.2457520174e-5 + y * -0.240337019e-6)));
-  const q = 0.04687499995 +
-    y * (-0.2002690873e-3 +
-      y * (0.8449199096e-5 +
-        y * (-0.88228987e-6 + y * 0.105787412e-6)));
-  return Math.sqrt(0.636619772 / x) *
-    (Math.sin(xx) * p + z * Math.cos(xx) * q);
+  const p =
+    1.0 +
+    y *
+      (0.183105e-2 +
+        y * (-0.3516396496e-4 + y * (0.2457520174e-5 + y * -0.240337019e-6)));
+  const q =
+    0.04687499995 +
+    y *
+      (-0.2002690873e-3 +
+        y * (0.8449199096e-5 + y * (-0.88228987e-6 + y * 0.105787412e-6)));
+  return Math.sqrt(0.636619772 / x) * (Math.sin(xx) * p + z * Math.cos(xx) * q);
 }
 
 /** Bessel J of integer order n via stable recurrence (Miller's algorithm). */
@@ -417,7 +442,7 @@ function besselJn(n: number, x: number): number {
       bjm = bj;
       bj = bjp;
     }
-    return x < 0 && (n & 1) ? -bj : bj;
+    return x < 0 && n & 1 ? -bj : bj;
   } else {
     const m = 2 * Math.floor((n + Math.floor(Math.sqrt(40 * n))) / 2);
     let jsum = 0;
@@ -441,7 +466,7 @@ function besselJn(n: number, x: number): number {
     }
     sum = 2 * sum - bj;
     ans /= sum;
-    return x < 0 && (n & 1) ? -ans : ans;
+    return x < 0 && n & 1 ? -ans : ans;
   }
 }
 
@@ -465,11 +490,20 @@ function besselYn(n: number, x: number): number {
 /** True if value is a scalar (null, boolean, number, string). */
 function isScalar(value: unknown): boolean {
   const t = typeOf(value);
-  return t === Type.null || t === Type.boolean || t === Type.number || t === Type.string;
+  return (
+    t === Type.null ||
+    t === Type.boolean ||
+    t === Type.number ||
+    t === Type.string
+  );
 }
 
+/* eslint-disable require-yield -- Every entry in this table is a generator so
+   the evaluator can drive them all through one protocol. Filters whose only
+   outcome is a signal — raising a jq error, or halting the program — reach the
+   throw before any yield, and still have to be generators to sit in the table. */
 export const builtinNativeFilters: Record<string, NativeFilter> = {
-  *'path/1'(input, value) {
+  *'path/1'(_input, value) {
     yield createItem(value.path);
   },
   ...wrapBareNativeFilters({
@@ -499,7 +533,7 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
       input: string,
       regex: string,
       flags: string | null,
-      returnOnlyBoolean: boolean
+      returnOnlyBoolean: boolean,
     ) {
       const str = assertString(input);
       const r = new RegExp(regex, (flags ?? '') + 'd');
@@ -575,19 +609,19 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
     },
 
     *'acos/0'(input: unknown) {
-      yield applyUnaryMath(input, 'acos', Math.acos);
+      yield applyUnaryMath(input, Math.acos);
     },
     *'acosh/0'(input: unknown) {
-      yield applyUnaryMath(input, 'acosh', Math.acosh);
+      yield applyUnaryMath(input, Math.acosh);
     },
     *'asin/0'(input: unknown) {
-      yield applyUnaryMath(input, 'asin', Math.asin);
+      yield applyUnaryMath(input, Math.asin);
     },
     *'asinh/0'(input: unknown) {
-      yield applyUnaryMath(input, 'asinh', Math.asinh);
+      yield applyUnaryMath(input, Math.asinh);
     },
     *'atan/0'(input: unknown) {
-      yield applyUnaryMath(input, 'atan', Math.atan);
+      yield applyUnaryMath(input, Math.atan);
     },
     *'atan2/1'(input: unknown, value: unknown) {
       yield applyBinaryMath(input, value, Math.atan2);
@@ -604,7 +638,7 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
       yield Math.atan2(yv, xv);
     },
     *'atanh/0'(input: unknown) {
-      yield applyUnaryMath(input, 'atanh', Math.atanh);
+      yield applyUnaryMath(input, Math.atanh);
     },
     *'bsearch/1'(input: unknown, target: unknown) {
       if (typeOf(input) !== Type.array) {
@@ -635,7 +669,7 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
       yield publicBuiltinNames();
     },
     *'cbrt/0'(input: unknown) {
-      yield applyUnaryMath(input, 'cbrt', Math.cbrt);
+      yield applyUnaryMath(input, Math.cbrt);
     },
     *'ceil/0'(input: unknown) {
       yield Math.ceil(assertNumber(input));
@@ -655,13 +689,15 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
       yield sign === 0 ? magnitude : Math.sign(sign) * magnitude;
     },
     *'cos/0'(input: unknown) {
-      yield applyUnaryMath(input, 'cos', Math.cos);
+      yield applyUnaryMath(input, Math.cos);
     },
     *'cosh/0'(input: unknown) {
-      yield applyUnaryMath(input, 'cosh', Math.cosh);
+      yield applyUnaryMath(input, Math.cosh);
     },
     *'debug/0'(input: unknown) {
-      emitDebugMessage(JSON.stringify(['DEBUG:', snapshotForDiagnostics(input)]));
+      emitDebugMessage(
+        JSON.stringify(['DEBUG:', snapshotForDiagnostics(input)]),
+      );
       yield input;
     },
     *'delpaths/1'(input: unknown, paths: unknown) {
@@ -682,7 +718,9 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
       yield i.endsWith(s);
     },
     *'env/0'() {
-      throw new JqEvaluateError('env is not available in the public BXL sandbox');
+      throw new JqEvaluateError(
+        'env is not available in the public BXL sandbox',
+      );
     },
     *'erf/0'(input: unknown) {
       yield erfApprox(assertNumber(input));
@@ -694,13 +732,13 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
       throw new JqEvaluateError(toString(input));
     },
     *'exp/0'(input: unknown) {
-      yield applyUnaryMath(input, 'exp', Math.exp);
+      yield applyUnaryMath(input, Math.exp);
     },
     *'exp10/0'(input: unknown) {
-      yield applyUnaryMath(input, 'exp10', (value) => 10 ** value);
+      yield applyUnaryMath(input, (value) => 10 ** value);
     },
     *'exp2/0'(input: unknown) {
-      yield applyUnaryMath(input, 'exp2', (value) => 2 ** value);
+      yield applyUnaryMath(input, (value) => 2 ** value);
     },
     *'explode/0'(input: unknown) {
       yield Array.from(assertString(input)).map((char) => char.codePointAt(0)!);
@@ -871,12 +909,10 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
       yield typeOf(input) === Type.number && Number.isNaN(input as number);
     },
     *'isnormal/0'(input: unknown) {
-      yield (
-        typeOf(input) === Type.number &&
+      yield typeOf(input) === Type.number &&
         Number.isFinite(input as number) &&
         input !== 0 &&
-        Math.abs(input as number) >= MIN_NORMAL
-      );
+        Math.abs(input as number) >= MIN_NORMAL;
     },
     *'j0/0'(input: unknown) {
       yield besselJ0(assertNumber(input));
@@ -935,16 +971,16 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
       yield localtimeValue(input as number);
     },
     *'log/0'(input: unknown) {
-      yield applyUnaryMath(input, 'log', Math.log);
+      yield applyUnaryMath(input, Math.log);
     },
     *'log10/0'(input: unknown) {
-      yield applyUnaryMath(input, 'log10', Math.log10);
+      yield applyUnaryMath(input, Math.log10);
     },
     *'log1p/0'(input: unknown) {
-      yield applyUnaryMath(input, 'log1p', Math.log1p);
+      yield applyUnaryMath(input, Math.log1p);
     },
     *'log2/0'(input: unknown) {
-      yield applyUnaryMath(input, 'log2', Math.log2);
+      yield applyUnaryMath(input, Math.log2);
     },
     *'logb/0'(input: unknown) {
       yield logb(assertNumber(input));
@@ -1029,7 +1065,7 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
     *'pow10/0'(input: unknown) {
       yield Math.pow(10, assertNumber(input));
     },
-    *'range/2'(input: unknown, from: number, upto: number) {
+    *'range/2'(_input: unknown, from: number, upto: number) {
       yield* range(from, upto);
     },
     *'remainder/2'(_input: unknown, x: unknown, y: unknown) {
@@ -1048,7 +1084,9 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
     *'rtrimstr/1'(input: unknown, right: unknown) {
       const str = assertString(input);
       const suffix = assertString(right);
-      yield str.endsWith(suffix) ? str.slice(0, str.length - suffix.length) : str;
+      yield str.endsWith(suffix)
+        ? str.slice(0, str.length - suffix.length)
+        : str;
     },
     *'scalars_or_empty/0'(input: unknown) {
       // Yield input if it's null/boolean/number/string, otherwise no output.
@@ -1072,10 +1110,10 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
       yield x / Math.pow(2, logb(x));
     },
     *'sin/0'(input: unknown) {
-      yield applyUnaryMath(input, 'sin', Math.sin);
+      yield applyUnaryMath(input, Math.sin);
     },
     *'sinh/0'(input: unknown) {
-      yield applyUnaryMath(input, 'sinh', Math.sinh);
+      yield applyUnaryMath(input, Math.sinh);
     },
     *'sort/0'(input: any[]) {
       yield input.sort(compare);
@@ -1084,7 +1122,7 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
       yield assertString(input).split(assertString(split));
     },
     *'sqrt/0'(input: unknown) {
-      yield applyUnaryMath(input, 'sqrt', Math.sqrt);
+      yield applyUnaryMath(input, Math.sqrt);
     },
     *'startswith/1'(input: unknown, str: unknown) {
       const i = assertString(input);
@@ -1101,12 +1139,16 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
         throw new JqEvaluateError('strflocaltime/1 requires a string format');
       }
       if (typeOf(input) !== Type.number && typeOf(input) !== Type.array) {
-        throw new JqEvaluateError('strflocaltime/1 requires parsed datetime inputs');
+        throw new JqEvaluateError(
+          'strflocaltime/1 requires parsed datetime inputs',
+        );
       }
       try {
         yield strftimeValue(input, format as string, 'local');
       } catch (_error) {
-        throw new JqEvaluateError('strflocaltime/1 requires parsed datetime inputs');
+        throw new JqEvaluateError(
+          'strflocaltime/1 requires parsed datetime inputs',
+        );
       }
     },
     *'strftime/1'(input: unknown, format: unknown) {
@@ -1124,7 +1166,9 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
     },
     *'strptime/1'(input: unknown, format: unknown) {
       if (typeOf(input) !== Type.string || typeOf(format) !== Type.string) {
-        throw new JqEvaluateError('strptime/1 requires string inputs and arguments');
+        throw new JqEvaluateError(
+          'strptime/1 requires string inputs and arguments',
+        );
       }
       yield strptimeValue(input as string, format as string);
     },
@@ -1166,10 +1210,10 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
       yield trimStringValue(input, 'both');
     },
     *'tan/0'(input: unknown) {
-      yield applyUnaryMath(input, 'tan', Math.tan);
+      yield applyUnaryMath(input, Math.tan);
     },
     *'tanh/0'(input: unknown) {
-      yield applyUnaryMath(input, 'tanh', Math.tanh);
+      yield applyUnaryMath(input, Math.tanh);
     },
     *'tgamma/0'(input: unknown) {
       // True Γ — same as `gamma/0` in BXL.
@@ -1180,15 +1224,17 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
       switch (type) {
         case Type.string: {
           const parsedNumber = Number(input);
-          if(isNaN(parsedNumber)) {
-            throw Error(`${type} (${toString(input)}) cannot be parsed as number`);
+          if (isNaN(parsedNumber)) {
+            throw Error(
+              `${type} (${toString(input)}) cannot be parsed as number`,
+            );
           }
-          if(!isFinite(parsedNumber)) {
+          if (!isFinite(parsedNumber)) {
             yield parsedNumber > 0 ? Number.MAX_VALUE : -1 * Number.MAX_VALUE;
             break;
           }
           yield parsedNumber;
-        break;
+          break;
         }
         case Type.number:
           yield input;
@@ -1198,7 +1244,9 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
         case Type.null:
         case Type.boolean:
         default:
-          throw Error(`${type} (${toString(input)}) cannot be parsed as number`);
+          throw Error(
+            `${type} (${toString(input)}) cannot be parsed as number`,
+          );
       }
     },
     *'tostring/0'(input: unknown) {
@@ -1219,7 +1267,10 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
       const sorted = [...(input as unknown[])].sort(compare);
       const output: unknown[] = [];
       for (const value of sorted) {
-        if (output.length === 0 || compare(output[output.length - 1], value) !== 0) {
+        if (
+          output.length === 0 ||
+          compare(output[output.length - 1], value) !== 0
+        ) {
           output.push(value);
         }
       }

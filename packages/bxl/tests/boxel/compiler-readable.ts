@@ -11,12 +11,12 @@
 //   §16  — mixed-syntax (PascalCase head + jq nested, vice versa)
 
 import { strictEqual } from 'node:assert';
-import { compileBxl, evaluateBxl } from '../../src/index.js';
+import { compileBxl, evaluateBxl } from '../../src/index.ts';
 import {
   baselinePatient,
   fuzzShellRecord,
   highSeverityPatient,
-} from './fixtures/hospital.js';
+} from './fixtures/hospital.ts';
 
 let pass = 0;
 let fail = 0;
@@ -72,10 +72,7 @@ check('§12 quoted string literal stays a string (not camelCased)', () => {
   // Realm regression: `Category = "Hardware"` used to compile to
   // `.category == .hardware` because the fallback fired on the RHS.
   // The token-type guard now skips quoted strings.
-  strictEqual(
-    compiledNoSchema('Severity == "High"'),
-    '.severity == "High"',
-  );
+  strictEqual(compiledNoSchema('Severity == "High"'), '.severity == "High"');
 });
 
 check('§12 fallback resolves bare ident in a comparison', () => {

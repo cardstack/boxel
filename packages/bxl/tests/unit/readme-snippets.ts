@@ -17,7 +17,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { bxlToJqExpression } from '../../src/index.js';
+import { bxlToJqExpression } from '../../src/index.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const readmePath = join(__dirname, '../../README.md');
@@ -25,9 +25,12 @@ const readme = readFileSync(readmePath, 'utf8');
 
 // Strips leading display labels like `BXL:`, `BXL (jq, plus SUM from the Excel layer):`,
 // `jq:`, etc. The language token is followed by optional parenthesised qualifier and `:`.
-const DISPLAY_PREFIX = /^(BXL|jq|XQuery|Schematron|JSONata|CEL|JS|XPath|CSS)(\s*\([^)]*\))?\s*:\s*/;
+const DISPLAY_PREFIX =
+  /^(BXL|jq|XQuery|Schematron|JSONata|CEL|JS|XPath|CSS)(\s*\([^)]*\))?\s*:\s*/;
 
-function extractBxlBlocks(md: string): { index: number; body: string; firstLine: number }[] {
+function extractBxlBlocks(
+  md: string,
+): { index: number; body: string; firstLine: number }[] {
   const lines = md.split('\n');
   const blocks: { index: number; body: string; firstLine: number }[] = [];
   let inBlock = false;
@@ -42,7 +45,11 @@ function extractBxlBlocks(md: string): { index: number; body: string; firstLine:
       continue;
     }
     if (inBlock && line === '```') {
-      blocks.push({ index: blocks.length, body: buf.join('\n'), firstLine: start + 1 });
+      blocks.push({
+        index: blocks.length,
+        body: buf.join('\n'),
+        firstLine: start + 1,
+      });
       inBlock = false;
       continue;
     }
@@ -83,7 +90,10 @@ for (const b of blocks) {
   } catch (wholeErr) {
     // Fallback: try line-by-line, skipping blank lines. Useful for blocks
     // that display several independent one-liners.
-    const lines = cleaned.split('\n').map((s) => s.trim()).filter(Boolean);
+    const lines = cleaned
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean);
     if (lines.length <= 1) {
       console.log(`FAIL ${label}: ${(wholeErr as Error).message}`);
       failed++;
@@ -95,7 +105,9 @@ for (const b of blocks) {
         bxlToJqExpression(line);
       } catch (lineErr) {
         anyFail = true;
-        console.log(`FAIL ${label} line "${line.slice(0, 60)}": ${(lineErr as Error).message}`);
+        console.log(
+          `FAIL ${label} line "${line.slice(0, 60)}": ${(lineErr as Error).message}`,
+        );
       }
     }
     if (!anyFail) {
@@ -108,5 +120,7 @@ for (const b of blocks) {
   else failed++;
 }
 
-console.log(`README BXL snippets: ${blocks.length} blocks, ${checked} expressions parsed, ${failed} failing`);
+console.log(
+  `README BXL snippets: ${blocks.length} blocks, ${checked} expressions parsed, ${failed} failing`,
+);
 process.exit(failed > 0 ? 1 : 0);

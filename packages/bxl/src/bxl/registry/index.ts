@@ -12,14 +12,14 @@
 import type {
   BuiltinLibrary,
   ResolvedBuiltinRegistry,
-} from '../../jqtools/evaluate/filters/registry.js';
+} from '../../jqtools/evaluate/filters/registry.ts';
 import {
   CORE_REGISTRY,
   resolveRegistry,
-} from '../../jqtools/evaluate/filters/registry.js';
-import { formulaContribJqFilters } from '../bridge/formula-contrib-jq.js';
-import { formulaContribNativeFilters } from '../bridge/formula-contrib-native.js';
-import { authorizationLibrary } from './authorization.js';
+} from '../../jqtools/evaluate/filters/registry.ts';
+import { formulaContribJqFilters } from '../bridge/formula-contrib-jq.ts';
+import { formulaContribNativeFilters } from '../bridge/formula-contrib-native.ts';
+import { authorizationLibrary } from './authorization.ts';
 
 export const formulaLibrary: BuiltinLibrary = {
   jq: formulaContribJqFilters,

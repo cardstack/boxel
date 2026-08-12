@@ -1,4 +1,4 @@
-import { evaluateBxl } from '../../src/index.js';
+import { evaluateBxl } from '../../src/index.ts';
 
 const schema = {
   fields: [

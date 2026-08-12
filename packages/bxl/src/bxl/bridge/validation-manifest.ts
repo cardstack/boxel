@@ -102,13 +102,14 @@ export const VALIDATION_FUNCTIONS = VALIDATION_FUNCTION_DEFINITIONS.map(
 );
 
 export const DETERMINISTIC_VALIDATION_FUNCTIONS =
-  VALIDATION_FUNCTION_DEFINITIONS
-    .filter((definition) => !('volatile' in definition && definition.volatile))
-    .map((definition) => definition.name);
+  VALIDATION_FUNCTION_DEFINITIONS.filter(
+    (definition) => !('volatile' in definition && definition.volatile),
+  ).map((definition) => definition.name);
 
-export const VOLATILE_VALIDATION_FUNCTIONS = VALIDATION_FUNCTION_DEFINITIONS
-  .filter((definition) => 'volatile' in definition && definition.volatile)
-  .map((definition) => definition.name);
+export const VOLATILE_VALIDATION_FUNCTIONS =
+  VALIDATION_FUNCTION_DEFINITIONS.filter(
+    (definition) => 'volatile' in definition && definition.volatile,
+  ).map((definition) => definition.name);
 
 export const VALIDATION_FILTERS = new Set(
   VALIDATION_FUNCTION_DEFINITIONS.flatMap((definition) =>

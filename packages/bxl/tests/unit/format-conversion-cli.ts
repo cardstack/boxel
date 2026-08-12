@@ -9,10 +9,7 @@
 //   - Both functions are crash-safe on un-tokenizable input
 
 import { strictEqual } from 'node:assert';
-import {
-  collapseBxlExpression,
-  expandBxlExpression,
-} from '../../src/index.js';
+import { collapseBxlExpression, expandBxlExpression } from '../../src/index.ts';
 
 // -- Inline cases (short enough to not wrap) -----------------------------
 
@@ -24,7 +21,11 @@ const inlineCases: Array<[string, string]> = [
 ];
 for (const [input, expected] of inlineCases) {
   const expanded = expandBxlExpression(input).source;
-  strictEqual(expanded, expected, `expand stays inline: ${JSON.stringify(input)}`);
+  strictEqual(
+    expanded,
+    expected,
+    `expand stays inline: ${JSON.stringify(input)}`,
+  );
 }
 
 // -- Wrapping: function calls -------------------------------------------
@@ -176,7 +177,11 @@ const alreadyInline = 'DATE(2025, 1, 1)';
 const collapseInline = collapseBxlExpression(alreadyInline);
 // DATE(2025, 1, 1) is already canonical single-line; collapse should
 // detect no change.
-strictEqual(collapseInline.changed, false, 'collapse no-ops on canonical input');
+strictEqual(
+  collapseInline.changed,
+  false,
+  'collapse no-ops on canonical input',
+);
 
 console.log(
   `BXL format conversion: ${inlineCases.length} inline + 4 wrap + ${roundTripCases.length} round-trip + 1 paste + 2 rewrite + 3 hostile cases passed`,

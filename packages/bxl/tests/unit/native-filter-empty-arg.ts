@@ -3,7 +3,7 @@ import {
   evaluateBxl,
   runNativeJq,
   type ReadableSchema,
-} from '../../src/index.js';
+} from '../../src/index.ts';
 
 const nativeEmptyCases = [
   'ROUND(empty; 2)',

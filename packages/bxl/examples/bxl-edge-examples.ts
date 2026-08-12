@@ -1,8 +1,5 @@
-import type { ReadableSchema } from '../src/index.js';
-import {
-  bxlExampleInput,
-  bxlExampleSchema,
-} from './bxl-150-examples.ts';
+import type { ReadableSchema } from '../src/index.ts';
+import { bxlExampleInput, bxlExampleSchema } from './bxl-150-examples.ts';
 
 export interface BxlEdgeExample {
   id: number;
@@ -132,7 +129,8 @@ export const bxlFuzzyExamples: BxlEdgeExample[] = [
     id: 16,
     level: 'fuzzy ok',
     name: 'rounded balance with lowercase formula and fuzzy spacing',
-    expression: ' round ( total - payment [ status = "captured" ] . amount , 2 ) ',
+    expression:
+      ' round ( total - payment [ status = "captured" ] . amount , 2 ) ',
     expected: 59.04,
     expectIssueCodes: ['predicate-first-match'],
   },

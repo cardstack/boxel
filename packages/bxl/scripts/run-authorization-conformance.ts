@@ -1,5 +1,5 @@
-import { runOpenFgaConformance } from '../tests/authorization/support/openfga-conformance.js';
-import { OPENFGA_FIXTURE_COMMIT } from '../tests/authorization/support/openfga-fixtures.js';
+import { runOpenFgaConformance } from '../tests/authorization/support/openfga-conformance.ts';
+import { OPENFGA_FIXTURE_COMMIT } from '../tests/authorization/support/openfga-fixtures.ts';
 
 try {
   const report = runOpenFgaConformance();
@@ -26,7 +26,9 @@ try {
       failure.fixture,
       failure.test,
       `stage ${failure.stage}`,
-      ...(failure.assertion === undefined ? [] : [`assertion ${failure.assertion}`]),
+      ...(failure.assertion === undefined
+        ? []
+        : [`assertion ${failure.assertion}`]),
     ].join(' > ');
     console.log(`- ${failure.kind}: ${location}: ${failure.message}`);
   }
@@ -42,6 +44,8 @@ try {
     process.exitCode = 1;
   }
 } catch (error) {
-  console.error(error instanceof Error ? error.stack ?? error.message : String(error));
+  console.error(
+    error instanceof Error ? (error.stack ?? error.message) : String(error),
+  );
   process.exitCode = 1;
 }

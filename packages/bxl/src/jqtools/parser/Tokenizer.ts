@@ -1,4 +1,4 @@
-import { InputStream } from './InputStream.js';
+import type { InputStream } from './InputStream.ts';
 
 export interface PuncToken {
   type: 'punc';
@@ -150,11 +150,13 @@ export class Tokenizer {
   ]);
 
   private interpolationContexts: number[] = [];
+  private input: InputStream;
+  private readonly recordConsumedTokens: boolean;
 
-  constructor(
-    private input: InputStream,
-    private readonly recordConsumedTokens = false,
-  ) {}
+  constructor(input: InputStream, recordConsumedTokens = false) {
+    this.input = input;
+    this.recordConsumedTokens = recordConsumedTokens;
+  }
 
   next() {
     const tok = this.current;
@@ -255,10 +257,10 @@ export class Tokenizer {
       type: Tokenizer.keywords.has(ident)
         ? 'kw'
         : ident.charAt(0) === '@'
-        ? 'format'
-        : ident.charAt(0) === '$'
-        ? 'var'
-        : 'ident',
+          ? 'format'
+          : ident.charAt(0) === '$'
+            ? 'var'
+            : 'ident',
       value: ident,
     };
   }
@@ -285,7 +287,7 @@ export class Tokenizer {
       if (this.input.peek() !== '(')
         throw this.croak(
           `Can't handle character: ${this.input.peek()}`,
-          'tokenize'
+          'tokenize',
         );
       value += this.input.next();
       this.interpolationContexts.push(1);
@@ -353,7 +355,7 @@ export class Tokenizer {
           }
 
           return Tokenizer.isDigit(c);
-        })
+        }),
       ),
     };
   }

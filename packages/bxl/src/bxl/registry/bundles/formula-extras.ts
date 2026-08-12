@@ -6,9 +6,9 @@
 // See bundles/formula-stats.ts for the rationale on not importing from
 // `../index.js` — same shared-chunk-bloat reason.
 
-import type { BuiltinLibrary } from '../../../jqtools/evaluate/filters/registry.js';
-import { formulaEngineeringLibrary } from '../formula-engineering.js';
-import { formulaFinancialLibrary } from '../formula-financial.js';
+import type { BuiltinLibrary } from '../../../jqtools/evaluate/filters/registry.ts';
+import { formulaEngineeringLibrary } from '../formula-engineering.ts';
+import { formulaFinancialLibrary } from '../formula-financial.ts';
 
 export const formulaExtrasBundle: Record<string, BuiltinLibrary> = {
   'formula-engineering': formulaEngineeringLibrary,

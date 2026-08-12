@@ -1,5 +1,5 @@
-import type { BuiltinLibrary } from '../../jqtools/evaluate/filters/registry.js';
-import { authorizationNativeFilters } from '../bridge/authorization-native.js';
+import type { BuiltinLibrary } from '../../jqtools/evaluate/filters/registry.ts';
+import { authorizationNativeFilters } from '../bridge/authorization-native.ts';
 
 export const authorizationLibrary: BuiltinLibrary = {
   jq: {},

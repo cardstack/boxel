@@ -5,7 +5,7 @@ import {
   type BxlAuthorizationCheckRequest,
   type BxlAuthorizationDocument,
   type BxlAuthorizationSnapshot,
-} from '../../src/authorization/index.js';
+} from '../../src/authorization/index.ts';
 
 interface ExpectedDecision extends BxlAuthorizationCheckRequest {
   allowed: boolean;
@@ -38,8 +38,10 @@ const fixture = JSON.parse(
 strictEqual(fixture.provenance.generalized, true);
 strictEqual(fixture.checks.length, 40);
 
-const prepared = prepareBxlAuthorizationSafe(fixture.document, fixture.snapshot);
-strictEqual(prepared.ok, true);
+const prepared = prepareBxlAuthorizationSafe(
+  fixture.document,
+  fixture.snapshot,
+);
 if (!prepared.ok) throw new Error(prepared.error.message);
 
 const decisions = prepared.value.checkCapabilities(
@@ -56,7 +58,11 @@ for (let index = 0; index < fixture.checks.length; index++) {
   strictEqual(actual.ok, true, label);
   if (!actual.ok) continue;
   strictEqual(actual.value.allowed, expected.allowed, label);
-  strictEqual(actual.value.decision, expected.allowed ? 'allow' : 'refuse', label);
+  strictEqual(
+    actual.value.decision,
+    expected.allowed ? 'allow' : 'refuse',
+    label,
+  );
 }
 
 for (const expected of fixture.capabilityLists) {
@@ -64,7 +70,11 @@ for (const expected of fixture.capabilityLists) {
     party: expected.party,
     resource: expected.resource,
   });
-  strictEqual(actual.ok, true, `${expected.party} capabilities on ${expected.resource}`);
+  strictEqual(
+    actual.ok,
+    true,
+    `${expected.party} capabilities on ${expected.resource}`,
+  );
   if (!actual.ok) continue;
   deepStrictEqual(actual.value.capabilities, expected.capabilities);
 }
@@ -75,7 +85,6 @@ const nestedReviewer = prepared.value.checkCapability({
   resource: '../ChangeRequest/change-a',
   trace: true,
 });
-strictEqual(nestedReviewer.ok, true);
 if (!nestedReviewer.ok) throw new Error(nestedReviewer.error.message);
 strictEqual(nestedReviewer.value.allowed, true);
 strictEqual(
@@ -115,7 +124,6 @@ const membershipChanged = prepareBxlAuthorizationSafe(
   fixture.document,
   withoutContributors,
 );
-strictEqual(membershipChanged.ok, true);
 if (!membershipChanged.ok) throw new Error(membershipChanged.error.message);
 const removedContributor = membershipChanged.value.checkCapability({
   party: '../Person/contributor',

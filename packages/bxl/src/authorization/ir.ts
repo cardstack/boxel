@@ -1,4 +1,4 @@
-import type { SubjectTypeConstraint } from './identifiers.js';
+import type { SubjectTypeConstraint } from './identifiers.ts';
 
 export interface AuthorizationPredicateInput {
   context: Readonly<Record<string, unknown>>;
@@ -18,7 +18,10 @@ export type AuthorizationRelationExpression =
   | { kind: 'computed'; relation: string }
   | { kind: 'tupleToUserset'; tupleset: string; computed: string }
   | { kind: 'union'; children: readonly AuthorizationRelationExpression[] }
-  | { kind: 'intersection'; children: readonly AuthorizationRelationExpression[] }
+  | {
+      kind: 'intersection';
+      children: readonly AuthorizationRelationExpression[];
+    }
   | {
       kind: 'difference';
       base: AuthorizationRelationExpression;

@@ -32,13 +32,11 @@ import {
   excelTbillyield,
   excelXirr,
   excelXnpv,
-} from '../../formulajs/financial.js';
-import { EXCEL_ERROR, throwExcelError } from '../../formulajs/errors.js';
-import { parseExcelString } from '../../formulajs/common.js';
-import {
-  BareNativeFilter,
-  wrapBareNativeFilters,
-} from '../../jqtools/evaluate/filters/lib/nativeFilter.js';
+} from '../../formulajs/financial.ts';
+import { EXCEL_ERROR, throwExcelError } from '../../formulajs/errors.ts';
+import { parseExcelString } from '../../formulajs/common.ts';
+import type { BareNativeFilter } from '../../jqtools/evaluate/filters/lib/nativeFilter.ts';
+import { wrapBareNativeFilters } from '../../jqtools/evaluate/filters/lib/nativeFilter.ts';
 
 // IRR/NPV/XIRR/XNPV accept rows-of-objects and project a column out by key.
 // Mirror of the helper that lives in formula-contrib-native.ts; duplicated

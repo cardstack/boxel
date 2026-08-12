@@ -1,5 +1,5 @@
-import { ReadableSyntaxError } from './bxl/compiler/readable-syntax.js';
-import { NativeJqDialectError } from './bxl/bridge/native.js';
+import { ReadableSyntaxError } from './bxl/compiler/readable-syntax.ts';
+import { NativeJqDialectError } from './bxl/bridge/native.ts';
 
 export type BxlErrorPhase =
   | 'compile'

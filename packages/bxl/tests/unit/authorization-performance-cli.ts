@@ -6,7 +6,7 @@ import {
   type BxlAuthorizationCheckRequest,
   type BxlAuthorizationDocument,
   type BxlAuthorizationSnapshot,
-} from '../../src/authorization/index.js';
+} from '../../src/authorization/index.ts';
 
 interface Fixture {
   document: BxlAuthorizationDocument;
@@ -48,7 +48,6 @@ const preparedCoordination = prepareBxlAuthorizationSafe(
   coordination.document,
   coordination.snapshot,
 );
-strictEqual(preparedCoordination.ok, true);
 if (!preparedCoordination.ok) {
   throw new Error(preparedCoordination.error.message);
 }
@@ -56,7 +55,6 @@ const preparedReleaseGovernance = prepareBxlAuthorizationSafe(
   releaseGovernance.document,
   releaseGovernance.snapshot,
 );
-strictEqual(preparedReleaseGovernance.ok, true);
 if (!preparedReleaseGovernance.ok) {
   throw new Error(preparedReleaseGovernance.error.message);
 }
@@ -85,9 +83,8 @@ const metrics = {
     if (!result.ok) throw new Error(result.error.message);
   }),
   batch32Ms: measure(1_000, () => {
-    const results = preparedCoordination.value.checkCapabilities(
-      coordinationRequests,
-    );
+    const results =
+      preparedCoordination.value.checkCapabilities(coordinationRequests);
     if (results.some((result) => !result.ok)) {
       throw new Error('checkCapabilities failed');
     }
@@ -106,9 +103,17 @@ const metrics = {
 // They sit well above the checked-in benchmark baseline so a noisy shared
 // runner does not fail while still catching accidental algorithmic blow-ups.
 assertBudget('cold prepare', metrics.coldPrepareMs, 50 * multiplier);
-assertBudget('warm checkCapability', metrics.warmCheckCapabilityMs, 2 * multiplier);
+assertBudget(
+  'warm checkCapability',
+  metrics.warmCheckCapabilityMs,
+  2 * multiplier,
+);
 assertBudget('checkCapabilities(32)', metrics.batch32Ms, 10 * multiplier);
-assertBudget('nested userset check', metrics.nestedUsersetCheckMs, 2 * multiplier);
+assertBudget(
+  'nested userset check',
+  metrics.nestedUsersetCheckMs,
+  2 * multiplier,
+);
 
 console.log(
   `Authorization performance gate: prepare=${metrics.coldPrepareMs.toFixed(4)} ms/op ` +

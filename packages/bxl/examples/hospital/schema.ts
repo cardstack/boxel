@@ -1,4 +1,4 @@
-import type { ReadableSchema } from '../../src/index.js';
+import type { ReadableSchema } from '../../src/index.ts';
 
 /**
  * Schema for the hospital fixture. Mirrors the field layout of the

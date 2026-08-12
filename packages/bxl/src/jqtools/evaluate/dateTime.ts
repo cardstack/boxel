@@ -1,4 +1,4 @@
-import { JqArgumentError } from '../errors.js';
+import { JqArgumentError } from '../errors.ts';
 
 type TimeMode = 'utc' | 'local';
 
@@ -75,9 +75,7 @@ function localZoneName(date: Date): string {
     const parts = new Intl.DateTimeFormat('en-US', {
       timeZoneName: 'short',
     }).formatToParts(date);
-    return (
-      parts.find((part) => part.type === 'timeZoneName')?.value ?? 'UTC'
-    );
+    return parts.find((part) => part.type === 'timeZoneName')?.value ?? 'UTC';
   } catch (_error) {
     return 'UTC';
   }
@@ -125,8 +123,7 @@ function brokenDownFromDate(
   const day = mode === 'utc' ? date.getUTCDate() : date.getDate();
   const hour = mode === 'utc' ? date.getUTCHours() : date.getHours();
   const minute = mode === 'utc' ? date.getUTCMinutes() : date.getMinutes();
-  const secondWhole =
-    mode === 'utc' ? date.getUTCSeconds() : date.getSeconds();
+  const secondWhole = mode === 'utc' ? date.getUTCSeconds() : date.getSeconds();
   const weekday = mode === 'utc' ? date.getUTCDay() : date.getDay();
   const yearDay = dayOfYear(date, mode);
 
@@ -218,7 +215,9 @@ function applyDirective(
     case 'Z':
       return mode === 'utc' ? 'UTC' : localZoneName(date);
     default:
-      throw new JqArgumentError(`Unsupported strftime format directive: %${directive}`);
+      throw new JqArgumentError(
+        `Unsupported strftime format directive: %${directive}`,
+      );
   }
 }
 
@@ -229,11 +228,17 @@ function readNumber(
   maxDigits: number,
 ): { value: number; nextIndex: number } {
   let end = start;
-  while (end < input.length && /\d/.test(input[end]!) && end - start < maxDigits) {
+  while (
+    end < input.length &&
+    /\d/.test(input[end]!) &&
+    end - start < maxDigits
+  ) {
     end += 1;
   }
   if (end - start < minDigits) {
-    throw new JqArgumentError('Unexpected numeric field while parsing datetime');
+    throw new JqArgumentError(
+      'Unexpected numeric field while parsing datetime',
+    );
   }
   return {
     value: Number(input.slice(start, end)),
@@ -278,7 +283,11 @@ export function mktime(input: unknown): number {
   return Math.floor(date.getTime() / 1000);
 }
 
-export function strftime(input: unknown, format: string, mode: TimeMode): string {
+export function strftime(
+  input: unknown,
+  format: string,
+  mode: TimeMode,
+): string {
   let date: Date;
   let epochSeconds = 0;
 
@@ -383,7 +392,9 @@ export function strptime(input: string, format: string): unknown[] {
         case 'S': {
           const match = /^(\d{1,2}(?:\.\d+)?)/.exec(input.slice(inputIndex));
           if (!match) {
-            throw new JqArgumentError('Unexpected seconds field while parsing datetime');
+            throw new JqArgumentError(
+              'Unexpected seconds field while parsing datetime',
+            );
           }
           fields.second = Number(match[1]);
           inputIndex += match[1]!.length;
@@ -459,7 +470,9 @@ export function strptime(input: string, format: string): unknown[] {
           break;
         }
         case 'z': {
-          const offsetMatch = /^(Z|[+-]\d{2}:?\d{2})/.exec(input.slice(inputIndex));
+          const offsetMatch = /^(Z|[+-]\d{2}:?\d{2})/.exec(
+            input.slice(inputIndex),
+          );
           if (!offsetMatch) {
             throw new JqArgumentError('Failed to parse %z timezone offset');
           }
@@ -485,7 +498,9 @@ export function strptime(input: string, format: string): unknown[] {
           break;
         }
         default:
-          throw new JqArgumentError(`Unsupported strptime format directive: %${directive}`);
+          throw new JqArgumentError(
+            `Unsupported strptime format directive: %${directive}`,
+          );
       }
       continue;
     }
@@ -496,14 +511,18 @@ export function strptime(input: string, format: string): unknown[] {
     }
 
     if (input[inputIndex] !== char) {
-      throw new JqArgumentError('Input did not match the strptime format literal');
+      throw new JqArgumentError(
+        'Input did not match the strptime format literal',
+      );
     }
     inputIndex += 1;
   }
 
   const remainder = input.slice(inputIndex);
   if (/[^\s]/.test(remainder)) {
-    throw new JqArgumentError(`date "${input}" does not match format "${format}"`);
+    throw new JqArgumentError(
+      `date "${input}" does not match format "${format}"`,
+    );
   }
 
   let year = fields.year ?? 0;
@@ -547,9 +566,7 @@ export function strptime(input: string, format: string): unknown[] {
     month = normalized[1]!;
     day = normalized[2]!;
     second = normalized[5]!;
-    return remainder.length > 0
-      ? [...normalized, remainder]
-      : normalized;
+    return remainder.length > 0 ? [...normalized, remainder] : normalized;
   }
 
   const date = makeDate(

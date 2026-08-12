@@ -5,7 +5,7 @@
 // from source (this test).
 
 import { ok, strictEqual } from 'node:assert';
-import { BXL_BUILD_INFO, VERSION } from '../../src/index.js';
+import { BXL_BUILD_INFO, VERSION } from '../../src/index.ts';
 
 strictEqual(BXL_BUILD_INFO.version, VERSION, 'version mirrors VERSION');
 strictEqual(

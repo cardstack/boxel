@@ -26,7 +26,7 @@ const rule = {
     },
     messages: {
       escapeGotcha:
-        "Plain BXL expression contains `\\(` — JS strips the backslash before `(`, so the runtime never sees the jq interpolation. Use `jq`…`` to preserve it verbatim.",
+        'Plain BXL expression contains `\\(` — JS strips the backslash before `(`, so the runtime never sees the jq interpolation. Use `jq`…`` to preserve it verbatim.',
     },
     schema: [],
   },

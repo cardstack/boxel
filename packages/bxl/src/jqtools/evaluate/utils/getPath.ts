@@ -1,19 +1,19 @@
+import type { Path } from './utils.ts';
 import {
   access,
   isSliceAccessor,
   normalizeLeadingSliceAccessors,
-  Path,
   Type,
   typeOf,
-} from './utils.js';
-import { JqEvaluateError } from '../../errors.js';
+} from './utils.ts';
+import { JqEvaluateError } from '../../errors.ts';
 
 export function getPath(input: any, path: Path): any {
   if (path.length === 0) return input;
   const type = typeOf(input);
   const normalizedPath = normalizeLeadingSliceAccessors(
     type === Type.array ? input.length : 0,
-    path
+    path,
   );
 
   const accessor = normalizedPath[0];
@@ -31,7 +31,7 @@ export function getPath(input: any, path: Path): any {
   } else {
     if (isSliceAccessor(accessor)) {
       throw new JqEvaluateError(
-        'getPath: Leading slice accessors are not normalized'
+        'getPath: Leading slice accessors are not normalized',
       );
     }
     return getPath(input[accessor], normalizedPath.slice(1));

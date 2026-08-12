@@ -49,13 +49,11 @@ import {
   excelOct2Bin,
   excelOct2Dec,
   excelOct2Hex,
-} from '../../formulajs/engineering.js';
-import { EXCEL_ERROR, throwExcelError } from '../../formulajs/errors.js';
-import { parseExcelNumber } from '../../formulajs/common.js';
-import {
-  BareNativeFilter,
-  wrapBareNativeFilters,
-} from '../../jqtools/evaluate/filters/lib/nativeFilter.js';
+} from '../../formulajs/engineering.ts';
+import { EXCEL_ERROR, throwExcelError } from '../../formulajs/errors.ts';
+import { parseExcelNumber } from '../../formulajs/common.ts';
+import type { BareNativeFilter } from '../../jqtools/evaluate/filters/lib/nativeFilter.ts';
+import { wrapBareNativeFilters } from '../../jqtools/evaluate/filters/lib/nativeFilter.ts';
 
 const bareNativeFilters: Record<string, BareNativeFilter> = {
   *'BASE/2'(_input, number, radix) {
@@ -100,7 +98,9 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   *'COMPLEX/3'(_input, real, imaginary, suffix) {
     yield excelComplex(real, imaginary, suffix);
   },
-  *'CONVERT/3'(_input, number, fromUnit, toUnit) { yield excelConvert(number, fromUnit, toUnit); },
+  *'CONVERT/3'(_input, number, fromUnit, toUnit) {
+    yield excelConvert(number, fromUnit, toUnit);
+  },
 
   // ═══════════════════════════════════════════════════════════════
   // Text functions
@@ -108,7 +108,7 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
 
   *'UNICHAR/1'(_input, number) {
     const n = Math.floor(parseExcelNumber(number));
-    if (n < 1 || n > 0x10FFFF) throwExcelError(EXCEL_ERROR.value);
+    if (n < 1 || n > 0x10ffff) throwExcelError(EXCEL_ERROR.value);
     yield String.fromCodePoint(n);
   },
   *'DEC2BIN/1'(_input, number) {
@@ -138,8 +138,12 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   *'DELTA/2'(_input, left, right) {
     yield excelDelta(left, right);
   },
-  *'ERF/2'(_input, lower, upper) { yield excelErf(lower, upper); },
-  *'ERFC/1'(_input, value) { yield excelErfc(value); },
+  *'ERF/2'(_input, lower, upper) {
+    yield excelErf(lower, upper);
+  },
+  *'ERFC/1'(_input, value) {
+    yield excelErfc(value);
+  },
   *'GESTEP/1'(_input, number) {
     yield excelGestep(number);
   },
@@ -167,32 +171,72 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   *'IMAGINARY/1'(_input, value) {
     yield excelImImaginary(value);
   },
-  *'IMARGUMENT/1'(_input, value) { yield excelImArgument(value); },
-  *'ERF/1'(_input, lower) { yield excelErf(lower); },
+  *'IMARGUMENT/1'(_input, value) {
+    yield excelImArgument(value);
+  },
+  *'ERF/1'(_input, lower) {
+    yield excelErf(lower);
+  },
   *'IMCONJUGATE/1'(_input, value) {
     yield excelImConjugate(value);
   },
-  *'IMCOS/1'(_input, value) { yield excelImCos(value); },
-  *'IMCOSH/1'(_input, value) { yield excelImCosh(value); },
-  *'IMCOT/1'(_input, value) { yield excelImCot(value); },
-  *'IMCSC/1'(_input, value) { yield excelImCsc(value); },
-  *'IMCSCH/1'(_input, value) { yield excelImCsch(value); },
-  *'IMSIN/1'(_input, value) { yield excelImSin(value); },
-  *'IMDIV/2'(_input, left, right) { yield excelImDiv(left, right); },
-  *'IMPRODUCT/1'(_input, values) { yield excelImProduct(values); },
-  *'IMEXP/1'(_input, value) { yield excelImExp(value); },
-  *'IMLN/1'(_input, value) { yield excelImLn(value); },
-  *'IMLOG10/1'(_input, value) { yield excelImLog10(value); },
-  *'IMLOG2/1'(_input, value) { yield excelImLog2(value); },
-  *'IMPOWER/2'(_input, value, power) { yield excelImPower(value, power); },
-  *'IMSQRT/1'(_input, value) { yield excelImSqrt(value); },
+  *'IMCOS/1'(_input, value) {
+    yield excelImCos(value);
+  },
+  *'IMCOSH/1'(_input, value) {
+    yield excelImCosh(value);
+  },
+  *'IMCOT/1'(_input, value) {
+    yield excelImCot(value);
+  },
+  *'IMCSC/1'(_input, value) {
+    yield excelImCsc(value);
+  },
+  *'IMCSCH/1'(_input, value) {
+    yield excelImCsch(value);
+  },
+  *'IMSIN/1'(_input, value) {
+    yield excelImSin(value);
+  },
+  *'IMDIV/2'(_input, left, right) {
+    yield excelImDiv(left, right);
+  },
+  *'IMPRODUCT/1'(_input, values) {
+    yield excelImProduct(values);
+  },
+  *'IMEXP/1'(_input, value) {
+    yield excelImExp(value);
+  },
+  *'IMLN/1'(_input, value) {
+    yield excelImLn(value);
+  },
+  *'IMLOG10/1'(_input, value) {
+    yield excelImLog10(value);
+  },
+  *'IMLOG2/1'(_input, value) {
+    yield excelImLog2(value);
+  },
+  *'IMPOWER/2'(_input, value, power) {
+    yield excelImPower(value, power);
+  },
+  *'IMSQRT/1'(_input, value) {
+    yield excelImSqrt(value);
+  },
   *'IMREAL/1'(_input, value) {
     yield excelImReal(value);
   },
-  *'IMSEC/1'(_input, value) { yield excelImSec(value); },
-  *'IMSECH/1'(_input, value) { yield excelImSech(value); },
-  *'IMSINH/1'(_input, value) { yield excelImSinh(value); },
-  *'IMTAN/1'(_input, value) { yield excelImTan(value); },
+  *'IMSEC/1'(_input, value) {
+    yield excelImSec(value);
+  },
+  *'IMSECH/1'(_input, value) {
+    yield excelImSech(value);
+  },
+  *'IMSINH/1'(_input, value) {
+    yield excelImSinh(value);
+  },
+  *'IMTAN/1'(_input, value) {
+    yield excelImTan(value);
+  },
   *'IMSUB/2'(_input, left, right) {
     yield excelImSub(left, right);
   },

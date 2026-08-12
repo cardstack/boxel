@@ -1,10 +1,11 @@
-import {
+import type {
   AlternativeOperator,
   AssignmentOperator,
   BinaryOperator,
   BooleanBinaryOperator,
   NormalBinaryOperator,
-} from '../parser/AST.js';
+} from '../parser/AST.ts';
+import type { Item, ItemIterator } from './utils/utils.ts';
 import {
   createItem,
   deepClone,
@@ -12,8 +13,6 @@ import {
   generatePaths,
   generateValues,
   isTrue,
-  Item,
-  ItemIterator,
   relativizePath,
   repeatString,
   Type,
@@ -21,21 +20,21 @@ import {
   typesEqual,
   typesMatch,
   typesMatchCommutative,
-} from './utils/utils.js';
-import { compare } from './compare.js';
-import { JqEvaluateError } from '../errors.js';
-import { setPath } from './utils/setPath.js';
-import { combineIterators, nestedIterators } from './utils/nestedIterators.js';
-import { getPath } from './utils/getPath.js';
+} from './utils/utils.ts';
+import { compare } from './compare.ts';
+import { JqEvaluateError } from '../errors.ts';
+import { setPath } from './utils/setPath.ts';
+import { combineIterators, nestedIterators } from './utils/nestedIterators.ts';
+import { getPath } from './utils/getPath.ts';
 import {
   BinaryOperatorType,
   isBinaryOperatorType,
-} from './utils/binaryOperator.js';
-import { checkRuntimeBudget } from './runtimeState.js';
+} from './utils/binaryOperator.ts';
+import { checkRuntimeBudget } from './runtimeState.ts';
 
 function cannotApplyOperatorToError(op: BinaryOperator, left: any, right: any) {
   return new JqEvaluateError(
-    `Operator ${op} cannot be applied to ${typeOf(left)} and ${typeOf(right)}`
+    `Operator ${op} cannot be applied to ${typeOf(left)} and ${typeOf(right)}`,
   );
 }
 
@@ -56,7 +55,8 @@ function coerceOne(val: any): number | null {
   if (typeof val === 'number' && !Number.isNaN(val)) return val;
   if (val === null || val === undefined) return 0;
   if (typeof val === 'boolean') return val ? 1 : 0;
-  if (typeof val === 'string' && val !== '' && !Number.isNaN(Number(val))) return parseFloat(val);
+  if (typeof val === 'string' && val !== '' && !Number.isNaN(Number(val)))
+    return parseFloat(val);
   return null;
 }
 
@@ -64,7 +64,7 @@ function coerceOne(val: any): number | null {
 export function applyNormalBinaryOperator(
   op: NormalBinaryOperator,
   left: any,
-  right: any
+  right: any,
 ): any {
   if (op === '/' || op === '*' || op === '-' || op === '%') {
     if (left == null || right == null) {
@@ -123,8 +123,8 @@ export function applyNormalBinaryOperator(
           return left.filter(
             (leftItem: any) =>
               !right.some(
-                (rightItem: any) => compare(leftItem, rightItem) === 0
-              )
+                (rightItem: any) => compare(leftItem, rightItem) === 0,
+              ),
           );
         default:
           throw cannotApplyOperatorToError(op, left, right);
@@ -183,17 +183,21 @@ export function applyNormalBinaryOperator(
 export function* evaluateSimpleAssignment(
   inputItem: Item,
   left: ItemIterator,
-  right: ItemIterator
+  right: ItemIterator,
 ): ItemIterator {
   for (const [value, pathIterator] of nestedIterators(
     generateValues(right),
-    generatePaths(left)
+    generatePaths(left),
   )) {
     checkRuntimeBudget();
     let out = inputItem.value;
     for (const path of pathIterator) {
       checkRuntimeBudget();
-      out = setPath(out, relativizePath(path, inputItem.path), deepClone(value));
+      out = setPath(
+        out,
+        relativizePath(path, inputItem.path),
+        deepClone(value),
+      );
     }
     yield createItem(out);
   }
@@ -203,11 +207,11 @@ export function* evaluateArithmeticUpdateAssignment(
   op: AssignmentOperator,
   inputItem: Item,
   left: ItemIterator,
-  right: ItemIterator
+  right: ItemIterator,
 ): ItemIterator {
   for (const [value, pathIterator] of nestedIterators(
     generateValues(right),
-    generatePaths(left)
+    generatePaths(left),
   )) {
     checkRuntimeBudget();
     let out = inputItem.value;
@@ -217,7 +221,7 @@ export function* evaluateArithmeticUpdateAssignment(
       // Remove the '=' sign from the original arithmetic update-assignment operator
       const subOp: NormalBinaryOperator | AlternativeOperator = op.slice(
         0,
-        -1
+        -1,
       ) as any;
       const originalValue = getPath(out, relativePath);
 
@@ -226,7 +230,7 @@ export function* evaluateArithmeticUpdateAssignment(
         relativePath,
         isBinaryOperatorType(subOp, BinaryOperatorType.alternative)
           ? applyAlternativeOperator(originalValue, value)
-          : applyNormalBinaryOperator(subOp, originalValue, value)
+          : applyNormalBinaryOperator(subOp, originalValue, value),
       );
     }
     yield createItem(out);
@@ -236,11 +240,11 @@ export function* evaluateArithmeticUpdateAssignment(
 export function* evaluateBooleanOperator(
   op: BooleanBinaryOperator,
   left: ItemIterator,
-  right: ItemIterator
+  right: ItemIterator,
 ): ItemIterator {
   if (op !== 'and' && op !== 'or') {
     throw new JqEvaluateError(
-      `evaluateBooleanOperator: Unexpected operator '${op}'`
+      `evaluateBooleanOperator: Unexpected operator '${op}'`,
     );
   }
 
@@ -269,12 +273,12 @@ export function* evaluateBooleanOperator(
 export function* evaluateNormalBinaryOperator(
   op: NormalBinaryOperator,
   left: ItemIterator,
-  right: ItemIterator
+  right: ItemIterator,
 ): ItemIterator {
   for (const [rightItem, leftItem] of combineIterators(right, left)) {
     checkRuntimeBudget();
     yield createItem(
-      applyNormalBinaryOperator(op, leftItem.value, rightItem.value)
+      applyNormalBinaryOperator(op, leftItem.value, rightItem.value),
     );
   }
 }
@@ -285,7 +289,7 @@ function applyAlternativeOperator(left: any, right: any) {
 
 export function* evaluateAlternativeOperator(
   left: ItemIterator,
-  right: ItemIterator
+  right: ItemIterator,
 ): ItemIterator {
   let hasResults = false;
   for (const leftItem of left) {

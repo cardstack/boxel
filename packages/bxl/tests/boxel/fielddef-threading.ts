@@ -16,7 +16,7 @@
 // Maps to docs/realm-composition.md and port-doc §11a.
 
 import { ok, strictEqual } from 'node:assert';
-import { expression, fx } from '../../src/index.js';
+import { expression, fx } from '../../src/index.ts';
 
 let pass = 0;
 let fail = 0;
@@ -90,26 +90,28 @@ check('stage 1: Development materializes from card-level inputs', () => {
   strictEqual(dev.reportedLoss, 30000);
 });
 
-check('stage 2: Reinsurance reads stage-1 output via Development.X path', () => {
-  // The "card" here is the parent that has both raw inputs AND a
-  // materialized `development` field — exactly what a CardDef
-  // ends up with at render time.
-  const developmentCompute = expression(
-    fx`{
+check(
+  'stage 2: Reinsurance reads stage-1 output via Development.X path',
+  () => {
+    // The "card" here is the parent that has both raw inputs AND a
+    // materialized `development` field — exactly what a CardDef
+    // ends up with at render time.
+    const developmentCompute = expression(
+      fx`{
       reportedLoss: ReportedLoss,
       selectedLdf: SelectedLdf,
       scenarioLossDevelopmentFactor: ScenarioLossDevelopmentFactor,
       grossUltimateLoss: ROUND(ReportedLoss * SelectedLdf * ScenarioLossDevelopmentFactor, 2),
     }`,
-    { as: DevelopmentField },
-  );
-  const cardWithDev = {
-    ...card,
-    development: developmentCompute.call(card),
-  };
+      { as: DevelopmentField },
+    );
+    const cardWithDev = {
+      ...card,
+      development: developmentCompute.call(card),
+    };
 
-  const compute = expression(
-    fx`{
+    const compute = expression(
+      fx`{
       grossUltimateLoss: Development.GrossUltimateLoss,
       quotaShareCededPct: QuotaShareCededPct,
       xolRetention: XolRetention,
@@ -117,60 +119,64 @@ check('stage 2: Reinsurance reads stage-1 output via Development.X path', () => 
       cededLoss: ROUND(MIN(Development.GrossUltimateLoss, Development.GrossUltimateLoss * QuotaShareCededPct + MAX(0, MIN(Development.GrossUltimateLoss - XolRetention, XolLimit))), 2),
       netUltimateLoss: ROUND(Development.GrossUltimateLoss - MIN(Development.GrossUltimateLoss, Development.GrossUltimateLoss * QuotaShareCededPct + MAX(0, MIN(Development.GrossUltimateLoss - XolRetention, XolLimit))), 2),
     }`,
-    { as: ReinsuranceField },
-  );
-  const re = compute.call(cardWithDev) as ReinsuranceField;
-  ok(re instanceof ReinsuranceField);
-  // GrossUltimate 37800; QS = 25% × 37800 = 9450; XOL = max(0, min(37800-50000, 200000)) = 0;
-  // CededLoss = min(37800, 9450) = 9450; NetUltimate = 37800 - 9450 = 28350.
-  strictEqual(re.cededLoss, 9450);
-  strictEqual(re.netUltimateLoss, 28350);
-});
+      { as: ReinsuranceField },
+    );
+    const re = compute.call(cardWithDev) as ReinsuranceField;
+    ok(re instanceof ReinsuranceField);
+    // GrossUltimate 37800; QS = 25% × 37800 = 9450; XOL = max(0, min(37800-50000, 200000)) = 0;
+    // CededLoss = min(37800, 9450) = 9450; NetUltimate = 37800 - 9450 = 28350.
+    strictEqual(re.cededLoss, 9450);
+    strictEqual(re.netUltimateLoss, 28350);
+  },
+);
 
-check('stage 3: Profit reads stage-2 output via Reinsurance.NetUltimateLoss', () => {
-  // Build the full card-with-FieldDefs the way a realm would.
-  const developmentCompute = expression(
-    fx`{
+check(
+  'stage 3: Profit reads stage-2 output via Reinsurance.NetUltimateLoss',
+  () => {
+    // Build the full card-with-FieldDefs the way a realm would.
+    const developmentCompute = expression(
+      fx`{
       reportedLoss: ReportedLoss,
       selectedLdf: SelectedLdf,
       scenarioLossDevelopmentFactor: ScenarioLossDevelopmentFactor,
       grossUltimateLoss: ROUND(ReportedLoss * SelectedLdf * ScenarioLossDevelopmentFactor, 2),
     }`,
-    { as: DevelopmentField },
-  );
-  const development = developmentCompute.call(card);
+      { as: DevelopmentField },
+    );
+    const development = developmentCompute.call(card);
 
-  const reinsuranceCompute = expression(
-    fx`{
+    const reinsuranceCompute = expression(
+      fx`{
       grossUltimateLoss: Development.GrossUltimateLoss,
       quotaShareCededPct: QuotaShareCededPct,
       xolRetention: XolRetention,
       xolLimit: XolLimit,
       netUltimateLoss: ROUND(Development.GrossUltimateLoss - MIN(Development.GrossUltimateLoss, Development.GrossUltimateLoss * QuotaShareCededPct), 2),
     }`,
-    { as: ReinsuranceField },
-  );
-  const reinsurance = reinsuranceCompute.call({ ...card, development });
+      { as: ReinsuranceField },
+    );
+    const reinsurance = reinsuranceCompute.call({ ...card, development });
 
-  const compute = expression(
-    fx`{
+    const compute = expression(
+      fx`{
       earnedPremium: EarnedPremium,
       netUltimateLoss: Reinsurance.NetUltimateLoss,
       totalExpense: TotalExpense,
       underwritingProfit: ROUND(EarnedPremium - (Reinsurance.NetUltimateLoss + TotalExpense), 2),
     }`,
-    { as: ProfitField },
-  );
-  const profit = compute.call({
-    ...card,
-    development,
-    reinsurance,
-  }) as ProfitField;
-  ok(profit instanceof ProfitField);
-  // EarnedPremium 80000; Net 28350; Expense 22000; Profit 80000-(28350+22000) = 29650.
-  strictEqual(profit.netUltimateLoss, 28350);
-  strictEqual(profit.underwritingProfit, 29650);
-});
+      { as: ProfitField },
+    );
+    const profit = compute.call({
+      ...card,
+      development,
+      reinsurance,
+    }) as ProfitField;
+    ok(profit instanceof ProfitField);
+    // EarnedPremium 80000; Net 28350; Expense 22000; Profit 80000-(28350+22000) = 29650.
+    strictEqual(profit.netUltimateLoss, 28350);
+    strictEqual(profit.underwritingProfit, 29650);
+  },
+);
 
 check('threading survives a `(A - B + C)` parsed-paren shape', () => {
   // Regression for the parser fix (port-doc §18). A FieldDef that

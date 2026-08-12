@@ -23,8 +23,11 @@ import {
   evaluateBxl,
   lintBxlExpression,
   solidifyBxlExpression,
-} from '../../src/index.js';
-import { bxlExampleInput, bxlExampleSchema } from '../../examples/bxl-150-examples.js';
+} from '../../src/index.ts';
+import {
+  bxlExampleInput,
+  bxlExampleSchema,
+} from '../../examples/bxl-150-examples.ts';
 
 type Expected = number | string | boolean | null | unknown[];
 
@@ -88,13 +91,15 @@ const cases: FilterCase[] = [
     name: '[#2..#last-1] yields middle SKUs',
     expression: '"Line Item"[#2..#last-1].SKU',
     expectedValue: ['BRAND-RED', 'COPY-03', 'COPY-04', 'SRV-01'],
-    expectedJq: '[(.lineItems) as $__seq | $__seq[1:(($__seq | length) - 1)][].sku]',
+    expectedJq:
+      '[(.lineItems) as $__seq | $__seq[1:(($__seq | length) - 1)][].sku]',
   },
   {
     name: '[#last-3..#last-1] yields forward end-anchored range',
     expression: '"Line Item"[#last-3..#last-1].SKU',
     expectedValue: ['COPY-03', 'COPY-04', 'SRV-01'],
-    expectedJq: '[(.lineItems) as $__seq | $__seq[(($__seq | length) - 4):(($__seq | length) - 1)][].sku]',
+    expectedJq:
+      '[(.lineItems) as $__seq | $__seq[(($__seq | length) - 4):(($__seq | length) - 1)][].sku]',
   },
   {
     name: '[#1, #2, #4..#5] yields selector union in collection order',
@@ -162,7 +167,9 @@ for (const c of cases) {
     }).value;
     deepStrictEqual(value, c.expectedValue, `${c.name}: value`);
     if (c.expectedJq !== undefined) {
-      const jq = bxlToJqExpression(c.expression, { schema: bxlExampleSchema }).source;
+      const jq = bxlToJqExpression(c.expression, {
+        schema: bxlExampleSchema,
+      }).source;
       strictEqual(jq, c.expectedJq, `${c.name}: jq`);
     }
   } catch (error) {
@@ -174,9 +181,10 @@ for (const c of cases) {
 }
 
 throws(
-  () => evaluateBxl('"Line Item"[*Taxable]."Line Total"', bxlExampleInput, {
-    schema: bxlExampleSchema,
-  }),
+  () =>
+    evaluateBxl('"Line Item"[*Taxable]."Line Total"', bxlExampleInput, {
+      schema: bxlExampleSchema,
+    }),
   /Filter-all \[\* \.\.\.\] predicates must use explicit current-item paths/,
   'filter-all shorthand now requires an explicit current-item dot',
 );
@@ -186,7 +194,11 @@ throws(
 const rowRewrite = solidifyBxlExpression('"Line Item"[row 4].Quantity', {
   schema: bxlExampleSchema,
 });
-strictEqual(rowRewrite.source, '"Line Item"[#4].Quantity', 'solidify: [row N] -> [#N]');
+strictEqual(
+  rowRewrite.source,
+  '"Line Item"[#4].Quantity',
+  'solidify: [row N] -> [#N]',
+);
 strictEqual(
   rowRewrite.rewrites.some((r) => r.code === 'row-shortcut-to-hash'),
   true,
@@ -196,7 +208,11 @@ strictEqual(
 const itemRewrite = solidifyBxlExpression('"Line Item"[item 2].SKU', {
   schema: bxlExampleSchema,
 });
-strictEqual(itemRewrite.source, '"Line Item"[#2].SKU', 'solidify: [item N] -> [#N]');
+strictEqual(
+  itemRewrite.source,
+  '"Line Item"[#2].SKU',
+  'solidify: [item N] -> [#N]',
+);
 
 const rangeRewrite = solidifyBxlExpression('"Line Item"[row 1..3].SKU', {
   schema: bxlExampleSchema,
@@ -212,20 +228,34 @@ strictEqual(
 const reverseAnchored = lintBxlExpression('"Line Item"[#last-1..#last-3].SKU', {
   schema: bxlExampleSchema,
 });
-strictEqual(reverseAnchored.ok, false, 'reverse anchored range must be rejected');
+strictEqual(
+  reverseAnchored.ok,
+  false,
+  'reverse anchored range must be rejected',
+);
 strictEqual(
   reverseAnchored.issues.some((i) =>
-    i.message.includes('[#last-1..#last-3] range must move forward in collection order')),
+    i.message.includes(
+      '[#last-1..#last-3] range must move forward in collection order',
+    ),
+  ),
   true,
 );
 
 const backToFrontAnchored = lintBxlExpression('"Line Item"[#last-3..#4].SKU', {
   schema: bxlExampleSchema,
 });
-strictEqual(backToFrontAnchored.ok, false, 'back-to-front anchored range must be rejected');
+strictEqual(
+  backToFrontAnchored.ok,
+  false,
+  'back-to-front anchored range must be rejected',
+);
 strictEqual(
   backToFrontAnchored.issues.some((i) =>
-    i.message.includes('[#last-3..#4] range must move forward in collection order')),
+    i.message.includes(
+      '[#last-3..#4] range must move forward in collection order',
+    ),
+  ),
   true,
 );
 
@@ -253,7 +283,9 @@ strictEqual(
 );
 
 if (failing > 0) {
-  throw new Error(`pred-filter suite: ${failing} of ${cases.length} cases failed`);
+  throw new Error(
+    `pred-filter suite: ${failing} of ${cases.length} cases failed`,
+  );
 }
 
 console.log(

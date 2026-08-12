@@ -1,9 +1,6 @@
 import { deepStrictEqual, strictEqual } from 'node:assert';
-import {
-  compileReadableSyntax,
-  evaluateBxl,
-  ReadableSchema,
-} from '../../src/index.js';
+import type { ReadableSchema } from '../../src/index.ts';
+import { compileReadableSyntax, evaluateBxl } from '../../src/index.ts';
 
 const invoiceSchema: ReadableSchema = {
   fields: [
@@ -183,7 +180,11 @@ strictEqual(compiled.changed, true);
 const publicBuiltins = evaluateBxl('builtins | contains(["env/0"])', invoice, {
   schema: invoiceSchema,
 });
-strictEqual(publicBuiltins.value, false, 'public builtins should not advertise env/0');
+strictEqual(
+  publicBuiltins.value,
+  false,
+  'public builtins should not advertise env/0',
+);
 
 let envError = '';
 try {

@@ -1,5 +1,9 @@
 import { deepStrictEqual, strictEqual } from 'node:assert';
-import { evaluateBxl, prepareBxl, type ReadableSchema } from '../../src/index.js';
+import {
+  evaluateBxl,
+  prepareBxl,
+  type ReadableSchema,
+} from '../../src/index.ts';
 
 const schema: ReadableSchema = {
   fields: [

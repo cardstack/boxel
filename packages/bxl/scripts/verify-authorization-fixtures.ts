@@ -1,4 +1,4 @@
-import { verifyOpenFgaFixtureInventory } from '../tests/authorization/support/openfga-fixtures.js';
+import { verifyOpenFgaFixtureInventory } from '../tests/authorization/support/openfga-fixtures.ts';
 
 try {
   const { manifest, counts } = verifyOpenFgaFixtureInventory();

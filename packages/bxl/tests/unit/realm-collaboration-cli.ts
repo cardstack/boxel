@@ -3,11 +3,11 @@
 // to produce exactly one value of the appropriate gateway shape.
 
 import { deepStrictEqual, strictEqual } from 'node:assert';
-import { compileBxl, evaluateBxl } from '../../src/index.js';
+import { compileBxl, evaluateBxl } from '../../src/index.ts';
 import {
   realmCollaborationExamples,
   realmCollaborationInventory,
-} from '../../examples/realm-collaboration-examples.js';
+} from '../../examples/realm-collaboration-examples.ts';
 
 const inventoryTotal = Object.values(
   realmCollaborationInventory.bySource,
@@ -83,7 +83,7 @@ for (const example of realmCollaborationExamples) {
   } catch (error) {
     failures.push(
       `${example.id} (${example.sourceRef}): ${
-        error instanceof Error ? error.stack ?? error.message : String(error)
+        error instanceof Error ? (error.stack ?? error.message) : String(error)
       }`,
     );
   }

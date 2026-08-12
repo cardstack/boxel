@@ -5,7 +5,7 @@ import {
   prepareBoxelRuntimeAsync,
   runNativeJqAsync,
   type BoxelRuntimeDefinition,
-} from '../../src/index.js';
+} from '../../src/index.ts';
 
 function approx(actual: unknown, expected: number, tolerance = 1e-6) {
   ok(typeof actual === 'number', `expected number, got ${typeof actual}`);
@@ -27,9 +27,13 @@ const direct = await runNativeJqAsync('BESSELI(1.5, 1)', {});
 approx(direct.outputs[0], 0.981666);
 strictEqual(direct.compiledSource, 'BESSELI(1.5; 1)');
 
-const explicitLibrary = await runNativeJqAsync('1 + 1', {}, {
-  libraries: ['core', 'formula-bessel'],
-});
+const explicitLibrary = await runNativeJqAsync(
+  '1 + 1',
+  {},
+  {
+    libraries: ['core', 'formula-bessel'],
+  },
+);
 strictEqual(explicitLibrary.outputs[0], 2);
 
 const definition: BoxelRuntimeDefinition = {

@@ -1,20 +1,20 @@
+import type { Path } from './utils.ts';
 import {
   access,
   isSliceAccessor,
   normalizeLeadingSliceAccessors,
-  Path,
   shallowClone,
   Type,
   typeOf,
-} from './utils.js';
-import { JqEvaluateError } from '../../errors.js';
+} from './utils.ts';
+import { JqEvaluateError } from '../../errors.ts';
 
 export function setPath(input: any, path: Path, value: any) {
   if (path.length === 0) return value;
   const type = typeOf(input);
   const normalizedPath = normalizeLeadingSliceAccessors(
     type === Type.array ? input.length : 0,
-    path
+    path,
   );
   const accessor = normalizedPath[0];
   const clone =
@@ -28,7 +28,7 @@ export function setPath(input: any, path: Path, value: any) {
     if (isSliceAccessor(accessor)) {
       if (typeOf(value) !== Type.array) {
         throw new JqEvaluateError(
-          `An array slice can only be assigned an array`
+          `An array slice can only be assigned an array`,
         );
       }
       clone.splice(accessor.start, accessor.end - accessor.start, ...value);
@@ -38,7 +38,7 @@ export function setPath(input: any, path: Path, value: any) {
   } else {
     if (isSliceAccessor(accessor)) {
       throw new JqEvaluateError(
-        'setPath: Leading slice accessors are not normalized'
+        'setPath: Leading slice accessors are not normalized',
       );
     }
     clone[accessor] = setPath(clone[accessor], normalizedPath.slice(1), value);

@@ -5,7 +5,7 @@ import {
   parseBxlAst,
   type BxlPredicateSqlPathUsage,
   type ReadableSchema,
-} from '../../src/index.js';
+} from '../../src/index.ts';
 
 const schema: ReadableSchema = {
   fields: [

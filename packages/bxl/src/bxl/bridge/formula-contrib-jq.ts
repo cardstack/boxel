@@ -1,4 +1,4 @@
-import { parseBuiltinJqFilters } from '../../jqtools/evaluate/filters/lib/parseBuiltinJqFilters.js';
+import { parseBuiltinJqFilters } from '../../jqtools/evaluate/filters/lib/parseBuiltinJqFilters.ts';
 
 export const formulaContribJqFilters = parseBuiltinJqFilters(`
 def TRUE: true;

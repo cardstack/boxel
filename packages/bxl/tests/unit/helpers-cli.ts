@@ -11,7 +11,11 @@
 //   - case-insensitive resolution (ISBLANK / isblank / IsBlank all work)
 //   - compile output uses the canonical jq form
 import { strictEqual, deepStrictEqual } from 'node:assert';
-import { evaluateBxl, compileReadableSyntax, type ReadableSchema } from '../../src/index.js';
+import {
+  evaluateBxl,
+  compileReadableSyntax,
+  type ReadableSchema,
+} from '../../src/index.ts';
 
 const schema: ReadableSchema = {
   fields: [
@@ -20,8 +24,13 @@ const schema: ReadableSchema = {
     { key: 'donor', label: 'Donor' },
     { key: 'amount', label: 'Amount' },
     {
-      key: 'billing', label: 'Bill To', kind: 'object',
-      fields: [{ key: 'zip', label: 'Zip' }, { key: 'street', label: 'Street' }],
+      key: 'billing',
+      label: 'Bill To',
+      kind: 'object',
+      fields: [
+        { key: 'zip', label: 'Zip' },
+        { key: 'street', label: 'Street' },
+      ],
     },
   ],
 };
@@ -60,42 +69,82 @@ function evalOn(expr: string, input: unknown) {
 
 // Excel-strict semantics: only null/undefined is blank; empty string is NOT.
 // (Matches Excel's ISBLANK behavior — an empty formula result "" is not blank.)
-strictEqual(evalOn('ISBLANK(Campaign)', good),    false, 'ISBLANK false on populated');
-strictEqual(evalOn('ISBLANK(Campaign)', missing), false, 'ISBLANK false on "" (Excel-strict)');
-strictEqual(evalOn('ISBLANK(Campaign)', none),    true,  'ISBLANK true on null');
-strictEqual(evalOn('NOT ISBLANK(Campaign)', good), true, 'NOT ISBLANK pattern works');
+strictEqual(
+  evalOn('ISBLANK(Campaign)', good),
+  false,
+  'ISBLANK false on populated',
+);
+strictEqual(
+  evalOn('ISBLANK(Campaign)', missing),
+  false,
+  'ISBLANK false on "" (Excel-strict)',
+);
+strictEqual(evalOn('ISBLANK(Campaign)', none), true, 'ISBLANK true on null');
+strictEqual(
+  evalOn('NOT ISBLANK(Campaign)', good),
+  true,
+  'NOT ISBLANK pattern works',
+);
 
 // Case-insensitive resolution
-strictEqual(evalOn('isblank(Campaign)', none),    true, 'lowercase isblank resolves');
-strictEqual(evalOn('IsBlank(Campaign)', none),    true, 'mixed-case IsBlank resolves');
+strictEqual(
+  evalOn('isblank(Campaign)', none),
+  true,
+  'lowercase isblank resolves',
+);
+strictEqual(
+  evalOn('IsBlank(Campaign)', none),
+  true,
+  'mixed-case IsBlank resolves',
+);
 
 // ─────────────────────────────────────────────────────────────────────────
 // present — lowercase (BXL shortcut for "not ISBLANK")
 // ─────────────────────────────────────────────────────────────────────────
 
-strictEqual(evalOn('present(Campaign)', good),    true,  'present true on populated');
-strictEqual(evalOn('present(Campaign)', missing), false, 'present false on empty string');
-strictEqual(evalOn('present(Campaign)', none),    false, 'present false on null');
+strictEqual(
+  evalOn('present(Campaign)', good),
+  true,
+  'present true on populated',
+);
+strictEqual(
+  evalOn('present(Campaign)', missing),
+  false,
+  'present false on empty string',
+);
+strictEqual(evalOn('present(Campaign)', none), false, 'present false on null');
 
 // Nested paths
-strictEqual(evalOn('present("Bill To".Zip)', good),    true);
+strictEqual(evalOn('present("Bill To".Zip)', good), true);
 strictEqual(evalOn('present("Bill To".Zip)', missing), false);
-strictEqual(evalOn('present("Bill To".Zip)', none),    false);
+strictEqual(evalOn('present("Bill To".Zip)', none), false);
 
 // Case-insensitive resolution
-strictEqual(evalOn('PRESENT(Campaign)', good), true,
-  'uppercase PRESENT resolves (case-insensitive)');
+strictEqual(
+  evalOn('PRESENT(Campaign)', good),
+  true,
+  'uppercase PRESENT resolves (case-insensitive)',
+);
 
 // ─────────────────────────────────────────────────────────────────────────
 // when / implies — lowercase (BXL implication)
 // ─────────────────────────────────────────────────────────────────────────
 
-strictEqual(evalOn('when(Payment = "Credit card"; present("Bill To".Zip))', good),    true,
-  'when: cc + zip set → pass');
-strictEqual(evalOn('when(Payment = "Credit card"; present("Bill To".Zip))', missing), false,
-  'when: cc + no zip → fail');
-strictEqual(evalOn('when(Payment = "Credit card"; present("Bill To".Zip))', none),    true,
-  'when: not cc → vacuously pass');
+strictEqual(
+  evalOn('when(Payment = "Credit card"; present("Bill To".Zip))', good),
+  true,
+  'when: cc + zip set → pass',
+);
+strictEqual(
+  evalOn('when(Payment = "Credit card"; present("Bill To".Zip))', missing),
+  false,
+  'when: cc + no zip → fail',
+);
+strictEqual(
+  evalOn('when(Payment = "Credit card"; present("Bill To".Zip))', none),
+  true,
+  'when: not cc → vacuously pass',
+);
 strictEqual(
   evalOn('when(Payment = "Credit card", present("Bill To".Zip))', good),
   true,
@@ -108,13 +157,24 @@ strictEqual(
 );
 
 // implies is an alias
-strictEqual(evalOn('implies(Payment = "Credit card"; present("Bill To".Zip))', good), true,
-  'implies alias of when');
+strictEqual(
+  evalOn('implies(Payment = "Credit card"; present("Bill To".Zip))', good),
+  true,
+  'implies alias of when',
+);
 
 // when falls back to true on false condition — verify explicitly
-strictEqual(evalOn('when(false; false)', {}), true, 'when(false; false) vacuous → true');
-strictEqual(evalOn('when(true; false)', {}),  false, 'when(true; false) failed requirement');
-strictEqual(evalOn('when(true; true)', {}),   true,  'when(true; true) satisfied');
+strictEqual(
+  evalOn('when(false; false)', {}),
+  true,
+  'when(false; false) vacuous → true',
+);
+strictEqual(
+  evalOn('when(true; false)', {}),
+  false,
+  'when(true; false) failed requirement',
+);
+strictEqual(evalOn('when(true; true)', {}), true, 'when(true; true) satisfied');
 
 // ─────────────────────────────────────────────────────────────────────────
 // LET — UPPERCASE (Excel-style lexical bindings, lowered to jq `as $name`)
@@ -135,16 +195,24 @@ strictEqual(
 // words — lowercase (BXL word count; no Excel equivalent)
 // ─────────────────────────────────────────────────────────────────────────
 
-strictEqual(evalOn('words(Donor)', good),    2, 'words: "Grace Lin" → 2');
+strictEqual(evalOn('words(Donor)', good), 2, 'words: "Grace Lin" → 2');
 strictEqual(evalOn('words(Donor)', missing), 1, 'words: "Madonna" → 1');
-strictEqual(evalOn('words(Donor)', none),    0, 'words: null → 0');
-strictEqual(evalOn('words(Donor) >= 2', good),    true,  'words ≥ 2 passes');
-strictEqual(evalOn('words(Donor) >= 2', missing), false, 'words ≥ 2 fails on single');
+strictEqual(evalOn('words(Donor)', none), 0, 'words: null → 0');
+strictEqual(evalOn('words(Donor) >= 2', good), true, 'words ≥ 2 passes');
+strictEqual(
+  evalOn('words(Donor) >= 2', missing),
+  false,
+  'words ≥ 2 fails on single',
+);
 
 // Graceful double-space handling
-strictEqual(evalOn('words(.x)', { x: 'one  two' }), 2, 'words: double-space tolerated');
-strictEqual(evalOn('words(.x)', { x: '   ' }),      0, 'words: whitespace-only → 0');
-strictEqual(evalOn('words(.x)', { x: '' }),         0, 'words: empty → 0');
+strictEqual(
+  evalOn('words(.x)', { x: 'one  two' }),
+  2,
+  'words: double-space tolerated',
+);
+strictEqual(evalOn('words(.x)', { x: '   ' }), 0, 'words: whitespace-only → 0');
+strictEqual(evalOn('words(.x)', { x: '' }), 0, 'words: empty → 0');
 
 // ─────────────────────────────────────────────────────────────────────────
 // nonempty — lowercase (BXL array cleaner)
@@ -161,7 +229,9 @@ deepStrictEqual(
 // ─────────────────────────────────────────────────────────────────────────
 
 strictEqual(
-  evalOn('.tags | overlaps(["finance", "legal"])', { tags: ['sales', 'finance'] }),
+  evalOn('.tags | overlaps(["finance", "legal"])', {
+    tags: ['sales', 'finance'],
+  }),
   true,
   'overlaps detects shared set members',
 );
@@ -176,14 +246,46 @@ strictEqual(
 // compute mappings for SQL-ish predicate sugar.
 // ─────────────────────────────────────────────────────────────────────────
 
-strictEqual(evalOn('between(.amount; 10; 20)', { amount: 15 }), true, 'between true in range');
-strictEqual(evalOn('between(.amount; 10; 20)', { amount: 25 }), false, 'between false out of range');
-strictEqual(evalOn('like(.name; "Ali%")', { name: 'Alice' }), true, 'like supports SQL trailing percent wildcard');
-strictEqual(evalOn('like(.name; "%ice")', { name: 'Alice' }), true, 'like supports SQL leading percent wildcard');
-strictEqual(evalOn('like(.name; "%lic%")', { name: 'Alice' }), true, 'like supports SQL contains-style percent wildcard');
-strictEqual(evalOn('like(.name; "Alice")', { name: 'Alice' }), true, 'like without wildcard is exact string match');
-strictEqual(evalOn('like(.name; "Ali")', { name: 'Alice' }), false, 'like without wildcard does not do prefix matching');
-strictEqual(evalOn('like(.name; "A_i_e")', { name: 'Alice' }), true, 'like supports SQL underscore wildcard');
+strictEqual(
+  evalOn('between(.amount; 10; 20)', { amount: 15 }),
+  true,
+  'between true in range',
+);
+strictEqual(
+  evalOn('between(.amount; 10; 20)', { amount: 25 }),
+  false,
+  'between false out of range',
+);
+strictEqual(
+  evalOn('like(.name; "Ali%")', { name: 'Alice' }),
+  true,
+  'like supports SQL trailing percent wildcard',
+);
+strictEqual(
+  evalOn('like(.name; "%ice")', { name: 'Alice' }),
+  true,
+  'like supports SQL leading percent wildcard',
+);
+strictEqual(
+  evalOn('like(.name; "%lic%")', { name: 'Alice' }),
+  true,
+  'like supports SQL contains-style percent wildcard',
+);
+strictEqual(
+  evalOn('like(.name; "Alice")', { name: 'Alice' }),
+  true,
+  'like without wildcard is exact string match',
+);
+strictEqual(
+  evalOn('like(.name; "Ali")', { name: 'Alice' }),
+  false,
+  'like without wildcard does not do prefix matching',
+);
+strictEqual(
+  evalOn('like(.name; "A_i_e")', { name: 'Alice' }),
+  true,
+  'like supports SQL underscore wildcard',
+);
 
 // ─────────────────────────────────────────────────────────────────────────
 // Compile-output sanity (canonical jq shape)
@@ -223,4 +325,6 @@ strictEqual(
   'when rewrites readable comma separators to jq semicolons',
 );
 
-console.log('BXL helpers (ISBLANK, LET, present, when, implies, words, nonempty, overlaps, SQL predicate helpers): all checks passed');
+console.log(
+  'BXL helpers (ISBLANK, LET, present, when, implies, words, nonempty, overlaps, SQL predicate helpers): all checks passed',
+);

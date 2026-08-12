@@ -11,7 +11,7 @@ import {
   type BxlAstProgram,
   type BxlProfile,
   type ReadableSchema,
-} from '../../src/index.js';
+} from '../../src/index.ts';
 
 const schema: ReadableSchema = {
   fields: [
@@ -46,12 +46,17 @@ if (ast.body?.type === 'binary') {
   }
 }
 
-const policyAst = parseBxlAst('SUM("Line Item"[* ."Taxable"]."Line Total") > 10', {
-  schema,
-  profile: 'policy',
-});
+const policyAst = parseBxlAst(
+  'SUM("Line Item"[* ."Taxable"]."Line Total") > 10',
+  {
+    schema,
+    profile: 'policy',
+  },
+);
 strictEqual(
-  policyAst.profileIssues.some((issue) => issue.code === 'policy-aggregate-banned'),
+  policyAst.profileIssues.some(
+    (issue) => issue.code === 'policy-aggregate-banned',
+  ),
   true,
   'policy profile rejects aggregate calls',
 );
@@ -61,7 +66,9 @@ const predicateAst = parseBxlAst('words(Description) > 10', {
   profile: 'predicate',
 });
 strictEqual(
-  predicateAst.profileIssues.some((issue) => issue.code === 'predicate-call-banned'),
+  predicateAst.profileIssues.some(
+    (issue) => issue.code === 'predicate-call-banned',
+  ),
   true,
   'predicate profile rejects unqueryable calls',
 );
@@ -111,7 +118,12 @@ function expectProfileIssue(
   return program;
 }
 
-const boundedProfiles: BxlProfile[] = ['policy', 'authorization', 'predicate', 'derive'];
+const boundedProfiles: BxlProfile[] = [
+  'policy',
+  'authorization',
+  'predicate',
+  'derive',
+];
 const boundedProfileCases = [
   {
     expression: 'def triple(x): x * 3; triple(2)',
@@ -157,19 +169,20 @@ for (const profile of boundedProfiles) {
 
 // reduce / foreach are banned in `policy` and `predicate` only — `derive`
 // allows them as ergonomic fold primitives for record-local aggregation.
-const loopBoundedProfiles: BxlProfile[] = ['policy', 'authorization', 'predicate'];
+const loopBoundedProfiles: BxlProfile[] = [
+  'policy',
+  'authorization',
+  'predicate',
+];
 const loopCases = [
   'reduce .lineItems[] as $item (0; . + $item.lineTotal)',
   'foreach .lineItems[] as $item (0; . + $item.lineTotal; .)',
 ];
 for (const profile of loopBoundedProfiles) {
   for (const expression of loopCases) {
-    expectProfileIssue(
-      expression,
-      profile,
-      `${profile}-loop-banned`,
-      { readableSyntax: false },
-    );
+    expectProfileIssue(expression, profile, `${profile}-loop-banned`, {
+      readableSyntax: false,
+    });
   }
 }
 
@@ -179,18 +192,28 @@ expectProfileIssue(
   'policy-aggregate-banned',
   { messageIncludes: 'request-time authorization decisions' },
 );
-expectProfileIssue('NPV(0.1, [100, 200]) > 0', 'policy', 'policy-aggregate-banned', {
-  messageIncludes: 'aggregate calls',
-});
+expectProfileIssue(
+  'NPV(0.1, [100, 200]) > 0',
+  'policy',
+  'policy-aggregate-banned',
+  {
+    messageIncludes: 'aggregate calls',
+  },
+);
 expectProfileIssue(
   'T_TEST([1, 2, 3], [2, 3, 4]) < 0.05',
   'policy',
   'policy-aggregate-banned',
   { messageIncludes: 'aggregate calls' },
 );
-expectProfileIssue('IMSUM(["1+i", "2+i"]) = "3+2i"', 'policy', 'policy-aggregate-banned', {
-  messageIncludes: 'aggregate calls',
-});
+expectProfileIssue(
+  'IMSUM(["1+i", "2+i"]) = "3+2i"',
+  'policy',
+  'policy-aggregate-banned',
+  {
+    messageIncludes: 'aggregate calls',
+  },
+);
 expectProfileIssue('IFERROR(Amount, 0) > 10', 'policy', 'policy-call-banned', {
   messageIncludes: 'error-masking calls',
 });
@@ -212,30 +235,51 @@ strictEqual(
   0,
   'authorization profile adds the compiler-only OpenFGA graph vocabulary to policy',
 );
-expectProfileIssue('SUM([1, 2, 3]) > 0', 'authorization', 'authorization-aggregate-banned', {
-  messageIncludes: 'relationship-graph composition',
-});
+expectProfileIssue(
+  'SUM([1, 2, 3]) > 0',
+  'authorization',
+  'authorization-aggregate-banned',
+  {
+    messageIncludes: 'relationship-graph composition',
+  },
+);
 expectProfileIssue(
   'auth_check(.model; .tuples; .request)',
   'authorization',
   'authorization-call-banned',
   { messageIncludes: 'cannot recursively invoke the authorization kernel' },
 );
-expectProfileIssue('words(Description) > 10', 'predicate', 'predicate-call-banned', {
-  messageIncludes: 'query-time boolean predicate',
-});
-expectProfileIssue('PMT(0.08 / 12, 60, 25000, 0, 0) < 0', 'predicate', 'predicate-call-banned', {
-  messageIncludes: 'query-time boolean predicate',
-});
+expectProfileIssue(
+  'words(Description) > 10',
+  'predicate',
+  'predicate-call-banned',
+  {
+    messageIncludes: 'query-time boolean predicate',
+  },
+);
+expectProfileIssue(
+  'PMT(0.08 / 12, 60, 25000, 0, 0) < 0',
+  'predicate',
+  'predicate-call-banned',
+  {
+    messageIncludes: 'query-time boolean predicate',
+  },
+);
 strictEqual(
-  parseBxlAst('Amount + 1 > 10', { schema, profile: 'predicate' }).profileIssues.length,
+  parseBxlAst('Amount + 1 > 10', { schema, profile: 'predicate' }).profileIssues
+    .length,
   0,
   'predicate profile allows portable SQL arithmetic value expressions',
 );
-expectProfileIssue('1 as $x | $x == 1', 'predicate', 'predicate-binding-banned', {
-  readableSyntax: false,
-  messageIncludes: 'query-time boolean predicate',
-});
+expectProfileIssue(
+  '1 as $x | $x == 1',
+  'predicate',
+  'predicate-binding-banned',
+  {
+    readableSyntax: false,
+    messageIncludes: 'query-time boolean predicate',
+  },
+);
 for (const expression of [
   '.lineItems[] == 1',
   '.lineItems[0:1] == []',
@@ -260,35 +304,45 @@ strictEqual(
   'derive profile allows LET and aggregation for headless computedVia work',
 );
 strictEqual(
-  parseBxlAst('IFERROR(Amount, 0)', { schema, profile: 'derive' }).profileIssues.length,
+  parseBxlAst('IFERROR(Amount, 0)', { schema, profile: 'derive' }).profileIssues
+    .length,
   0,
   'derive profile allows deterministic Excel error fallback helpers',
 );
 strictEqual(
-  parseBxlAst('NPV(0.1, [100, 200])', { schema, profile: 'derive' }).profileIssues.length,
+  parseBxlAst('NPV(0.1, [100, 200])', { schema, profile: 'derive' })
+    .profileIssues.length,
   0,
   'derive profile allows deterministic lazy aggregate formula helpers',
 );
 strictEqual(
-  parseBxlAst(
-    'reduce .lineItems[] as $item (0; . + $item.lineTotal)',
-    { schema, profile: 'derive', readableSyntax: false },
-  ).profileIssues.length,
+  parseBxlAst('reduce .lineItems[] as $item (0; . + $item.lineTotal)', {
+    schema,
+    profile: 'derive',
+    readableSyntax: false,
+  }).profileIssues.length,
   0,
   'derive profile allows reduce — record-local fold for aggregation',
 );
 strictEqual(
-  parseBxlAst(
-    'foreach .lineItems[] as $item (0; . + $item.lineTotal; .)',
-    { schema, profile: 'derive', readableSyntax: false },
-  ).profileIssues.length,
+  parseBxlAst('foreach .lineItems[] as $item (0; . + $item.lineTotal; .)', {
+    schema,
+    profile: 'derive',
+    readableSyntax: false,
+  }).profileIssues.length,
   0,
   'derive profile allows foreach — record-local fold with intermediate state',
 );
 strictEqual(
   parseBxlAst(
     '[.policies[] | .coverageFlags // 0] | reduce .[] as $x (0; BITOR(.; $x))',
-    { schema: { fields: [{ key: 'policies', label: 'Policies', kind: 'array' }] }, profile: 'derive', readableSyntax: false },
+    {
+      schema: {
+        fields: [{ key: 'policies', label: 'Policies', kind: 'array' }],
+      },
+      profile: 'derive',
+      readableSyntax: false,
+    },
   ).profileIssues.length,
   0,
   'derive profile allows BITOR-fold for portfolio coverage bitmasks',
@@ -427,7 +481,8 @@ deepStrictEqual(
     safety: 'deny',
     normalizedName: 'ISAFTER',
     category: 'volatile',
-    message: 'volatile calls are not stable request-time authorization predicates',
+    message:
+      'volatile calls are not stable request-time authorization predicates',
   },
   'function safety registry denies volatile validator.js functions in policy',
 );
@@ -476,10 +531,9 @@ for (const testCase of boundedProfileCases) {
 
 throws(
   () =>
-    assertValidBxlProfile(
-      parseBxlAst('words(Description) > 10', { schema }),
-      { profile: 'predicate' },
-    ),
+    assertValidBxlProfile(parseBxlAst('words(Description) > 10', { schema }), {
+      profile: 'predicate',
+    }),
   /predicate-call-banned/,
   'assertValidBxlProfile throws profile diagnostics',
 );

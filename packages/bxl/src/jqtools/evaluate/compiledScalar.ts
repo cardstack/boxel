@@ -1,15 +1,12 @@
-import type {
-  ExpressionAst,
-  NormalBinaryOperator,
-} from '../parser/AST.js';
-import { JqEvaluateError } from '../errors.js';
-import { applyNormalBinaryOperator } from './applyBinary.js';
-import { applyFormat } from './applyFormat.js';
+import type { ExpressionAst, NormalBinaryOperator } from '../parser/AST.ts';
+import { JqEvaluateError } from '../errors.ts';
+import { applyNormalBinaryOperator } from './applyBinary.ts';
+import { applyFormat } from './applyFormat.ts';
 import {
   getBareNativeFilter,
   type NativeFilter,
-} from './filters/lib/nativeFilter.js';
-import { access, isTrue, type PathItem } from './utils/utils.js';
+} from './filters/lib/nativeFilter.ts';
+import { access, isTrue, type PathItem } from './utils/utils.ts';
 
 export type CompiledScalarExpression = (input: unknown) => unknown;
 

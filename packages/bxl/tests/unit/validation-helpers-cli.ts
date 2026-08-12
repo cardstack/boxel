@@ -5,7 +5,7 @@ import {
   runNativeJqAsync,
   solidifyBxlExpression,
   type ReadableSchema,
-} from '../../src/index.js';
+} from '../../src/index.ts';
 
 const schema: ReadableSchema = {
   fields: [
@@ -35,7 +35,8 @@ strictEqual(
   'readable BXL canonicalizes validator.js functions to upstream casing',
 );
 strictEqual(
-  compileReadableSyntax('ISURL(Website, {require_protocol: true})', { schema }).source,
+  compileReadableSyntax('ISURL(Website, {require_protocol: true})', { schema })
+    .source,
   'isURL(.website; {require_protocol:true})',
   'validator.js functions keep readable comma args and upstream option shape',
 );
@@ -45,7 +46,8 @@ strictEqual(
   'solidify canonicalizes validator.js functions to upstream casing',
 );
 strictEqual(
-  solidifyBxlExpression('ISURL(Website, {require_protocol: true})', { schema }).source,
+  solidifyBxlExpression('ISURL(Website, {require_protocol: true})', { schema })
+    .source,
   'isURL(Website, {require_protocol:true})',
   'solidify keeps validator.js option shape with readable commas',
 );
@@ -57,9 +59,21 @@ strictEqual(
   'linter nudges validator.js functions to upstream casing',
 );
 
-strictEqual(await value('isEmail(Email)'), true, 'isEmail validates email strings');
-strictEqual(await value('isEmail("not-an-email")'), false, 'isEmail rejects invalid email strings');
-strictEqual(await value('isEmail(42)'), false, 'validator.js functions return false for non-strings');
+strictEqual(
+  await value('isEmail(Email)'),
+  true,
+  'isEmail validates email strings',
+);
+strictEqual(
+  await value('isEmail("not-an-email")'),
+  false,
+  'isEmail rejects invalid email strings',
+);
+strictEqual(
+  await value('isEmail(42)'),
+  false,
+  'validator.js functions return false for non-strings',
+);
 
 strictEqual(await value('isURL(Website)'), true, 'isURL validates URL strings');
 strictEqual(
@@ -73,9 +87,21 @@ strictEqual(
   'isURL accepts option objects',
 );
 
-strictEqual(await value('isUUID(ID)'), true, 'isUUID validates all UUID versions by default');
-strictEqual(await value('isUUID(ID, 4)'), true, 'isUUID accepts validator.js version arg');
-strictEqual(await value('isUUID(ID, 1)'), false, 'isUUID version arg is honored');
+strictEqual(
+  await value('isUUID(ID)'),
+  true,
+  'isUUID validates all UUID versions by default',
+);
+strictEqual(
+  await value('isUUID(ID, 4)'),
+  true,
+  'isUUID accepts validator.js version arg',
+);
+strictEqual(
+  await value('isUUID(ID, 1)'),
+  false,
+  'isUUID version arg is honored',
+);
 
 strictEqual(
   await value('isULID("01ARZ3NDEKTSV4RRFFQ69G5FAV")'),
@@ -83,23 +109,43 @@ strictEqual(
   'isULID validates ULIDs',
 );
 strictEqual(await value('isIP("127.0.0.1")'), true, 'isIP validates IPv4');
-strictEqual(await value('isIP("127.0.0.1", 6)'), false, 'isIP accepts version arg');
-strictEqual(await value('isFQDN("example.com")'), true, 'isFQDN validates hostnames');
+strictEqual(
+  await value('isIP("127.0.0.1", 6)'),
+  false,
+  'isIP accepts version arg',
+);
+strictEqual(
+  await value('isFQDN("example.com")'),
+  true,
+  'isFQDN validates hostnames',
+);
 
 strictEqual(
   await value('isIBAN("GB82WEST12345698765432")'),
   true,
   'isIBAN validates bank account numbers',
 );
-strictEqual(await value('isBIC("DEUTDEFF")'), true, 'isBIC validates SWIFT/BIC codes');
+strictEqual(
+  await value('isBIC("DEUTDEFF")'),
+  true,
+  'isBIC validates SWIFT/BIC codes',
+);
 strictEqual(
   await value('isISBN("978-0-306-40615-7", 13)'),
   true,
   'isISBN accepts validator.js version arg',
 );
-strictEqual(await value('isISIN("US0378331005")'), true, 'isISIN validates securities IDs');
+strictEqual(
+  await value('isISIN("US0378331005")'),
+  true,
+  'isISIN validates securities IDs',
+);
 
-strictEqual(await value('isHexColor("#ff00aa")'), true, 'isHexColor validates CSS hex colors');
+strictEqual(
+  await value('isHexColor("#ff00aa")'),
+  true,
+  'isHexColor validates CSS hex colors',
+);
 strictEqual(
   await value('isHexColor("ff00aa", {require_hashtag: true})'),
   false,
@@ -110,7 +156,11 @@ strictEqual(
   true,
   'isRFC3339 validates timestamps',
 );
-strictEqual(await value('isISO8601("2026-05-10")'), true, 'isISO8601 validates dates');
+strictEqual(
+  await value('isISO8601("2026-05-10")'),
+  true,
+  'isISO8601 validates dates',
+);
 strictEqual(
   await value('isPostalCode("94105", "US")'),
   true,
@@ -121,7 +171,11 @@ strictEqual(
   false,
   'invalid validator.js options return false instead of throwing',
 );
-strictEqual(await value('isSlug("valid-slug_1")'), true, 'isSlug validates slugs');
+strictEqual(
+  await value('isSlug("valid-slug_1")'),
+  true,
+  'isSlug validates slugs',
+);
 strictEqual(await value('isSlug("Bad Slug")'), false, 'isSlug rejects spaces');
 
 const positiveCases: Array<[string, unknown]> = [
@@ -135,7 +189,10 @@ const positiveCases: Array<[string, unknown]> = [
   ['isAlphanumeric("abc123")', true],
   ['isAscii("abc")', true],
   ['isBase32("MZXW6===")', true],
-  ['isBase58("123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz")', true],
+  [
+    'isBase58("123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz")',
+    true,
+  ],
   ['isBase64("Zm9vYmFy")', true],
   ['isBefore("2026-01-01", {comparisonDate:"2026-01-02"})', true],
   ['isBoolean("true")', true],
@@ -179,7 +236,10 @@ const positiveCases: Array<[string, unknown]> = [
   ['isLowercase("abc")', true],
   ['isLuhnNumber("79927398713")', true],
   ['isMACAddress("00:1B:44:11:3A:B7")', true],
-  ['isMagnetURI("magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567")', true],
+  [
+    'isMagnetURI("magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567")',
+    true,
+  ],
   ['isMailtoURI("mailto:ada@example.com")', true],
   ['isMD5("d41d8cd98f00b204e9800998ecf8427e")', true],
   ['isMimeType("text/plain")', true],

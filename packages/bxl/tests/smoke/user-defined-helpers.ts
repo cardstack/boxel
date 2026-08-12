@@ -1,6 +1,11 @@
-import { evaluateBxl } from '../../src/index.js';
+import { evaluateBxl } from '../../src/index.ts';
 
-const cases: Array<{ name: string; src: string; input: unknown; expected: unknown }> = [
+const cases: Array<{
+  name: string;
+  src: string;
+  input: unknown;
+  expected: unknown;
+}> = [
   {
     name: 'single-arg lowercase helper',
     src: `def double(x): x * 2; double(.n)`,
@@ -65,5 +70,7 @@ for (const c of cases) {
     fail++;
   }
 }
-console.log(`BXL user-defined helpers: ${cases.length - fail}/${cases.length} passed`);
+console.log(
+  `BXL user-defined helpers: ${cases.length - fail}/${cases.length} passed`,
+);
 process.exit(fail);

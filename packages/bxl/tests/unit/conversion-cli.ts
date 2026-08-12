@@ -4,10 +4,8 @@ import {
   jqToReadableBxlExpression,
   lintBxlExpression,
   solidifyBxlExpression,
-} from '../../src/index.js';
-import {
-  bxlExampleSchema,
-} from '../../examples/bxl-150-examples.js';
+} from '../../src/index.ts';
+import { bxlExampleSchema } from '../../examples/bxl-150-examples.ts';
 
 function assertSolid(source: string, expected: string) {
   const result = solidifyBxlExpression(source, { schema: bxlExampleSchema });
@@ -21,10 +19,7 @@ function assertSolid(source: string, expected: string) {
 }
 
 assertSolid('Invoice Number', '"Invoice Number"');
-assertSolid(
-  'line item [ ROW 4 ] . quantity',
-  '"Line Item"[#4].Quantity',
-);
+assertSolid('line item [ ROW 4 ] . quantity', '"Line Item"[#4].Quantity');
 // `[row N]` / `[item N]` are legacy one-based shortcuts; solidify
 // canonicalises them to `[#N]`. Raw zero-based indices and slices stay
 // as-is (they're the jq-native escape hatch).
@@ -45,7 +40,9 @@ const predicateSolid = solidifyBxlExpression(
 );
 strictEqual(predicateSolid.source, '"Line Item"[Category = "Service"].SKU');
 strictEqual(
-  predicateSolid.after.issues.some((issue) => issue.code === 'predicate-first-match'),
+  predicateSolid.after.issues.some(
+    (issue) => issue.code === 'predicate-first-match',
+  ),
   true,
   'semantic first-match info should remain explicit',
 );
@@ -100,9 +97,12 @@ strictEqual(
   '"Line Item"[SKU = "COPY-04"].Quantity',
 );
 
-const readableCustomerCredit = jqToReadableBxlExpression('.customer.creditLimit', {
-  schema: bxlExampleSchema,
-});
+const readableCustomerCredit = jqToReadableBxlExpression(
+  '.customer.creditLimit',
+  {
+    schema: bxlExampleSchema,
+  },
+);
 strictEqual(readableCustomerCredit.source, 'Customer."Credit Limit"');
 
 const fullJq = bxlToJqExpression(readableCustomerCredit.source, {
@@ -120,4 +120,6 @@ strictEqual(
   true,
 );
 
-console.log('BXL conversion helpers: solidify and jq/readable round trips passed');
+console.log(
+  'BXL conversion helpers: solidify and jq/readable round trips passed',
+);

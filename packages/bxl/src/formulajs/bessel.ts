@@ -1,6 +1,6 @@
 import besselImport from 'bessel';
 
-import { parseExcelNumber } from './common.js';
+import { parseExcelNumber } from './common.ts';
 
 const bessel = besselImport as any;
 

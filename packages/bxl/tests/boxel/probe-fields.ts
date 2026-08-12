@@ -18,12 +18,12 @@
 //   probeRecentlyAdmitted   — date-string range comparison via fx (§11)
 
 import { strictEqual } from 'node:assert';
-import { evaluateBxl, expression, fx } from '../../src/index.js';
+import { evaluateBxl, expression, fx } from '../../src/index.ts';
 import {
   baselinePatient,
   dischargedPatient,
   highSeverityPatient,
-} from './fixtures/hospital.js';
+} from './fixtures/hospital.ts';
 
 let pass = 0;
 let fail = 0;
@@ -41,25 +41,31 @@ function check(name: string, fn: () => void) {
 
 // ---------------------------------------------------------------- probeRiskFlag
 
-check('probeRiskFlag: PascalCase ref to a sibling computed (high risk → flag)', () => {
-  // Realm declares `fxIsHighRisk` first, then `probeRiskFlag` references
-  // it via `FxIsHighRisk`. Here we simulate with the precomputed flag
-  // baked into the input.
-  const compute = expression(
-    'if FxIsHighRisk then "⚠ HIGH RISK" else "" end',
-  );
-  strictEqual(compute.call({ fxIsHighRisk: true }), '⚠ HIGH RISK');
-  strictEqual(compute.call({ fxIsHighRisk: false }), '');
-});
+check(
+  'probeRiskFlag: PascalCase ref to a sibling computed (high risk → flag)',
+  () => {
+    // Realm declares `fxIsHighRisk` first, then `probeRiskFlag` references
+    // it via `FxIsHighRisk`. Here we simulate with the precomputed flag
+    // baked into the input.
+    const compute = expression(
+      'if FxIsHighRisk then "⚠ HIGH RISK" else "" end',
+    );
+    strictEqual(compute.call({ fxIsHighRisk: true }), '⚠ HIGH RISK');
+    strictEqual(compute.call({ fxIsHighRisk: false }), '');
+  },
+);
 
-check('probeRiskFlag: derives the underlying flag from severity (no precompute)', () => {
-  // Inline the high-risk check + the dependent label in one expression
-  // so the test is hermetic.
-  const src =
-    'if (Severity == "High" or Severity == "Critical") then "⚠ HIGH RISK" else "" end';
-  strictEqual(evaluateBxl(src, baselinePatient).value, '');
-  strictEqual(evaluateBxl(src, highSeverityPatient).value, '⚠ HIGH RISK');
-});
+check(
+  'probeRiskFlag: derives the underlying flag from severity (no precompute)',
+  () => {
+    // Inline the high-risk check + the dependent label in one expression
+    // so the test is hermetic.
+    const src =
+      'if (Severity == "High" or Severity == "Critical") then "⚠ HIGH RISK" else "" end';
+    strictEqual(evaluateBxl(src, baselinePatient).value, '');
+    strictEqual(evaluateBxl(src, highSeverityPatient).value, '⚠ HIGH RISK');
+  },
+);
 
 // ---------------------------------------------------------------- probeAdmissionQuarter
 
@@ -97,7 +103,8 @@ check('probeAdmissionState: jq if/then/elif/else/end with raw-jq paths', () => {
   strictEqual(evaluateBxl(src, baselinePatient).value, 'discharged');
   strictEqual(evaluateBxl(src, dischargedPatient).value, 'discharged');
   strictEqual(
-    evaluateBxl(src, { admissionDate: '2024-11-01', dischargeDate: null }).value,
+    evaluateBxl(src, { admissionDate: '2024-11-01', dischargeDate: null })
+      .value,
     'admitted',
   );
   strictEqual(evaluateBxl(src, { admissionDate: null }).value, 'pending');
@@ -109,10 +116,7 @@ check('probeFullNameWithId: Excel & string-concat operator', () => {
   const compute = expression(
     fx`PatientId & " — " & FirstName & " " & LastName`,
   );
-  strictEqual(
-    compute.call(baselinePatient),
-    'PT-1001 — Margaret Okonkwo',
-  );
+  strictEqual(compute.call(baselinePatient), 'PT-1001 — Margaret Okonkwo');
 });
 
 check('probeFullNameWithId: handles null first/last (§7 + §8)', () => {
@@ -137,10 +141,7 @@ check('probeFullNameWithId: handles null first/last (§7 + §8)', () => {
 check('probeRecentlyAdmitted: date-string range via fx', () => {
   const compute = expression(fx`AdmissionDate >= "2024-11-01"`);
   strictEqual(compute.call(baselinePatient), true);
-  strictEqual(
-    compute.call({ admissionDate: '2024-09-30' }),
-    false,
-  );
+  strictEqual(compute.call({ admissionDate: '2024-09-30' }), false);
 });
 
 check('probeRecentlyAdmitted: null admissionDate compares as false', () => {

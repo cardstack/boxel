@@ -12,7 +12,7 @@
 // stress-test the language — that's the 150-core corpus's job — but to show
 // how one expression language serves nine distinct authoring surfaces.
 
-import type { ReadableSchema } from '../src/index.js';
+import type { ReadableSchema } from '../src/index.ts';
 import { bxlExampleInput, bxlExampleSchema } from './bxl-150-examples.ts';
 
 export type BxlContext =
@@ -74,7 +74,8 @@ export const bxlContextExamples: BxlContextExample[] = [
     id: 3,
     context: 'CONSTRAINT',
     name: 'line totals sum to subtotal',
-    purpose: 'Invariant: the sum of line-item totals must equal the stored Subtotal.',
+    purpose:
+      'Invariant: the sum of line-item totals must equal the stored Subtotal.',
     primerRef: '§43 Guide · §07 Primer',
     expression: '("Line Item"[all]."Line Total" | add) == Subtotal',
     expected: true, // Subtotal=80, line totals 10+10+12+18+15+15 = 80
@@ -83,7 +84,8 @@ export const bxlContextExamples: BxlContextExample[] = [
     id: 4,
     context: 'CONSTRAINT',
     name: 'line items all have positive quantity',
-    purpose: 'Cross-item invariant using all(); one false item fails the whole card.',
+    purpose:
+      'Cross-item invariant using all(); one false item fails the whole card.',
     primerRef: '§43 Guide',
     expression: 'all("Line Item"[], Quantity > 0)',
     expected: true,
@@ -96,7 +98,8 @@ export const bxlContextExamples: BxlContextExample[] = [
     id: 5,
     context: 'VISIBLE-WHEN',
     name: 'show reviewer fields when in review',
-    purpose: 'Guide rule — reveal reviewer section only for in-review invoices.',
+    purpose:
+      'Guide rule — reveal reviewer section only for in-review invoices.',
     primerRef: '§44 visibility',
     expression: 'Status == "open"',
     expected: true,
@@ -127,9 +130,11 @@ export const bxlContextExamples: BxlContextExample[] = [
     id: 8,
     context: 'AUTOFILL',
     name: 'suggested tax amount',
-    purpose: 'Default a computed tax from rate + taxable items; user may override.',
+    purpose:
+      'Default a computed tax from rate + taxable items; user may override.',
     primerRef: '§45 auto-fill',
-    expression: 'ROUND(SUMIF_BY("Line Item"[all], "lineTotal", "taxable", true)*"Tax Rate"/100, 2)',
+    expression:
+      'ROUND(SUMIF_BY("Line Item"[all], "lineTotal", "taxable", true)*"Tax Rate"/100, 2)',
     expected: 4.54, // 55 * 8.25 / 100 = 4.5375 → 4.54
   },
 
@@ -140,7 +145,8 @@ export const bxlContextExamples: BxlContextExample[] = [
     id: 9,
     context: 'WORKFLOW',
     name: 'can close when all shipments delivered',
-    purpose: 'Gate: workflow advances to "closed" only when every shipment is delivered.',
+    purpose:
+      'Gate: workflow advances to "closed" only when every shipment is delivered.',
     primerRef: '§10 Commands · §07 Primer',
     expression: 'all(Shipment[], Delivered == true)',
     expected: false, // UPS delivered, FedEx+Courier not → false
@@ -149,7 +155,8 @@ export const bxlContextExamples: BxlContextExample[] = [
     id: 10,
     context: 'WORKFLOW',
     name: 'can invoice when captured payment covers total',
-    purpose: 'Gate: can advance to "paid" state when captured amounts meet the total.',
+    purpose:
+      'Gate: can advance to "paid" state when captured amounts meet the total.',
     primerRef: '§10 Commands',
     expression: 'Payment[Status = "captured"].Amount >= Total',
     expected: false, // captured=30, total=89.04 → false
@@ -162,7 +169,8 @@ export const bxlContextExamples: BxlContextExample[] = [
     id: 11,
     context: 'NOTIFICATION',
     name: 'low credit remaining alert',
-    purpose: 'Notification: fire when customer is close to hitting their credit limit.',
+    purpose:
+      'Notification: fire when customer is close to hitting their credit limit.',
     primerRef: '§07 Primer · notification triggers',
     expression: '(Customer."Credit Limit"-Total) < 500',
     expected: true, // 500 - 89.04 = 410.96, < 500 → true
@@ -184,7 +192,8 @@ export const bxlContextExamples: BxlContextExample[] = [
     id: 13,
     context: 'REFLEX',
     name: 'overdue invoice trigger',
-    purpose: 'Reflex: fires when Due Days drops under a threshold so follow-up logic runs.',
+    purpose:
+      'Reflex: fires when Due Days drops under a threshold so follow-up logic runs.',
     primerRef: '§11 Reflex · §07 Primer',
     expression: '"Due Days" < 7 and Status != "paid"',
     expected: false, // Due Days = 30, >= 7
@@ -208,7 +217,8 @@ export const bxlContextExamples: BxlContextExample[] = [
     name: 'line-item report projection',
     purpose: 'Build a report row per line item with SKU and extended price.',
     primerRef: '§07 Primer · query transforms',
-    expression: '["Line Item"[] | {sku: .SKU, ext: (.Quantity * ."Unit Price")}]',
+    expression:
+      '["Line Item"[] | {sku: .SKU, ext: (.Quantity * ."Unit Price")}]',
     expected: [
       { sku: 'PAPER-01', ext: 10 },
       { sku: 'BRAND-RED', ext: 10 },
@@ -224,7 +234,8 @@ export const bxlContextExamples: BxlContextExample[] = [
     name: 'category rollup',
     purpose: 'Group and sum line totals by category for an analytics view.',
     primerRef: '§07 Primer',
-    expression: '"Line Item"[all] | group_by(.category) | map({ category: .[0].category, total: (map(.lineTotal) | add) })',
+    expression:
+      '"Line Item"[all] | group_by(.category) | map({ category: .[0].category, total: (map(.lineTotal) | add) })',
     expected: [
       { category: 'Hardware', total: 15 },
       { category: 'Marketing', total: 10 },

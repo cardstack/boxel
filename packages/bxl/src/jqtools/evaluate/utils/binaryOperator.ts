@@ -1,4 +1,4 @@
-import {
+import type {
   AlternativeOperator,
   AssignmentOperator,
   BinaryOperator,
@@ -7,34 +7,37 @@ import {
   DestructuringAlternativeOperator,
   NormalBinaryOperator,
   PipeOperator,
-} from '../../parser/AST.js';
+} from '../../parser/AST.ts';
 
-export enum BinaryOperatorType {
-  normal,
-  assignment,
-  boolean,
-  pipe,
-  comma,
-  alternative,
-  destructuringAlternative,
-}
+export const BinaryOperatorType = {
+  normal: 'normal',
+  assignment: 'assignment',
+  boolean: 'boolean',
+  pipe: 'pipe',
+  comma: 'comma',
+  alternative: 'alternative',
+  destructuringAlternative: 'destructuringAlternative',
+} as const;
+
+export type BinaryOperatorType =
+  (typeof BinaryOperatorType)[keyof typeof BinaryOperatorType];
 
 type OperatorTypeMapping<T extends BinaryOperatorType> =
-  T extends BinaryOperatorType.normal
+  T extends typeof BinaryOperatorType.normal
     ? NormalBinaryOperator
-    : T extends BinaryOperatorType.assignment
-    ? AssignmentOperator
-    : T extends BinaryOperatorType.boolean
-    ? BooleanBinaryOperator
-    : T extends BinaryOperatorType.pipe
-    ? PipeOperator
-    : T extends BinaryOperatorType.comma
-    ? CommaOperator
-    : T extends BinaryOperatorType.alternative
-    ? AlternativeOperator
-    : T extends BinaryOperatorType.destructuringAlternative
-    ? DestructuringAlternativeOperator
-    : never;
+    : T extends typeof BinaryOperatorType.assignment
+      ? AssignmentOperator
+      : T extends typeof BinaryOperatorType.boolean
+        ? BooleanBinaryOperator
+        : T extends typeof BinaryOperatorType.pipe
+          ? PipeOperator
+          : T extends typeof BinaryOperatorType.comma
+            ? CommaOperator
+            : T extends typeof BinaryOperatorType.alternative
+              ? AlternativeOperator
+              : T extends typeof BinaryOperatorType.destructuringAlternative
+                ? DestructuringAlternativeOperator
+                : never;
 
 const operatorMapping: Record<BinaryOperator, BinaryOperatorType> = {
   '|': BinaryOperatorType.pipe,
@@ -70,7 +73,7 @@ export function typeOfBinaryOperator(op: BinaryOperator): BinaryOperatorType {
 
 export function isBinaryOperatorType<T extends BinaryOperatorType>(
   op: BinaryOperator,
-  type: T
+  type: T,
 ): op is OperatorTypeMapping<T> {
   return typeOfBinaryOperator(op) === type;
 }

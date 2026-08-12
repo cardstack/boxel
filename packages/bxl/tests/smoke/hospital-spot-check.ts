@@ -1,7 +1,7 @@
 // Spot-check that the expressions used in the ported hospital example
 // actually evaluate end-to-end through BXL. Picks a representative sample
 // from each hospital .gts file.
-import { evaluateBxl } from '../../src/index.js';
+import { evaluateBxl } from '../../src/index.ts';
 
 const cases: Array<[string, unknown, unknown, string]> = [
   [
@@ -51,5 +51,7 @@ for (const [expr, input, expected, label] of cases) {
     fail++;
   }
 }
-console.log(`\n${cases.length - fail}/${cases.length} hospital spot-checks passed`);
+console.log(
+  `\n${cases.length - fail}/${cases.length} hospital spot-checks passed`,
+);
 process.exit(fail);

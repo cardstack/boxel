@@ -19,8 +19,8 @@ import {
   expression,
   fx,
   jq,
-} from '../../src/index.js';
-import { baselinePatient, fuzzEmptyVitals } from './fixtures/hospital.js';
+} from '../../src/index.ts';
+import { baselinePatient, fuzzEmptyVitals } from './fixtures/hospital.ts';
 
 let pass = 0;
 let fail = 0;
@@ -159,16 +159,19 @@ check('§11a fx`…` enables readable BXL (Excel-style)', () => {
   strictEqual(compute.call(baselinePatient.vitals), 1.57);
 });
 
-check('§11a Excel #N/A from IFS with no match returns null (not a crash)', () => {
-  // The realm pattern: a guarded IFS that misses every branch used to
-  // throw `#N/A` from the indexer. `bxl()` now catches Excel sentinels
-  // at the boundary and surfaces null so a StringField/NumberField
-  // gets a clean empty value.
-  const compute = expression(
-    fx`IFS(BpSystolic >= 200, "crisis", BpSystolic >= 180, "stage2")`,
-  );
-  strictEqual(compute.call({ bpSystolic: 90 }), null);
-});
+check(
+  '§11a Excel #N/A from IFS with no match returns null (not a crash)',
+  () => {
+    // The realm pattern: a guarded IFS that misses every branch used to
+    // throw `#N/A` from the indexer. `bxl()` now catches Excel sentinels
+    // at the boundary and surfaces null so a StringField/NumberField
+    // gets a clean empty value.
+    const compute = expression(
+      fx`IFS(BpSystolic >= 200, "crisis", BpSystolic >= 180, "stage2")`,
+    );
+    strictEqual(compute.call({ bpSystolic: 90 }), null);
+  },
+);
 
 check('§11a `as: Cls` materializes a plain object as an instance', () => {
   // No Boxel runtime here — `getFields` is unavailable so the factory
@@ -178,10 +181,9 @@ check('§11a `as: Cls` materializes a plain object as an instance', () => {
     label: string = '';
     tone: string = '';
   }
-  const compute = expression(
-    jq`{ label: "Stable", tone: "blue" }`,
-    { as: StatusPanel },
-  );
+  const compute = expression(jq`{ label: "Stable", tone: "blue" }`, {
+    as: StatusPanel,
+  });
   const out = compute.call(baselinePatient) as StatusPanel;
   ok(out instanceof StatusPanel, 'output is an instance of the shape class');
   strictEqual(out.label, 'Stable');
@@ -222,7 +224,9 @@ check('§11a empty-vitals computeVia returns null, not undefined', () => {
 
 // ----------------------------------------------------------------
 
-console.log(`BXL Boxel expression factory: ${pass}/${pass + fail} cases passed`);
+console.log(
+  `BXL Boxel expression factory: ${pass}/${pass + fail} cases passed`,
+);
 if (fail > 0) {
   console.log('Failures:');
   for (const f of failures) console.log(f);
