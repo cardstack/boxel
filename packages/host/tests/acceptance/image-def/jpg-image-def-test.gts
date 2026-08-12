@@ -367,6 +367,65 @@ module('Acceptance | jpg image def', function (hooks) {
       img?.getAttribute('src')?.includes('sample.jpg'),
       'img src references the JPEG file',
     );
+    assert.ok(
+      document.querySelector('[data-prerender] [data-test-file-isolated]'),
+      'the shared isolated shell hosts the preview',
+    );
+  });
+
+  test('isolated render surfaces EXIF and color profile in the inspector', async function (assert) {
+    let url = makeFileURL('with-exif.jpg');
+
+    await visit(
+      fileExtractPath(url, {
+        fileExtract: true,
+        fileDefCodeRef: jpgDefCodeRef(),
+      }),
+    );
+    let result = await captureFileExtractResult('ready');
+    assert.ok(result.resource, 'extraction produced a resource');
+
+    (globalThis as any).__boxelFileRenderData = {
+      resource: result.resource,
+      fileDefCodeRef: jpgDefCodeRef(),
+    };
+
+    await visit(
+      fileRenderPath(url, {
+        fileRender: true,
+        fileDefCodeRef: jpgDefCodeRef(),
+      }),
+    );
+
+    let { status } = await capturePrerenderResult('innerHTML');
+    assert.strictEqual(status, 'ready', 'render completed');
+
+    let inspector = document.querySelector(
+      '[data-prerender] [data-test-file-isolated]',
+    ) as HTMLElement | null;
+    assert.ok(inspector, 'the shared isolated shell rendered');
+
+    let text = inspector?.textContent ?? '';
+    assert.ok(
+      text.includes('EXIF metadata'),
+      'the inspector shows an EXIF group',
+    );
+    assert.ok(
+      text.includes('Canon EOS R5'),
+      'the camera name renders from the extracted EXIF',
+    );
+    assert.ok(
+      text.includes('Color profile'),
+      'the inspector shows a color profile group',
+    );
+    assert.ok(
+      text.includes('sRGB'),
+      'the coded color space renders with its human label',
+    );
+    assert.ok(
+      text.includes('8-bit'),
+      'the bit depth read from the frame header renders',
+    );
   });
 
   test('indexing stores JPEG metadata and file meta uses it', async function (assert) {
@@ -446,7 +505,7 @@ module('Acceptance | jpg image def', function (hooks) {
     let { status } = await capturePrerenderResult('innerHTML');
     assert.strictEqual(status, 'ready', 'render completed');
 
-    let imgSelector = '[data-prerender] .image-isolated__img';
+    let imgSelector = '[data-prerender] [data-test-image-preview]';
     let img = document.querySelector(imgSelector) as HTMLImageElement | null;
     assert.ok(img, 'img element is rendered');
     assert.ok(

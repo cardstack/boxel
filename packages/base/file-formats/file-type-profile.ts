@@ -391,6 +391,13 @@ const PROFILE_BY_CONTENT_TYPE: Record<string, FileTypeProfile> = {
 
 // Extension fallback covers files served without a useful content type.
 const CONTENT_TYPE_BY_EXTENSION: Record<string, string> = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  avif: 'image/avif',
+  svg: 'image/svg+xml',
   mp3: 'audio/mpeg',
   wav: 'audio/wav',
   ogg: 'audio/ogg',

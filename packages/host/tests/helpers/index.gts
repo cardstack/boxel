@@ -2103,6 +2103,15 @@ export const cardInfo = Object.freeze({
   notes: null,
 });
 
+// The link fields `CardInfoField` declares. A composite field serializes its
+// never-authored links only under `includeUnrenderedFields`, so these appear
+// in an exact-document assertion exactly when that option is set — and, since
+// every CardDef contains a `cardInfo`, they appear for every card.
+export const cardInfoLinks = Object.freeze({
+  'cardInfo.cardThumbnail': { links: { self: null } },
+  'cardInfo.theme': { links: { self: null } },
+});
+
 // UI interaction helpers for acceptance tests
 
 /**
