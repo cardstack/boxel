@@ -2,7 +2,7 @@ import { VirtualNetwork } from '../virtual-network.ts';
 import { createEnvironmentAwareFetch } from '#fetch';
 import type { SharedTests } from '../helpers/index.ts';
 
-const SERVE = 'https://realm-server.example.com/_packages';
+const SERVE = 'https://realm-server.example.com/demo/_packages';
 const REALM = 'https://realm-server.example.com/acme/';
 
 // The claim this file exists to prove:
@@ -137,10 +137,10 @@ const tests: SharedTests<unknown> = Object.freeze({
     // environments, or sensibly hand-edited — which is the whole point of
     // it being a file in the realm rather than server configuration.
     let authored = {
-      imports: { palette: '/_packages/lib/palette@2.0.0/index.js' },
+      imports: { palette: '/demo/_packages/lib/palette@2.0.0/index.js' },
       scopes: {
         'legacy-viewer/': {
-          palette: '/_packages/lib/palette@1.0.0/index.js',
+          palette: '/demo/_packages/lib/palette@1.0.0/index.js',
         },
       },
     };
@@ -173,10 +173,10 @@ const tests: SharedTests<unknown> = Object.freeze({
     let other = 'https://realm-server.example.com/other/';
     let vn = new VirtualNetwork(createEnvironmentAwareFetch());
     vn.setRealmDecklist(REALM, {
-      imports: { palette: '/_packages/lib/palette@1.0.0/index.js' },
+      imports: { palette: '/demo/_packages/lib/palette@1.0.0/index.js' },
     });
     vn.setRealmDecklist(other, {
-      imports: { palette: '/_packages/lib/palette@2.0.0/index.js' },
+      imports: { palette: '/demo/_packages/lib/palette@2.0.0/index.js' },
     });
 
     assert.strictEqual(
@@ -198,9 +198,11 @@ const tests: SharedTests<unknown> = Object.freeze({
     // own scope keys resolve to URLs nested beneath the realm.
     let vn = new VirtualNetwork(createEnvironmentAwareFetch());
     vn.setRealmDecklist(REALM, {
-      imports: { palette: '/_packages/lib/palette@2.0.0/index.js' },
+      imports: { palette: '/demo/_packages/lib/palette@2.0.0/index.js' },
       scopes: {
-        'legacy-viewer/': { palette: '/_packages/lib/palette@1.0.0/index.js' },
+        'legacy-viewer/': {
+          palette: '/demo/_packages/lib/palette@1.0.0/index.js',
+        },
       },
     });
     assert.strictEqual(
@@ -225,16 +227,18 @@ const tests: SharedTests<unknown> = Object.freeze({
     let vn = new VirtualNetwork(createEnvironmentAwareFetch());
     vn.setRealmDecklist(REALM, {
       imports: {
-        palette: '/_packages/lib/palette@1.0.0/index.js',
-        retracted: '/_packages/lib/gone@1.0.0/index.js',
+        palette: '/demo/_packages/lib/palette@1.0.0/index.js',
+        retracted: '/demo/_packages/lib/gone@1.0.0/index.js',
       },
       scopes: {
-        'legacy-viewer/': { palette: '/_packages/lib/palette@1.0.0/index.js' },
+        'legacy-viewer/': {
+          palette: '/demo/_packages/lib/palette@1.0.0/index.js',
+        },
       },
     });
     // The edited card: palette bumped, `retracted` and the scope deleted.
     vn.setRealmDecklist(REALM, {
-      imports: { palette: '/_packages/lib/palette@2.0.0/index.js' },
+      imports: { palette: '/demo/_packages/lib/palette@2.0.0/index.js' },
     });
 
     assert.strictEqual(
@@ -265,11 +269,11 @@ const tests: SharedTests<unknown> = Object.freeze({
     // tests fails and says which behaviour was lost.
     let vn = new VirtualNetwork(createEnvironmentAwareFetch());
     vn.addDecklist(
-      { imports: { retracted: '/_packages/lib/gone@1.0.0/index.js' } },
+      { imports: { retracted: '/demo/_packages/lib/gone@1.0.0/index.js' } },
       REALM,
     );
     vn.addDecklist(
-      { imports: { palette: '/_packages/lib/palette@2.0.0/index.js' } },
+      { imports: { palette: '/demo/_packages/lib/palette@2.0.0/index.js' } },
       REALM,
     );
     assert.strictEqual(
@@ -283,7 +287,7 @@ const tests: SharedTests<unknown> = Object.freeze({
     // Closing a workspace, or deleting the card.
     let vn = new VirtualNetwork(createEnvironmentAwareFetch());
     vn.setRealmDecklist(REALM, {
-      imports: { palette: '/_packages/lib/palette@1.0.0/index.js' },
+      imports: { palette: '/demo/_packages/lib/palette@1.0.0/index.js' },
     });
     let pinned = vn.resolveImport('palette', `${REALM}gallery/scene.gts`);
     vn.setRealmDecklist(REALM, undefined);
@@ -300,7 +304,7 @@ const tests: SharedTests<unknown> = Object.freeze({
     // edited map, which is what a reload does.
     let vn = new VirtualNetwork(createEnvironmentAwareFetch());
     vn.addDecklist(
-      { imports: { palette: '/_packages/lib/palette@1.0.0/index.js' } },
+      { imports: { palette: '/demo/_packages/lib/palette@1.0.0/index.js' } },
       REALM,
     );
     assert.strictEqual(
@@ -311,7 +315,7 @@ const tests: SharedTests<unknown> = Object.freeze({
 
     vn.clearDecklist();
     vn.addDecklist(
-      { imports: { palette: '/_packages/lib/palette@2.0.0/index.js' } },
+      { imports: { palette: '/demo/_packages/lib/palette@2.0.0/index.js' } },
       REALM,
     );
     assert.strictEqual(

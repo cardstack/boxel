@@ -1143,10 +1143,16 @@ export {
   type ResponseWithNodeStream,
 } from './virtual-network.ts';
 export {
+  APPS_DIR,
+  PACKAGES_DIR,
+  DECKLIST_ROOTS,
+  appImportMapURL,
+  composeRealmDecklist,
   flattenImportMaps,
   importMapURL,
   invalidationsNameImportMap,
   IMPORT_MAP_PATH,
+  packageBaseOf,
   parentImportMapURL,
   parseImportMapFile,
   resolveImportMap,

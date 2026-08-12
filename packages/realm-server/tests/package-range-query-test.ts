@@ -20,7 +20,7 @@ const NAME = 'experiments/greeter';
 const ALL = ['1.0.0', '1.1.0', '2.0.0', '2.1.0', '2.2.0', '2.3.0'];
 
 function mod(spec: string, rest = 'index') {
-  return `${ORIGIN}/_packages/${NAME}@${encodeURIComponent(spec)}/${rest}`;
+  return `${ORIGIN}/demo/_packages/${NAME}@${encodeURIComponent(spec)}/${rest}`;
 }
 
 const lookupAll = ({ spec }: { name: string; spec: string }) =>
@@ -30,7 +30,7 @@ module(basename(import.meta.filename), function () {
   module('parsing a package address', function () {
     test('splits name, spec and rest', function (assert) {
       assert.deepEqual(parsePackageModule(mod('^2.0.0')), {
-        prefix: `${ORIGIN}/_packages/`,
+        prefix: `${ORIGIN}/demo/_packages/`,
         name: NAME,
         spec: '^2.0.0',
         rest: 'index',

@@ -6,8 +6,10 @@
 //
 // `deck-multi-package-design.md` §4 specifies both redirects. What this does
 // NOT do is serve the bytes: it resolves the short name and sends a 302 into
-// `/_packages/<publisher>/<name>@<version>/…`, which is where the published
-// tree actually lives.
+// `<realm>/_packages/<publisher>/<name>@<version>/…`, which is where the
+// published tree actually lives. Both addresses sit beneath the SAME realm,
+// because the realm is what governs the package name — see
+// `lib/package-store.ts`.
 //
 // THAT SPLIT IS THE POINT. A published Version must not change when the realm
 // it came from is edited, moved or deleted, and only the store can promise
@@ -28,6 +30,7 @@ import { readStoreMeta, readStoredFile } from '@cardstack/deck/node';
 import type { DBAdapter, Realm } from '@cardstack/runtime-common';
 import { setContextResponse } from '../middleware/index.ts';
 import { findOrMountRealm } from '../lib/realm-routing.ts';
+import { packageStoreForRealm } from '../lib/package-store.ts';
 import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.ts';
 import {
   discoverRealmPackages,
@@ -128,9 +131,9 @@ export default function handleRealmPackageAlias({
   return async function (ctxt: Koa.Context, next: Koa.Next) {
     // Defer immediately on anything that is not shaped like an alias, so a
     // realm holding a path with an `@` in it flows through untouched.
-    let storeDir = packageStorePath;
-    let alias = storeDir ? parseRealmPackageAlias(ctxt.path) : undefined;
-    if (!storeDir || !alias || ctxt.method !== 'GET') {
+    let storeRoot = packageStorePath;
+    let alias = storeRoot ? parseRealmPackageAlias(ctxt.path) : undefined;
+    if (!storeRoot || !alias || ctxt.method !== 'GET') {
       return next();
     }
     let { prefix, key, version, rest } = alias;
@@ -143,6 +146,13 @@ export default function handleRealmPackageAlias({
     if (!realm?.dir) {
       return next();
     }
+    // The realm governs the package namespace, so its store is the only one
+    // this alias can resolve against and its path is the prefix the redirect
+    // lands under. `realm.url` rather than the request's `prefix`: the two
+    // agree for a request that hit the realm root exactly, and only the
+    // registry's answer is right when they do not.
+    let realmPath = new URL(realm.url).pathname.replace(/\/?$/, '/');
+    let storeDir = packageStoreForRealm(storeRoot, realm.url);
 
     // The convention first: a package's directory is normally named after it,
     // so `<realm>/<key>/importmap.json` is one read rather than a tree walk on
@@ -202,7 +212,7 @@ export default function handleRealmPackageAlias({
       new Response(null, {
         status: 302,
         headers: {
-          location: `/_packages/${name}@${version}/${path}`,
+          location: `${realmPath}_packages/${name}@${version}/${path}`,
           // The target is immutable; the answer to "where does @crm@2.0.0
           // point" is not, because a realm can re-declare its publisher.
           'cache-control': 'no-store',

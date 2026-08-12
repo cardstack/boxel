@@ -20,6 +20,7 @@ const { ensureDirSync } = fsExtra;
 import {
   httpLogging,
   ecsMetadata,
+  jwtMiddleware,
   methodOverrideSupport,
   proxyAsset,
 } from './middleware/index.ts';
@@ -34,6 +35,10 @@ import { createSendEvent } from './handlers/send-event.ts';
 import { createServeFromRealm } from './handlers/serve-from-realm.ts';
 import handleRealmHistory from './handlers/handle-realm-history.ts';
 import handleRealmPackageAlias from './handlers/handle-realm-package-alias.ts';
+import handlePackageServe from './handlers/handle-package-serve.ts';
+import handlePackageProposals, {
+  parseProposalsAddress,
+} from './handlers/handle-package-proposals.ts';
 import { createServeIndex } from './handlers/serve-index.ts';
 import { findOrMountRealm } from './lib/realm-routing.ts';
 import type { Prerenderer } from '@cardstack/runtime-common';
@@ -1089,6 +1094,16 @@ export class RealmServer {
       dbAdapter: this.dbAdapter,
       virtualNetwork: this.virtualNetwork,
     });
+    // Built once rather than per request: the write door onto each realm's
+    // package namespace, mounted below with the JWT gate on POST only.
+    let packageProposals = handlePackageProposals({
+      realms: this.realms,
+      reconciler: this.reconciler,
+      dbAdapter: this.dbAdapter,
+      packageStorePath:
+        process.env.PACKAGE_STORE_PATH ??
+        join(this.realmsRootPath, '.package-store'),
+    });
     let sendEvent = createSendEvent({
       matrixClient: this.matrixClient,
       dbAdapter: this.dbAdapter,
@@ -1209,6 +1224,47 @@ export class RealmServer {
           realmSecretSeed: this.realmSecretSeed,
         }),
       )
+      // `<realm>/_packages/…` and `<realm>/_source/…` — the two serve doors
+      // onto the Versions this realm published. A middleware rather than a
+      // route because a realm's path is not a fixed number of segments, and
+      // only the realm registry knows where it ends; see
+      // `handlers/handle-package-serve.ts`. Ahead of the realm fallthrough so
+      // the doors are not shadowed by the realm's own file router, and it
+      // defers immediately on anything that is not one of them.
+      .use(
+        handlePackageServe({
+          realms: this.realms,
+          reconciler: this.reconciler,
+          dbAdapter: this.dbAdapter,
+          packageStorePath:
+            process.env.PACKAGE_STORE_PATH ??
+            join(this.realmsRootPath, '.package-store'),
+        }),
+      )
+      // `<realm>/_package-proposals/<name>` — the WRITE door onto the same
+      // realm-governed namespace. Realm-relative for a reason beyond symmetry:
+      // a proposal record lives in its realm's store, and with no server-wide
+      // store left there is nowhere else `accept` could look.
+      //
+      // The JWT gate is applied to writes only, here rather than in the
+      // handler, so the authenticated and unauthenticated halves stay visibly
+      // separate: the queue is readable without a token because a review
+      // nobody may read is not a review, while proposing and accepting take
+      // their identity from the token and never from the body.
+      .use(async (ctxt, next) => {
+        if (!parseProposalsAddress(ctxt.path)) {
+          return next();
+        }
+        if (ctxt.method === 'POST') {
+          return jwtMiddleware(this.realmSecretSeed, this.dbAdapter)(ctxt, () =>
+            packageProposals(ctxt, next),
+          );
+        }
+        if (ctxt.method === 'GET') {
+          return packageProposals(ctxt, next);
+        }
+        return next();
+      })
       // `<realm>/@<package>@<version>/…` — the short realm-relative name for
       // a Version this realm published, redirected into the package store.
       // Defers on anything it does not recognise, so a realm path that merely

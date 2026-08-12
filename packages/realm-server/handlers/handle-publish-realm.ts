@@ -556,13 +556,18 @@ export default function handlePublishRealm({
           await ensureRealmIndexBoilerplateOptIn(publishedRealmPath);
 
           // Re-home the published copy's import map. The tree just landed on
-          // a different origin, and an origin-relative pin — a `/_packages/…`
-          // package address — now names the published host, which has no
-          // package store. See `publish-import-map.ts` for why this asks the
-          // classifier rather than swapping prefixes.
+          // a different origin, and an origin-relative pin — a
+          // `<realm>/_packages/…` package address — now names the published
+          // host, which has no package store. See `publish-import-map.ts` for
+          // why this asks the classifier rather than swapping prefixes.
+          //
+          // `sourceRealmURL` as well as the server: a bare `deck.extends`
+          // names a package in the SOURCE realm's namespace, so making it
+          // absolute needs that realm's path and not just its origin.
           try {
             let rebind = await rebindPublishedImportMap(publishedRealmPath, {
               serverURL,
+              sourceRealmURL,
             });
             if (!rebind.absent) {
               log.info(

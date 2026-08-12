@@ -1,4 +1,24 @@
-// A realm's import map: `importmap.json` at the realm root.
+// A realm's import map: `importmap.json`, at the realm root or — preferably —
+// one per app under `apps/`.
+//
+// WHERE THE PINS LIVE, AND WHY IT MOVED. A single map at the realm root has to
+// carry every app's pins at once, with per-app differences expressed as
+// `scopes` keyed by directory. That works, and it puts one file in the way of
+// the thing app surfaces exist to guarantee: a realm can host COMPETING apps,
+// and each must be able to move its own versions without touching a file its
+// neighbour also depends on. A shared root map is exactly the coupling that
+// design removes one layer up, reintroduced one layer down.
+//
+// So an app owns its pins. `apps/<name>/importmap.json` governs the modules
+// beneath it, and `composeRealmDecklist` folds each app in as a scope over its
+// own directory — which is what the root map's `scopes` said by hand, now said
+// by where the file sits. A realm whose modules all live in apps needs no root
+// map at all.
+//
+// The root map is still read, and still first: realms that predate this hold
+// real pins there, and a realm with no `apps/` directory is not doing anything
+// wrong. An app map wins for its own subtree, because it is the more specific
+// statement and the one sitting next to the code it governs.
 //
 // NOT A CARD, and that is the point rather than an implementation detail.
 // `deck-multi-package-design.md` §2 states it plainly — "One plain JSON file
@@ -38,6 +58,109 @@ export { IMPORT_MAP_PATH };
 export type { DecklistLink };
 
 /**
+ * Where a realm keeps its apps.
+ *
+ * A CONVENTION rather than a declaration, deliberately. The alternative was a
+ * root map listing the app directories — but then adding an app means editing
+ * a shared file, which is the coupling this whole arrangement removes. One
+ * directory listing costs one request and needs no registry to keep in step.
+ */
+export const APPS_DIR = 'apps/';
+
+/**
+ * Where a realm keeps the working trees of packages it publishes.
+ *
+ * A SECOND ROOT, and the reason is worth stating because it is not symmetry.
+ * A package's working tree is realm content like any other — the realm indexes
+ * it, code mode opens it, and its modules import bare specifiers that
+ * something has to resolve. Before per-app maps that something was the realm
+ * root map; with the root map gone, a working tree needs pins of its own, and
+ * they belong in the map that already sits in that directory declaring the
+ * package.
+ *
+ * Those pins are a LOCKFILE, not a duplicate of the ranges beside them: the
+ * ranges say what the author would accept and the pins say what this tree
+ * currently develops against, which is exactly the pair a publish seals.
+ */
+export const PACKAGES_DIR = 'packages/';
+
+/**
+ * The directories a realm's maps are discovered under, and how far to descend.
+ *
+ * BOUNDED ON PURPOSE. Scanning a whole realm for `importmap.json` would be
+ * unbounded work on every boot for a realm of any size; naming the roots keeps
+ * it to two listings plus one per candidate.
+ *
+ * The depth differs because the layouts do: an app is `apps/<name>/`, while a
+ * package is `<publisher>/<package>` and therefore `packages/<publisher>/<key>/`.
+ * Rather than hardcode which is which, a directory holding a map is taken as
+ * the answer and only a directory WITHOUT one is descended into — the same
+ * rule Deck's own store walk uses to find scoped and unscoped packages without
+ * assuming a depth.
+ */
+export const DECKLIST_ROOTS: readonly { dir: string; maxDepth: number }[] = [
+  { dir: APPS_DIR, maxDepth: 1 },
+  { dir: PACKAGES_DIR, maxDepth: 2 },
+];
+
+/** The URL of an app's own import map. */
+export function appImportMapURL(appBase: string): string {
+  return `${ensureTrailingSlash(appBase)}${IMPORT_MAP_PATH}`;
+}
+
+/**
+ * One realm decklist from a root map (if any) and the maps discovered beneath
+ * `apps/` and `packages/`.
+ *
+ * Each map's `imports` become a SCOPE over its own directory, which is
+ * precisely what a hand-written root scope said — the difference is only that
+ * the statement now lives next to the code it governs, so moving one app's
+ * versions cannot touch another's.
+ *
+ * An app's own `scopes` are carried across verbatim. They were already
+ * resolved against the app's base by `resolveImportMap`, so their keys mean
+ * that app's subtree and stay correct without re-basing here.
+ *
+ * PRECEDENCE. An app map wins over a root scope for the same directory. The
+ * root map is the older, less specific spelling of the same fact, and when a
+ * realm carries both the file sitting beside the code is the one an author
+ * just edited. Realm-wide `imports` are untouched: they remain the default for
+ * everything no app claims.
+ *
+ * Pure, and separate from the fetching, so the precedence rules can be tested
+ * without a server.
+ */
+export function composeRealmDecklist(
+  root: DecklistInput | undefined,
+  found: { base: string; decklist: DecklistInput }[],
+): DecklistInput | undefined {
+  if (!root && found.length === 0) {
+    return undefined;
+  }
+  // `Record<string, string>`, not `MapValue`: these decklists have already
+  // been through `resolveImportMap`, which narrows away the `null` removals.
+  // A removal is an instruction for the merge, and the merge is done.
+  let scopes: Record<string, Record<string, string>> = {
+    ...(root?.scopes ?? {}),
+  };
+  for (let { base, decklist } of found) {
+    // The map's own scopes first, so its self-scope below cannot be
+    // overwritten by one it inherited from a pack.
+    for (let [key, value] of Object.entries(decklist.scopes ?? {})) {
+      scopes[key] = { ...(scopes[key] ?? {}), ...value };
+    }
+    if (decklist.imports && Object.keys(decklist.imports).length > 0) {
+      let key = ensureTrailingSlash(base);
+      scopes[key] = { ...(scopes[key] ?? {}), ...decklist.imports };
+    }
+  }
+  return {
+    ...(root?.imports ? { imports: root.imports } : {}),
+    ...(Object.keys(scopes).length ? { scopes } : {}),
+  };
+}
+
+/**
  * The URL of a realm's import map.
  */
 export function importMapURL(realmURL: string): string {
@@ -60,11 +183,35 @@ export function invalidationsNameImportMap(
   invalidations: readonly string[],
   realmURL: string,
 ): boolean {
-  let withExtension = importMapURL(realmURL);
-  let withoutExtension = withExtension.replace(/\.json$/, '');
-  return invalidations.some(
-    (id) => id === withExtension || id === withoutExtension,
+  let root = importMapURL(realmURL);
+  // ANY app's map counts, not only the realm's own. Since an app owns its
+  // pins, editing `apps/rfq-to-payment/importmap.json` changes what that app
+  // resolves — and if that did not trigger a reload, the edit would appear to
+  // do nothing until the next restart, which is the exact class of silent
+  // staleness this file is careful about elsewhere.
+  //
+  // Matched by SHAPE rather than by listing the apps: this runs against an
+  // invalidation list with no directory listing to hand, and a map that
+  // arrives for an app nobody has seen yet is precisely the one worth
+  // reloading for.
+  let appMap = new RegExp(
+    `^${escapeForRegExp(ensureTrailingSlash(realmURL))}${escapeForRegExp(
+      APPS_DIR,
+    )}[^/]+/${escapeForRegExp(IMPORT_MAP_PATH)}$`,
   );
+  return invalidations.some((id) => {
+    // Both spellings: the indexer reports a module by its extensionless id.
+    let bare = id.replace(/\.json$/, '');
+    return (
+      bare === root.replace(/\.json$/, '') ||
+      appMap.test(id) ||
+      appMap.test(`${bare}.json`)
+    );
+  });
+}
+
+function escapeForRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**
@@ -90,10 +237,15 @@ export function parseImportMapFile(jsonText: string): DecklistLink {
  *   https://app.example/catalog/acme/blog@1.2.3/   fully qualified
  *   lib/palette@1.0.0                              a package on this server
  *
- * The second resolves under `/_packages/`, which is where this server already
- * serves the versioned package space from — the same address a pin in
- * `imports` would name, so a parent and a pin agree about where a version
- * lives.
+ * The second resolves under THIS REALM's `_packages/` door, which is where the
+ * versioned package space is served from — the same address a pin in `imports`
+ * would name, so a parent and a pin agree about where a version lives.
+ *
+ * Realm-relative, not server-rooted. A bare `lib/palette@1.0.0` names a
+ * package in the namespace of the realm doing the extending, because a realm
+ * server governs no global publisher namespace: `lib/palette` means nothing
+ * until you know whose it is. Inheriting from another realm's package needs
+ * the full-URL spelling above, which says so out loud.
  *
  * The third — a scoped alias like `@catalog/acme/blog@1.2.3/` — is refused.
  * Resolving it needs a mapping from catalog scope to origin that this server
@@ -116,10 +268,13 @@ export function parentImportMapURL(parent: string, realmURL: string): string {
         `cannot be fetched. Name it by full URL instead.`,
     );
   }
-  // `<publisher>/<package>@<version>` — a package published to this server.
+  // `<publisher>/<package>@<version>` — a package published by THIS realm.
+  // Resolved relative to the realm URL rather than to the server root, so the
+  // door it lands on is the realm's own.
+  let base = realmURL.replace(/\/?$/, '/');
   return new URL(
-    `/_packages/${parent.replace(/\/$/, '')}/${IMPORT_MAP_PATH}`,
-    realmURL,
+    `_packages/${parent.replace(/\/$/, '')}/${IMPORT_MAP_PATH}`,
+    base,
   ).href;
 }
 
@@ -139,8 +294,13 @@ export function flattenImportMaps(
 const PACKAGE_BASE = /^(.*\/_packages\/(?:[^/@]+\/)?[^/@]+@([^/@]+)\/)/;
 const EXACT_VERSION = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)*$/;
 
-/** The Version base a mapped value points into, if it points into one. */
-function packageBaseOf(value: string): string | undefined {
+/** The Version base a mapped value points into, if it points into one.
+ *
+ * Exported because the same question gets asked from the other direction: not
+ * only "where does this pin point" but "which Version is this module I am
+ * about to load part of", which is what tells a client whose pins to install
+ * before resolving anything inside it. */
+export function packageBaseOf(value: string): string | undefined {
   let match = value.match(PACKAGE_BASE);
   if (!match) {
     return undefined;

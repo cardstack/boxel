@@ -404,6 +404,13 @@ const ALL_TEST_FILES: string[] = [
   './import-map-invalidation-test',
   './package-publish-invalidation-test',
   './package-range-query-test',
+  // This array is hand-listed rather than globbed, so an unregistered file is
+  // not a failing test — it is silently no test at all. These three existed
+  // and had never run once.
+  './package-routes-test',
+  './realm-package-alias-test',
+  './publish-import-map-test',
+  './decklist-resolution-test',
 ];
 
 // TEST_FILES limits which test files are loaded (parsed and executed). Useful

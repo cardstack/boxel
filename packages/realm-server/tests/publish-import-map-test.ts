@@ -36,7 +36,7 @@ module(basename(import.meta.filename), function () {
   module('rebind the published import map', function () {
     test('an origin-relative package pin is re-pointed at the source server', async function (assert) {
       await withRealm(
-        { imports: { palette: '/_packages/lib/palette@1.0.0/index.js' } },
+        { imports: { palette: '/demo/_packages/lib/palette@1.0.0/index.js' } },
         async (dir) => {
           let report = await rebindPublishedImportMap(dir, {
             serverURL: SERVER,
@@ -44,7 +44,7 @@ module(basename(import.meta.filename), function () {
           assert.strictEqual(report.rewritten, 1, 'one entry was re-homed');
           assert.strictEqual(
             (await readMap(dir)).imports.palette,
-            `${SERVER}/_packages/lib/palette@1.0.0/index.js`,
+            `${SERVER}/demo/_packages/lib/palette@1.0.0/index.js`,
             'the pin now names the server that actually holds the package store',
           );
         },
@@ -95,14 +95,16 @@ module(basename(import.meta.filename), function () {
       await withRealm(
         {
           scopes: {
-            'legacy/': { palette: '/_packages/lib/palette@2.0.0/index.js' },
+            'legacy/': {
+              palette: '/demo/_packages/lib/palette@2.0.0/index.js',
+            },
           },
         },
         async (dir) => {
           await rebindPublishedImportMap(dir, { serverURL: SERVER });
           assert.strictEqual(
             (await readMap(dir)).scopes['legacy/'].palette,
-            `${SERVER}/_packages/lib/palette@2.0.0/index.js`,
+            `${SERVER}/demo/_packages/lib/palette@2.0.0/index.js`,
             'a scope is as origin-dependent as the realm-wide table',
           );
         },
@@ -110,16 +112,38 @@ module(basename(import.meta.filename), function () {
     });
 
     test('a depot-local parent becomes fully qualified', async function (assert) {
-      // `deck.extends` resolves under `/_packages/` too, so a published remix
-      // loses the thing it inherits unless the parent is spelled absolutely.
+      // `deck.extends` resolves under the SOURCE REALM's own `_packages/`
+      // door, so a published remix loses the thing it inherits unless the
+      // parent is spelled absolutely — realm and all.
+      await withRealm(
+        { deck: { extends: 'acme/gallery@1.2.3' } },
+        async (dir) => {
+          await rebindPublishedImportMap(dir, {
+            serverURL: SERVER,
+            sourceRealmURL: `${SERVER}/demo/`,
+          });
+          assert.strictEqual(
+            (await readMap(dir)).deck.extends,
+            `${SERVER}/demo/_packages/acme/gallery@1.2.3/`,
+            'the published remix can still find its parent',
+          );
+        },
+      );
+    });
+
+    test('a bare parent is left alone when no source realm is known', async function (assert) {
+      // A realm server governs no global publisher namespace, so
+      // `acme/gallery@1.2.3` is meaningless without knowing whose it is.
+      // Leaving it beats rewriting it to an address that resolves to the wrong
+      // package or to none.
       await withRealm(
         { deck: { extends: 'acme/gallery@1.2.3' } },
         async (dir) => {
           await rebindPublishedImportMap(dir, { serverURL: SERVER });
           assert.strictEqual(
             (await readMap(dir)).deck.extends,
-            `${SERVER}/_packages/acme/gallery@1.2.3/`,
-            'the published remix can still find its parent',
+            'acme/gallery@1.2.3',
+            'an unqualifiable parent is not guessed at',
           );
         },
       );

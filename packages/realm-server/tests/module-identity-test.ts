@@ -19,8 +19,8 @@ import { Loader } from '@cardstack/runtime-common';
 // of the others, and two instances running the identical class were different
 // types to the index.
 
-const EXACT = 'https://ex.test/_packages/acme/greeter@2.2.0/index.js';
-const RANGE = 'https://ex.test/_packages/acme/greeter@%5E2.0.0/index.js';
+const EXACT = 'https://ex.test/demo/_packages/acme/greeter@2.2.0/index.js';
+const RANGE = 'https://ex.test/demo/_packages/acme/greeter@%5E2.0.0/index.js';
 const SOURCE = 'export class Greeter {}\n';
 
 /** A fetch that answers the range spelling with the exact module's bytes and
@@ -58,7 +58,7 @@ module(basename(import.meta.filename), function () {
         // No `.js`: identities are recorded extension-trimmed, as code refs
         // are persisted.
         {
-          module: 'https://ex.test/_packages/acme/greeter@2.2.0/index',
+          module: 'https://ex.test/demo/_packages/acme/greeter@2.2.0/index',
           name: 'Greeter',
         },
         'the exact Version answers, so the exact Version is the identity',

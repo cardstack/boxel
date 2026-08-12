@@ -6,7 +6,7 @@
 // untouched, which is the whole reason a well-written realm needs almost no
 // re-homing. An ORIGIN-RELATIVE one does not:
 //
-//     "palette": "/_packages/lib/palette@1.0.0/index.js"
+//     "palette": "/demo/_packages/lib/palette@1.0.0/index.js"
 //
 // means "the package store on whatever host is serving me". At the source
 // that is the realm server, and the store is there. At the destination it is
@@ -64,7 +64,7 @@ export interface RebindReport {
  */
 export async function rebindPublishedImportMap(
   publishedRealmPath: string,
-  opts: { serverURL: string },
+  opts: { serverURL: string; sourceRealmURL?: string },
 ): Promise<RebindReport> {
   let mapPath = join(publishedRealmPath, IMPORT_MAP_PATH);
   if (!(await pathExists(mapPath))) {
@@ -140,17 +140,32 @@ export async function rebindPublishedImportMap(
   }
 
   // `deck.extends` names a parent that a depot-local spelling resolves under
-  // `/_packages/` — the same store on the same server — so it breaks on a new
-  // origin for the same reason a pin does. Rewriting it to the fully
-  // qualified form is what keeps a published remix able to find what it
-  // inherits.
+  // the SOURCE REALM's `_packages/` door — the same store on the same server —
+  // so it breaks on a new origin for the same reason a pin does. Rewriting it
+  // to the fully qualified form is what keeps a published remix able to find
+  // what it inherits.
+  //
+  // Resolved against the source realm rather than the server root, because a
+  // bare parent names a package in that realm's namespace: a realm server
+  // governs no global publisher namespace, so `lib/palette@1.0.0` is only
+  // meaningful once you know whose it is. Without a source realm there is no
+  // namespace to resolve in, so the value is left alone rather than rewritten
+  // to an address that would resolve to the wrong package or to none.
   let deck = doc.deck;
   if (isPlainObject(deck) && typeof deck.extends === 'string') {
     let parent = deck.extends;
-    if (!/^https?:\/\//i.test(parent) && !parent.startsWith('@')) {
-      let absolute = new URL(
-        `/_packages/${parent.replace(/^\/+|\/+$/g, '')}/`,
+    if (
+      !/^https?:\/\//i.test(parent) &&
+      !parent.startsWith('@') &&
+      opts.sourceRealmURL
+    ) {
+      let realmBase = new URL(
+        opts.sourceRealmURL.replace(/\/?$/, '/'),
         opts.serverURL,
+      );
+      let absolute = new URL(
+        `_packages/${parent.replace(/^\/+|\/+$/g, '')}/`,
+        realmBase,
       ).href;
       next.deck = { ...deck, extends: absolute };
       seen.push({

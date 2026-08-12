@@ -8,7 +8,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://realm-server.deck-at-rest-poc.localhost/_packages/experiments/welcome@1.0.0/index.js",
+        "module": "https://realm-server.deck-at-rest-poc.localhost/experiments/_packages/experiments/welcome@1.0.0/index.js",
         "name": "Welcome"
       }
     }

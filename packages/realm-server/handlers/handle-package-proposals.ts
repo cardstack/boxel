@@ -29,6 +29,7 @@
 import type Koa from 'koa';
 import semver from 'semver';
 import { logger } from '@cardstack/runtime-common';
+import { packageStoreForRealm } from '../lib/package-store.ts';
 import {
   pack,
   publishToStore,
@@ -42,8 +43,11 @@ import {
   setContextResponse,
 } from '../middleware/index.ts';
 import type { RealmServerTokenClaim } from '../utils/jwt.ts';
-import type { CreateRoutesArgs } from '../routes.ts';
-import { findOrMountRealm } from '../lib/realm-routing.ts';
+import {
+  findOrMountRealm,
+  type RealmRoutingDeps,
+} from '../lib/realm-routing.ts';
+
 import {
   acceptProposal,
   listProposals,
@@ -62,6 +66,14 @@ import {
   realmsToInvalidateOnPublish,
   type RealmInvalidation,
 } from '../lib/package-publish-invalidation.ts';
+
+// Only what this door actually needs, rather than the whole route-args bag:
+// it is mounted as a middleware in `server.ts` beside the serve doors — see
+// the note in `routes.ts` — and a narrow type is what makes that mount
+// readable.
+export type HandlePackageProposalsDeps = RealmRoutingDeps & {
+  packageStorePath?: string;
+};
 
 const log = logger('realm-server:package-proposals');
 
@@ -174,24 +186,46 @@ async function treeOf(
 async function proposeFromRealm({
   args,
   storeDir,
+  governingRealmURL,
   name,
   actor,
   input,
 }: {
-  args: CreateRoutesArgs;
+  args: HandlePackageProposalsDeps;
   storeDir: string;
+  /** The realm named by the door this request came through, which owns both
+   *  the namespace and the store. */
+  governingRealmURL: string;
   name: string;
   actor: string;
   input: Record<string, any>;
 }): Promise<Response> {
-  let { realm: realmURL, package: key } = input.from ?? {};
-  if (typeof realmURL !== 'string' || typeof key !== 'string') {
+  let { realm: fromRealm, package: key } = input.from ?? {};
+  if (typeof key !== 'string') {
     return error(
       400,
       'malformed-from',
-      'from must be { realm: <url>, package: <name declared by that realm> }',
+      'from must be { package: <name this realm declares> }',
     );
   }
+  // The realm is now in the URL, so `from.realm` is redundant — kept as an
+  // optional CROSS-CHECK rather than dropped, because a caller that names one
+  // realm and posts to another has a bug worth surfacing, and silently
+  // preferring either one would publish into a namespace nobody asked for.
+  if (typeof fromRealm === 'string' && fromRealm.trim()) {
+    let stated = new URL(fromRealm).href.replace(/\/?$/, '/');
+    let door = new URL(governingRealmURL).href.replace(/\/?$/, '/');
+    if (stated !== door) {
+      return error(
+        409,
+        'realm-mismatch',
+        `this proposal was posted to ${door} but names ${stated} as its ` +
+          'source; a package is published into the namespace of the realm ' +
+          'whose door it came through',
+      );
+    }
+  }
+  let realmURL = governingRealmURL;
   if (typeof input.body !== 'string' || !input.body.trim()) {
     return error(
       400,
@@ -263,10 +297,14 @@ async function proposeFromRealm({
     packageDir: found.dir,
     key,
     declaration: found.declaration,
-    // Ranges in the package's own manifest, resolved against this server's
-    // store into the pins that get sealed with it.
+    // Ranges in the package's own manifest, resolved against THIS REALM's
+    // store into the pins that get sealed with it. Realm-scoped on both
+    // sides: the store the ranges resolve against and the realm the resulting
+    // pins are addressed under are the same realm, which is what makes a
+    // sealed pin resolvable by whoever reads it.
     dependencies: found.dependencies,
     storeDir,
+    realmPath: new URL(realm.url).pathname,
   });
   if (packed.kind === 'refused') {
     return json(409, { refused: { code: packed.code, detail: packed.detail } });
@@ -315,7 +353,7 @@ async function proposeFromRealm({
 // the response because a downstream realm could not be reindexed would report
 // a stored, sealed, addressable Version as an error.
 async function invalidateRangesNowResolvingTo(options: {
-  args: CreateRoutesArgs;
+  args: HandlePackageProposalsDeps;
   storeDir: string;
   name: string;
   version: string | undefined;
@@ -368,11 +406,55 @@ async function invalidateRangesNowResolvingTo(options: {
   return selected;
 }
 
+// `<realm>/_package-proposals/<name>` — the write door, realm-relative for the
+// same reason the serve doors are: the realm governs the namespace, so which
+// realm's `cardstack/contracts` is being proposed cannot be left to whoever
+// asked first. It also makes `accept` and the queue listing answerable at all,
+// since a proposal record lives in its realm's store and there is no
+// server-wide store left to search.
+const PROPOSALS_DOOR = '/_package-proposals/';
+
+export interface ProposalsAddress {
+  realmPath: string;
+  name: string;
+}
+
+/** Pure, so the grammar is testable without a server. */
+export function parseProposalsAddress(
+  path: string,
+): ProposalsAddress | undefined {
+  let at = path.indexOf(PROPOSALS_DOOR);
+  // `at > 0`: at position 0 this is the old server-root address, which named
+  // no realm and therefore no namespace.
+  if (at <= 0) {
+    return undefined;
+  }
+  let name = path
+    .slice(at + PROPOSALS_DOOR.length)
+    .split('/')
+    .map((segment) => {
+      try {
+        return decodeURIComponent(segment);
+      } catch {
+        return segment;
+      }
+    })
+    .join('/')
+    .replace(/\/+$/, '');
+  return { realmPath: `${path.slice(0, at)}/`, name };
+}
+
 export default function handlePackageProposals(
-  args: CreateRoutesArgs,
+  args: HandlePackageProposalsDeps,
 ): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   let { packageStorePath } = args;
-  return async function (ctxt: Koa.Context, _next: Koa.Next) {
+  return async function (ctxt: Koa.Context, next: Koa.Next) {
+    let address = parseProposalsAddress(ctxt.path);
+    if (!address) {
+      return next();
+    }
+    let { realmPath, name } = address;
+
     if (!packageStorePath) {
       return setContextResponse(
         ctxt,
@@ -383,19 +465,29 @@ export default function handlePackageProposals(
         ),
       );
     }
-    let storeDir = packageStorePath;
 
-    let raw = ctxt.params?.rest;
-    let name = (Array.isArray(raw) ? raw.join('/') : (raw ?? '')).replace(
-      /\/+$/,
-      '',
-    );
     if (!name) {
       return setContextResponse(
         ctxt,
-        error(400, 'no-package', 'expected /_package-proposals/<name>'),
+        error(400, 'no-package', 'expected <realm>/_package-proposals/<name>'),
       );
     }
+
+    // The realm in the URL is the one whose namespace is being written to, and
+    // whose store the proposal lands in. Resolved before anything else,
+    // because every branch below needs the store and the store is per realm.
+    let governingRealm = await findOrMountRealm(
+      new URL(`${ctxt.origin}${realmPath}`),
+      {
+        realms: args.realms,
+        reconciler: args.reconciler,
+        dbAdapter: args.dbAdapter,
+      },
+    );
+    if (!governingRealm) {
+      return next();
+    }
+    let storeDir = packageStoreForRealm(packageStorePath, governingRealm.url);
 
     if (ctxt.method === 'GET') {
       return setContextResponse(
@@ -485,7 +577,14 @@ export default function handlePackageProposals(
           }
           return setContextResponse(
             ctxt,
-            await proposeFromRealm({ args, storeDir, name, actor, input }),
+            await proposeFromRealm({
+              args,
+              storeDir,
+              governingRealmURL: governingRealm.url,
+              name,
+              actor,
+              input,
+            }),
           );
         }
         // §1.1: a Version needs a body. Refused here rather than defaulted to
@@ -573,6 +672,12 @@ export default function handlePackageProposals(
               proposal.version,
               bytes,
             );
+            // Nothing records who published these bytes, and nothing needs to:
+            // the store they landed in belongs to one realm, and the address
+            // they are served from names that realm. An earlier pass kept a
+            // `package-origins` sidecar for exactly this question, which is
+            // what a server-wide store forces — the fix was to put the realm
+            // in the URL, not to keep better notes about it.
             published = {
               version: proposal.version,
               treeHash: record.treeHash,

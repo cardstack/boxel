@@ -117,7 +117,7 @@ class VersionLockIsolated extends Component<typeof VersionLock> {
   }
 
   private urlFor(version: string): string {
-    return `/_packages/${PACKAGE}@${version}/index.js`;
+    return `/experiments/_packages/${PACKAGE}@${version}/index.js`;
   }
 
   private async fetchVersions(): Promise<PublishedVersion[]> {
@@ -126,7 +126,7 @@ class VersionLockIsolated extends Component<typeof VersionLock> {
     }
     // The package store is served by the realm SERVER, at its origin — it is
     // not inside any realm — so this asks the origin the realm sits on.
-    let listing = new URL(`/_packages/${PACKAGE}`, this.realm).href;
+    let listing = new URL(`/experiments/_packages/${PACKAGE}`, this.realm).href;
     let response = await fetch(listing, {
       headers: { Accept: 'application/json' },
     });
@@ -620,7 +620,7 @@ class VersionLockIsolated extends Component<typeof VersionLock> {
             type='button'
             class='secondary'
             disabled={{this.analyze.isRunning}}
-            {{on 'click' (fn this.analyze.perform)}}
+            {{on 'click' this.analyze.perform}}
             data-test-analyze
           >
             {{#if this.analyze.isRunning}}reading the surface…{{else}}Suggest a
@@ -688,7 +688,7 @@ class VersionLockIsolated extends Component<typeof VersionLock> {
             type='button'
             class='primary'
             disabled={{this.cannotPropose}}
-            {{on 'click' (fn this.propose.perform)}}
+            {{on 'click' this.propose.perform}}
             data-test-propose
           >Propose</button>
           <button
@@ -702,7 +702,7 @@ class VersionLockIsolated extends Component<typeof VersionLock> {
           type='button'
           class='primary'
           disabled={{this.startCut.isRunning}}
-          {{on 'click' (fn this.startCut.perform)}}
+          {{on 'click' this.startCut.perform}}
           data-test-start-cut
         >Start from {{if this.newest this.newest.version 'nothing'}}…</button>
       {{/if}}
@@ -1046,7 +1046,7 @@ function bumpBetween(prior: string, next: string): string | undefined {
 // `deck-multi-package-design.md` §3 rules for any authoring surface over the
 // map — "the card is a convenience, never a dependency."
 //
-// The list is discovered, not declared. `GET /_packages/lib/palette` reports
+// The list is discovered, not declared. `GET /experiments/_packages/lib/palette` reports
 // what the store holds, so publishing a new version to the running server
 // makes it appear here with no edit to this file.
 //

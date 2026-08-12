@@ -40,7 +40,11 @@ module(basename(import.meta.filename), function () {
         '/experiments/AccountCard.gts',
         '/experiments/notes@home.gts',
         '/experiments/index.json',
-        '/_packages/lib/palette@4.1.0/index.js',
+        // The serve door itself. It carries an `@` and sits under a realm, so
+        // it is the closest thing to an alias that is not one — and this
+        // handler swallowing it would break every module load in the realm.
+        '/experiments/_packages/lib/palette@4.1.0/index.js',
+        '/experiments/_source/lib/palette@4.1.0/index.gts',
       ]) {
         assert.strictEqual(
           parseRealmPackageAlias(path),

@@ -36,8 +36,13 @@ import {
   ensureTrailingSlash,
   fetchPublishabilityReport,
   importMapURL,
+  IMPORT_MAP_PATH,
+  DECKLIST_ROOTS,
+  appImportMapURL,
+  composeRealmDecklist,
   invalidationsNameImportMap,
   logger,
+  packageBaseOf,
   parseImportMapFile,
   resolveImportMap,
   ri,
@@ -514,8 +519,106 @@ class RealmResource {
     this.network.virtualNetwork.setRealmDecklist(this.realmURL, decklist);
   }
 
+  // TWO SOURCES, COMPOSED. A realm's own `importmap.json` if it has one, plus
+  // every map discovered under `apps/` and `packages/` — see
+  // `composeRealmDecklist` for why a directory owns its pins and what wins
+  // when a realm carries both.
+  //
+  // Both are optional. A realm with neither has no decklist, which is the
+  // common case and not a failure.
   private async fetchDecklistFromServer(): Promise<DecklistInput | undefined> {
-    let text = await this.readImportMapFile(importMapURL(this.realmURL));
+    let [root, apps] = await Promise.all([
+      this.fetchOneImportMap(importMapURL(this.realmURL), this.realmURL),
+      this.fetchNestedDecklists(),
+    ]);
+    // `decklistSettled` is set by the readers above; composing does not change
+    // whether the answer was definite.
+    return composeRealmDecklist(root, apps);
+  }
+
+  /**
+   * Every map discovered beneath the conventional roots, resolved against its
+   * own directory.
+   *
+   * DESCEND ONLY WHERE THERE IS NO MAP. A directory holding an
+   * `importmap.json` is the answer; one without is a container to look inside,
+   * up to that root's depth. That is what lets `apps/<name>/` and
+   * `packages/<publisher>/<key>/` be found by the same walk without either
+   * layout being hardcoded.
+   *
+   * BEST EFFORT, PER DIRECTORY. One malformed map applies nothing for that
+   * directory and leaves its neighbours alone — which is the whole point of
+   * separating them. A realm with neither root lists nothing and this costs
+   * two 404s.
+   */
+  private async fetchNestedDecklists(): Promise<
+    { base: string; decklist: DecklistInput }[]
+  > {
+    let found: { base: string; decklist: DecklistInput }[] = [];
+    let visit = async (base: string, depth: number): Promise<void> => {
+      let decklist = await this.fetchOneImportMap(appImportMapURL(base), base);
+      if (decklist) {
+        found.push({ base, decklist });
+        return;
+      }
+      if (depth <= 0) {
+        return;
+      }
+      let children = await this.listSubdirectories(base);
+      await Promise.all(children.map((child) => visit(child, depth - 1)));
+    };
+    await Promise.all(
+      DECKLIST_ROOTS.map(({ dir, maxDepth }) =>
+        // The root itself is a container, never a map-bearing directory: a
+        // map at `apps/importmap.json` would govern every app at once, which
+        // is the shared file this arrangement exists to remove.
+        this.listSubdirectories(
+          `${ensureTrailingSlash(this.realmURL)}${dir}`,
+        ).then((children) =>
+          Promise.all(children.map((child) => visit(child, maxDepth - 1))),
+        ),
+      ),
+    );
+    return found;
+  }
+
+  /** The immediate subdirectories of a realm directory, or none. */
+  private async listSubdirectories(url: string): Promise<string[]> {
+    try {
+      let response = await this.network.authedFetch(url, {
+        headers: { Accept: SupportedMimeType.DirectoryListing },
+      });
+      if (response.status !== 200) {
+        return [];
+      }
+      let doc = await response.json();
+      return Object.values(
+        (doc?.data?.relationships ?? {}) as Record<string, any>,
+      )
+        .filter((entry) => entry?.meta?.kind === 'directory')
+        .map((entry) => entry?.links?.related)
+        .filter((href): href is string => typeof href === 'string');
+    } catch (error) {
+      if (isTesting()) {
+        console.warn(
+          `[realm-service] directory listing failed ${JSON.stringify({
+            url,
+            error: String(error),
+          })}`,
+        );
+      }
+      return [];
+    }
+  }
+
+  // One map, read and resolved against the base it was found at. `base` is
+  // what makes an app map's relative values and scope keys mean that app's
+  // directory rather than the realm root.
+  private async fetchOneImportMap(
+    url: string,
+    base: string,
+  ): Promise<DecklistInput | undefined> {
+    let text = await this.readImportMapFile(url);
     if (text == null) {
       return undefined;
     }
@@ -527,7 +630,7 @@ class RealmResource {
       // total — see `parseImportMapFile`.
       console.warn(
         `[realm-service] import map refused ${JSON.stringify({
-          realmURL: this.realmURL,
+          base,
           error: String(error),
         })}`,
       );
@@ -538,7 +641,12 @@ class RealmResource {
     try {
       decklist = await resolveImportMap({
         start,
-        realmURL: this.realmURL,
+        // The map's OWN location, not the realm root. An app map's relative
+        // values and scope keys mean that app's directory, and resolving them
+        // against the realm would silently re-home every one of them onto the
+        // root — the same failure `resolveImportMap` documents for inherited
+        // parents, one level out.
+        realmURL: base,
         load: async (parentURL) => {
           let parentText = await this.readImportMapFile(parentURL);
           return parentText == null
@@ -549,7 +657,7 @@ class RealmResource {
     } catch (error) {
       console.warn(
         `[realm-service] import map inheritance failed ${JSON.stringify({
-          realmURL: this.realmURL,
+          base,
           error: String(error),
         })}`,
       );
@@ -986,6 +1094,93 @@ export default class RealmService extends Service {
   async ensureRealmMeta(realmURL: string): Promise<void> {
     let resource = this.getOrCreateRealmResource(realmURL);
     await resource.fetchInfo();
+  }
+
+  /**
+   * Install the pins of the Version a module belongs to.
+   *
+   * THE GAP THIS FILLS. `routes/module` sets up a module's realm before
+   * resolving anything inside it, and reads that realm from the
+   * `x-boxel-realm-url` header — "shimmed modules have no realm and no pins;
+   * everything else gets its realm's decklist installed". A module served
+   * from `<realm>/_packages/` is neither. The realm GOVERNS the namespace,
+   * but the bytes come from the immutable store rather than from the realm's
+   * tree, so the serve door carries no realm header and nothing gets
+   * installed. Every bare specifier inside it then falls through to the
+   * packages origin and 404s.
+   *
+   * And a realm header would be the WRONG fix even where one exists: a sealed
+   * Version resolves through its OWN pins, not through whatever its realm
+   * currently resolves. That is the entire point of sealing.
+   *
+   * That presented as: a package whose modules import ANOTHER package indexed
+   * as an error, while a package with no dependencies of its own indexed
+   * fine — because only the former ever needed a specifier resolved.
+   *
+   * WHY THE PACK'S OWN MANIFEST IS THE RIGHT SOURCE. Its pins were sealed at
+   * publish, so they mean the same thing in every realm that installs the
+   * pack; there is no realm-specific answer to go looking for. Registering
+   * them under the pack's own base reuses `setRealmDecklist` exactly as it
+   * already works — it turns a decklist's `imports` into a scope over the URL
+   * it is keyed by, which is precisely "these are the pins for modules living
+   * here", and the same longest-scope-wins rule then keeps a realm's own
+   * override on top.
+   *
+   * TRANSITIVE, via `resolveImportMap`: loading acme's module pulls
+   * ledgerworks', which needs ITS pins to resolve northwind. Installing one
+   * level would move the failure rather than fix it.
+   *
+   * FAILS OPEN, like `resolveSealedScopes`. An unreachable manifest costs
+   * exactly that Version's imports, which fail loudly at their own import;
+   * throwing here would take down a render over a package the card may not
+   * even touch.
+   */
+  async ensurePackageDecklist(moduleURL: string): Promise<void> {
+    let base = packageBaseOf(moduleURL);
+    if (!base) {
+      return;
+    }
+    let inFlight = this.packageDecklists.get(base);
+    if (!inFlight) {
+      inFlight = this.loadPackageDecklist(base);
+      this.packageDecklists.set(base, inFlight);
+    }
+    await inFlight;
+  }
+
+  // Memoised per Version base rather than per module: a Version is immutable,
+  // so its pins cannot change under us and one fetch answers for every module
+  // in the pack.
+  private packageDecklists = new Map<string, Promise<void>>();
+
+  private async loadPackageDecklist(base: string): Promise<void> {
+    let read = async (url: string) => {
+      let response = await this.network.authedFetch(url, {
+        headers: { Accept: SupportedMimeType.CardSource },
+      });
+      return response.ok
+        ? parseImportMapFile(await response.text())
+        : undefined;
+    };
+    try {
+      let start = await read(`${base}${IMPORT_MAP_PATH}`);
+      if (!start) {
+        return;
+      }
+      let decklist = await resolveImportMap({
+        start,
+        realmURL: base,
+        load: read,
+      });
+      this.network.virtualNetwork.setRealmDecklist(base, decklist);
+    } catch (error) {
+      console.warn(
+        `[realm-service] package decklist failed ${JSON.stringify({
+          base,
+          error: String(error),
+        })}`,
+      );
+    }
   }
 
   // Force a re-read of a realm's decklist, bypassing the memo. For the

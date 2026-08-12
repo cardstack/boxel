@@ -1206,41 +1206,45 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       return normalizedModuleURL.startsWith(normalizedRealmURL);
     });
 
-    // A module in the package store is owned by its PACKAGE NAMESPACE, not by
-    // whichever realm happens to be asking — `deck-a-package-carries-its-own-
-    // name.md`. Ownership-by-realm-prefix above cannot name an owner for
-    // `/_packages/…` because it sits under no realm, and with no owner the
-    // lookup throws `FilterRefersToNonexistentTypeError`, which the query
-    // engine turns into an empty result. That is what made every field
-    // predicate over a package-hosted type match nothing.
+    // A module in the package store is owned by its PACKAGE NAMESPACE, which
+    // is a different thing from the realm that governs that namespace even
+    // though the two now share a URL prefix — `deck-a-package-carries-its-own-
+    // name.md`.
+    //
+    // Checked BEFORE the plain realm-prefix answer below, deliberately. Since
+    // the serve door moved under the realm (`<realm>/_packages/…`), the prefix
+    // match on line ~1201 succeeds for a package module, and taking that
+    // answer would fold a package's definitions into its realm's — losing the
+    // separation the next paragraph exists to keep.
     //
     // Two things are needed here and they are NOT the same thing:
     //
     //   - the OWNER, which keys the cache and scopes invalidation. That is the
-    //     package address space, so a package's definitions can be dropped
-    //     without touching any realm's, and an entry does not move when a
-    //     different realm asks the same question. Rows stay unique because the
-    //     cache is keyed on (owner, moduleURL).
+    //     package address space, so a published Version's definitions survive
+    //     an edit to the realm's own files, and are dropped when a Version is,
+    //     rather than the two invalidating each other. Package modules are
+    //     immutable and realm files are not: giving them one owner would tie
+    //     the never-changing to the always-changing. Rows stay unique because
+    //     the cache is keyed on (owner, moduleURL).
     //
     //   - the HOST, a realm whose prerender page can actually evaluate the
     //     module. That is an implementation detail of rendering, not
-    //     ownership: package pins are origin-relative, so any realm on this
-    //     origin can load it. Chosen by origin match, so the choice is stable
-    //     rather than "whichever realm asked first".
-    //
-    // Public scope, because the serve door is itself unauthenticated: a
-    // published Version is immutable and readable by anyone who can reach it.
-    if (!localRealm) {
-      let marker = '/_packages/';
-      let at = moduleURL.indexOf(marker);
-      if (at !== -1) {
-        let moduleOrigin: string | undefined;
-        try {
-          moduleOrigin = new URL(moduleURL).origin;
-        } catch {
-          moduleOrigin = undefined;
-        }
-        let host = moduleOrigin
+    //     ownership. The governing realm when there is one, which is now the
+    //     usual case; otherwise any realm on the same origin, since package
+    //     pins are origin-relative. Chosen deterministically rather than
+    //     "whichever realm asked first".
+    let marker = '/_packages/';
+    let at = moduleURL.indexOf(marker);
+    if (at !== -1) {
+      let moduleOrigin: string | undefined;
+      try {
+        moduleOrigin = new URL(moduleURL).origin;
+      } catch {
+        moduleOrigin = undefined;
+      }
+      let host =
+        localRealm ??
+        (moduleOrigin
           ? this.#realms.find((realm) => {
               try {
                 return new URL(realm.url).origin === moduleOrigin;
@@ -1248,16 +1252,23 @@ export class CachingDefinitionLookup implements DefinitionLookup {
                 return false;
               }
             })
-          : undefined;
-        if (host) {
-          return {
-            realmURL: host.url,
-            resolvedRealmURL: moduleURL.slice(0, at + marker.length),
-            cacheScope: 'public',
-            cacheUserId: '',
-            prerenderUserId: await host.getRealmOwnerUserId(),
-          };
-        }
+          : undefined);
+      if (host) {
+        // SCOPE FOLLOWS THE GOVERNING REALM, and no longer hardcodes 'public'.
+        // It could when the serve door hung off the server root and was
+        // unauthenticated. The door is now beneath a realm and inherits that
+        // realm's read permission, so a private realm's published Versions are
+        // exactly as private as its files — and a cache entry marked public
+        // would hand them to anyone who asked.
+        let isPublic = (await host.visibility()) === 'public';
+        let prerenderUserId = await host.getRealmOwnerUserId();
+        return {
+          realmURL: host.url,
+          resolvedRealmURL: moduleURL.slice(0, at + marker.length),
+          cacheScope: isPublic ? 'public' : 'realm-auth',
+          cacheUserId: isPublic ? '' : prerenderUserId,
+          prerenderUserId,
+        };
       }
     }
 

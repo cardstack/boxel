@@ -3,9 +3,9 @@
     "experiments/components/": "./components/",
     "experiments/fields/": "./fields/",
     "experiments/library/": "./library/",
-    "experiments/welcome": "/_packages/experiments/welcome@1.0.0/index.js",
-    "experiments/welcome/": "/_packages/experiments/welcome@1.0.0/",
-    "palette": "/_packages/lib/palette@4.1.0/index.js"
+    "experiments/welcome": "/experiments/_packages/experiments/welcome@1.0.0/index.js",
+    "experiments/welcome/": "/experiments/_packages/experiments/welcome@1.0.0/",
+    "palette": "/experiments/_packages/lib/palette@4.1.0/index.js"
   },
   "boxel": {
     "dependencies": {

@@ -505,6 +505,7 @@ export async function packRealmPackage({
   declaration,
   dependencies,
   storeDir,
+  realmPath,
 }: {
   packageDir: string;
   key: string;
@@ -514,6 +515,10 @@ export async function packRealmPackage({
   /** The store the ranges resolve against. Required to lock anything; a
    *  package with no dependencies does not need one. */
   storeDir?: string;
+  /** The publishing realm's path, `/atlas/`. Every sealed pin is written
+   *  beneath it, because the realm is what governs the package names — see
+   *  `lib/package-store.ts`. Must name the same realm as `storeDir`. */
+  realmPath?: string;
 }): Promise<PackRealmPackageResult> {
   if (!declaration) {
     return {
@@ -619,6 +624,10 @@ export async function packRealmPackage({
   // holds — which is the whole of `deck-a-package-resolves-through-its-own-map.md`.
   let lock = await lockDependencies({
     storeDir: storeDir ?? '',
+    // The realm the pins are written beneath. Empty when the caller did not
+    // name one, which can only happen with no dependencies to pin — a pin
+    // under no realm names nobody's namespace, so it must never be minted.
+    realmPath: realmPath ?? '',
     // Without a store there is nothing to resolve against, so a package that
     // declares dependencies is refused rather than sealed with the ranges
     // silently dropped.

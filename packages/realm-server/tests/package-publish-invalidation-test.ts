@@ -37,7 +37,7 @@ function meta(
 // The dep spelling the index actually holds: absolute, percent-encoded,
 // executable extension already trimmed.
 function dep(spec: string, path = 'index'): string {
-  return `https://realm.example.com/_packages/${NAME}@${encodeURIComponent(
+  return `https://realm.example.com/demo/_packages/${NAME}@${encodeURIComponent(
     spec,
   )}/${path}`;
 }
@@ -180,7 +180,7 @@ module(basename(import.meta.filename), function () {
             {
               realmURL: REALM,
               url: `${REALM}a.json`,
-              dep: `https://realm.example.com/_packages/${NAME}-extras@%5E2.0.0/index`,
+              dep: `https://realm.example.com/demo/_packages/${NAME}-extras@%5E2.0.0/index`,
             },
           ],
           meta: meta(['2.0.0', '2.3.0']),
@@ -200,7 +200,7 @@ module(basename(import.meta.filename), function () {
             {
               realmURL: REALM,
               url: `${REALM}a.json`,
-              dep: `https://realm.example.com/_packages/${NAME}@%ZZ/index`,
+              dep: `https://realm.example.com/demo/_packages/${NAME}@%ZZ/index`,
             },
             row(`${REALM}good.json`, '^2.0.0'),
           ],

@@ -271,10 +271,27 @@ export async function buildModuleModel(
       }
 
       // Shimmed modules have no realm and no pins; everything else gets its
-      // realm's decklist installed before a single specifier is resolved.
+      // pins installed before a single specifier is resolved.
+      //
+      // THREE KINDS OF MODULE, not two. A realm's module answers with
+      // `x-boxel-realm-url` and gets that realm's decklist. A shimmed one
+      // answers 404 to the HEAD and needs nothing. A module served from
+      // `<realm>/_packages/` is NEITHER. The realm governs the package
+      // NAMESPACE, but the bytes come from the immutable store rather than
+      // from the realm's tree, so the serve door sends no realm header — and
+      // before this it therefore got no pins at all, and every bare specifier
+      // inside it fell through to the packages origin and 404'd.
+      //
+      // Its pins come from its own sealed manifest, and that is not a
+      // workaround for the missing header — it is the correct source. A
+      // sealed Version resolves through the pins it was published with, not
+      // through whatever its realm resolves today. Handing it the realm's
+      // decklist would silently un-seal it.
       let realmURL = response.headers.get('x-boxel-realm-url');
       if (realmURL) {
         await context.realm.ensureRealmMeta(realmURL);
+      } else {
+        await context.realm.ensurePackageDecklist(id);
       }
 
       let module: Record<string, any> | undefined;

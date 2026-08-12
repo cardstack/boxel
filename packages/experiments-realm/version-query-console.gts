@@ -37,7 +37,7 @@ interface Sample {
 
 function greeterRef(origin: string, spec: string) {
   return {
-    module: `${origin}/_packages/experiments/greeter@${encodeURIComponent(spec)}/index.js`,
+    module: `${origin}/experiments/_packages/experiments/greeter@${encodeURIComponent(spec)}/index.js`,
     name: 'Greeter',
   };
 }

@@ -34,7 +34,7 @@ const CRM_MANIFEST = JSON.stringify({
 // The realm's own map. Resolution for unpackaged content, and nothing about
 // what the realm publishes.
 const REALM_MAP = JSON.stringify({
-  imports: { palette: '/_packages/lib/palette@4.1.0/index.js' },
+  imports: { palette: '/demo/_packages/lib/palette@4.1.0/index.js' },
 });
 
 const REALM = {
@@ -556,16 +556,17 @@ module(basename(import.meta.filename), function () {
             declaration: crm.declaration,
             dependencies: crm.dependencies,
             storeDir: store,
+            realmPath: '/demo/',
           }),
         );
         let manifest = sealedManifest(packed.bytes);
         assert.deepEqual(manifest.imports, {
-          'acme/greeter/': '/_packages/acme/greeter@1.2.0/',
-          'acme/greeter': '/_packages/acme/greeter@1.2.0/index.js',
+          'acme/greeter/': '/demo/_packages/acme/greeter@1.2.0/',
+          'acme/greeter': '/demo/_packages/acme/greeter@1.2.0/index.js',
           // The alias points at the BUILT module, because the sealed manifest
           // it was read from names built modules — the entry a consumer
           // imports has to be the bytes that run.
-          'acme/greeter/greeter': '/_packages/acme/greeter@1.2.0/index.js',
+          'acme/greeter/greeter': '/demo/_packages/acme/greeter@1.2.0/index.js',
         });
         // The RANGE is kept beside the pin, not consumed by it. A reader can
         // see what the author would have accepted, and an operator advancing
@@ -589,6 +590,7 @@ module(basename(import.meta.filename), function () {
             declaration: crm.declaration,
             dependencies: crm.dependencies,
             storeDir: store,
+            realmPath: '/demo/',
           }),
         );
         // What a seal owes its consumer is the VERSION. Welding the host into
@@ -603,6 +605,34 @@ module(basename(import.meta.filename), function () {
       });
     });
 
+    test('pinning without a governing realm refuses the publish', async function (assert) {
+      // A package address with no realm in it names nobody's namespace — the
+      // rootless `/_packages/…` form this design removed. Defaulting here
+      // would quietly mint exactly those pins again, and they would resolve to
+      // nothing on every server that read them. Loud at publish beats silent
+      // in a consumer's browser weeks later.
+      await withPublishedGreeter(async ({ dir, store }) => {
+        let crm = await crmOf(dir);
+        let result = await packRealmPackage({
+          packageDir: crm.dir,
+          key: crm.key,
+          declaration: crm.declaration,
+          dependencies: crm.dependencies,
+          storeDir: store,
+          // realmPath deliberately omitted
+        });
+        assert.strictEqual(
+          result.kind === 'refused' ? result.code : 'unexpected',
+          'malformed-dependency',
+        );
+        assert.ok(
+          result.kind === 'refused' &&
+            /publishing realm/.test(result.detail ?? ''),
+          'the refusal names what is missing',
+        );
+      });
+    });
+
     test('a range nothing satisfies refuses the publish', async function (assert) {
       await withPublishedGreeter(async ({ dir, store }) => {
         let crm = await crmOf(dir);
@@ -612,6 +642,7 @@ module(basename(import.meta.filename), function () {
           declaration: crm.declaration,
           dependencies: { 'acme/greeter': '^9.0.0' },
           storeDir: store,
+          realmPath: '/demo/',
         });
         // Fails CLOSED. A seal that certifies bytes it cannot make run is
         // worth less than no seal: the hole would surface at a consumer's
@@ -632,6 +663,7 @@ module(basename(import.meta.filename), function () {
           declaration: crm.declaration,
           dependencies: { 'acme/nothing': '^1.0.0' },
           storeDir: store,
+          realmPath: '/demo/',
         });
         assert.strictEqual(
           result.kind === 'refused' ? result.code : 'unexpected',

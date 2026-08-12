@@ -1,7 +1,7 @@
 import type { SharedTests } from '../helpers/index.ts';
 import { resolveSealedScopes, type DecklistLink } from '../import-map-file.ts';
 
-const SERVE = 'https://realm.example.com/_packages';
+const SERVE = 'https://realm.example.com/demo/_packages';
 const REALM = 'https://realm.example.com/acme/';
 
 // A store, as the load callback sees it: pack manifests keyed by their URL.
@@ -13,12 +13,12 @@ function store(): Record<string, DecklistLink> {
   return {
     [`${SERVE}/acme/crm@2.0.0/importmap.json`]: {
       imports: {
-        'acme/greeter': '/_packages/acme/greeter@1.2.0/index.js',
-        'acme/greeter/': '/_packages/acme/greeter@1.2.0/',
+        'acme/greeter': '/demo/_packages/acme/greeter@1.2.0/index.js',
+        'acme/greeter/': '/demo/_packages/acme/greeter@1.2.0/',
       },
     } as DecklistLink,
     [`${SERVE}/acme/greeter@1.2.0/importmap.json`]: {
-      imports: { palette: '/_packages/lib/palette@3.0.0/index.js' },
+      imports: { palette: '/demo/_packages/lib/palette@3.0.0/index.js' },
     } as DecklistLink,
     [`${SERVE}/lib/palette@3.0.0/importmap.json`]: {} as DecklistLink,
   };
@@ -49,7 +49,7 @@ const tests = Object.freeze({
       'acme/greeter': `${SERVE}/acme/greeter@1.2.0/index.js`,
       'acme/greeter/': `${SERVE}/acme/greeter@1.2.0/`,
     });
-    // The sealed pin was written origin-relative — `/_packages/…` — which
+    // The sealed pin was written origin-relative — `/demo/_packages/…` — which
     // means "the package space of whichever host serves me". Resolved against
     // the Version's own URL, that lands on this host.
     assert.deepEqual(flat.scopes[`${SERVE}/acme/greeter@1.2.0/`], {
@@ -64,10 +64,10 @@ const tests = Object.freeze({
     // nobody will.
     let manifests: Record<string, DecklistLink> = {
       [`${SERVE}/acme/a@1.0.0/importmap.json`]: {
-        imports: { 'acme/b': '/_packages/acme/b@1.0.0/index.js' },
+        imports: { 'acme/b': '/demo/_packages/acme/b@1.0.0/index.js' },
       } as DecklistLink,
       [`${SERVE}/acme/b@1.0.0/importmap.json`]: {
-        imports: { 'acme/a': '/_packages/acme/a@1.0.0/index.js' },
+        imports: { 'acme/a': '/demo/_packages/acme/a@1.0.0/index.js' },
       } as DecklistLink,
     };
     let flat = await resolveSealedScopes({
