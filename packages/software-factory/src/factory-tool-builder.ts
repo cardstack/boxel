@@ -294,7 +294,7 @@ function buildGetCardSchemaTool(config: ToolBuilderConfig): FactoryTool {
           description:
             'Absolute module URL of the card definition (e.g. the live ' +
             '`darkfactoryModuleUrl` from the system prompt for tracker ' +
-            'cards, or `https://cardstack.com/base/spec` for catalog Spec).',
+            'cards, or `@cardstack/base/spec` for catalog Spec).',
         },
         name: {
           type: 'string',
@@ -605,7 +605,7 @@ function buildRunInstantiateTool(config: ToolBuilderConfig): FactoryTool {
       'is skipped entirely so the agent can self-check one instance in ' +
       'isolation. The path must end in `.json`. **Do NOT pass a `Spec/...json` ' +
       'path or any card whose `meta.adoptsFrom.module` is a base-realm URL ' +
-      '(`https://cardstack.com/base/...`). Specs adopt from the base realm, ' +
+      '(`@cardstack/base/...`). Specs adopt from the base realm, ' +
       'and the prerender refuses cross-origin module loads — the call would ' +
       'fail with "moduleUrl origin does not match realmUrl origin". To ' +
       'validate Specs, call this tool WITHOUT a path; it discovers your ' +

@@ -12,7 +12,7 @@ planning a build; load only the sections that match the task.
 ## 1. Base Card APIs (URL-pinned)
 
 The Boxel base realm. Always available. Imports live at
-`https://cardstack.com/base/<name>`.
+`@cardstack/base/<name>`.
 
 | Module                                                                                                                   | Provides                                                                                                                           | Use for                                                                                                  |
 | ------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |

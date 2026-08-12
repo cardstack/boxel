@@ -5,7 +5,7 @@
  * results without side effects).
  *
  * Discovery is spec-based: the realm is searched for Spec cards (from
- * `https://cardstack.com/base/spec`), and each spec's `linkedExamples` entries
+ * `@cardstack/base/spec`), and each spec's `linkedExamples` entries
  * are instantiated by calling the `instantiate-card` host command via
  * `_run-command`. The host command runs in the prerenderer sandbox (headless
  * Chrome), so every runtime error that surfaces when a real user opens the
@@ -573,7 +573,7 @@ async function prepareExampleInstance(
 
   // The prerender refuses cross-origin module loads. The most common way
   // an agent triggers this is by passing a `Spec/...json` path: Specs
-  // adopt from `https://cardstack.com/base/spec`, which lives in a
+  // adopt from `@cardstack/base/spec`, which lives in a
   // different origin than any user realm. Catch it here with a clearer
   // error than the prerender's "moduleUrl origin … does not match
   // realmUrl origin …" so the agent knows what to do instead.
