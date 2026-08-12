@@ -111,11 +111,37 @@ module('Integration | ts/gts file def preview', function (hooks) {
     await renderCard(loader, file, 'isolated');
     assert.dom('[data-test-file-isolated]').exists();
     assert.dom('[data-test-ts-preview]').exists('GTS mounts the code preview');
-    // `highlightTs` marks `<template>` as a keyword, so a GTS component reads
-    // correctly without a second pass.
-    assert
-      .dom('[data-test-ts-preview] .ts-keyword')
-      .exists('GTS keywords and <template> are highlighted');
+    // The GTS-specific behavior is that the template tag itself is highlighted:
+    // `highlightTs` marks `<template>`/`</template>` as keywords. A plain
+    // `.ts-keyword` check would pass on `import`/`class` alone, so assert on a
+    // keyword span whose text is exactly the tag — this fails if
+    // `TEMPLATE_TAG_RE` ever stops firing.
+    let keywords = Array.from(
+      document.querySelectorAll('[data-test-ts-preview] .ts-keyword'),
+    );
+    assert.ok(
+      keywords.some((el) => el.textContent === '<template>'),
+      'the <template> tag itself is marked as a keyword',
+    );
     assert.dom('[data-test-ts-preview]').containsText('Greeting');
+  });
+
+  // `lineCount` feeds the shell's "N lines" hero fact. It normalizes newline
+  // variants (so a CRLF or classic-Mac CR file counts the same as LF) and drops
+  // a single trailing newline. Exercise those branches directly rather than only
+  // through the LF fixture, which reaches none of them.
+  test('lineCount normalizes CRLF/CR and strips one trailing newline', async function (assert) {
+    let lineCountOf = async (content: string) => {
+      let result = await TsFileDef.extractAttributes(
+        'http://example.com/code/newlines.ts',
+        async () => new TextEncoder().encode(content),
+      );
+      return result.lineCount;
+    };
+
+    assert.strictEqual(await lineCountOf('a\r\nb\r\n'), 2, 'CRLF + trailing');
+    assert.strictEqual(await lineCountOf('a\rb'), 2, 'classic-Mac lone CR');
+    assert.strictEqual(await lineCountOf('a\nb\n'), 2, 'LF + trailing');
+    assert.strictEqual(await lineCountOf(''), 0, 'empty content is zero lines');
   });
 });
