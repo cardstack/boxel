@@ -6,11 +6,10 @@ import { Deferred, Loader } from '@cardstack/runtime-common';
 // the recording task's own recursion stack — cycle handling. That leaves a
 // window where the dep is still 'registered': the recording task must resume
 // before the dep advances. A *concurrent* import root that reaches the
-// recorded module during that window used to treat the not-yet-advanced dep as
-// a broken invariant and throw
-// `expected <url> to be 'registered-completing-deps' but was 'registered'`;
-// it must instead complete the dep itself, since state transitions are
-// monotonic and re-entrant.
+// recorded module during that window completes the dep itself rather than
+// treating the not-yet-advanced dep as a broken invariant, since state
+// transitions are monotonic and re-entrant. Regression guard against
+// `expected <url> to be 'registered-completing-deps' but was 'registered'`.
 module('Unit | loader concurrent cycle completion', function () {
   test('a second import root completes a cycle participant that a suspended root left mid-completion', async function (assert) {
     let releaseSlow = new Deferred<void>();
@@ -50,11 +49,13 @@ module('Unit | loader concurrent cycle completion', function () {
     await slowRequested.promise;
 
     // Root 2 enters at `b` while root 1 is suspended: b's completing-dep `a`
-    // has not been advanced yet, which is exactly the interleaving that used
-    // to throw.
+    // has not been advanced yet, which is exactly the interleaving under test.
     let root2 = loader.import<{ b: string }>('http://race.example/b');
     releaseSlow.fulfill();
 
+    // Each module's own export is the strongest stable assertion here: what a
+    // module sees *through* the cycle depends on which end the cycle is
+    // entered from, which is exactly what the second root varies.
     let [modA, modB] = await Promise.all([root1, root2]);
     assert.strictEqual(modA.a, 'a', 'the suspended root still evaluates');
     assert.strictEqual(modB.b, 'b', 'the concurrent root evaluates the cycle');
