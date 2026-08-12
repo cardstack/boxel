@@ -90,7 +90,7 @@ interface CodeMirrorContext {
     content: string;
     onDocChange: (text: string) => void;
     onCardTargetsChange: (targets: CardWidgetTarget[]) => void;
-    onOpenCardSearch: (pos: { from: number; to: number }) => void;
+    onOpenCardSearch: () => void;
     onSelectionChange?: (info: SelectionInfo) => void;
     livePreview?: boolean;
   }) => any;
@@ -1014,7 +1014,6 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
           {{on 'mousedown' this._focusEditorOnPointerDown}}
           {{this.mountEditor this.cm @content @onUpdate this.livePreview}}
         ></div>
-
       </div>
 
       {{#if this.livePreview}}
@@ -1033,9 +1032,9 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
                     <span
                       class='codemirror-card-slot
                         {{if
-                          (eq target.format 'atom')
-                          'codemirror-card-slot--inline'
-                          'codemirror-card-slot--inline-embed'
+                          (eq target.format "atom")
+                          "codemirror-card-slot--inline"
+                          "codemirror-card-slot--inline-embed"
                         }}'
                       style={{if target.style (htmlSafe target.style)}}
                       data-test-codemirror-file-slot-inline={{if

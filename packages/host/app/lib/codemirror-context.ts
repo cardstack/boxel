@@ -967,7 +967,7 @@ function createCardTargetNotifier(
 // ── Slash command autocompletion ─────────────────────────────────────────────
 
 function createSlashCommandSource(
-  onOpenCardSearch: (pos: { from: number; to: number }) => void,
+  onOpenCardSearch: () => void,
 ): (context: CompletionContext) => CompletionResult | null {
   return function slashCommandSource(
     context: CompletionContext,
@@ -995,8 +995,10 @@ function createSlashCommandSource(
             from: number,
             to: number,
           ) => {
+            // Delete the typed `/…` so the caret sits where the directive
+            // should land, then open the chooser — it inserts at the selection.
             view.dispatch({ changes: { from, to, insert: '' } });
-            onOpenCardSearch({ from, to });
+            onOpenCardSearch();
           },
         },
       ],
@@ -1185,7 +1187,7 @@ export interface CreateEditorStateOptions {
   content: string;
   onDocChange: (text: string) => void;
   onCardTargetsChange: (targets: CardWidgetTarget[]) => void;
-  onOpenCardSearch: (pos: { from: number; to: number }) => void;
+  onOpenCardSearch: () => void;
   onSelectionChange?: (info: SelectionInfo) => void;
   /** When false, all syntax markers are visible (source mode). Default true. */
   livePreview?: boolean;
