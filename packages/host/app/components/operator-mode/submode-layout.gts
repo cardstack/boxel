@@ -733,6 +733,9 @@ export default class SubmodeLayout extends Component<Signature> {
         box-shadow: var(--submode-bar-item-box-shadow);
         z-index: var(--host-profile-z-index);
       }
+      .profile-icon-button:hover {
+        --profile-avatar-icon-border: 1px solid rgba(255, 255, 255, 1);
+      }
 
       .workspace-button {
         --icon-color: var(--boxel-highlight);
@@ -778,6 +781,9 @@ export default class SubmodeLayout extends Component<Signature> {
       :deep(.open-search-field) {
         box-shadow: var(--submode-bar-item-box-shadow);
         outline: var(--submode-bar-item-outline);
+      }
+      :deep(.open-search-field):hover {
+        outline-color: rgba(255, 255, 255, 1);
       }
 
       @media (max-width: 26rem) {

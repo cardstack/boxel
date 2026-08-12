@@ -62,9 +62,9 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
         justify-content: space-between;
         flex-wrap: wrap;
         gap: var(--boxel-sp-lg);
-        margin-bottom: var(--boxel-sp);
+        margin-bottom: 0;
         padding-top: var(--boxel-sp-lg);
-        border-top: 1px solid var(--boxel-dark);
+        border-top: 1px solid #afafb7;
       }
       .info-group {
         display: flex;
@@ -102,6 +102,28 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
         width: 100%;
         margin-top: var(--boxel-sp-xs);
       }
+      .buy-more-credits:not(.out-of-credit) button,
+      .upgrade-plan-button {
+        --boxel-button-font: 600 var(--boxel-font-xs);
+      }
+      .upgrade-plan-button {
+        --boxel-button-color: var(--boxel-teal);
+        --boxel-button-text-color: var(--boxel-dark);
+      }
+      .upgrade-plan-button:not(:disabled):hover,
+      .upgrade-plan-button:not(:disabled):active {
+        --boxel-button-color: #00c38e;
+      }
+      .signout-button:not(:disabled):hover,
+      .signout-button:not(:disabled):active,
+      .buy-more-credits:not(.out-of-credit) button:not(:disabled):hover,
+      .buy-more-credits:not(.out-of-credit) button:not(:disabled):active {
+        --boxel-button-color: #404040;
+      }
+      .buy-more-credits {
+        margin-top: 0;
+        margin-bottom: 4px;
+      }
       .buy-more-credits.out-of-credit {
         justify-content: center;
         margin-top: var(--boxel-sp-sm);
@@ -115,8 +137,8 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
         color: var(--boxel-500);
         font: var(--boxel-font-xs);
         padding: var(--boxel-sp-xxs) var(--boxel-sp-xs);
-        border: 1px solid var(--boxel-300);
-        background: var(--boxel-50);
+        border: none;
+        background: #efeded;
         border-radius: calc(var(--boxel-border-radius) / 2);
         line-height: 1.3;
         display: flex;
@@ -139,6 +161,7 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
         <BoxelButton
           @kind='primary-dark'
           @size='small'
+          class='signout-button'
           {{on 'click' this.logout}}
           data-test-signout-button
         >
@@ -157,6 +180,7 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
           <BoxelButton
             @kind='primary-dark'
             @size='small'
+            class='upgrade-plan-button'
             {{on 'click' @toggleSubscriptionPlans}}
             data-test-upgrade-plan-button
           >Upgrade Plan</BoxelButton>
@@ -187,7 +211,7 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
               @kind={{if
                 subscriptionData.isOutOfCredit
                 'primary'
-                'secondary-light'
+                'primary-dark'
               }}
               @size={{if subscriptionData.isOutOfCredit 'base' 'small'}}
               {{on 'click' @toggleProfileSettings}}

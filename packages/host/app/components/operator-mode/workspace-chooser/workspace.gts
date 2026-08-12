@@ -745,9 +745,10 @@ export default class Workspace extends Component<Signature> {
         border-radius: var(--boxel-border-radius);
         box-shadow: 0 4px 16px rgba(0 0 0 / 25%);
         z-index: 10;
-        padding: var(--boxel-sp-xs) 0 var(--boxel-sp-2xs);
+        padding: var(--boxel-sp-xs) 0 0;
         display: flex;
         flex-direction: column;
+        overflow: hidden;
       }
       .dropdown-header {
         font-size: var(--boxel-font-size-2xs);
@@ -760,7 +761,7 @@ export default class Workspace extends Component<Signature> {
       .dropdown-list {
         list-style: none;
         margin: 0;
-        padding: var(--boxel-sp-4xs) var(--boxel-sp-2xs);
+        padding: 0;
       }
       .dropdown-list li {
         margin: 0;
@@ -771,10 +772,10 @@ export default class Workspace extends Component<Signature> {
         display: flex;
         align-items: center;
         gap: 0.5rem;
-        padding: var(--boxel-sp-2xs) 0.5rem;
+        padding: var(--boxel-sp-2xs) var(--boxel-sp-sm);
         background: none;
         border: none;
-        border-radius: var(--boxel-border-radius-sm);
+        border-radius: 0;
         cursor: pointer;
         text-align: left;
       }

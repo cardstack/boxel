@@ -156,6 +156,10 @@ export default class WithSubscriptionData extends Component<WithSubscriptionData
     );
   }
 
+  private get displayMonthlyCreditIcon() {
+    return !this.isOutOfPlanCreditAllowance;
+  }
+
   private get isOutOfPlanCreditAllowance() {
     return (
       this.creditsAvailableInPlanAllowance == null ||
@@ -237,7 +241,7 @@ export default class WithSubscriptionData extends Component<WithSubscriptionData
           value=this.monthlyCreditText
           isLoading=this.isLoading
           isOutOfCredit=this.isOutOfPlanCreditAllowance
-          displayCreditIcon=true
+          displayCreditIcon=this.displayMonthlyCreditIcon
         )
         additionalCredit=(component
           Value

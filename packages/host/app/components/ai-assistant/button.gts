@@ -33,6 +33,7 @@ const AiAssistantButton: TemplateOnlyComponent<Signature> = <template>
     }
     .ai-assistant-button:hover {
       cursor: pointer;
+      border-color: rgba(255, 255, 255, 1);
     }
 
     .ai-assistant-button.is-active {
