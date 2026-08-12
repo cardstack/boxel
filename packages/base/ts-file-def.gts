@@ -291,9 +291,15 @@ export class TsFileDef extends FileDef {
       title: fallbackTitle,
       excerpt: truncateExcerpt(source.replace(/\s+/g, ' ').trim()),
       content: source,
-      // A trailing newline shouldn't inflate the count, and empty content is
-      // zero lines rather than one.
-      lineCount: source ? source.replace(/\n$/, '').split('\n').length : 0,
+      // Normalize CRLF/CR to LF first so the count is the same across newline
+      // styles (and matches the fitted projection); a trailing newline
+      // shouldn't inflate the count, and empty content is zero lines.
+      lineCount: source
+        ? source
+            .replace(/\r\n?/g, '\n')
+            .replace(/\n$/, '')
+            .split('\n').length
+        : 0,
     };
   }
 }
