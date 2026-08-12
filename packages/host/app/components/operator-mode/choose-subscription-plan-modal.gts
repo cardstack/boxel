@@ -41,11 +41,39 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
 
   <template>
     <style scoped>
+      :global(.choose-subscription-plan-modal .dialog-box__content) {
+        scroll-snap-type: y mandatory;
+        scroll-padding-top: 50px;
+        grid-row: 1 / -1;
+      }
+      :global(.choose-subscription-plan-modal .dialog-box__header) {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 2;
+        background: transparent;
+        pointer-events: none;
+      }
+      :global(.choose-subscription-plan-modal .dialog-box__close) {
+        pointer-events: auto;
+      }
+
       .boxel-pricing-container {
         color: var(--boxel-700);
         background-color: var(--boxel-light);
         max-width: var(--boxel-xxl-container);
         margin: 0 auto;
+        padding-top: 50px;
+      }
+
+      .main-title,
+      .early-preview-banner,
+      .intro-text,
+      .subscription-header,
+      .pricing-table,
+      .footer-notes {
+        scroll-snap-align: start;
       }
 
       .main-title {
@@ -59,13 +87,12 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
 
       .early-preview-banner {
         background-color: var(--boxel-lime);
-        border: 1.5px solid var(--boxel-dark);
         border-radius: var(--boxel-border-radius-sm);
-        padding: var(--boxel-sp-sm) var(--boxel-sp);
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
         font: var(--boxel-font);
         font-weight: 500;
         text-align: center;
-        max-width: var(--boxel-lg-container);
+        width: fit-content;
         margin: 0 auto var(--boxel-sp) auto;
       }
 
@@ -73,6 +100,7 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
         text-align: center;
         max-width: var(--boxel-xl-container);
         margin: 0 auto var(--boxel-sp-xxl) auto;
+        font: var(--boxel-font);
         line-height: 1.5;
         color: var(--boxel-700);
       }
@@ -167,22 +195,26 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
       .btn {
         display: inline-block;
         padding: var(--boxel-sp-sm) var(--boxel-sp-lg);
+        border: none;
         border-radius: 50px;
         text-decoration: none;
         font-weight: 600;
         transition: var(--boxel-transition);
         font: var(--boxel-font-sm);
       }
-      .btn:hover {
-        transform: scale(1.05);
-      }
       .btn-teal {
         background-color: var(--boxel-teal);
         color: var(--boxel-dark);
       }
+      .btn-teal:hover {
+        background-color: #00d99e;
+      }
       .btn-dark {
         background-color: var(--boxel-dark);
         color: var(--boxel-light);
+      }
+      .btn-dark:hover {
+        background-color: #595959;
       }
       .btn-get-started {
         font-weight: 600;
@@ -194,18 +226,15 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
         text-align: center;
         border-top: var(--boxel-border);
       }
-      .feature-cell:not(:last-child) {
-        border-bottom: var(--boxel-border);
-      }
 
       .feature-cell::before {
         content: attr(data-label);
         display: block;
-        font-weight: 500;
         color: var(--boxel-700);
         margin-bottom: var(--boxel-sp-xs);
         text-align: center;
         font: var(--boxel-font-sm);
+        font-weight: 600;
       }
       .feature-cell .credit-value {
         margin-top: var(--boxel-sp-xs);
@@ -215,6 +244,7 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
         display: flex;
         flex-direction: row;
         align-items: center;
+        justify-content: center;
         gap: var(--boxel-sp-xs);
         font: var(--boxel-font-lg);
         font-weight: 600;
@@ -238,6 +268,7 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
         margin: var(--boxel-sp-xs) 0;
       }
       .footer-notes .highlight {
+        display: inline-block;
         background-color: var(--boxel-lime);
         padding: var(--boxel-sp-xxs) var(--boxel-sp-xs);
         border-radius: var(--boxel-border-radius-xs);
@@ -256,14 +287,14 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
 
         .feature-labels-column {
           display: block;
-          flex: 1 1 25%;
+          flex: 1 1 auto;
           background-color: var(--boxel-light);
           font-weight: 600;
           color: var(--boxel-700);
         }
 
         .plan-column {
-          flex: 1 1 25%;
+          flex: 0 0 305px;
           border: none;
           border-radius: 0;
           margin-bottom: 0;
@@ -312,15 +343,25 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
         }
       }
 
+      @media (max-width: 991px) {
+        .btn-get-started {
+          padding-left: calc(var(--boxel-sp-lg) + 30px);
+          padding-right: calc(var(--boxel-sp-lg) + 30px);
+        }
+      }
+
       .choose-subscription-plan-modal {
         --boxel-modal-max-width: 80rem;
         --boxel-modal-offset-top: var(--boxel-sp-xxl);
         height: 90%;
       }
+      :global(.boxel-card-container.choose-subscription-plan) {
+        border-radius: 20px;
+      }
     </style>
 
     <ModalContainer
-      @title='Choose Subscription Plan'
+      @title=''
       @isOpen={{@isModalOpen}}
       @onClose={{@onClose}}
       @cardContainerClass='choose-subscription-plan'
@@ -330,7 +371,7 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
 
       <:content>
         <div class='boxel-pricing-container'>
-          <h1 class='main-title'>Boxel Pricing</h1>
+          <h1 class='main-title'>Choose a Subscription Plan</h1>
 
           <p class='early-preview-banner'>
             Access to the Boxel Web App is free during early preview.
@@ -338,9 +379,10 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
 
           <p class='intro-text'>
             To use the included AI features, you need to have Boxel Credits in
-            your account. Starter plan includes 2,500 credit per month. To get
-            more credits, you can subscribe to a monthly plan or buy credit
-            packs.
+            your account. Starter plan includes 2,500 credit per month.
+            <br />
+            To get more credits, you can subscribe to a monthly plan or buy
+            credit packs.
           </p>
 
           <div class='subscription-header'>
@@ -407,16 +449,22 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
                   }}
                 >{{if this.isStarterPlan 'Manage Plan' 'Get Started'}}</button>
               </div>
-              <div class='feature-cell'>
+              <div
+                class='feature-cell'
+                data-label='Boxel Credits (For AI Generation)'
+              >
                 <div class='credit-value'>
                   <IconHexagon width='16px' height='16px' />
                   2,500
                 </div>
                 <div class='feature-note'>Monthly Boxel Credit</div>
               </div>
-              <div class='feature-cell'>Up to 10</div>
-              <div class='feature-cell'>500 MB</div>
-              <div class='feature-cell'>Included</div>
+              <div class='feature-cell' data-label='Workspaces'>Up to 10</div>
+              <div class='feature-cell' data-label='Cloud Storage'>500 MB</div>
+              <div
+                class='feature-cell'
+                data-label='Boxel Web App'
+              >Included</div>
             </div>
 
             <div
@@ -446,16 +494,22 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
                   }}
                 >{{if this.isCreatorPlan 'Manage Plan' 'Get Started'}}</button>
               </div>
-              <div class='feature-cell'>
+              <div
+                class='feature-cell'
+                data-label='Boxel Credits (For AI Generation)'
+              >
                 <div class='credit-value'>
                   <IconHexagon width='16px' height='16px' />
                   6,500
                 </div>
                 <div class='feature-note'>Monthly Boxel Credit</div>
               </div>
-              <div class='feature-cell'>Up to 25</div>
-              <div class='feature-cell'>5 GB</div>
-              <div class='feature-cell'>Included</div>
+              <div class='feature-cell' data-label='Workspaces'>Up to 25</div>
+              <div class='feature-cell' data-label='Cloud Storage'>5 GB</div>
+              <div
+                class='feature-cell'
+                data-label='Boxel Web App'
+              >Included</div>
             </div>
 
             <div
@@ -490,16 +544,22 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
                     'Get Started'
                   }}</button>
               </div>
-              <div class='feature-cell'>
+              <div
+                class='feature-cell'
+                data-label='Boxel Credits (For AI Generation)'
+              >
                 <div class='credit-value'>
                   <IconHexagon width='16px' height='16px' />
                   35,000
                 </div>
                 <div class='feature-note'>Monthly Boxel Credit</div>
               </div>
-              <div class='feature-cell'>Up to 150</div>
-              <div class='feature-cell'>20 GB</div>
-              <div class='feature-cell'>Included</div>
+              <div class='feature-cell' data-label='Workspaces'>Up to 150</div>
+              <div class='feature-cell' data-label='Cloud Storage'>20 GB</div>
+              <div
+                class='feature-cell'
+                data-label='Boxel Web App'
+              >Included</div>
             </div>
 
           </div>

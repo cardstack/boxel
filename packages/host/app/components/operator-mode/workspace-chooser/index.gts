@@ -585,6 +585,13 @@ export default class WorkspaceChooser extends Component<Signature> {
         --boxel-dropdown-hover-color: #272330;
         --boxel-dropdown-highlight-color: #3b394b;
       }
+      :global(.workspace-chooser-sort-dropdown .boxel-select-options-list) {
+        padding: 0;
+      }
+      :global(.workspace-chooser-sort-dropdown .boxel-select-option-item) {
+        padding-left: var(--boxel-sp);
+        padding-right: var(--boxel-sp);
+      }
       :global(
         .workspace-chooser-sort-dropdown
           .boxel-select-option-item.ember-power-select-option--selected.ember-power-select-option--highlighted
