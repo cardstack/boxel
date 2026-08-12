@@ -1713,12 +1713,17 @@ export async function buildPromptForModel(
   // turn, guaranteeing a cache miss for the entire history after it, every
   // time.
   //
-  // Placement. Providers disagree about where a `system` message may sit,
-  // and the array has to satisfy the strictest of them: OpenAI rejects one
-  // placed between an assistant and its tool messages, and Anthropic
-  // requires one to immediately precede an `assistant` message or end the
-  // array. A trailing `system` message ends the array, which is legal
-  // everywhere.
+  // Role. The trailing message is `user`, not `system`, and this is
+  // load-bearing: for models without a native mid-conversation system role,
+  // OpenRouter hoists every non-leading `system` message into the top-level
+  // system parameter — which put this volatile, timestamped content in front
+  // of the entire conversation and made every request miss the cache for
+  // everything after the system prefix (verified empirically: an identical
+  // two-request exchange read the full history back with a trailing `user`
+  // context and only the system prefix with a trailing `system` one). A
+  // trailing `user` message is legal everywhere; when the turn also ends
+  // with a user message, providers merge the two, and the merged blocks land
+  // after the cache marker where their churn costs nothing.
   //
   // The breakpoint marks the last real message — the end of the stable
   // history. When the turn ends with a tool result, that is where pulled
@@ -1738,7 +1743,7 @@ export async function buildPromptForModel(
   )
     ? `${contextContent}\n\n${CHECK_CORRECTNESS_SUMMARY_INSTRUCTION}`
     : contextContent;
-  messages.push({ role: 'system', content: trailingContent });
+  messages.push({ role: 'user', content: trailingContent });
 
   return messages;
 }

@@ -225,7 +225,7 @@ module('buildPromptForModel', (hooks) => {
     assert.equal(result.length, 3);
     assert.equal(result[0].role, 'system');
     assert.equal(result[1].role, 'user');
-    assert.equal(result[2].role, 'system');
+    assert.equal(result[2].role, 'user');
 
     assert.equal(messageText(result[1]), 'Hey');
     assert.equal(
@@ -324,7 +324,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.equal(result.length, 3);
     assert.equal(result[0].role, 'system');
     assert.equal(result[1].role, 'user');
-    assert.equal(result[2].role, 'system');
+    assert.equal(result[2].role, 'user');
 
     assert.equal(messageText(result[1]), 'Hey');
     assert.equal(
@@ -409,7 +409,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.equal(result.length, 3);
     assert.equal(result[0].role, 'system');
     assert.equal(result[1].role, 'user');
-    assert.equal(result[2].role, 'system');
+    assert.equal(result[2].role, 'user');
 
     assert.equal(messageText(result[1]), 'Hey');
     assert.equal(
@@ -481,7 +481,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.equal(result.length, 3);
     assert.equal(result[0].role, 'system');
     assert.equal(result[1].role, 'user');
-    assert.equal(result[2].role, 'system');
+    assert.equal(result[2].role, 'user');
 
     assert.equal(messageText(result[1]), 'Hey');
     assert.equal(
@@ -568,7 +568,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.equal(result.length, 3);
     assert.equal(result[0].role, 'system');
     assert.equal(result[1].role, 'user');
-    assert.equal(result[2].role, 'system');
+    assert.equal(result[2].role, 'user');
     assert.true(
       messageText(result[1]).includes('Hey'),
       'message body should be in the user prompt',
@@ -2030,7 +2030,7 @@ Attached Files (files with newer versions don't show their content):
     ).messages!;
     assert.equal(result.length, 3);
     assert.equal(result[0].role, 'system');
-    assert.equal(result[2].role, 'system');
+    assert.equal(result[2].role, 'user');
     const systemPromptText = (result[0].content as TextContent[])
       .map((c) => c.text)
       .join('\n');
@@ -2402,7 +2402,7 @@ Attached Files (files with newer versions don't show their content):
     );
     assert.equal(messages!.length, 3);
     assert.equal(messages![1].role, 'user');
-    assert.equal(messages![2].role, 'system');
+    assert.equal(messages![2].role, 'user');
     assert.true(tools!.length === 1);
     assert.deepEqual(toolChoice, {
       type: 'function',
@@ -3552,7 +3552,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
     assert.deepEqual(
       messages!.map((m) => m.role),
-      ['system', 'user', 'assistant', 'system'],
+      ['system', 'user', 'assistant', 'user'],
     );
     assert.equal(
       messageText(messages![2]),
@@ -3815,10 +3815,14 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.strictEqual(shouldRespond, true, 'AiBot should solicit a response');
     assert.deepEqual(
       messages!.map((m) => m.role),
-      ['system', 'user', 'assistant', 'tool', 'system'],
+      ['system', 'user', 'assistant', 'tool', 'user'],
     );
     const userMessages = messages!.filter((message) => message.role === 'user');
-    assert.strictEqual(userMessages.length, 1, 'Should have one user message');
+    assert.strictEqual(
+      userMessages.length,
+      2,
+      'The question plus the trailing context message',
+    );
     assert.false(
       userMessages.some((message) =>
         messageText(message).includes(
@@ -3882,10 +3886,14 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.strictEqual(shouldRespond, true, 'AiBot should solicit a response');
     assert.deepEqual(
       messages!.map((m) => m.role),
-      ['system', 'user', 'assistant', 'tool', 'system'],
+      ['system', 'user', 'assistant', 'tool', 'user'],
     );
     const userMessages = messages!.filter((message) => message.role === 'user');
-    assert.strictEqual(userMessages.length, 1, 'Should have one user message');
+    assert.strictEqual(
+      userMessages.length,
+      2,
+      'The question plus the trailing context message',
+    );
     assert.false(
       userMessages.some((message) =>
         messageText(message).includes(
@@ -3934,7 +3942,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
   });
 
-  test('context trails as its own system message when there is just one user message', async () => {
+  test('context trails as its own user message when there is just one user message', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
@@ -3952,7 +3960,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
     assert.equal(messages![0].role, 'system');
     assert.equal(messages![1].role, 'user');
-    assert.equal(messages![2].role, 'system');
+    assert.equal(messages![2].role, 'user');
     assert.ok(
       messageText(messages![2]).startsWith('The user is currently viewing'),
       'the context trails the conversation as its own message',
@@ -3963,7 +3971,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
   });
 
-  test('context trails as its own system message when there are multiple user messages', async () => {
+  test('context trails as its own user message when there are multiple user messages', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
@@ -3983,7 +3991,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.equal(messages![1].role, 'user');
     assert.equal(messages![2].role, 'assistant');
     assert.equal(messages![3].role, 'user');
-    assert.equal(messages![4].role, 'system');
+    assert.equal(messages![4].role, 'user');
     assert.ok(
       messageText(messages![4]).startsWith('The user is currently viewing'),
       'the context trails the conversation as its own message',
@@ -4015,10 +4023,10 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.equal(messages![5].role, 'user');
     assert.equal(messages![6].role, 'assistant');
     assert.equal(messages![7].role, 'tool');
-    assert.equal(messages![8].role, 'system');
+    assert.equal(messages![8].role, 'user');
   });
 
-  test('context trails as its own system message when the last message is an assistant message', async () => {
+  test('context trails as its own user message when the last message is an assistant message', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
@@ -4037,19 +4045,19 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.equal(messages![0].role, 'system');
     assert.equal(messages![1].role, 'user');
     assert.equal(messages![2].role, 'assistant');
-    assert.equal(messages![3].role, 'system');
+    assert.equal(messages![3].role, 'user');
     assert.ok(
       messageText(messages![3]).startsWith('The user is currently viewing'),
       'the context trails the conversation as its own message',
     );
   });
 
-  test('no interstitial system message is followed by a user message', async () => {
-    // Anthropic rejects the array outright when a `system` message is neither
-    // last nor immediately before an `assistant` message:
-    //   "role 'system' must precede an 'assistant' message or end the array"
-    // The leading system prompt is exempt — providers lift it out of the array
-    // into their own system parameter — so this checks every one after it.
+  test('the leading system prompt is the only system message', async () => {
+    // For models without a native mid-conversation system role, OpenRouter
+    // hoists every non-leading `system` message into the top-level system
+    // parameter. Volatile content hoisted that way lands in front of the
+    // whole conversation and defeats the prompt cache — so nothing after
+    // messages[0] may carry the system role.
     for (let fixture of [
       'user-message-last-single.json',
       'user-message-last-multiple.json',
@@ -4073,18 +4081,11 @@ Current date and time: 2025-06-11T11:43:00.533Z
         // A history the bot would not answer builds no message array.
         continue;
       }
-      for (let i = 1; i < messages!.length; i++) {
-        if (messages![i].role !== 'system') {
-          continue;
-        }
-        let next = messages![i + 1];
-        assert.true(
-          next === undefined || next.role === 'assistant',
-          `${fixture}: system message at ${i} is followed by ${
-            next?.role ?? 'nothing'
-          }, which Anthropic rejects`,
-        );
-      }
+      assert.equal(messages![0].role, 'system', `${fixture}: leading system`);
+      assert.false(
+        messages!.slice(1).some((message) => message.role === 'system'),
+        `${fixture}: no system message after the leading one`,
+      );
     }
   });
 
@@ -4104,7 +4105,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       '@aibot:localhost',
       fakeMatrixClient,
     );
-    assert.equal(messages![4].role, 'system');
+    assert.equal(messages![4].role, 'user');
     assert.true(
       !!messageText(messages![4]).match(
         /Current date and time: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/,
@@ -5276,15 +5277,15 @@ new
     // volatile trailing context message rather than the history — a history
     // entry that vanishes on the next request would defeat the prompt cache.
     let trailingMessage = promptParts.messages?.at(-1);
-    assert.equal(trailingMessage?.role, 'system');
+    assert.equal(trailingMessage?.role, 'user');
     assert.true(
       messageText(trailingMessage).endsWith(summaryMessage),
       'Summary should be appended to the trailing context message',
     );
     assert.false(
-      enabledUserMessages.some((message) =>
-        messageText(message).includes(summaryMessage),
-      ),
+      promptParts.messages
+        ?.slice(0, -1)
+        .some((message) => messageText(message).includes(summaryMessage)),
       'Summary must not be a history entry — it vanishes on the next request',
     );
     assert.false(
@@ -5460,7 +5461,7 @@ new
     // [system, user, assistant, user, trailing context]
     assert.deepEqual(
       result.map((m) => m.role),
-      ['system', 'user', 'assistant', 'user', 'system'],
+      ['system', 'user', 'assistant', 'user', 'user'],
     );
     let lastUserMessage = result[3];
     assert.ok(
@@ -5526,7 +5527,7 @@ new
     );
     assert.deepEqual(
       messages!.map((m) => m.role),
-      ['system', 'user', 'assistant', 'tool', 'system'],
+      ['system', 'user', 'assistant', 'tool', 'user'],
     );
     let toolMessage = messages![3];
     assert.ok(
@@ -5656,7 +5657,7 @@ new
     );
     assert.deepEqual(
       result.map((m) => m.role),
-      ['system', 'user', 'system'],
+      ['system', 'user', 'user'],
     );
     assert.equal(
       countCacheBreakpoints(result),
@@ -5755,8 +5756,8 @@ new
     const userMessages = result.filter((message) => message.role === 'user');
     assert.equal(
       userMessages.length,
-      2,
-      'Both user messages should be included',
+      3,
+      'Both user messages plus the trailing context message',
     );
   });
 
@@ -5935,8 +5936,8 @@ new
     const userMessages = result.filter((message) => message.role === 'user');
     assert.equal(
       userMessages.length,
-      1,
-      'Only the non-empty user message should be included',
+      2,
+      'The non-empty user message plus the trailing context message',
     );
     assert.true(
       messageText(userMessages[0]).endsWith('Hello'),
