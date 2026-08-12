@@ -154,13 +154,21 @@ test.describe('Publish realm', () => {
     ).toBeChecked();
     await page.locator('[data-test-publish-button]').click();
 
+    // Wait for the publish to finish as its own step, before arming the popup
+    // listener. Publishing a brand-new realm runs a from-scratch index plus a
+    // prerender pass server-side, and this control only renders once the
+    // claimed domain reports published. Waiting explicitly means a stalled
+    // publish fails on the wait — naming the stage that stalled — instead of
+    // reporting a popup that never arrived alongside a click that was still
+    // waiting for its target.
+    let openPublishedSiteButton = page.locator(
+      '[data-test-publish-realm-modal] [data-test-open-custom-subdomain-button]',
+    );
+    await openPublishedSiteButton.waitFor({ state: 'visible' });
+
     let newTabPromise = page.waitForEvent('popup');
 
-    await page
-      .locator(
-        '[data-test-publish-realm-modal] [data-test-open-custom-subdomain-button]',
-      )
-      .click();
+    await openPublishedSiteButton.click();
 
     let newTab = await newTabPromise;
     await newTab.waitForLoadState();
