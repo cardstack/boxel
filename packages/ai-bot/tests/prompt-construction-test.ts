@@ -5552,12 +5552,9 @@ new
   });
 
   test('the shared history serializes byte-identically across consecutive turns, apart from the moving marker', async () => {
-    // The invariant the prompt cache lives on: request N+1's messages must be
-    // an exact byte extension of request N's stable prefix. The cache marker
-    // moves forward each turn, so the marker property itself is excluded —
-    // but nothing else may differ, including the string-vs-parts shape of a
-    // message's content, which is why every history message is normalized to
-    // the parts form on every turn.
+    // The invariant the prompt cache lives on: request N+1's messages must
+    // be an exact byte extension of request N's stable prefix, marker aside
+    // — including the string-vs-parts shape of each message's content.
     const makeEvent = (
       event_id: string,
       ts: number,

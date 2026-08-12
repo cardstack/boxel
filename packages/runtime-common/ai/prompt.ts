@@ -1701,42 +1701,19 @@ export async function buildPromptForModel(
     tools,
     disabledSkillIds,
   );
-  // The context always trails the conversation as its own message, for two
-  // reasons that lock together:
-  //
-  // Caching. The context carries the current time, so its bytes change on
-  // every request, and prompt caching is an exact prefix match. Trailing it
-  // keeps every history message byte-stable across requests, which is what
-  // lets the cache breakpoint below actually get read back. Folding the
-  // context into the last user message instead — which this assembly used to
-  // do — rewrote that message's bytes on every request and on every new user
-  // turn, guaranteeing a cache miss for the entire history after it, every
-  // time.
-  //
-  // Role. The trailing message is `user`, not `system`, and this is
-  // load-bearing: for models without a native mid-conversation system role,
-  // OpenRouter hoists every non-leading `system` message into the top-level
-  // system parameter — which put this volatile, timestamped content in front
-  // of the entire conversation and made every request miss the cache for
-  // everything after the system prefix (verified empirically: an identical
-  // two-request exchange read the full history back with a trailing `user`
-  // context and only the system prefix with a trailing `system` one). A
-  // trailing `user` message is legal everywhere; when the turn also ends
-  // with a user message, providers merge the two, and the merged blocks land
-  // after the cache marker where their churn costs nothing.
-  //
-  // The breakpoint marks the last real message — the end of the stable
-  // history. When the turn ends with a tool result, that is where pulled
-  // skill files land, and they are exactly the content that must not be
-  // re-billed at full price on every later request.
+  // The context carries the current time, so its bytes change on every
+  // request. Prompt caching is an exact prefix match, so it trails the
+  // conversation as its own message, after the cache marker — never folded
+  // into a history message, whose bytes must stay stable across requests.
+  // Its role must be `user`: OpenRouter hoists non-leading `system`
+  // messages into the top-level system parameter, which would put this
+  // volatile content in front of the whole conversation and defeat the
+  // cache.
   normalizeHistoryContentShape(messages);
   addHistoryCacheBreakpoint(messages, messages.length - 1);
-  // The correctness-summary instruction exists for this one request only, so
-  // it rides the volatile trailing message. As its own history entry — how
-  // this used to work — it changed the history's byte layout between
-  // requests (present on this one, gone on the next) and drew the cache
-  // marker onto a message that would never exist again, wasting the turn's
-  // cache entry. Appending keeps it the last thing the model reads.
+  // The correctness-summary instruction applies to this request only, so it
+  // rides the volatile trailing message; a history entry that vanishes on
+  // the next request would both churn the history and waste the marker.
   let trailingContent = shouldPromptCheckCorrectnessSummary(
     history,
     aiBotUserId,
@@ -1748,16 +1725,12 @@ export async function buildPromptForModel(
   return messages;
 }
 
-// Serializes every history message's content in the parts-array form, every
-// turn, whether or not it carries the cache marker. The marker needs the
-// parts form, and it moves forward each turn — if only the marked message
-// were converted, each message would flip between the string shape and the
-// parts shape as the marker passed through it. String and parts-array
-// content are semantically the same message, but they are not the same bytes
-// on the wire, and prompt caching is an exact byte match: the flip made the
-// previous turn's cache entry unreadable at exactly the marked position,
-// every turn. A message with empty content (an assistant turn that is only
-// tool calls) stays as it is — an empty text part would be rejected.
+// Serializes every history message in the parts-array form, every turn.
+// The cache marker needs the parts form and moves forward each turn; if
+// only the marked message were converted, messages would flip between the
+// string and parts shapes as the marker passes through — different bytes on
+// the wire, so each flip is a cache miss at that position. Empty contents
+// stay untouched: an empty text part would be rejected.
 function normalizeHistoryContentShape(messages: OpenAIPromptMessage[]) {
   for (let i = 1; i < messages.length; i++) {
     let message = messages[i];
@@ -1767,18 +1740,12 @@ function normalizeHistoryContentShape(messages: OpenAIPromptMessage[]) {
   }
 }
 
-// Marks the end of the stable conversation prefix as cacheable, so the
-// provider re-reads the history at the cached-input price instead of
-// re-billing it fresh on every request. This is the second of the prompt's
-// two cache breakpoints — the first sits on the system message — and it is
-// what keeps skills pulled mid-conversation (readRealmFile results) from
-// costing full price on every turn for the rest of the session.
-//
-// Walks backward from `index` past messages that cannot carry a marker (an
-// empty body, e.g. an assistant turn that is only tool calls). Never marks
-// messages[0]: that is the system message, which has its own breakpoint. The
-// mutation is safe because every message here was freshly built by this
-// prompt assembly.
+// Marks the end of the stable history as cacheable — the second of the
+// prompt's two breakpoints (the first sits on the system message). This is
+// what keeps pulled skill files (readRealmFile results) from being
+// re-billed at full price on every later request. Walks backward past
+// unmarkable messages (empty content); never marks messages[0], the system
+// message.
 function addHistoryCacheBreakpoint(
   messages: OpenAIPromptMessage[],
   index: number,
