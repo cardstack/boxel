@@ -50,6 +50,16 @@ const WorkStateField = enumField(StringField, {
   displayName: 'Work State',
 });
 
+const SpecTargetField = enumField(StringField, {
+  options: ['shared block', 'base realm', 'catalog'],
+  displayName: 'Spec Target',
+});
+
+const CatalogDispositionField = enumField(StringField, {
+  options: ['pure listing', 'needs block'],
+  displayName: 'Catalog Disposition',
+});
+
 function tierClass(tier: string | undefined): string {
   switch (tier) {
     case 'Platform':
@@ -103,8 +113,13 @@ export class MatrixConcept extends CardDef {
   @field workState = contains(WorkStateField);
   @field notes = contains(StringField);
   // Verifier-owned: URL of the Spec in the shared realm that evidences this
-  // concept. Written by verify-specs.py, never by hand or by the crawl.
+  // concept, and where that Spec's ref resolves to. Written by
+  // verify-specs.py, never by hand or by the crawl.
   @field sharedSpec = contains(StringField);
+  @field specTarget = contains(SpecTargetField);
+  // Human-set during review, only meaningful on catalog-matched rows: a pure
+  // listing can be spec'd as-is; otherwise a block must be built here first.
+  @field catalogDisposition = contains(CatalogDispositionField);
 
   @field cardTitle = contains(StringField, {
     computeVia: function (this: MatrixConcept) {
@@ -451,11 +466,16 @@ export class MatrixConcept extends CardDef {
 
     private reviewList: ReturnType<getCards> | undefined;
     private teammateList: ReturnType<getCards> | undefined;
+    private specResource: any;
 
     constructor(owner: Owner, args: any) {
       super(owner, args);
       let ctx = this.args.context;
       let realms = () => this.realms;
+      this.specResource = (ctx as any)?.getCard?.(
+        this,
+        () => (this.args.model as MatrixConcept)?.sharedSpec ?? undefined,
+      );
       this.reviewList = ctx?.getCards(
         this,
         () => {
@@ -583,6 +603,15 @@ export class MatrixConcept extends CardDef {
       }
     }
 
+    get specCard(): CardDef | undefined {
+      return this.specResource?.card;
+    }
+
+    @action openSpec() {
+      let spec = this.specCard;
+      if (spec) (this.args as any).viewCard?.(spec, 'isolated');
+    }
+
     @action async resolveReview(review: ConceptReview) {
       if (!this.commandContext || !this.realm) return;
       this.busy = true;
@@ -631,10 +660,6 @@ export class MatrixConcept extends CardDef {
             <dd>{{if @model.implemented 'Yes' 'No'}}</dd>
             <dt>Evidence tier</dt>
             <dd>{{if @model.evidenceTier @model.evidenceTier '—'}}</dd>
-            {{#if @model.auditStatus}}
-              <dt>Audit status</dt>
-              <dd>{{@model.auditStatus}}</dd>
-            {{/if}}
             {{#if @model.whereImplemented}}
               <dt>Where</dt>
               <dd class='mono'>{{@model.whereImplemented}}</dd>
@@ -643,20 +668,31 @@ export class MatrixConcept extends CardDef {
               <dt>Catalog match</dt>
               <dd class='mono'>{{@model.catalogMatch}}</dd>
             {{/if}}
+            {{#if @model.catalogDisposition}}
+              <dt>Catalog disposition</dt>
+              <dd>{{@model.catalogDisposition}}</dd>
+            {{/if}}
             {{#if @model.sharedSpec}}
               <dt>Spec</dt>
               <dd>
-                <a
-                  class='spec-link'
-                  href={{@model.sharedSpec}}
-                  target='_blank'
-                  rel='noopener noreferrer'
-                >Open the Spec to review ↗</a>
+                {{#if this.specCard}}
+                  <button
+                    type='button'
+                    class='spec-link'
+                    {{on 'click' this.openSpec}}
+                  >Open the Spec to review →</button>
+                {{else}}
+                  <a
+                    class='spec-link'
+                    href={{@model.sharedSpec}}
+                    target='_blank'
+                    rel='noopener noreferrer'
+                  >Open the Spec to review ↗</a>
+                {{/if}}
+                {{#if @model.specTarget}}
+                  <span class='spec-target'>ref → {{@model.specTarget}}</span>
+                {{/if}}
               </dd>
-            {{/if}}
-            {{#if @model.reference}}
-              <dt>Reference (not counted)</dt>
-              <dd class='mono'>{{@model.reference}}</dd>
             {{/if}}
           </dl>
         </section>
@@ -878,6 +914,21 @@ export class MatrixConcept extends CardDef {
         }
         .spec-link:hover {
           background: var(--tier-shared-bg, #dbeafe);
+        }
+        button.spec-link {
+          font: inherit;
+          font-size: 0.8125rem;
+          font-weight: 600;
+          background: transparent;
+          cursor: pointer;
+        }
+        .spec-target {
+          margin-left: 0.5rem;
+          font-size: 0.6875rem;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          color: var(--muted-foreground, #6b7280);
         }
         .notes {
           margin: 0;

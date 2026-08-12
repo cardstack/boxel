@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "reportName": "Support Tickets by Channel — Q3",
+      "samples": [
+        { "label": "Email", "value": 142 },
+        { "label": "Live Chat", "value": 96 },
+        { "label": "Phone", "value": 54 },
+        { "label": "Community Forum", "value": 31 },
+        { "label": "Social", "value": 18 }
+      ],
+      "cardInfo": {
+        "name": "Charts Block POC",
+        "summary": "Stage-2 POC consumer for the charts block: a metrics card that renders the shared DonutChart and LineChart with plain-number data, proving the block is not currency-bound.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../metrics-report",
+        "name": "MetricsReport"
+      }
+    }
+  }
+}

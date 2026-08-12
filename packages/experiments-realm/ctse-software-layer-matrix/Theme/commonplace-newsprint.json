@@ -1,0 +1,22 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cssVariables": ":root {\n  --font-sans: 'DM Sans', ui-sans-serif, system-ui, sans-serif;\n  --font-serif: 'Newsreader', ui-serif, Georgia, serif;\n  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;\n  --background: #eee8d8;\n  --card: #fffaf0;\n  --foreground: #141310;\n  --card-foreground: #141310;\n  --muted: #ddd5c2;\n  --muted-foreground: #68645b;\n  --border: #c7beaa;\n  --input: #c7beaa;\n  --primary: #2457ff;\n  --primary-foreground: #fffaf0;\n  --accent: #2457ff;\n  --accent-foreground: #fffaf0;\n  --ring: #2457ff;\n  --radius: 0rem;\n  --common-ink: #141310;\n  --common-paper: #eee8d8;\n  --common-paper-soft: #cfc7b6;\n  --common-sheet: #fffaf0;\n  --common-board: #25231e;\n  --common-rule-dark: #4b4740;\n  --common-shadow: #090907;\n  --common-blue-wash: #e2e7fb;\n}\n",
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap"
+      ],
+      "cardInfo": {
+        "name": "Commonplace Newsprint",
+        "summary": "An independent-magazine palette of warm newsprint, black pasteboard, and one electric editorial annotation color.",
+        "notes": "Designed for the Commonplace factory proposal. Newsreader carries the essay voice; IBM Plex Mono labels provenance; cobalt marks machine proposals, evidence, and editorial interventions."
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/theme",
+        "name": "default"
+      }
+    }
+  }
+}

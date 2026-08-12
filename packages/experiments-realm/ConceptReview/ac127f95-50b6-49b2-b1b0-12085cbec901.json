@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "verdict": "approve",
+      "body": "Read the Spec and the linked timeline examples — the typed-entry contract is clear and the card renders cleanly. Approving.",
+      "createdAt": "2026-08-12T07:46:45.646Z",
+      "resolved": true,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "concept": {
+        "links": {
+          "self": "../boxel-software-matrix-layer/MatrixConcept/l05-cm-activity"
+        }
+      },
+      "reviewer": {
+        "links": {
+          "self": "../boxel-software-matrix-layer/Teammate/lucas"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../boxel-software-matrix-layer/concept-review",
+        "name": "ConceptReview"
+      }
+    }
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Spec",
+        "module": "https://cardstack.com/base/spec"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "SurfaceLayerManager",
+        "module": "../utils/layer-manager"
+      },
+      "readMe": "## SurfaceLayerManager\n\nDynamic z-index allocator for surface layers. Static z-index tokens declare where each layer tier sits, but they do not order multiple active surfaces inside one tier. A fresh allocation on mount gives nested popovers, cell lifts, modals, drag ghosts, and future top-layer bridges deterministic stacking without every host inventing its own ladder.\n\nTiers: `selection` · `cell-lift` · `popover` · `modal` · `toast`.\n\n```ts\nimport { SURFACE_LAYERS } from '../utils/layer-manager';\n\nconst z = SURFACE_LAYERS.allocate('popover');\n```\n\nExports: `SurfaceLayerManager` (class), the shared `SURFACE_LAYERS` / `LAYERS` singletons, the `LayerManager` alias, and the `SurfaceLayerTier` / `SurfaceLayerRect` / geometry types.",
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "specType": null,
+      "cardTitle": "SurfaceLayerManager",
+      "cardDescription": "Dynamic z-index allocator that orders multiple active surfaces within a tier — gives nested popovers, lifts, modals, and drag ghosts deterministic stacking.",
+      "containedExamples": []
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,279 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/brand-guide"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "version": null,
+      "cardInfo": {
+        "name": "Midnight Glass",
+        "notes": null,
+        "summary": "Dark indigo glass theme for the Popover demo. Exercises the popover's COLOR knob family: explicit fg/border/accent, indigo-tinted dim and translucent tint/blur surfaces, indigo tools kind, dark-amber edit kind, extra-round 1.25rem corners (card is 0.75rem), and indigo glow shadows.",
+        "cardThumbnailURL": null
+      },
+      "markUsage": {
+        "primaryMark1": null,
+        "primaryMark2": null,
+        "secondaryMark1": null,
+        "secondaryMark2": null,
+        "primaryMarkMinHeight": null,
+        "primaryMarkGreyscale1": null,
+        "primaryMarkGreyscale2": null,
+        "secondaryMarkMinHeight": null,
+        "socialMediaProfileIcon": null,
+        "secondaryMarkGreyscale1": null,
+        "secondaryMarkGreyscale2": null,
+        "primaryMarkClearanceRatio": null,
+        "secondaryMarkClearanceRatio": null
+      },
+      "styleName": "Midnight Glass",
+      "visualDNA": "Deep slate surfaces, indigo accents, frosted-glass layering, generous rounding, shadows that glow into the dark.",
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&family=Lora:ital,wght@0,400..700;1,400..700&family=JetBrains+Mono:wght@300..700&display=swap"
+      ],
+      "typography": {
+        "body": {
+          "fontSize": null,
+          "fontFamily": null,
+          "fontWeight": null,
+          "lineHeight": null,
+          "sampleText": null
+        },
+        "caption": {
+          "fontSize": null,
+          "fontFamily": null,
+          "fontWeight": null,
+          "lineHeight": null,
+          "sampleText": null
+        },
+        "heading": {
+          "fontSize": null,
+          "fontFamily": null,
+          "fontWeight": null,
+          "lineHeight": null,
+          "sampleText": null
+        },
+        "subheading": {
+          "fontSize": null,
+          "fontFamily": null,
+          "fontWeight": null,
+          "lineHeight": null,
+          "sampleText": null
+        },
+        "sectionHeading": {
+          "fontSize": null,
+          "fontFamily": null,
+          "fontWeight": null,
+          "lineHeight": null,
+          "sampleText": null
+        }
+      },
+      "colorPalette": null,
+      "contentVoice": null,
+      "inspirations": [],
+      "designMindset": null,
+      "rootVariables": {
+        "card": "#1e293b",
+        "ring": "#818cf8",
+        "input": "#1e293b",
+        "muted": "#1e293b",
+        "accent": "#22d3ee",
+        "border": "#334155",
+        "chart1": "#818cf8",
+        "chart2": "#22d3ee",
+        "chart3": "#a78bfa",
+        "chart4": "#34d399",
+        "chart5": "#f472b6",
+        "radius": "0.75rem",
+        "shadow": "0 4px 12px 0px hsl(222 47% 4% / 0.45)",
+        "popover": "#1e293b",
+        "primary": "#818cf8",
+        "sidebar": "#0b1120",
+        "spacing": "0.25rem",
+        "fontMono": "JetBrains Mono, monospace",
+        "fontSans": "Space Grotesk, sans-serif",
+        "shadowLg": "0 12px 36px 0px hsl(222 47% 4% / 0.55)",
+        "shadowMd": "0 8px 24px 0px hsl(222 47% 4% / 0.5)",
+        "shadowSm": "0 4px 12px 0px hsl(222 47% 4% / 0.45)",
+        "shadowXl": "0 16px 48px 0px hsl(222 47% 4% / 0.6)",
+        "shadowXs": "0 2px 6px 0px hsl(222 47% 4% / 0.4)",
+        "fontSerif": "Lora, serif",
+        "secondary": "#334155",
+        "shadow2xl": "0 24px 72px 0px hsl(222 47% 4% / 0.65)",
+        "shadow2xs": "0 2px 6px 0px hsl(222 47% 4% / 0.3)",
+        "background": "#0f172a",
+        "foreground": "#e2e8f0",
+        "themeScale": null,
+        "destructive": "#f87171",
+        "sidebarRing": "#818cf8",
+        "sidebarAccent": "#1e293b",
+        "sidebarBorder": "#1e293b",
+        "themeFontSize": null,
+        "cardForeground": "#e2e8f0",
+        "sidebarPrimary": "#818cf8",
+        "trackingNormal": "0em",
+        "mutedForeground": "#94a3b8",
+        "accentForeground": "#0f172a",
+        "popoverForeground": "#e2e8f0",
+        "primaryForeground": "#0f172a",
+        "sidebarForeground": "#e2e8f0",
+        "secondaryForeground": "#e2e8f0",
+        "destructiveForeground": "#0f172a",
+        "sidebarAccentForeground": "#e2e8f0",
+        "sidebarPrimaryForeground": "#0f172a"
+      },
+      "motionLanguage": null,
+      "technicalSpecs": null,
+      "wallpaperImages": [],
+      "compositionRules": null,
+      "qualityStandards": null,
+      "typographySystem": null,
+      "brandColorPalette": [],
+      "darkModeVariables": {
+        "card": "#1e293b",
+        "ring": "#818cf8",
+        "input": "#1e293b",
+        "muted": "#1e293b",
+        "accent": "#22d3ee",
+        "border": "#334155",
+        "chart1": "#818cf8",
+        "chart2": "#22d3ee",
+        "chart3": "#a78bfa",
+        "chart4": "#34d399",
+        "chart5": "#f472b6",
+        "radius": "0.75rem",
+        "shadow": "0 4px 12px 0px hsl(222 47% 4% / 0.45)",
+        "popover": "#1e293b",
+        "primary": "#818cf8",
+        "sidebar": "#0b1120",
+        "spacing": "0.25rem",
+        "fontMono": "JetBrains Mono, monospace",
+        "fontSans": "Space Grotesk, sans-serif",
+        "shadowLg": "0 12px 36px 0px hsl(222 47% 4% / 0.55)",
+        "shadowMd": "0 8px 24px 0px hsl(222 47% 4% / 0.5)",
+        "shadowSm": "0 4px 12px 0px hsl(222 47% 4% / 0.45)",
+        "shadowXl": "0 16px 48px 0px hsl(222 47% 4% / 0.6)",
+        "shadowXs": "0 2px 6px 0px hsl(222 47% 4% / 0.4)",
+        "fontSerif": "Lora, serif",
+        "secondary": "#334155",
+        "shadow2xl": "0 24px 72px 0px hsl(222 47% 4% / 0.65)",
+        "shadow2xs": "0 2px 6px 0px hsl(222 47% 4% / 0.3)",
+        "background": "#0f172a",
+        "foreground": "#e2e8f0",
+        "themeScale": null,
+        "destructive": "#f87171",
+        "sidebarRing": "#818cf8",
+        "sidebarAccent": "#1e293b",
+        "sidebarBorder": "#1e293b",
+        "themeFontSize": null,
+        "cardForeground": "#e2e8f0",
+        "sidebarPrimary": "#818cf8",
+        "trackingNormal": "0em",
+        "mutedForeground": "#94a3b8",
+        "accentForeground": "#0f172a",
+        "popoverForeground": "#e2e8f0",
+        "primaryForeground": "#0f172a",
+        "sidebarForeground": "#e2e8f0",
+        "secondaryForeground": "#e2e8f0",
+        "destructiveForeground": "#0f172a",
+        "sidebarAccentForeground": "#e2e8f0",
+        "sidebarPrimaryForeground": "#0f172a"
+      },
+      "functionalPalette": {
+        "dark": null,
+        "light": null,
+        "accent": null,
+        "primary": null,
+        "secondary": null
+      },
+      "geometricLanguage": null,
+      "historicalContext": null,
+      "customCssVariables": [
+        {
+          "name": "bx-popover-tools-bg",
+          "value": "#312e81"
+        },
+        {
+          "name": "bx-popover-tools-fg",
+          "value": "#e0e7ff"
+        },
+        {
+          "name": "bx-popover-edit-bg",
+          "value": "#3b3520"
+        },
+        {
+          "name": "bx-popover-edit-border",
+          "value": "#8a7a2e"
+        },
+        {
+          "name": "bx-popover-radius",
+          "value": "1.25rem"
+        },
+        {
+          "name": "bx-popover-shadow-raised",
+          "value": "0 4px 20px 0px hsl(239 84% 67% / 0.25)"
+        },
+        {
+          "name": "bx-popover-shadow-elevated",
+          "value": "0 8px 30px 0px hsl(239 84% 67% / 0.35)"
+        },
+        {
+          "name": "bx-popover-shadow-floating",
+          "value": "0 16px 48px 0px hsl(239 84% 67% / 0.45)"
+        },
+        {
+          "name": "bx-popover-fg",
+          "value": "#e2e8f0"
+        },
+        {
+          "name": "bx-popover-fg-muted",
+          "value": "#94a3b8"
+        },
+        {
+          "name": "bx-popover-border",
+          "value": "#3f4a63"
+        },
+        {
+          "name": "bx-popover-accent",
+          "value": "#22d3ee"
+        },
+        {
+          "name": "bx-popover-dim-bg",
+          "value": "hsl(234 60% 8% / 0.6)"
+        },
+        {
+          "name": "bx-popover-bg-tint",
+          "value": "hsl(217 33% 17% / 0.8)"
+        },
+        {
+          "name": "bx-popover-bg-blur",
+          "value": "hsl(217 33% 17% / 0.55)"
+        },
+        {
+          "name": "bx-popover-font-family",
+          "value": "Space Grotesk, sans-serif"
+        }
+      ],
+      "materialVocabulary": null,
+      "componentVocabulary": null,
+      "applicationScenarios": null,
+      "brandImageAttachments": []
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

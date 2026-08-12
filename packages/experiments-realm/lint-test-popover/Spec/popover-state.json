@@ -1,0 +1,45 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Spec",
+        "module": "https://cardstack.com/base/spec"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "PopoverState",
+        "module": "../utils/popover-state"
+      },
+      "readMe": "## PopoverState\n\nThe per-host state machine that owns the currently-open popover's `(row, col, kind)` plus the hover-pause and dismiss-grace timers. Pulls ~150 lines of repeated gesture state out of every host component into one class.\n\nThe host owns ONE instance per surface root (one open popover at a time) and passes it to the `surfacePopoverBinding` modifier on each hover-target element. Drives the desktop gesture model: hover ~500ms → details opens; pointer leaves source + popover → 200ms grace; pointer enters popover → grace canceled; click → edit opens; escalate transitions kind without unmounting.\n\n```ts\nimport { createPopoverState } from '../utils/popover-state';\n\nthis.popoverState = createPopoverState({ /* options */ });\n```\n\nExports: `PopoverState` (class), `createPopoverState` (factory), and the `PopoverTarget` / `PopoverStateOptions` / `PopoverContract` types.",
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "specType": null,
+      "cardTitle": "PopoverState",
+      "cardDescription": "Per-host state machine owning the open popover's (row, col, kind) plus hover-pause and dismiss-grace timers — the shared gesture model behind hover-to-details / click-to-edit / escalate.",
+      "containedExamples": []
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

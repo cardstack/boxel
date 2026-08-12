@@ -24,7 +24,8 @@
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      }
+      },
+      "specTarget": "shared block"
     },
     "meta": {
       "adoptsFrom": {

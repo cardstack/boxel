@@ -1,0 +1,45 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Spec",
+        "module": "https://cardstack.com/base/spec"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "Popover",
+        "module": "../popover"
+      },
+      "readMe": "## Popover\n\nAn anchored floating surface that hosts a focused interaction next to a source element — it **raises** a focused something out of the source's small footprint without taking the user away from the source. A standalone, remixable extraction of the `boxel-surface` `Lift` primitive whose only npm dependency is `@floating-ui/dom` (shimmed as a global virtual module in every realm).\n\n### Orthogonal axes\nEach dial does exactly one thing and reads only its own value, so any combination is predictable:\n- **kind** — `details` · `edit` · `tools` — ARIA role + autofocus default + CSS theme\n- **anchoring** — `beside` · `overlay` · `center` — position only\n- **size** — `compact` · `comfortable` · `spacious` · `auto` — min/max width + height\n- **backdrop** — `none` · `tint` · `blur` · `dim` — surface material\n- **elevation** — `flat` · `raised` · `elevated` · `floating` — shadow depth + radius\n\n### Keyboard / focus (explicit opt-ins)\n- **@keyboardModel** — `'pick'` (focus a `[role=listbox]`, route arrow keys) or `'edit'` (focus the editor input, route typing keys). Omit to leave key handling to the host.\n- **@trapFocus** — trap Tab inside the popover (aria-modal). Use for editor popovers that own the full focus cycle.\n\n### Escalation\nPass `@canEscalateTo` (kinds other than the current `@kind`) plus `@onEscalate` to render a compact corner glyph (✎ → edit, ⓘ → details, ⋯ → tools / multiple targets). The toolbar is OFF by default; single-kind contracts get no chrome.\n\n### Per-kind content via named blocks\nThe host supplies one named block per kind — `<:details>`, `<:edit>`, `<:tools>` — and the popover renders the block matching the current `@kind`. No host-side `{{#if (eq kind …)}}` dispatch: changing `@kind` (including via escalation) swaps the rendered block live while the popover stays open. Supply a block for every kind reachable through `@kind` or `@canEscalateTo` (a missing block renders an empty pane); a single-kind popover writes just one block. Each block's content is wrapped in `.bx-popover__pane` with `data-bx-popover-pane='<kind>'` — a styling hook with **no padding** (the body's picker convention applies: each editor pane owns its own gutter).\n\n### Calling convention\nThe host owns **what** (open/close state, kind state, body content); the Popover owns **how** (positioning, dismissal on Esc / outside-click, focus enter/restore, per-kind chrome, the optional dim overlay).\n\n## Usage\n\nThe **Popover Playground** example is the canonical reference — every axis is a live control there, and it prints the exact invocation as you change dials. The minimal shape:\n\n```gts\nimport Popover from '../popover.gts';\n\n<template>\n  <button data-anchor='preview'>Open</button>\n\n  <Popover\n    @anchor='[data-anchor=preview]'\n    @open={{this.open}}\n    @kind='details'\n    @anchoring='beside'\n    @placement='bottom'\n    @offset={{8}}\n    @size='comfortable'\n    @backdrop='none'\n    @elevation='raised'\n    @onDismiss={{this.close}}\n  >\n    <:details>\n      …details content…\n    </:details>\n  </Popover>\n</template>\n```\n\n- `@anchor` is a CSS selector string the popover positions against.\n- `@open` + `@onDismiss` — the host owns open/close state; the popover calls `@onDismiss` on Esc / outside-click.\n- `@placement` / `@offset` / `@arrow` apply only when `@anchoring='beside'`.\n- For an editor popover, add `@kind='edit'`, `@keyboardModel='edit'`, and `@trapFocus={{true}}`.\n- For hover-to-open / click-to-escalate wiring across many source units, drive it through `PopoverState` + the `surfacePopoverBinding` modifier rather than managing `@open` by hand.\n\n## Theming & customization\n\nThe popover follows the theme of the card that anchors it. Theme CSS variables are scoped to the themed card's container while the popover portals to `document.body`, so on open the popover reads the **resolved** theme tokens from its anchor element and copies them onto the portaled root — dark mode and Brand Guide custom variables included.\n\nEvery visual value resolves through three scopes, strongest first:\n\n1. **Popover-only knobs** — `--bx-popover-*` custom properties. Set these (e.g. in a Brand Guide's *Custom CSS Variables*) to restyle ONLY the popover; nothing else on the card is affected.\n   - Surface / colors: `--bx-popover-fg` · `--bx-popover-fg-muted` · `--bx-popover-border` · `--bx-popover-accent` · `--bx-popover-dim-bg` · `--bx-popover-bg-tint` · `--bx-popover-bg-blur`\n   - `--bx-popover-bg` exists but forces ONE surface fill, overriding whatever the *backdrop* and *kind* axes would paint (tint/blur translucency, the dark tools surface, the edit yellow). Prefer the per-kind and backdrop knobs; set `--bx-popover-bg` only when you want exactly that single-color behavior.\n   - Per-kind: `--bx-popover-tools-bg` / `--bx-popover-tools-fg` (tools surface) · `--bx-popover-edit-bg` / `--bx-popover-edit-border` (edit sticky-note)\n   - Shape / depth / type: `--bx-popover-radius` (base of the elevation radius ladder) · `--bx-popover-shadow-raised` / `--bx-popover-shadow-elevated` / `--bx-popover-shadow-floating` · `--bx-popover-font-family`\n   - Size tiers: `--bx-popover-size-{compact,comfortable,spacious}-{min-w,max-w,max-h}` — set `min-w` equal to `max-w` for fixed-width popovers (no width jump when `@kind` swaps content)\n2. **Theme semantic tokens** — `--popover` · `--popover-foreground` · `--border` · `--primary` · `--muted-foreground` · `--radius` · `--shadow-{sm,md,xl}` · `--font-sans`. Author a normal theme and the popover follows automatically; the `tools` kind renders as the inverted surface (`--foreground` / `--background` swapped).\n3. **Built-in defaults** — used when neither scope defines a value, so the popover stands alone with no theme at all.\n\nThe bundled **Theme/midnight-glass** and **Theme/paper-press** Brand Guides demo both scopes and jointly exercise the whole knob catalog: midnight-glass covers the color family (explicit fg/border/accent, tinted dim, translucent tint/blur, glow shadows, extra rounding), paper-press the size family (fixed-width 240/320/420px tiers so kind swaps never change width, square corners, mono face). The playground instance links paper-press out of the box — the stage shows a \"Themed\" chip naming the linked Theme card.\n\n## Companion modules (bundled in this listing)\n- **surfacePopoverBinding** (`modifiers/popover-binding`) — element modifier that translates pointer/click gestures on each source unit into `PopoverState` transitions.\n- **PopoverState** (`utils/popover-state`) — per-host state machine owning the open `(row, col, kind)` plus hover-pause / dismiss-grace timers.\n- **SurfaceLayerManager** (`utils/layer-manager`) — dynamic z-index allocator so nested popovers / lifts / modals stack deterministically.\n- **popover-types** (`utils/popover-types`) — the axis unions plus kind→glyph / kind→label maps and the escalation-priority resolver.",
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "specType": "component",
+      "cardTitle": "Popover",
+      "cardDescription": "An anchored floating surface that raises a focused interaction next to its source element. Five orthogonal axes (kind, anchoring, size, backdrop, elevation) plus opt-in keyboard delegation, focus-trapping, and kind escalation.",
+      "containedExamples": []
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

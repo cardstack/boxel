@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "label": "DROP / LAB",
+      "title": "DropLab",
+      "subtitle": "A collaborative release studio that extracts facts from messy media, interprets rights with AI, generates campaign variants, and keeps every human decision auditable.",
+      "dropName": "NEON COMMONS / 001",
+      "cardInfo": {
+        "name": "Factory Trial 02 — DropLab",
+        "summary": "A culturally current software-factory proposal combining mixed-media extraction, AI interpretation and generation, multi-user approvals, provenance, and catalog reuse.",
+        "notes": "Proposed 2026-07-21. The fictional test release combines music, limited apparel, short film, guest collaborators, sample clearance, and four publishing channels. Pass targets are hypotheses to measure during the run.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/software-elements"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../droplab-structured-proposal",
+        "name": "StructuredDropLabProposal"
+      }
+    }
+  }
+}

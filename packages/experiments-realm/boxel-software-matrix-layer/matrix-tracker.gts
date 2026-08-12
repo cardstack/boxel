@@ -30,6 +30,15 @@ const TIER_ORDER = [
   { key: 'POC realm', color: '#d97706' },
   { key: 'No evidence', color: '#e5e7eb' },
 ];
+// The progress story: DONE means a Spec here whose ref resolves (to a shared
+// block, base-realm code, or a pure catalog listing). Catalog and platform
+// code without a Spec is available, not done; POC folds into not-started.
+const SPEC_STATES = [
+  { key: 'verified', label: 'Spec-verified', color: '#16a34a' },
+  { key: 'catalog', label: 'Catalog available', color: '#7c3aed' },
+  { key: 'platform', label: 'Platform available', color: '#2563eb' },
+  { key: 'none', label: 'Not started', color: '#e5e7eb' },
+];
 const STATE_ORDER = ['Done', 'In Progress', 'Next', 'Blocked'];
 const ALL = 'all';
 // Card-context searches are clamped to 100 items per page (search-bounds.ts),
@@ -59,6 +68,7 @@ export class MatrixTracker extends CardDef {
     @tracked tierFilter = ALL;
     @tracked stateFilter = ALL;
     @tracked ownerFilter = ALL;
+    @tracked specStateFilter = ALL;
     @tracked lagOnly = false;
     @tracked query = '';
 
@@ -128,19 +138,12 @@ export class MatrixTracker extends CardDef {
     get implementedCount() {
       return this.concepts.filter((c) => c.implemented).length;
     }
-    get implementedPercent() {
-      return this.total
-        ? Math.round((this.implementedCount / this.total) * 100)
-        : 0;
-    }
 
-    get tierSegments(): DonutSegment[] {
-      return TIER_ORDER.map(({ key, color }) => ({
-        label: key,
+    get specStateSegments(): DonutSegment[] {
+      return SPEC_STATES.map(({ key, label, color }) => ({
+        label,
         color,
-        value: this.concepts.filter(
-          (c) => (c.evidenceTier ?? 'No evidence') === key,
-        ).length,
+        value: this.concepts.filter((c) => this.specState(c) === key).length,
       }));
     }
 
@@ -151,10 +154,44 @@ export class MatrixTracker extends CardDef {
       }));
     }
 
-    // A Done claim is verified when the catalog has the concept or the shared
-    // realm holds its Spec; anything else is a claim awaiting evidence.
-    isVerified = (c: MatrixConcept) =>
-      Boolean(c.catalogMatch || c.sharedSpec || c.implemented);
+    // A Done claim is verified only by a resolving Spec in this realm —
+    // catalog matches and platform code are available material, not done.
+    isVerified = (c: MatrixConcept) => Boolean(c.sharedSpec);
+
+    specState = (c: MatrixConcept): string => {
+      if (c.sharedSpec) return 'verified';
+      if (
+        c.catalogMatch ||
+        c.evidenceTier === 'Catalog shared' ||
+        c.evidenceTier === 'Catalog listing'
+      )
+        return 'catalog';
+      if (c.evidenceTier === 'Platform') return 'platform';
+      return 'none';
+    };
+
+    get specVerifiedCount() {
+      return this.concepts.filter((c) => c.sharedSpec).length;
+    }
+    get catalogAvailable(): MatrixConcept[] {
+      return this.concepts.filter((c) => this.specState(c) === 'catalog');
+    }
+    get platformAvailable(): MatrixConcept[] {
+      return this.concepts.filter((c) => this.specState(c) === 'platform');
+    }
+
+    get funnel() {
+      let total = this.total || 1;
+      let bar = (count: number) => ({
+        count,
+        style: htmlSafe(`width: ${Math.round((count / total) * 100)}%`),
+      });
+      return [
+        { label: 'Code exists', ...bar(this.implementedCount) },
+        { label: 'Spec-verified', ...bar(this.specVerifiedCount) },
+        { label: 'Approved', ...bar(this.approved.length) },
+      ];
+    }
 
     get allReviews(): ConceptReview[] {
       return ((this.reviewList?.instances ?? []) as ConceptReview[])
@@ -287,6 +324,11 @@ export class MatrixTracker extends CardDef {
           if (this.ownerFilter !== ALL && c.owner !== this.ownerFilter)
             return false;
           if (
+            this.specStateFilter !== ALL &&
+            this.specState(c) !== this.specStateFilter
+          )
+            return false;
+          if (
             this.lagOnly &&
             !(c.workState === 'Done' && !this.isVerified(c))
           )
@@ -325,8 +367,18 @@ export class MatrixTracker extends CardDef {
     @action setOwner(e: Event) {
       this.ownerFilter = (e.target as HTMLSelectElement).value;
     }
+    @action setSpecState(e: Event) {
+      this.specStateFilter = (e.target as HTMLSelectElement).value;
+    }
     @action setTab(key: string) {
       this.activeTab = key;
+    }
+    @action drillToBacklog(state: string) {
+      this.specStateFilter = state;
+      this.activeTab = 'concepts';
+    }
+    get specStateOptions() {
+      return SPEC_STATES.map((s) => ({ key: s.key, label: s.label }));
     }
     @action setQuery(value: string) {
       this.query = value;
@@ -347,10 +399,19 @@ export class MatrixTracker extends CardDef {
             <LayoutGridIcon class='brand-icon' />
             <h1>{{@model.cardTitle}}</h1>
           </div>
-          <p class='sub'>{{this.implementedCount}}
-            of
-            {{this.total}}
-            concepts counted implemented ({{this.implementedPercent}}%)</p>
+          <div class='funnel'>
+            {{#each this.funnel as |stage|}}
+              <div class='funnel-row'>
+                <span class='funnel-label'>{{stage.label}}</span>
+                <div class='funnel-bar'><div
+                    class='funnel-fill'
+                    style={{stage.style}}
+                  ></div></div>
+                <span class='funnel-count'>{{stage.count}}</span>
+              </div>
+            {{/each}}
+            <p class='sub'>of {{this.total}} concepts</p>
+          </div>
         </header>
 
         {{#if this.isInteractive}}
@@ -368,15 +429,16 @@ export class MatrixTracker extends CardDef {
         {{#if this.showOverview}}
         <section class='summary'>
           <div class='panel donut-panel'>
-            <h2>Evidence coverage</h2>
+            <h2>Progress</h2>
             <DonutChart
-              @segments={{this.tierSegments}}
-              @centerValue='{{this.implementedCount}}'
-              @centerLabel='counted'
+              @segments={{this.specStateSegments}}
+              @centerValue='{{this.specVerifiedCount}}'
+              @centerLabel='spec-verified'
             />
-            <p class='tier-note'>Platform and Catalog shared count as
-              implemented; POC realm and Catalog listing are evidence on the
-              way there.</p>
+            <p class='tier-note'>Done means a Spec here whose ref resolves —
+              to a shared block, base-realm code, or a pure catalog listing.
+              Catalog and platform code without a Spec is available material,
+              not done.</p>
           </div>
 
           <div class='panel'>
@@ -490,6 +552,29 @@ export class MatrixTracker extends CardDef {
                   {{/each}}
                 </div>
               </div>
+              <div class='panel'>
+                <h2>Spec backlog</h2>
+                <div class='queue-list'>
+                  <button
+                    type='button'
+                    class='queue-row backlog-row'
+                    {{on 'click' (fn this.drillToBacklog 'catalog')}}
+                  >
+                    <span class='cell-concept'>Catalog available — needs a
+                      Spec here (pure listing) or a block</span>
+                    <span class='backlog-count'>{{this.catalogAvailable.length}}</span>
+                  </button>
+                  <button
+                    type='button'
+                    class='queue-row backlog-row'
+                    {{on 'click' (fn this.drillToBacklog 'platform')}}
+                  >
+                    <span class='cell-concept'>Platform available — code in
+                      base, needs a Spec here</span>
+                    <span class='backlog-count'>{{this.platformAvailable.length}}</span>
+                  </button>
+                </div>
+              </div>
               <div class='panel feed-panel'>
                 <h2>Recent activity</h2>
                 <div class='feed'>
@@ -570,6 +655,21 @@ export class MatrixTracker extends CardDef {
                   >{{opt}}</option>
                 {{/each}}
               </select>
+              <select
+                aria-label='Spec state'
+                {{on 'change' this.setSpecState}}
+              >
+                <option
+                  value='all'
+                  selected={{eq this.specStateFilter 'all'}}
+                >Any spec state</option>
+                {{#each this.specStateOptions as |opt|}}
+                  <option
+                    value={{opt.key}}
+                    selected={{eq this.specStateFilter opt.key}}
+                  >{{opt.label}}</option>
+                {{/each}}
+              </select>
               <BoxelInput
                 class='search'
                 @type='search'
@@ -645,6 +745,52 @@ export class MatrixTracker extends CardDef {
           margin: 0;
           font-size: 0.875rem;
           color: var(--muted-foreground, #6b7280);
+        }
+        .funnel {
+          display: flex;
+          flex-direction: column;
+          gap: 0.25rem;
+          max-width: 34rem;
+          margin-top: 0.375rem;
+        }
+        .funnel-row {
+          display: grid;
+          grid-template-columns: 7.5rem 1fr 3rem;
+          align-items: center;
+          gap: 0.625rem;
+          font-size: 0.8125rem;
+        }
+        .funnel-label {
+          color: var(--muted-foreground, #6b7280);
+        }
+        .funnel-bar {
+          height: 0.5rem;
+          border-radius: 999px;
+          background: var(--muted, #f3f4f6);
+          overflow: hidden;
+        }
+        .funnel-fill {
+          height: 100%;
+          border-radius: 999px;
+          background: var(--tier-platform-fg, #16a34a);
+        }
+        .funnel-row:nth-child(2) .funnel-fill {
+          background: var(--state-progress-fg, #2563eb);
+        }
+        .funnel-row:nth-child(3) .funnel-fill {
+          background: var(--tier-listing-fg, #7c3aed);
+        }
+        .funnel-count {
+          font-weight: 700;
+          font-variant-numeric: tabular-nums;
+          text-align: right;
+        }
+        .backlog-row {
+          grid-template-columns: 1fr auto;
+        }
+        .backlog-count {
+          font-weight: 700;
+          font-variant-numeric: tabular-nums;
         }
         .summary {
           display: grid;
