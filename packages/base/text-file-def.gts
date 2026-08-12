@@ -1,8 +1,10 @@
 import { byteStreamToUint8Array } from '@cardstack/runtime-common';
 import TextFileIcon from '@cardstack/boxel-icons/file-text';
+import GlimmerComponent from '@glimmer/component';
 import {
   BaseDefComponent,
   Component,
+  NumberField,
   StringField,
   contains,
   field,
@@ -13,6 +15,7 @@ import {
   type ByteStream,
   type SerializedFile,
 } from './file-api';
+import type { FilePreviewSignature } from './file-formats/file-preview-stage';
 import { fencedCodeBlock } from './markdown-helpers';
 
 const TEXT_EXTENSIONS = new Set(['.txt', '.text']);
@@ -41,278 +44,84 @@ function truncateExcerpt(text: string): string {
   return `${text.slice(0, EXCERPT_MAX_LENGTH - 3).trimEnd()}...`;
 }
 
-function textTitle(
-  model: { title?: string | null; name?: string | null } | null | undefined,
-): string {
-  return model?.title ?? model?.name ?? 'Untitled text file';
-}
-
-class Isolated extends Component<typeof TextFileDef> {
-  get title() {
-    return textTitle(this.args.model);
+// The family renderer the four shared shells mount into. Plain text has no
+// structure to render, so every format shows the bytes verbatim in a monospace
+// column — full content for embedded/isolated, the projection's already-budgeted
+// head snippet for a fitted collection cell.
+class TextPreview extends GlimmerComponent<FilePreviewSignature> {
+  get content(): string {
+    let model = this.args.model;
+    if (this.args.mode === 'fitted') {
+      // `contentPreview` is truncated to the fitted character/line budget in
+      // `fileViewModel`, so a cell can never be handed the whole file.
+      return model?.contentPreview ?? '';
+    }
+    return String(model?.source?.content ?? model?.contentPreview ?? '');
   }
 
-  get content() {
-    return this.args.model?.content ?? '';
+  get hasContent(): boolean {
+    return Boolean(this.content.trim());
   }
 
-  get hasContent() {
-    return Boolean(this.args.model?.content?.trim());
+  get truncated(): boolean {
+    return this.args.mode === 'fitted' && Boolean(this.args.model?.previewTruncated);
   }
 
   <template>
-    <article class='text-isolated' data-test-text-isolated>
+    <div class='text-preview' data-mode={{@mode}} data-test-text-preview>
       {{#if this.hasContent}}
-        <pre class='text-isolated__content'>{{this.content}}</pre>
-      {{else}}
-        <header class='text-isolated__title'>{{this.title}}</header>
-      {{/if}}
-    </article>
-    <style scoped>
-      .text-isolated {
-        padding: var(--boxel-sp-lg);
-        max-width: 100%;
-      }
-
-      .text-isolated__title {
-        color: var(--boxel-900);
-        font-weight: 600;
-        font-size: var(--boxel-font-size-lg);
-      }
-
-      .text-isolated__content {
-        font-family: var(--boxel-monospace-font-family, monospace);
-        white-space: pre-wrap;
-        word-wrap: break-word;
-        margin: 0;
-        color: var(--boxel-900);
-        font-size: var(--boxel-font-sm);
-        line-height: 1.5;
-      }
-    </style>
-  </template>
-}
-
-class Embedded extends Component<typeof TextFileDef> {
-  get title() {
-    return textTitle(this.args.model);
-  }
-
-  get content() {
-    return this.args.model?.content ?? '';
-  }
-
-  <template>
-    <article class='text-embedded' data-test-text-embedded>
-      <header class='text-embedded__title'>{{this.title}}</header>
-      <div class='text-embedded__content'>
-        <pre class='text-embedded__pre'>{{this.content}}</pre>
-      </div>
-    </article>
-    <style scoped>
-      .text-embedded {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-xs);
-        padding: var(--boxel-sp);
-      }
-
-      .text-embedded__title {
-        color: var(--boxel-900);
-        font-weight: 600;
-      }
-
-      .text-embedded__content {
-        max-height: 200px;
-        overflow: hidden;
-        mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
-        -webkit-mask-image: linear-gradient(
-          to bottom,
-          black 60%,
-          transparent 100%
-        );
-      }
-
-      .text-embedded__pre {
-        font-family: var(--boxel-monospace-font-family, monospace);
-        white-space: pre-wrap;
-        word-wrap: break-word;
-        margin: 0;
-        color: var(--boxel-900);
-        font-size: var(--boxel-font-sm);
-        line-height: 1.5;
-      }
-    </style>
-  </template>
-}
-
-class Fitted extends Component<typeof TextFileDef> {
-  get title() {
-    return textTitle(this.args.model);
-  }
-
-  get excerpt() {
-    return this.args.model?.excerpt ?? '';
-  }
-
-  get hasExcerpt() {
-    return Boolean(this.excerpt);
-  }
-
-  <template>
-    <article class='text-fitted' data-test-text-fitted>
-      <div class='text-fitted__icon'>
-        <TextFileIcon width='100%' height='100%' />
-      </div>
-      <div class='text-fitted__text'>
-        <header class='text-fitted__title'>{{this.title}}</header>
-        {{#if this.hasExcerpt}}
-          <p class='text-fitted__excerpt'>{{this.excerpt}}</p>
+        <pre class='text-preview__body'>{{this.content}}</pre>
+        {{#if this.truncated}}
+          <div class='text-preview__more' aria-hidden='true'>…</div>
         {{/if}}
-      </div>
-    </article>
+      {{else}}
+        <p class='text-preview__empty'>No text content</p>
+      {{/if}}
+    </div>
     <style scoped>
-      .text-fitted {
-        container-name: fitted-card;
-        container-type: size;
+      .text-preview {
         width: 100%;
         height: 100%;
-        display: flex;
-        align-items: flex-start;
-        gap: var(--boxel-sp-xs);
-        padding: var(--boxel-sp-xs);
-        overflow: hidden;
+        min-height: 0;
+        overflow: auto;
+        background: var(--card);
+        color: var(--foreground);
+        text-align: left;
       }
-
-      .text-fitted__icon {
-        flex-shrink: 0;
-        width: 20px;
-        height: 20px;
-        color: var(--boxel-600);
-      }
-
-      .text-fitted__text {
-        min-width: 0;
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-4xs);
-      }
-
-      .text-fitted__title {
-        color: var(--boxel-900);
-        font-weight: 600;
-        font-size: var(--boxel-font-sm);
-        overflow: hidden;
-        display: -webkit-box;
-        -webkit-box-orient: vertical;
-        -webkit-line-clamp: 2;
-      }
-
-      .text-fitted__excerpt {
-        color: var(--boxel-600);
-        font-size: var(--boxel-font-xs);
+      .text-preview__body {
         margin: 0;
+        padding: var(--boxel-sp);
+        font-family: var(--font-mono, var(--boxel-monospace-font-family, monospace));
+        font-size: 0.8125rem;
+        line-height: 1.55;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      /* Fitted cells get a smaller, denser head snippet capped by a fade so the
+         clip reads as "there is more" rather than an abrupt cut. */
+      .text-preview[data-mode='fitted'] {
         overflow: hidden;
-        display: -webkit-box;
-        -webkit-box-orient: vertical;
-        -webkit-line-clamp: 3;
+        position: relative;
+        -webkit-mask-image: linear-gradient(to bottom, black 72%, transparent);
+        mask-image: linear-gradient(to bottom, black 72%, transparent);
       }
-
-      /* Portrait tall: icon above text */
-      @container fitted-card (aspect-ratio <= 1.0) and (height >= 120px) {
-        .text-fitted {
-          flex-direction: column;
-          align-items: center;
-          text-align: center;
-        }
-
-        .text-fitted__icon {
-          width: 28px;
-          height: 28px;
-        }
-
-        .text-fitted__title {
-          -webkit-line-clamp: 3;
-        }
+      .text-preview[data-mode='fitted'] .text-preview__body {
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        font-size: 0.6875rem;
+        line-height: 1.5;
       }
-
-      /* Portrait short: hide excerpt */
-      @container fitted-card (aspect-ratio <= 1.0) and (height < 120px) {
-        .text-fitted__excerpt {
-          display: none;
-        }
+      .text-preview__more {
+        position: absolute;
+        bottom: 2px;
+        right: 8px;
+        color: var(--muted-foreground);
+        font-size: 0.75rem;
       }
-
-      /* Portrait very short: hide icon too */
-      @container fitted-card (aspect-ratio <= 1.0) and (height < 80px) {
-        .text-fitted__icon {
-          display: none;
-        }
-      }
-
-      /* Landscape: icon left of text */
-      @container fitted-card (1.0 < aspect-ratio) {
-        .text-fitted {
-          align-items: flex-start;
-        }
-      }
-
-      /* Landscape short: hide excerpt */
-      @container fitted-card (1.0 < aspect-ratio) and (height < 80px) {
-        .text-fitted__excerpt {
-          display: none;
-        }
-      }
-
-      /* Very small: title only, smaller font */
-      @container fitted-card (height <= 57px) {
-        .text-fitted__icon {
-          display: none;
-        }
-
-        .text-fitted__excerpt {
-          display: none;
-        }
-
-        .text-fitted__title {
-          font-size: var(--boxel-font-xs);
-          -webkit-line-clamp: 1;
-        }
-      }
-    </style>
-  </template>
-}
-
-class Atom extends Component<typeof TextFileDef> {
-  get title() {
-    return textTitle(this.args.model);
-  }
-
-  <template>
-    <span class='text-atom' data-test-text-atom>
-      <TextFileIcon class='text-atom__icon' width='16' height='16' />
-      <span class='text-atom__title'>{{this.title}}</span>
-    </span>
-    <style scoped>
-      .text-atom {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--boxel-sp-4xs);
-        min-width: 0;
-      }
-
-      .text-atom__icon {
-        flex-shrink: 0;
-        color: var(--boxel-600);
-      }
-
-      .text-atom__title {
-        color: var(--boxel-900);
+      .text-preview__empty {
+        margin: 0;
+        padding: var(--boxel-sp);
+        color: var(--muted-foreground);
         font-size: var(--boxel-font-sm);
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
       }
     </style>
   </template>
@@ -320,7 +129,9 @@ class Atom extends Component<typeof TextFileDef> {
 
 class Head extends Component<typeof TextFileDef> {
   get title() {
-    return textTitle(this.args.model);
+    return (
+      this.args.model?.title ?? this.args.model?.name ?? 'Untitled text file'
+    );
   }
 
   get description() {
@@ -351,14 +162,28 @@ export class TextFileDef extends FileDef {
   static icon = TextFileIcon;
   static acceptTypes = '.txt,.text,text/plain';
 
+  // A `.txt` served without (or with an uninformative) content type would route
+  // to a generic profile by extension alone, so pin the document axes the four
+  // shells present — the family, the labeled kind, and the text renderer — off
+  // the class rather than depending on every instance carrying `text/plain`.
+  static fileFamily = 'document';
+  static fileKind = 'Plain text';
+  static previewKind = 'doc';
+  static previewAdapter = 'text';
+  static previewSource = 'extracted';
+
   @field title = contains(StringField);
   @field excerpt = contains(StringField);
   @field content = contains(StringField);
+  // Surfaced by the shells as the hero fact ("N lines") and an isolated
+  // inspector row, and cheap enough to read from the same decode.
+  @field lineCount = contains(NumberField);
 
-  static isolated: BaseDefComponent = Isolated;
-  static embedded: BaseDefComponent = Embedded;
-  static fitted: BaseDefComponent = Fitted;
-  static atom: BaseDefComponent = Atom;
+  // The bespoke isolated/embedded/fitted/atom are gone: TextFileDef now
+  // inherits the four shared shells from FileDef and supplies only the renderer
+  // they mount, so identity, facts, budgets, and state handling stay in one
+  // place across every file family.
+  static previewComponent = TextPreview;
   static head: BaseDefComponent = Head;
 
   // CS-10787: plain-text files emit as an unlabeled fenced code block so
@@ -382,7 +207,12 @@ export class TextFileDef extends FileDef {
     getStream: () => Promise<ByteStream>,
     options: { contentHash?: string } = {},
   ): Promise<
-    SerializedFile<{ title: string; excerpt: string; content: string }>
+    SerializedFile<{
+      title: string;
+      excerpt: string;
+      content: string;
+      lineCount: number;
+    }>
   > {
     let extension = getExtension(url);
     if (!TEXT_EXTENSIONS.has(extension)) {
@@ -407,6 +237,9 @@ export class TextFileDef extends FileDef {
       title: fallbackTitle || 'Untitled text file',
       excerpt: truncateExcerpt(text.trim()),
       content: text,
+      // A trailing newline shouldn't inflate the count, and empty content is
+      // zero lines rather than one.
+      lineCount: text ? text.replace(/\n$/, '').split('\n').length : 0,
     };
   }
 }

@@ -681,13 +681,18 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
         gap: 20px;
         align-items: start;
       }
-      /* HTML owns a full-width document stage; its metadata follows below in
-         reading order. */
-      .iso[data-preview-kind='html'] .iso-cols {
+      /* HTML and long-form text own a full-width document stage; a document is
+         read top to bottom, so its metadata follows below in reading order
+         rather than competing for width beside it. */
+      .iso[data-preview-kind='html'] .iso-cols,
+      .iso[data-preview-kind='markdown'] .iso-cols,
+      .iso[data-preview-kind='doc'] .iso-cols {
         grid-template-columns: minmax(0, 1fr);
         gap: 24px;
       }
-      .iso[data-preview-kind='html'] .inspector {
+      .iso[data-preview-kind='html'] .inspector,
+      .iso[data-preview-kind='markdown'] .inspector,
+      .iso[data-preview-kind='doc'] .inspector {
         width: 100%;
       }
       @container (max-width: 760px) {
@@ -711,6 +716,16 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
       /* A real mockup or report needs a browser-sized viewport. */
       .iso[data-preview-kind='html'] .iso-stage {
         height: clamp(560px, 72vh, 920px);
+        background: var(--card);
+      }
+      /* A prose document grows to its own length rather than scrolling inside a
+         fixed hero: the whole point of the isolated view is to read it. It keeps
+         a floor so a one-line file still presents as a page. */
+      .iso[data-preview-kind='markdown'] .iso-stage,
+      .iso[data-preview-kind='doc'] .iso-stage {
+        height: auto;
+        min-height: 240px;
+        overflow: visible;
         background: var(--card);
       }
       /* Exact aspect ratio within useful limits; matte beyond them. */
