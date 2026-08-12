@@ -83,7 +83,6 @@ class Isolated extends Component<typeof PosterBoard> {
   private panSession: PanSession | null = null;
   private activePointerId: number | null = null;
   private rootElement: HTMLElement | null = null;
-  private keydownHandler: ((e: KeyboardEvent) => void) | null = null;
 
   get zoomLabel() {
     return Math.round(this.rig.magnify * 100) + '%';
@@ -313,15 +312,9 @@ class Isolated extends Component<typeof PosterBoard> {
 
   handleInserted = (el: HTMLElement) => {
     this.rootElement = el;
-    this.keydownHandler = this.handleKeyDown;
-    window.addEventListener('keydown', this.keydownHandler);
   };
 
   willDestroy(): void {
-    if (this.keydownHandler) {
-      window.removeEventListener('keydown', this.keydownHandler);
-      this.keydownHandler = null;
-    }
     this.surfaceRig.destroy();
     super.willDestroy();
   }
