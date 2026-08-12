@@ -38,6 +38,8 @@ import type StoreService from '@cardstack/host/services/store';
 import type { CardErrorJSONAPI } from '@cardstack/host/services/store';
 
 import {
+  withCachedRealmSetup,
+  setupRealmCacheTeardown,
   testRealmURL,
   testRRI,
   setupLocalIndexing,
@@ -92,15 +94,8 @@ module('Integration | Store', function (hooks) {
   let ManagerDef: typeof CardDefType;
   let realmService: RealmService;
 
-  // Every test builds the same fixtures in the beforeEach below, so the realm
-  // is indexed once and that index restored per test. Tests here do write —
-  // that stays with the test that wrote it, since the snapshot is restored
-  // rather than carried forward. The tests that could not tolerate a restored
-  // index — the ones about what a source write does to the loader — now live in
-  // store-module-rebuild-test.gts.
-  setupLocalIndexing(hooks, {
-    reuseIndexAcrossTests: 'store',
-  });
+  setupLocalIndexing(hooks);
+  setupRealmCacheTeardown(hooks);
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
@@ -190,21 +185,27 @@ module('Integration | Store', function (hooks) {
     cardStore = (storeService as any).store as CardStore;
     realmService = getService('realm');
 
-    ({ adapter: testRealmAdapter, realm: testRealm } =
-      await setupIntegrationTestRealm({
-        mockMatrixUtils,
-        contents: {
-          'person.gts': { Person },
-          'boom-person.gts': { BoomPerson },
-          'employee.gts': { Employee },
-          'manager.gts': { Manager },
-          'Person/hassan.json': new Person({ name: 'Hassan' }),
-          'Person/jade.json': new Person({ name: 'Jade' }),
-          'Person/queenzy.json': new Person({ name: 'Queenzy' }),
-          'Person/germaine.json': new Person({ name: 'Germaine' }),
-          'Person/boris.json': new Person({ name: 'Boris' }),
-        },
-      }));
+    // Every test builds these fixtures identically, so the indexed result is
+    // cached for the module and restored rather than rebuilt. Tests here do
+    // write; that stays with the test that wrote it, since each test restores
+    // the snapshot rather than continuing from the previous one.
+    await withCachedRealmSetup(async () => {
+      ({ adapter: testRealmAdapter, realm: testRealm } =
+        await setupIntegrationTestRealm({
+          mockMatrixUtils,
+          contents: {
+            'person.gts': { Person },
+            'boom-person.gts': { BoomPerson },
+            'employee.gts': { Employee },
+            'manager.gts': { Manager },
+            'Person/hassan.json': new Person({ name: 'Hassan' }),
+            'Person/jade.json': new Person({ name: 'Jade' }),
+            'Person/queenzy.json': new Person({ name: 'Queenzy' }),
+            'Person/germaine.json': new Person({ name: 'Germaine' }),
+            'Person/boris.json': new Person({ name: 'Boris' }),
+          },
+        }));
+    });
     await realmService.login(testRealmURL);
   });
 
