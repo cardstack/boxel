@@ -1,0 +1,47 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "three-mf · Format Preview",
+      "cardInfo": {
+        "name": "three-mf · Format Preview",
+        "summary": "Simple, moderate, and complex three-mf fixtures across atom, embedded, isolated, and the 16 fitted envelopes."
+      }
+    },
+    "relationships": {
+      "previewFiles.0": {
+        "links": {
+          "self": "../samples/three-mf-simple.3mf"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/three-mf-simple.3mf"
+        }
+      },
+      "previewFiles.1": {
+        "links": {
+          "self": "../samples/three-mf-moderate.3mf"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/three-mf-moderate.3mf"
+        }
+      },
+      "previewFiles.2": {
+        "links": {
+          "self": "../samples/three-mf-complex.3mf"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/three-mf-complex.3mf"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../format-preview",
+        "name": "FileDefFormatPreview"
+      }
+    }
+  }
+}

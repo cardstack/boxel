@@ -188,9 +188,39 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
   }
 
   // A `contains` FieldDef is always an instance, so presence has to mean "has
-  // at least one meaningful value" rather than "is not null".
+  // at least one meaningful value" rather than "is not null" — and the value
+  // list must cover every field the pane's templates can render, or a thinly
+  // tagged photo hides rows the pane would have shown.
   get hasExif() {
-    return Boolean(this.args.model?.exif);
+    let capture = this.args.model?.exif?.capture;
+    let location = this.args.model?.exif?.location;
+    return Boolean(
+      capture?.cameraName ||
+      capture?.lensModel ||
+      capture?.focalLength?.display ||
+      capture?.aperture?.display ||
+      capture?.exposureTime?.display ||
+      capture?.iso ||
+      capture?.flash?.label ||
+      capture?.orientation?.label ||
+      capture?.capturedAt ||
+      capture?.software ||
+      location?.coordinates ||
+      location?.altitude?.display ||
+      location?.place ||
+      location?.source?.label,
+    );
+  }
+
+  get hasColorProfile() {
+    let c = this.args.model?.colorProfile;
+    return Boolean(
+      c?.colorSpace?.code ||
+      c?.bitDepth ||
+      c?.channels ||
+      c?.iccProfile ||
+      c?.hasAlpha != null,
+    );
   }
 
   get hasEncoding() {
@@ -492,6 +522,10 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
             <h2 class='insp-group'>EXIF metadata</h2>
             <div class='insp-family'><@fields.exif /></div>
           {{/if}}
+          {{#if this.hasColorProfile}}
+            <h2 class='insp-group'>Color profile</h2>
+            <div class='insp-family'><@fields.colorProfile /></div>
+          {{/if}}
           {{#if this.hasEncoding}}
             <h2 class='insp-group'>Encoding</h2>
             <div class='insp-family'><@fields.encoding /></div>
@@ -647,13 +681,18 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
         gap: 20px;
         align-items: start;
       }
-      /* HTML owns a full-width document stage; its metadata follows below in
-         reading order. */
-      .iso[data-preview-kind='html'] .iso-cols {
+      /* HTML and long-form text own a full-width document stage; a document is
+         read top to bottom, so its metadata follows below in reading order
+         rather than competing for width beside it. */
+      .iso[data-preview-kind='html'] .iso-cols,
+      .iso[data-preview-kind='markdown'] .iso-cols,
+      .iso[data-preview-kind='doc'] .iso-cols {
         grid-template-columns: minmax(0, 1fr);
         gap: 24px;
       }
-      .iso[data-preview-kind='html'] .inspector {
+      .iso[data-preview-kind='html'] .inspector,
+      .iso[data-preview-kind='markdown'] .inspector,
+      .iso[data-preview-kind='doc'] .inspector {
         width: 100%;
       }
       /* A data table or tree reads as a full-width document too: its metadata
@@ -691,9 +730,18 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
         height: clamp(560px, 72vh, 920px);
         background: var(--card);
       }
-      /* A data document grows to its own length rather than scrolling inside a
-         fixed hero: the point of the isolated view is to read the whole table
-         or tree. It keeps a floor so a small file still presents as a page. */
+      /* A prose document grows to its own length rather than scrolling inside a
+         fixed hero: the whole point of the isolated view is to read it. It keeps
+         a floor so a one-line file still presents as a page. */
+      .iso[data-preview-kind='markdown'] .iso-stage,
+      .iso[data-preview-kind='doc'] .iso-stage {
+        height: auto;
+        min-height: 240px;
+        overflow: visible;
+        background: var(--card);
+      }
+      /* A data table or tree reads the same way, but clips at its rounded
+         border instead of overflowing. */
       .iso[data-preview-kind='json'] .iso-stage,
       .iso[data-preview-kind='csv'] .iso-stage {
         height: auto;

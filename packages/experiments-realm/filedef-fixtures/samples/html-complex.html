@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dispatch Board Prototype</title>
+  <!-- Original Boxel FileDef fixture. CC0-1.0. -->
+  <style>
+    :root { color-scheme:light; --bg:#e7eef8; --panel:#ffffff; --ink:#10213c; --muted:#5f708a; --line:#b8c5d8; --accent:#e43f36; --ok:#0b9a76; }
+    :root[data-theme="night"] { color-scheme:dark; --bg:#071426; --panel:#10213c; --ink:#f1f6ff; --muted:#9eafc7; --line:#314663; --accent:#ff675f; --ok:#52d7b4; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; background:var(--bg); color:var(--ink); font:13px/1.45 Arial,sans-serif; transition:background .2s,color .2s; }
+    button,input { font:inherit; }
+    button { color:inherit; }
+    .app { min-height:100vh; display:grid; grid-template-columns:210px minmax(0,1fr); }
+    aside { padding:22px 16px; display:flex; flex-direction:column; background:#10213c; color:#f1f6ff; }
+    .brand { display:flex; align-items:center; gap:10px; font-weight:800; letter-spacing:-.02em; }
+    .brand-mark { width:26px; height:26px; display:grid; place-items:center; background:var(--accent); color:#fff; }
+    nav { display:grid; gap:6px; margin-top:42px; }
+    nav button { padding:10px 12px; text-align:left; border:0; border-radius:7px; background:transparent; cursor:pointer; opacity:.62; }
+    nav button.active,nav button:hover { background:#223858; opacity:1; }
+    .aside-foot { margin-top:auto; display:grid; gap:10px; }
+    .theme-button { padding:9px 12px; border:1px solid color-mix(in srgb,var(--bg) 25%,transparent); border-radius:7px; background:transparent; cursor:pointer; }
+    main { min-width:0; padding:clamp(20px,4vw,48px); }
+    .topbar { display:flex; align-items:flex-start; justify-content:space-between; gap:20px; }
+    .eyebrow { margin:0 0 5px; color:var(--muted); font:700 10px/1.2 ui-monospace,monospace; letter-spacing:.13em; text-transform:uppercase; }
+    h1 { margin:0; font:750 clamp(30px,4vw,50px)/1 Arial,sans-serif; letter-spacing:-.045em; }
+    .search { width:min(300px,42vw); padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:var(--panel); color:var(--ink); }
+    .stats { margin:34px 0 26px; display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+    .stat { padding:16px; border-top:3px solid var(--ink); background:var(--panel); }
+    .stat span { color:var(--muted); font:700 9px/1.2 ui-monospace,monospace; letter-spacing:.1em; text-transform:uppercase; }
+    .stat b { display:block; margin-top:8px; font:750 30px/1 Arial,sans-serif; }
+    .toolbar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; margin-bottom:14px; }
+    .tabs { display:flex; gap:6px; }
+    .tabs button { padding:7px 11px; border:1px solid var(--line); border-radius:999px; background:transparent; cursor:pointer; }
+    .tabs button.active { border-color:var(--ink); background:var(--ink); color:var(--bg); }
+    .range { display:flex; align-items:center; gap:8px; color:var(--muted); font-size:12px; }
+    .range input { accent-color:var(--accent); }
+    .board { display:grid; grid-template-columns:repeat(3,minmax(210px,1fr)); gap:12px; align-items:start; }
+    .lane { min-width:0; padding:10px; border:1px solid var(--line); background:color-mix(in srgb,var(--panel) 60%,transparent); }
+    .lane-head { display:flex; justify-content:space-between; padding:4px 4px 12px; font-weight:700; }
+    .count { color:var(--muted); font:700 10px/1.2 ui-monospace,monospace; }
+    .cards { display:grid; gap:9px; }
+    .card { padding:13px; border:1px solid var(--line); background:var(--panel); box-shadow:3px 3px 0 color-mix(in srgb,var(--ink) 8%,transparent); }
+    .card[hidden] { display:none; }
+    .card-top { display:flex; justify-content:space-between; gap:10px; }
+    .route { color:var(--muted); font:700 9px/1.2 ui-monospace,monospace; letter-spacing:.08em; text-transform:uppercase; }
+    .priority { width:8px; height:8px; border-radius:50%; background:var(--ok); }
+    .priority.high { background:var(--accent); }
+    .card h2 { margin:10px 0 5px; font-size:15px; line-height:1.25; }
+    .card p { margin:0; color:var(--muted); font-size:12px; }
+    .progress { height:4px; margin-top:13px; overflow:hidden; background:var(--line); }
+    .progress i { display:block; height:100%; background:var(--ink); }
+    .empty { display:none; padding:40px; border:1px dashed var(--line); text-align:center; color:var(--muted); }
+    @media (max-width:900px) { .app { grid-template-columns:72px minmax(0,1fr); } aside { padding-inline:12px; } .brand span,nav button span,.aside-foot span { display:none; } nav button { text-align:center; } .stats { grid-template-columns:repeat(2,1fr); } .board { grid-template-columns:1fr; } }
+    @media (max-width:560px) { .app { display:block; } aside { display:none; } main { padding:18px; } .topbar { display:grid; } .search { width:100%; } }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside>
+      <div class="brand"><b class="brand-mark">D</b><span>Dispatch</span></div>
+      <nav aria-label="Primary"><button class="active"><span>Board</span></button><button><span>Routes</span></button><button><span>Drivers</span></button><button><span>Archive</span></button></nav>
+      <div class="aside-foot"><span>Prototype workspace</span><button class="theme-button" id="themeButton">Toggle theme</button></div>
+    </aside>
+    <main>
+      <header class="topbar"><div><p class="eyebrow">Thursday · live operations</p><h1>Morning dispatch</h1></div><input class="search" id="search" type="search" placeholder="Search jobs" aria-label="Search jobs"></header>
+      <section class="stats" aria-label="Dispatch summary"><div class="stat"><span>Active jobs</span><b>12</b></div><div class="stat"><span>On time</span><b>92%</b></div><div class="stat"><span>Miles today</span><b>418</b></div><div class="stat"><span>Exceptions</span><b>2</b></div></section>
+      <div class="toolbar">
+        <div class="tabs" role="tablist" aria-label="Priority filter"><button class="active" data-filter="all">All jobs</button><button data-filter="high">High priority</button><button data-filter="normal">Standard</button></div>
+        <label class="range">Density <input id="density" type="range" min="8" max="18" value="12"></label>
+      </div>
+      <section class="board" id="board">
+        <article class="lane"><div class="lane-head"><span>Queued</span><span class="count">04</span></div><div class="cards"><section class="card" data-priority="high"><div class="card-top"><span class="route">BX-104 · Harbor</span><i class="priority high"></i></div><h2>Cold-chain pharmacy delivery</h2><p>Window 09:20–09:45 · 8 crates</p><div class="progress"><i style="width:18%"></i></div></section><section class="card" data-priority="normal"><div class="card-top"><span class="route">BX-109 · Midtown</span><i class="priority"></i></div><h2>Studio equipment return</h2><p>Window 10:00–11:30 · liftgate</p><div class="progress"><i style="width:8%"></i></div></section></div></article>
+        <article class="lane"><div class="lane-head"><span>In transit</span><span class="count">05</span></div><div class="cards"><section class="card" data-priority="high"><div class="card-top"><span class="route">BX-098 · Airport</span><i class="priority high"></i></div><h2>Prototype enclosure transfer</h2><p>ETA 09:34 · signature required</p><div class="progress"><i style="width:68%"></i></div></section><section class="card" data-priority="normal"><div class="card-top"><span class="route">BX-101 · Northline</span><i class="priority"></i></div><h2>Retail display components</h2><p>ETA 10:12 · 14 cartons</p><div class="progress"><i style="width:44%"></i></div></section></div></article>
+        <article class="lane"><div class="lane-head"><span>Delivered</span><span class="count">03</span></div><div class="cards"><section class="card" data-priority="normal"><div class="card-top"><span class="route">BX-091 · West End</span><i class="priority"></i></div><h2>Gallery lighting package</h2><p>Delivered 08:42 · signed by L. Wu</p><div class="progress"><i style="width:100%"></i></div></section><section class="card" data-priority="normal"><div class="card-top"><span class="route">BX-094 · Civic</span><i class="priority"></i></div><h2>Public records transfer</h2><p>Delivered 08:56 · 6 archive boxes</p><div class="progress"><i style="width:100%"></i></div></section></div></article>
+      </section>
+      <div class="empty" id="empty">No jobs match this view.</div>
+    </main>
+  </div>
+  <script>
+    const root = document.documentElement;
+    const cards = [...document.querySelectorAll('.card')];
+    const tabs = [...document.querySelectorAll('[data-filter]')];
+    const search = document.querySelector('#search');
+    const empty = document.querySelector('#empty');
+    let activeFilter = 'all';
+    function refresh() {
+      const query = search.value.trim().toLowerCase();
+      let visible = 0;
+      cards.forEach((card) => {
+        const matchesFilter = activeFilter === 'all' || card.dataset.priority === activeFilter;
+        const matchesQuery = !query || card.textContent.toLowerCase().includes(query);
+        card.hidden = !(matchesFilter && matchesQuery);
+        if (!card.hidden) visible += 1;
+      });
+      empty.style.display = visible ? 'none' : 'block';
+    }
+    tabs.forEach((tab) => tab.addEventListener('click', () => {
+      tabs.forEach((item) => item.classList.remove('active'));
+      tab.classList.add('active');
+      activeFilter = tab.dataset.filter;
+      refresh();
+    }));
+    search.addEventListener('input', refresh);
+    document.querySelector('#density').addEventListener('input', (event) => {
+      document.querySelector('#board').style.gap = `${event.target.value}px`;
+    });
+    document.querySelector('#themeButton').addEventListener('click', () => {
+      root.dataset.theme = root.dataset.theme === 'night' ? '' : 'night';
+    });
+  </script>
+</body>
+</html>

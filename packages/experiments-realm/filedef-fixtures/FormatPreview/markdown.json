@@ -1,0 +1,47 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "markdown · Format Preview",
+      "cardInfo": {
+        "name": "markdown · Format Preview",
+        "summary": "Simple, moderate, and complex markdown fixtures across atom, embedded, isolated, and the 16 fitted envelopes."
+      }
+    },
+    "relationships": {
+      "previewFiles.0": {
+        "links": {
+          "self": "../samples/markdown-simple.md"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/markdown-simple.md"
+        }
+      },
+      "previewFiles.1": {
+        "links": {
+          "self": "../samples/markdown-moderate.md"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/markdown-moderate.md"
+        }
+      },
+      "previewFiles.2": {
+        "links": {
+          "self": "../samples/markdown-complex.md"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/markdown-complex.md"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../format-preview",
+        "name": "FileDefFormatPreview"
+      }
+    }
+  }
+}

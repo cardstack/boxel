@@ -504,6 +504,10 @@ export class MediaEncodingField extends FieldDef {
 
   @field container = contains(StringField);
   @field audioCodec = contains(StringField);
+  // Set only for a container carrying picture. Its presence is what tells a
+  // consumer this is video rather than sound.
+  @field videoCodec = contains(StringField);
+  @field frameRate = contains(QuantityField);
   @field sampleRate = contains(QuantityField);
   @field bitrate = contains(QuantityField);
   @field bitDepth = contains(NumberField);
@@ -524,8 +528,16 @@ export class MediaEncodingField extends FieldDef {
               class='mono'
             >{{@model.container}}</dd></div>
         {{/if}}
+        {{#if @model.videoCodec}}
+          <div class='row'><dt>Video</dt><dd class='mono'>{{@model.videoCodec}}</dd></div>
+        {{/if}}
         {{#if @model.audioCodec}}
-          <div class='row'><dt>Codec</dt><dd class='mono'>{{@model.audioCodec}}</dd></div>
+          <div class='row'><dt>{{if @model.videoCodec 'Audio' 'Codec'}}</dt><dd
+              class='mono'
+            >{{@model.audioCodec}}</dd></div>
+        {{/if}}
+        {{#if @model.frameRate.display}}
+          <div class='row'><dt>Frame rate</dt><dd><@fields.frameRate /></dd></div>
         {{/if}}
         {{#if @model.sampleRate.display}}
           <div class='row'><dt>Sample rate</dt><dd><@fields.sampleRate

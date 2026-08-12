@@ -1,0 +1,47 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "mp4 · Format Preview",
+      "cardInfo": {
+        "name": "mp4 · Format Preview",
+        "summary": "Simple, moderate, and complex mp4 fixtures across atom, embedded, isolated, and the 16 fitted envelopes."
+      }
+    },
+    "relationships": {
+      "previewFiles.0": {
+        "links": {
+          "self": "../samples/mp4-simple.mp4"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/mp4-simple.mp4"
+        }
+      },
+      "previewFiles.1": {
+        "links": {
+          "self": "../samples/mp4-moderate.mp4"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/mp4-moderate.mp4"
+        }
+      },
+      "previewFiles.2": {
+        "links": {
+          "self": "../samples/mp4-complex.mp4"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/mp4-complex.mp4"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../format-preview",
+        "name": "FileDefFormatPreview"
+      }
+    }
+  }
+}
