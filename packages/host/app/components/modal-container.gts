@@ -131,6 +131,13 @@ export default class ModalContainer extends Component<Signature> {
           'footer';
         grid-template-rows: auto 1fr auto;
         box-shadow: var(--boxel-deep-box-shadow);
+        /* container-type applies layout containment, which makes .dialog-box
+           the containing block for position: fixed descendants. A nested
+           modal rendered inside :content gets trapped by it (sized and
+           positioned against this box instead of the viewport), so nested
+           modals must portal out to the app root via in-element. */
+        container-type: inline-size;
+        container-name: dialog-box;
       }
 
       .dialog-box--with-sidebar {
@@ -138,7 +145,7 @@ export default class ModalContainer extends Component<Signature> {
           'sidebar-header header'
           'sidebar content'
           'sidebar footer';
-        grid-template-columns: 300px 1fr;
+        grid-template-columns: auto 1fr;
       }
 
       .dialog-box__sidebar-header {
@@ -149,8 +156,8 @@ export default class ModalContainer extends Component<Signature> {
 
       .dialog-box__sidebar {
         grid-area: sidebar;
+        width: 18.75rem;
         background-color: var(--boxel-100);
-
         border-bottom-left-radius: var(--boxel-border-radius);
       }
 
@@ -239,6 +246,21 @@ export default class ModalContainer extends Component<Signature> {
         border-bottom-left-radius: var(--boxel-border-radius);
         border-bottom-right-radius: var(--boxel-border-radius);
         display: flex;
+      }
+
+      @container dialog-box (width <= 48rem) {
+        .dialog-box--with-sidebar > .dialog-box__sidebar,
+        .dialog-box--with-sidebar > .dialog-box__sidebar-header {
+          display: none;
+        }
+        .dialog-box--with-sidebar > .dialog-box__content {
+          padding-inline: var(--boxel-sp);
+        }
+        .dialog-box--with-sidebar > .dialog-box__footer {
+          height: auto;
+          min-height: var(--stack-card-footer-height);
+          padding-inline: var(--boxel-sp-2xs);
+        }
       }
     </style>
   </template>

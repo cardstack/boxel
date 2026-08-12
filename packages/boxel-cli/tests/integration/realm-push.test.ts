@@ -15,10 +15,11 @@ import {
 } from '../helpers/integration.ts';
 import { runBoxel } from '../helpers/run-boxel.ts';
 import {
-  TINY_PNG_BYTES,
-  TINY_PDF_BYTES,
   TINY_MP3_BYTES,
   NON_UTF8_BYTES,
+  TINY_MP4_BYTES,
+  TINY_PDF_BYTES,
+  TINY_PNG_BYTES,
 } from '../helpers/binary-fixtures.ts';
 
 // `boxel realm push <local-dir> <realm-url>` is driven as a subprocess. The
@@ -773,6 +774,22 @@ describe('realm push (integration)', () => {
 
     let remote = await fetchRemoteBytes(realmUrl, 'sample.mp3');
     expect(remote.equals(Buffer.from(TINY_MP3_BYTES))).toBe(true);
+  });
+
+  it('pushes an MP4 file byte-identically', async () => {
+    // Video is binary for the same reason audio is; if `isBinaryFilename`
+    // missed `video/*`, the bytes would be UTF-8 round-tripped and corrupted
+    // on the wire.
+    let realmUrl = await createTestRealm();
+    let localDir = makeLocalDir();
+
+    writeLocalBytes(localDir, 'clip.mp4', TINY_MP4_BYTES);
+
+    let res = await runPush(localDir, realmUrl);
+    expect(res.ok, res.stderr).toBe(true);
+
+    let remote = await fetchRemoteBytes(realmUrl, 'clip.mp4');
+    expect(remote.equals(Buffer.from(TINY_MP4_BYTES))).toBe(true);
   });
 
   it('mixed batch carves binary out of /_atomic but lands every file', async () => {

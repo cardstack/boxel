@@ -32,6 +32,8 @@ module(basename(import.meta.filename), function () {
           )}"></head><body></body></html>`,
         cardSizeLimitBytes: 0,
         fileSizeLimitBytes: 0,
+        audioSizeLimitBytes: 0,
+        videoSizeLimitBytes: 0,
       });
 
       let html = await retrieveIndexHTML();

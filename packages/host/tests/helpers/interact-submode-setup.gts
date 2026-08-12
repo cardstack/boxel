@@ -28,6 +28,8 @@ export const personalRealmURL = `http://test-realm/personal/`;
 type InteractSubmodeSetupOptions = {
   setRealm: (realm: Realm) => void;
   fileSizeLimitBytes?: number;
+  audioSizeLimitBytes?: number;
+  videoSizeLimitBytes?: number;
   // Index these four realms once for the module and restore that index before
   // each subsequent test, instead of re-indexing all four per test. Pass a name
   // unique to the module (matching /^[A-Za-z][A-Za-z0-9_]*$/) — the fixtures are
@@ -43,6 +45,8 @@ export function setupInteractSubmodeTests(
   {
     setRealm,
     fileSizeLimitBytes,
+    audioSizeLimitBytes,
+    videoSizeLimitBytes,
     reuseIndexAcrossTests,
   }: InteractSubmodeSetupOptions,
 ) {
@@ -343,6 +347,8 @@ export function setupInteractSubmodeTests(
     ({ realm } = await setupAcceptanceTestRealm({
       mockMatrixUtils,
       fileSizeLimitBytes,
+      audioSizeLimitBytes,
+      videoSizeLimitBytes,
       contents: {
         ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'address.gts': { Address },

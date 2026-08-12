@@ -31,8 +31,10 @@ import {
   testRealmURL,
   testRRI,
   Worker,
+  DEFAULT_AUDIO_SIZE_LIMIT_BYTES,
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
+  DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
   type DefinitionLookup,
   type LooseSingleCardDocument,
   type Prerenderer,
@@ -1278,6 +1280,8 @@ export async function setupAcceptanceTestRealm({
   mockMatrixUtils,
   startMatrix = true,
   fileSizeLimitBytes,
+  audioSizeLimitBytes,
+  videoSizeLimitBytes,
 }: {
   contents: RealmContents;
   realmURL?: string;
@@ -1285,6 +1289,8 @@ export async function setupAcceptanceTestRealm({
   mockMatrixUtils: MockUtils;
   startMatrix?: boolean;
   fileSizeLimitBytes?: number;
+  audioSizeLimitBytes?: number;
+  videoSizeLimitBytes?: number;
 }) {
   let resolvedRealmURL = ensureTrailingSlash(realmURL ?? testRealmURL);
   setupAuthEndpoints({
@@ -1298,6 +1304,8 @@ export async function setupAcceptanceTestRealm({
     mockMatrixUtils,
     startMatrix,
     fileSizeLimitBytes,
+    audioSizeLimitBytes,
+    videoSizeLimitBytes,
   });
   getTestRealmRegistry().set(result.realm.url, {
     realm: result.realm,
@@ -1313,6 +1321,8 @@ export async function setupIntegrationTestRealm({
   mockMatrixUtils,
   startMatrix = true,
   fileSizeLimitBytes,
+  audioSizeLimitBytes,
+  videoSizeLimitBytes,
 }: {
   contents: RealmContents;
   realmURL?: string;
@@ -1320,6 +1330,8 @@ export async function setupIntegrationTestRealm({
   mockMatrixUtils: MockUtils;
   startMatrix?: boolean;
   fileSizeLimitBytes?: number;
+  audioSizeLimitBytes?: number;
+  videoSizeLimitBytes?: number;
 }) {
   let resolvedRealmURL = ensureTrailingSlash(realmURL ?? testRealmURL);
   setupAuthEndpoints({
@@ -1333,6 +1345,8 @@ export async function setupIntegrationTestRealm({
     mockMatrixUtils,
     startMatrix,
     fileSizeLimitBytes,
+    audioSizeLimitBytes,
+    videoSizeLimitBytes,
   });
   getTestRealmRegistry().set(result.realm.url, {
     realm: result.realm,
@@ -1366,6 +1380,8 @@ async function setupTestRealm({
   mockMatrixUtils,
   startMatrix = true,
   fileSizeLimitBytes,
+  audioSizeLimitBytes,
+  videoSizeLimitBytes,
 }: {
   contents: RealmContents;
   realmURL?: string;
@@ -1374,6 +1390,8 @@ async function setupTestRealm({
   mockMatrixUtils: MockUtils;
   startMatrix?: boolean;
   fileSizeLimitBytes?: number;
+  audioSizeLimitBytes?: number;
+  videoSizeLimitBytes?: number;
 }) {
   let owner = (getContext() as TestContext).owner;
   let { virtualNetwork } = getService('network');
@@ -1488,6 +1506,16 @@ async function setupTestRealm({
       fileSizeLimitBytes ??
       Number(
         process.env.FILE_SIZE_LIMIT_BYTES ?? DEFAULT_FILE_SIZE_LIMIT_BYTES,
+      ),
+    audioSizeLimitBytes:
+      audioSizeLimitBytes ??
+      Number(
+        process.env.AUDIO_SIZE_LIMIT_BYTES ?? DEFAULT_AUDIO_SIZE_LIMIT_BYTES,
+      ),
+    videoSizeLimitBytes:
+      videoSizeLimitBytes ??
+      Number(
+        process.env.VIDEO_SIZE_LIMIT_BYTES ?? DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
       ),
     // This test's index was restored from a snapshot taken after the same
     // fixtures were indexed, so there is nothing to index; mount and serve.
@@ -2073,6 +2101,15 @@ export const cardInfo = Object.freeze({
   summary: null,
   cardThumbnailURL: null,
   notes: null,
+});
+
+// The link fields `CardInfoField` declares. A composite field serializes its
+// never-authored links only under `includeUnrenderedFields`, so these appear
+// in an exact-document assertion exactly when that option is set — and, since
+// every CardDef contains a `cardInfo`, they appear for every card.
+export const cardInfoLinks = Object.freeze({
+  'cardInfo.cardThumbnail': { links: { self: null } },
+  'cardInfo.theme': { links: { self: null } },
 });
 
 // UI interaction helpers for acceptance tests

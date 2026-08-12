@@ -1,6 +1,7 @@
 import {
   click,
   fillIn,
+  settled,
   triggerEvent,
   waitFor,
   waitUntil,
@@ -11,7 +12,13 @@ import { module, test } from 'qunit';
 
 import { TrackedObject } from 'tracked-built-ins';
 
-import { Deferred, baseRealm, param, query } from '@cardstack/runtime-common';
+import {
+  Deferred,
+  baseRealm,
+  param,
+  query,
+  type PublishProgress,
+} from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
 
@@ -823,6 +830,104 @@ module('Acceptance | host submode', function (hooks) {
           )
           .hasAttribute('href', `https://testuser.${publishedSpaceHost}/test/`)
           .hasAttribute('target', '_blank');
+      });
+
+      // Indexing and prerendering a realm take minutes, and a bare spinner
+      // can't tell slow progress from a hang. The popover is where a publish in
+      // flight is inspected, so it has to name the pass and count through it.
+      test('the publishing popover reports indexing and rendering progress', async function (assert) {
+        let readyDeferred = new Deferred<void>();
+        let reportProgress: ((progress: PublishProgress) => void) | undefined;
+        getService('realm-server').waitForRealmReady = async (_url, opts) => {
+          reportProgress = opts?.onProgress;
+          await readyDeferred.promise;
+        };
+        // The publish itself is accepted immediately here; the wait under test
+        // is the indexing that follows the 202.
+        publishDeferred.fulfill();
+
+        await visitOperatorMode({
+          submode: 'host',
+          trail: [`${testRealmURL}Person/1.json`],
+        });
+
+        await click('[data-test-publish-realm-button]');
+        await click('[data-test-default-domain-checkbox]');
+        await click('[data-test-publish-button]');
+
+        await waitFor('[data-test-publish-realm-button].publishing');
+
+        // The modal stays open over the publish, so it reports the wait too.
+        assert
+          .dom('[data-test-publish-progress-status]')
+          .hasText('Starting…', 'the modal names a pass right away');
+        assert
+          .dom(
+            '[data-test-publish-progress-status] [data-test-boxel-progress-bar]',
+          )
+          .doesNotExist('no bar until the pass reports a total');
+
+        await click('[data-test-publish-realm-button]');
+        await waitFor('.publishing-realm-popover');
+
+        assert
+          .dom('[data-test-publish-progress-phase]')
+          .hasText('Starting', 'names a pass before any reading arrives');
+        assert
+          .dom('[data-test-publish-progress-counts]')
+          .doesNotExist('no counts until the pass reports a total');
+
+        reportProgress!({
+          phase: 'index',
+          filesCompleted: 42,
+          totalFiles: 270,
+        });
+        await settled();
+
+        assert.dom('[data-test-publish-progress-phase]').hasText('Indexing');
+        assert
+          .dom('[data-test-publish-progress-counts]')
+          .hasText('42 of 270 files');
+        assert
+          .dom('[data-test-publish-progress-status]')
+          .hasText('Indexing 42 of 270 files…');
+        // Both surfaces draw a determinate bar once the pass reports a total.
+        for (let scope of [
+          '[data-test-publish-progress-status]',
+          '.publishing-realm-popover',
+        ]) {
+          assert
+            .dom(`${scope} [data-test-boxel-progress-bar]`)
+            .hasAttribute('aria-valuenow', '42');
+          assert
+            .dom(`${scope} [data-test-boxel-progress-bar]`)
+            .hasAttribute('aria-valuemax', '270');
+        }
+
+        reportProgress!({
+          phase: 'render',
+          filesCompleted: 3,
+          totalFiles: 270,
+        });
+        await settled();
+
+        assert
+          .dom('[data-test-publish-progress-phase]')
+          .hasText('Rendering', 'follows the publish into its second pass');
+        assert
+          .dom('[data-test-publish-progress-counts]')
+          .hasText('3 of 270 files');
+
+        readyDeferred.fulfill();
+        await waitUntil(
+          () =>
+            !document.querySelector(
+              '[data-test-publish-realm-button].publishing',
+            ),
+        );
+        assert
+          .dom('.publishing-realm-popover')
+          .doesNotExist('the progress display goes away with the publish');
       });
 
       test('preselects previously published domains on refresh', async function (assert) {

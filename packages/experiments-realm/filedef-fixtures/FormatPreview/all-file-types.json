@@ -1,0 +1,344 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "All File Types · Complex Fixtures",
+      "cardInfo": {
+        "name": "All File Types · Complex Fixtures",
+        "summary": "One complex fixture per file type. Each type has a dedicated FileDef Format Preview page carrying all three fixture tiers."
+      }
+    },
+    "relationships": {
+      "previewFiles.0": {
+        "links": {
+          "self": "../samples/avif-complex.avif"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/avif-complex.avif"
+        }
+      },
+      "previewFiles.1": {
+        "links": {
+          "self": "../samples/binary-complex.bin"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/binary-complex.bin"
+        }
+      },
+      "previewFiles.2": {
+        "links": {
+          "self": "../samples/csv-complex.csv"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/csv-complex.csv"
+        }
+      },
+      "previewFiles.3": {
+        "links": {
+          "self": "../samples/docx-complex.docx"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/docx-complex.docx"
+        }
+      },
+      "previewFiles.4": {
+        "links": {
+          "self": "../samples/flac-complex.flac"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/flac-complex.flac"
+        }
+      },
+      "previewFiles.5": {
+        "links": {
+          "self": "../samples/gif-complex.gif"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/gif-complex.gif"
+        }
+      },
+      "previewFiles.6": {
+        "links": {
+          "self": "../samples/glb-complex.glb"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/glb-complex.glb"
+        }
+      },
+      "previewFiles.7": {
+        "links": {
+          "self": "../samples/gltf-complex.gltf"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/gltf-complex.gltf"
+        }
+      },
+      "previewFiles.8": {
+        "links": {
+          "self": "../samples/gts-complex.sample.gts"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/gts-complex.sample.gts"
+        }
+      },
+      "previewFiles.9": {
+        "links": {
+          "self": "../samples/html-complex.html"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/html-complex.html"
+        }
+      },
+      "previewFiles.10": {
+        "links": {
+          "self": "../samples/jpeg-complex.jpg"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/jpeg-complex.jpg"
+        }
+      },
+      "previewFiles.11": {
+        "links": {
+          "self": "../samples/json-complex.data.json"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/json-complex.data.json"
+        }
+      },
+      "previewFiles.12": {
+        "links": {
+          "self": "../samples/m4a-complex.m4a"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/m4a-complex.m4a"
+        }
+      },
+      "previewFiles.13": {
+        "links": {
+          "self": "../samples/markdown-complex.md"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/markdown-complex.md"
+        }
+      },
+      "previewFiles.14": {
+        "links": {
+          "self": "../samples/midi-complex.mid"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/midi-complex.mid"
+        }
+      },
+      "previewFiles.15": {
+        "links": {
+          "self": "../samples/mov-complex.mov"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/mov-complex.mov"
+        }
+      },
+      "previewFiles.16": {
+        "links": {
+          "self": "../samples/mp3-complex.mp3"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/mp3-complex.mp3"
+        }
+      },
+      "previewFiles.17": {
+        "links": {
+          "self": "../samples/mp4-complex.mp4"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/mp4-complex.mp4"
+        }
+      },
+      "previewFiles.18": {
+        "links": {
+          "self": "../samples/ogg-complex.ogg"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/ogg-complex.ogg"
+        }
+      },
+      "previewFiles.19": {
+        "links": {
+          "self": "../samples/otf-complex.otf"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/otf-complex.otf"
+        }
+      },
+      "previewFiles.20": {
+        "links": {
+          "self": "../samples/pdf-complex.pdf"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/pdf-complex.pdf"
+        }
+      },
+      "previewFiles.21": {
+        "links": {
+          "self": "../samples/png-complex.png"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/png-complex.png"
+        }
+      },
+      "previewFiles.22": {
+        "links": {
+          "self": "../samples/pptx-complex.pptx"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/pptx-complex.pptx"
+        }
+      },
+      "previewFiles.23": {
+        "links": {
+          "self": "../samples/stl-complex.stl"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/stl-complex.stl"
+        }
+      },
+      "previewFiles.24": {
+        "links": {
+          "self": "../samples/svg-complex.svg"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/svg-complex.svg"
+        }
+      },
+      "previewFiles.25": {
+        "links": {
+          "self": "../samples/text-complex.txt"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/text-complex.txt"
+        }
+      },
+      "previewFiles.26": {
+        "links": {
+          "self": "../samples/three-mf-complex.3mf"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/three-mf-complex.3mf"
+        }
+      },
+      "previewFiles.27": {
+        "links": {
+          "self": "../samples/ttf-complex.ttf"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/ttf-complex.ttf"
+        }
+      },
+      "previewFiles.28": {
+        "links": {
+          "self": "../samples/typescript-complex.ts"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/typescript-complex.ts"
+        }
+      },
+      "previewFiles.29": {
+        "links": {
+          "self": "../samples/wav-complex.wav"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/wav-complex.wav"
+        }
+      },
+      "previewFiles.30": {
+        "links": {
+          "self": "../samples/webm-complex.webm"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/webm-complex.webm"
+        }
+      },
+      "previewFiles.31": {
+        "links": {
+          "self": "../samples/webp-complex.webp"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/webp-complex.webp"
+        }
+      },
+      "previewFiles.32": {
+        "links": {
+          "self": "../samples/woff-complex.woff"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/woff-complex.woff"
+        }
+      },
+      "previewFiles.33": {
+        "links": {
+          "self": "../samples/woff2-complex.woff2"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/woff2-complex.woff2"
+        }
+      },
+      "previewFiles.34": {
+        "links": {
+          "self": "../samples/xlsx-complex.xlsx"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/xlsx-complex.xlsx"
+        }
+      },
+      "previewFiles.35": {
+        "links": {
+          "self": "../samples/zip-complex.zip"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/zip-complex.zip"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../format-preview",
+        "name": "FileDefFormatPreview"
+      }
+    }
+  }
+}

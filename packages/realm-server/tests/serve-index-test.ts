@@ -18,6 +18,8 @@ function buildDeps(getIndexHTML: () => Promise<string>) {
     getIndexHTML,
     cardSizeLimitBytes: 0,
     fileSizeLimitBytes: 0,
+    audioSizeLimitBytes: 0,
+    videoSizeLimitBytes: 0,
   };
 }
 

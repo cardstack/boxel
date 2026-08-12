@@ -18,6 +18,7 @@ import perform from 'ember-concurrency/helpers/perform';
 import {
   BoxelButton,
   BoxelInputGroup,
+  ProgressBar,
   RealmIcon,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
@@ -56,6 +57,10 @@ import type {
 import type StoreService from '@cardstack/host/services/store';
 import type ToolService from '@cardstack/host/services/tool-service';
 import CheckDomainAvailabilityTool from '@cardstack/host/tools/check-domain-availability';
+import {
+  publishProgressView,
+  publishTargetHost,
+} from '@cardstack/host/utils/publish-progress';
 
 import type * as CardAPI from '@cardstack/base/card-api';
 
@@ -893,6 +898,25 @@ export default class PublishRealmModal extends Component<Signature> {
     return this.realm.isPublishing(this.currentRealmURL);
   }
 
+  // The modal stays open over a publish, so this is where the wait is actually
+  // watched — indexing and prerendering a large realm take minutes, and a
+  // "Publishing…" button alone can't tell slow progress from a hang. One line
+  // per target, labelled with its host only when there are several to tell
+  // apart.
+  get publishingStatuses() {
+    return this.realm.publishingRealms(this.currentRealmURL).map((url) => ({
+      url,
+      host: publishTargetHost(url),
+      ...publishProgressView(
+        this.realm.publishProgress(this.currentRealmURL, url),
+      ),
+    }));
+  }
+
+  get hasSeveralPublishTargets() {
+    return this.publishingStatuses.length > 1;
+  }
+
   getPublishErrorForUrl = (url: string): string | null => {
     const error = this.args.publishError;
     if (error?.urlErrors) {
@@ -1573,6 +1597,38 @@ export default class PublishRealmModal extends Component<Signature> {
 
       <:footer>
         {{#if @isOpen}}
+          {{#if this.publishingStatuses.length}}
+            <div
+              class='publish-progress-status'
+              data-test-publish-progress-status
+            >
+              {{#each this.publishingStatuses as |status|}}
+                <div
+                  class='progress-row'
+                  data-test-publish-progress-for={{status.url}}
+                >
+                  <div class='progress-description'>
+                    {{#if this.hasSeveralPublishTargets}}
+                      <span class='progress-target'>{{status.host}}</span>
+                    {{/if}}
+                    {{status.description}}
+                  </div>
+                  {{#if status.counts}}
+                    {{! Named through `aria-label` rather than `@label`, which
+                        the shared bar also renders as visible text inside the
+                        track — unreadable at this height, and redundant with
+                        the description above it. }}
+                    <ProgressBar
+                      class='progress-bar'
+                      aria-label='{{status.phaseLabel}} {{status.url}}'
+                      @value={{status.counts.completed}}
+                      @max={{status.counts.total}}
+                    />
+                  {{/if}}
+                </div>
+              {{/each}}
+            </div>
+          {{/if}}
           <div class='footer-buttons'>
             <BoxelButton
               @kind='primary'
@@ -1835,6 +1891,37 @@ export default class PublishRealmModal extends Component<Signature> {
         display: flex;
         margin-left: auto;
         gap: var(--horizontal-gap);
+      }
+
+      .publish-progress-status {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: var(--boxel-sp-xxs);
+        /* Take the footer's free width so the bars have a length worth
+           reading, while the buttons keep their own. */
+        flex: 1;
+        max-width: 22rem;
+        margin-right: var(--horizontal-gap);
+        color: var(--muted-foreground);
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
+      }
+
+      .progress-row {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-5xs);
+      }
+
+      .progress-target {
+        font-weight: 600;
+      }
+
+      /* A slim rule under the description rather than a full-height labelled
+         bar. */
+      .progress-bar {
+        --boxel-progress-bar-height: 0.5rem;
       }
 
       .custom-subdomain-setup {

@@ -79,6 +79,10 @@ export class CardStoreWithErrors implements CardStore {
     return this.#virtualNetwork.unresolveURL(id);
   }
 
+  realmForId(id: string): string | undefined {
+    return this.#virtualNetwork.realmForReference(id);
+  }
+
   getCard(id: string): CardDef | undefined {
     id = this.normalizeKey(id);
     return this.#cards.get(id);

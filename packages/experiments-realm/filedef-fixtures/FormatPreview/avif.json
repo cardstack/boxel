@@ -1,0 +1,47 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "avif · Format Preview",
+      "cardInfo": {
+        "name": "avif · Format Preview",
+        "summary": "Simple, moderate, and complex avif fixtures across atom, embedded, isolated, and the 16 fitted envelopes."
+      }
+    },
+    "relationships": {
+      "previewFiles.0": {
+        "links": {
+          "self": "../samples/avif-simple.avif"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/avif-simple.avif"
+        }
+      },
+      "previewFiles.1": {
+        "links": {
+          "self": "../samples/avif-moderate.avif"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/avif-moderate.avif"
+        }
+      },
+      "previewFiles.2": {
+        "links": {
+          "self": "../samples/avif-complex.avif"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/avif-complex.avif"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../format-preview",
+        "name": "FileDefFormatPreview"
+      }
+    }
+  }
+}

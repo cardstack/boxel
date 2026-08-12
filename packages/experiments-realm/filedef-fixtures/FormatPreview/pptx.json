@@ -1,0 +1,47 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "pptx · Format Preview",
+      "cardInfo": {
+        "name": "pptx · Format Preview",
+        "summary": "Simple, moderate, and complex pptx fixtures across atom, embedded, isolated, and the 16 fitted envelopes."
+      }
+    },
+    "relationships": {
+      "previewFiles.0": {
+        "links": {
+          "self": "../samples/pptx-simple.pptx"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/pptx-simple.pptx"
+        }
+      },
+      "previewFiles.1": {
+        "links": {
+          "self": "../samples/pptx-moderate.pptx"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/pptx-moderate.pptx"
+        }
+      },
+      "previewFiles.2": {
+        "links": {
+          "self": "../samples/pptx-complex.pptx"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/pptx-complex.pptx"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../format-preview",
+        "name": "FileDefFormatPreview"
+      }
+    }
+  }
+}

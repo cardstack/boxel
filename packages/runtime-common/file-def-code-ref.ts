@@ -19,6 +19,8 @@ const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
   // TODO: Replace with realm metadata configuration.
   '.markdown': { module: baseModule('markdown-file-def'), name: 'MarkdownDef' },
   '.md': { module: baseModule('markdown-file-def'), name: 'MarkdownDef' },
+  '.html': { module: baseModule('html-file-def'), name: 'HtmlDef' },
+  '.htm': { module: baseModule('html-file-def'), name: 'HtmlDef' },
   '.png': { module: baseModule('png-image-def'), name: 'PngDef' },
   '.jpg': { module: baseModule('jpg-image-def'), name: 'JpgDef' },
   '.jpeg': { module: baseModule('jpg-image-def'), name: 'JpgDef' },
@@ -43,6 +45,12 @@ const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
   // FileDef directly instead of AudioDef.
   '.mid': { module: baseModule('midi-audio-def'), name: 'MidiDef' },
   '.midi': { module: baseModule('midi-audio-def'), name: 'MidiDef' },
+  // MP4 and MOV are the same ISO BMFF container as .m4a; the extension is what
+  // says whether to expect a picture track, so they route to distinct classes.
+  '.mp4': { module: baseModule('mp4-video-def'), name: 'Mp4Def' },
+  '.m4v': { module: baseModule('mp4-video-def'), name: 'Mp4Def' },
+  '.mov': { module: baseModule('mov-video-def'), name: 'MovDef' },
+  '.webm': { module: baseModule('webm-video-def'), name: 'WebmDef' },
   '.mismatch': {
     module: './filedef-mismatch' as RealmResourceIdentifier,
     name: 'FileDef',

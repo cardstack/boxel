@@ -1,0 +1,47 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "gif · Format Preview",
+      "cardInfo": {
+        "name": "gif · Format Preview",
+        "summary": "Simple, moderate, and complex gif fixtures across atom, embedded, isolated, and the 16 fitted envelopes."
+      }
+    },
+    "relationships": {
+      "previewFiles.0": {
+        "links": {
+          "self": "../samples/gif-simple.gif"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/gif-simple.gif"
+        }
+      },
+      "previewFiles.1": {
+        "links": {
+          "self": "../samples/gif-moderate.gif"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/gif-moderate.gif"
+        }
+      },
+      "previewFiles.2": {
+        "links": {
+          "self": "../samples/gif-complex.gif"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/gif-complex.gif"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../format-preview",
+        "name": "FileDefFormatPreview"
+      }
+    }
+  }
+}

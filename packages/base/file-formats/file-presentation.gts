@@ -24,6 +24,21 @@ export function fileIconFor(
   return source?.icon ?? FileIcon;
 }
 
+// Whether a bounded frame should letterbox an image rather than center-crop
+// it. A vector is as likely a diagram as a picture, and a square crop of a
+// panorama or a skyscraper is meaningless. One rule, because two renderers
+// present the same picture — the fitted stage and the fitted shell's
+// list-view thumbnail rail — and they must letterbox it identically.
+export function letterboxImage(
+  previewKind?: string | null,
+  aspectRatio?: number | null,
+): boolean {
+  if (previewKind === 'svg') {
+    return true;
+  }
+  return aspectRatio != null && (aspectRatio >= 2.5 || aspectRatio <= 0.4);
+}
+
 // Preserve the source's authored shape until honoring it would make the player
 // unusably short or tall; extreme cinema and portrait sources matte instead.
 export function boundedVideoFrameAspectRatio(value?: number | null): number {

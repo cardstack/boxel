@@ -215,7 +215,7 @@ module('Integration | FileDef format templates', function (hooks) {
       .containsText('0 bytes · empty');
   });
 
-  test('image-file embeds still render via ImageDef, not the shared FileDef shell', async function (assert) {
+  test('image-file embeds render the shared FileDef shell around a native <img>', async function (assert) {
     let image = new ImageDef({
       id: 'http://example.com/img/hero.png',
       url: 'http://example.com/img/hero.png',
@@ -225,8 +225,10 @@ module('Integration | FileDef format templates', function (hooks) {
     });
     await renderCard(loader, image, 'embedded');
     assert
-      .dom('img')
-      .exists('ImageDef embedded renders an <img>, not the file affordance');
-    assert.dom('[data-test-file-embedded]').doesNotExist();
+      .dom('[data-test-file-embedded]')
+      .exists('ImageDef embeds share the FileDef shell');
+    assert
+      .dom('[data-test-file-embedded] img[data-test-image-preview]')
+      .exists('the image family renders a native <img> inside the shell');
   });
 });

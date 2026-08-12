@@ -41,6 +41,7 @@ import {
   getSerializer,
   humanReadable,
   identifyCard,
+  computeContentHash,
   inferContentType,
   isBaseInstance,
   isCardError,
@@ -129,10 +130,7 @@ import FileDefEmbeddedTemplate from './default-templates/file-def-embedded';
 import FileDefFittedTemplate from './default-templates/file-def-fitted';
 import FileDefIsolatedTemplate from './default-templates/file-def-isolated';
 import type { FilePreviewComponent } from './file-formats/file-preview-stage';
-import ImageDefAtomTemplate from './default-templates/image-def-atom';
-import ImageDefEmbeddedTemplate from './default-templates/image-def-embedded';
-import ImageDefFittedTemplate from './default-templates/image-def-fitted';
-import ImageDefIsolatedTemplate from './default-templates/image-def-isolated';
+import { ImagePreview } from './file-formats/image-preview';
 import CaptionsIcon from '@cardstack/boxel-icons/captions';
 import FileIcon from '@cardstack/boxel-icons/file';
 import ImageIcon from '@cardstack/boxel-icons/image';
@@ -148,7 +146,6 @@ import HashIcon from '@cardstack/boxel-icons/hash';
 // normalizeEnumOptions used by enum moved to packages/base/enum.gts
 import PatchThemeTool from '@cardstack/boxel-host/commands/patch-theme';
 import CopyAndEditTool from '@cardstack/boxel-host/commands/copy-and-edit';
-import { md5 } from 'super-fast-md5';
 
 import {
   callSerializeHook,
@@ -156,6 +153,7 @@ import {
   deserialize,
   makeMetaForField,
   makeRelativeURL,
+  rebaseReferencesFor,
   serialize,
   serializeCard,
   serializeCardResource,
@@ -525,6 +523,13 @@ export interface CardStore {
   // interior form without holding the network. Returns the input unchanged
   // when no network is available.
   canonicalizeId(id: string): string;
+  // The realm holding `id`, as a real URL href, or undefined when this store's
+  // network can't place it. Completes the same boundary as the two above: card
+  // code can ask which realm a reference belongs to without holding the realm
+  // mappings itself. A realm root is whatever was registered, at whatever
+  // depth, so it can't be recovered from the path — `/user/alice/` is a realm
+  // and `/user/` is not.
+  realmForId(id: string): string | undefined;
   getCard(url: string): CardDef | undefined;
   getFileMeta(url: string): FileDef | undefined;
   setCard(url: string, instance: CardDef): void;
@@ -1098,9 +1103,15 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
         return { attributes: { [this.name]: serialized } };
       }
     } else {
+      // `opts` reaches the nested resource so a composite field serializes the
+      // same way whether it is reached through `contains` or `containsMany` —
+      // most visibly `includeComputeds`, without which a computed declared
+      // inside a FieldDef is filtered out of the nested resource. `visited` is
+      // deliberately a fresh set here, matching the other three field
+      // serialize sites.
       let serialized: JSONAPISingleResourceDocument['data'] & {
         meta: Record<string, any>;
-      } = callSerializeHook(this.card, value, doc);
+      } = callSerializeHook(this.card, value, doc, undefined, opts);
       let resource: JSONAPIResource = {
         attributes: {
           [this.name]: serialized?.attributes,
@@ -1409,9 +1420,13 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
 
     visited.add(value.id ?? (value as CardDef)[localId]);
 
-    let serialized = callSerializeHook(this.card, value, doc, visited, opts) as
-      | (JSONAPIResource & { id: string; type: string })
-      | null;
+    let serialized = callSerializeHook(
+      this.card,
+      value,
+      doc,
+      visited,
+      rebaseReferencesFor(value, opts),
+    ) as (JSONAPIResource & { id: string; type: string }) | null;
     if (serialized) {
       let resource: JSONAPIResource = {
         relationships: {
@@ -1968,7 +1983,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         value,
         doc,
         visited,
-        opts,
+        rebaseReferencesFor(value, opts),
       );
       if (serialized.meta && Object.keys(serialized.meta).length === 0) {
         delete serialized.meta;
@@ -3127,11 +3142,7 @@ export class FileDef extends BaseDef {
     if (!contentHash || contentSize === undefined) {
       let bytes = await byteStreamToUint8Array(await getStream());
       if (!contentHash) {
-        try {
-          contentHash = md5(bytes);
-        } catch {
-          contentHash = md5(new TextDecoder().decode(bytes));
-        }
+        contentHash = computeContentHash(bytes);
       }
       if (contentSize === undefined) {
         contentSize = bytes.byteLength;
@@ -3188,14 +3199,18 @@ export class ImageDef extends FileDef {
   static displayName = 'Image';
   static icon: CardOrFieldTypeIcon = ImageIcon;
   static acceptTypes = 'image/*';
+  // An image whose content type never arrived — a hand-linked thumbnail, say —
+  // must still present as an image rather than a generic file, so the family
+  // is pinned instead of left to MIME/extension inference. `previewKind` stays
+  // inferred: photo, gif, and svg genuinely differ per instance.
+  static fileFamily = 'image';
 
   @field width = contains(NumberField);
   @field height = contains(NumberField);
 
-  static isolated: BaseDefComponent = ImageDefIsolatedTemplate;
-  static atom: BaseDefComponent = ImageDefAtomTemplate;
-  static embedded: BaseDefComponent = ImageDefEmbeddedTemplate;
-  static fitted: BaseDefComponent = ImageDefFittedTemplate;
+  // The four formats come from FileDef's shared shells; the family supplies
+  // only the renderer that draws its pixels.
+  static previewComponent: FilePreviewComponent = ImagePreview;
 
   // CS-10787: emit a markdown image reference. If no URL is available we
   // fall back to a placeholder that names the image — useful to downstream
@@ -5060,6 +5075,16 @@ class FallbackCardStore implements CardStore {
       return id;
     }
     return vn ? vn.unresolveURL(id) : id;
+  }
+
+  realmForId(id: string): string | undefined {
+    let vn: VirtualNetwork | undefined;
+    try {
+      vn = myLoader().getVirtualNetwork();
+    } catch {
+      return undefined;
+    }
+    return vn?.realmForReference(id);
   }
 
   // Mirror the host stores' bucket-key fold: every spelling of the same
