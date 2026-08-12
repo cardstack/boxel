@@ -14,6 +14,13 @@ module('Unit | loader concurrent cycle completion', function () {
   test('a second import root completes a cycle participant that a suspended root left mid-completion', async function (assert) {
     let releaseSlow = new Deferred<void>();
     let slowRequested = new Deferred<void>();
+    // Every axis of this graph is load-bearing: the two-node cycle, `./b`
+    // preceding `./slow` (so root 1 suspends with `a` still 'registered'),
+    // and root 2 entering at `b` specifically. A longer chain closes the
+    // window on its own — the suspended root resumes and advances the dep
+    // before the second root arrives — and the interleaving pins nothing.
+    // Anyone restructuring this test must re-verify it fails with the
+    // loader's completing-dep recovery reverted to a throw.
     let sources: Record<string, string> = {
       '/a': `import './b'; import './slow'; export const a = 'a';`,
       '/b': `import './a'; export const b = 'b';`,
