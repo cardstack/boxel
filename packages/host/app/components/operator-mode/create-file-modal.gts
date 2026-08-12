@@ -705,7 +705,10 @@ export default class CreateFileModal extends Component<Signature> {
     this.fileName = name;
   }
 
-  @action private handleTextFileExtensionChange(extension: string) {
+  @action private handleTextFileExtensionChange(extension: string | null) {
+    if (extension == null) {
+      return;
+    }
     this.clearSaveError();
     this.fileNameError = undefined;
     this.selectedTextFileExtension = extension;

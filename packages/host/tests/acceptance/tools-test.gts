@@ -20,6 +20,7 @@ import { GridContainer } from '@cardstack/boxel-ui/components';
 import {
   baseRealm,
   buildCommandFunctionName,
+  buildCommandFunctionNameFromResolvedRef,
   Command,
   skillCardRef,
 } from '@cardstack/runtime-common';
@@ -85,6 +86,12 @@ let maybeBoomShouldBoom = true;
 let savedMeetingCardId: string | undefined;
 
 module('Acceptance | Tools tests', function (hooks) {
+  // The show-card tool as `Skill/card-editing` declares it.
+  const showCardToolName = buildCommandFunctionNameFromResolvedRef({
+    module: '@cardstack/boxel-host/commands/show-card',
+    name: 'default',
+  });
+
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
@@ -489,6 +496,33 @@ module('Acceptance | Tools tests', function (hooks) {
                 },
               ],
               cardTitle: 'Useful Commands',
+              cardDescription: null,
+              cardThumbnailURL: null,
+            },
+            meta: {
+              adoptsFrom: skillCardRef,
+            },
+          },
+        },
+        // `show-card` without approval, for the auto-apply tests. A room's
+        // default skill is the skills index, which declares no tools of its
+        // own, so a test that applies a tool has to attach a skill carrying it.
+        'Skill/card-editing.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              instructions:
+                'Use show-card to bring a card into view once you know its id.',
+              commands: [
+                {
+                  codeRef: {
+                    name: 'default',
+                    module: '@cardstack/boxel-host/commands/show-card',
+                  },
+                  requiresApproval: false,
+                },
+              ],
+              cardTitle: 'Card Editing',
               cardDescription: null,
               cardThumbnailURL: null,
             },
@@ -1297,12 +1331,12 @@ module('Acceptance | Tools tests', function (hooks) {
 
     // simulate message
     roomId = getRoomIds().pop()!;
-    // The new room's default skills (env skill, which carries show-card) are
-    // loaded asynchronously by the room resource's processRoomTask. If we
-    // dispatch the bot message before loadSkills finishes, message-builder
-    // can't match show-card_566f to a known codeRef and the command resolves
-    // as invalid ("No command for the name X was found") instead of being
-    // auto-applied.
+    // The room's skills load asynchronously through the room resource's
+    // processRoomTask. If we dispatch the bot message before that finishes,
+    // message-builder can't match the request to a known codeRef and the
+    // command resolves as invalid ("No command for the name X was found")
+    // instead of being auto-applied.
+    await addSkillToAiAssistant(`${testRealmURL}Skill/card-editing`);
     await waitForNewRoomSkillsLoaded(roomId);
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Show the card',
@@ -1312,7 +1346,7 @@ module('Acceptance | Tools tests', function (hooks) {
       [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: '1554f297-e9f2-43fe-8b95-55b29251444d',
-          name: 'show-card_566f',
+          name: showCardToolName,
           arguments: JSON.stringify({
             description:
               'Displaying the card with the Latin word for milkweed in the title.',
@@ -1430,8 +1464,9 @@ module('Acceptance | Tools tests', function (hooks) {
     // simulate message
     roomId = getRoomIds().pop()!;
     // Same skill-load race as the sister "agentId matches" test — wait for
-    // default skills to be available so show-card_566f resolves to a known
-    // codeRef before the simulated bot message arrives.
+    // the attached skill's tools so the request resolves to a known codeRef
+    // before the simulated bot message arrives.
+    await addSkillToAiAssistant(`${testRealmURL}Skill/card-editing`);
     await waitForNewRoomSkillsLoaded(roomId);
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Show the card',
@@ -1441,7 +1476,7 @@ module('Acceptance | Tools tests', function (hooks) {
       [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: '1554f297-e9f2-43fe-8b95-55b29251444d',
-          name: 'show-card_566f',
+          name: showCardToolName,
           arguments: JSON.stringify({
             description:
               'Displaying the card with the Latin word for milkweed in the title.',
@@ -1790,9 +1825,10 @@ module('Acceptance | Tools tests', function (hooks) {
     // simulate message
     let roomId = getRoomIds().pop()!;
     // The JSON-schema validation failure we're asserting only runs once
-    // message-builder has resolved show-card_566f to its codeRef via the
-    // room's loaded skills. Without this wait we sometimes hit the upstream
-    // "No command for the name X was found" branch instead.
+    // message-builder has resolved the request to its codeRef via the room's
+    // loaded skills. Without this wait we sometimes hit the upstream "No
+    // command for the name X was found" branch instead.
+    await addSkillToAiAssistant(`${testRealmURL}Skill/card-editing`);
     await waitForNewRoomSkillsLoaded(roomId);
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Show the card',
@@ -1802,7 +1838,7 @@ module('Acceptance | Tools tests', function (hooks) {
       [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: '1554f297-e9f2-43fe-8b95-55b29251444d',
-          name: 'show-card_566f',
+          name: showCardToolName,
           arguments: JSON.stringify({
             description:
               'Displaying the card with the Latin word for milkweed in the title.',
@@ -1828,8 +1864,7 @@ module('Acceptance | Tools tests', function (hooks) {
     // expected JSON-schema validation message. Log enough state to
     // distinguish the skill-load race from a genuine validation regression
     // before the qunit-dom assertion records the failure.
-    let expectedValidationText =
-      'Command "show-card_566f" validation failed: data/attributes must have required property \'cardId\'';
+    let expectedValidationText = `Command "${showCardToolName}" validation failed: data/attributes must have required property 'cardId'`;
     let warningText =
       document
         .querySelector('[data-test-boxel-alert="warning"]')
@@ -1871,10 +1906,7 @@ module('Acceptance | Tools tests', function (hooks) {
       APP_BOXEL_TOOL_RESULT_REL_TYPE,
     );
     assert.strictEqual(message.content['m.relates_to']?.key, 'invalid');
-    assert.strictEqual(
-      message.content.failureReason,
-      'Command "show-card_566f" validation failed: data/attributes must have required property \'cardId\'',
-    );
+    assert.strictEqual(message.content.failureReason, expectedValidationText);
     assert.strictEqual(
       message.content.commandRequestId,
       '1554f297-e9f2-43fe-8b95-55b29251444d',

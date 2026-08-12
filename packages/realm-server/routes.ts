@@ -18,6 +18,7 @@ import handleFetchCatalogRealmsRequest from './handlers/handle-fetch-catalog-rea
 import handleFetchUserRequest from './handlers/handle-fetch-user.ts';
 import handleStripeWebhookRequest from './handlers/handle-stripe-webhook.ts';
 import handlePublishRealm from './handlers/handle-publish-realm.ts';
+import handlePublishProgress from './handlers/handle-publish-progress.ts';
 import handleUnpublishRealm from './handlers/handle-unpublish-realm.ts';
 import handleArchiveRealm from './handlers/handle-archive-realm.ts';
 import handleUnarchiveRealm from './handlers/handle-unarchive-realm.ts';
@@ -53,6 +54,7 @@ import handleUnlistedRealmPathRequest from './handlers/handle-unlisted-realm-pat
 import handlePrerenderProxy from './handlers/handle-prerender-proxy.ts';
 import handleSearch from './handlers/handle-search.ts';
 import type { JobScopedSearchCache } from './job-scoped-search-cache.ts';
+import handleRealmIndexCounts from './handlers/handle-realm-index-counts.ts';
 import handleRealmInfo from './handlers/handle-realm-info.ts';
 import handleFederatedTypes from './handlers/handle-federated-types.ts';
 import { multiRealmAuthorization } from './middleware/multi-realm-authorization.ts';
@@ -234,6 +236,14 @@ export function createRoutes(args: CreateRoutesArgs) {
     }),
   );
   router.all(
+    '/_federated-index-counts',
+    multiRealmAuthorization(args),
+    handleRealmIndexCounts({
+      dbAdapter: args.dbAdapter,
+      reconciler: args.reconciler,
+    }),
+  );
+  router.all(
     '/_federated-types',
     multiRealmAuthorization(args),
     handleFederatedTypes({
@@ -280,6 +290,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_publish-realm',
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handlePublishRealm(args),
+  );
+  router.get(
+    '/_publish-progress',
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handlePublishProgress(args),
   );
   router.post(
     '/_unpublish-realm',

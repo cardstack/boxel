@@ -1,0 +1,45 @@
+/* ember-basic-dropdown's structural styles. The addon ships them only as
+   SCSS (scss/base.scss) and injects nothing into the build itself, so this
+   is that file compiled with its default variable values. Without these
+   rules, teleported dropdown content renders in normal flow at the
+   destination element instead of positioned near its trigger. */
+
+.ember-basic-dropdown {
+  position: relative;
+}
+
+.ember-basic-dropdown,
+.ember-basic-dropdown-content,
+.ember-basic-dropdown-content * {
+  box-sizing: border-box;
+}
+
+.ember-basic-dropdown-content {
+  position: absolute;
+  width: auto;
+  z-index: 1000;
+  background-color: #fff;
+}
+
+.ember-basic-dropdown-content--left {
+  left: 0;
+}
+
+.ember-basic-dropdown-content--right {
+  right: 0;
+}
+
+.ember-basic-dropdown-overlay {
+  position: fixed;
+  background: rgba(0, 0, 0, 0.5);
+  width: 100%;
+  height: 100%;
+  z-index: 10;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+.ember-basic-dropdown-content-wormhole-origin {
+  display: inline;
+}

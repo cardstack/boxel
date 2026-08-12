@@ -20,6 +20,8 @@ import {
   IconSearch,
 } from '@cardstack/boxel-ui/icons';
 
+import { isSampledContentHash } from '@cardstack/runtime-common';
+
 import {
   boundedVideoFrameAspectRatio,
   fileIconFor,
@@ -127,7 +129,17 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
         `${humanSize(m.contentSize)} · ${m.contentSize.toLocaleString()} bytes`,
       );
     }
-    push('MD5', m.contentHash, true);
+    // A whole-content fingerprint is a plain md5, so it is worth naming as
+    // one — it matches what `md5sum` reports. A sampled fingerprint covers
+    // only the file's head and tail, so calling it an md5 would invite a
+    // comparison that can never match.
+    if (m.contentHash) {
+      push(
+        isSampledContentHash(m.contentHash) ? 'Checksum (sampled)' : 'MD5',
+        m.contentHash,
+        true,
+      );
+    }
     if (m.width && m.height) {
       push('Dimensions', `${m.width} × ${m.height} px`);
     }
@@ -176,9 +188,39 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
   }
 
   // A `contains` FieldDef is always an instance, so presence has to mean "has
-  // at least one meaningful value" rather than "is not null".
+  // at least one meaningful value" rather than "is not null" — and the value
+  // list must cover every field the pane's templates can render, or a thinly
+  // tagged photo hides rows the pane would have shown.
   get hasExif() {
-    return Boolean(this.args.model?.exif);
+    let capture = this.args.model?.exif?.capture;
+    let location = this.args.model?.exif?.location;
+    return Boolean(
+      capture?.cameraName ||
+      capture?.lensModel ||
+      capture?.focalLength?.display ||
+      capture?.aperture?.display ||
+      capture?.exposureTime?.display ||
+      capture?.iso ||
+      capture?.flash?.label ||
+      capture?.orientation?.label ||
+      capture?.capturedAt ||
+      capture?.software ||
+      location?.coordinates ||
+      location?.altitude?.display ||
+      location?.place ||
+      location?.source?.label,
+    );
+  }
+
+  get hasColorProfile() {
+    let c = this.args.model?.colorProfile;
+    return Boolean(
+      c?.colorSpace?.code ||
+      c?.bitDepth ||
+      c?.channels ||
+      c?.iccProfile ||
+      c?.hasAlpha != null,
+    );
   }
 
   get hasEncoding() {
@@ -479,6 +521,10 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
           {{#if this.hasExif}}
             <h2 class='insp-group'>EXIF metadata</h2>
             <div class='insp-family'><@fields.exif /></div>
+          {{/if}}
+          {{#if this.hasColorProfile}}
+            <h2 class='insp-group'>Color profile</h2>
+            <div class='insp-family'><@fields.colorProfile /></div>
           {{/if}}
           {{#if this.hasEncoding}}
             <h2 class='insp-group'>Encoding</h2>

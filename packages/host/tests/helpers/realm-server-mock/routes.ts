@@ -70,6 +70,81 @@ export function registerDefaultRoutes() {
   registerCatalogRoutes();
   registerAuthRoutes();
   registerArchiveRoutes();
+  registerPublishRoutes();
+}
+
+// The test environment points `ENV.realmServerURL` at the fake `http://test-realm`
+// host (config/environment.js), so every realm-server call a test makes through
+// the network service lands here. An endpoint with no route escapes to the real
+// network and fails, which is harmless — nothing asserts on these — but it
+// accounted for 43 failed fetches per CI run, and that noise is what error
+// triage has to read past.
+//
+// These answer only the background calls nobody asserted on. A test that cares
+// about one of these endpoints stubs the service method instead (see
+// `stubAllocateUnlistedPath` in acceptance/host-submode-test.gts), and a stub
+// takes precedence over any of this. Anything other than the method the client
+// actually uses returns null, so it falls through rather than being answered
+// with a fabricated result.
+//
+// Only requests that go through the network service can be answered here, since
+// that is where this mock is mounted (see ensureRealmServerMockState). Notably
+// that excludes `_client-telemetry`: client-telemetry.ts flushes through
+// `globalThis.fetch` deliberately, so a route for it would never be consulted —
+// its 9 escapes per run belong to tests that opt into telemetry under
+// `isTesting()`, and the fix belongs in that opt-in, not here.
+function registerPublishRoutes() {
+  registerRealmServerRoute({
+    path: '/_boxel-claimed-domains',
+    handler: async (req) => {
+      if (req.method !== 'GET') {
+        return null;
+      }
+      // 404 is the realm server's "nothing claimed for this realm" answer,
+      // which `fetchBoxelClaimedDomain` maps to null.
+      return new Response(null, { status: 404 });
+    },
+  });
+
+  registerRealmServerRoute({
+    path: '/_unlisted-realm-path',
+    handler: async (req) => {
+      if (req.method !== 'POST') {
+        return null;
+      }
+      let sourceRealmURL = '';
+      try {
+        ({ sourceRealmURL } = (await req.clone().json()) as {
+          sourceRealmURL: string;
+        });
+      } catch {
+        // A malformed body is the caller's business, not this mock's; answer
+        // with an empty source rather than throwing inside the handler.
+      }
+      return new Response(
+        JSON.stringify({
+          data: {
+            type: 'unlisted-realm-path',
+            attributes: {
+              sourceRealmURL,
+              slug: unlistedSlugFor(sourceRealmURL),
+            },
+          },
+        }),
+        { status: 200, headers: { 'content-type': SupportedMimeType.JSONAPI } },
+      );
+    },
+  });
+}
+
+// The real slug is server-issued and opaque; this only has to be stable, since
+// a test asserting on a particular slug stubs `allocateUnlistedPath`.
+function unlistedSlugFor(sourceRealmURL: string): string {
+  let slug = sourceRealmURL
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return `unlisted-${slug || 'realm'}`;
 }
 
 function registerSearchRoutes() {

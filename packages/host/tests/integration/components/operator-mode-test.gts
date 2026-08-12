@@ -23,7 +23,9 @@ import { setupOperatorModeTests } from './operator-mode/setup';
 import type { CardDef } from '@cardstack/base/card-api';
 
 module('Integration | operator-mode | basics', function (hooks) {
-  let ctx = setupOperatorModeTests(hooks);
+  let ctx = setupOperatorModeTests(hooks, {
+    reuseIndexAcrossTests: 'operatorMode',
+  });
 
   let noop = () => {};
 

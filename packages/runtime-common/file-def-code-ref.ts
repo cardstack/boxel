@@ -39,6 +39,16 @@ const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
   '.opus': { module: baseModule('ogg-audio-def'), name: 'OggDef' },
   '.m4a': { module: baseModule('m4a-audio-def'), name: 'M4aDef' },
   '.flac': { module: baseModule('flac-audio-def'), name: 'FlacDef' },
+  // Symbolic performance data rather than sampled audio, so `MidiDef` extends
+  // FileDef directly instead of AudioDef.
+  '.mid': { module: baseModule('midi-audio-def'), name: 'MidiDef' },
+  '.midi': { module: baseModule('midi-audio-def'), name: 'MidiDef' },
+  // MP4 and MOV are the same ISO BMFF container as .m4a; the extension is what
+  // says whether to expect a picture track, so they route to distinct classes.
+  '.mp4': { module: baseModule('mp4-video-def'), name: 'Mp4Def' },
+  '.m4v': { module: baseModule('mp4-video-def'), name: 'Mp4Def' },
+  '.mov': { module: baseModule('mov-video-def'), name: 'MovDef' },
+  '.webm': { module: baseModule('webm-video-def'), name: 'WebmDef' },
   '.mismatch': {
     module: './filedef-mismatch' as RealmResourceIdentifier,
     name: 'FileDef',

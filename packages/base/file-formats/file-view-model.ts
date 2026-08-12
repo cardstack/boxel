@@ -403,6 +403,12 @@ export function fileViewModel(
     file.encoding?.videoCodec ??
       file.encoding?.audioCodec ??
       file.encoding?.container,
+    // A real field instance computes `label` from the code; a plain wire-shape
+    // object hasn't, so the bare code is the honest fallback.
+    file.colorProfile?.colorSpace?.label ?? file.colorProfile?.colorSpace?.code,
+    file.colorProfile?.bitDepth
+      ? `${file.colorProfile.bitDepth}-bit`
+      : undefined,
     file.sheetCount ? `${file.sheetCount} sheets` : undefined,
     fontMetadata?.subfamilyName && fontMetadata?.weightClass
       ? `${fontMetadata.subfamilyName} · ${fontMetadata.weightClass}`
@@ -516,7 +522,9 @@ export function fileViewModel(
     exif: file.exif,
     capture: file.exif?.capture,
     location: file.exif?.location,
-    colorProfile: file.exif?.colorProfile,
+    // A sibling of `exif`, not a member: the container header is the color
+    // authority, with the EXIF tag already folded in at extract time.
+    colorProfile: file.colorProfile,
     encoding: file.encoding,
     mediaTags: file.mediaTags,
     waveform: file.waveform,

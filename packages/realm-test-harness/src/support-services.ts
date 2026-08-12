@@ -41,13 +41,13 @@ function hostStartupLooksLikePortContention(logs: string): boolean {
 }
 
 function boxelUIIsUsable(hostPackageDir: string): boolean {
-  let boxelUIDir = join(hostPackageDir, '..', 'boxel-ui', 'addon');
+  let boxelUIDir = join(hostPackageDir, '..', 'boxel-ui');
   return existsSync(join(boxelUIDir, 'declarations', 'components.d.ts'));
 }
 
 /**
  * Ensure boxel-ui dist artifacts exist for the host package. Tries in order:
- *   1. The current worktree's boxel-ui/addon/dist
+ *   1. The current worktree's boxel-ui/dist
  *   2. Symlink from the root repo's built boxel-ui dist (fast, avoids rebuild)
  *   3. Build boxel-ui in the current worktree (slow but always works)
  */
@@ -56,7 +56,7 @@ function ensureBoxelUIReady(hostPackageDir: string): void {
     return;
   }
 
-  let boxelUIAddonDir = join(hostPackageDir, '..', 'boxel-ui', 'addon');
+  let boxelUIAddonDir = join(hostPackageDir, '..', 'boxel-ui');
 
   // boxel-ui's type build imports icon components from boxel-icons, so
   // boxel-icons must be fully built (including its declarations) first. This

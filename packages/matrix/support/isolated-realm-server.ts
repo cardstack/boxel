@@ -34,6 +34,7 @@ const skillsRealmDir = resolve(
 const baseRealmDir = resolve(join(import.meta.dirname, '..', '..', 'base'));
 const matrixDir = resolve(join(import.meta.dirname, '..'));
 export const appURL = 'https://localhost:4205/test';
+export const skillsRealmURL = 'https://localhost:4205/skills/';
 
 const DEFAULT_PRERENDER_PORT = 4231;
 const DEFAULT_WORKER_MANAGER_READY_TIMEOUT_MS = 120_000;

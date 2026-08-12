@@ -980,7 +980,19 @@ export {
   ERROR_DOC_MAX_BYTES,
   ERROR_DOC_MAX_ADDITIONAL_ERRORS,
 } from './error.ts';
-export { validateWriteSize } from './write-size-validation.ts';
+export {
+  fileSizeLimitFor,
+  validateByteLength,
+  validateWriteSize,
+} from './write-size-validation.ts';
+export {
+  computeContentHash,
+  isSampledContentHash,
+  CONTENT_HASH_WHOLE_LIMIT_BYTES,
+  CONTENT_HASH_HEAD_BYTES,
+  CONTENT_HASH_TAIL_BYTES,
+} from './content-hash.ts';
+export type { FileSizeLimits } from './write-size-validation.ts';
 
 export interface ResourceObject {
   type: string;
@@ -1147,6 +1159,7 @@ export type {
   Kind,
   RealmAdapter,
   FileRef,
+  RealmIndexCounts,
   RealmInfo,
   TokenClaims,
   RealmSession,

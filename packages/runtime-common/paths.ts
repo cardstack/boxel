@@ -204,6 +204,84 @@ function beforeQuery(value: string): string {
 //
 export type LocalPath = string;
 
+// Characters that a file name cannot survive a trip through this module with.
+// `fileURL` builds the URL with `new URL(name, realmURL)` and `local` recovers
+// the path with `decodeURI`, and that pair mangles each of these:
+//
+//   #   opens a fragment, so "Standup #3.m4a" is written as "Standup"
+//   ?   opens a query, which `local` strips, so "notes?.m4a" becomes "notes"
+//   \   is normalized to "/", silently turning the name into a directory
+//   /   is a path separator, so a name would gain a directory it didn't ask for
+//   %   either mis-decodes ("a%20b" comes back as "a b") or, on an escape that
+//       isn't valid hex, makes `decodeURI` throw URIError
+//
+// Tab, newline, and carriage return are dropped outright by the URL parser
+// wherever they appear, so they are handled alongside the punctuation.
+//
+// Losing the extension this way is the damage that carries: every layer
+// re-derives a file's content type from its name (see `inferContentType`), so a
+// truncated name reads as application/octet-stream and an uploaded recording
+// stops being audio.
+const UNSAFE_FILE_NAME_CHARS = /[#?\\/%\t\n\r]+/g;
+
+// Inside the extension the same characters are cut from rather than replaced,
+// taking the rest of the name with them. Substituting for them would seat a
+// suffix past the extension, turning "recording.m4a#" into "recording.m4a-"
+// and "image.png?v=2" into "image.png-v=2"; an unrecognized ".m4a-" or
+// ".png-v=2" is exactly the content-type loss this function exists to prevent,
+// so the extension is cut back to the part that survives instead. Cutting is
+// also what the URL parser does to a `#` or `?` and everything after it, which
+// is why nothing of value is thrown away here.
+const EXTENSION_TAIL_FROM_UNSAFE = /[#?\\/%\t\n\r].*$/;
+
+// The URL parser strips leading and trailing C0 controls and spaces from its
+// input, so a name cannot keep them. Other Unicode whitespace — U+00A0 and
+// friends — the parser preserves, so those are left alone rather than trimmed
+// off a name that would have kept them. The control characters in this range
+// are the whole point of it, so the lint that guards against writing one into
+// a pattern by accident does not apply.
+// eslint-disable-next-line no-control-regex
+const URL_STRIPPED_EDGES = /^[\u0000-\u0020]+|[\u0000-\u0020]+$/g;
+
+// A name whose first segment reads as a URL scheme — "notes:draft.txt",
+// "http:foo.txt" — is read by `new URL(name, realmURL)` as a scheme rather than
+// as a path inside the realm. Which way that fails depends on the realm's own
+// scheme: a different one ("notes:", or "http:" under an https realm) resolves
+// to an absolute URL somewhere else entirely, while a matching one is treated
+// as a relative reference and silently drops the prefix, so "http:foo.txt"
+// under an http realm is written as "foo.txt". A colon anywhere else is
+// ordinary and common ("notes re: budget.m4a"), so only the scheme position is
+// neutralized.
+const SCHEME_PREFIX = /^([A-Za-z][A-Za-z0-9+.-]*):/;
+
+// Make a single file name safe to hand to `fileURL`, so that the local path the
+// realm stores is the name the caller intended and keeps the extension the
+// caller gave it. Takes a bare name, never a path — `/` is replaced rather than
+// preserved, so a caller assembling something like `skills/<slug>/SKILL.md`
+// sanitizes the segments and joins them afterward.
+export function toSafeFileName(name: string): string {
+  let trimmed = name.replace(URL_STRIPPED_EDGES, '');
+  // A leading dot marks a dotfile rather than an extension, so the split only
+  // counts a dot with something in front of it.
+  let dot = trimmed.lastIndexOf('.');
+  let stem = dot > 0 ? trimmed.slice(0, dot) : trimmed;
+  let extension = dot > 0 ? trimmed.slice(dot) : '';
+  let safe =
+    stem.replace(UNSAFE_FILE_NAME_CHARS, '-') +
+    extension.replace(EXTENSION_TAIL_FROM_UNSAFE, '');
+  safe = safe.replace(URL_STRIPPED_EDGES, '');
+  // Replacing the colon can expose another scheme behind it, because `-` is
+  // itself legal in a scheme: one pass over "x:y:z.txt" yields "x-y:z.txt",
+  // which `new URL` still reads as scheme "x-y". Each pass removes one colon,
+  // so this settles.
+  while (SCHEME_PREFIX.test(safe)) {
+    safe = safe.replace(SCHEME_PREFIX, '$1-');
+  }
+  // "" resolves to the containing directory and "."/".." to a directory
+  // traversal, none of which name a file.
+  return safe === '' || safe === '.' || safe === '..' ? '-' : safe;
+}
+
 const MARKDOWN_FILE_EXTENSION = /\.(md|markdown)$/i;
 
 // True when the id/URL names a markdown file (`.md` / `.markdown`). Matches
