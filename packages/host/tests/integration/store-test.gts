@@ -43,6 +43,7 @@ import type StoreService from '@cardstack/host/services/store';
 import type { CardErrorJSONAPI } from '@cardstack/host/services/store';
 
 import {
+  withCachedRealmSetup,
   testRealmURL,
   testRRI,
   setupLocalIndexing,
@@ -187,21 +188,27 @@ module('Integration | Store', function (hooks) {
     cardStore = (storeService as any).store as CardStore;
     realmService = getService('realm');
 
-    ({ adapter: testRealmAdapter, realm: testRealm } =
-      await setupIntegrationTestRealm({
-        mockMatrixUtils,
-        contents: {
-          'person.gts': { Person },
-          'boom-person.gts': { BoomPerson },
-          'employee.gts': { Employee },
-          'manager.gts': { Manager },
-          'Person/hassan.json': new Person({ name: 'Hassan' }),
-          'Person/jade.json': new Person({ name: 'Jade' }),
-          'Person/queenzy.json': new Person({ name: 'Queenzy' }),
-          'Person/germaine.json': new Person({ name: 'Germaine' }),
-          'Person/boris.json': new Person({ name: 'Boris' }),
-        },
-      }));
+    // Every test builds these fixtures identically, so the indexed result is
+    // cached for the module and restored instead of rebuilt. The boot index
+    // still runs — it simply finds the rows current — so the loader bookkeeping
+    // a source write depends on is unaffected.
+    await withCachedRealmSetup(async () => {
+      ({ adapter: testRealmAdapter, realm: testRealm } =
+        await setupIntegrationTestRealm({
+          mockMatrixUtils,
+          contents: {
+            'person.gts': { Person },
+            'boom-person.gts': { BoomPerson },
+            'employee.gts': { Employee },
+            'manager.gts': { Manager },
+            'Person/hassan.json': new Person({ name: 'Hassan' }),
+            'Person/jade.json': new Person({ name: 'Jade' }),
+            'Person/queenzy.json': new Person({ name: 'Queenzy' }),
+            'Person/germaine.json': new Person({ name: 'Germaine' }),
+            'Person/boris.json': new Person({ name: 'Boris' }),
+          },
+        }));
+    });
     await realmService.login(testRealmURL);
   });
 
