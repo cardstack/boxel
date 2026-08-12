@@ -119,6 +119,46 @@ export function isFilterRefersToNonsearchableFieldError(
   return error instanceof FilterRefersToNonsearchableFieldError;
 }
 
+// A filter path names a field the type simply does not have. Carries the type
+// and path as data (rather than only in the message) so the reconciler below
+// can decide whether this is a mistake or ordinary version skew.
+export class FilterRefersToNonexistentFieldError extends Error {
+  type: CodeRef;
+  path: string;
+
+  constructor(opts: { type: CodeRef; path: string }) {
+    super(
+      `Your filter refers to a nonexistent field "${opts.path}" on type ${stringify(
+        opts.type,
+      )}`,
+    );
+    this.name = 'FilterRefersToNonexistentFieldError';
+    this.type = opts.type;
+    this.path = opts.path;
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+export function isFilterRefersToNonexistentFieldError(
+  error: unknown,
+): error is FilterRefersToNonexistentFieldError {
+  return error instanceof FilterRefersToNonexistentFieldError;
+}
+
+// Either way a predicate failed to compile against a particular type: the field
+// is absent, or it is present but unreachable through the search doc. Both mean
+// "this type cannot answer this question".
+function isUnanswerableFieldError(
+  error: unknown,
+): error is
+  | FilterRefersToNonexistentFieldError
+  | FilterRefersToNonsearchableFieldError {
+  return (
+    isFilterRefersToNonexistentFieldError(error) ||
+    isFilterRefersToNonsearchableFieldError(error)
+  );
+}
+
 function buildNonsearchableFieldMessage(opts: {
   type: CodeRef;
   path: string;
@@ -244,7 +284,26 @@ export type QueryOptions = WIPOptions & {
   // instance rows by their `.json` file URL, file rows by their canonical URL.
   cardUrls?: string[];
   timings?: RequestTimings;
+  onMissingField?: MissingFieldPolicy;
 };
+
+// What to do when a filter names a field that one of the query's types does not
+// have. See `reconcileFilterFields` for the full argument.
+//   'skip'  (default) — that type's branch of the query goes UNKNOWN and the
+//                       skip is reported in `meta.skippedFilters`.
+//   'error' — any unanswerable predicate fails the whole query.
+export type MissingFieldPolicy = 'skip' | 'error';
+
+// One (type, path) pair a filter asked about that the type could not answer.
+// Reported on a successful response so a thinner result set is never silent.
+export interface SkippedFilterPredicate {
+  // The filter path as written, e.g. `currency.code`.
+  path: string;
+  // The type that could not answer it.
+  type: CodeRef;
+  reason: 'nonexistent-field' | 'not-searchable' | 'query-backed';
+  message: string;
+}
 
 // Selects which columns `search()` projects. `dataOnly` projects
 // the live serialization only (pristine_doc / error_doc); `renderSet` projects
@@ -263,6 +322,12 @@ export interface QueryResultsMeta {
   page: {
     total: number;
   };
+  // Present (and non-empty) only when the query named several types and some of
+  // them could not answer a predicate. The results are complete for every type
+  // that COULD answer it; this says which types sat the predicate out, so a
+  // caller never has to guess whether a short answer means "none" or "not
+  // asked". Omitted entirely on the common single-type path.
+  skippedFilters?: SkippedFilterPredicate[];
 }
 
 // A mapper for fields that can be sorted on but are not an attribute of a card
@@ -726,7 +791,7 @@ export class IndexQueryEngine {
   // loader that we should be using.
   private async _search(
     realmURL: URL,
-    { filter, sort, page }: Query,
+    query: Query,
     opts: QueryOptions,
     selectClauseExpression: CardExpression,
     entryType: 'instance' | 'file' | 'all' = 'instance',
@@ -740,6 +805,11 @@ export class IndexQueryEngine {
     meta: QueryResultsMeta;
     results: Partial<IndexRowWithHtml>[];
   }> {
+    let { filter, sort, page } = query;
+    // The wire query carries the missing-field policy; `opts` is the internal
+    // override, so a caller that pins it wins over the request body.
+    let onMissingField: MissingFieldPolicy =
+      opts.onMissingField ?? query.onMissingField ?? 'skip';
     try {
       let conditions: CardExpression[] = [
         ['i.realm_url = ', param(realmURL.href)],
@@ -787,8 +857,15 @@ export class IndexQueryEngine {
         ]);
       }
 
+      let skippedFilters: SkippedFilterPredicate[] = [];
       if (filter) {
-        conditions.push(this.filterCondition(filter, baseCardRef, 'positive'));
+        let compiled = this.filterCondition(filter, baseCardRef, 'positive');
+        let reconciled = await this.reconcileFilterFields(
+          compiled,
+          onMissingField,
+        );
+        conditions.push(reconciled.expression);
+        skippedFilters = reconciled.skipped;
       }
 
       let everyCondition = every(conditions);
@@ -861,6 +938,7 @@ export class IndexQueryEngine {
         results,
         meta: {
           page: { total: Number(totalResults[0].total) },
+          ...(skippedFilters.length > 0 ? { skippedFilters } : {}),
         },
       };
     } catch (error) {
@@ -893,7 +971,7 @@ export class IndexQueryEngine {
   // wrappers, each fixing one projection.
   async search(
     realmURL: URL,
-    { filter, sort, page }: Query,
+    query: Query,
     opts: QueryOptions,
     projection: SearchProjection,
     // 'all' searches both `instance` and `file` rows in one query (kind is
@@ -970,7 +1048,7 @@ export class IndexQueryEngine {
 
     return (await this._search(
       realmURL,
-      { filter, sort, page },
+      query,
       opts,
       selectClauseExpression,
       entryType,
@@ -985,17 +1063,14 @@ export class IndexQueryEngine {
 
   async searchCards(
     realmURL: URL,
-    { filter, sort, page }: Query,
+    query: Query,
     opts: QueryOptions = {},
     // TODO this should be returning a CardCollectionDocument--handle that in
     // subsequent PR where we start storing card documents in "pristine_doc"
   ): Promise<{ cards: CardResource[]; meta: QueryResultsMeta }> {
-    let { results, meta } = await this.search(
-      realmURL,
-      { filter, sort, page },
-      opts,
-      { kind: 'dataOnly' },
-    );
+    let { results, meta } = await this.search(realmURL, query, opts, {
+      kind: 'dataOnly',
+    });
 
     let cards = results
       .map((r) => r.pristine_doc)
@@ -1006,12 +1081,12 @@ export class IndexQueryEngine {
 
   async searchFiles(
     realmURL: URL,
-    { filter, sort, page }: Query,
+    query: Query,
     opts: QueryOptions = {},
   ): Promise<{ files: IndexedFile[]; meta: QueryResultsMeta }> {
     let { results, meta } = await this._search(
       realmURL,
-      { filter, sort, page },
+      query,
       opts,
       [
         `SELECT i.url AS url, ANY_VALUE(i.pristine_doc) AS pristine_doc, ANY_VALUE(i.search_doc) AS search_doc, ANY_VALUE(i.types) AS types, ANY_VALUE(i.display_names) AS display_names, ANY_VALUE(ph.deps) AS deps, ANY_VALUE(i.last_modified) AS last_modified, ANY_VALUE(i.resource_created_at) AS resource_created_at, ANY_VALUE(ph.isolated_html) AS isolated_html, ANY_VALUE(ph.head_html) AS head_html, ANY_VALUE(ph.embedded_html) AS embedded_html, ANY_VALUE(ph.fitted_html) AS fitted_html, ANY_VALUE(ph.atom_html) AS atom_html, ANY_VALUE(i.icon_html) AS icon_html, ANY_VALUE(ph.markdown) AS markdown, ANY_VALUE(i.generation) AS generation, ANY_VALUE(ph.generation) AS html_generation, ANY_VALUE(i.realm_url) AS realm_url, ANY_VALUE(i.indexed_at) AS indexed_at`,
@@ -1125,6 +1200,143 @@ export class IndexQueryEngine {
     ] as Expression)) as { value: unknown }[];
 
     return normalizeRealmMetaValue(results[0]?.value);
+  }
+
+  // A FILTER PATH THAT ONE TYPE HAS AND ANOTHER DOES NOT.
+  //
+  // A filter compiles against a SCHEMA, but a single query can name several
+  // schemas at once — most often because a version RANGE was expanded into an
+  // `any` over the exact Versions the index holds (see package-range-query.ts),
+  // and those Versions do not have to agree about their fields. Ask
+  // `records@*` for `currency.code` and the 1.x branch compiles while the 2.x
+  // branch has no such path, because 2.0.0 flattened `currency` to a string.
+  //
+  // Neither obvious answer is good enough on its own:
+  //
+  //   - THROW (what this engine used to do). One shape break makes every query
+  //     that mentions the moved field fail, including for the Versions that
+  //     still have it. The user asked a perfectly good question about five
+  //     invoices and got an exception because a sixth invoice is newer.
+  //
+  //   - MATCH NOTHING, QUIETLY. The failure mode every lenient store is
+  //     criticized for: ask "which invoices are in DEM" and get "none",
+  //     when the truth is "none THAT I LOOKED AT". A wrong answer that looks
+  //     like an answer is worse than an error.
+  //
+  // So: DECIDE BY WHETHER THE QUESTION IS ANSWERABLE ANYWHERE.
+  //
+  //     If the path resolves on NO type the query names, the query is a
+  //     mistake (a typo, a field that was never there) and it fails, exactly
+  //     as before — this is the case that protects `item.invoiceNumbr`.
+  //
+  //     If it resolves on SOME type, the ones that cannot answer go UNKNOWN,
+  //     and every skip is reported in `meta.skippedFilters`.
+  //
+  // UNKNOWN IS SPELLED `NULL`, WHICH MEANS SQL'S OWN THREE-VALUED LOGIC DOES
+  // THE COMPOSITION FOR US — and gets the hard case right for free. Under
+  // `any`, `NULL OR true` is true, so a branch that can answer still
+  // contributes its rows. Under `not`, `NOT NULL` is NULL, so a type that
+  // could not evaluate the predicate is NOT swept into the negation: asking
+  // for "invoices NOT in DEM" never hands back 2.x invoices on the grounds
+  // that we failed to look. Silent LOSS is a smaller lie than silent GAIN,
+  // and this keeps both honest by refusing to guess in either direction. The
+  // client-side matcher (instance-filter-matcher.ts) already reasons this way
+  // — its `unresolvable` result composes through `combineAnd`/`combineOr`/
+  // `negate` with the same truth table — so this brings the SQL engine into
+  // line with the matcher rather than inventing a second semantics.
+  //
+  // The whole thing is skipped unless the query names at least two distinct
+  // types, so the ordinary single-type search pays one array scan and no
+  // definition lookups, and its behavior is bit-for-bit what it always was.
+  private async reconcileFilterFields(
+    expression: CardExpression,
+    policy: MissingFieldPolicy,
+  ): Promise<{
+    expression: CardExpression;
+    skipped: SkippedFilterPredicate[];
+  }> {
+    if (policy === 'error') {
+      return { expression, skipped: [] };
+    }
+    // Every field predicate — eq / in / contains / range — is wrapped in a
+    // `field-arity` node carrying its own (type, path), and `every`/`any`
+    // flatten their operands, so the compiled filter is a flat array and these
+    // nodes are exactly the places a path is resolved. (`matches` builds no
+    // such node: full-text search names no field, which is precisely why it is
+    // the one predicate that spans a shape break unaided.)
+    let nodes = expression.filter(isFieldArityNode);
+    let typeKeys = new Set(nodes.map((node) => stringify(node.type)));
+    if (typeKeys.size < 2) {
+      // One type in play: there is no second opinion that could make an
+      // unresolvable path anything other than a mistake.
+      return { expression, skipped: [] };
+    }
+
+    // Probe each distinct (type, path) once. `handleFieldQuery` is the same
+    // resolution the compile will do, so a probe that passes cannot fail later
+    // and a probe that fails names the real reason.
+    let probes = [
+      ...new Map(
+        nodes.map(
+          (node) => [`${stringify(node.type)}|${node.path}`, node] as const,
+        ),
+      ).values(),
+    ];
+    let results = await Promise.all(
+      probes.map(async (node) => {
+        try {
+          await this.handleFieldQuery(
+            fieldQuery(node.path, node.type, false, 'filter'),
+          );
+          return { node, error: undefined };
+        } catch (err: unknown) {
+          if (isUnanswerableFieldError(err)) {
+            return { node, error: err };
+          }
+          throw err;
+        }
+      }),
+    );
+
+    let answeredSomewhere = new Set(
+      results.filter((r) => !r.error).map((r) => r.node.path),
+    );
+    let skipKeys = new Set<string>();
+    let skipped: SkippedFilterPredicate[] = [];
+    for (let { node, error } of results) {
+      if (!error || !answeredSomewhere.has(node.path)) {
+        // No type in this query can answer this path — let the compile below
+        // throw, so the caller gets the real diagnostic rather than an empty
+        // result set.
+        continue;
+      }
+      skipKeys.add(`${stringify(node.type)}|${node.path}`);
+      skipped.push({
+        path: node.path,
+        type: node.type,
+        // Narrowed on the nonsearchable side: it structurally subsumes the
+        // nonexistent-field shape, so a negative guard on the latter would
+        // narrow both away.
+        reason: isFilterRefersToNonsearchableFieldError(error)
+          ? error.reason
+          : 'nonexistent-field',
+        message: error.message,
+      });
+    }
+    if (skipKeys.size === 0) {
+      return { expression, skipped: [] };
+    }
+    return {
+      expression: expression.map((element) =>
+        isFieldArityNode(element) &&
+        skipKeys.has(`${stringify(element.type)}|${element.path}`)
+          ? // SQL UNKNOWN. Not `FALSE`: `NOT FALSE` is TRUE, which would let a
+            // negated filter claim rows it never evaluated.
+            dbExpression({ pg: 'NULL::boolean', sqlite: 'NULL' })
+          : element,
+      ),
+      skipped,
+    };
   }
 
   private filterCondition(
@@ -1988,6 +2200,14 @@ function removeBrackets(pathTraveled: string) {
   return pathTraveled.replace(/\[\]/g, '');
 }
 
+function isFieldArityNode(element: unknown): element is FieldArity {
+  return (
+    typeof element === 'object' &&
+    element !== null &&
+    (element as { kind?: unknown }).kind === 'field-arity'
+  );
+}
+
 function isFieldPlural(field: FieldDefinition): boolean {
   return field.type === 'containsMany' || field.type === 'linksToMany';
 }
@@ -2044,11 +2264,10 @@ async function getField(
         },
       } as FieldDefinition;
     }
-    throw new Error(
-      `Your filter refers to a nonexistent field "${cleansedPath}" on type ${stringify(
-        definition.codeRef,
-      )}`,
-    );
+    throw new FilterRefersToNonexistentFieldError({
+      type: definition.codeRef,
+      path: cleansedPath,
+    });
   }
   return field;
 }

@@ -158,13 +158,61 @@ export function emitSearchTiming(line: string): void {
   (searchTimingLog ??= logger('realm:search-timing')).info(line);
 }
 
+// TWO KINDS OF PER-REALM FAILURE, WHICH MUST NOT BE TREATED ALIKE.
+//
+// "This realm is unavailable" is a property of that realm — a timeout, a dead
+// replica, a 5xx. One such realm must not sink a federated search, so it is
+// logged and its results are simply absent. That is what the settle semantics
+// below exist for.
+//
+// "Your question is malformed" is a property of the QUERY, and the query is the
+// same for every realm — so a filter naming a field nothing has, or a page size
+// over the cap, fails identically everywhere. Swallowing it turns a 400 into an
+// empty 200: the caller is told "no results" when the truth is "that question
+// was never answerable". That is exactly the silent-wrong-answer failure the
+// missing-field reconciler exists to prevent (see
+// docs/missing-field-query-semantics.md), reintroduced one layer up — and it is
+// what made `onMissingField: "error"`, whose entire job is to fail loudly,
+// return an empty success through federation.
+//
+// So client errors propagate and infrastructure errors stay swallowed.
+//
+// The check is structural — an HTTP-ish 4xx `status`, or a known error `name` —
+// rather than `instanceof`. Two reasons: the error crosses a process boundary on
+// the client fan-out (where it is rebuilt as a plain Error carrying `status`),
+// and importing the error classes here would put search-utils in an import cycle
+// with the query engine that throws them.
+const CLIENT_QUERY_ERROR_NAMES = new Set([
+  // The filter names a field no type in the query has, or one unreachable
+  // through the search doc. Note `FilterRefersToNonexistentTypeError` is
+  // deliberately absent: it is already answered as an empty result inside
+  // `_search`, so it never rejects.
+  'FilterRefersToNonexistentFieldError',
+  'FilterRefersToNonsearchableFieldError',
+  'InvalidQueryError',
+  'SearchRequestError',
+  'SearchBoundError',
+]);
+
+export function isClientQueryError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+  let { status, name } = error as { status?: unknown; name?: unknown };
+  if (typeof status === 'number' && status >= 400 && status < 500) {
+    return true;
+  }
+  return typeof name === 'string' && CLIENT_QUERY_ERROR_NAMES.has(name);
+}
+
 // Shared fan-out for the federated search runners. Filters out dead realms,
-// runs each surviving realm's search concurrently, logs (never throws on) a
-// per-realm failure so one realm can't sink the whole federation, and returns
-// the fulfilled docs in input order for the caller to merge. The two public
-// runners differ only in which per-realm method they call, how they label a
-// failure, and which merge they apply — the settle semantics, input ordering,
-// and per-realm error isolation are identical and live here.
+// runs each surviving realm's search concurrently, logs a per-realm
+// infrastructure failure so one realm can't sink the whole federation, and
+// returns the fulfilled docs in input order for the caller to merge. A client
+// error is rethrown instead — see above. The two public runners differ only in
+// which per-realm method they call, how they label a failure, and which merge
+// they apply — the settle semantics, input ordering, and per-realm error
+// isolation are identical and live here.
 export async function fanOutRealmSearch<R extends { url?: string }, Doc>(
   realms: Array<R | null | undefined>,
   query: Query,
@@ -186,6 +234,15 @@ export async function fanOutRealmSearch<R extends { url?: string }, Doc>(
     queryLabel = JSON.stringify(query);
   } catch {
     // ignore stringify errors, fallback label already set
+  }
+  // A malformed query fails the same way on every realm, so the first such
+  // rejection is the answer for the whole federation — rethrow it rather than
+  // reporting an empty success. Checked before the logging pass so a client
+  // error is not also written to the log as a realm failure, which it isn't.
+  for (let result of results) {
+    if (result.status === 'rejected' && isClientQueryError(result.reason)) {
+      throw result.reason;
+    }
   }
   results.forEach((result, index) => {
     if (result.status === 'rejected') {

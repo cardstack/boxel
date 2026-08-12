@@ -1660,6 +1660,181 @@ module('Unit | query', function (hooks) {
     }
   });
 
+  // A query can name more than one type — most often because a version range
+  // expanded into an `any` over the exact Versions the index holds — and those
+  // types do not have to agree about their fields. `venue` stands in for that
+  // here: Event has it, Person does not.
+  module('a field one type has and another does not', function () {
+    test(`the type that cannot answer sits the predicate out, and says so`, async function (assert) {
+      let { mango, vangogh, mangoBirthday } = testCards;
+      await setupIndex(dbAdapter, [
+        mango,
+        vangogh,
+        {
+          card: mangoBirthday,
+          data: {
+            search_doc: {
+              cardTitle: mangoBirthday.cardTitle,
+              venue: (mangoBirthday as any).venue,
+            },
+          },
+        },
+      ]);
+      let personType = await personCardType(testCards);
+      let eventTypeRef = await eventType(testCards);
+
+      let { cards: results, meta } = await indexQueryEngine.searchCards(
+        new URL(testRealmURL),
+        {
+          filter: {
+            any: [
+              { on: personType, eq: { venue: 'Dog Park' } },
+              { on: eventTypeRef, eq: { venue: 'Dog Park' } },
+            ],
+          },
+        },
+      );
+
+      assert.deepEqual(
+        getIds(results),
+        [mangoBirthday.id],
+        'the type that has the field still answers',
+      );
+      assert.deepEqual(
+        meta.skippedFilters?.map(({ path, reason }) => ({ path, reason })),
+        [{ path: 'venue', reason: 'nonexistent-field' }],
+        'the skip is reported rather than silently shrinking the result set',
+      );
+      assert.deepEqual(
+        meta.skippedFilters?.[0].type,
+        personType,
+        'the report names the type that could not answer',
+      );
+    });
+
+    test(`a skipped predicate is UNKNOWN, so negation does not claim rows it never evaluated`, async function (assert) {
+      let { mango, vangogh, mangoBirthday } = testCards;
+      await setupIndex(dbAdapter, [
+        mango,
+        vangogh,
+        {
+          card: mangoBirthday,
+          data: {
+            search_doc: {
+              cardTitle: mangoBirthday.cardTitle,
+              venue: (mangoBirthday as any).venue,
+            },
+          },
+        },
+      ]);
+      let personType = await personCardType(testCards);
+      let eventTypeRef = await eventType(testCards);
+
+      let { cards: results, meta } = await indexQueryEngine.searchCards(
+        new URL(testRealmURL),
+        {
+          filter: {
+            not: {
+              any: [
+                { on: personType, eq: { venue: 'Dog Park' } },
+                { on: eventTypeRef, eq: { venue: 'Dog Park' } },
+              ],
+            },
+          },
+        },
+      );
+
+      // The event is excluded because it genuinely matched. The two people are
+      // excluded because nothing in this query could evaluate `venue` for them
+      // — SQL's `NOT UNKNOWN` is UNKNOWN. Handing them back would be a silent
+      // GAIN of rows the query never actually tested, a worse lie than the
+      // silent loss the skip report already covers.
+      assert.deepEqual(getIds(results), [], 'nothing is claimed on a guess');
+      assert.strictEqual(
+        meta.skippedFilters?.length,
+        1,
+        'the skip is still reported under negation',
+      );
+    });
+
+    test(`a path NO type in the query has is still an error`, async function (assert) {
+      let { mango, mangoBirthday } = testCards;
+      await setupIndex(dbAdapter, [mango, mangoBirthday]);
+      let personType = await personCardType(testCards);
+      let eventTypeRef = await eventType(testCards);
+
+      try {
+        await indexQueryEngine.searchCards(new URL(testRealmURL), {
+          filter: {
+            any: [
+              { on: personType, eq: { nonExistentField: 'hello' } },
+              { on: eventTypeRef, eq: { nonExistentField: 'hello' } },
+            ],
+          },
+        });
+        throw new Error('failed to throw expected exception');
+      } catch (err: any) {
+        assert.true(
+          err.message.includes('nonexistent field "nonExistentField"'),
+          `a typo cannot hide behind leniency: ${err.message}`,
+        );
+      }
+    });
+
+    test(`onMissingField: 'error' turns the skip back into a failure`, async function (assert) {
+      let { mango, mangoBirthday } = testCards;
+      await setupIndex(dbAdapter, [mango, mangoBirthday]);
+      let personType = await personCardType(testCards);
+      let eventTypeRef = await eventType(testCards);
+
+      try {
+        await indexQueryEngine.searchCards(new URL(testRealmURL), {
+          onMissingField: 'error',
+          filter: {
+            any: [
+              { on: personType, eq: { venue: 'Dog Park' } },
+              { on: eventTypeRef, eq: { venue: 'Dog Park' } },
+            ],
+          },
+        });
+        throw new Error('failed to throw expected exception');
+      } catch (err: any) {
+        assert.true(
+          err.message.includes('nonexistent field "venue"'),
+          `the precision knob refuses a partial answer: ${err.message}`,
+        );
+      }
+    });
+
+    test(`a single-type query reports nothing, and is unchanged`, async function (assert) {
+      let { mangoBirthday } = testCards;
+      await setupIndex(dbAdapter, [
+        {
+          card: mangoBirthday,
+          data: {
+            search_doc: {
+              cardTitle: mangoBirthday.cardTitle,
+              venue: (mangoBirthday as any).venue,
+            },
+          },
+        },
+      ]);
+      let eventTypeRef = await eventType(testCards);
+
+      let { cards: results, meta } = await indexQueryEngine.searchCards(
+        new URL(testRealmURL),
+        { filter: { on: eventTypeRef, eq: { venue: 'Dog Park' } } },
+      );
+
+      assert.deepEqual(getIds(results), [mangoBirthday.id], 'results correct');
+      assert.strictEqual(
+        meta.skippedFilters,
+        undefined,
+        'the reconciler stays out of the ordinary single-type path entirely',
+      );
+    });
+  });
+
   test(`it can filter on a plural primitive field using 'eq'`, async function (assert) {
     let { mango, vangogh } = testCards;
     await setupIndex(dbAdapter, [

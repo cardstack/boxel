@@ -2,6 +2,7 @@ import {
   assertQuery,
   InvalidQueryError,
   type Filter,
+  type MissingFieldPolicy,
   type Query,
   type Sort,
 } from './query.ts';
@@ -105,6 +106,7 @@ const SEARCH_ENTRY_QUERY_MEMBERS = [
   'fields',
   'cardUrls',
   'scope',
+  'onMissingField',
 ];
 
 // Which row kinds a search spans. Pins `boxel_index.type` directly, so it works
@@ -662,6 +664,11 @@ export function parseSearchEntryQueryFromPayload(
   if (record.page !== undefined) {
     itemQuery.page = record.page;
   }
+  if (record.onMissingField !== undefined) {
+    // The missing-field policy rides the item query, since it governs how the
+    // item filter compiles. `assertQuery` below validates the value.
+    itemQuery.onMissingField = record.onMissingField;
+  }
   try {
     assertQuery(itemQuery);
   } catch (e) {
@@ -877,6 +884,7 @@ export interface SearchEntryWireQuery {
   cardUrls?: string[];
   realms?: string[];
   scope?: SearchEntryScope;
+  onMissingField?: MissingFieldPolicy;
 }
 
 function wireFilterFromFilter(filter: Filter): SearchEntryWireFilter {
@@ -938,6 +946,13 @@ export function searchEntryWireQueryFromQuery(
   if (opts?.scope) {
     wire.scope = opts.scope;
   }
+  if (query.onMissingField) {
+    // The missing-field policy is part of the question, not of the transport,
+    // so it has to survive the trip to the wire — this function is an explicit
+    // allowlist, and a member omitted here is silently dropped rather than
+    // rejected.
+    wire.onMissingField = query.onMissingField;
+  }
   return wire;
 }
 
@@ -966,6 +981,16 @@ export function combineSearchEntryResults(
     combined.meta.page.total += doc.meta?.page?.total ?? 0;
     if (combined.meta.htmlQuery == null && doc.meta?.htmlQuery != null) {
       combined.meta.htmlQuery = doc.meta.htmlQuery;
+    }
+    // Skipped predicates accumulate across realms rather than collapsing: the
+    // same field path can be unanswerable on a different type in each realm,
+    // and dropping any of them would under-report which types sat the question
+    // out — the one thing this report exists to prevent.
+    if (doc.meta?.skippedFilters?.length) {
+      combined.meta.skippedFilters = [
+        ...(combined.meta.skippedFilters ?? []),
+        ...doc.meta.skippedFilters,
+      ];
     }
     for (let resource of doc.included ?? []) {
       if (resource.id) {

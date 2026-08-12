@@ -28,7 +28,18 @@ interface QueryCommon {
     size: number;
     generation?: number;
   };
+  // What to do when a filter names a field that one of the query's types does
+  // not have — which a query spanning a version range can do without anyone
+  // having made a mistake. Defaults to 'skip': the types that cannot answer the
+  // predicate sit it out, and every skip is named in `meta.skippedFilters`.
+  // 'error' is the precision knob — any unanswerable predicate fails the whole
+  // query, for a caller that would rather see nothing than see part of the
+  // picture. Either way, a path that NO type in the query has is a mistake and
+  // always fails.
+  onMissingField?: MissingFieldPolicy;
 }
+
+export type MissingFieldPolicy = 'skip' | 'error';
 
 // fields is only valid when asData is true. This discriminated union
 // makes it a compile-time error to specify fields without asData.
@@ -258,6 +269,15 @@ export function assertQuery(
         if (typeof value !== 'boolean') {
           throw new InvalidQueryError(
             `${pointer.concat('asData').join('/') || '/'}: asData must be a boolean`,
+          );
+        }
+        break;
+      case 'onMissingField':
+        if (value !== 'skip' && value !== 'error') {
+          throw new InvalidQueryError(
+            `${
+              pointer.concat('onMissingField').join('/') || '/'
+            }: onMissingField must be "skip" or "error"`,
           );
         }
         break;

@@ -181,6 +181,10 @@ import { RealmAuthDataSource } from './realm-auth-data-source.ts';
 import { AliasCache } from './cache/alias-cache.ts';
 import { fetcher } from './fetcher.ts';
 import { RealmIndexQueryEngine } from './realm-index-query-engine.ts';
+import {
+  isFilterRefersToNonexistentFieldError,
+  isFilterRefersToNonsearchableFieldError,
+} from './index-query-engine.ts';
 import { RealmIndexUpdater } from './realm-index-updater.ts';
 import serialize from './file-serializer.ts';
 import { validateWriteSize } from './write-size-validation.ts';
@@ -5882,6 +5886,24 @@ export class Realm {
         });
       }
       if (e instanceof SearchRequestError) {
+        return createResponse({
+          body: JSON.stringify(buildSearchErrorBody(e.message)),
+          init: {
+            status: 400,
+            headers: { 'content-type': SupportedMimeType.CardJson },
+          },
+          requestContext,
+        });
+      }
+      if (
+        isFilterRefersToNonexistentFieldError(e) ||
+        isFilterRefersToNonsearchableFieldError(e)
+      ) {
+        // The filter named a field no type in the query has, or one that can't
+        // be reached through the search doc. Both are malformed requests, and
+        // both reach here only after the missing-field reconciler has already
+        // ruled out ordinary version skew — so this is the caller's mistake and
+        // deserves to say so, rather than reading as a server fault.
         return createResponse({
           body: JSON.stringify(buildSearchErrorBody(e.message)),
           init: {

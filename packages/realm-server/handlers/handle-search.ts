@@ -11,6 +11,7 @@ import {
   sanitizeConsumingRealmHeader,
   SearchBoundError,
   SearchRequestError,
+  isClientQueryError,
   searchEntryRealms,
   sanitizeLoggingCorrelationId,
   SupportedMimeType,
@@ -244,6 +245,18 @@ export default function handleSearch(opts: {
         await setContextResponse(
           ctxt,
           buildSearchErrorResponse(e.message, e.status),
+        );
+        emitTimeline();
+        return;
+      }
+      // A malformed query propagated out of the fan-out (see
+      // `isClientQueryError`) — the caller's mistake, not a realm being down —
+      // so it must read as 400, rather than as a server fault or, worse, as the
+      // empty success it used to be.
+      if (isClientQueryError(e)) {
+        await setContextResponse(
+          ctxt,
+          buildSearchErrorResponse((e as Error).message, 400),
         );
         emitTimeline();
         return;
