@@ -21,6 +21,7 @@ const REALM_USERS = [
   'node-test_realm-server',
   'base_realm',
   'experiments_realm',
+  'atlas_realm',
   'catalog_realm',
   'boxel_homepage_realm',
   'submission_realm',

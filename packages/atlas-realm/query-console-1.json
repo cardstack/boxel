@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "Version Query Console",
+        "summary": "Ask the index questions that span three published Versions of northwind/records, and watch what each Version can and cannot answer."
+      },
+      "query": "{\n  \"filter\": {\n    \"on\": {\n      \"module\": \"https://realm-server.deck-at-rest-poc.localhost/atlas/_packages/northwind/records@*/index\",\n      \"name\": \"Invoice\"\n    },\n    \"eq\": {\n      \"currency.code\": \"DEM\"\n    }\n  }\n}"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": { "self": "./pretui-theme" }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "./query-console",
+        "name": "QueryConsole"
+      }
+    }
+  }
+}

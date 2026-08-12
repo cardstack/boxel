@@ -1,0 +1,30 @@
+{
+  "imports": {
+    "northwind/records/": "/atlas/_packages/northwind/records@1.3.0/",
+    "northwind/records": "/atlas/_packages/northwind/records@1.3.0/index.js",
+    "northwind/records/records": "/atlas/_packages/northwind/records@1.3.0/index.js",
+    "cardstack/contracts/": "/atlas/_packages/cardstack/contracts@1.2.0/",
+    "cardstack/contracts": "/atlas/_packages/cardstack/contracts@1.2.0/index.js",
+    "cardstack/contracts/contracts": "/atlas/_packages/cardstack/contracts@1.2.0/index.js",
+    "openkit/controls/": "/atlas/_packages/openkit/controls@0.2.0/",
+    "openkit/controls": "/atlas/_packages/openkit/controls@0.2.0/index.js",
+    "openkit/controls/controls": "/atlas/_packages/openkit/controls@0.2.0/index.js"
+  },
+  "deck": {
+    "publisher": "ledgerworks",
+    "packages": {
+      "billing-kit": {
+        "version": "1.5.0",
+        "entry": "$DECK/index.gts",
+        "exports": {
+          "./billing-kit": "$DECK/index.gts"
+        }
+      }
+    },
+    "dependencies": {
+      "northwind/records": "^1.2.0",
+      "cardstack/contracts": "^1.0.0",
+      "openkit/controls": "^0.2.0"
+    }
+  }
+}

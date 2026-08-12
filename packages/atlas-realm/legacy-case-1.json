@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "LC-2024-0031 \u00b7 collection case",
+        "summary": "The 1.0.1 case, sixty-one days overdue and still on the oldest published shape."
+      },
+      "paymentTerms": "net-30",
+      "daysOverdue": 61,
+      "amountRecovered": {
+        "value": 2400,
+        "currency": "USD"
+      }
+    },
+    "relationships": {
+      "invoice": {
+        "links": {
+          "self": "./legacy-invoice-1"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "./pretui-theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "./apps/legacy-collections/index",
+        "name": "CollectionCase"
+      }
+    }
+  }
+}

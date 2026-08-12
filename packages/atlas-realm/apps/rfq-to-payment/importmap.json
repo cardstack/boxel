@@ -1,0 +1,12 @@
+{
+  "imports": {
+    "acme/rfq-to-payment": "/atlas/_packages/acme/rfq-to-payment@1.4.1/index.js",
+    "ledgerworks/billing-kit": "/atlas/_packages/ledgerworks/billing-kit@1.5.0/index.js"
+  },
+  "boxel": {
+    "dependencies": {
+      "acme/rfq-to-payment": "^1.2.0",
+      "ledgerworks/billing-kit": "^1.3.0"
+    }
+  }
+}

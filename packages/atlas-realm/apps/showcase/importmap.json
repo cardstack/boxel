@@ -1,0 +1,16 @@
+{
+  "imports": {
+    "cardstack/contracts": "/atlas/_packages/cardstack/contracts@1.2.1/index.js",
+    "cardstack/contracts@0.1.0": "/atlas/_packages/cardstack/contracts@0.1.0/index.js",
+    "cardstack/contracts@0.2.0": "/atlas/_packages/cardstack/contracts@0.2.0/index.js",
+    "openkit/controls": "/atlas/_packages/openkit/controls@1.1.0/index.js",
+    "openkit/controls@0.1.0": "/atlas/_packages/openkit/controls@0.1.0/index.js",
+    "openkit/controls@0.2.0": "/atlas/_packages/openkit/controls@0.2.0/index.js"
+  },
+  "boxel": {
+    "dependencies": {
+      "cardstack/contracts": "^1.1.0",
+      "openkit/controls": "^1.0.0"
+    }
+  }
+}

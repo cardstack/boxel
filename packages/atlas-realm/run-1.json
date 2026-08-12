@@ -1,0 +1,34 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "June close",
+        "summary": "A payment run that puts two majors of the same package on one page."
+      },
+      "runName": "June close \u2014 two majors on one page",
+      "released": {
+        "value": 8100,
+        "currency": "USD"
+      }
+    },
+    "relationships": {
+      "openCase": {
+        "links": {
+          "self": "./case-1"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "./pretui-theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "./apps/rfq-to-payment/index",
+        "name": "PaymentRun"
+      }
+    }
+  }
+}

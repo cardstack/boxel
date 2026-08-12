@@ -1,0 +1,54 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "NW-2026-0417",
+        "summary": "Northwind invoice on records 1.2.0 \u2014 the settled 1.x shape."
+      },
+      "invoiceNumber": "NW-2026-0417",
+      "issuedOn": "2026-06-01",
+      "dueOn": "2026-07-01",
+      "currency": {
+        "code": "USD"
+      },
+      "lines": [
+        {
+          "description": "Realm hosting, Q3",
+          "quantity": 3,
+          "unitPrice": {
+            "value": 1200,
+            "currency": "USD"
+          },
+          "taxRate": {
+            "rate": 0.0825
+          }
+        },
+        {
+          "description": "Onboarding workshop",
+          "quantity": 1,
+          "unitPrice": {
+            "value": 4500,
+            "currency": "USD"
+          },
+          "taxRate": {
+            "rate": 0.0825
+          }
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "./pretui-theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "./apps/rfq-to-payment/index",
+        "name": "Invoice"
+      }
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "deck": {
+    "publisher": "openkit",
+    "packages": {
+      "controls": {
+        "version": "1.1.0",
+        "entry": "$DECK/index.gts",
+        "exports": {
+          "./controls": "$DECK/index.gts"
+        }
+      }
+    }
+  }
+}

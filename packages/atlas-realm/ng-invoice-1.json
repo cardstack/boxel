@@ -1,0 +1,50 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "NG-2026-0001",
+        "summary": "Northwind invoice on records 2.0.0 \u2014 the breaking major: flat currency, items[].label, billTo."
+      },
+      "invoiceNumber": "NG-2026-0001",
+      "issuedOn": "2026-07-14",
+      "dueOn": "2026-08-13",
+      "currency": "USD",
+      "billTo": "Northwind Trading Co.",
+      "taxRate": {
+        "rate": 0.0825
+      },
+      "items": [
+        {
+          "label": "Onboarding workshop",
+          "quantity": 1,
+          "unitPrice": {
+            "value": 4500,
+            "currency": "USD"
+          }
+        },
+        {
+          "label": "Realm hosting, Q4",
+          "quantity": 3,
+          "unitPrice": {
+            "value": 1200,
+            "currency": "USD"
+          }
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "./pretui-theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "./apps/next-gen/index",
+        "name": "Invoice"
+      }
+    }
+  }
+}

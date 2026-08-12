@@ -1,0 +1,30 @@
+{
+  "imports": {
+    "ledgerworks/billing-kit/": "/atlas/_packages/ledgerworks/billing-kit@1.5.0/",
+    "ledgerworks/billing-kit": "/atlas/_packages/ledgerworks/billing-kit@1.5.0/index.js",
+    "ledgerworks/billing-kit/billing-kit": "/atlas/_packages/ledgerworks/billing-kit@1.5.0/index.js",
+    "cardstack/contracts/": "/atlas/_packages/cardstack/contracts@1.2.1/",
+    "cardstack/contracts": "/atlas/_packages/cardstack/contracts@1.2.1/index.js",
+    "cardstack/contracts/contracts": "/atlas/_packages/cardstack/contracts@1.2.1/index.js",
+    "openkit/controls/": "/atlas/_packages/openkit/controls@1.1.0/",
+    "openkit/controls": "/atlas/_packages/openkit/controls@1.1.0/index.js",
+    "openkit/controls/controls": "/atlas/_packages/openkit/controls@1.1.0/index.js"
+  },
+  "deck": {
+    "publisher": "acme",
+    "packages": {
+      "rfq-to-payment": {
+        "version": "1.4.1",
+        "entry": "$DECK/index.gts",
+        "exports": {
+          "./rfq-to-payment": "$DECK/index.gts"
+        }
+      }
+    },
+    "dependencies": {
+      "ledgerworks/billing-kit": "^1.3.0",
+      "cardstack/contracts": "^1.0.0",
+      "openkit/controls": "^1.0.0"
+    }
+  }
+}

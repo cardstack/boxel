@@ -49,6 +49,8 @@ if [ -z "$MATRIX_REGISTRATION_SHARED_SECRET" ]; then
 fi
 
 START_EXPERIMENTS=$(if [ -z "$SKIP_EXPERIMENTS" ]; then echo "true"; else echo ""; fi)
+# The Atlas Slice: the versioned vertical from docs/atlas-slice-version-scenarios.md.
+START_ATLAS=$(if [ -z "$SKIP_ATLAS" ]; then echo "true"; else echo ""; fi)
 START_CATALOG=true
 if [ "${SKIP_CATALOG:-}" = "true" ]; then
   START_CATALOG=""
@@ -131,6 +133,11 @@ LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   ${START_EXPERIMENTS:+--username='experiments_realm'} \
   ${START_EXPERIMENTS:+--fromUrl="${REALM_BASE_URL}/experiments/"} \
   ${START_EXPERIMENTS:+--toUrl="${REALM_BASE_URL}/experiments/"} \
+  \
+  ${START_ATLAS:+--path='../atlas-realm'} \
+  ${START_ATLAS:+--username='atlas_realm'} \
+  ${START_ATLAS:+--fromUrl="${REALM_BASE_URL}/atlas/"} \
+  ${START_ATLAS:+--toUrl="${REALM_BASE_URL}/atlas/"} \
   \
   --path='../openrouter-realm' \
   --username='openrouter_realm' \

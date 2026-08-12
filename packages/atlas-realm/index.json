@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "Atlas Slice"
+      },
+      "signage": "L06 \u2192 L02",
+      "purpose": "One vertical column of the Integrated Software Layer Matrix, published as six packages across thirty Versions.",
+      "moduleOrder": "pinned,about,browse",
+      "pinnedSize": "regular",
+      "defaultView": "grid"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "./pretui-theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/workspace",
+        "name": "Workspace"
+      }
+    }
+  }
+}

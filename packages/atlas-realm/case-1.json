@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "NW-2026-0417 \u00b7 collection case",
+        "summary": "A settled 1.2.0 case: nothing overdue, opened to keep the payment run honest."
+      },
+      "paymentTerms": "net-30",
+      "daysOverdue": 0,
+      "amountRecovered": {
+        "value": 0,
+        "currency": "USD"
+      }
+    },
+    "relationships": {
+      "invoice": {
+        "links": {
+          "self": "./invoice-1"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "./pretui-theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "./apps/rfq-to-payment/index",
+        "name": "CollectionCase"
+      }
+    }
+  }
+}

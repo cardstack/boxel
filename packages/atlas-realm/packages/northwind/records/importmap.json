@@ -1,0 +1,26 @@
+{
+  "imports": {
+    "cardstack/contracts/": "/atlas/_packages/cardstack/contracts@1.2.0/",
+    "cardstack/contracts": "/atlas/_packages/cardstack/contracts@1.2.0/index.js",
+    "cardstack/contracts/contracts": "/atlas/_packages/cardstack/contracts@1.2.0/index.js",
+    "iso/money-codes/": "/atlas/_packages/iso/money-codes@1.3.0/",
+    "iso/money-codes": "/atlas/_packages/iso/money-codes@1.3.0/index.js",
+    "iso/money-codes/money-codes": "/atlas/_packages/iso/money-codes@1.3.0/index.js"
+  },
+  "deck": {
+    "publisher": "northwind",
+    "packages": {
+      "records": {
+        "version": "1.3.0",
+        "entry": "$DECK/index.gts",
+        "exports": {
+          "./records": "$DECK/index.gts"
+        }
+      }
+    },
+    "dependencies": {
+      "cardstack/contracts": "^1.0.0",
+      "iso/money-codes": "^1.0.0"
+    }
+  }
+}

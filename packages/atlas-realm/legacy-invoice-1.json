@@ -1,0 +1,54 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "LC-2024-0031",
+        "summary": "The one invoice still on records 1.0.1 \u2014 the oldest published shape in the slice."
+      },
+      "invoiceNumber": "LC-2024-0031",
+      "issuedOn": "2024-09-02",
+      "dueOn": "2024-10-02",
+      "currency": {
+        "code": "USD"
+      },
+      "lines": [
+        {
+          "description": "Retainer, Q4",
+          "quantity": 3,
+          "unitPrice": {
+            "value": 1200,
+            "currency": "USD"
+          },
+          "taxRate": {
+            "rate": 0.0825
+          }
+        },
+        {
+          "description": "Onboarding workshop",
+          "quantity": 1,
+          "unitPrice": {
+            "value": 4500,
+            "currency": "USD"
+          },
+          "taxRate": {
+            "rate": 0.0825
+          }
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "./pretui-theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "./apps/legacy-collections/index",
+        "name": "Invoice"
+      }
+    }
+  }
+}

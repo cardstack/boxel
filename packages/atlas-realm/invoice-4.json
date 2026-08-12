@@ -1,0 +1,43 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "NW-2026-0511",
+        "summary": "Northwind invoice on records 1.2.0, sixty-day terms."
+      },
+      "invoiceNumber": "NW-2026-0511",
+      "issuedOn": "2026-06-22",
+      "dueOn": "2026-08-22",
+      "currency": {
+        "code": "KWD"
+      },
+      "lines": [
+        {
+          "description": "Regional compliance audit",
+          "quantity": 1,
+          "unitPrice": {
+            "value": 3417.125,
+            "currency": "KWD"
+          },
+          "taxRate": {
+            "rate": 0.05
+          }
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "./pretui-theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "./apps/rfq-to-payment/index",
+        "name": "Invoice"
+      }
+    }
+  }
+}

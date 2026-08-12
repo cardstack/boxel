@@ -1,0 +1,10 @@
+{
+  "imports": {
+    "ledgerworks/billing-kit": "/atlas/_packages/ledgerworks/billing-kit@1.0.1/index.js"
+  },
+  "boxel": {
+    "dependencies": {
+      "ledgerworks/billing-kit": "~1.0.0"
+    }
+  }
+}

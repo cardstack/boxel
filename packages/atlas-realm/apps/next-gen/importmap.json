@@ -1,0 +1,10 @@
+{
+  "imports": {
+    "northwind/records": "/atlas/_packages/northwind/records@2.1.0/index.js"
+  },
+  "boxel": {
+    "dependencies": {
+      "northwind/records": "^2.0.0"
+    }
+  }
+}

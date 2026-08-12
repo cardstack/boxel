@@ -1,0 +1,40 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "Three versions, one page",
+        "summary": "The whole argument in one card: three published Versions of northwind/records rendering side by side, none degrading the others."
+      },
+      "title": "Three versions, one page",
+      "priceAsPublished": {
+        "value": 1200,
+        "currency": "USD"
+      },
+      "priceIntl": {
+        "value": 1200,
+        "currency": "USD"
+      },
+      "price": {
+        "value": 1200,
+        "currency": "USD"
+      },
+      "taxRate": {
+        "rate": 0.0825
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "./pretui-theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "./apps/showcase/showcase",
+        "name": "Showcase"
+      }
+    }
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "NW-2026-0502",
+        "summary": "Northwind invoice on records 1.2.0."
+      },
+      "invoiceNumber": "NW-2026-0502",
+      "issuedOn": "2026-06-20",
+      "dueOn": "2026-07-20",
+      "currency": {
+        "code": "JPY"
+      },
+      "lines": [
+        {
+          "description": "Tokyo datacentre egress",
+          "quantity": 12,
+          "unitPrice": {
+            "value": 148000,
+            "currency": "JPY"
+          },
+          "taxRate": {
+            "rate": 0.1
+          }
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "./pretui-theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "./apps/rfq-to-payment/index",
+        "name": "Invoice"
+      }
+    }
+  }
+}

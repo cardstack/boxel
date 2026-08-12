@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "NW-2001-0088 \u00b7 collection case",
+        "summary": "The deep-history case. Twenty-five years overdue, in a currency that no longer exists."
+      },
+      "paymentTerms": "net-30",
+      "daysOverdue": 8974,
+      "amountRecovered": {
+        "value": 0,
+        "currency": "DEM"
+      }
+    },
+    "relationships": {
+      "invoice": {
+        "links": {
+          "self": "./invoice-2"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "./pretui-theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "./apps/rfq-to-payment/index",
+        "name": "CollectionCase"
+      }
+    }
+  }
+}

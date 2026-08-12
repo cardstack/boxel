@@ -1,0 +1,42 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "NG-2026-0002",
+        "summary": "Northwind invoice on records 2.0.0, denominated in DEM."
+      },
+      "invoiceNumber": "NG-2026-0002",
+      "issuedOn": "2026-07-20",
+      "dueOn": "2026-09-18",
+      "currency": "DEM",
+      "billTo": "Legacy Ledger GmbH",
+      "taxRate": {
+        "rate": 0.19
+      },
+      "items": [
+        {
+          "label": "Tokyo datacentre egress",
+          "quantity": 2,
+          "unitPrice": {
+            "value": 880,
+            "currency": "DEM"
+          }
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "./pretui-theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "./apps/next-gen/index",
+        "name": "Invoice"
+      }
+    }
+  }
+}

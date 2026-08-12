@@ -1,0 +1,43 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "NW-2001-0088",
+        "summary": "Northwind invoice on records 1.2.0, denominated in DEM \u2014 a code withdrawn in 2002."
+      },
+      "invoiceNumber": "NW-2001-0088",
+      "issuedOn": "2001-11-14",
+      "dueOn": "2001-12-14",
+      "currency": {
+        "code": "DEM"
+      },
+      "lines": [
+        {
+          "description": "Legacy ledger migration",
+          "quantity": 1,
+          "unitPrice": {
+            "value": 9800,
+            "currency": "DEM"
+          },
+          "taxRate": {
+            "rate": 0.16
+          }
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "./pretui-theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "./apps/rfq-to-payment/index",
+        "name": "Invoice"
+      }
+    }
+  }
+}
