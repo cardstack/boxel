@@ -52,11 +52,16 @@ If you've been stitching together Ajv + jq + Formula.js + a custom rule engine, 
 
 ## Install
 
-```sh
-npm install @cardstack/bxl
+Inside this monorepo, depend on the workspace package:
+
+```jsonc
+// package.json
+"dependencies": {
+  "@cardstack/bxl": "workspace:*"
+}
 ```
 
-Requires Node `>=18.17`. The default entry keeps heavyweight Formula.js dependencies in lazy chunks; the linter-only bundle strips formula helpers for editor tooling.
+Requires Node `>=24` — the package ships raw erasable TypeScript that Node runs via type stripping. The default entry keeps heavyweight Formula.js dependencies in lazy chunks; the `./linter` sub-entry gives editor tooling parser-only diagnostics without the formula helpers.
 
 ---
 

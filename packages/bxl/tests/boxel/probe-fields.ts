@@ -6,7 +6,7 @@
 // fix lands here first, in BXL CI.
 //
 // The probe fields are deliberately designed to exercise specific
-// quirks documented in the port doc:
+// compiler and runtime rules:
 //   probeRiskFlag           — cascading-computed reference, plain-string
 //                             with jq if/else, PascalCase fallback (§12,
 //                             §13)

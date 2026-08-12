@@ -156,7 +156,9 @@ function ieeeNextafter(x: number, y: number): number {
   if (x === 0) return y > 0 ? Number.MIN_VALUE : -Number.MIN_VALUE;
   let { hi, lo } = f64ToBits(x);
   // Increase magnitude when (x < y) === (x > 0); else decrease.
-  const increasing = x < y === x > 0;
+  // Magnitude grows when the step direction matches the sign of x.
+  const steppingUp = x < y;
+  const increasing = steppingUp === x > 0;
   if (increasing) {
     if (lo === 0xffffffff) {
       hi = (hi + 1) >>> 0;

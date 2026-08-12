@@ -17,7 +17,7 @@ The pinned YAML corpus contains 1,227 unique assertions:
 - 348 ListObjects assertions;
 - 388 ListUsers assertions.
 
-`npm run test:authorization:conformance` must exit non-zero while any assertion
+`pnpm test:authorization:conformance` must exit non-zero while any assertion
 is unsupported, cannot be imported, returns the wrong result, or produces the
 wrong error classification. Unsupported work is never treated as a skip.
 
@@ -28,13 +28,13 @@ unsupported cases; each category makes the command exit non-zero.
 Run fixture integrity checks independently with:
 
 ```sh
-npm run fixtures:authorization:verify
+pnpm fixtures:authorization:verify
 ```
 
 Run the complete semantic gate with:
 
 ```sh
-npm run test:authorization:conformance
+pnpm test:authorization:conformance
 ```
 
 The OpenFGA transformer and YAML parser are development-only test tooling.
@@ -67,10 +67,10 @@ changes access.
 Run the broad, non-SLO performance regression gate with:
 
 ```sh
-npm run test:authorization:performance
+pnpm test:authorization:performance
 ```
 
-Use `npm run bench:authorization` for descriptive numbers. The regression gate
+Use `pnpm bench:authorization` for descriptive numbers. The regression gate
 has deliberately generous budgets for shared CI; it detects algorithmic
 blow-ups rather than promising production latency.
 

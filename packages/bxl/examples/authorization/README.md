@@ -7,7 +7,7 @@ and copied identities.
 Run both executable fixtures with:
 
 ```sh
-npm run example:authorization
+pnpm example:authorization
 ```
 
 The coordination fixture covers:

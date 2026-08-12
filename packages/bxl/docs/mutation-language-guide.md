@@ -420,12 +420,12 @@ Count += 1;
 Token boundaries have no semantic meaning. A model might happen to deliver the
 program in these chunks:
 
-| Arriving text | Decoder result | Host action |
-| --- | --- | --- |
-| `Status = "rev` | Incomplete | Buffer; do not evaluate anything. |
+| Arriving text   | Decoder result                                  | Host action                                                     |
+| --------------- | ----------------------------------------------- | --------------------------------------------------------------- |
+| `Status = "rev` | Incomplete                                      | Buffer; do not evaluate anything.                               |
 | `iew";\nCount ` | One complete statement, plus an incomplete tail | Solidify `Status` to `.status`, parse it, and produce its plan. |
-| `+= ` | Incomplete tail | Keep buffering the second statement. |
-| `1;` | Second complete statement | Solidify the compound assignment and produce its plan. |
+| `+= `           | Incomplete tail                                 | Keep buffering the second statement.                            |
+| `1;`            | Second complete statement                       | Solidify the compound assignment and produce its plan.          |
 
 The framing rule is intentionally small: only a top-level semicolon completes
 a statement. The decoder still tracks quoted strings, escapes, comments, and
@@ -587,12 +587,12 @@ allowed to invent different mutation semantics.
 
 ## Pick the AI interface for the interaction
 
-| Interaction | Suggested encoding | Why |
-| --- | --- | --- |
-| A chat assistant visibly edits a Card as it talks | Readable BXL, streaming + statement | Each finished statement can update the UI immediately. |
-| An AI drafts a multi-field change for approval | Readable BXL, streaming + atomic | The host can preview incrementally and commit all-or-nothing. |
-| A model has a strict mutation tool | Structured operations, complete + atomic | JSON Schema constrains operation shapes and literal values. |
-| A long tool call is delivered incrementally | Structured operations, streaming + atomic | Closed operations can be planned early without exposing a partial commit. |
+| Interaction                                       | Suggested encoding                        | Why                                                                       |
+| ------------------------------------------------- | ----------------------------------------- | ------------------------------------------------------------------------- |
+| A chat assistant visibly edits a Card as it talks | Readable BXL, streaming + statement       | Each finished statement can update the UI immediately.                    |
+| An AI drafts a multi-field change for approval    | Readable BXL, streaming + atomic          | The host can preview incrementally and commit all-or-nothing.             |
+| A model has a strict mutation tool                | Structured operations, complete + atomic  | JSON Schema constrains operation shapes and literal values.               |
+| A long tool call is delivered incrementally       | Structured operations, streaming + atomic | Closed operations can be planned early without exposing a partial commit. |
 
 The executable cases `streaming-statement-commits`,
 `streaming-atomic-semicolon-string`, and `workspace-append-entry-point` in the
@@ -639,19 +639,19 @@ grants permission to make it.
 The guide's examples are backed by accepted fixtures rather than illustrative
 syntax alone:
 
-| Theme | Corpus cases |
-| --- | --- |
-| Small field edits | `field-root-update`, `replace-field-root`, `assign-null`, `delete-member`, `copy-compound-field` |
-| Selection and bulk changes | `classroom-update-contained-schedule`, `exact-one-selected-update`, `explicit-bulk-set`, `explicit-bulk-update`, `explicit-bulk-delete` |
-| Evaluation order | `sequential-statement-evaluation`, `assert-then-update` |
-| Ordered collections | `append-contained-value`, `prepend-contained-value`, `delete-contained-value`, `insert-at-revision-pinned-index`, `insert-before-stable-anchor`, `insert-after-stable-anchor`, `move-before-stable-anchor`, `move-after-stable-anchor`, `move-item-to-start`, `move-item-to-end`, `exact-reorder` |
-| Loaded Card relationships | `workspace-append-entry-point`, `contest-set-singular-link`, `unrelate-card`, `zine-reorder-linked-fragments` |
-| Streaming | `streaming-statement-commits`, `streaming-atomic-semicolon-string` |
-| Safety boundaries | every `reject-*` fixture, including raw JSON:API paths, ambiguous selectors, unstable indexes, relationship traversal, and query-backed membership |
+| Theme                      | Corpus cases                                                                                                                                                                                                                                                                                      |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Small field edits          | `field-root-update`, `replace-field-root`, `assign-null`, `delete-member`, `copy-compound-field`                                                                                                                                                                                                  |
+| Selection and bulk changes | `classroom-update-contained-schedule`, `exact-one-selected-update`, `explicit-bulk-set`, `explicit-bulk-update`, `explicit-bulk-delete`                                                                                                                                                           |
+| Evaluation order           | `sequential-statement-evaluation`, `assert-then-update`                                                                                                                                                                                                                                           |
+| Ordered collections        | `append-contained-value`, `prepend-contained-value`, `delete-contained-value`, `insert-at-revision-pinned-index`, `insert-before-stable-anchor`, `insert-after-stable-anchor`, `move-before-stable-anchor`, `move-after-stable-anchor`, `move-item-to-start`, `move-item-to-end`, `exact-reorder` |
+| Loaded Card relationships  | `workspace-append-entry-point`, `contest-set-singular-link`, `unrelate-card`, `zine-reorder-linked-fragments`                                                                                                                                                                                     |
+| Streaming                  | `streaming-statement-commits`, `streaming-atomic-semicolon-string`                                                                                                                                                                                                                                |
+| Safety boundaries          | every `reject-*` fixture, including raw JSON:API paths, ambiguous selectors, unstable indexes, relationship traversal, and query-backed membership                                                                                                                                                |
 
-Running `npm run example:mutation` checks that each accepted normalized plan
+Running `pnpm example:mutation` checks that each accepted normalized plan
 produces its documented after-state and that the corpus retains these design
-areas. `npm run example:mutation:realm` runs the source-evidenced realm-shaped
+areas. `pnpm example:mutation:realm` runs the source-evidenced realm-shaped
 subset separately; it is the integration seam for replacing snapshots with
 Card Store loads from real test realms.
 

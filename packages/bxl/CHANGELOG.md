@@ -10,6 +10,21 @@ versions may change syntax behavior until `1.0.0`.
 
 ## [Unreleased]
 
+### Changed
+
+- **The package ships raw erasable TypeScript from `src/`.** The `exports`
+  map points at `.ts` sources; there is no build step and no `dist/`.
+  Consumers are Node ≥24 (native type stripping) and bundlers that compile
+  TypeScript — `engines.node` is now `>=24`.
+- Relative import specifiers use `.ts` extensions throughout.
+
+### Removed
+
+- **`BXL_BUILD_INFO.buildTime`.** Only a bundling step ever set it; the const
+  now carries `version` and the `features` detection list.
+- **The `bxl` and `bxl-sync` bins.** The CLI and the per-realm bundle-sync
+  flow are not part of this package.
+
 ## [0.5.1] — 2026-08-02
 
 ### Fixed
@@ -124,7 +139,7 @@ versions may change syntax behavior until `1.0.0`.
   responsibility boundary, recurring policy patterns, matrix-bot metadata,
   and five unsafe `inside(.config...)` pipelines found in the ledger-lab
   snapshot.
-- **Browser corpus runner.** `npm run demo:realm-collaboration` opens an
+- **Browser corpus runner.** `pnpm demo:realm-collaboration` opens an
   interactive 18-case results page with stage/status filters and expandable
   source, input, expected/actual output, and compiled jq.
 
@@ -197,7 +212,7 @@ versions may change syntax behavior until `1.0.0`.
 - **Documentation reshuffle.** Migration guide at
   `docs/migration-from-jqxl.md`; full port log moved to
   `docs/internals/port-from-jqxl.md`.
-  TypeDoc setup (`typedoc.json`, `npm run docs:api`) generates an
+  TypeDoc setup (`typedoc.json`, `pnpm docs:api`) generates an
   API reference from the JSDoc that now annotates every public
   symbol in `src/index.ts`.
 

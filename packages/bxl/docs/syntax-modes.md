@@ -206,11 +206,11 @@ Both compile fine; the PascalCase fallback runs label-by-label.
 ## Choosing a tag — quick matrix
 
 | Source has…                             |   Plain string    |   `` jq`…` ``    |    `` fx`…` ``    |
-| --------------------------------------- | :---------------: | :--------------: | :---------------: | --- |
+| --------------------------------------- | :---------------: | :--------------: | :---------------: |
 | `\(…)` interpolation                    | ✗ (escape gotcha) |        ✓         | ✗ (escape gotcha) |
 | PascalCase bare identifier (`Severity`) |         ✓         | ✗ (not resolved) |         ✓         |
 | Excel function (`ROUND`, `IFS`)         |         ✓         |        ✗         |         ✓         |
-| Pure jq pipe (`.x                       |     length`)      |        ✓         |         ✓         | ✓   |
+| Pure jq pipe (`.x \| length`)           |         ✓         |        ✓         |         ✓         |
 | Mixed PascalCase + jq                   |         ✓         |        ✗         |         ✓         |
 | Hot-path performance matters            |        OK         |  ✓ (no compile)  |        OK         |
 

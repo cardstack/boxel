@@ -25,7 +25,7 @@ node examples/hospital/run.ts
 Or with `tsx` if you have it installed locally / globally:
 
 ```sh
-tsx examples/hospital/run.ts
+node examples/hospital/run.ts
 ```
 
 Expected: `8/8 expressions evaluated successfully`.

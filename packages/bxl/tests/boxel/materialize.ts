@@ -6,7 +6,7 @@
 // requires Boxel's runtime; that's exercised in the realm-server's own
 // tests, not here.
 //
-// Maps to port-doc §11a (`as` materialization).
+// Rule §11a: `as` materialization.
 
 import { ok, strictEqual } from 'node:assert';
 import { expression, jq } from '../../src/index.ts';

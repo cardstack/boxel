@@ -162,10 +162,10 @@ check('§11a fx`…` enables readable BXL (Excel-style)', () => {
 check(
   '§11a Excel #N/A from IFS with no match returns null (not a crash)',
   () => {
-    // The realm pattern: a guarded IFS that misses every branch used to
-    // throw `#N/A` from the indexer. `bxl()` now catches Excel sentinels
-    // at the boundary and surfaces null so a StringField/NumberField
-    // gets a clean empty value.
+    // The realm pattern: a guarded IFS that misses every branch raises
+    // `#N/A`. `bxl()` catches Excel sentinels at the boundary and
+    // surfaces null, so a StringField/NumberField gets a clean empty
+    // value instead of a crashed indexer.
     const compute = expression(
       fx`IFS(BpSystolic >= 200, "crisis", BpSystolic >= 180, "stage2")`,
     );

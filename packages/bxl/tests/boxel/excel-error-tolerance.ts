@@ -6,7 +6,7 @@
 // and surface as `null` — not propagated up to the realm
 // indexer, where they'd tear down the card mid-render.
 //
-// Maps to port-doc §11a (Excel-error catch).
+// Rule §11a: Excel errors are caught at the factory boundary.
 
 import { ok, strictEqual } from 'node:assert';
 import { evaluateBxl, expression, fx } from '../../src/index.ts';

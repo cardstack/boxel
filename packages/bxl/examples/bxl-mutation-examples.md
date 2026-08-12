@@ -23,30 +23,19 @@ failure.
 Run the semantic verifier with:
 
 ```sh
-npm run example:mutation
+pnpm example:mutation
 ```
 
 Run only the realm-shaped seam—with committed Workspace, Contest, Classroom,
 Zine, and query-backed relationship snapshots—with:
 
 ```sh
-npm run example:mutation:realm
+pnpm example:mutation:realm
 ```
 
 Those cases retain source-evidence metadata so an integration harness can
 replace the snapshots with loaded Card Store models while reusing the same
 plans and assertions.
-
-Explore and run the same corpus in the standalone browser workbench with:
-
-```sh
-npm run demo:mutation
-```
-
-The workbench includes every accepted and rejected fixture, filters for each
-pattern and feature, readable and schema-solidified source, structured AI tool calls,
-before/after loaded models, normalized plans, and stepwise stream replay. Its
-browser verifier is the same module used by the CLI test above.
 
 The verifier currently checks readable and canonical framing, statement-count
 equivalence, structured-operation identities, coverage of the ten syntax

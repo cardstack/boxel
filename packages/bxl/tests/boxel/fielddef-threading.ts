@@ -13,7 +13,8 @@
 // gives us the same observable behavior at the surface — the next
 // stage can read the prior stage's computeds.
 //
-// Maps to docs/realm-composition.md and port-doc §11a.
+// The composition pattern is documented in docs/realm-composition.md;
+// the materialization rule is §11a.
 
 import { ok, strictEqual } from 'node:assert';
 import { expression, fx } from '../../src/index.ts';
@@ -179,9 +180,9 @@ check(
 );
 
 check('threading survives a `(A - B + C)` parsed-paren shape', () => {
-  // Regression for the parser fix (port-doc §18). A FieldDef that
-  // computes `Earned - (Loss + Expense)` would have rendered the
-  // expense as a positive contribution before the fix.
+  // Parenthesization guard (§18): a FieldDef computing
+  // `Earned - (Loss + Expense)` must not reassociate the parenthesized
+  // sum, which would render the expense as a positive contribution.
   const compute = expression(
     fx`{
       earnedPremium: EarnedPremium,

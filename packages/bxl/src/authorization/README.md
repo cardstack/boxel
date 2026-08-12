@@ -182,17 +182,17 @@ to another change request.
 
 ## Source layout
 
-| File | Responsibility |
-| --- | --- |
+| File                   | Responsibility                                                                        |
+| ---------------------- | ------------------------------------------------------------------------------------- |
 | `bxl-authorization.ts` | Public `bxl-authorization/1` document, snapshot, compiler adapter, and prepared APIs. |
-| `graph-model.ts` | Private `bxl-authorization-ir/1` compatibility model. |
-| `compiler.ts` | Validates and lowers the graph model into immutable IR. |
-| `tuple-index.ts` | Builds the finite relationship index. |
-| `resolver.ts` | Bounded synchronous capability evaluation and traces. |
-| `enumerate.ts` | Low-level ListObjects and ListUsers graph primitives used by public enumeration. |
-| `openfga-recursive.ts` | Synchronous TypeScript adaptation of the pinned OpenFGA recursive userset slice. |
-| `conditions.ts` | BXL policy-profile predicates for the compatibility IR. |
-| `errors.ts` | Fail-closed structured error results. |
+| `graph-model.ts`       | Private `bxl-authorization-ir/1` compatibility model.                                 |
+| `compiler.ts`          | Validates and lowers the graph model into immutable IR.                               |
+| `tuple-index.ts`       | Builds the finite relationship index.                                                 |
+| `resolver.ts`          | Bounded synchronous capability evaluation and traces.                                 |
+| `enumerate.ts`         | Low-level ListObjects and ListUsers graph primitives used by public enumeration.      |
+| `openfga-recursive.ts` | Synchronous TypeScript adaptation of the pinned OpenFGA recursive userset slice.      |
+| `conditions.ts`        | BXL policy-profile predicates for the compatibility IR.                               |
+| `errors.ts`            | Fail-closed structured error results.                                                 |
 
 ## OpenFGA and Zanzibar provenance
 
@@ -219,22 +219,20 @@ BXL expressions.
 
 ## Tests and merge gates
 
-Run the full repository gate:
+Run the full package gate:
 
 ```sh
-npm run typecheck
-npm run lint
-npm test
-npm run build
+pnpm lint
+pnpm test
 ```
 
 Authorization-specific gates:
 
 ```sh
-npm run fixtures:authorization:verify
-npm run test:authorization:conformance
-npm run test:authorization:performance
-npm run bench:authorization
+pnpm fixtures:authorization:verify
+pnpm test:authorization:conformance
+pnpm test:authorization:performance
+pnpm bench:authorization
 ```
 
 Coverage includes:
@@ -252,8 +250,8 @@ Coverage includes:
 - a generous CI performance regression gate plus a descriptive benchmark.
 
 The timing gate detects gross regressions; it is not a production service-level
-objective. Record platform-specific baselines with `npm run
-bench:authorization` before tightening any budget.
+objective. Record platform-specific baselines with
+`pnpm bench:authorization` before tightening any budget.
 
 ## Security boundary
 

@@ -419,7 +419,7 @@ node tests/unit/release-governance-policy-cli.ts
 The private graph kernel separately runs the pinned OpenFGA semantic corpus:
 
 ```sh
-npm run test:authorization:conformance
+pnpm test:authorization:conformance
 ```
 
 That corpus remains a semantic kernel test. OpenFGA syntax and identifiers are
@@ -428,8 +428,8 @@ not part of the BXL Authorization authoring API.
 Run the non-SLO performance regression gate and the descriptive benchmark with:
 
 ```sh
-npm run test:authorization:performance
-npm run bench:authorization
+pnpm test:authorization:performance
+pnpm bench:authorization
 ```
 
 The architecture and upstream attribution are summarized in

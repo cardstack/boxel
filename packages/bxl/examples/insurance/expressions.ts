@@ -59,7 +59,6 @@ export const insuranceExpressions: InsuranceExpression[] = [
     name: 'underwritingProfit',
     source: jq`((.earnedPremium - ((.claimsExperience.paidLoss + .claimsExperience.caseReserve) * .selectedLdf * .scenario.lossDevelopmentFactor + ((.earnedPremium * (.commissionPct + .premiumTaxPct + .variableExpensePct) + .fixedExpensePerPolicy + .expectedLossUsd * .ulaePctOfLoss) * .scenario.expenseFactor))) * 100 | round) / 100`,
     expected: 3430.84,
-    illustrates:
-      'Earned - (Loss + Expense) — the A-(B+C) shape post-parser-fix',
+    illustrates: 'Earned - (Loss + Expense) — the parenthesized A-(B+C) shape',
   },
 ];

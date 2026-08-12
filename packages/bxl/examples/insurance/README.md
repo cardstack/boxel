@@ -1,13 +1,13 @@
 # Insurance pricing & reserving example
 
 A miniature actuarial scenario, vendored as plain JS data + a set of
-expressions + a runner. Mirrors the structure of `examples/hospital/`
-and `examples/airline/`-style fixtures, but exercises:
+expressions + a runner. Mirrors the structure of `examples/hospital/`,
+but exercises:
 
-- Five-pair `IFS` (the arity that the airline fixture uncovered as
-  not-yet-defined; now covers up to 8 pairs).
-- `Earned - (Loss + Expense)` — the parenthesized cost-sum shape
-  that the parser fix unblocked.
+- Five-pair `IFS` — arity 10, well past the two-pair shape most
+  examples reach for (`IFS` accepts up to 8 pairs).
+- `Earned - (Loss + Expense)` — a parenthesized cost sum whose
+  associativity the parser must preserve.
 - `IF(AppliesFlag = "Yes", …, 0)` reinsurance guard.
 - LDF chain `(Paid + Case) × LDF × ScenarioLDF` with parenthesized
   sum on the LHS of `*`.

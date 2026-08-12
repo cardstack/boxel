@@ -38,15 +38,7 @@ The declarations occupy these gateway slots:
 | clock `statePatch`      |     1 | One object               |
 | clock `event`           |     1 | One object               |
 
-Run the source audit against any checkout without importing its Ember modules:
-
-```sh
-npm run audit:realm-bxl -- /path/to/realm-collaboration
-```
-
-The audit parses tagged and plain-template static declarations in raw-jq mode,
-applies their declared `policy` or `derive` profile, and reports source
-locations, profile failures, and known root-scope hazards. The reviewed
+The reviewed
 snapshot compiled all 88 declarations, with five runtime root-scope warnings
 described below.
 
@@ -254,15 +246,3 @@ immutable seat rewrite, bounded audience overlays, a winning turn-game move,
 trivia duplicate and clock behavior, agent allowlists, spatial rejection,
 market projection, rejected ledger events, readable policy/workflow cards,
 generated decision tables, editable expectations, and stored decision traces.
-
-### Browser UI
-
-To watch the same corpus compile and evaluate in a browser:
-
-```sh
-npm run demo:realm-collaboration
-```
-
-The page runs automatically and can be rerun with **Run all cases**. Filters
-narrow results by stage, status, or text; each case expands to show the source
-expression, input, expected and actual output, and compiled jq.

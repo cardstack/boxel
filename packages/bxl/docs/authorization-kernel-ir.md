@@ -852,13 +852,13 @@ not ship in the production BXL bundle.
 Run fixture integrity verification:
 
 ```sh
-npm run fixtures:authorization:verify
+pnpm fixtures:authorization:verify
 ```
 
 Run the full semantic gate:
 
 ```sh
-npm run test:authorization:conformance
+pnpm test:authorization:conformance
 ```
 
 The pinned corpus at OpenFGA commit
@@ -877,26 +877,20 @@ unsupported, or is omitted from accounting. There is no passing skip category.
 Run the focused benchmark:
 
 ```sh
-npm run bench:authorization
+pnpm bench:authorization
 ```
 
 It separates cold model preparation from warm Check, CheckMany, ListObjects,
 and ListUsers work. Treat benchmark output as a local comparison, not a service
 latency promise.
 
-Run the generalized authorization browser playground:
+Run the complete conformance corpus:
 
 ```sh
-npm run demo:authorization
+pnpm test:authorization:conformance
 ```
 
-Run the complete browser conformance observatory:
-
-```sh
-npm run demo:authorization-conformance
-```
-
-The observatory times the full path in the current browser: YAML parsing,
+The run covers the full path: YAML parsing,
 test-only DSL translation, BXL compilation, tuple indexing, and all 1,227
 assertions.
 

@@ -155,5 +155,5 @@ mechanics:
 - `fielddef-threading.ts` — multi-stage pipeline with one FieldDef's
   output threaded into another's input (mirrors the insurance pipeline).
 
-Each test names the port-doc section it asserts so a regression
-trace points straight at the rule.
+Each test names the rule it asserts so a regression trace points
+straight at the rule that broke.
