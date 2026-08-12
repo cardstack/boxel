@@ -656,6 +656,18 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
       .iso[data-preview-kind='html'] .inspector {
         width: 100%;
       }
+      /* A data table or tree reads as a full-width document too: its metadata
+         follows below in reading order rather than competing for width beside
+         it. */
+      .iso[data-preview-kind='json'] .iso-cols,
+      .iso[data-preview-kind='csv'] .iso-cols {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 24px;
+      }
+      .iso[data-preview-kind='json'] .inspector,
+      .iso[data-preview-kind='csv'] .inspector {
+        width: 100%;
+      }
       @container (max-width: 760px) {
         .iso-cols {
           grid-template-columns: minmax(0, 1fr);
@@ -677,6 +689,16 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
       /* A real mockup or report needs a browser-sized viewport. */
       .iso[data-preview-kind='html'] .iso-stage {
         height: clamp(560px, 72vh, 920px);
+        background: var(--card);
+      }
+      /* A data document grows to its own length rather than scrolling inside a
+         fixed hero: the point of the isolated view is to read the whole table
+         or tree. It keeps a floor so a small file still presents as a page. */
+      .iso[data-preview-kind='json'] .iso-stage,
+      .iso[data-preview-kind='csv'] .iso-stage {
+        height: auto;
+        min-height: 240px;
+        overflow: hidden;
         background: var(--card);
       }
       /* Exact aspect ratio within useful limits; matte beyond them. */

@@ -1,9 +1,11 @@
 import { byteStreamToUint8Array } from '@cardstack/runtime-common';
 import { htmlSafe } from '@ember/template';
 import JsonIcon from '@cardstack/boxel-icons/json';
+import GlimmerComponent from '@glimmer/component';
 import {
   BaseDefComponent,
   Component,
+  NumberField,
   StringField,
   contains,
   field,
@@ -14,9 +16,15 @@ import {
   type ByteStream,
   type SerializedFile,
 } from './file-api';
+import type { FilePreviewSignature } from './file-formats/file-preview-stage';
 import { fencedCodeBlock } from './markdown-helpers';
 
 const EXCERPT_MAX_LENGTH = 500;
+// A very large document would otherwise render into megabytes of tree markup;
+// stop after this many nodes and show a truncation note.
+const TREE_MAX_NODES = 2000;
+// Root and its direct children render expanded; deeper levels start collapsed.
+const TREE_AUTO_OPEN_DEPTH = 1;
 
 // content-tag misparses angle brackets inside regex literals in .gts files,
 // so we use RegExp constructor instead.
@@ -33,6 +41,18 @@ function escapeHtml(unsafe: string): string {
     .replace(GT_RE, '&gt;')
     .replace(QUOT_RE, '&quot;')
     .replace(APOS_RE, '&#039;');
+}
+
+// content-tag misparses HTML tag literals in .gts files, so we build tags via
+// helpers instead of writing them out.
+function tag(name: string, content: string, attrs?: string): string {
+  return attrs
+    ? `<${name} ${attrs}>${content}</${name}>`
+    : `<${name}>${content}</${name}>`;
+}
+
+function spanWrap(cls: string, content: string): string {
+  return tag('span', content, `class="${cls}"`);
 }
 
 function getExtension(url: string): string {
@@ -66,391 +86,341 @@ function truncateExcerpt(text: string): string {
   return `${text.slice(0, EXCERPT_MAX_LENGTH - 3).trimEnd()}...`;
 }
 
-function jsonTitle(
-  model: { title?: string | null; name?: string | null } | null | undefined,
+type JsonValue =
+  | null
+  | boolean
+  | number
+  | string
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+
+// 'object' | 'array' | 'string' | 'number' | 'boolean' | 'null'
+function kindOf(value: unknown): string {
+  if (value === null) {
+    return 'null';
+  }
+  if (Array.isArray(value)) {
+    return 'array';
+  }
+  return typeof value;
+}
+
+// The top-level entry count: object keys, array items, or 0 for a scalar root.
+function entryCount(value: unknown): number {
+  let kind = kindOf(value);
+  if (kind === 'array') {
+    return (value as unknown[]).length;
+  }
+  if (kind === 'object') {
+    return Object.keys(value as object).length;
+  }
+  return 0;
+}
+
+function leafValueHtml(value: unknown, kind: string): string {
+  if (kind === 'string') {
+    return spanWrap('jt-string', escapeHtml(`"${value}"`));
+  }
+  if (kind === 'null') {
+    return spanWrap('jt-null', 'null');
+  }
+  // number, boolean
+  return spanWrap(`jt-${kind}`, escapeHtml(String(value)));
+}
+
+function keyLabelHtml(key: string | undefined): string {
+  if (key === undefined) {
+    return '';
+  }
+  return spanWrap('jt-key', escapeHtml(key)) + spanWrap('jt-colon', ': ');
+}
+
+interface TreeCtx {
+  nodes: number;
+  truncated: boolean;
+}
+
+function renderTreeNode(
+  value: unknown,
+  key: string | undefined,
+  depth: number,
+  ctx: TreeCtx,
 ): string {
-  return model?.title ?? model?.name ?? 'Untitled JSON';
-}
-
-function prettyPrintJson(content: string): string {
-  try {
-    return JSON.stringify(JSON.parse(content), null, 2);
-  } catch {
-    return content;
+  if (ctx.nodes >= TREE_MAX_NODES) {
+    ctx.truncated = true;
+    return '';
   }
-}
+  ctx.nodes++;
 
-// content-tag misparses HTML tag literals in .gts files,
-// so we build span wrappers dynamically.
-function spanWrap(cls: string, content: string): string {
-  return '<span class="' + cls + '">' + content + '</span>';
-}
-
-// Regex patterns and replacements also avoid literal angle brackets
-// via RegExp constructor where they contain </ sequences.
-const KEY_RE = new RegExp(
-  '(&quot;)((?:[^&]|&(?!quot;))*)(&quot;)\\s*:',
-  'g',
-);
-const STRING_RE = new RegExp(
-  '(&quot;)((?:[^&]|&(?!quot;))*)(&quot;)(?!\\s*(?:<\\/span>)?\\s*:)',
-  'g',
-);
-const NUMBER_RE = new RegExp(
-  '\\b(-?\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?)\\b',
-  'g',
-);
-const BOOL_RE = new RegExp('\\b(true|false)\\b', 'g');
-const NULL_RE = new RegExp('\\bnull\\b', 'g');
-
-function highlightJson(json: string): string {
-  let escaped = escapeHtml(json);
-  escaped = escaped.replace(KEY_RE, (_m, q1, inner, q2) =>
-    `${spanWrap('json-key', `${q1}${inner}${q2}`)}:`,
-  );
-  escaped = escaped.replace(STRING_RE, (_m, q1, inner, q2) =>
-    spanWrap('json-string', `${q1}${inner}${q2}`),
-  );
-  escaped = escaped.replace(NUMBER_RE, (_m, num) =>
-    spanWrap('json-number', num),
-  );
-  escaped = escaped.replace(BOOL_RE, (_m, bool) =>
-    spanWrap('json-boolean', bool),
-  );
-  escaped = escaped.replace(NULL_RE, () => spanWrap('json-null', 'null'));
-  return escaped;
-}
-
-class Isolated extends Component<typeof JsonFileDef> {
-  get title() {
-    return jsonTitle(this.args.model);
+  let kind = kindOf(value);
+  if (kind !== 'object' && kind !== 'array') {
+    return tag('div', keyLabelHtml(key) + leafValueHtml(value, kind), 'class="jt-row"');
   }
 
-  get highlightedContent() {
-    let content = this.args.model?.content ?? '';
-    if (!content.trim()) {
+  let entries: Array<[string, unknown]> =
+    kind === 'array'
+      ? (value as unknown[]).map((v, i) => [String(i), v])
+      : Object.entries(value as Record<string, unknown>);
+  let count = entries.length;
+  let meta = kind === 'array' ? `[${count}]` : `{${count}}`;
+  let summary = tag(
+    'summary',
+    keyLabelHtml(key) + spanWrap('jt-meta', meta),
+    'class="jt-summary"',
+  );
+
+  let childrenHtml = '';
+  for (let [childKey, childValue] of entries) {
+    childrenHtml += renderTreeNode(childValue, childKey, depth + 1, ctx);
+    if (ctx.truncated) {
+      break;
+    }
+  }
+  let children = tag('div', childrenHtml, 'class="jt-children"');
+
+  let attrs =
+    depth < TREE_AUTO_OPEN_DEPTH ? 'class="jt-node" open' : 'class="jt-node"';
+  return tag('details', summary + children, attrs);
+}
+
+function jsonToTreeHtml(parsed: JsonValue): string {
+  let ctx: TreeCtx = { nodes: 0, truncated: false };
+  let html = renderTreeNode(parsed, undefined, 0, ctx);
+  if (ctx.truncated) {
+    html += tag(
+      'p',
+      `… tree truncated at ${TREE_MAX_NODES} nodes`,
+      'class="jt-truncated"',
+    );
+  }
+  return html;
+}
+
+// The family renderer the four shared shells mount into. JSON has a natural
+// hierarchy, so embedded/isolated render it as a collapsible key/value tree
+// (native <details>, so it stays interactive even in prerendered HTML), while a
+// fitted collection cell shows a glanceable type + entry-count summary. Invalid
+// JSON still shows its raw text rather than an empty pane.
+class JsonPreview extends GlimmerComponent<FilePreviewSignature> {
+  get source(): any {
+    return this.args.model?.source;
+  }
+
+  get content(): string {
+    return String(this.source?.content ?? '');
+  }
+
+  get hasContent(): boolean {
+    return Boolean(this.content.trim());
+  }
+
+  get isFitted(): boolean {
+    return this.args.mode === 'fitted';
+  }
+
+  get parsed(): { ok: boolean; value?: JsonValue } {
+    if (!this.hasContent) {
+      return { ok: false };
+    }
+    try {
+      return { ok: true, value: JSON.parse(this.content) as JsonValue };
+    } catch {
+      return { ok: false };
+    }
+  }
+
+  // The tree markup is produced here: every key and value is escaped before it
+  // is wrapped, so the resulting HTML is our own and needs no second sanitizer
+  // pass during prerender/indexing.
+  get treeHtml() {
+    let { ok, value } = this.parsed;
+    if (!ok) {
       return htmlSafe('');
     }
-    // This component produces the entire HTML payload itself:
-    // `prettyPrintJson()` formats plain text, `highlightJson()` escapes that text,
-    // and only then adds the span wrappers we control for styling. Running the
-    // result back through DOMPurify adds DOMParser churn during prerender/indexing
-    // without providing extra protection.
-    return htmlSafe(highlightJson(prettyPrintJson(content)));
+    return htmlSafe(jsonToTreeHtml(value as JsonValue));
   }
 
-  get hasContent() {
-    return Boolean(this.args.model?.content?.trim());
+  get isValid(): boolean {
+    return this.parsed.ok;
   }
 
-  <template>
-    <article class='json-isolated' data-test-json-isolated>
-      {{#if this.hasContent}}
-        <pre class='json-isolated__content'>{{this.highlightedContent}}</pre>
-      {{else}}
-        <header class='json-isolated__title'>{{this.title}}</header>
-      {{/if}}
-    </article>
-    <style scoped>
-      .json-isolated {
-        padding: var(--boxel-sp-lg);
-        max-width: 100%;
-      }
-
-      .json-isolated__title {
-        color: var(--boxel-900);
-        font-weight: 600;
-        font-size: var(--boxel-font-size-lg);
-      }
-
-      .json-isolated__content {
-        font-family: var(--boxel-monospace-font-family, monospace);
-        white-space: pre-wrap;
-        word-wrap: break-word;
-        margin: 0;
-        font-size: var(--boxel-font-sm);
-        line-height: 1.5;
-        background-color: var(--boxel-dark);
-        color: var(--boxel-light);
-        border-radius: var(--boxel-border-radius-xl);
-        padding: var(--boxel-sp-lg);
-      }
-
-      .json-isolated__content :deep(.json-key) {
-        color: #9cdcfe;
-      }
-
-      .json-isolated__content :deep(.json-string) {
-        color: #ce9178;
-      }
-
-      .json-isolated__content :deep(.json-number) {
-        color: #b5cea8;
-      }
-
-      .json-isolated__content :deep(.json-boolean) {
-        color: #569cd6;
-      }
-
-      .json-isolated__content :deep(.json-null) {
-        color: #569cd6;
-      }
-    </style>
-  </template>
-}
-
-class Embedded extends Component<typeof JsonFileDef> {
-  get title() {
-    return jsonTitle(this.args.model);
+  // A scalar/invalid document has no tree; show its raw text instead.
+  get rawText(): string {
+    return this.content;
   }
 
-  get highlightedContent() {
-    let content = this.args.model?.content ?? '';
-    if (!content.trim()) {
-      return htmlSafe('');
+  // Fitted summary, read from the index-time facts so a cell never parses the
+  // whole document.
+  get rootType(): string {
+    return String(this.source?.rootType ?? '');
+  }
+
+  get keyCount(): number {
+    return Number(this.source?.keyCount ?? 0);
+  }
+
+  get countLabel(): string {
+    let type = this.rootType;
+    if (type === 'array') {
+      return this.keyCount === 1 ? 'item' : 'items';
     }
-    // This component produces the entire HTML payload itself:
-    // `prettyPrintJson()` formats plain text, `highlightJson()` escapes that text,
-    // and only then adds the span wrappers we control for styling. Running the
-    // result back through DOMPurify adds DOMParser churn during prerender/indexing
-    // without providing extra protection.
-    return htmlSafe(highlightJson(prettyPrintJson(content)));
+    return this.keyCount === 1 ? 'key' : 'keys';
   }
 
   <template>
-    <article class='json-embedded' data-test-json-embedded>
-      <header class='json-embedded__title'>{{this.title}}</header>
-      <div class='json-embedded__content'>
-        <pre class='json-embedded__pre'>{{this.highlightedContent}}</pre>
-      </div>
-    </article>
-    <style scoped>
-      .json-embedded {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-xs);
-        padding: var(--boxel-sp);
-      }
-
-      .json-embedded__title {
-        color: var(--boxel-900);
-        font-weight: 600;
-      }
-
-      .json-embedded__content {
-        max-height: 200px;
-        overflow: hidden;
-        mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
-        -webkit-mask-image: linear-gradient(
-          to bottom,
-          black 60%,
-          transparent 100%
-        );
-      }
-
-      .json-embedded__pre {
-        font-family: var(--boxel-monospace-font-family, monospace);
-        white-space: pre-wrap;
-        word-wrap: break-word;
-        margin: 0;
-        font-size: var(--boxel-font-sm);
-        line-height: 1.5;
-        background-color: var(--boxel-dark);
-        color: var(--boxel-light);
-        border-radius: var(--boxel-border-radius-xl);
-        padding: var(--boxel-sp-lg);
-      }
-
-      .json-embedded__pre :deep(.json-key) {
-        color: #9cdcfe;
-      }
-
-      .json-embedded__pre :deep(.json-string) {
-        color: #ce9178;
-      }
-
-      .json-embedded__pre :deep(.json-number) {
-        color: #b5cea8;
-      }
-
-      .json-embedded__pre :deep(.json-boolean) {
-        color: #569cd6;
-      }
-
-      .json-embedded__pre :deep(.json-null) {
-        color: #569cd6;
-      }
-    </style>
-  </template>
-}
-
-class Fitted extends Component<typeof JsonFileDef> {
-  get title() {
-    return jsonTitle(this.args.model);
-  }
-
-  get excerpt() {
-    return this.args.model?.excerpt ?? '';
-  }
-
-  get hasExcerpt() {
-    return Boolean(this.excerpt);
-  }
-
-  <template>
-    <article class='json-fitted' data-test-json-fitted>
-      <div class='json-fitted__icon'>
-        <JsonIcon width='100%' height='100%' />
-      </div>
-      <div class='json-fitted__text'>
-        <header class='json-fitted__title'>{{this.title}}</header>
-        {{#if this.hasExcerpt}}
-          <p class='json-fitted__excerpt'>{{this.excerpt}}</p>
+    {{#if this.isFitted}}
+      <div class='data-preview data-preview--fitted' data-test-json-preview>
+        {{#if this.hasContent}}
+          <dl class='data-summary'>
+            <div class='data-summary__metric'>
+              <dt>{{this.countLabel}}</dt>
+              <dd>{{this.keyCount}}</dd>
+            </div>
+            {{#if this.rootType}}
+              <div class='data-summary__type'>{{this.rootType}}</div>
+            {{/if}}
+          </dl>
+        {{else}}
+          <p class='data-preview__empty'>No content</p>
         {{/if}}
       </div>
-    </article>
+    {{else}}
+      <div
+        class='data-preview data-preview--tree'
+        data-mode={{@mode}}
+        data-test-json-preview
+      >
+        {{#if this.hasContent}}
+          {{#if this.isValid}}
+            <div class='jt-tree'>{{this.treeHtml}}</div>
+          {{else}}
+            <pre class='jt-raw'>{{this.rawText}}</pre>
+          {{/if}}
+        {{else}}
+          <p class='data-preview__empty'>No content</p>
+        {{/if}}
+      </div>
+    {{/if}}
     <style scoped>
-      .json-fitted {
-        container-name: fitted-card;
-        container-type: size;
+      /* A data inspector stays a dark panel in either theme: the type palette
+         is tuned for a dark background and reads as "this is structured data". */
+      .data-preview {
         width: 100%;
         height: 100%;
+        min-height: 0;
+        overflow: auto;
+        background: var(--boxel-dark, #1e1e1e);
+        color: var(--boxel-light, #d4d4d4);
+        text-align: left;
+      }
+      .data-preview--tree {
+        padding: var(--boxel-sp);
+      }
+      .jt-tree {
+        font-family: var(
+          --font-mono,
+          var(--boxel-monospace-font-family, monospace)
+        );
+        font-size: var(--boxel-font-size-sm);
+        line-height: 1.6;
+      }
+      .jt-tree :deep(.jt-node) {
+        margin: 0;
+      }
+      .jt-tree :deep(.jt-summary) {
+        cursor: pointer;
+        list-style: revert;
+      }
+      .jt-tree :deep(.jt-children) {
+        padding-left: 1.1em;
+        border-left: 1px solid rgba(255, 255, 255, 0.12);
+        margin-left: 0.3em;
+      }
+      .jt-tree :deep(.jt-row) {
+        padding-left: 1.1em;
+      }
+      .jt-tree :deep(.jt-key) {
+        color: #9cdcfe;
+      }
+      .jt-tree :deep(.jt-colon) {
+        color: var(--boxel-light, #d4d4d4);
+      }
+      .jt-tree :deep(.jt-string) {
+        color: #ce9178;
+      }
+      .jt-tree :deep(.jt-number) {
+        color: #b5cea8;
+      }
+      .jt-tree :deep(.jt-boolean),
+      .jt-tree :deep(.jt-null) {
+        color: #569cd6;
+      }
+      .jt-tree :deep(.jt-meta) {
+        color: #808080;
+      }
+      .jt-tree :deep(.jt-truncated) {
+        color: #808080;
+        font-size: var(--boxel-font-size-xs);
+        margin: var(--boxel-sp-xs) 0 0;
+      }
+      .jt-raw {
+        margin: 0;
+        font-family: var(
+          --font-mono,
+          var(--boxel-monospace-font-family, monospace)
+        );
+        font-size: var(--boxel-font-size-sm);
+        line-height: 1.5;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+
+      /* Fitted: a glanceable count + type rather than a cropped tree. */
+      .data-preview--fitted {
         display: flex;
-        align-items: flex-start;
-        gap: var(--boxel-sp-xs);
+        align-items: center;
+        justify-content: center;
         padding: var(--boxel-sp-xs);
         overflow: hidden;
       }
-
-      .json-fitted__icon {
-        flex-shrink: 0;
-        width: 20px;
-        height: 20px;
-        color: var(--boxel-600);
-      }
-
-      .json-fitted__text {
-        min-width: 0;
-        flex: 1;
+      .data-summary {
         display: flex;
         flex-direction: column;
-        gap: var(--boxel-sp-4xs);
-      }
-
-      .json-fitted__title {
-        color: var(--boxel-900);
-        font-weight: 600;
-        font-size: var(--boxel-font-sm);
-        overflow: hidden;
-        display: -webkit-box;
-        -webkit-box-orient: vertical;
-        -webkit-line-clamp: 2;
-      }
-
-      .json-fitted__excerpt {
-        color: var(--boxel-600);
-        font-size: var(--boxel-font-xs);
-        margin: 0;
-        overflow: hidden;
-        display: -webkit-box;
-        -webkit-box-orient: vertical;
-        -webkit-line-clamp: 3;
-      }
-
-      /* Portrait tall: icon above text */
-      @container fitted-card (aspect-ratio <= 1.0) and (height >= 120px) {
-        .json-fitted {
-          flex-direction: column;
-          align-items: center;
-          text-align: center;
-        }
-
-        .json-fitted__icon {
-          width: 28px;
-          height: 28px;
-        }
-
-        .json-fitted__title {
-          -webkit-line-clamp: 3;
-        }
-      }
-
-      /* Portrait short: hide excerpt */
-      @container fitted-card (aspect-ratio <= 1.0) and (height < 120px) {
-        .json-fitted__excerpt {
-          display: none;
-        }
-      }
-
-      /* Portrait very short: hide icon too */
-      @container fitted-card (aspect-ratio <= 1.0) and (height < 80px) {
-        .json-fitted__icon {
-          display: none;
-        }
-      }
-
-      /* Landscape: icon left of text */
-      @container fitted-card (1.0 < aspect-ratio) {
-        .json-fitted {
-          align-items: flex-start;
-        }
-      }
-
-      /* Landscape short: hide excerpt */
-      @container fitted-card (1.0 < aspect-ratio) and (height < 80px) {
-        .json-fitted__excerpt {
-          display: none;
-        }
-      }
-
-      /* Very small: title only, smaller font */
-      @container fitted-card (height <= 57px) {
-        .json-fitted__icon {
-          display: none;
-        }
-
-        .json-fitted__excerpt {
-          display: none;
-        }
-
-        .json-fitted__title {
-          font-size: var(--boxel-font-xs);
-          -webkit-line-clamp: 1;
-        }
-      }
-    </style>
-  </template>
-}
-
-class Atom extends Component<typeof JsonFileDef> {
-  get title() {
-    return jsonTitle(this.args.model);
-  }
-
-  <template>
-    <span class='json-atom' data-test-json-atom>
-      <JsonIcon class='json-atom__icon' width='16' height='16' />
-      <span class='json-atom__title'>{{this.title}}</span>
-    </span>
-    <style scoped>
-      .json-atom {
-        display: inline-flex;
         align-items: center;
         gap: var(--boxel-sp-4xs);
-        min-width: 0;
+        margin: 0;
       }
-
-      .json-atom__icon {
-        flex-shrink: 0;
-        color: var(--boxel-600);
+      .data-summary__metric {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: var(--boxel-sp-5xs);
       }
-
-      .json-atom__title {
-        color: var(--boxel-900);
-        font-size: var(--boxel-font-sm);
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+      .data-summary__metric dd {
+        margin: 0;
+        font-weight: 700;
+        font-size: var(--boxel-font-size-lg);
+        line-height: 1;
+      }
+      .data-summary__metric dt {
+        font-size: var(--boxel-font-size-xs);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: #9d9d9d;
+      }
+      .data-summary__type {
+        font-size: var(--boxel-font-size-xs);
+        color: #9d9d9d;
+        font-family: var(
+          --font-mono,
+          var(--boxel-monospace-font-family, monospace)
+        );
+      }
+      .data-preview__empty {
+        margin: 0;
+        padding: var(--boxel-sp);
+        color: #9d9d9d;
+        font-size: var(--boxel-font-size-sm);
       }
     </style>
   </template>
@@ -458,7 +428,7 @@ class Atom extends Component<typeof JsonFileDef> {
 
 class Head extends Component<typeof JsonFileDef> {
   get title() {
-    return jsonTitle(this.args.model);
+    return this.args.model?.title ?? this.args.model?.name ?? 'Untitled JSON';
   }
 
   get description() {
@@ -489,14 +459,31 @@ export class JsonFileDef extends FileDef {
   static icon = JsonIcon;
   static acceptTypes = '.json,application/json';
 
+  // A `.json` served without (or with an uninformative) content type would
+  // route to a generic profile by extension alone, so pin the data axes the
+  // four shells present — the family, the labeled kind, and the data renderer —
+  // off the class rather than depending on every instance carrying
+  // `application/json`.
+  static fileFamily = 'data';
+  static fileKind = 'JSON';
+  static previewKind = 'json';
+  static previewAdapter = 'data';
+  static previewSource = 'extracted';
+
   @field title = contains(StringField);
   @field excerpt = contains(StringField);
   @field content = contains(StringField);
+  // Surfaced by the shells as the hero fact ("N keys") and by the fitted
+  // preview, computed once at index time so a cell never parses the document.
+  @field rootType = contains(StringField);
+  @field keyCount = contains(NumberField);
+  @field lineCount = contains(NumberField);
 
-  static isolated: BaseDefComponent = Isolated;
-  static embedded: BaseDefComponent = Embedded;
-  static fitted: BaseDefComponent = Fitted;
-  static atom: BaseDefComponent = Atom;
+  // The bespoke isolated/embedded/fitted/atom are gone: JsonFileDef now inherits
+  // the four shared shells from FileDef and supplies only the renderer they
+  // mount, so identity, facts, budgets, and state handling stay in one place
+  // across every file family.
+  static previewComponent = JsonPreview;
   static head: BaseDefComponent = Head;
 
   // CS-10787: emit the JSON source as a fenced `json` code block. Empty
@@ -519,7 +506,14 @@ export class JsonFileDef extends FileDef {
     getStream: () => Promise<ByteStream>,
     options: { contentHash?: string } = {},
   ): Promise<
-    SerializedFile<{ title: string; excerpt: string; content: string }>
+    SerializedFile<{
+      title: string;
+      excerpt: string;
+      content: string;
+      rootType: string;
+      keyCount: number;
+      lineCount: number;
+    }>
   > {
     let extension = getExtension(url);
     if (extension !== '.json') {
@@ -539,11 +533,35 @@ export class JsonFileDef extends FileDef {
     let text = new TextDecoder().decode(bytes);
     let fallbackTitle = fileNameWithoutExtension(base.name ?? '');
 
+    // Parse once for the structural facts; invalid JSON keeps its content and
+    // reports an empty root rather than failing the whole file.
+    let rootType = '';
+    let keyCount = 0;
+    try {
+      let parsed = JSON.parse(text) as JsonValue;
+      rootType = kindOf(parsed);
+      keyCount = entryCount(parsed);
+    } catch {
+      rootType = '';
+      keyCount = 0;
+    }
+
     return {
       ...base,
       title: fallbackTitle || 'Untitled JSON',
       excerpt: truncateExcerpt(text.trim()),
       content: text,
+      rootType,
+      keyCount,
+      // Normalize CRLF/CR to LF first so the count is the same across newline
+      // styles; a trailing newline shouldn't inflate the count, and empty
+      // content is zero lines.
+      lineCount: text
+        ? text
+            .replace(/\r\n?/g, '\n')
+            .replace(/\n$/, '')
+            .split('\n').length
+        : 0,
     };
   }
 }
