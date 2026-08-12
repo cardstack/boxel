@@ -96,7 +96,14 @@ module('Integration | generic file def fallback preview', function (hooks) {
   });
 
   test('a file with no resource URL offers no download affordance', async function (assert) {
-    await renderCard(loader, binaryFile({ url: undefined }), 'embedded');
+    // No url/sourceUrl/id at all — the view model derives its resource URL from
+    // whichever of those is present, so any one would keep the download alive.
+    let file = new FileDef({
+      name: 'firmware.bin',
+      contentType: 'application/octet-stream',
+      contentSize: 262_144,
+    });
+    await renderCard(loader, file, 'embedded');
     assert.dom('[data-test-file-generic-name]').hasText('firmware.bin');
     assert.dom('[data-test-file-generic-download]').doesNotExist();
   });
