@@ -750,8 +750,9 @@ export class MatrixConcept extends CardDef {
                 rows='3'
                 placeholder='What did you find? Approvals and change requests both deserve a reason.'
                 aria-label='Review body'
+                value={{this.reviewBody}}
                 {{on 'input' this.setBody}}
-              >{{this.reviewBody}}</textarea>
+              ></textarea>
               <BoxelButton
                 @kind='primary'
                 @size='extra-small'
