@@ -1,6 +1,7 @@
 import { module, test } from 'qunit';
 
 import {
+  authorizationMiddleware,
   shouldSkipReauthenticationForContext,
   withReauthenticationAllowed,
 } from '@cardstack/runtime-common/authorization-middleware';
@@ -58,5 +59,30 @@ module('Unit | authorization middleware render context', function () {
     });
 
     assert.strictEqual(globals.__boxelInteractiveRenderContextDepth, undefined);
+  });
+
+  test('a rejected stale token retries as anonymous when reauthentication has no token', async function (assert) {
+    let attempts: string[] = [];
+    let middleware = authorizationMiddleware({
+      token: () => 'Bearer stale-token',
+      reauthenticate: async () => undefined,
+    });
+    let request = new Request('https://realm.example/card');
+
+    let response = await middleware(request, async (onwardRequest) => {
+      attempts.push(onwardRequest.headers.get('Authorization') ?? 'anonymous');
+      if (attempts.length === 1) {
+        return new Response('expired token', {
+          status: 401,
+          headers: {
+            'x-boxel-realm-url': 'https://realm.example/',
+          },
+        });
+      }
+      return new Response('public content', { status: 200 });
+    });
+
+    assert.strictEqual(response.status, 200);
+    assert.deepEqual(attempts, ['Bearer stale-token', 'anonymous']);
   });
 });

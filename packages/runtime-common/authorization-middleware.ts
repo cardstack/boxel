@@ -96,8 +96,13 @@ export function authorizationMiddleware(
         token = await tokenSource.reauthenticate(realmURL);
         if (token) {
           req.headers.set('Authorization', token);
-          response = await next(req);
+        } else {
+          // Reauthentication may intentionally settle on anonymous access.
+          // In particular, a public realm must remain readable after a stale
+          // persisted token is rejected. Do not resend that rejected token.
+          req.headers.delete('Authorization');
         }
+        response = await next(req);
       }
     }
     return response;
