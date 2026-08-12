@@ -71,6 +71,7 @@ class TestRuntime {
   retainedCanonical?: object;
   allowedModules: readonly string[] = [];
   renderSlotCalls: { format: string; hostOwnsBox?: boolean }[] = [];
+  mountTokens: object[] = [];
   private nextInstance = 0;
 
   constructor(readonly mode: BoxelRuntime['mode']) {}
@@ -147,6 +148,12 @@ class TestRuntime {
   reloadCalls = 0;
   reloadSandbox(): void {
     this.reloadCalls++;
+  }
+
+  reserveMount(): object {
+    let token = {};
+    this.mountTokens.push(token);
+    return token;
   }
 
   getRenderSlotForHandle() {
@@ -247,6 +254,17 @@ module('Unit | Boxel execution engine', function () {
       mode: 'direct',
       reason: 'trusted-boxel-module',
     });
+    assert.deepEqual(
+      decideBoxelExecution(
+        policy({
+          hostRequestedMode: 'direct',
+          source: sandboxSource,
+          prefersFullSandbox: true,
+        }),
+      ),
+      { mode: 'direct', reason: 'host-requested-direct' },
+      'a trusted Host call site selects Direct through the protocol even for authored browser code',
+    );
     assert.deepEqual(decideBoxelExecution(policy()), {
       mode: 'capsule',
       reason: 'default-user-card',
@@ -381,6 +399,21 @@ module('Unit | Boxel execution engine', function () {
         { format: 'edit', hostOwnsBox: true },
         { format: 'isolated', hostOwnsBox: true },
       ]);
+      assert.strictEqual(
+        editSlot?.mountToken,
+        sandbox.mountTokens[0],
+        'the edit presentation receives a fresh teardown owner',
+      );
+      assert.strictEqual(
+        isolatedSlot?.mountToken,
+        sandbox.mountTokens[1],
+        'the return to isolated receives the next teardown owner',
+      );
+      assert.notStrictEqual(
+        editSlot?.mountToken,
+        isolatedSlot?.mountToken,
+        'a predecessor modifier cannot unmount its retained successor',
+      );
     } finally {
       await session.destroy();
       engine.destroy();

@@ -584,6 +584,7 @@ module(
               class='runtime-scroll-host'
               @card={{card}}
               @format={{format}}
+              @execution='auto'
             />
           </template>
         },
@@ -662,11 +663,20 @@ module(
         .dom('[data-test-field="status"]')
         .containsText('ready', 'the generated enum field renders in edit');
       assert
-        .dom('[data-test-field="address"]')
-        .containsText(
-          '18 Orchard Lane',
-          'fields after the generated enum continue rendering',
+        .dom('[data-test-field="address"] input')
+        .exists(
+          { count: 3 },
+          'fields after the generated enum continue rendering as editable controls',
         );
+      assert.deepEqual(
+        [
+          ...document.querySelectorAll<HTMLInputElement>(
+            '[data-test-field="address"] input',
+          ),
+        ].map((input) => input.value),
+        ['18 Orchard Lane', 'Hudson', 'NY'],
+        'the nested address editor receives each canonical field value',
+      );
     });
 
     test('G-04 | RP-2.6, RP-6.4, RP-8.4: relationship-backed mirror composition loads and delegates one and many linked cards inside Capsule', async function (assert) {
@@ -749,8 +759,8 @@ module(
       await renderComponent(
         class TestDriver extends GlimmerComponent {
           <template>
-            <CardRenderer @card={{card}} @format='embedded' />
-            <CardRenderer @card={{card}} @format='fitted' />
+            <CardRenderer @card={{card}} @format='embedded' @execution='auto' />
+            <CardRenderer @card={{card}} @format='fitted' @execution='auto' />
           </template>
         },
       );

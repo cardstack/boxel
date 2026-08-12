@@ -1480,8 +1480,12 @@ module('Integration | search-entries resource', function (hooks) {
     let originalSearchEntries = storeService.searchEntries.bind(storeService);
     storeService.searchEntries = async () => doc;
     let importCalls: string[] = [];
-    let originalImport = loader.import.bind(loader);
-    loader.import = (async (url: string) => {
+    // Realm setup can advance the executable Loader generation. Exercise the
+    // generation the resource actually consumes instead of patching the
+    // beforeEach snapshot, which may already have been retired by Direct RP.
+    let activeLoader = loaderService.loader;
+    let originalImport = activeLoader.import.bind(activeLoader);
+    activeLoader.import = (async (url: string) => {
       if (url === trustedHref || url === authoredHref) {
         importCalls.push(url);
         return {};
@@ -1509,7 +1513,7 @@ module('Integration | search-entries resource', function (hooks) {
       );
     } finally {
       storeService.searchEntries = originalSearchEntries;
-      loader.import = originalImport;
+      activeLoader.import = originalImport;
     }
   });
 

@@ -4,7 +4,14 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { baseRealm, Loader } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  beginRuntimeDependencyTrackingSession,
+  endRuntimeDependencyTrackingSession,
+  Loader,
+  resetRuntimeDependencyTracker,
+  snapshotRuntimeDependencies,
+} from '@cardstack/runtime-common';
 
 import {
   testRealmURL,
@@ -422,5 +429,136 @@ module('Unit | loader', function (hooks) {
       module: `${baseRealm.url}card-api`,
       name: 'StringField',
     });
+  });
+
+  test('an invalidated in-flight fetch cannot restore stale source', async function (assert) {
+    let url = 'https://loader-test.invalid/value.js';
+    let resolveStaleFetch!: (response: Response) => void;
+    let fetchCount = 0;
+    let isolatedLoader = new Loader(async () => {
+      fetchCount++;
+      if (fetchCount === 1) {
+        return await new Promise<Response>((resolve) => {
+          resolveStaleFetch = resolve;
+        });
+      }
+      return new Response(`export const value = 'fresh';`, {
+        headers: { 'content-type': 'text/javascript' },
+      });
+    });
+
+    try {
+      let staleImport = isolatedLoader.import<{ value: string }>(url);
+      await Promise.resolve();
+      assert.strictEqual(isolatedLoader.invalidateModule(url), 1);
+
+      let fresh = await isolatedLoader.import<{ value: string }>(url);
+      resolveStaleFetch(
+        new Response(`export const value = 'stale';`, {
+          headers: { 'content-type': 'text/javascript' },
+        }),
+      );
+      let staleCaller = await staleImport;
+
+      assert.strictEqual(fresh.value, 'fresh');
+      assert.strictEqual(
+        staleCaller,
+        fresh,
+        'the original caller advances through the replacement generation',
+      );
+      assert.strictEqual(await isolatedLoader.import(url), fresh);
+      assert.strictEqual(fetchCount, 2);
+    } finally {
+      isolatedLoader.dispose();
+    }
+  });
+
+  test('reverse invalidation retains edges across a cyclic graph', async function (assert) {
+    let sources = new Map([
+      [
+        'https://loader-test.invalid/a.js',
+        `import './b.js'; export const a = 'a';`,
+      ],
+      [
+        'https://loader-test.invalid/b.js',
+        `import './a.js'; export const b = 'b';`,
+      ],
+    ]);
+    let isolatedLoader = new Loader(async (input) => {
+      let url = input instanceof Request ? input.url : String(input);
+      let source = sources.get(url);
+      return source == null
+        ? new Response('not found', { status: 404 })
+        : new Response(source, {
+            headers: { 'content-type': 'text/javascript' },
+          });
+    });
+
+    try {
+      await isolatedLoader.import('https://loader-test.invalid/a.js');
+      assert.strictEqual(
+        isolatedLoader.invalidateModule('https://loader-test.invalid/a.js'),
+        2,
+      );
+      assert.false(
+        isolatedLoader.isModuleLoaded('https://loader-test.invalid/a.js'),
+      );
+      assert.false(
+        isolatedLoader.isModuleLoaded('https://loader-test.invalid/b.js'),
+      );
+    } finally {
+      isolatedLoader.dispose();
+    }
+  });
+
+  test('runtime dependency tracking terminates at a remotely supplied module shim', async function (assert) {
+    let rootURL = 'https://loader-test.invalid/root.js';
+    let leafURL = 'https://loader-test.invalid/leaf.js';
+    let trustedShimURL = 'https://loader-test.invalid/trusted-shim.js';
+    let isolatedLoader = new Loader(async (input) => {
+      let url = input instanceof Request ? input.url : String(input);
+      if (url === trustedShimURL) {
+        let response = new Response('', {
+          headers: { 'content-type': 'text/javascript' },
+        });
+        (response as any)[Symbol.for('shimmed-module')] = {
+          trustedValue: 'trusted',
+        };
+        return response;
+      }
+      if (url === rootURL) {
+        return new Response(
+          `import { leafValue } from './leaf.js';\n` +
+            `import { trustedValue } from './trusted-shim.js';\n` +
+            `export const value = leafValue + trustedValue;`,
+          { headers: { 'content-type': 'text/javascript' } },
+        );
+      }
+      if (url === leafURL) {
+        return new Response(`export const leafValue = 'leaf-';`, {
+          headers: { 'content-type': 'text/javascript' },
+        });
+      }
+      return new Response('not found', { status: 404 });
+    });
+
+    resetRuntimeDependencyTracker();
+    beginRuntimeDependencyTrackingSession({ sessionKey: 'loader-shim-test' });
+    try {
+      let module = await isolatedLoader.import<{ value: string }>(rootURL);
+      assert.strictEqual(module.value, 'leaf-trusted');
+      assert.deepEqual(
+        snapshotRuntimeDependencies().deps.sort(),
+        [
+          'https://loader-test.invalid/leaf',
+          'https://loader-test.invalid/root',
+        ],
+        'realm-owned modules are tracked while the Host-supplied shim is an execution terminal',
+      );
+    } finally {
+      endRuntimeDependencyTrackingSession();
+      resetRuntimeDependencyTracker();
+      isolatedLoader.dispose();
+    }
   });
 });

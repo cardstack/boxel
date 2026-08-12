@@ -50,7 +50,7 @@ function snapshotRenderedCard(assert: Assert): CardRenderSnapshot {
   };
 }
 
-async function renderLegacy(
+async function renderTestDefaultDirect(
   card: BaseDef,
   format?: Format,
   displayContainer?: boolean,
@@ -62,12 +62,14 @@ async function renderLegacy(
           @card={{card}}
           @format={{format}}
           @displayContainer={{displayContainer}}
-          @execution='direct'
         />
       </template>
     },
   );
-  await waitFor('[data-test-field-component-card]', { timeout: 10000 });
+  await waitFor(
+    '[data-boxel-execution="direct"] [data-test-field-component-card]',
+    { timeout: 10000 },
+  );
 }
 
 async function renderProtocolDirect(
@@ -82,7 +84,7 @@ async function renderProtocolDirect(
           @card={{card}}
           @format={{format}}
           @displayContainer={{displayContainer}}
-          @execution='auto'
+          @execution='direct'
         />
       </template>
     },
@@ -118,9 +120,10 @@ module('Integration | rp-equivalence', function (hooks) {
     getService('loader-service').loader.import('@cardstack/base/card-api'),
   );
 
-  // The equivalence oracle runs on a trusted fixture because the protocol
-  // routes only trusted modules to the Direct tier (RP-6.1 R1/R5); the
-  // legacy path renders the identical instance for comparison.
+  // The equivalence oracle runs on a trusted fixture because Direct is a Host
+  // capability. The ordinary Host-test entry and the explicit Direct entry
+  // must both select the same rendering-protocol adapter; there is no legacy
+  // renderer left to compare against.
   async function createTrustedFixture(): Promise<CardDef> {
     let resource: LooseCardResource = {
       attributes: {
@@ -139,29 +142,29 @@ module('Integration | rp-equivalence', function (hooks) {
     );
   }
 
-  test('RP-15.4, RP-1.5: the legacy path and the protocol Direct tier agree on an isolated render', async function (assert) {
+  test('RP-15.4, RP-1.5: the Host test default and explicit Direct selection agree on an isolated render', async function (assert) {
     let card = await createTrustedFixture();
 
-    await renderLegacy(card, 'isolated');
+    await renderTestDefaultDirect(card, 'isolated');
     assert
-      .dom('[data-boxel-execution]')
-      .doesNotExist('the legacy path mounts no execution tier');
-    let legacy = snapshotRenderedCard(assert);
+      .dom('[data-boxel-execution="direct"]')
+      .exists('the Host test default mounts through the Direct RP adapter');
+    let testDefault = snapshotRenderedCard(assert);
 
     await renderProtocolDirect(card, 'isolated');
     let protocol = snapshotRenderedCard(assert);
 
     assert.deepEqual(
       protocol,
-      legacy,
+      testDefault,
       'text, data-boxel-card-* attributes, and container classes agree',
     );
     assert.true(
-      legacy.text.includes('Trusted Fixture'),
+      testDefault.text.includes('Trusted Fixture'),
       'both snapshots carry the rendered card content',
     );
     assert.strictEqual(
-      legacy.cardFormat,
+      testDefault.cardFormat,
       'isolated',
       'the root renders in the caller-seeded default format',
     );
@@ -171,15 +174,15 @@ module('Integration | rp-equivalence', function (hooks) {
     let card = await createTrustedFixture();
 
     for (let format of ['embedded', 'fitted', 'atom'] as Format[]) {
-      await renderLegacy(card, format);
-      let legacy = snapshotRenderedCard(assert);
+      await renderTestDefaultDirect(card, format);
+      let testDefault = snapshotRenderedCard(assert);
 
       await renderProtocolDirect(card, format);
       let protocol = snapshotRenderedCard(assert);
 
       assert.deepEqual(
         protocol,
-        legacy,
+        testDefault,
         `the two entries agree for the '${format}' format`,
       );
       assert.strictEqual(
@@ -197,10 +200,10 @@ module('Integration | rp-equivalence', function (hooks) {
   test('RP-1.6, RP-11.4: container boundaries and @displayContainer pass-through agree', async function (assert) {
     let card = await createTrustedFixture();
 
-    await renderLegacy(card, 'embedded');
-    let legacyDefault = snapshotRenderedCard(assert);
+    await renderTestDefaultDirect(card, 'embedded');
+    let testDefault = snapshotRenderedCard(assert);
     assert.true(
-      legacyDefault.classes.includes('boxel-card-container--boundaries'),
+      testDefault.classes.includes('boxel-card-container--boundaries'),
       'an unset @displayContainer keeps the Base-owned boundary',
     );
 
@@ -208,14 +211,16 @@ module('Integration | rp-equivalence', function (hooks) {
     let protocolDefault = snapshotRenderedCard(assert);
     assert.deepEqual(
       protocolDefault.classes,
-      legacyDefault.classes,
+      testDefault.classes,
       'default container classes agree across the two entries',
     );
 
-    await renderLegacy(card, 'embedded', false);
-    let legacySuppressed = snapshotRenderedCard(assert);
+    await renderTestDefaultDirect(card, 'embedded', false);
+    let testDefaultSuppressed = snapshotRenderedCard(assert);
     assert.false(
-      legacySuppressed.classes.includes('boxel-card-container--boundaries'),
+      testDefaultSuppressed.classes.includes(
+        'boxel-card-container--boundaries',
+      ),
       'an explicit false suppresses the container boundary',
     );
 
@@ -223,7 +228,7 @@ module('Integration | rp-equivalence', function (hooks) {
     let protocolSuppressed = snapshotRenderedCard(assert);
     assert.deepEqual(
       protocolSuppressed,
-      legacySuppressed,
+      testDefaultSuppressed,
       'boundary suppression agrees across the two entries',
     );
   });

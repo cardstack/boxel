@@ -360,6 +360,7 @@ module('Integration | preview', function (hooks) {
         </template>
       };
     }
+    loader.shimModule(`${testRealmURL}head-card`, { HeadCard });
 
     let headCard = new HeadCard({
       cardTitle: 'Preview Title',
@@ -381,6 +382,7 @@ module('Integration | preview', function (hooks) {
     }
 
     await renderComponent(TestDriver, 'head');
+    await waitFor('.google-title');
 
     await percySnapshot(assert);
 
@@ -429,6 +431,9 @@ module('Integration | preview', function (hooks) {
         </template>
       };
     }
+    loader.shimModule(`${testRealmURL}fallback-head-card`, {
+      FallbackHeadCard,
+    });
 
     let fallbackCard = new FallbackHeadCard({
       cardTitle: 'Fallback Title',
@@ -448,6 +453,7 @@ module('Integration | preview', function (hooks) {
     }
 
     await renderComponent(TestDriver, 'head');
+    await waitFor('.google-title');
 
     assert.dom('.google-title').hasText('Fallback Title');
     assert

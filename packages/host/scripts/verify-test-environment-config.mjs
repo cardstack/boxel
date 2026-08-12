@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
 import { readFile } from 'node:fs/promises';
 
 const configMetaRE =
@@ -49,6 +50,25 @@ if (process.env.BOXEL_ENVIRONMENT === 'ci') {
     );
     assert.equal(config.iconsURL, 'https://icons.ci.localhost');
     assert.equal(config.boxelSandboxRuntimeURL, 'https://sandbox.ci.localhost');
+  }
+
+  // Environment mode serves the Sandbox child from the same local Vite
+  // process on its dedicated Traefik origin. A shell that previously loaded a
+  // deployed environment can still carry this variable, but it must not move
+  // the child onto a hosted runtime with different assets.
+  let previousSandboxRuntimeURL = process.env.BOXEL_SANDBOX_RUNTIME_URL;
+  process.env.BOXEL_SANDBOX_RUNTIME_URL = 'https://boxelusercontent.dev';
+  let require = createRequire(import.meta.url);
+  let environment = require('../config/environment.js');
+  let isolatedConfig = environment('development');
+  assert.equal(
+    isolatedConfig.boxelSandboxRuntimeURL,
+    'https://sandbox.ci.localhost',
+  );
+  if (previousSandboxRuntimeURL === undefined) {
+    delete process.env.BOXEL_SANDBOX_RUNTIME_URL;
+  } else {
+    process.env.BOXEL_SANDBOX_RUNTIME_URL = previousSandboxRuntimeURL;
   }
 }
 

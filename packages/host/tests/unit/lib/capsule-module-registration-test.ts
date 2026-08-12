@@ -876,6 +876,78 @@ module('Unit | Capsule module registration', function () {
     }
   });
 
+  test('Capsule componentCodeRef pins rendering to an authored ancestor by reference', async function (assert) {
+    let source = `
+      import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+      import { setComponentTemplate } from '@ember/component';
+      import { createTemplateFactory } from '@ember/template-factory';
+
+      export class Parent extends CardDef {}
+      Parent.fitted = class ParentFitted extends Component {};
+      setComponentTemplate(createTemplateFactory({
+        id: 'parent-fitted',
+        block: ${JSON.stringify(fittedBlock)},
+        moduleName: ${JSON.stringify(moduleId)},
+        scope: () => [],
+        isStrictMode: true,
+      }), Parent.fitted);
+
+      export class Child extends Parent {}
+      Child.fitted = class ChildFitted extends Component {};
+      setComponentTemplate(createTemplateFactory({
+        id: 'child-fitted',
+        block: ${JSON.stringify(fittedBlock)},
+        moduleName: ${JSON.stringify(moduleId)},
+        scope: () => [],
+        isStrictMode: true,
+      }), Child.fitted);
+    `;
+    let evaluator = evaluatorFor({ [moduleId]: source });
+    let evaluateTemplate = evaluator.evaluateTemplate.bind(evaluator);
+    let renderedProviders: string[] = [];
+    evaluator.evaluateTemplate = async (module, name, format) => {
+      renderedProviders.push(`${module}#${name}:${format}`);
+      return evaluateTemplate(module, name, format);
+    };
+    let runtime = new CapsuleBoxelRuntime(evaluator);
+    let resource = {
+      type: 'card',
+      id: 'https://example.test/Child/one',
+      attributes: {},
+      relationships: {},
+      meta: {
+        adoptsFrom: { module: moduleId, name: 'Child' },
+      },
+    } as LooseCardResource;
+    let document = { data: resource } as LooseSingleCardDocument;
+
+    try {
+      let card = await runtime.createFromSerialized(
+        resource,
+        document,
+        resource.id as RealmResourceIdentifier,
+        'host-display',
+      );
+      let pinned = await runtime.getRenderSlot(card, 'fitted', {
+        module: moduleId as RealmResourceIdentifier,
+        name: 'Parent',
+      });
+      let unrelated = await runtime.getRenderSlot(card, 'fitted', {
+        module: 'https://example.test/unrelated.js' as RealmResourceIdentifier,
+        name: 'Other',
+      });
+
+      assert.strictEqual(pinned.owner, 'capsule');
+      assert.strictEqual(unrelated.owner, 'capsule');
+      assert.deepEqual(renderedProviders, [
+        'https://example.test/cards/article#Parent:fitted',
+        `${moduleId}#Child:fitted`,
+      ]);
+    } finally {
+      runtime.destroy();
+    }
+  });
+
   test('Capsule recursively projects getters from contained authored FieldDefs', async function (assert) {
     let source = `
       import {
