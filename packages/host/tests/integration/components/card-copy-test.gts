@@ -20,6 +20,7 @@ import type { Realm } from '@cardstack/runtime-common/realm';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
 import {
+  setupRealmCacheTeardown,
   withCachedRealmSetup,
   SYSTEM_CARD_FIXTURE_CONTENTS,
   percySnapshot,
@@ -58,6 +59,11 @@ function getDestinationCardCount(): number {
 }
 
 module('Integration | card-copy', function (hooks) {
+  // The snapshot this module caches stays attached until it is deleted, and
+  // SQLite caps attached databases per connection, so register the teardown
+  // that removes it when the module finishes.
+  setupRealmCacheTeardown(hooks);
+
   let realm1: Realm;
   let noop = () => {};
 

@@ -17,6 +17,7 @@ import ENV from '@cardstack/host/config/environment';
 import type RealmService from '@cardstack/host/services/realm';
 
 import {
+  setupRealmCacheTeardown,
   withCachedRealmSetup,
   getDbAdapter,
   setupLocalIndexing,
@@ -225,6 +226,16 @@ module('Acceptance | host submode', function (hooks) {
   });
 
   module('with a dangling host routing rule', function (hooks) {
+    // Each snapshot this module's tests create stays attached until it is
+
+    // deleted, and SQLite caps attached databases per connection. The prefix is
+
+    // derived from the running module's name, and nested modules have distinct
+
+    // names, so every scope that runs tests registers its own teardown.
+
+    setupRealmCacheTeardown(hooks);
+
     hooks.beforeEach(async function () {
       let dbAdapter = await getDbAdapter();
       await query(dbAdapter, [
@@ -297,6 +308,16 @@ module('Acceptance | host submode', function (hooks) {
   });
 
   module('with a realm that is not publishable', function (hooks) {
+    // Each snapshot this module's tests create stays attached until it is
+
+    // deleted, and SQLite caps attached databases per connection. The prefix is
+
+    // derived from the running module's name, and nested modules have distinct
+
+    // names, so every scope that runs tests registers its own teardown.
+
+    setupRealmCacheTeardown(hooks);
+
     hooks.beforeEach(async function () {
       // Each of these nested modules builds the same realm for every one of its
       // tests, so the indexed result is cached per module and restored instead
@@ -340,6 +361,16 @@ module('Acceptance | host submode', function (hooks) {
   });
 
   module('with a realm that is publishable', function (hooks) {
+    // Each snapshot this module's tests create stays attached until it is
+
+    // deleted, and SQLite caps attached databases per connection. The prefix is
+
+    // derived from the running module's name, and nested modules have distinct
+
+    // names, so every scope that runs tests registers its own teardown.
+
+    setupRealmCacheTeardown(hooks);
+
     hooks.beforeEach(async function () {
       // CS-10053: publishable lives in realm_metadata now. Seed the row
       // BEFORE setupAcceptanceTestRealm so parseRealmInfo's first read
@@ -750,6 +781,16 @@ module('Acceptance | host submode', function (hooks) {
     });
 
     module('publish and unpublish realm', function (hooks) {
+      // Each snapshot this module's tests create stays attached until it is
+
+      // deleted, and SQLite caps attached databases per connection. The prefix is
+
+      // derived from the running module's name, and nested modules have distinct
+
+      // names, so every scope that runs tests registers its own teardown.
+
+      setupRealmCacheTeardown(hooks);
+
       let publishDeferred: Deferred<void>;
       let unpublishDeferred: Deferred<void>;
 
