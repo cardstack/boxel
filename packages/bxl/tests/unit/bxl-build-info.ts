@@ -1,25 +1,16 @@
-// Smoke check that BXL_BUILD_INFO has the expected shape and the
-// feature list isn't accidentally empty. The realm-bundle build
-// script overrides `buildTime` to a real timestamp; the source
-// default is the string 'dev', which is what we see when running
-// from source (this test).
+// Smoke check that BXL_BUILD_INFO has the expected shape and that the
+// feature list isn't accidentally empty.
 
 import { ok, strictEqual } from 'node:assert';
 import { BXL_BUILD_INFO, VERSION } from '../../src/index.ts';
 
 strictEqual(BXL_BUILD_INFO.version, VERSION, 'version mirrors VERSION');
-strictEqual(
-  BXL_BUILD_INFO.buildTime,
-  'dev',
-  "source-loaded build info has buildTime='dev' — bundle script overrides at build time",
-);
 
 ok(Array.isArray(BXL_BUILD_INFO.features));
 ok(BXL_BUILD_INFO.features.length > 0, 'features list is non-empty');
 
-// Every feature must be the kind of opaque sentinel string operators
-// can grep for in a served bundle. Spaces / shell-special characters
-// would defeat the grep workflow.
+// Feature identifiers are compared and grepped for by consumers, so they must
+// stay opaque tokens — spaces or shell-special characters would defeat that.
 for (const feature of BXL_BUILD_INFO.features) {
   ok(
     /^[a-z0-9-]+$/.test(feature),
@@ -27,7 +18,7 @@ for (const feature of BXL_BUILD_INFO.features) {
   );
 }
 
-// The features the realm currently depends on must be present.
+// Behaviors that consumers depend on must be advertised.
 const required = [
   'null-tolerance',
   'jq-fx-tags',

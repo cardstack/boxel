@@ -2,7 +2,7 @@
 
 The canonical BXL syntax reference. Readable labels, one-based rows, predicates, and positional selectors on top of jq pipes, 300+ Excel formula helpers, and validator.js validator functions. Compiles to canonical jq; same evaluator, same AST, one language.
 
-> This is the Markdown mirror of [`docs/syntax-reference.html`](./syntax-reference.html). The HTML version has syntax highlighting and a rendered layout — open it in a browser for the best reading experience.
+> This is the Markdown edition. The same reference is published with syntax highlighting and a rendered layout at [bxl.boxel.site](https://bxl.boxel.site).
 
 ---
 
@@ -10,20 +10,20 @@ The canonical BXL syntax reference. Readable labels, one-based rows, predicates,
 
 If you know spreadsheets, you know the core idea. The difference: instead of cell references like `A1:B10`, you work with JSON -- fields, arrays, and objects.
 
-| Spreadsheet | BXL (readable, with sugar) |
-| --- | --- |
-| Cell value | JSON scalar (number, string, boolean) |
-| Range `A1:A10` | Array field — navigate it as `"Line Item"` or materialize with `"Line Item"[all]` |
-| Table with headers | Array of objects — each object's keys are the columns (`Quantity`, `"Unit Price"`, …) |
-| Current row | `.` (the dot — current JSON value inside `map`/`select`) |
-| `=A1 + B1` | `Price + Tax` |
-| `=SUM(A1:A10)` | `SUM("Line Item".Amount)`  — implicit iteration, no `map` needed |
-| `=IFERROR(A1, 0)` | `IFERROR(Value, 0)` |
-| `=SUMIF(C:C, "Service", B:B)` | `SUM("Line Item"[* ."Category" = "Service"].Amount)` |
-| `=VLOOKUP("B", A:B, 2, FALSE)` | `"Line Item"[SKU = "B"]."Unit Price"`  — first-match predicate |
-| `=A1` (first row) | `"Line Item"[#first].Amount` |
-| `=INDEX(A:A, ROWS(A:A))` (last) | `"Line Item"[#last].Amount` |
-| `=ROUND(B1*C1, 2)` | `ROUND(Quantity * "Unit Price", 2)` |
+| Spreadsheet                     | BXL (readable, with sugar)                                                            |
+| ------------------------------- | ------------------------------------------------------------------------------------- |
+| Cell value                      | JSON scalar (number, string, boolean)                                                 |
+| Range `A1:A10`                  | Array field — navigate it as `"Line Item"` or materialize with `"Line Item"[all]`     |
+| Table with headers              | Array of objects — each object's keys are the columns (`Quantity`, `"Unit Price"`, …) |
+| Current row                     | `.` (the dot — current JSON value inside `map`/`select`)                              |
+| `=A1 + B1`                      | `Price + Tax`                                                                         |
+| `=SUM(A1:A10)`                  | `SUM("Line Item".Amount)`  — implicit iteration, no `map` needed                      |
+| `=IFERROR(A1, 0)`               | `IFERROR(Value, 0)`                                                                   |
+| `=SUMIF(C:C, "Service", B:B)`   | `SUM("Line Item"[* ."Category" = "Service"].Amount)`                                  |
+| `=VLOOKUP("B", A:B, 2, FALSE)`  | `"Line Item"[SKU = "B"]."Unit Price"`  — first-match predicate                        |
+| `=A1` (first row)               | `"Line Item"[#first].Amount`                                                          |
+| `=INDEX(A:A, ROWS(A:A))` (last) | `"Line Item"[#last].Amount`                                                           |
+| `=ROUND(B1*C1, 2)`              | `ROUND(Quantity * "Unit Price", 2)`                                                   |
 
 > **Notice what changes between Excel and BXL:** no cell letters (`A1`), no absolute columns (`A:A`), no separate `ROWS()` to get the last position. Every row shows a different piece of sugar in action — labels replace cell references, implicit iteration replaces `map`, `[* .pred]` replaces `SUMIF`, first-match `[pred]` replaces `VLOOKUP`, and positional selectors replace `INDEX`/`ROWS` arithmetic.
 
@@ -33,11 +33,11 @@ If you know spreadsheets, you know the core idea. The difference: instead of cel
 
 Every helper name in BXL follows a source convention. The compiler is case-insensitive (`ROUND`, `round`, and `Round` all resolve to the same function), but the convention communicates _intent_ to the reader.
 
-| Reader sees | Interpretation | Examples |
-| --- | --- | --- |
-| `UPPERCASE` | Real Microsoft Excel function — paste-compatible, matching semantics. **We never invent new UPPERCASE names.** | `ROUND`, `SUM`, `IFERROR`, `VLOOKUP`, `ISBLANK` |
-| `lowercase` | BXL-native contribution — jq ecosystem primitive or a BXL-specific shortcut. Not portable to Excel. | `present`, `when` / `implies`, `words`, `nonempty`, `map`, `select`, `add` |
-| `camelCase` | Known upstream JavaScript library idiom preserved in BXL. | `isEmail`, `isURL`, `isUUID`, `isPostalCode` |
+| Reader sees | Interpretation                                                                                                 | Examples                                                                   |
+| ----------- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `UPPERCASE` | Real Microsoft Excel function — paste-compatible, matching semantics. **We never invent new UPPERCASE names.** | `ROUND`, `SUM`, `IFERROR`, `VLOOKUP`, `ISBLANK`                            |
+| `lowercase` | BXL-native contribution — jq ecosystem primitive or a BXL-specific shortcut. Not portable to Excel.            | `present`, `when` / `implies`, `words`, `nonempty`, `map`, `select`, `add` |
+| `camelCase` | Known upstream JavaScript library idiom preserved in BXL.                                                      | `isEmail`, `isURL`, `isUUID`, `isPostalCode`                               |
 
 > **If a helper name is UPPERCASE, you can paste it into an Excel cell and expect the same answer.** If it's lowercase, it's BXL or jq vocabulary. If it's camelCase, BXL is preserving a well-known JavaScript API shape, currently validator.js functions. The convention is enforced socially in review, not by the compiler — but keep it honest in authored expressions so reviewers can trust the promise.
 
@@ -55,25 +55,25 @@ Commas are for Excel formulas and readable BXL helpers: `MATCH(value, array)`, `
 
 Most jq/Excel pairs use different names, or the same name with different arity:
 
-| jq form | Excel form | How they coexist |
-| --- | --- | --- |
-| `x \| pow(y)` / `pow(b; e)` | `POWER(b, e)` | Different names, same parameter order. |
-| `fmod(a; b)` | `MOD(a, b)` | Different names, different sign semantics: `fmod(-7; 3) = -1`; `MOD(-7, 3) = 2`. |
-| `fmax(a; b)` / `fmin(a; b)` | `MAX(arr)` / `MIN(arr)` | Different names, different NaN/error handling. |
-| `jn(n; x)` / `yn(n; x)` | `BESSELJ(x, n)` / `BESSELY(x, n)` | Different names and different argument order. |
-| `x \| sin`, `x \| sqrt`, `x \| exp` | `SIN(x)`, `SQRT(x)`, `EXP(x)` | Same case-folded idea, different explicit arity. |
+| jq form                             | Excel form                        | How they coexist                                                                 |
+| ----------------------------------- | --------------------------------- | -------------------------------------------------------------------------------- |
+| `x \| pow(y)` / `pow(b; e)`         | `POWER(b, e)`                     | Different names, same parameter order.                                           |
+| `fmod(a; b)`                        | `MOD(a, b)`                       | Different names, different sign semantics: `fmod(-7; 3) = -1`; `MOD(-7, 3) = 2`. |
+| `fmax(a; b)` / `fmin(a; b)`         | `MAX(arr)` / `MIN(arr)`           | Different names, different NaN/error handling.                                   |
+| `jn(n; x)` / `yn(n; x)`             | `BESSELJ(x, n)` / `BESSELY(x, n)` | Different names and different argument order.                                    |
+| `x \| sin`, `x \| sqrt`, `x \| exp` | `SIN(x)`, `SQRT(x)`, `EXP(x)`     | Same case-folded idea, different explicit arity.                                 |
 
 #### Practical collision table
 
-| Name | Excel/readable BXL | jq | Dispatch note |
-| --- | --- | --- | --- |
-| `MATCH` / `match` | `MATCH(value, array)` / `MATCH(value, array, type)` | `text \| match(re)` / `text \| match(re; flags)` | Arity separates `match/1` and `MATCH/3`; separator separates `match/2` from `MATCH/2`. |
-| `INDEX` / `index` | `INDEX(array, row)` / `INDEX(array, row, col)` | `array \| index(value)` / `text \| index(substr)` | Arity separates jq `index/1` from Excel `INDEX/2` and `INDEX/3`. |
-| `TYPE` / `type` | `TYPE(value)` returns Excel numeric type code | `value \| type` returns jq type string | Arity separates jq `type/0` from Excel `TYPE/1`. |
-| `LOG` / `log` | `LOG(value)` is base-10 by default | `value \| log` is natural log | Arity separates jq `log/0` from Excel `LOG/1` and `LOG/2`. |
-| `NOW` / `now` | `NOW()` returns Excel date serial | `now` returns Unix epoch seconds | Call shape separates this: parenthesized call is Excel; bare filter is jq. |
-| `TRIM` / `trim` | `TRIM(text)` trims and collapses internal whitespace | `text \| trim` trims outer whitespace | Arity separates jq `trim/0` from Excel `TRIM/1`. |
-| `ATAN2` / `atan2` | `ATAN2(x, y)` uses Excel order | `atan2(y; x)` uses jq/POSIX order | Arity separates jq `atan2/1`; separator separates Excel `ATAN2/2` from jq `atan2/2`. |
+| Name              | Excel/readable BXL                                   | jq                                                | Dispatch note                                                                          |
+| ----------------- | ---------------------------------------------------- | ------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `MATCH` / `match` | `MATCH(value, array)` / `MATCH(value, array, type)`  | `text \| match(re)` / `text \| match(re; flags)`  | Arity separates `match/1` and `MATCH/3`; separator separates `match/2` from `MATCH/2`. |
+| `INDEX` / `index` | `INDEX(array, row)` / `INDEX(array, row, col)`       | `array \| index(value)` / `text \| index(substr)` | Arity separates jq `index/1` from Excel `INDEX/2` and `INDEX/3`.                       |
+| `TYPE` / `type`   | `TYPE(value)` returns Excel numeric type code        | `value \| type` returns jq type string            | Arity separates jq `type/0` from Excel `TYPE/1`.                                       |
+| `LOG` / `log`     | `LOG(value)` is base-10 by default                   | `value \| log` is natural log                     | Arity separates jq `log/0` from Excel `LOG/1` and `LOG/2`.                             |
+| `NOW` / `now`     | `NOW()` returns Excel date serial                    | `now` returns Unix epoch seconds                  | Call shape separates this: parenthesized call is Excel; bare filter is jq.             |
+| `TRIM` / `trim`   | `TRIM(text)` trims and collapses internal whitespace | `text \| trim` trims outer whitespace             | Arity separates jq `trim/0` from Excel `TRIM/1`.                                       |
+| `ATAN2` / `atan2` | `ATAN2(x, y)` uses Excel order                       | `atan2(y; x)` uses jq/POSIX order                 | Arity separates jq `atan2/1`; separator separates Excel `ATAN2/2` from jq `atan2/2`.   |
 
 ```text
 MATCH("b", ["a", "b"], 0)   -- Excel lookup, returns 2
@@ -103,29 +103,29 @@ BXL canonicalizes both `GAMMA/1` (Excel) and `gamma/0` (jq) to **true Γ**. Use 
 
 If you need log-Γ, use the unambiguous spellings — they compute the same thing in either dialect:
 
-| Want | jq spelling | Excel spelling |
-| --- | --- | --- |
-| true Γ(x) | `x \| gamma` (== `tgamma`) | `GAMMA(x)` |
-| log Γ(x) | `x \| lgamma` | `GAMMALN(x)` |
+| Want      | jq spelling                | Excel spelling |
+| --------- | -------------------------- | -------------- |
+| true Γ(x) | `x \| gamma` (== `tgamma`) | `GAMMA(x)`     |
+| log Γ(x)  | `x \| lgamma`              | `GAMMALN(x)`   |
 
 #### Quick reference: collisions and resolutions
 
 > Spelling reminder: prefer the **UPPERCASE** form for any name that ends up at an Excel function. Lowercase still resolves but the linter emits an info-level `excel-name-uppercase-preferred` nudge — see [Linter style nudges](#linter-style-nudges).
 
-| Function | BXL behaviour | Notes |
-| --- | --- | --- |
-| `MATCH(value, array)` / `match(re; flags)` | Excel lookup with comma; jq regex with semicolon | `match(re)` is jq by arity; `MATCH(value, array, 0)` is Excel by arity. |
-| `INDEX(array, row)` / `index(value)` | Excel lookup with 2-3 args; jq index-of with 1 arg | Excel rows are one-based; jq index result is zero-based. |
-| `TYPE(value)` / `type` | Excel numeric type code vs jq type string | Parenthesized one-arg call is Excel; bare pipe filter is jq. |
-| `LOG(x)` / `log` | Excel base-10 log vs jq natural log | Arity decides. `LOG(x, base)` is Excel. |
-| `NOW()` / `now` | Excel date serial vs jq epoch seconds | Call shape decides. `now()` is Excel and formats to `NOW()`. Bare `NOW` is jq and formats to `now`. |
-| `TRIM(text)` / `trim` | Excel collapse whitespace vs jq outer trim | Arity decides. |
-| `ATAN2(x, y)` / `atan2(y; x)` | Excel order with comma; jq/POSIX order with semicolon | Separator decides the two-arg collision. |
-| `GAMMA(x)` / `gamma` | true Γ | Same math; use `lgamma` or `GAMMALN` for log-Γ. |
-| `fmod` vs `MOD` | independent functions | `fmod` dividend-signed (C); `MOD` divisor-signed (Excel) |
-| `fmax`/`fmin` vs `MAX`/`MIN` | independent functions | `fmax`/`fmin` skip NaN; `MAX`/`MIN` propagate errors |
-| `jn`/`yn` vs `BESSELJ`/`BESSELY` | independent functions | `jn(n; x)` (C order); `BESSELJ(x, n)` (Excel order) |
-| `pow` vs `POWER` | independent functions | Same param order in both, no impedance |
+| Function                                   | BXL behaviour                                         | Notes                                                                                               |
+| ------------------------------------------ | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `MATCH(value, array)` / `match(re; flags)` | Excel lookup with comma; jq regex with semicolon      | `match(re)` is jq by arity; `MATCH(value, array, 0)` is Excel by arity.                             |
+| `INDEX(array, row)` / `index(value)`       | Excel lookup with 2-3 args; jq index-of with 1 arg    | Excel rows are one-based; jq index result is zero-based.                                            |
+| `TYPE(value)` / `type`                     | Excel numeric type code vs jq type string             | Parenthesized one-arg call is Excel; bare pipe filter is jq.                                        |
+| `LOG(x)` / `log`                           | Excel base-10 log vs jq natural log                   | Arity decides. `LOG(x, base)` is Excel.                                                             |
+| `NOW()` / `now`                            | Excel date serial vs jq epoch seconds                 | Call shape decides. `now()` is Excel and formats to `NOW()`. Bare `NOW` is jq and formats to `now`. |
+| `TRIM(text)` / `trim`                      | Excel collapse whitespace vs jq outer trim            | Arity decides.                                                                                      |
+| `ATAN2(x, y)` / `atan2(y; x)`              | Excel order with comma; jq/POSIX order with semicolon | Separator decides the two-arg collision.                                                            |
+| `GAMMA(x)` / `gamma`                       | true Γ                                                | Same math; use `lgamma` or `GAMMALN` for log-Γ.                                                     |
+| `fmod` vs `MOD`                            | independent functions                                 | `fmod` dividend-signed (C); `MOD` divisor-signed (Excel)                                            |
+| `fmax`/`fmin` vs `MAX`/`MIN`               | independent functions                                 | `fmax`/`fmin` skip NaN; `MAX`/`MIN` propagate errors                                                |
+| `jn`/`yn` vs `BESSELJ`/`BESSELY`           | independent functions                                 | `jn(n; x)` (C order); `BESSELJ(x, n)` (Excel order)                                                 |
+| `pow` vs `POWER`                           | independent functions                                 | Same param order in both, no impedance                                                              |
 
 > **Why no runtime dialect flag?** Earlier drafts considered an `expression(jq\`…\`)` mode. BXL does not need it: arity/call shape and separators preserve the intent that users paste from Excel or jq, while casing stays a formatter/linter convention.
 
@@ -155,18 +155,18 @@ Severity is `info`, never `error` — your code still compiles and runs.
 
 If you only remember ten things about BXL, remember these. Every other section expands on one of them.
 
-| # | Rule | In practice |
-| --- | --- | --- |
-| **1** | **Labels replace paths in schema-aware contexts.** `"Line Item".Quantity`, not `.lineItems[].quantity`. | Write what the UI shows. The compiler resolves display names via the active schema. |
-| **2** | **Implicit iteration on array fields.** Navigating `.field` on an array auto-materializes. | `SUM("Line Item".Amount)` — no `map`, no `[all]`. Sugar beats boilerplate. |
-| **3** | **One-based rows use `[#N]`; raw `[N]` is 0-based jq.** They mean different elements. | `[#4]` = 4th row. `[3]` = 4th row but zero-based (escape hatch). Pick one style per expression. |
-| **4** | **Predicates come in two shapes.** `[pred]` returns the first match; `[* .pred]` returns every match. | Scalar vs array result. `[SKU="X"]` finds one; `[* ."Taxable"]` filters all. |
-| **5** | **Excel-style equality works:** `=` and `<>` compile to `==` and `!=`. | Paste `IF(Status="paid", …)` from Excel, no edits needed. |
-| **6** | **Source idioms are preserved.** `ROUND`, `SUM`, `ISBLANK` match Microsoft Excel exactly. lowercase (`present`, `when`, `words`) is BXL/jq-native. camelCase (`isEmail`, `isURL`) keeps validator.js familiar. | UPPERCASE paste-compatible with Excel cells. lowercase is BXL/jq vocabulary. camelCase is known JS-library vocabulary. |
-| **7** | **Positional selectors live in `[#...]` only.** Positive selectors are 1-based; last-relative selectors count backward from the end. | `[#1]`, `[#4]`, `[#first]`, `[#last]`, `[#last-1]`, `[#4..#last-3]`, `[#1, #2, #7..#9, #11]`, `[#odd]`, `[#even]`, `[#only]`. |
-| **8** | **Root auto-binds across pipes.** Readable labels after `\|` resolve against the root card, not the piped-in value. | `"Line Item"."Line Total" \| add = Subtotal` — `Subtotal` reads from the root. |
-| **9** | **Presence is context-dependent.** `ISBLANK` is Excel-strict (null only). `present` is form-friendly (null or `""`). | `present(Email)` for form validation. `NOT ISBLANK(Email)` when you need Excel's semantics. |
-| **10** | **Formatters pipe and interpolate.** `\| @fmt` transforms a value; `@fmt "… \(expr) …"` escapes every interpolation into a safe sink. | `@html "Hi \(Name)"` escapes XSS. `@uri` for URLs. `@json` / `@csv` / `@base64` for machine sinks. |
+| #      | Rule                                                                                                                                                                                                           | In practice                                                                                                                   |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| **1**  | **Labels replace paths in schema-aware contexts.** `"Line Item".Quantity`, not `.lineItems[].quantity`.                                                                                                        | Write what the UI shows. The compiler resolves display names via the active schema.                                           |
+| **2**  | **Implicit iteration on array fields.** Navigating `.field` on an array auto-materializes.                                                                                                                     | `SUM("Line Item".Amount)` — no `map`, no `[all]`. Sugar beats boilerplate.                                                    |
+| **3**  | **One-based rows use `[#N]`; raw `[N]` is 0-based jq.** They mean different elements.                                                                                                                          | `[#4]` = 4th row. `[3]` = 4th row but zero-based (escape hatch). Pick one style per expression.                               |
+| **4**  | **Predicates come in two shapes.** `[pred]` returns the first match; `[* .pred]` returns every match.                                                                                                          | Scalar vs array result. `[SKU="X"]` finds one; `[* ."Taxable"]` filters all.                                                  |
+| **5**  | **Excel-style equality works:** `=` and `<>` compile to `==` and `!=`.                                                                                                                                         | Paste `IF(Status="paid", …)` from Excel, no edits needed.                                                                     |
+| **6**  | **Source idioms are preserved.** `ROUND`, `SUM`, `ISBLANK` match Microsoft Excel exactly. lowercase (`present`, `when`, `words`) is BXL/jq-native. camelCase (`isEmail`, `isURL`) keeps validator.js familiar. | UPPERCASE paste-compatible with Excel cells. lowercase is BXL/jq vocabulary. camelCase is known JS-library vocabulary.        |
+| **7**  | **Positional selectors live in `[#...]` only.** Positive selectors are 1-based; last-relative selectors count backward from the end.                                                                           | `[#1]`, `[#4]`, `[#first]`, `[#last]`, `[#last-1]`, `[#4..#last-3]`, `[#1, #2, #7..#9, #11]`, `[#odd]`, `[#even]`, `[#only]`. |
+| **8**  | **Root auto-binds across pipes.** Readable labels after `\|` resolve against the root card, not the piped-in value.                                                                                            | `"Line Item"."Line Total" \| add = Subtotal` — `Subtotal` reads from the root.                                                |
+| **9**  | **Presence is context-dependent.** `ISBLANK` is Excel-strict (null only). `present` is form-friendly (null or `""`).                                                                                           | `present(Email)` for form validation. `NOT ISBLANK(Email)` when you need Excel's semantics.                                   |
+| **10** | **Formatters pipe and interpolate.** `\| @fmt` transforms a value; `@fmt "… \(expr) …"` escapes every interpolation into a safe sink.                                                                          | `@html "Hi \(Name)"` escapes XSS. `@uri` for URLs. `@json` / `@csv` / `@base64` for machine sinks.                            |
 
 > **Honorable mentions.** `when(p, q)` / `implies(p, q)` for "if this, then that must hold" constraints. `nonempty(arr)` to strip `null` / `""` before counting. `words(s)` to count whitespace-separated tokens.
 
@@ -178,14 +178,14 @@ BXL keeps canonical jq valid and adds a schema-aware readable layer. Labels, one
 
 ### Labels, rows, and implicit iteration
 
-| Readable BXL | Canonical jq | Meaning |
-| --- | --- | --- |
-| `Total` | `.total` | Bare labels work when the schema resolves them unambiguously. |
-| `"Bill To"."Country Code"` | `.billTo.countryCode` | Quoted labels handle spaces and punctuation. |
-| `"Line Item"[#4].Quantity` | `.lineItems[3].quantity` | `[#N]` is the canonical one-based row shortcut. |
-| `"Line Item"[#1..#3].SKU` | `[.lineItems[0:3][].sku]` | One-based inclusive range — first three SKUs. |
-| `"Line Item"."Line Total"` | `[.lineItems[].lineTotal]` | **Implicit iteration** — navigating `.field` on an array field auto-materializes, just like `[all]`. |
-| `"Line Item"[all].Quantity` | `[.lineItems[].quantity]` | Explicit form remains valid. |
+| Readable BXL                | Canonical jq               | Meaning                                                                                              |
+| --------------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `Total`                     | `.total`                   | Bare labels work when the schema resolves them unambiguously.                                        |
+| `"Bill To"."Country Code"`  | `.billTo.countryCode`      | Quoted labels handle spaces and punctuation.                                                         |
+| `"Line Item"[#4].Quantity`  | `.lineItems[3].quantity`   | `[#N]` is the canonical one-based row shortcut.                                                      |
+| `"Line Item"[#1..#3].SKU`   | `[.lineItems[0:3][].sku]`  | One-based inclusive range — first three SKUs.                                                        |
+| `"Line Item"."Line Total"`  | `[.lineItems[].lineTotal]` | **Implicit iteration** — navigating `.field` on an array field auto-materializes, just like `[all]`. |
+| `"Line Item"[all].Quantity` | `[.lineItems[].quantity]`  | Explicit form remains valid.                                                                         |
 
 > **Legacy row shortcuts.** `[row N]` and `[item N]` still parse but solidify rewrites them to `[#N]`. Keep `[0]` / `[0:3]` (zero-based, jq-native) as the escape hatch when you need it.
 
@@ -193,32 +193,32 @@ BXL keeps canonical jq valid and adds a schema-aware readable layer. Labels, one
 
 ### Predicates: first-match and filter-all
 
-| Readable BXL | Canonical jq | Shape |
-| --- | --- | --- |
-| `"Line Item"[SKU = "COPY-04"].Quantity` | `first(.lineItems[] \| select(.sku == "COPY-04")).quantity` | **First match** — scalar result. |
-| `"Line Item"[* ."Category" = "Service"]` | `[.lineItems[] \| select(.category == "Service")]` | **Filter all** — `[* .pred]` keeps every matching row. |
-| `SUM("Line Item"[* ."Taxable"]."Line Total")` | `SUM([.lineItems[] \| select(.taxable).lineTotal])` | Excel `SUMIF` shape — no dedicated `_BY` builtin needed. |
-| `COUNTA("Line Item"[* .Quantity > 5])` | `COUNTA([.lineItems[] \| select(.quantity > 5)])` | Excel `COUNTIF` shape. |
-| `"Line Item"[* .Quantity * ."Unit Price" > 15].SKU` | `[.lineItems[] \| select(.quantity * .unitPrice > 15).sku]` | Arbitrary boolean predicate — arithmetic across sibling fields. |
-| `"Line Item"[SKU \| startswith("BRAND")]` | `first(.lineItems[] \| select(.sku \| startswith("BRAND")))` | String predicates use jq pipe form. |
+| Readable BXL                                        | Canonical jq                                                 | Shape                                                           |
+| --------------------------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------- |
+| `"Line Item"[SKU = "COPY-04"].Quantity`             | `first(.lineItems[] \| select(.sku == "COPY-04")).quantity`  | **First match** — scalar result.                                |
+| `"Line Item"[* ."Category" = "Service"]`            | `[.lineItems[] \| select(.category == "Service")]`           | **Filter all** — `[* .pred]` keeps every matching row.          |
+| `SUM("Line Item"[* ."Taxable"]."Line Total")`       | `SUM([.lineItems[] \| select(.taxable).lineTotal])`          | Excel `SUMIF` shape — no dedicated `_BY` builtin needed.        |
+| `COUNTA("Line Item"[* .Quantity > 5])`              | `COUNTA([.lineItems[] \| select(.quantity > 5)])`            | Excel `COUNTIF` shape.                                          |
+| `"Line Item"[* .Quantity * ."Unit Price" > 15].SKU` | `[.lineItems[] \| select(.quantity * .unitPrice > 15).sku]`  | Arbitrary boolean predicate — arithmetic across sibling fields. |
+| `"Line Item"[SKU \| startswith("BRAND")]`           | `first(.lineItems[] \| select(.sku \| startswith("BRAND")))` | String predicates use jq pipe form.                             |
 
 > **Predicate truthiness.** `[* ."Taxable"]` uses jq item-scope truthiness — `true` keeps, `false` / `null` / missing filter out — same as jq's native `select(.taxable)`.
 
 ### Positional selectors
 
-| Readable BXL | Canonical jq | Notes |
-| --- | --- | --- |
-| `"Line Item"[#first].SKU` | `.lineItems[0].sku` | First item. |
-| `"Line Item"[#last]."Line Total"` | `.lineItems[-1].lineTotal` | Last item. |
-| `"Line Item"[#last-1].SKU` | `.lineItems[-2].sku` | Second from the end. |
-| `"Line Item"[#4].Quantity` | `.lineItems[3].quantity` | Positive selectors are 1-based. |
-| `"Line Item"[#2..#last-1].SKU` | `[(.lineItems) as $__seq \| $__seq[1:(($__seq \| length) - 1)][].sku]` | Forward anchored range from the front to the back. |
-| `"Line Item"[#last-3..#last-1].SKU` | `[(.lineItems) as $__seq \| $__seq[(($__seq \| length) - 4):(($__seq \| length) - 1)][].sku]` | Forward anchored range fully from the back. |
+| Readable BXL                           | Canonical jq                                                                                                                                                                                         | Notes                                                                             |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `"Line Item"[#first].SKU`              | `.lineItems[0].sku`                                                                                                                                                                                  | First item.                                                                       |
+| `"Line Item"[#last]."Line Total"`      | `.lineItems[-1].lineTotal`                                                                                                                                                                           | Last item.                                                                        |
+| `"Line Item"[#last-1].SKU`             | `.lineItems[-2].sku`                                                                                                                                                                                 | Second from the end.                                                              |
+| `"Line Item"[#4].Quantity`             | `.lineItems[3].quantity`                                                                                                                                                                             | Positive selectors are 1-based.                                                   |
+| `"Line Item"[#2..#last-1].SKU`         | `[(.lineItems) as $__seq \| $__seq[1:(($__seq \| length) - 1)][].sku]`                                                                                                                               | Forward anchored range from the front to the back.                                |
+| `"Line Item"[#last-3..#last-1].SKU`    | `[(.lineItems) as $__seq \| $__seq[(($__seq \| length) - 4):(($__seq \| length) - 1)][].sku]`                                                                                                        | Forward anchored range fully from the back.                                       |
 | `"Line Item"[#1, #2, #7..#9, #11].SKU` | `[(.lineItems) as $__seq \| ($__seq \| length) as $__len \| range(0; $__len) as $__idx \| select($__idx == 0 or $__idx == 1 or ($__idx >= 6 and $__idx < 9) or $__idx == 10) \| $__seq[$__idx].sku]` | Selector union. Output stays in collection order and overlaps collapse naturally. |
-| `"Line Item"[#-1].SKU` | `.lineItems[-1].sku` | jq-native alias for the last item. |
-| `"Line Item"[#odd]` | `[.lineItems \| .[range(0; length; 2)]]` | Positions 1, 3, 5 (1-based). |
-| `"Line Item"[#even]` | `[.lineItems \| .[range(1; length; 2)]]` | Positions 2, 4, 6. |
-| `Shipment[0:1][#only].Carrier` | `(([.shipments[0:1][]]) as $__seq \| ($__seq \| length) as $__len \| if $__len == 1 then $__seq[0] else error(...) end).carrier` | The only element, error unless length is exactly 1. |
+| `"Line Item"[#-1].SKU`                 | `.lineItems[-1].sku`                                                                                                                                                                                 | jq-native alias for the last item.                                                |
+| `"Line Item"[#odd]`                    | `[.lineItems \| .[range(0; length; 2)]]`                                                                                                                                                             | Positions 1, 3, 5 (1-based).                                                      |
+| `"Line Item"[#even]`                   | `[.lineItems \| .[range(1; length; 2)]]`                                                                                                                                                             | Positions 2, 4, 6.                                                                |
+| `Shipment[0:1][#only].Carrier`         | `(([.shipments[0:1][]]) as $__seq \| ($__seq \| length) as $__len \| if $__len == 1 then $__seq[0] else error(...) end).carrier`                                                                     | The only element, error unless length is exactly 1.                               |
 
 > **Indexing asymmetry is intentional.** Positive selectors are 1-based (`[#1]` is the first row) because they are for human-authored row access. The preferred end-relative form is `[#last-N]`: `[#last]` is the last row, `[#last-1]` second-to-last, `[#last-3]` fourth-from-last. jq-native `[#-N]` aliases are still accepted (`[#-1]` = `[#last]`, `[#-2]` = `[#last-1]`) but the readable formatter prefers the `last-N` spelling.
 
@@ -248,12 +248,12 @@ ROUND(.subtotal * .taxRate / 100; 2) == .taxAmount
 
 ### Grammar and linter
 
-| Artifact | Purpose |
-| --- | --- |
-| `grammar.ebnf` | Standalone formal grammar for the BXL readable-syntax overlay. |
-| `syntax/bxl.tmLanguage.json` | Portable TextMate syntax highlighting definition for BXL expressions. |
+| Artifact                             | Purpose                                                                                          |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| `grammar.ebnf`                       | Standalone formal grammar for the BXL readable-syntax overlay.                                   |
+| `syntax/bxl.tmLanguage.json`         | Portable TextMate syntax highlighting definition for BXL expressions.                            |
 | `lintBxlExpression(source, options)` | Non-evaluating linter for readable syntax confusion, compiler warnings, and native parse errors. |
-| `tests/linter-cli.ts` | CLI coverage for edge cases the grammar allows but authors can easily misread. |
+| `tests/linter-cli.ts`                | CLI coverage for edge cases the grammar allows but authors can easily misread.                   |
 
 > **Lint targets:** missing quotes around multi-word labels, root labels after a top-level pipe, legacy `[row N]` shortcuts, predicate selectors that return only the first match, top-level `==` (info-level `prefer-excel-equality` — BXL canonicalizes to `=`), removed CSS-style pseudo-classes, and helper-dependent predicates such as `IN`.
 
@@ -263,13 +263,13 @@ ROUND(.subtotal * .taxRate / 100; 2) == .taxAmount
 
 BXL absorbs five Excel-specific idioms so a formula from a spreadsheet works verbatim:
 
-| Excel idiom | What BXL does | Example |
-| --- | --- | --- |
-| Leading `=` (cell-formula prefix) | Stripped by the preprocessor. | `=ROUND(x, 2)` → `ROUND(x, 2)` |
-| `<>` inequality | Canonicalized to `!=` for jq; displayed as `<>` in readable BXL. | `Status <> "closed"` |
-| `^` power operator | Right-associative rewrite to `POWER(a, b)`. | `2^8` → `POWER(2, 8)` |
-| `&` string concat | Rewrite to `((a\|tostring) + (b\|tostring))` — Excel-style coercion. | `"Invoice-" & "Invoice Number"` |
-| Unknown characters | Caught by the linter as `untokenizable-character`; never crashes solidify. | — |
+| Excel idiom                       | What BXL does                                                              | Example                         |
+| --------------------------------- | -------------------------------------------------------------------------- | ------------------------------- |
+| Leading `=` (cell-formula prefix) | Stripped by the preprocessor.                                              | `=ROUND(x, 2)` → `ROUND(x, 2)`  |
+| `<>` inequality                   | Canonicalized to `!=` for jq; displayed as `<>` in readable BXL.           | `Status <> "closed"`            |
+| `^` power operator                | Right-associative rewrite to `POWER(a, b)`.                                | `2^8` → `POWER(2, 8)`           |
+| `&` string concat                 | Rewrite to `((a\|tostring) + (b\|tostring))` — Excel-style coercion.       | `"Invoice-" & "Invoice Number"` |
+| Unknown characters                | Caught by the linter as `untokenizable-character`; never crashes solidify. | —                               |
 
 > **Paste test:** Sampled FormulaJS cases across math/trig, text, logical, statistical, engineering, information, date/time, and financial formulas work unchanged in the async compatibility runtime. Known paste gap: `MODE` is not implemented. `AND` / `OR` / `XOR` use array-style arguments, and `DEC2HEX` returns lowercase.
 
@@ -779,7 +779,7 @@ Item.{
 }
 ```
 
-_Compiles to canonical jq — VLOOKUP\_BY walks the PerDiem rows by City key, returns the matching Limit_
+_Compiles to canonical jq — VLOOKUP_BY walks the PerDiem rows by City key, returns the matching Limit_
 
 ```
 [.Item[] | {
@@ -791,11 +791,11 @@ _Compiles to canonical jq — VLOOKUP\_BY walks the PerDiem rows by City key, re
 
 ### Side-by-side — the same rule in three forms
 
-| Form | Lines | Reads as | Requires |
-| --- | --- | --- | --- |
-| Excel | 1 (per row, drag-to-copy) | a spreadsheet cell formula | A/B sheet references, manual dragging |
-| Raw jq | 5 | a script with intermediate bindings | jq fluency, `as $var` chaining |
-| BXL readable | 1–3 | a policy check in plain English | a schema — which Boxel already has |
+| Form         | Lines                     | Reads as                            | Requires                              |
+| ------------ | ------------------------- | ----------------------------------- | ------------------------------------- |
+| Excel        | 1 (per row, drag-to-copy) | a spreadsheet cell formula          | A/B sheet references, manual dragging |
+| Raw jq       | 5                         | a script with intermediate bindings | jq fluency, `as $var` chaining        |
+| BXL readable | 1–3                       | a policy check in plain English     | a schema — which Boxel already has    |
 
 > **Where BXL earns its keep.** The Excel form is the one business users recognize, but it lives one row at a time in a grid. The jq form is expressive but asks the reader to follow variable bindings across 5 lines. The BXL form preserves the Excel mental model (`VLOOKUP`, `IF`, labels you see in the UI) while operating over the entire card's data in one expression that compiles to safe, sandboxed jq.
 
@@ -807,23 +807,23 @@ Everything jq does still works. BXL sits _on top_ of jq — canonical jq express
 
 ### Basic Access
 
-| Expression | Result |
-| --- | --- |
-| `.` | The entire current value (like "this row") |
-| `.name` | Value of the `name` field |
-| `.patient.name` | Nested field access |
-| `.orders[0]` | First element of the `orders` array (zero-based in jq) |
-| `.orders[-1]` | Last element |
-| `.orders[2:5]` | Slice: elements at index 2, 3, 4 |
+| Expression      | Result                                                 |
+| --------------- | ------------------------------------------------------ |
+| `.`             | The entire current value (like "this row")             |
+| `.name`         | Value of the `name` field                              |
+| `.patient.name` | Nested field access                                    |
+| `.orders[0]`    | First element of the `orders` array (zero-based in jq) |
+| `.orders[-1]`   | Last element                                           |
+| `.orders[2:5]`  | Slice: elements at index 2, 3, 4                       |
 
 ### Safe Access & Fallbacks
 
-| Expression | Result |
-| --- | --- |
-| `.owner?.email` | Optional access -- no error if `owner` is null |
+| Expression                | Result                                           |
+| ------------------------- | ------------------------------------------------ |
+| `.owner?.email`           | Optional access -- no error if `owner` is null   |
 | `.owner?.email // "none"` | Alternative operator -- fallback if null/missing |
-| `.items[]` | Iterate: emit each element as a separate value |
-| `..` | Recursive descent -- all values at every depth |
+| `.items[]`                | Iterate: emit each element as a separate value   |
+| `..`                      | Recursive descent -- all values at every depth   |
 
 ## Pipes & Transforms
 
@@ -855,7 +855,7 @@ _Deduplicate_
 .tags | map(ascii_downcase) | unique | sort
 ```
 
-### group\_by, flatten, add
+### group_by, flatten, add
 
 _Group and count_
 
@@ -879,36 +879,36 @@ _Sum an array_
 
 ### Operators
 
-| Operator | Meaning | Example |
-| --- | --- | --- |
-| `\|` | Pipe | `.items \| map(.x)` |
-| `,` | Both outputs | `.a, .b` emits two values |
-| `+` `-` `*` `/` `%` | Arithmetic | `.price * .qty` |
-| `==` `!=` `<` `<=` `>` `>=` | Comparison | `.age >= 18` |
-| `and` `or` `not` | Logical | `.a and .b` |
-| `//` | Alternative (fallback) | `.x // 0` |
-| `=` `\|=` `+=` `-=` | Update | `.count += 1` |
+| Operator                    | Meaning                | Example                   |
+| --------------------------- | ---------------------- | ------------------------- |
+| `\|`                        | Pipe                   | `.items \| map(.x)`       |
+| `,`                         | Both outputs           | `.a, .b` emits two values |
+| `+` `-` `*` `/` `%`         | Arithmetic             | `.price * .qty`           |
+| `==` `!=` `<` `<=` `>` `>=` | Comparison             | `.age >= 18`              |
+| `and` `or` `not`            | Logical                | `.a and .b`               |
+| `//`                        | Alternative (fallback) | `.x // 0`                 |
+| `=` `\|=` `+=` `-=`         | Update                 | `.count += 1`             |
 
 ## Constructing Values
 
 ### Objects
 
-| Expression | Result |
-| --- | --- |
-| `{id, status, total}` | Shorthand -- pulls fields from current value |
-| `{patient: .patientName, ward: .ward}` | Renamed fields |
+| Expression                             | Result                                       |
+| -------------------------------------- | -------------------------------------------- |
+| `{id, status, total}`                  | Shorthand -- pulls fields from current value |
+| `{patient: .patientName, ward: .ward}` | Renamed fields                               |
 
 ### Arrays
 
-| Expression | Result |
-| --- | --- |
-| `[.name, .ward, .diagnosis]` | Array from specific fields |
-| `[.items[] \| .name]` | Collect iterated values into array |
+| Expression                   | Result                             |
+| ---------------------------- | ---------------------------------- |
+| `[.name, .ward, .diagnosis]` | Array from specific fields         |
+| `[.items[] \| .name]`        | Collect iterated values into array |
 
 ### String Interpolation
 
-| Expression | Result |
-| --- | --- |
+| Expression                              | Result                           |
+| --------------------------------------- | -------------------------------- |
 | `"Patient: \(.firstName) \(.lastName)"` | Embed computed values in strings |
 
 ## Bindings & Variables
@@ -932,10 +932,10 @@ _Bind and reuse_
 
 Any BXL expression can open with its own named helpers. Syntax and scoping match jq's `def`. Because user helpers aren't from Excel or a preserved upstream helper family, they follow the lowercase naming convention — a `def UPPERCASE` would lie about paste-compatibility. (See [Naming convention](#naming-convention-preserve-source-idioms).)
 
-| Form | Meaning |
-| --- | --- |
-| `def name: body;` | Zero-arg helper. Applied as a pipeline filter: `.items \| map(name)`. |
-| `def name(arg): body;` | One-arg helper. Call site: `name(value)`. |
+| Form                       | Meaning                                                                                                                                                                                                                                                                                                                                                                      |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `def name: body;`          | Zero-arg helper. Applied as a pipeline filter: `.items \| map(name)`.                                                                                                                                                                                                                                                                                                        |
+| `def name(arg): body;`     | One-arg helper. Call site: `name(value)`.                                                                                                                                                                                                                                                                                                                                    |
 | `def name(a; b; c): body;` | Multi-arg helper. **Definition and call both use `;`.** BXL's comma-to-`;` rewrite is a convenience for known readable built-ins — paste `ROUND("Unit Price", 2)` from a spreadsheet or write `isURL(Website, {require_protocol:true})`, and BXL handles the translation to jq behind the scenes. User `def` calls don't get that rewrite; `clamp(0, 100, x)` won't resolve. |
 
 _Single-arg helper next to a built-in:_
@@ -957,6 +957,7 @@ _Recursion:_
 def fact: if . <= 1 then 1 else . * (. - 1 | fact) end;
 5 | fact
 ```
+
 → `120`
 
 _Multi-arg (semicolons required at both sides):_
@@ -970,98 +971,98 @@ Helpers are **scoped to the expression**. There is no module system, and that's 
 
 ## Control Flow
 
-| Pattern | Syntax |
-| --- | --- |
-| Conditional | `if .x > 0 then "positive" elif .x == 0 then "zero" else "negative" end` |
-| Try/catch | `try (.x / .y) catch "division error"` |
-| Reduce | `reduce .items[] as $i (0; . + $i.amount)` |
-| Foreach | `foreach .items[] as $i (0; . + $i.amount)` |
+| Pattern         | Syntax                                                                                                               |
+| --------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Conditional     | `if .x > 0 then "positive" elif .x == 0 then "zero" else "negative" end`                                             |
+| Try/catch       | `try (.x / .y) catch "division error"`                                                                               |
+| Reduce          | `reduce .items[] as $i (0; . + $i.amount)`                                                                           |
+| Foreach         | `foreach .items[] as $i (0; . + $i.amount)`                                                                          |
 | Define function | `def double: . * 2; .values \| map(double)` — see [User-defined helpers](#user-defined-helpers-def) for full syntax. |
-| Label/break | `label $out \| foreach .[] as $x (0; .+$x; if .>100 then ., break $out else . end)` |
+| Label/break     | `label $out \| foreach .[] as $x (0; .+$x; if .>100 then ., break $out else . end)`                                  |
 
-* * *
+---
 
 ## Math & Rounding
 
-| Function | Description | Example |
-| --- | --- | --- |
-| `ROUND(n, d)` | Round to _d_ decimal places | `ROUND(3.14159, 2)` → `3.14` |
-| `ROUNDUP(n, d)` | Round away from zero | `ROUNDUP(3.141, 2)` → `3.15` |
-| `ROUNDDOWN(n, d)` | Round toward zero | `ROUNDDOWN(3.149, 2)` → `3.14` |
-| `ABS(n)` | Absolute value | `ABS(-42)` → `42` |
-| `CEILING(n, s)` | Round up to significance (alias: `CEILING_MATH`) | `CEILING(2.3, 1)` → `3` |
-| `FLOOR(n, s)` | Round down to significance (alias: `FLOOR_MATH`) | `FLOOR(2.7, 1)` → `2` |
-| `INT(n)` | Floor to integer | `INT(3.9)` → `3` |
-| `MOD(a, b)` | Modulo (always non-negative) | `MOD(10, 3)` → `1` |
-| `POWER(n, p)` | Exponentiation | `POWER(2, 10)` → `1024` |
-| `SQRT(n)` | Square root | `SQRT(144)` → `12` |
-| `PRODUCT(arr)` | Product of all numbers | `PRODUCT([2, 3, 4])` → `24` |
-| `PI` | Constant 3.14159... | `PI` → `3.14159...` |
-| `SIGN(n)` | Returns -1, 0, or 1 | `SIGN(-42)` → `-1` |
-| `EVEN(n)` | Round up to nearest even | `EVEN(3)` → `4` |
-| `ODD(n)` | Round up to nearest odd | `ODD(4)` → `5` |
-| `GCD(arr)` | Greatest common divisor | `GCD([12, 8, 20])` → `4` |
-| `LCM(arr)` | Least common multiple | `LCM([4, 6, 10])` → `60` |
-| `FACT(n)` | Factorial | `FACT(5)` → `120` |
-| `FACTDOUBLE(n)` | Double factorial | `FACTDOUBLE(7)` → `105` |
-| `COMBIN(n, k)` | Combinations | `COMBIN(10, 3)` → `120` |
-| `COMBINA(n, k)` | Combinations with repetition | `COMBINA(4, 2)` → `10` |
-| `PERMUT(n, k)` | Permutations | `PERMUT(10, 3)` → `720` |
-| `MROUND(n, m)` | Round to nearest multiple | `MROUND(7.5, 3)` → `9` |
-| `QUOTIENT(n, d)` | Integer division | `QUOTIENT(7, 2)` → `3` |
-| `DEGREES(rad)` | Radians to degrees | `DEGREES(PI)` → `180` |
-| `RADIANS(deg)` | Degrees to radians | `RADIANS(180)` → `3.14159...` |
-| `RAND` | Random number 0--1 | `RAND` → `0.7291...` |
-| `RANDBETWEEN(lo, hi)` | Random integer in range | `RANDBETWEEN(1, 100)` |
-| `SUMPRODUCT(arrays)` | Sum of element-wise products | `SUMPRODUCT([[1,2],[3,4]])` → `11` |
-| `SUMSQ(arr)` | Sum of squares | `SUMSQ([3, 4])` → `25` |
-| `MULTINOMIAL(arr)` | Multinomial coefficient | `MULTINOMIAL([2, 3, 4])` |
-| `SERIESSUM(x, n, m, coeffs)` | Power series sum | `SERIESSUM(2, 1, 1, [1,2,3])` |
-| `SQRTPI(n)` | Square root of `n * PI` | `SQRTPI(2)` |
-| `SUMX2MY2(x, y)` | Sum of `x^2 - y^2` pairs | `SUMX2MY2([1,2], [3,4])` |
-| `SUMX2PY2(x, y)` | Sum of `x^2 + y^2` pairs | `SUMX2PY2([1,2], [3,4])` |
-| `SUMXMY2(x, y)` | Sum of squared differences | `SUMXMY2([1,2], [3,4])` |
+| Function                     | Description                                      | Example                            |
+| ---------------------------- | ------------------------------------------------ | ---------------------------------- |
+| `ROUND(n, d)`                | Round to _d_ decimal places                      | `ROUND(3.14159, 2)` → `3.14`       |
+| `ROUNDUP(n, d)`              | Round away from zero                             | `ROUNDUP(3.141, 2)` → `3.15`       |
+| `ROUNDDOWN(n, d)`            | Round toward zero                                | `ROUNDDOWN(3.149, 2)` → `3.14`     |
+| `ABS(n)`                     | Absolute value                                   | `ABS(-42)` → `42`                  |
+| `CEILING(n, s)`              | Round up to significance (alias: `CEILING_MATH`) | `CEILING(2.3, 1)` → `3`            |
+| `FLOOR(n, s)`                | Round down to significance (alias: `FLOOR_MATH`) | `FLOOR(2.7, 1)` → `2`              |
+| `INT(n)`                     | Floor to integer                                 | `INT(3.9)` → `3`                   |
+| `MOD(a, b)`                  | Modulo (always non-negative)                     | `MOD(10, 3)` → `1`                 |
+| `POWER(n, p)`                | Exponentiation                                   | `POWER(2, 10)` → `1024`            |
+| `SQRT(n)`                    | Square root                                      | `SQRT(144)` → `12`                 |
+| `PRODUCT(arr)`               | Product of all numbers                           | `PRODUCT([2, 3, 4])` → `24`        |
+| `PI`                         | Constant 3.14159...                              | `PI` → `3.14159...`                |
+| `SIGN(n)`                    | Returns -1, 0, or 1                              | `SIGN(-42)` → `-1`                 |
+| `EVEN(n)`                    | Round up to nearest even                         | `EVEN(3)` → `4`                    |
+| `ODD(n)`                     | Round up to nearest odd                          | `ODD(4)` → `5`                     |
+| `GCD(arr)`                   | Greatest common divisor                          | `GCD([12, 8, 20])` → `4`           |
+| `LCM(arr)`                   | Least common multiple                            | `LCM([4, 6, 10])` → `60`           |
+| `FACT(n)`                    | Factorial                                        | `FACT(5)` → `120`                  |
+| `FACTDOUBLE(n)`              | Double factorial                                 | `FACTDOUBLE(7)` → `105`            |
+| `COMBIN(n, k)`               | Combinations                                     | `COMBIN(10, 3)` → `120`            |
+| `COMBINA(n, k)`              | Combinations with repetition                     | `COMBINA(4, 2)` → `10`             |
+| `PERMUT(n, k)`               | Permutations                                     | `PERMUT(10, 3)` → `720`            |
+| `MROUND(n, m)`               | Round to nearest multiple                        | `MROUND(7.5, 3)` → `9`             |
+| `QUOTIENT(n, d)`             | Integer division                                 | `QUOTIENT(7, 2)` → `3`             |
+| `DEGREES(rad)`               | Radians to degrees                               | `DEGREES(PI)` → `180`              |
+| `RADIANS(deg)`               | Degrees to radians                               | `RADIANS(180)` → `3.14159...`      |
+| `RAND`                       | Random number 0--1                               | `RAND` → `0.7291...`               |
+| `RANDBETWEEN(lo, hi)`        | Random integer in range                          | `RANDBETWEEN(1, 100)`              |
+| `SUMPRODUCT(arrays)`         | Sum of element-wise products                     | `SUMPRODUCT([[1,2],[3,4]])` → `11` |
+| `SUMSQ(arr)`                 | Sum of squares                                   | `SUMSQ([3, 4])` → `25`             |
+| `MULTINOMIAL(arr)`           | Multinomial coefficient                          | `MULTINOMIAL([2, 3, 4])`           |
+| `SERIESSUM(x, n, m, coeffs)` | Power series sum                                 | `SERIESSUM(2, 1, 1, [1,2,3])`      |
+| `SQRTPI(n)`                  | Square root of `n * PI`                          | `SQRTPI(2)`                        |
+| `SUMX2MY2(x, y)`             | Sum of `x^2 - y^2` pairs                         | `SUMX2MY2([1,2], [3,4])`           |
+| `SUMX2PY2(x, y)`             | Sum of `x^2 + y^2` pairs                         | `SUMX2PY2([1,2], [3,4])`           |
+| `SUMXMY2(x, y)`              | Sum of squared differences                       | `SUMXMY2([1,2], [3,4])`            |
 
 ## Statistics
 
-| Function | Description | Example |
-| --- | --- | --- |
-| `SUM(arr)` | Sum of numbers (skips nulls) | `SUM([10, 20, 30])` → `60` |
-| `AVERAGE(arr)` | Mean (skips nulls) | `AVERAGE([10, 20, 30])` → `20` |
-| `COUNT(arr)` | Count of finite numbers | `COUNT([1, "a", 3])` → `2` |
-| `COUNTA(arr)` | Count of non-blank values | `COUNTA([1, "a", null])` → `2` |
-| `MAX(arr)` | Maximum | `MAX([3, 1, 4])` → `4` |
-| `MIN(arr)` | Minimum | `MIN([3, 1, 4])` → `1` |
-| `STDEV(arr)` | Sample standard deviation (alias: `STDEV_S`) | `STDEV([2, 4, 4, 4, 5, 5, 7, 9])` |
-| `STDEV_P(arr)` | Population standard deviation | `STDEV_P([2, 4, 4, 4, 5, 5, 7, 9])` |
-| `MEDIAN(arr)` | Middle value | `MEDIAN([1, 3, 5, 7])` → `4` |
-| `VAR(arr)` | Sample variance (alias: `VAR_S`) | `VAR([2, 4, 4, 4, 5, 5, 7, 9])` |
-| `VAR_P(arr)` | Population variance | `VAR_P([2, 4, 4, 4, 5, 5, 7, 9])` |
-| `LARGE(arr, k)` | Kth largest | `LARGE([3, 1, 4, 1, 5], 2)` → `4` |
-| `SMALL(arr, k)` | Kth smallest | `SMALL([3, 1, 4, 1, 5], 2)` → `1` |
-| `COUNTBLANK(arr)` | Count of empty/null values | `COUNTBLANK([1, null, "", 3])` → `2` |
-| `RANK_EQ(n, arr)` | Rank (descending) | `RANK_EQ(4, [5, 4, 3, 2])` → `2` |
-| `RANK_AVG(n, arr)` | Rank with average for ties | `RANK_AVG(4, [5, 4, 4, 2])` → `2.5` |
-| `PERCENTILE_INC(arr, k)` | Percentile (inclusive) | `PERCENTILE_INC([1,2,3,4], 0.75)` → `3.25` |
-| `QUARTILE_INC(arr, q)` | Quartile (0--4) | `QUARTILE_INC([1,2,3,4], 1)` → `1.75` |
-| `CORREL(x, y)` | Correlation coefficient | `CORREL([1,2,3], [2,4,6])` → `1` |
-| `SLOPE(y, x)` | Linear regression slope | `SLOPE([2,4,6], [1,2,3])` → `2` |
-| `INTERCEPT(y, x)` | Linear regression intercept | `INTERCEPT([2,4,6], [1,2,3])` → `0` |
-| `FORECAST(x, y, knownX)` | Linear prediction | `FORECAST(4, [2,4,6], [1,2,3])` → `8` |
-| `GEOMEAN(arr)` | Geometric mean | `GEOMEAN([2, 8])` → `4` |
-| `HARMEAN(arr)` | Harmonic mean | `HARMEAN([2, 8])` → `3.2` |
-| `TRIMMEAN(arr, pct)` | Mean excluding outliers | `TRIMMEAN([1,2,3,4,100], 0.4)` |
-| `AVEDEV(arr)` | Average absolute deviation | `AVEDEV([2, 4, 8, 16])` |
-| `DEVSQ(arr)` | Sum of squared deviations | `DEVSQ([2, 4, 8, 16])` |
-| `SKEW(arr)` | Distribution skewness | `SKEW([1, 2, 3, 4, 100])` → positive |
-| `KURT(arr)` | Distribution kurtosis | `KURT([1, 2, 3, 4, 100])` → heavy-tailed |
-| `MAXIFS([vals, range, crit])` | Conditional max | `MAXIFS([[5,3,8], [1,2,1], 1])` → `8` |
-| `MINIFS([vals, range, crit])` | Conditional min | `MINIFS([[5,3,8], [1,2,1], 1])` → `5` |
-| `PERCENTILE_EXC(arr, k)` | Percentile (exclusive) | `PERCENTILE_EXC([1,2,3,4,5], 0.4)` |
-| `QUARTILE_EXC(arr, q)` | Quartile exclusive (1--3) | `QUARTILE_EXC([1,2,3,4,5], 1)` |
-| `PERCENTRANK_INC(arr, x)` | Percentile rank (inclusive) | `PERCENTRANK_INC([1,2,3,4], 3)` → `0.667` |
-| `PERCENTRANK_EXC(arr, x)` | Percentile rank (exclusive) | `PERCENTRANK_EXC([1,2,3,4], 3)` → `0.6` |
-| `PEARSON(x, y)` | Pearson correlation (alias for CORREL) | `PEARSON([1,2,3], [2,4,6])` → `1` |
+| Function                      | Description                                  | Example                                    |
+| ----------------------------- | -------------------------------------------- | ------------------------------------------ |
+| `SUM(arr)`                    | Sum of numbers (skips nulls)                 | `SUM([10, 20, 30])` → `60`                 |
+| `AVERAGE(arr)`                | Mean (skips nulls)                           | `AVERAGE([10, 20, 30])` → `20`             |
+| `COUNT(arr)`                  | Count of finite numbers                      | `COUNT([1, "a", 3])` → `2`                 |
+| `COUNTA(arr)`                 | Count of non-blank values                    | `COUNTA([1, "a", null])` → `2`             |
+| `MAX(arr)`                    | Maximum                                      | `MAX([3, 1, 4])` → `4`                     |
+| `MIN(arr)`                    | Minimum                                      | `MIN([3, 1, 4])` → `1`                     |
+| `STDEV(arr)`                  | Sample standard deviation (alias: `STDEV_S`) | `STDEV([2, 4, 4, 4, 5, 5, 7, 9])`          |
+| `STDEV_P(arr)`                | Population standard deviation                | `STDEV_P([2, 4, 4, 4, 5, 5, 7, 9])`        |
+| `MEDIAN(arr)`                 | Middle value                                 | `MEDIAN([1, 3, 5, 7])` → `4`               |
+| `VAR(arr)`                    | Sample variance (alias: `VAR_S`)             | `VAR([2, 4, 4, 4, 5, 5, 7, 9])`            |
+| `VAR_P(arr)`                  | Population variance                          | `VAR_P([2, 4, 4, 4, 5, 5, 7, 9])`          |
+| `LARGE(arr, k)`               | Kth largest                                  | `LARGE([3, 1, 4, 1, 5], 2)` → `4`          |
+| `SMALL(arr, k)`               | Kth smallest                                 | `SMALL([3, 1, 4, 1, 5], 2)` → `1`          |
+| `COUNTBLANK(arr)`             | Count of empty/null values                   | `COUNTBLANK([1, null, "", 3])` → `2`       |
+| `RANK_EQ(n, arr)`             | Rank (descending)                            | `RANK_EQ(4, [5, 4, 3, 2])` → `2`           |
+| `RANK_AVG(n, arr)`            | Rank with average for ties                   | `RANK_AVG(4, [5, 4, 4, 2])` → `2.5`        |
+| `PERCENTILE_INC(arr, k)`      | Percentile (inclusive)                       | `PERCENTILE_INC([1,2,3,4], 0.75)` → `3.25` |
+| `QUARTILE_INC(arr, q)`        | Quartile (0--4)                              | `QUARTILE_INC([1,2,3,4], 1)` → `1.75`      |
+| `CORREL(x, y)`                | Correlation coefficient                      | `CORREL([1,2,3], [2,4,6])` → `1`           |
+| `SLOPE(y, x)`                 | Linear regression slope                      | `SLOPE([2,4,6], [1,2,3])` → `2`            |
+| `INTERCEPT(y, x)`             | Linear regression intercept                  | `INTERCEPT([2,4,6], [1,2,3])` → `0`        |
+| `FORECAST(x, y, knownX)`      | Linear prediction                            | `FORECAST(4, [2,4,6], [1,2,3])` → `8`      |
+| `GEOMEAN(arr)`                | Geometric mean                               | `GEOMEAN([2, 8])` → `4`                    |
+| `HARMEAN(arr)`                | Harmonic mean                                | `HARMEAN([2, 8])` → `3.2`                  |
+| `TRIMMEAN(arr, pct)`          | Mean excluding outliers                      | `TRIMMEAN([1,2,3,4,100], 0.4)`             |
+| `AVEDEV(arr)`                 | Average absolute deviation                   | `AVEDEV([2, 4, 8, 16])`                    |
+| `DEVSQ(arr)`                  | Sum of squared deviations                    | `DEVSQ([2, 4, 8, 16])`                     |
+| `SKEW(arr)`                   | Distribution skewness                        | `SKEW([1, 2, 3, 4, 100])` → positive       |
+| `KURT(arr)`                   | Distribution kurtosis                        | `KURT([1, 2, 3, 4, 100])` → heavy-tailed   |
+| `MAXIFS([vals, range, crit])` | Conditional max                              | `MAXIFS([[5,3,8], [1,2,1], 1])` → `8`      |
+| `MINIFS([vals, range, crit])` | Conditional min                              | `MINIFS([[5,3,8], [1,2,1], 1])` → `5`      |
+| `PERCENTILE_EXC(arr, k)`      | Percentile (exclusive)                       | `PERCENTILE_EXC([1,2,3,4,5], 0.4)`         |
+| `QUARTILE_EXC(arr, q)`        | Quartile exclusive (1--3)                    | `QUARTILE_EXC([1,2,3,4,5], 1)`             |
+| `PERCENTRANK_INC(arr, x)`     | Percentile rank (inclusive)                  | `PERCENTRANK_INC([1,2,3,4], 3)` → `0.667`  |
+| `PERCENTRANK_EXC(arr, x)`     | Percentile rank (exclusive)                  | `PERCENTRANK_EXC([1,2,3,4], 3)` → `0.6`    |
+| `PEARSON(x, y)`               | Pearson correlation (alias for CORREL)       | `PEARSON([1,2,3], [2,4,6])` → `1`          |
 
 > `SUM` and `AVERAGE` automatically skip nulls and non-numeric values, just like their spreadsheet counterparts.
 
@@ -1069,13 +1070,13 @@ Helpers are **scoped to the expression**. There is no module system, and that's 
 
 FormulaJS statistical distributions, inverse distributions, confidence intervals, and tests live in the lazy `formula-statistical` extension. Async runtimes load it only when an expression references one of these functions. Canonical BXL uses underscore names such as `NORM_DIST(...)`; pasted Excel dotted names such as `NORM.DIST(...)` and `T.TEST(...)` are accepted in readable syntax and rewritten to the underscore form.
 
-| Family | Functions |
-| --- | --- |
-| Beta / binomial | `BETA_DIST`, `BETA_INV`, `BINOM_DIST`, `BINOM_DIST_RANGE`, `BINOM_INV`, `NEGBINOM_DIST` |
-| Chi-square / F / T tests | `CHISQ_DIST`, `CHISQ_DIST_RT`, `CHISQ_INV`, `CHISQ_INV_RT`, `CHISQ_TEST`, `F_DIST`, `F_DIST_RT`, `F_INV`, `F_INV_RT`, `F_TEST`, `T_DIST`, `T_DIST_2T`, `T_DIST_RT`, `T_INV`, `T_INV_2T`, `T_TEST` |
-| Normal / lognormal / exponential / Poisson / Weibull | `NORM_DIST`, `NORM_INV`, `NORM_S_DIST`, `NORM_S_INV`, `LOGNORM_DIST`, `LOGNORM_INV`, `EXPON_DIST`, `POISSON_DIST`, `WEIBULL_DIST` |
-| Gamma / hypergeometric | `GAMMA`, `GAMMA_DIST`, `GAMMA_INV`, `GAMMALN`, `GAMMALN_PRECISE`, `HYPGEOM_DIST` |
-| Confidence / standardization | `CONFIDENCE_NORM`, `CONFIDENCE_T`, `GAUSS`, `PHI`, `STANDARDIZE`, `Z_TEST` |
+| Family                                               | Functions                                                                                                                                                                                         |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Beta / binomial                                      | `BETA_DIST`, `BETA_INV`, `BINOM_DIST`, `BINOM_DIST_RANGE`, `BINOM_INV`, `NEGBINOM_DIST`                                                                                                           |
+| Chi-square / F / T tests                             | `CHISQ_DIST`, `CHISQ_DIST_RT`, `CHISQ_INV`, `CHISQ_INV_RT`, `CHISQ_TEST`, `F_DIST`, `F_DIST_RT`, `F_INV`, `F_INV_RT`, `F_TEST`, `T_DIST`, `T_DIST_2T`, `T_DIST_RT`, `T_INV`, `T_INV_2T`, `T_TEST` |
+| Normal / lognormal / exponential / Poisson / Weibull | `NORM_DIST`, `NORM_INV`, `NORM_S_DIST`, `NORM_S_INV`, `LOGNORM_DIST`, `LOGNORM_INV`, `EXPON_DIST`, `POISSON_DIST`, `WEIBULL_DIST`                                                                 |
+| Gamma / hypergeometric                               | `GAMMA`, `GAMMA_DIST`, `GAMMA_INV`, `GAMMALN`, `GAMMALN_PRECISE`, `HYPGEOM_DIST`                                                                                                                  |
+| Confidence / standardization                         | `CONFIDENCE_NORM`, `CONFIDENCE_T`, `GAUSS`, `PHI`, `STANDARDIZE`, `Z_TEST`                                                                                                                        |
 
 ## Conditional Aggregation
 
@@ -1083,43 +1084,43 @@ Two flavors: **range-based** (classic Excel) and **\_BY** variants for arrays of
 
 ### Range-Based (Classic)
 
-| Function | Description |
-| --- | --- |
-| `SUMIF(range, criteria)` | Sum where criteria matches |
-| `SUMIF(range, criteria, sumRange)` | Sum from a different range |
-| `COUNTIF(range, criteria)` | Count where criteria matches |
-| `AVERAGEIF(range, criteria)` | Average where criteria matches |
+| Function                           | Description                    |
+| ---------------------------------- | ------------------------------ |
+| `SUMIF(range, criteria)`           | Sum where criteria matches     |
+| `SUMIF(range, criteria, sumRange)` | Sum from a different range     |
+| `COUNTIF(range, criteria)`         | Count where criteria matches   |
+| `AVERAGEIF(range, criteria)`       | Average where criteria matches |
 
 ### Row-Object Variants (\_BY)
 
-| Function | Example |
-| --- | --- |
-| `SUMIF_BY(rows, valueKey, criteriaKey, criteria)` | `SUMIF_BY(., "amount", "region", "East")` |
-| `SUMIFS_BY(rows, valueKey, criteriaObj)` | `SUMIFS_BY(., "amount", {,region: "East", team: "A"},)` |
-| `COUNTIF_BY(rows, criteriaKey, criteria)` | `COUNTIF_BY(., "status", "active")` |
-| `COUNTIFS_BY(rows, criteriaObj)` | `COUNTIFS_BY(., {,region: "East", team: "A"},)` |
-| `AVERAGEIF_BY(rows, valueKey, criteriaKey, criteria)` | `AVERAGEIF_BY(., "score", "grade", "A")` |
-| `AVERAGEIFS_BY(rows, valueKey, criteriaObj)` | `AVERAGEIFS_BY(., "score", {,grade: "A"},)` |
+| Function                                              | Example                                                 |
+| ----------------------------------------------------- | ------------------------------------------------------- |
+| `SUMIF_BY(rows, valueKey, criteriaKey, criteria)`     | `SUMIF_BY(., "amount", "region", "East")`               |
+| `SUMIFS_BY(rows, valueKey, criteriaObj)`              | `SUMIFS_BY(., "amount", {,region: "East", team: "A"},)` |
+| `COUNTIF_BY(rows, criteriaKey, criteria)`             | `COUNTIF_BY(., "status", "active")`                     |
+| `COUNTIFS_BY(rows, criteriaObj)`                      | `COUNTIFS_BY(., {,region: "East", team: "A"},)`         |
+| `AVERAGEIF_BY(rows, valueKey, criteriaKey, criteria)` | `AVERAGEIF_BY(., "score", "grade", "A")`                |
+| `AVERAGEIFS_BY(rows, valueKey, criteriaObj)`          | `AVERAGEIFS_BY(., "score", {,grade: "A"},)`             |
 
 > **Criteria strings** support prefixes: `=`, `<>`, `>`, `>=`, `<`, `<=`. Wildcards: `*` (any chars), `?` (single char). Escape with `~`.
 
 ## Lookups
 
-| Function | Description |
-| --- | --- |
-| `VLOOKUP(val, table, colIdx)` | Vertical lookup -- search first column, return nth column |
-| `VLOOKUP(val, table, colIdx, rangeLookup)` | Set `rangeLookup` to `false` for exact match |
-| `VLOOKUP_BY(rows, lookupKey, val, resultKey)` | Row-object VLOOKUP |
-| `XLOOKUP(val, lookupArr, returnArr)` | Exact lookup across independent lookup/return arrays |
-| `XLOOKUP(val, lookupArr, returnArr, fallback)` | Exact lookup with fallback for missing values |
-| `HLOOKUP(val, table, rowIdx)` | Horizontal lookup |
-| `LOOKUP(val, lookupArr, resultArr)` | Simple lookup with two arrays |
-| `LOOKUP_BY(rows, lookupKey, val, resultKey)` | Row-object LOOKUP |
-| `MATCH(val, arr, matchType)` | Position of match (1-based). matchType: 1, 0, or -1 |
-| `INDEX(arr, row)` | Value at position |
-| `INDEX(arr, row, col)` | Value at row and column |
-| `CHOOSE(idx, options)` | Select from list by 1-based index |
-| `COL(rows, key)` | Extract column values from array of objects |
+| Function                                       | Description                                               |
+| ---------------------------------------------- | --------------------------------------------------------- |
+| `VLOOKUP(val, table, colIdx)`                  | Vertical lookup -- search first column, return nth column |
+| `VLOOKUP(val, table, colIdx, rangeLookup)`     | Set `rangeLookup` to `false` for exact match              |
+| `VLOOKUP_BY(rows, lookupKey, val, resultKey)`  | Row-object VLOOKUP                                        |
+| `XLOOKUP(val, lookupArr, returnArr)`           | Exact lookup across independent lookup/return arrays      |
+| `XLOOKUP(val, lookupArr, returnArr, fallback)` | Exact lookup with fallback for missing values             |
+| `HLOOKUP(val, table, rowIdx)`                  | Horizontal lookup                                         |
+| `LOOKUP(val, lookupArr, resultArr)`            | Simple lookup with two arrays                             |
+| `LOOKUP_BY(rows, lookupKey, val, resultKey)`   | Row-object LOOKUP                                         |
+| `MATCH(val, arr, matchType)`                   | Position of match (1-based). matchType: 1, 0, or -1       |
+| `INDEX(arr, row)`                              | Value at position                                         |
+| `INDEX(arr, row, col)`                         | Value at row and column                                   |
+| `CHOOSE(idx, options)`                         | Select from list by 1-based index                         |
+| `COL(rows, key)`                               | Extract column values from array of objects               |
 
 > **Lookup preference for BXL-shaped JSON.** If the data is an array of
 > objects and the lookup reads naturally as a row predicate, the most readable
@@ -1134,7 +1135,7 @@ Two flavors: **range-based** (classic Excel) and **\_BY** variants for arrays of
 > named directly instead of addressed by column number, but the predicate path
 > is the most BXL-native shape.
 
-_VLOOKUP\_BY example_
+_VLOOKUP_BY example_
 
 ```
 VLOOKUP_BY(., "label", "ventilator", "amount")
@@ -1154,74 +1155,74 @@ INDEX(.names, MATCH("target", .ids, 0))
 
 ## Text
 
-| Function | Description | Example |
-| --- | --- | --- |
-| `TEXTJOIN(delim, skipEmpty, arr)` | Join with delimiter | `TEXTJOIN(", ", true, .names)` |
-| `CONCAT(arr)` | Concatenate array values (alias: `CONCATENATE`) | `CONCAT(["a", "b"])` → `"ab"` |
-| `LEFT(text, n)` | First n characters | `LEFT("Hello", 3)` → `"Hel"` |
-| `RIGHT(text, n)` | Last n characters | `RIGHT("Hello", 2)` → `"lo"` |
-| `MID(text, start, n)` | Substring (1-based) | `MID("Hello", 2, 3)` → `"ell"` |
-| `LEN(text)` | String length | `LEN("Hello")` → `5` |
-| `words(text)` | **BXL** — count of whitespace-separated non-empty tokens. No Excel equivalent. | `words("Ada Lovelace")` → `2` |
-| `UPPER(text)` | Uppercase | `UPPER("hi")` → `"HI"` |
-| `LOWER(text)` | Lowercase | `LOWER("HI")` → `"hi"` |
-| `PROPER(text)` | Title Case | `PROPER("hello world")` → `"Hello World"` |
-| `TRIM(text)` | Trim + collapse spaces | `TRIM(" hi there ")` → `"hi there"` |
-| `SUBSTITUTE(text, old, new)` | Replace all occurrences | `SUBSTITUTE("aaa", "a", "b")` → `"bbb"` |
-| `SUBSTITUTE(text, old, new, n)` | Replace nth occurrence | `SUBSTITUTE("aaa", "a", "b", 2)` → `"aba"` |
-| `REPLACE(text, pos, len, new)` | Replace by position | `REPLACE("Hello", 1, 2, "Ya")` → `"Yallo"` |
-| `REPT(text, n)` | Repeat | `REPT("ab", 3)` → `"ababab"` |
-| `FIND(find, within)` | Case-sensitive position (1-based) | `FIND("lo", "Hello")` → `4` |
-| `SEARCH(find, within)` | Case-insensitive position | `SEARCH("LO", "Hello")` → `4` |
-| `EXACT(a, b)` | Case-sensitive equality | `EXACT("Hi", "hi")` → `false` |
-| `CHAR(n)` | Code point to character (`UNICHAR` is the lazy FormulaJS spelling) | `CHAR(65)` → `"A"` |
-| `CODE(text)` | First char to code point (alias: `UNICODE`) | `CODE("A")` → `65` |
-| `CLEAN(text)` | Remove control chars | Strips 0x00-0x1F |
-| `VALUE(text)` | Parse string as number | `VALUE("42")` → `42` |
-| `NUMBERVALUE(text, dec, grp)` | Locale-aware parsing | `NUMBERVALUE("1.234,56", ",", ".")` |
+| Function                          | Description                                                                    | Example                                    |
+| --------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------ |
+| `TEXTJOIN(delim, skipEmpty, arr)` | Join with delimiter                                                            | `TEXTJOIN(", ", true, .names)`             |
+| `CONCAT(arr)`                     | Concatenate array values (alias: `CONCATENATE`)                                | `CONCAT(["a", "b"])` → `"ab"`              |
+| `LEFT(text, n)`                   | First n characters                                                             | `LEFT("Hello", 3)` → `"Hel"`               |
+| `RIGHT(text, n)`                  | Last n characters                                                              | `RIGHT("Hello", 2)` → `"lo"`               |
+| `MID(text, start, n)`             | Substring (1-based)                                                            | `MID("Hello", 2, 3)` → `"ell"`             |
+| `LEN(text)`                       | String length                                                                  | `LEN("Hello")` → `5`                       |
+| `words(text)`                     | **BXL** — count of whitespace-separated non-empty tokens. No Excel equivalent. | `words("Ada Lovelace")` → `2`              |
+| `UPPER(text)`                     | Uppercase                                                                      | `UPPER("hi")` → `"HI"`                     |
+| `LOWER(text)`                     | Lowercase                                                                      | `LOWER("HI")` → `"hi"`                     |
+| `PROPER(text)`                    | Title Case                                                                     | `PROPER("hello world")` → `"Hello World"`  |
+| `TRIM(text)`                      | Trim + collapse spaces                                                         | `TRIM(" hi there ")` → `"hi there"`        |
+| `SUBSTITUTE(text, old, new)`      | Replace all occurrences                                                        | `SUBSTITUTE("aaa", "a", "b")` → `"bbb"`    |
+| `SUBSTITUTE(text, old, new, n)`   | Replace nth occurrence                                                         | `SUBSTITUTE("aaa", "a", "b", 2)` → `"aba"` |
+| `REPLACE(text, pos, len, new)`    | Replace by position                                                            | `REPLACE("Hello", 1, 2, "Ya")` → `"Yallo"` |
+| `REPT(text, n)`                   | Repeat                                                                         | `REPT("ab", 3)` → `"ababab"`               |
+| `FIND(find, within)`              | Case-sensitive position (1-based)                                              | `FIND("lo", "Hello")` → `4`                |
+| `SEARCH(find, within)`            | Case-insensitive position                                                      | `SEARCH("LO", "Hello")` → `4`              |
+| `EXACT(a, b)`                     | Case-sensitive equality                                                        | `EXACT("Hi", "hi")` → `false`              |
+| `CHAR(n)`                         | Code point to character (`UNICHAR` is the lazy FormulaJS spelling)             | `CHAR(65)` → `"A"`                         |
+| `CODE(text)`                      | First char to code point (alias: `UNICODE`)                                    | `CODE("A")` → `65`                         |
+| `CLEAN(text)`                     | Remove control chars                                                           | Strips 0x00-0x1F                           |
+| `VALUE(text)`                     | Parse string as number                                                         | `VALUE("42")` → `42`                       |
+| `NUMBERVALUE(text, dec, grp)`     | Locale-aware parsing                                                           | `NUMBERVALUE("1.234,56", ",", ".")`        |
 
 ### Formatting Helpers
 
-| Function | Description | Example |
-| --- | --- | --- |
-| `TEXT(val, fmt)` | Format number as string | `TEXT(.date, "yyyy-mm-dd")` |
-| `DOLLAR(n, d)` | Format as currency | `DOLLAR(1234.5, 2)` → `"$1,234.50"` |
-| `FIXED(n, d, noCommas)` | Fixed decimal string | `FIXED(1234.5, 2, false)` → `"1,234.50"` |
+| Function                | Description             | Example                                  |
+| ----------------------- | ----------------------- | ---------------------------------------- |
+| `TEXT(val, fmt)`        | Format number as string | `TEXT(.date, "yyyy-mm-dd")`              |
+| `DOLLAR(n, d)`          | Format as currency      | `DOLLAR(1234.5, 2)` → `"$1,234.50"`      |
+| `FIXED(n, d, noCommas)` | Fixed decimal string    | `FIXED(1234.5, 2, false)` → `"1,234.50"` |
 
 ## Logic & Type Checking
 
 ### Conditionals
 
-| Function | Description | Example |
-| --- | --- | --- |
-| `IF(test, then, else)` | Excel-style conditional | `IF(.score >= 90, "A", "B")` |
-| `IFERROR(val, fallback)` | Catch any error | `IFERROR(.x / .y, 0)` |
-| `IFNA(val, fallback)` | Catch only #N/A | `IFNA(VLOOKUP(...), "missing")` |
-| `IFS(c1, v1, c2, v2, ...)` | Multiple conditions (2--4 pairs) | `IFS(.x > 90, "A", .x > 80, "B", true, "C")` |
-| `LET(name, value, expr)` | Excel-style local binding lowered to jq `as $name` | `LET(limit, 10000, .amount > limit)` |
-| `SWITCH([expr, v1, r1, ...])` | Value-based dispatch (commas inside array) | `SWITCH([.status, "A", "Active", "I", "Inactive", "Unknown"])` |
-| `when(p, q)` | **BXL** — implication shortcut. Equivalent to `IF(p, q, TRUE)`. Useful for "if this applies, then this must hold" constraints. | `when(Payment = "Credit card", present("Bill To".Zip))` |
-| `implies(p, q)` | **BXL** — alias for `when`. Preferred when the expression reads as logic. | `implies(Status = "shipped", "Tracking Number" != null)` |
+| Function                      | Description                                                                                                                    | Example                                                        |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------- |
+| `IF(test, then, else)`        | Excel-style conditional                                                                                                        | `IF(.score >= 90, "A", "B")`                                   |
+| `IFERROR(val, fallback)`      | Catch any error                                                                                                                | `IFERROR(.x / .y, 0)`                                          |
+| `IFNA(val, fallback)`         | Catch only #N/A                                                                                                                | `IFNA(VLOOKUP(...), "missing")`                                |
+| `IFS(c1, v1, c2, v2, ...)`    | Multiple conditions (2--4 pairs)                                                                                               | `IFS(.x > 90, "A", .x > 80, "B", true, "C")`                   |
+| `LET(name, value, expr)`      | Excel-style local binding lowered to jq `as $name`                                                                             | `LET(limit, 10000, .amount > limit)`                           |
+| `SWITCH([expr, v1, r1, ...])` | Value-based dispatch (commas inside array)                                                                                     | `SWITCH([.status, "A", "Active", "I", "Inactive", "Unknown"])` |
+| `when(p, q)`                  | **BXL** — implication shortcut. Equivalent to `IF(p, q, TRUE)`. Useful for "if this applies, then this must hold" constraints. | `when(Payment = "Credit card", present("Bill To".Zip))`        |
+| `implies(p, q)`               | **BXL** — alias for `when`. Preferred when the expression reads as logic.                                                      | `implies(Status = "shipped", "Tracking Number" != null)`       |
 
 ### Boolean Functions
 
-| Function | Description |
-| --- | --- |
-| `TRUE` | Literal `true` |
-| `FALSE` | Literal `false` |
-| `NA` | Produce #N/A error (use as sentinel) |
-| `NOT(val)` | Boolean NOT |
-| `AND(arr)` | All truthy (skips nulls/strings) |
-| `OR(arr)` | Any truthy (skips nulls/strings) |
-| `XOR(arr)` | Odd count of truthy values |
+| Function   | Description                          |
+| ---------- | ------------------------------------ |
+| `TRUE`     | Literal `true`                       |
+| `FALSE`    | Literal `false`                      |
+| `NA`       | Produce #N/A error (use as sentinel) |
+| `NOT(val)` | Boolean NOT                          |
+| `AND(arr)` | All truthy (skips nulls/strings)     |
+| `OR(arr)`  | Any truthy (skips nulls/strings)     |
+| `XOR(arr)` | Odd count of truthy values           |
 
 ### Presence & Nullability
 
-| Function | Description | When to use |
-| --- | --- | --- |
-| `ISBLANK(val)` | **Excel-strict** — true only when `val` is `null` / `undefined`. Empty string is _not_ blank. | When you need Excel's exact semantics (paste-compatibility, audit rules that mirror a spreadsheet). |
-| `present(val)` | **BXL** — true when `val` is neither `null` nor `""`. Form-friendly opposite of `ISBLANK`. | Form validation, "is this filled in?" checks. Usually what you want. |
-| `nonempty(arr)` | **BXL** — returns `arr` with `null` and `""` entries removed. Chainable. | Cleaning up split results or optional-field collections before counting or joining. |
+| Function        | Description                                                                                   | When to use                                                                                         |
+| --------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `ISBLANK(val)`  | **Excel-strict** — true only when `val` is `null` / `undefined`. Empty string is _not_ blank. | When you need Excel's exact semantics (paste-compatibility, audit rules that mirror a spreadsheet). |
+| `present(val)`  | **BXL** — true when `val` is neither `null` nor `""`. Form-friendly opposite of `ISBLANK`.    | Form validation, "is this filled in?" checks. Usually what you want.                                |
+| `nonempty(arr)` | **BXL** — returns `arr` with `null` and `""` entries removed. Chainable.                      | Cleaning up split results or optional-field collections before counting or joining.                 |
 
 _Presence helpers side-by-side_
 
@@ -1267,157 +1268,157 @@ rule is one of its familiar predicates. Sanitizers and converters such as
 `trim`, `escape`, `normalizeEmail`, `toInt`, and `toDate` are not part of the
 validation extension.
 
-| Function | validator.js shape | Typical use |
-| --- | --- | --- |
-| `contains` | `contains(value, seed[, options])` | String containment with validator.js options. `value \| contains(seed)` remains jq. |
-| `equals` | `equals(value, comparison)` | Exact string comparison. |
-| `matches` | `matches(value, pattern[, modifiers])` | Regex predicate with validator.js shape. One-arg `matches(query)` remains BXL's predicate-profile full-text hook. |
-| `isEmail` | `isEmail(value[, options])` | Email address. |
-| `isURL` | `isURL(value[, options])` | URL; commonly `isURL(Website, {require_protocol:true})`. |
-| `isFQDN` | `isFQDN(value[, options])` | Domain / host name. |
-| `isIP` | `isIP(value[, version])` | IPv4 or IPv6 address. |
-| `isIPRange` | `isIPRange(value[, version])` | CIDR IP range. |
-| `isMobilePhone` | `isMobilePhone(value[, locale[, options]])` | Locale-aware mobile phone number. |
-| `isPostalCode` | `isPostalCode(value, locale)` | Locale-aware postal / ZIP code. |
-| `isMailtoURI` | `isMailtoURI(value[, options])` | `mailto:` URI. |
-| `isMagnetURI` | `isMagnetURI(value)` | Magnet URI. |
-| `isDataURI` | `isDataURI(value)` | Data URI. |
-| `isJWT` | `isJWT(value)` | JWT token shape. |
-| `isUUID` | `isUUID(value[, version])` | UUID. |
-| `isULID` | `isULID(value)` | ULID. |
-| `isMongoId` | `isMongoId(value)` | MongoDB ObjectId. |
-| `isAbaRouting` | `isAbaRouting(value)` | US ABA routing number. |
-| `isBIC` | `isBIC(value)` | SWIFT/BIC code. |
-| `isIBAN` | `isIBAN(value[, options])` | IBAN. |
-| `isCreditCard` | `isCreditCard(value[, options])` | Credit card number. |
-| `isCurrency` | `isCurrency(value[, options])` | Currency amount string. |
-| `isEthereumAddress` | `isEthereumAddress(value)` | Ethereum address. |
-| `isBtcAddress` | `isBtcAddress(value)` | Bitcoin address. |
-| `isEAN` | `isEAN(value)` | EAN code. |
-| `isIMEI` | `isIMEI(value[, options])` | IMEI. |
-| `isISBN` | `isISBN(value[, version])` | ISBN-10 or ISBN-13. |
-| `isISIN` | `isISIN(value)` | Securities identifier. |
-| `isISRC` | `isISRC(value)` | Recording code. |
-| `isISSN` | `isISSN(value[, options])` | Serial publication code. |
-| `isISO6346` | `isISO6346(value)` | Shipping container ID. |
-| `isFreightContainerID` | `isFreightContainerID(value)` | Alias-style container ID validator. |
-| `isISO6391` | `isISO6391(value)` | ISO 639-1 language code. |
-| `isISO15924` | `isISO15924(value)` | ISO 15924 script code. |
-| `isISO31661Alpha2` | `isISO31661Alpha2(value[, options])` | ISO 3166-1 alpha-2 country code. |
-| `isISO31661Alpha3` | `isISO31661Alpha3(value[, options])` | ISO 3166-1 alpha-3 country code. |
-| `isISO31661Numeric` | `isISO31661Numeric(value)` | ISO 3166-1 numeric country code. |
-| `isISO4217` | `isISO4217(value)` | ISO 4217 currency code. |
-| `isIdentityCard` | `isIdentityCard(value, locale)` | Locale-aware national identity card number; use `"any"` to check all supported locales. |
-| `isLicensePlate` | `isLicensePlate(value, locale)` | Locale-aware license plate. |
-| `isPassportNumber` | `isPassportNumber(value, countryCode)` | Passport number. |
-| `isTaxID` | `isTaxID(value[, locale])` | Tax ID. |
-| `isVAT` | `isVAT(value, countryCode)` | VAT number. |
-| `isAlpha` | `isAlpha(value[, locale[, options]])` | Letters only. |
-| `isAlphanumeric` | `isAlphanumeric(value[, locale[, options]])` | Letters and numbers only. |
-| `isAscii` | `isAscii(value)` | ASCII-only string. |
-| `isBase32` | `isBase32(value[, options])` | Base32 string. |
-| `isBase58` | `isBase58(value)` | Base58 string. |
-| `isBase64` | `isBase64(value[, options])` | Base64 string. |
-| `isBoolean` | `isBoolean(value[, options])` | Boolean string. |
-| `isByteLength` | `isByteLength(value[, options])` | UTF-8 byte length range. |
-| `isDecimal` | `isDecimal(value[, options])` | Decimal number string. |
-| `isDivisibleBy` | `isDivisibleBy(value, number)` | Numeric string divisible by number. |
-| `isEmpty` | `isEmpty(value[, options])` | Empty string. |
-| `isFloat` | `isFloat(value[, options])` | Float string with optional range. |
-| `isFullWidth` | `isFullWidth(value)` | Contains full-width characters. |
-| `isHalfWidth` | `isHalfWidth(value)` | Contains half-width characters. |
-| `isHash` | `isHash(value, algorithm)` | Hash by algorithm. |
-| `isHexadecimal` | `isHexadecimal(value)` | Hexadecimal string. |
-| `isHexColor` | `isHexColor(value[, options])` | CSS hex color. |
-| `isHSL` | `isHSL(value)` | CSS HSL color. |
-| `isIn` | `isIn(value, values)` | Membership in allowed values. |
-| `isInt` | `isInt(value[, options])` | Integer string with optional range. |
-| `isJSON` | `isJSON(value[, options])` | JSON string. |
-| `isLatLong` | `isLatLong(value[, options])` | Latitude/longitude string. |
-| `isLength` | `isLength(value[, options])` | Character length range. |
-| `isLocale` | `isLocale(value)` | Locale string. |
-| `isLowercase` | `isLowercase(value)` | Lowercase string. |
-| `isLuhnNumber` | `isLuhnNumber(value)` | Luhn checksum. |
-| `isMACAddress` | `isMACAddress(value[, options])` | MAC address. |
-| `isMD5` | `isMD5(value)` | MD5 hash. |
-| `isMimeType` | `isMimeType(value)` | MIME type. |
-| `isMultibyte` | `isMultibyte(value)` | Contains multibyte characters. |
-| `isNumeric` | `isNumeric(value[, options])` | Numeric string. |
-| `isOctal` | `isOctal(value)` | Octal string. |
-| `isPort` | `isPort(value)` | Port number string. |
-| `isRgbColor` | `isRgbColor(value[, options])` | CSS RGB/RGBA color. |
-| `isSemVer` | `isSemVer(value)` | Semantic version. |
-| `isSlug` | `isSlug(value)` | Slug string. |
-| `isStrongPassword` | `isStrongPassword(value[, options])` | Password strength boolean or score. |
-| `isSurrogatePair` | `isSurrogatePair(value)` | Contains surrogate-pair characters. |
-| `isTime` | `isTime(value[, options])` | Time string. |
-| `isUppercase` | `isUppercase(value)` | Uppercase string. |
-| `isVariableWidth` | `isVariableWidth(value)` | Mixture of full/half-width characters. |
-| `isWhitelisted` | `isWhitelisted(value, chars)` | Only characters from `chars`. |
-| `isDate` | `isDate(value[, options])` | Date string. |
-| `isAfter` | `isAfter(value[, options])` | Date after comparison date; volatile without `comparisonDate`. |
-| `isBefore` | `isBefore(value[, options])` | Date before comparison date; volatile without `comparisonDate`. |
-| `isRFC3339` | `isRFC3339(value)` | RFC 3339 timestamp. |
-| `isISO8601` | `isISO8601(value[, options])` | ISO 8601 date/time. |
+| Function               | validator.js shape                           | Typical use                                                                                                       |
+| ---------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `contains`             | `contains(value, seed[, options])`           | String containment with validator.js options. `value \| contains(seed)` remains jq.                               |
+| `equals`               | `equals(value, comparison)`                  | Exact string comparison.                                                                                          |
+| `matches`              | `matches(value, pattern[, modifiers])`       | Regex predicate with validator.js shape. One-arg `matches(query)` remains BXL's predicate-profile full-text hook. |
+| `isEmail`              | `isEmail(value[, options])`                  | Email address.                                                                                                    |
+| `isURL`                | `isURL(value[, options])`                    | URL; commonly `isURL(Website, {require_protocol:true})`.                                                          |
+| `isFQDN`               | `isFQDN(value[, options])`                   | Domain / host name.                                                                                               |
+| `isIP`                 | `isIP(value[, version])`                     | IPv4 or IPv6 address.                                                                                             |
+| `isIPRange`            | `isIPRange(value[, version])`                | CIDR IP range.                                                                                                    |
+| `isMobilePhone`        | `isMobilePhone(value[, locale[, options]])`  | Locale-aware mobile phone number.                                                                                 |
+| `isPostalCode`         | `isPostalCode(value, locale)`                | Locale-aware postal / ZIP code.                                                                                   |
+| `isMailtoURI`          | `isMailtoURI(value[, options])`              | `mailto:` URI.                                                                                                    |
+| `isMagnetURI`          | `isMagnetURI(value)`                         | Magnet URI.                                                                                                       |
+| `isDataURI`            | `isDataURI(value)`                           | Data URI.                                                                                                         |
+| `isJWT`                | `isJWT(value)`                               | JWT token shape.                                                                                                  |
+| `isUUID`               | `isUUID(value[, version])`                   | UUID.                                                                                                             |
+| `isULID`               | `isULID(value)`                              | ULID.                                                                                                             |
+| `isMongoId`            | `isMongoId(value)`                           | MongoDB ObjectId.                                                                                                 |
+| `isAbaRouting`         | `isAbaRouting(value)`                        | US ABA routing number.                                                                                            |
+| `isBIC`                | `isBIC(value)`                               | SWIFT/BIC code.                                                                                                   |
+| `isIBAN`               | `isIBAN(value[, options])`                   | IBAN.                                                                                                             |
+| `isCreditCard`         | `isCreditCard(value[, options])`             | Credit card number.                                                                                               |
+| `isCurrency`           | `isCurrency(value[, options])`               | Currency amount string.                                                                                           |
+| `isEthereumAddress`    | `isEthereumAddress(value)`                   | Ethereum address.                                                                                                 |
+| `isBtcAddress`         | `isBtcAddress(value)`                        | Bitcoin address.                                                                                                  |
+| `isEAN`                | `isEAN(value)`                               | EAN code.                                                                                                         |
+| `isIMEI`               | `isIMEI(value[, options])`                   | IMEI.                                                                                                             |
+| `isISBN`               | `isISBN(value[, version])`                   | ISBN-10 or ISBN-13.                                                                                               |
+| `isISIN`               | `isISIN(value)`                              | Securities identifier.                                                                                            |
+| `isISRC`               | `isISRC(value)`                              | Recording code.                                                                                                   |
+| `isISSN`               | `isISSN(value[, options])`                   | Serial publication code.                                                                                          |
+| `isISO6346`            | `isISO6346(value)`                           | Shipping container ID.                                                                                            |
+| `isFreightContainerID` | `isFreightContainerID(value)`                | Alias-style container ID validator.                                                                               |
+| `isISO6391`            | `isISO6391(value)`                           | ISO 639-1 language code.                                                                                          |
+| `isISO15924`           | `isISO15924(value)`                          | ISO 15924 script code.                                                                                            |
+| `isISO31661Alpha2`     | `isISO31661Alpha2(value[, options])`         | ISO 3166-1 alpha-2 country code.                                                                                  |
+| `isISO31661Alpha3`     | `isISO31661Alpha3(value[, options])`         | ISO 3166-1 alpha-3 country code.                                                                                  |
+| `isISO31661Numeric`    | `isISO31661Numeric(value)`                   | ISO 3166-1 numeric country code.                                                                                  |
+| `isISO4217`            | `isISO4217(value)`                           | ISO 4217 currency code.                                                                                           |
+| `isIdentityCard`       | `isIdentityCard(value, locale)`              | Locale-aware national identity card number; use `"any"` to check all supported locales.                           |
+| `isLicensePlate`       | `isLicensePlate(value, locale)`              | Locale-aware license plate.                                                                                       |
+| `isPassportNumber`     | `isPassportNumber(value, countryCode)`       | Passport number.                                                                                                  |
+| `isTaxID`              | `isTaxID(value[, locale])`                   | Tax ID.                                                                                                           |
+| `isVAT`                | `isVAT(value, countryCode)`                  | VAT number.                                                                                                       |
+| `isAlpha`              | `isAlpha(value[, locale[, options]])`        | Letters only.                                                                                                     |
+| `isAlphanumeric`       | `isAlphanumeric(value[, locale[, options]])` | Letters and numbers only.                                                                                         |
+| `isAscii`              | `isAscii(value)`                             | ASCII-only string.                                                                                                |
+| `isBase32`             | `isBase32(value[, options])`                 | Base32 string.                                                                                                    |
+| `isBase58`             | `isBase58(value)`                            | Base58 string.                                                                                                    |
+| `isBase64`             | `isBase64(value[, options])`                 | Base64 string.                                                                                                    |
+| `isBoolean`            | `isBoolean(value[, options])`                | Boolean string.                                                                                                   |
+| `isByteLength`         | `isByteLength(value[, options])`             | UTF-8 byte length range.                                                                                          |
+| `isDecimal`            | `isDecimal(value[, options])`                | Decimal number string.                                                                                            |
+| `isDivisibleBy`        | `isDivisibleBy(value, number)`               | Numeric string divisible by number.                                                                               |
+| `isEmpty`              | `isEmpty(value[, options])`                  | Empty string.                                                                                                     |
+| `isFloat`              | `isFloat(value[, options])`                  | Float string with optional range.                                                                                 |
+| `isFullWidth`          | `isFullWidth(value)`                         | Contains full-width characters.                                                                                   |
+| `isHalfWidth`          | `isHalfWidth(value)`                         | Contains half-width characters.                                                                                   |
+| `isHash`               | `isHash(value, algorithm)`                   | Hash by algorithm.                                                                                                |
+| `isHexadecimal`        | `isHexadecimal(value)`                       | Hexadecimal string.                                                                                               |
+| `isHexColor`           | `isHexColor(value[, options])`               | CSS hex color.                                                                                                    |
+| `isHSL`                | `isHSL(value)`                               | CSS HSL color.                                                                                                    |
+| `isIn`                 | `isIn(value, values)`                        | Membership in allowed values.                                                                                     |
+| `isInt`                | `isInt(value[, options])`                    | Integer string with optional range.                                                                               |
+| `isJSON`               | `isJSON(value[, options])`                   | JSON string.                                                                                                      |
+| `isLatLong`            | `isLatLong(value[, options])`                | Latitude/longitude string.                                                                                        |
+| `isLength`             | `isLength(value[, options])`                 | Character length range.                                                                                           |
+| `isLocale`             | `isLocale(value)`                            | Locale string.                                                                                                    |
+| `isLowercase`          | `isLowercase(value)`                         | Lowercase string.                                                                                                 |
+| `isLuhnNumber`         | `isLuhnNumber(value)`                        | Luhn checksum.                                                                                                    |
+| `isMACAddress`         | `isMACAddress(value[, options])`             | MAC address.                                                                                                      |
+| `isMD5`                | `isMD5(value)`                               | MD5 hash.                                                                                                         |
+| `isMimeType`           | `isMimeType(value)`                          | MIME type.                                                                                                        |
+| `isMultibyte`          | `isMultibyte(value)`                         | Contains multibyte characters.                                                                                    |
+| `isNumeric`            | `isNumeric(value[, options])`                | Numeric string.                                                                                                   |
+| `isOctal`              | `isOctal(value)`                             | Octal string.                                                                                                     |
+| `isPort`               | `isPort(value)`                              | Port number string.                                                                                               |
+| `isRgbColor`           | `isRgbColor(value[, options])`               | CSS RGB/RGBA color.                                                                                               |
+| `isSemVer`             | `isSemVer(value)`                            | Semantic version.                                                                                                 |
+| `isSlug`               | `isSlug(value)`                              | Slug string.                                                                                                      |
+| `isStrongPassword`     | `isStrongPassword(value[, options])`         | Password strength boolean or score.                                                                               |
+| `isSurrogatePair`      | `isSurrogatePair(value)`                     | Contains surrogate-pair characters.                                                                               |
+| `isTime`               | `isTime(value[, options])`                   | Time string.                                                                                                      |
+| `isUppercase`          | `isUppercase(value)`                         | Uppercase string.                                                                                                 |
+| `isVariableWidth`      | `isVariableWidth(value)`                     | Mixture of full/half-width characters.                                                                            |
+| `isWhitelisted`        | `isWhitelisted(value, chars)`                | Only characters from `chars`.                                                                                     |
+| `isDate`               | `isDate(value[, options])`                   | Date string.                                                                                                      |
+| `isAfter`              | `isAfter(value[, options])`                  | Date after comparison date; volatile without `comparisonDate`.                                                    |
+| `isBefore`             | `isBefore(value[, options])`                 | Date before comparison date; volatile without `comparisonDate`.                                                   |
+| `isRFC3339`            | `isRFC3339(value)`                           | RFC 3339 timestamp.                                                                                               |
+| `isISO8601`            | `isISO8601(value[, options])`                | ISO 8601 date/time.                                                                                               |
 
 ### Type Checking & Error Detection
 
-| Function | Description |
-| --- | --- |
-| `ISNUMBER(val)` | True if finite number |
-| `ISTEXT(val)` | True if string |
-| `ISERROR(val)` | True if any error |
-| `ISNA(val)` | True if #N/A error |
-| `ISERR(val)` | True if error but not #N/A |
-| `TYPE(val)` | Returns 1 (num), 2 (str), 4 (bool), 16 (error), 64 (array) |
-| `N(val)` | Convert to number (1/0 for bool) |
-| `T(val)` | Return string or `""` |
-| `ERROR_TYPE(val)` | Error type code (1--8) |
-| `ISEVEN(val)` | True if even integer |
-| `ISODD(val)` | True if odd integer |
-| `ISLOGICAL(val)` | True if boolean |
-| `ISNONTEXT(val)` | True if not a string |
+| Function          | Description                                                |
+| ----------------- | ---------------------------------------------------------- |
+| `ISNUMBER(val)`   | True if finite number                                      |
+| `ISTEXT(val)`     | True if string                                             |
+| `ISERROR(val)`    | True if any error                                          |
+| `ISNA(val)`       | True if #N/A error                                         |
+| `ISERR(val)`      | True if error but not #N/A                                 |
+| `TYPE(val)`       | Returns 1 (num), 2 (str), 4 (bool), 16 (error), 64 (array) |
+| `N(val)`          | Convert to number (1/0 for bool)                           |
+| `T(val)`          | Return string or `""`                                      |
+| `ERROR_TYPE(val)` | Error type code (1--8)                                     |
+| `ISEVEN(val)`     | True if even integer                                       |
+| `ISODD(val)`      | True if odd integer                                        |
+| `ISLOGICAL(val)`  | True if boolean                                            |
+| `ISNONTEXT(val)`  | True if not a string                                       |
 
 ## Date
 
 ### Formula Helpers
 
-| Function | Description |
-| --- | --- |
-| `DATE(year, month, day)` | Build Excel date serial number |
-| `DAY(date)` | Day of month (1--31) |
-| `MONTH(date)` | Month (1--12) |
-| `YEAR(date)` | Year |
-| `YEARFRAC(start, end, basis)` | Fraction of year between dates (basis 0--4) |
-| `DAYS(end, start)` | Days between two date serials |
-| `TODAY` | Current date as Excel serial number |
-| `HOUR(serial)` | Hour component (0--23) |
-| `MINUTE(serial)` | Minute component (0--59) |
-| `SECOND(serial)` | Second component (0--59) |
-| `WEEKDAY(serial, type)` | Day of week (type 1: Sun=1..Sat=7) |
-| `ISOWEEKNUM(serial)` | ISO week number |
-| `EDATE(start, months)` | Date offset by N months |
-| `EOMONTH(start, months)` | End of month, offset by N months |
-| `DATEDIF(start, end, unit)` | Difference in "Y", "M", "D", "MD", "YM", "YD" |
-| `DATEVALUE(text)` | Parse date string to serial number |
-| `DAYS360(start, end, method)` | Days on 360-day year (US/European) |
-| `WEEKNUM(serial, type)` | Week number (type 1: Sun start, 2: Mon start) |
-| `NETWORKDAYS(start, end, holidays)` | Business days between dates |
-| `WORKDAY(start, days, holidays)` | Date offset by N business days |
-| `TIME(hour, min, sec)` | Time as fraction of day |
-| `TIMEVALUE(text)` | Parse time string ("14:30") to fraction |
+| Function                            | Description                                   |
+| ----------------------------------- | --------------------------------------------- |
+| `DATE(year, month, day)`            | Build Excel date serial number                |
+| `DAY(date)`                         | Day of month (1--31)                          |
+| `MONTH(date)`                       | Month (1--12)                                 |
+| `YEAR(date)`                        | Year                                          |
+| `YEARFRAC(start, end, basis)`       | Fraction of year between dates (basis 0--4)   |
+| `DAYS(end, start)`                  | Days between two date serials                 |
+| `TODAY`                             | Current date as Excel serial number           |
+| `HOUR(serial)`                      | Hour component (0--23)                        |
+| `MINUTE(serial)`                    | Minute component (0--59)                      |
+| `SECOND(serial)`                    | Second component (0--59)                      |
+| `WEEKDAY(serial, type)`             | Day of week (type 1: Sun=1..Sat=7)            |
+| `ISOWEEKNUM(serial)`                | ISO week number                               |
+| `EDATE(start, months)`              | Date offset by N months                       |
+| `EOMONTH(start, months)`            | End of month, offset by N months              |
+| `DATEDIF(start, end, unit)`         | Difference in "Y", "M", "D", "MD", "YM", "YD" |
+| `DATEVALUE(text)`                   | Parse date string to serial number            |
+| `DAYS360(start, end, method)`       | Days on 360-day year (US/European)            |
+| `WEEKNUM(serial, type)`             | Week number (type 1: Sun start, 2: Mon start) |
+| `NETWORKDAYS(start, end, holidays)` | Business days between dates                   |
+| `WORKDAY(start, days, holidays)`    | Date offset by N business days                |
+| `TIME(hour, min, sec)`              | Time as fraction of day                       |
+| `TIMEVALUE(text)`                   | Parse time string ("14:30") to fraction       |
 
 ### jq Date Functions
 
-| Function | Description |
-| --- | --- |
-| `now` | Current Unix timestamp |
-| `strptime(fmt)` | Parse date string |
-| `strftime(fmt)` | Format timestamp |
-| `mktime` | Broken-down time to Unix timestamp |
-| `gmtime` | Unix timestamp to UTC time array |
-| `todate` | Timestamp to ISO-8601 string |
-| `fromdate` | ISO-8601 string to timestamp |
+| Function        | Description                        |
+| --------------- | ---------------------------------- |
+| `now`           | Current Unix timestamp             |
+| `strptime(fmt)` | Parse date string                  |
+| `strftime(fmt)` | Format timestamp                   |
+| `mktime`        | Broken-down time to Unix timestamp |
+| `gmtime`        | Unix timestamp to UTC time array   |
+| `todate`        | Timestamp to ISO-8601 string       |
+| `fromdate`      | ISO-8601 string to timestamp       |
 
 _Date difference in days_
 
@@ -1432,55 +1433,55 @@ _Date difference in days_
 
 ### Time Value of Money
 
-| Function | Description |
-| --- | --- |
-| `PMT(rate, nper, pv, fv, type)` | Payment per period |
-| `IPMT(rate, per, nper, pv, fv, type)` | Interest portion of payment |
-| `PPMT(rate, per, nper, pv, fv, type)` | Principal portion of payment |
-| `FV(rate, nper, pmt, pv, type)` | Future value |
-| `PV(rate, nper, pmt, fv, type)` | Present value |
-| `NPER(rate, pmt, pv, fv, type)` | Number of periods |
-| `RATE(nper, pmt, pv, fv, type, guess)` | Interest rate per period |
-| `FVSCHEDULE(principal, schedule)` | FV with variable rates |
+| Function                               | Description                  |
+| -------------------------------------- | ---------------------------- |
+| `PMT(rate, nper, pv, fv, type)`        | Payment per period           |
+| `IPMT(rate, per, nper, pv, fv, type)`  | Interest portion of payment  |
+| `PPMT(rate, per, nper, pv, fv, type)`  | Principal portion of payment |
+| `FV(rate, nper, pmt, pv, type)`        | Future value                 |
+| `PV(rate, nper, pmt, fv, type)`        | Present value                |
+| `NPER(rate, pmt, pv, fv, type)`        | Number of periods            |
+| `RATE(nper, pmt, pv, fv, type, guess)` | Interest rate per period     |
+| `FVSCHEDULE(principal, schedule)`      | FV with variable rates       |
 
 ### Investment Analysis
 
-| Function | Description |
-| --- | --- |
-| `NPV(rate, values)` | Net present value |
-| `NPV_BY(rate, rows, valueKey)` | NPV from row objects |
-| `IRR(values, guess)` | Internal rate of return |
-| `IRR_BY(rows, valueKey, guess)` | IRR from row objects |
-| `MIRR(values, finRate, reinRate)` | Modified IRR |
-| `XNPV(rate, values, dates)` | NPV for irregular cash flows |
-| `XNPV_BY(rate, rows, valKey, dateKey)` | XNPV from row objects |
-| `XIRR(values, dates, guess)` | IRR for irregular cash flows |
-| `XIRR_BY(rows, valKey, dateKey, guess)` | XIRR from row objects |
+| Function                                | Description                  |
+| --------------------------------------- | ---------------------------- |
+| `NPV(rate, values)`                     | Net present value            |
+| `NPV_BY(rate, rows, valueKey)`          | NPV from row objects         |
+| `IRR(values, guess)`                    | Internal rate of return      |
+| `IRR_BY(rows, valueKey, guess)`         | IRR from row objects         |
+| `MIRR(values, finRate, reinRate)`       | Modified IRR                 |
+| `XNPV(rate, values, dates)`             | NPV for irregular cash flows |
+| `XNPV_BY(rate, rows, valKey, dateKey)`  | XNPV from row objects        |
+| `XIRR(values, dates, guess)`            | IRR for irregular cash flows |
+| `XIRR_BY(rows, valKey, dateKey, guess)` | XIRR from row objects        |
 
 ### Other Financial
 
-| Function | Description |
-| --- | --- |
-| `CUMIPMT(rate, nper, pv, start, end, type)` | Cumulative interest between periods |
-| `CUMPRINC(rate, nper, pv, start, end, type)` | Cumulative principal between periods |
-| `EFFECT(nominal, npery)` | Effective annual rate |
-| `NOMINAL(effective, npery)` | Nominal annual rate |
-| `SLN(cost, salvage, life)` | Straight-line depreciation |
-| `SYD(cost, salvage, life, per)` | Sum-of-years depreciation |
-| `ACCRINT(issue, first, settle, rate, par, freq)` | Accrued interest |
-| `DB(cost, salvage, life, period, month)` | Declining balance depreciation |
-| `DDB(cost, salvage, life, period, factor)` | Double declining balance |
-| `ISPMT(rate, per, nper, pv)` | Interest for straight-line payments |
-| `PDURATION(rate, pv, fv)` | Periods to reach target value |
-| `RRI(nper, pv, fv)` | Required rate of return |
-| `DOLLARDE(frac, denom)` | Fractional dollar to decimal |
-| `DOLLARFR(dec, denom)` | Decimal dollar to fractional |
-| `DISC(settle, maturity, pr, redemption, basis)` | Discount rate of a security |
-| `PRICEDISC(settle, maturity, disc, redemption, basis)` | Price of discounted security |
-| `COUPDAYS(settle, maturity, freq, basis)` | Days in coupon period |
-| `TBILLEQ(settle, maturity, discount)` | T-bill bond-equivalent yield |
-| `TBILLPRICE(settle, maturity, discount)` | T-bill price per $100 |
-| `TBILLYIELD(settle, maturity, price)` | T-bill yield |
+| Function                                               | Description                          |
+| ------------------------------------------------------ | ------------------------------------ |
+| `CUMIPMT(rate, nper, pv, start, end, type)`            | Cumulative interest between periods  |
+| `CUMPRINC(rate, nper, pv, start, end, type)`           | Cumulative principal between periods |
+| `EFFECT(nominal, npery)`                               | Effective annual rate                |
+| `NOMINAL(effective, npery)`                            | Nominal annual rate                  |
+| `SLN(cost, salvage, life)`                             | Straight-line depreciation           |
+| `SYD(cost, salvage, life, per)`                        | Sum-of-years depreciation            |
+| `ACCRINT(issue, first, settle, rate, par, freq)`       | Accrued interest                     |
+| `DB(cost, salvage, life, period, month)`               | Declining balance depreciation       |
+| `DDB(cost, salvage, life, period, factor)`             | Double declining balance             |
+| `ISPMT(rate, per, nper, pv)`                           | Interest for straight-line payments  |
+| `PDURATION(rate, pv, fv)`                              | Periods to reach target value        |
+| `RRI(nper, pv, fv)`                                    | Required rate of return              |
+| `DOLLARDE(frac, denom)`                                | Fractional dollar to decimal         |
+| `DOLLARFR(dec, denom)`                                 | Decimal dollar to fractional         |
+| `DISC(settle, maturity, pr, redemption, basis)`        | Discount rate of a security          |
+| `PRICEDISC(settle, maturity, disc, redemption, basis)` | Price of discounted security         |
+| `COUPDAYS(settle, maturity, freq, basis)`              | Days in coupon period                |
+| `TBILLEQ(settle, maturity, discount)`                  | T-bill bond-equivalent yield         |
+| `TBILLPRICE(settle, maturity, discount)`               | T-bill price per $100                |
+| `TBILLYIELD(settle, maturity, price)`                  | T-bill yield                         |
 
 _Monthly car payment_
 
@@ -1500,76 +1501,76 @@ NPV(0.08, [-40000, 8000, 9200, 10000, 12000])
 
 ### Base Conversion
 
-| Function | Description |
-| --- | --- |
-| `BIN2DEC` / `DEC2BIN` | Binary ↔ Decimal |
-| `BIN2HEX` / `HEX2BIN` | Binary ↔ Hex |
-| `BIN2OCT` / `OCT2BIN` | Binary ↔ Octal |
-| `DEC2HEX` / `HEX2DEC` | Decimal ↔ Hex |
-| `DEC2OCT` / `OCT2DEC` | Decimal ↔ Octal |
-| `OCT2HEX` / `HEX2OCT` | Octal ↔ Hex |
+| Function                 | Description               |
+| ------------------------ | ------------------------- |
+| `BIN2DEC` / `DEC2BIN`    | Binary ↔ Decimal          |
+| `BIN2HEX` / `HEX2BIN`    | Binary ↔ Hex              |
+| `BIN2OCT` / `OCT2BIN`    | Binary ↔ Octal            |
+| `DEC2HEX` / `HEX2DEC`    | Decimal ↔ Hex             |
+| `DEC2OCT` / `OCT2DEC`    | Decimal ↔ Octal           |
+| `OCT2HEX` / `HEX2OCT`    | Octal ↔ Hex               |
 | `BASE(n, radix, minLen)` | Arbitrary base conversion |
-| `DECIMAL(text, radix)` | Parse from arbitrary base |
+| `DECIMAL(text, radix)`   | Parse from arbitrary base |
 
 ### Bitwise Operations
 
-| Function | Description |
-| --- | --- |
-| `BITAND(a, b)` | Bitwise AND |
-| `BITOR(a, b)` | Bitwise OR |
-| `BITXOR(a, b)` | Bitwise XOR |
-| `BITLSHIFT(n, shift)` | Left shift |
+| Function              | Description |
+| --------------------- | ----------- |
+| `BITAND(a, b)`        | Bitwise AND |
+| `BITOR(a, b)`         | Bitwise OR  |
+| `BITXOR(a, b)`        | Bitwise XOR |
+| `BITLSHIFT(n, shift)` | Left shift  |
 | `BITRSHIFT(n, shift)` | Right shift |
 
 ### Roman numeral conversion
 
-| Function | Description | Example |
-| --- | --- | --- |
-| `ROMAN(n)` | Arabic integer → Roman numeral string. Errors on negative input; floors non-integers. | `ROMAN(42)` → `"XLII"` |
+| Function       | Description                                                                                    | Example                      |
+| -------------- | ---------------------------------------------------------------------------------------------- | ---------------------------- |
+| `ROMAN(n)`     | Arabic integer → Roman numeral string. Errors on negative input; floors non-integers.          | `ROMAN(42)` → `"XLII"`       |
 | `ARABIC(text)` | Roman numeral string → Arabic integer. Errors on malformed input (validates via strict regex). | `ARABIC("MCMXCIV")` → `1994` |
 
 > Both helpers match Microsoft Excel exactly and round-trip: `ARABIC(ROMAN(N)) = N` for any non-negative integer N.
 
 ### Complex Numbers
 
-| Function | Description |
-| --- | --- |
-| `COMPLEX(real, imag, suffix)` | Construct complex number string |
-| `IMABS(val)` | Modulus |
-| `IMREAL(val)` | Real part |
-| `IMAGINARY(val)` | Imaginary part |
-| `IMCONJUGATE(val)` | Complex conjugate |
-| `IMSUB(a, b)` | Complex subtraction |
-| `IMSUM(values)` | Complex sum |
-| `DELTA(a, b)` | 1 if equal, 0 otherwise |
-| `GESTEP(n, step)` | 1 if ≥ step, 0 otherwise |
-| `IMCOS(z)` | Complex cosine |
-| `IMCOSH(z)` | Complex hyperbolic cosine |
-| `IMCOT(z)` | Complex cotangent |
-| `IMCSC(z)` | Complex cosecant |
-| `IMCSCH(z)` | Complex hyperbolic cosecant |
-| `IMSIN(z)` | Complex sine |
-| `IMSINH(z)` | Complex hyperbolic sine |
-| `IMTAN(z)` | Complex tangent |
-| `IMSEC(z)` | Complex secant |
-| `IMSECH(z)` | Complex hyperbolic secant |
-| `IMEXP(z)` | Complex exponential |
-| `IMLN(z)` | Complex natural log |
-| `IMLOG10(z)` | Complex log base 10 |
-| `IMLOG2(z)` | Complex log base 2 |
-| `IMDIV(a, b)` | Complex division |
-| `IMPRODUCT(values)` | Complex product |
-| `IMPOWER(z, n)` | Complex power |
-| `IMSQRT(z)` | Complex square root |
-| `IMARGUMENT(z)` | Angle (argument) of complex number |
-| `ERF(lower, upper)` | Error function (Gauss) |
-| `ERFC(x)` | Complementary error function |
-| `BESSELI(x, n)` | Modified Bessel function In (lazy async) |
-| `BESSELJ(x, n)` | Bessel function Jn (lazy async) |
-| `BESSELK(x, n)` | Modified Bessel function Kn (lazy async) |
-| `BESSELY(x, n)` | Bessel function Yn (lazy async) |
-| `CONVERT(n, from, to)` | Unit conversion (120+ units, SI prefixes) |
-| `UNICHAR(n)` | Code point to character (lazy FormulaJS spelling; `CHAR` is eager) |
+| Function                      | Description                                                        |
+| ----------------------------- | ------------------------------------------------------------------ |
+| `COMPLEX(real, imag, suffix)` | Construct complex number string                                    |
+| `IMABS(val)`                  | Modulus                                                            |
+| `IMREAL(val)`                 | Real part                                                          |
+| `IMAGINARY(val)`              | Imaginary part                                                     |
+| `IMCONJUGATE(val)`            | Complex conjugate                                                  |
+| `IMSUB(a, b)`                 | Complex subtraction                                                |
+| `IMSUM(values)`               | Complex sum                                                        |
+| `DELTA(a, b)`                 | 1 if equal, 0 otherwise                                            |
+| `GESTEP(n, step)`             | 1 if ≥ step, 0 otherwise                                           |
+| `IMCOS(z)`                    | Complex cosine                                                     |
+| `IMCOSH(z)`                   | Complex hyperbolic cosine                                          |
+| `IMCOT(z)`                    | Complex cotangent                                                  |
+| `IMCSC(z)`                    | Complex cosecant                                                   |
+| `IMCSCH(z)`                   | Complex hyperbolic cosecant                                        |
+| `IMSIN(z)`                    | Complex sine                                                       |
+| `IMSINH(z)`                   | Complex hyperbolic sine                                            |
+| `IMTAN(z)`                    | Complex tangent                                                    |
+| `IMSEC(z)`                    | Complex secant                                                     |
+| `IMSECH(z)`                   | Complex hyperbolic secant                                          |
+| `IMEXP(z)`                    | Complex exponential                                                |
+| `IMLN(z)`                     | Complex natural log                                                |
+| `IMLOG10(z)`                  | Complex log base 10                                                |
+| `IMLOG2(z)`                   | Complex log base 2                                                 |
+| `IMDIV(a, b)`                 | Complex division                                                   |
+| `IMPRODUCT(values)`           | Complex product                                                    |
+| `IMPOWER(z, n)`               | Complex power                                                      |
+| `IMSQRT(z)`                   | Complex square root                                                |
+| `IMARGUMENT(z)`               | Angle (argument) of complex number                                 |
+| `ERF(lower, upper)`           | Error function (Gauss)                                             |
+| `ERFC(x)`                     | Complementary error function                                       |
+| `BESSELI(x, n)`               | Modified Bessel function In (lazy async)                           |
+| `BESSELJ(x, n)`               | Bessel function Jn (lazy async)                                    |
+| `BESSELK(x, n)`               | Modified Bessel function Kn (lazy async)                           |
+| `BESSELY(x, n)`               | Bessel function Yn (lazy async)                                    |
+| `CONVERT(n, from, to)`        | Unit conversion (120+ units, SI prefixes)                          |
+| `UNICHAR(n)`                  | Code point to character (lazy FormulaJS spelling; `CHAR` is eager) |
 
 _CONVERT examples_
 
@@ -1581,7 +1582,7 @@ CONVERT(1, "kg", "lbm")    // 2.204...
 CONVERT(1024, "byte", "kibyte") // 1 (binary prefix)
 ```
 
-* * *
+---
 
 ## Computed Fields
 
@@ -1626,14 +1627,14 @@ _Array result_
 
 ### Field Type → Expression Return Type
 
-| Field Declaration | Expression Must Return |
-| --- | --- |
-| `contains(NumberField)` | A number |
-| `contains(StringField)` | A string |
-| `contains(BooleanField)` | A boolean |
-| `contains(SomeFieldDef)` | An object matching the FieldDef shape |
-| `containsMany(NumberField)` | An array of numbers |
-| `containsMany(SomeFieldDef)` | An array of objects |
+| Field Declaration            | Expression Must Return                |
+| ---------------------------- | ------------------------------------- |
+| `contains(NumberField)`      | A number                              |
+| `contains(StringField)`      | A string                              |
+| `contains(BooleanField)`     | A boolean                             |
+| `contains(SomeFieldDef)`     | An object matching the FieldDef shape |
+| `containsMany(NumberField)`  | An array of numbers                   |
+| `containsMany(SomeFieldDef)` | An array of objects                   |
 
 ### Chaining Computed Fields
 
@@ -1653,11 +1654,11 @@ _One field references another_
 
 ### Reading Across Relationships
 
-| Expression | Result |
-| --- | --- |
-| `.attendingClinician.name` | Read a field from a linked card |
-| `.consultTeam \| map(.name)` | Map over a linksToMany relationship |
-| `.patient.firstName + " " + .patient.lastName` | Concatenate across a link |
+| Expression                                     | Result                              |
+| ---------------------------------------------- | ----------------------------------- |
+| `.attendingClinician.name`                     | Read a field from a linked card     |
+| `.consultTeam \| map(.name)`                   | Map over a linksToMany relationship |
+| `.patient.firstName + " " + .patient.lastName` | Concatenate across a link           |
 
 ## jq Builtins Index
 
@@ -1665,101 +1666,101 @@ Complete index of core jq functions available in BXL.
 
 ### Array / Object
 
-| Function | Description |
-| --- | --- |
-| `length` | Length of string/array/object |
-| `keys` / `keys_unsorted` | Sorted / unsorted keys |
-| `has(key)` | Test if key/index exists |
-| `contains(v)` | Deep containment check |
-| `in(obj)` | Test if input is key in obj |
-| `inside(v)` | Test if input is contained in v |
-| `map(f)` | Apply f to each element |
-| `map_values(f)` | Apply f to all values |
-| `select(f)` | Keep elements where f is truthy |
-| `del(f)` | Delete paths |
-| `add` | Sum/fold array |
-| `sort` / `sort_by(f)` | Sort array |
-| `reverse` | Reverse array |
-| `unique` / `unique_by(f)` | Deduplicate |
-| `group_by(f)` | Group by key |
-| `min_by(f)` / `max_by(f)` | Extremes by key |
-| `flatten` / `flatten(n)` | Flatten to depth |
-| `join(sep)` | Join array to string |
-| `to_entries` | Object to \[{key, value}\] |
-| `from_entries` | \[{key, value}\] to object |
-| `with_entries(f)` | Transform entries |
-| `transpose` | Matrix transpose |
-| `indices(v)` | All indices of v |
-| `index(v)` / `rindex(v)` | First / last index |
-| `range(n)` / `range(a;b)` | Number range |
-| `walk(f)` | Apply f to all nodes bottom-up |
-| `recurse(f)` | Recursive descent |
-| `paths` / `leaf_paths` | All / leaf paths |
-| `getpath(p)` / `setpath(p; v)` | Path access |
-| `pick(pathexps)` | Pick paths from input |
-| `ROWS(arr)` / `COLUMNS(arr)` | Row/column count |
+| Function                       | Description                     |
+| ------------------------------ | ------------------------------- |
+| `length`                       | Length of string/array/object   |
+| `keys` / `keys_unsorted`       | Sorted / unsorted keys          |
+| `has(key)`                     | Test if key/index exists        |
+| `contains(v)`                  | Deep containment check          |
+| `in(obj)`                      | Test if input is key in obj     |
+| `inside(v)`                    | Test if input is contained in v |
+| `map(f)`                       | Apply f to each element         |
+| `map_values(f)`                | Apply f to all values           |
+| `select(f)`                    | Keep elements where f is truthy |
+| `del(f)`                       | Delete paths                    |
+| `add`                          | Sum/fold array                  |
+| `sort` / `sort_by(f)`          | Sort array                      |
+| `reverse`                      | Reverse array                   |
+| `unique` / `unique_by(f)`      | Deduplicate                     |
+| `group_by(f)`                  | Group by key                    |
+| `min_by(f)` / `max_by(f)`      | Extremes by key                 |
+| `flatten` / `flatten(n)`       | Flatten to depth                |
+| `join(sep)`                    | Join array to string            |
+| `to_entries`                   | Object to \[{key, value}\]      |
+| `from_entries`                 | \[{key, value}\] to object      |
+| `with_entries(f)`              | Transform entries               |
+| `transpose`                    | Matrix transpose                |
+| `indices(v)`                   | All indices of v                |
+| `index(v)` / `rindex(v)`       | First / last index              |
+| `range(n)` / `range(a;b)`      | Number range                    |
+| `walk(f)`                      | Apply f to all nodes bottom-up  |
+| `recurse(f)`                   | Recursive descent               |
+| `paths` / `leaf_paths`         | All / leaf paths                |
+| `getpath(p)` / `setpath(p; v)` | Path access                     |
+| `pick(pathexps)`               | Pick paths from input           |
+| `ROWS(arr)` / `COLUMNS(arr)`   | Row/column count                |
 
 ### String
 
-| Function | Description |
-| --- | --- |
-| `ascii_downcase` / `ascii_upcase` | Case conversion |
-| `ltrimstr(s)` / `rtrimstr(s)` | Remove prefix / suffix |
-| `trim` / `ltrim` / `rtrim` | Trim whitespace |
-| `startswith(s)` / `endswith(s)` | Test prefix / suffix |
-| `split(s)` | Split on string |
-| `test(re)` / `match(re)` | Regex test / match |
-| `capture(re)` | Named capture groups |
-| `scan(re)` | All regex matches |
-| `sub(re; s)` / `gsub(re; s)` | Regex substitution |
-| `tostring` / `tonumber` | Type conversion |
-| `tojson` / `fromjson` | JSON encode/decode |
-| `explode` / `implode` | String ↔ codepoints |
+| Function                          | Description            |
+| --------------------------------- | ---------------------- |
+| `ascii_downcase` / `ascii_upcase` | Case conversion        |
+| `ltrimstr(s)` / `rtrimstr(s)`     | Remove prefix / suffix |
+| `trim` / `ltrim` / `rtrim`        | Trim whitespace        |
+| `startswith(s)` / `endswith(s)`   | Test prefix / suffix   |
+| `split(s)`                        | Split on string        |
+| `test(re)` / `match(re)`          | Regex test / match     |
+| `capture(re)`                     | Named capture groups   |
+| `scan(re)`                        | All regex matches      |
+| `sub(re; s)` / `gsub(re; s)`      | Regex substitution     |
+| `tostring` / `tonumber`           | Type conversion        |
+| `tojson` / `fromjson`             | JSON encode/decode     |
+| `explode` / `implode`             | String ↔ codepoints    |
 
 ### Type Selectors
 
-| Function | Description |
-| --- | --- |
-| `type` | Return type name as string |
-| `arrays` / `objects` / `strings` / `numbers` / `booleans` / `nulls` | Select by type |
-| `values` / `scalars` | Non-null / scalar values |
-| `iterables` | Arrays or objects |
-| `isnan` / `isinfinite` / `isnormal` / `isfinite` | Number predicates |
-| `nan` / `infinite` | IEEE constants |
+| Function                                                            | Description                |
+| ------------------------------------------------------------------- | -------------------------- |
+| `type`                                                              | Return type name as string |
+| `arrays` / `objects` / `strings` / `numbers` / `booleans` / `nulls` | Select by type             |
+| `values` / `scalars`                                                | Non-null / scalar values   |
+| `iterables`                                                         | Arrays or objects          |
+| `isnan` / `isinfinite` / `isnormal` / `isfinite`                    | Number predicates          |
+| `nan` / `infinite`                                                  | IEEE constants             |
 
 ### Iteration & Flow
 
-| Function | Description |
-| --- | --- |
-| `first` / `first(g)` | First element / output |
-| `last` / `last(g)` | Last element / output |
-| `nth(n; g)` | Nth output |
-| `limit(n; g)` | First n outputs |
-| `skip(n; g)` | Skip first n outputs |
-| `isempty(g)` | True if generator is empty |
-| `any` / `any(f)` / `any(g; f)` | Existential test |
-| `all` / `all(f)` / `all(g; f)` | Universal test |
-| `while(cond; update)` | Emit while condition holds |
-| `until(cond; next)` | Apply until condition holds |
-| `repeat(f)` | Repeat forever |
-| `combinations` | Cartesian product |
-| `empty` | Produce no output |
+| Function                       | Description                 |
+| ------------------------------ | --------------------------- |
+| `first` / `first(g)`           | First element / output      |
+| `last` / `last(g)`             | Last element / output       |
+| `nth(n; g)`                    | Nth output                  |
+| `limit(n; g)`                  | First n outputs             |
+| `skip(n; g)`                   | Skip first n outputs        |
+| `isempty(g)`                   | True if generator is empty  |
+| `any` / `any(f)` / `any(g; f)` | Existential test            |
+| `all` / `all(f)` / `all(g; f)` | Universal test              |
+| `while(cond; update)`          | Emit while condition holds  |
+| `until(cond; next)`            | Apply until condition holds |
+| `repeat(f)`                    | Repeat forever              |
+| `combinations`                 | Cartesian product           |
+| `empty`                        | Produce no output           |
 
 ### Math (jq native)
 
 The jq math library is available in BXL with C/IEEE semantics. Both unary (pipe-input) and binary forms are supported where C provides them — write `x | pow(y)` or `pow(x; y)`, both work.
 
-| Category | Functions |
-| --- | --- |
-| Trig | `sin` `cos` `tan` `asin` `acos` `atan` `atan2(x)` `atan2(y; x)` |
-| Hyperbolic | `sinh` `cosh` `tanh` `asinh` `acosh` `atanh` |
-| Exp/Log | `exp` `exp2` `exp10` `expm1` `log` `log2` `log10` `pow(y)` `pow(b; e)` `pow10` `sqrt` `cbrt` |
-| Rounding | `floor` `ceil` `round` `trunc` `nearbyint` `rint` `fabs` |
+| Category    | Functions                                                                                                                                        |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Trig        | `sin` `cos` `tan` `asin` `acos` `atan` `atan2(x)` `atan2(y; x)`                                                                                  |
+| Hyperbolic  | `sinh` `cosh` `tanh` `asinh` `acosh` `atanh`                                                                                                     |
+| Exp/Log     | `exp` `exp2` `exp10` `expm1` `log` `log2` `log10` `pow(y)` `pow(b; e)` `pow10` `sqrt` `cbrt`                                                     |
+| Rounding    | `floor` `ceil` `round` `trunc` `nearbyint` `rint` `fabs`                                                                                         |
 | Binary math | `hypot(y)` `hypot(x; y)` `fmax(y)` `fmax(x; y)` `fmin(y)` `fmin(x; y)` `fdim(x; y)` `copysign(x; y)` `fmod(x; y)` `drem(x; y)` `remainder(x; y)` |
-| Bessel | `j0` `j1` `jn(n; x)` `y0` `y1` `yn(n; x)` |
-| Special | `gamma` `lgamma` `lgamma_r` `tgamma` `erf` `erfc` |
-| IEEE float | `frexp` `ldexp(x; n)` `scalb(x; n)` `scalbln(x; n)` `logb` `significand` `modf` `fma(a; b; c)` `nextafter(x; y)` `nexttoward(x; y)` |
-| Misc | `scalars_or_empty` |
+| Bessel      | `j0` `j1` `jn(n; x)` `y0` `y1` `yn(n; x)`                                                                                                        |
+| Special     | `gamma` `lgamma` `lgamma_r` `tgamma` `erf` `erfc`                                                                                                |
+| IEEE float  | `frexp` `ldexp(x; n)` `scalb(x; n)` `scalbln(x; n)` `logb` `significand` `modf` `fma(a; b; c)` `nextafter(x; y)` `nexttoward(x; y)`              |
+| Misc        | `scalars_or_empty`                                                                                                                               |
 
 > **Collision warning — `atan2`.** The binary jq form is `atan2(y; x)` and follows C/POSIX order. The Excel form is `ATAN2(x, y)` with comma separators. See [_How `MATCH` and `match` dispatch_](#how-match-and-match-dispatch) for the full story.
 
@@ -1769,18 +1770,18 @@ The jq math library is available in BXL with C/IEEE semantics. Both unary (pipe-
 
 Used as `@fmt "..."` or `format("fmt")` for string interpolation.
 
-| Format | Description | Example |
-| --- | --- | --- |
-| `@text` | Convert to string (default) | `42 \| @text` → `"42"` |
-| `@json` | JSON-encode | `{a:1} \| @json` → `'{"a":1}'` |
-| `@html` | HTML-escape | `"<b>" \| @html` → `"<b>"` |
-| `@uri` | Percent-encode | `"a b" \| @uri` → `"a%20b"` |
-| `@urid` | Percent-decode | `"a%20b" \| @urid` → `"a b"` |
-| `@csv` | CSV row | `["a","b"] \| @csv` → `"\"a\",\"b\""` |
-| `@tsv` | TSV row | `["a","b"] \| @tsv` → `"a\tb"` |
-| `@sh` | Shell-escape | `"it's" \| @sh` → `"'it'\\''s'"` |
-| `@base64` | Base64 encode | `"hello" \| @base64` |
-| `@base64d` | Base64 decode | `"aGVsbG8=" \| @base64d` |
+| Format     | Description                 | Example                               |
+| ---------- | --------------------------- | ------------------------------------- |
+| `@text`    | Convert to string (default) | `42 \| @text` → `"42"`                |
+| `@json`    | JSON-encode                 | `{a:1} \| @json` → `'{"a":1}'`        |
+| `@html`    | HTML-escape                 | `"<b>" \| @html` → `"<b>"`            |
+| `@uri`     | Percent-encode              | `"a b" \| @uri` → `"a%20b"`           |
+| `@urid`    | Percent-decode              | `"a%20b" \| @urid` → `"a b"`          |
+| `@csv`     | CSV row                     | `["a","b"] \| @csv` → `"\"a\",\"b\""` |
+| `@tsv`     | TSV row                     | `["a","b"] \| @tsv` → `"a\tb"`        |
+| `@sh`      | Shell-escape                | `"it's" \| @sh` → `"'it'\\''s'"`      |
+| `@base64`  | Base64 encode               | `"hello" \| @base64`                  |
+| `@base64d` | Base64 decode               | `"aGVsbG8=" \| @base64d`              |
 
 ### How to use formatters
 
@@ -1830,29 +1831,29 @@ _Encoders come paired. Use the d variant to reverse._
 
 #### Common recipes
 
-| Need | BXL |
-| --- | --- |
-| Safe-render a user string into HTML | `@html "Hello \(Name)"` |
-| Build a URL query string | `@uri "/api?q=\(Query)"` |
-| Serialize a card for logging / debugging | `. \| @json` |
-| Emit one CSV row per invoice | `Invoice[all] \| map([.Number, .Total] \| @csv)` |
-| Encode a binary payload | `Attachment.Bytes \| @base64` |
-| Build a safe shell command | `@sh "mv \(Source) \(Dest)"` |
+| Need                                     | BXL                                              |
+| ---------------------------------------- | ------------------------------------------------ |
+| Safe-render a user string into HTML      | `@html "Hello \(Name)"`                          |
+| Build a URL query string                 | `@uri "/api?q=\(Query)"`                         |
+| Serialize a card for logging / debugging | `. \| @json`                                     |
+| Emit one CSV row per invoice             | `Invoice[all] \| map([.Number, .Total] \| @csv)` |
+| Encode a binary payload                  | `Attachment.Bytes \| @base64`                    |
+| Build a safe shell command               | `@sh "mv \(Source) \(Dest)"`                     |
 
 ## Error Codes
 
 BXL uses Excel-compatible error codes. Catch them with `IFERROR`, `IFNA`, or `try/catch`.
 
-| Error | Code | Meaning |
-| --- | --- | --- |
-| `#NULL!` | 1 | Null reference |
-| `#DIV/0!` | 2 | Division by zero |
-| `#VALUE!` | 3 | Wrong value type |
-| `#REF!` | 4 | Invalid reference |
-| `#NAME?` | 5 | Unknown function name |
-| `#NUM!` | 6 | Numeric error (overflow, domain) |
-| `#N/A` | 7 | Value not available |
-| `#GETTING_DATA` | 8 | Data still loading |
+| Error           | Code | Meaning                          |
+| --------------- | ---- | -------------------------------- |
+| `#NULL!`        | 1    | Null reference                   |
+| `#DIV/0!`       | 2    | Division by zero                 |
+| `#VALUE!`       | 3    | Wrong value type                 |
+| `#REF!`         | 4    | Invalid reference                |
+| `#NAME?`        | 5    | Unknown function name            |
+| `#NUM!`         | 6    | Numeric error (overflow, domain) |
+| `#N/A`          | 7    | Value not available              |
+| `#GETTING_DATA` | 8    | Data still loading               |
 
 _Handling errors_
 
@@ -1864,7 +1865,7 @@ try (.x | tonumber) catch "not a number"
 IF(ISERROR(.lookup), "fallback", .lookup)
 ```
 
-* * *
+---
 
 ## Excel Function Coverage
 
@@ -1874,23 +1875,23 @@ BXL implements 300+ functions from the Excel/Google Sheets function set, plus 16
 
 These functions exist only in jq's vocabulary — there's no Excel paste-equivalent, so the lowercase form is the canonical spelling:
 
-| jq idiom | Category | Notes |
-| --- | --- | --- |
-| `map(f)` `select(f)` `sort_by(f)` `unique_by(f)` `group_by(f)` | Array | Pure jq pipe transforms |
-| `add` | Array | Sum of pipe input (`[1,2,3] \| add` → `6`) |
-| `transpose` | Array | Transpose a 2-D array |
-| `to_entries` `from_entries` `with_entries(f)` | Object | Object↔key/value-array conversion |
-| `keys` `keys_unsorted` `values` `has(k)` `del(p)` | Object | Structural |
-| `range(n)` `range(a; b)` `range(a; b; step)` | Iter | Numeric generator |
-| `recurse(f)` `walk(f)` | Iter | Tree walks |
-| `paths` `leaf_paths` `getpath(p)` `setpath(p; v)` | Path | JSONPath access |
-| `length` `type` `tostring` `tonumber` `tojson` `fromjson` | Type | Coercion + introspection |
-| `now` | Date | Unix timestamp |
-| `pow(b; e)` `pow(e)` (unary) | Math | C-style exponent. Different name from `POWER`, no collision. |
-| `fmod(a; b)` | Math | Dividend-signed modulo. Different name (and semantics) from `MOD`. |
-| `fmax(a; b)` `fmin(a; b)` | Math | NaN-skipping. Different name from `MAX`/`MIN`. |
-| `hypot(a; b)` `copysign(a; b)` `fdim(a; b)` `expm1` `pow10` `ldexp` | Math | C-only; no Excel counterpart |
-| `jn(n; x)` `yn(n; x)` `j0` `j1` `y0` `y1` | Bessel | C order. `BESSELJ`/`BESSELY` use Excel order. |
+| jq idiom                                                            | Category | Notes                                                              |
+| ------------------------------------------------------------------- | -------- | ------------------------------------------------------------------ |
+| `map(f)` `select(f)` `sort_by(f)` `unique_by(f)` `group_by(f)`      | Array    | Pure jq pipe transforms                                            |
+| `add`                                                               | Array    | Sum of pipe input (`[1,2,3] \| add` → `6`)                         |
+| `transpose`                                                         | Array    | Transpose a 2-D array                                              |
+| `to_entries` `from_entries` `with_entries(f)`                       | Object   | Object↔key/value-array conversion                                  |
+| `keys` `keys_unsorted` `values` `has(k)` `del(p)`                   | Object   | Structural                                                         |
+| `range(n)` `range(a; b)` `range(a; b; step)`                        | Iter     | Numeric generator                                                  |
+| `recurse(f)` `walk(f)`                                              | Iter     | Tree walks                                                         |
+| `paths` `leaf_paths` `getpath(p)` `setpath(p; v)`                   | Path     | JSONPath access                                                    |
+| `length` `type` `tostring` `tonumber` `tojson` `fromjson`           | Type     | Coercion + introspection                                           |
+| `now`                                                               | Date     | Unix timestamp                                                     |
+| `pow(b; e)` `pow(e)` (unary)                                        | Math     | C-style exponent. Different name from `POWER`, no collision.       |
+| `fmod(a; b)`                                                        | Math     | Dividend-signed modulo. Different name (and semantics) from `MOD`. |
+| `fmax(a; b)` `fmin(a; b)`                                           | Math     | NaN-skipping. Different name from `MAX`/`MIN`.                     |
+| `hypot(a; b)` `copysign(a; b)` `fdim(a; b)` `expm1` `pow10` `ldexp` | Math     | C-only; no Excel counterpart                                       |
+| `jn(n; x)` `yn(n; x)` `j0` `j1` `y0` `y1`                           | Bessel   | C order. `BESSELJ`/`BESSELY` use Excel order.                      |
 
 These are all **honest jq-native idioms** — the linter does NOT flag the lowercase spelling, because no Excel counterpart exists (or the names differ).
 
@@ -1898,19 +1899,19 @@ These are all **honest jq-native idioms** — the linter does NOT flag the lower
 
 Functions where a lowercase jq spelling case-folds to an Excel-style name. **UPPERCASE is preferred only when dispatch resolved to Excel**; lowercase is preferred when arity/call shape or semicolon dispatch resolved to jq:
 
-| Preferred (Excel) | Also accepted (lowercase) | Notes |
-| --- | --- | --- |
-| `SIN(x)` `COS(x)` `TAN(x)` `ASIN(x)` `ACOS(x)` `ATAN(x)` | `sin(x)` … `atan(x)` | Lint: prefer UPPERCASE |
-| `ATAN2(x, y)` | `atan2(y; x)` | Comma form is Excel order. Semicolon form is jq/POSIX order. See [collision rules](#how-match-and-match-dispatch). |
-| `SINH(x)` `COSH(x)` `TANH(x)` `ASINH(x)` `ACOSH(x)` `ATANH(x)` | `sinh(x)` … `atanh(x)` | Lint: prefer UPPERCASE |
-| `EXP(x)` `LOG10(x)` `SQRT(x)` | `exp(x)` `log10(x)` `sqrt(x)` | Lint: prefer UPPERCASE |
-| `LN(x)` | (use `LN`, not lowercase `log`) | jq's `log/0` is natural log (no explicit arg); Excel `LOG/1` is base-10. Different math at one-arg arity — arity decides. |
-| `LOG(x)` | `x \| log` | Excel `LOG(x)` = base-10. jq bare filter `log` = natural log. |
-| `POWER(b, e)` | (use `POWER` for Excel-flavoured code; `pow(b; e)` is the jq idiom and stays lowercase) | Different names — no lint either way. Pick by intent. |
-| `GAMMA(x)` | `gamma(x)` | True Γ. Lint: prefer UPPERCASE. For log-Γ use `GAMMALN` / `lgamma`. |
-| `ERF(x)` `ERFC(x)` | `erf(x)` `erfc(x)` | Lint: prefer UPPERCASE |
-| `FLOOR(x)` `ROUND(x)` `TRUNC(x)` | `floor(x)` `round(x)` `trunc(x)` | Lint: prefer UPPERCASE |
-| `ABS(x)` | (use `ABS`; `fabs` is the jq idiom — different name) | Different names — no lint |
+| Preferred (Excel)                                              | Also accepted (lowercase)                                                               | Notes                                                                                                                     |
+| -------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `SIN(x)` `COS(x)` `TAN(x)` `ASIN(x)` `ACOS(x)` `ATAN(x)`       | `sin(x)` … `atan(x)`                                                                    | Lint: prefer UPPERCASE                                                                                                    |
+| `ATAN2(x, y)`                                                  | `atan2(y; x)`                                                                           | Comma form is Excel order. Semicolon form is jq/POSIX order. See [collision rules](#how-match-and-match-dispatch).        |
+| `SINH(x)` `COSH(x)` `TANH(x)` `ASINH(x)` `ACOSH(x)` `ATANH(x)` | `sinh(x)` … `atanh(x)`                                                                  | Lint: prefer UPPERCASE                                                                                                    |
+| `EXP(x)` `LOG10(x)` `SQRT(x)`                                  | `exp(x)` `log10(x)` `sqrt(x)`                                                           | Lint: prefer UPPERCASE                                                                                                    |
+| `LN(x)`                                                        | (use `LN`, not lowercase `log`)                                                         | jq's `log/0` is natural log (no explicit arg); Excel `LOG/1` is base-10. Different math at one-arg arity — arity decides. |
+| `LOG(x)`                                                       | `x \| log`                                                                              | Excel `LOG(x)` = base-10. jq bare filter `log` = natural log.                                                             |
+| `POWER(b, e)`                                                  | (use `POWER` for Excel-flavoured code; `pow(b; e)` is the jq idiom and stays lowercase) | Different names — no lint either way. Pick by intent.                                                                     |
+| `GAMMA(x)`                                                     | `gamma(x)`                                                                              | True Γ. Lint: prefer UPPERCASE. For log-Γ use `GAMMALN` / `lgamma`.                                                       |
+| `ERF(x)` `ERFC(x)`                                             | `erf(x)` `erfc(x)`                                                                      | Lint: prefer UPPERCASE                                                                                                    |
+| `FLOOR(x)` `ROUND(x)` `TRUNC(x)`                               | `floor(x)` `round(x)` `trunc(x)`                                                        | Lint: prefer UPPERCASE                                                                                                    |
+| `ABS(x)`                                                       | (use `ABS`; `fabs` is the jq idiom — different name)                                    | Different names — no lint                                                                                                 |
 
 > **Read [_How `MATCH` and `match` dispatch_](#how-match-and-match-dispatch)** for the full collision rules, the `ATAN2` argument-order story, `NOW` call-shape rule, and `GAMMA` / log-Γ resolution. The linter rule that backs the casing advice in this table is documented under [Linter style nudges](#linter-style-nudges).
 
@@ -1920,24 +1921,24 @@ Functions where a lowercase jq spelling case-folds to an Excel-style name. **UPP
 
 Some FormulaJS families are implemented but intentionally lazy because they pull heavier optional dependencies or are rarely needed. Others are explicitly not supported in BXL because they assume a spreadsheet grid, criteria ranges, or array-returning analysis shapes that do not fit JSON computed fields.
 
-| Category | Functions | Status |
-| --- | --- | --- |
-| Lazy statistical distributions and tests | `BETA.DIST` `BINOM.DIST` `CHISQ.DIST` `F.DIST` `GAMMA.DIST` `NORM.DIST` `POISSON.DIST` `T.DIST` `WEIBULL.DIST` and their `.INV`, `.RT`, `.TEST` variants | Loaded only by async runtimes when an expression calls one of these functions. Canonical BXL uses underscore names such as `NORM_DIST(...)`; pasted dotted names are accepted in readable syntax. |
-| Lazy financial formulas | `PMT` `NPV` `IRR` `XIRR` `FV` `PV` `RATE` `COUPDAYS` `TBILLPRICE` and the rest of the Financial section | Loaded by async runtimes as `formula-financial`. Shares the `formula-extras` bundle with lazy engineering. |
-| Lazy engineering formulas | `BIN2DEC` `BITAND` `COMPLEX` `IM*` `ERF` `ERFC` `CONVERT` `UNICHAR` and related helpers | Loaded by async runtimes as `formula-engineering`. `ROMAN` and `ARABIC` remain eager. |
-| Lazy Bessel functions | `BESSELI` `BESSELJ` `BESSELK` `BESSELY` | Loaded by async runtimes as `formula-bessel` when an expression calls one of these specialized engineering functions. |
-| Database | `DAVERAGE` `DCOUNT` `DCOUNTA` `DGET` `DMAX` `DMIN` `DPRODUCT` `DSTDEV` `DSTDEVP` `DSUM` `DVAR` `DVARP` | **Unsupported in BXL.** Excel database functions assume a flat cell range with criteria ranges. BXL uses `map`/`select`/`_BY` variants instead -- more powerful on JSON. |
-| Grid reference | `COLUMN` `ROW` `SUBTOTAL` `AGGREGATE` | **Unsupported in BXL.** These require a cell grid model. No equivalent concept exists in JSON expressions. Note: `ROWS(arr)` and `COLUMNS(arr)` are supported array-shape helpers; singular `ROW` / `COLUMN` are not. |
-| Matrix | `MMULT` `MUNIT` | **Unsupported in BXL.** Matrix multiplication and identity belong in jq array pipelines or dedicated math libraries. |
-| Regression | `LINEST` `LOGEST` `GROWTH` `TREND` | **Unsupported in BXL.** These return regression arrays / projections whose shapes don't map cleanly to single computed fields. |
+| Category                                 | Functions                                                                                                                                                | Status                                                                                                                                                                                                                |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Lazy statistical distributions and tests | `BETA.DIST` `BINOM.DIST` `CHISQ.DIST` `F.DIST` `GAMMA.DIST` `NORM.DIST` `POISSON.DIST` `T.DIST` `WEIBULL.DIST` and their `.INV`, `.RT`, `.TEST` variants | Loaded only by async runtimes when an expression calls one of these functions. Canonical BXL uses underscore names such as `NORM_DIST(...)`; pasted dotted names are accepted in readable syntax.                     |
+| Lazy financial formulas                  | `PMT` `NPV` `IRR` `XIRR` `FV` `PV` `RATE` `COUPDAYS` `TBILLPRICE` and the rest of the Financial section                                                  | Loaded by async runtimes as `formula-financial`. Shares the `formula-extras` bundle with lazy engineering.                                                                                                            |
+| Lazy engineering formulas                | `BIN2DEC` `BITAND` `COMPLEX` `IM*` `ERF` `ERFC` `CONVERT` `UNICHAR` and related helpers                                                                  | Loaded by async runtimes as `formula-engineering`. `ROMAN` and `ARABIC` remain eager.                                                                                                                                 |
+| Lazy Bessel functions                    | `BESSELI` `BESSELJ` `BESSELK` `BESSELY`                                                                                                                  | Loaded by async runtimes as `formula-bessel` when an expression calls one of these specialized engineering functions.                                                                                                 |
+| Database                                 | `DAVERAGE` `DCOUNT` `DCOUNTA` `DGET` `DMAX` `DMIN` `DPRODUCT` `DSTDEV` `DSTDEVP` `DSUM` `DVAR` `DVARP`                                                   | **Unsupported in BXL.** Excel database functions assume a flat cell range with criteria ranges. BXL uses `map`/`select`/`_BY` variants instead -- more powerful on JSON.                                              |
+| Grid reference                           | `COLUMN` `ROW` `SUBTOTAL` `AGGREGATE`                                                                                                                    | **Unsupported in BXL.** These require a cell grid model. No equivalent concept exists in JSON expressions. Note: `ROWS(arr)` and `COLUMNS(arr)` are supported array-shape helpers; singular `ROW` / `COLUMN` are not. |
+| Matrix                                   | `MMULT` `MUNIT`                                                                                                                                          | **Unsupported in BXL.** Matrix multiplication and identity belong in jq array pipelines or dedicated math libraries.                                                                                                  |
+| Regression                               | `LINEST` `LOGEST` `GROWTH` `TREND`                                                                                                                       | **Unsupported in BXL.** These return regression arrays / projections whose shapes don't map cleanly to single computed fields.                                                                                        |
 
 ### Coverage Summary
 
-| Status | Count | Notes |
-| --- | --- | --- |
-| Implemented | 300+ | All targeted Excel-compatible formula functions plus validator.js functions; large helper families load lazily in async runtimes |
-| Lazy extension libraries | 4 | `formula-statistical`, `formula-bessel`, `formula-engineering`, `formula-financial` |
-| BXL-only extensions | 16 | `_BY` row-object variants, `COL`, `ERROR_TYPE` |
-| Excel name with case-folded jq counterpart | ~25 | Trig, exp/log, rounding, gamma, erf — UPPERCASE preferred (lint nudges lowercase) |
-| jq-only idioms (no Excel counterpart) | ~30 | `map`, `select`, `add`, `sort_by`, `pow`, `fmod`, `hypot`, `jn`, etc. — lowercase canonical |
-| Won't add | ~30 | Database functions, grid reference functions, matrix helpers, regression arrays |
+| Status                                     | Count | Notes                                                                                                                            |
+| ------------------------------------------ | ----- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Implemented                                | 300+  | All targeted Excel-compatible formula functions plus validator.js functions; large helper families load lazily in async runtimes |
+| Lazy extension libraries                   | 4     | `formula-statistical`, `formula-bessel`, `formula-engineering`, `formula-financial`                                              |
+| BXL-only extensions                        | 16    | `_BY` row-object variants, `COL`, `ERROR_TYPE`                                                                                   |
+| Excel name with case-folded jq counterpart | ~25   | Trig, exp/log, rounding, gamma, erf — UPPERCASE preferred (lint nudges lowercase)                                                |
+| jq-only idioms (no Excel counterpart)      | ~30   | `map`, `select`, `add`, `sort_by`, `pow`, `fmod`, `hypot`, `jn`, etc. — lowercase canonical                                      |
+| Won't add                                  | ~30   | Database functions, grid reference functions, matrix helpers, regression arrays                                                  |

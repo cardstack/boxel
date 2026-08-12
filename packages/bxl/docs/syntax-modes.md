@@ -9,10 +9,10 @@ BXL accepts three forms at the call site of `bxl()` / `expression()`:
 
 This document is the canonical reference for what each mode does,
 why you'd pick one over another, and what surprises to watch for.
-For the rules baked into the readable-syntax compiler itself (label
-resolution, PascalCase fallback, jq keyword guard, etc.), see
-[`docs/internals/port-from-jqxl.md`](./internals/port-from-jqxl.md)
-§12 / §13.
+The rules baked into the readable-syntax compiler itself — label
+resolution, the PascalCase fallback, the jq keyword guard — are
+covered in [`syntax-reference.md`](./syntax-reference.md), and each is
+locked down by a case in [`../tests/boxel/`](../tests/boxel/).
 
 ## Using BXL Inside Boxel
 
@@ -92,24 +92,27 @@ function names (SUM, ROUND, IF, IFS)?
 ### Plain string — readable BXL
 
 ```ts
-expression('Severity == "High"')
-expression('ROUND(Subtotal * "Tax Rate" / 100, 2)')
-expression('if .dischargeDate then "discharged" else "active" end')
+expression('Severity == "High"');
+expression('ROUND(Subtotal * "Tax Rate" / 100, 2)');
+expression('if .dischargeDate then "discharged" else "active" end');
 ```
 
 The compiler:
+
 - runs the readable-syntax pass first (PascalCase → camelCase
   fallback, Excel functions, label resolution against a `schema` if
   one is provided);
 - evaluates the resulting jq.
 
 Use when:
+
 - You want Excel-like syntax (PascalCase identifiers, `SUM`,
   `ROUND`, `IF`, …).
 - You're writing a card field's `computeVia` and want the source to
   read like a spreadsheet formula.
 
 Watch for:
+
 - **`\(…)` interpolation**: a regular JS string literal silently
   drops the backslash. Use `` jq`…` `` instead.
 - **Excel `IF` vs jq `if`**: BXL's compiler is case-sensitive at
@@ -120,16 +123,20 @@ Watch for:
 ### `` jq`…` `` — plain jq
 
 ```ts
-expression(jq`"\(.bpSystolic)/\(.bpDiastolic)"`)
-expression(jq`if .severity == "Critical" then { tone: "red" } else { tone: "blue" } end`)
-expression(jq`.medications | map(.name)`)
+expression(jq`"\(.bpSystolic)/\(.bpDiastolic)"`);
+expression(
+  jq`if .severity == "Critical" then { tone: "red" } else { tone: "blue" } end`,
+);
+expression(jq`.medications | map(.name)`);
 ```
 
 The compiler:
+
 - skips the readable-syntax pass entirely;
 - hands the source straight to the jq parser.
 
 Use when:
+
 - The source uses `\(…)` interpolation. Backticks preserve the
   backslash through JS string escaping; a regular string literal
   would silently drop it.
@@ -140,6 +147,7 @@ Use when:
   compile step is cheaper.
 
 Watch for:
+
 - **PascalCase identifiers**: bare `Severity` won't resolve to
   `.severity` here. Write `.severity` directly.
 - **Excel function names**: `SUM`, `ROUND`, `IF` aren't jq builtins.
@@ -148,9 +156,9 @@ Watch for:
 ### `` fx`…` `` — explicit Excel-like BXL
 
 ```ts
-expression(fx`ROUND(Salary / 2080, 2)`)
-expression(fx`PatientId & " — " & FirstName & " " & LastName`)
-expression(fx`SUM(Patients[].Billing.RoomCharge)`)
+expression(fx`ROUND(Salary / 2080, 2)`);
+expression(fx`PatientId & " — " & FirstName & " " & LastName`);
+expression(fx`SUM(Patients[].Billing.RoomCharge)`);
 ```
 
 The compiler treats `` fx`…` `` exactly like a plain string —
@@ -159,6 +167,7 @@ fallback are in play. The only difference is that the tag makes the
 intent obvious at the call site.
 
 Use when:
+
 - The same .gts file mixes `jq` and `fx` sources and you want the
   casing/PascalCase intent to be explicit.
 - You're reaching for the spreadsheet `fx` mental model.
@@ -186,24 +195,24 @@ nested inside, or vice versa:
 
 ```ts
 // PascalCase head + jq lowercase nested
-expression(fx`Patients[Severity = "Critical"][.icuAdmissionDate != null]`)
+expression(fx`Patients[Severity = "Critical"][.icuAdmissionDate != null]`);
 
 // jq head + PascalCase nested via the readable-syntax compiler
-expression(fx`.patients | map({ Name: .firstName, Acuity: .severity })`)
+expression(fx`.patients | map({ Name: .firstName, Acuity: .severity })`);
 ```
 
 Both compile fine; the PascalCase fallback runs label-by-label.
 
 ## Choosing a tag — quick matrix
 
-| Source has…                          | Plain string | `` jq`…` `` | `` fx`…` `` |
-|--------------------------------------|:------------:|:-----------:|:-----------:|
-| `\(…)` interpolation                 | ✗ (escape gotcha) | ✓ | ✗ (escape gotcha) |
-| PascalCase bare identifier (`Severity`) | ✓        | ✗ (not resolved) | ✓ |
-| Excel function (`ROUND`, `IFS`)      | ✓            | ✗            | ✓           |
-| Pure jq pipe (`.x | length`)         | ✓            | ✓            | ✓           |
-| Mixed PascalCase + jq                | ✓            | ✗            | ✓           |
-| Hot-path performance matters         | OK           | ✓ (no compile) | OK         |
+| Source has…                             |   Plain string    |   `` jq`…` ``    |    `` fx`…` ``    |
+| --------------------------------------- | :---------------: | :--------------: | :---------------: | --- |
+| `\(…)` interpolation                    | ✗ (escape gotcha) |        ✓         | ✗ (escape gotcha) |
+| PascalCase bare identifier (`Severity`) |         ✓         | ✗ (not resolved) |         ✓         |
+| Excel function (`ROUND`, `IFS`)         |         ✓         |        ✗         |         ✓         |
+| Pure jq pipe (`.x                       |     length`)      |        ✓         |         ✓         | ✓   |
+| Mixed PascalCase + jq                   |         ✓         |        ✗         |         ✓         |
+| Hot-path performance matters            |        OK         |  ✓ (no compile)  |        OK         |
 
 If in doubt: **plain string** is the safest default. Reach for
 `` jq`…` `` only when you need the backslash preserved or you want

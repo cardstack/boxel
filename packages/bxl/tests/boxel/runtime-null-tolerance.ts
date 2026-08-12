@@ -1,16 +1,16 @@
 // Boxel-flavored runtime null-tolerance suite.
 //
-// Validates the runtime relaxations the realm depends on. Maps to
-// docs/internals/port-from-jqxl.md §6–9 — each case is tagged with the section it
-// asserts so a failure trace points straight at the rule that broke.
+// Validates the four null-tolerance rules a card runtime depends on: a card
+// with a missing link or an empty field must evaluate to `null`, never crash
+// the indexer. Every case below is tagged with the rule it asserts, so a
+// failure trace points straight at the rule that broke.
 //
-// Section mapping:
+// Rules:
 //   §6  — null[]  → empty stream (no `null is not iterable`)
 //   §7  — null arithmetic propagates rather than throwing
 //   §8  — assertString / assertNumber coerce null to "" / 0
 //   §9  — startswith/1 + endswith/1 honor the coerced return value
-//         (the bug was assigning the coercion result and then still
-//         using the raw `input` afterward).
+//         rather than re-reading the raw input
 
 import { deepStrictEqual, strictEqual } from 'node:assert';
 import { evaluateBxl, jq, expression } from '../../src/index.ts';
@@ -86,10 +86,10 @@ check('§7 null + null is null (identity preserved for +)', () => {
 });
 
 check('§7 ratio over an empty-vitals record stays null end-to-end', () => {
-  // Realm parallel: hospital-fields' bpRatio computes
+  // Mirrors a real computeVia — hospital-fields' bpRatio computes
   //   .vitals.bpSystolic / .vitals.bpDiastolic
-  // which used to crash with "Operator / cannot be applied to null
-  // and null" when both operands were missing.
+  // and must yield null, not "Operator / cannot be applied to null and
+  // null", when both operands are missing.
   const result = evaluateBxl(
     '.vitals.bpSystolic / .vitals.bpDiastolic',
     fuzzEmptyVitals,
@@ -101,8 +101,8 @@ check('§7 ratio over an empty-vitals record stays null end-to-end', () => {
 // ---------------------------------------------------------------- §8
 
 check('§8 ascii_upcase on null yields empty string', () => {
-  // `assertString(null)` used to throw "Got null, string expected" —
-  // now coerces to "" and the filter applies cleanly.
+  // `assertString(null)` coerces to "" rather than throwing "Got null,
+  // string expected", so the filter applies cleanly.
   const result = evaluateBxl(
     '.firstName | ascii_upcase',
     { firstName: null },
@@ -162,9 +162,9 @@ check('§9 startswith on a record where the field is the wrong type', () => {
   strictEqual(result.value, true);
 });
 
-// ---------------------------- §11a — bxl() factory smoke ----------
+// ------------------------ expression() factory smoke --------------
 
-check('§11a expression(jq`…`).call(card) returns the resolved value', () => {
+check('expression(jq`…`).call(card) returns the resolved value', () => {
   const compute = expression(jq`.vitals.bpSystolic / .vitals.bpDiastolic`);
   const ratio = compute.call(baselinePatient);
   strictEqual(typeof ratio, 'number');
@@ -172,17 +172,17 @@ check('§11a expression(jq`…`).call(card) returns the resolved value', () => {
   strictEqual(Math.abs((ratio as number) - 138 / 88) < 1e-9, true);
 });
 
-check('§11a empty-vitals card returns null instead of throwing', () => {
+check('empty-vitals card returns null instead of throwing', () => {
   const compute = expression(jq`.vitals.bpSystolic / .vitals.bpDiastolic`);
   strictEqual(compute.call(fuzzEmptyVitals), null);
 });
 
-// --- Parenthesization regression (jq parser left-associativity) ---
+// --- Parenthesization (jq parser left-associativity) ---
 //
-// Pre-fix bug: `A - (B + C)` normalized to `(A - B) + C` because `+`
-// and `-` share precedence and the AST normalizer reassociated across
-// the (parenthesized) RHS. Caught by the airline fixture's
-// contributionProfit computeVia, which has the exact shape
+// `+` and `-` share precedence, so an AST normalizer that reassociates
+// across a parenthesized right-hand side turns `A - (B + C)` into
+// `(A - B) + C`. Guarded here because the shape is everywhere in real
+// computeVia sources — the airline fixture's contributionProfit is
 // `Revenue - (FuelCost + CrewCost + ...)`.
 
 check('paren regression: 100 - (50 + 30) === 20', () => {

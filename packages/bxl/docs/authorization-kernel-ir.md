@@ -29,13 +29,13 @@ conformance. BXL does not accept OpenFGA DSL or CEL at runtime.
 Relationship authorization becomes much easier when every decision is stated
 with five nouns.
 
-| Noun | Meaning | Example |
-| --- | --- | --- |
-| Subject | The person, service, or group asking | `user:maintainer` |
-| Object | The thing being protected | `repository:repository-a` |
-| Relation | A stored relationship that may be assigned | `maintainer` |
-| Permission | A rule computed from relations and other permissions | `can_merge` |
-| Tuple | One stored subject–relation–object fact | A user is a maintainer of Repository A |
+| Noun       | Meaning                                              | Example                                |
+| ---------- | ---------------------------------------------------- | -------------------------------------- |
+| Subject    | The person, service, or group asking                 | `user:maintainer`                      |
+| Object     | The thing being protected                            | `repository:repository-a`              |
+| Relation   | A stored relationship that may be assigned           | `maintainer`                           |
+| Permission | A rule computed from relations and other permissions | `can_merge`                            |
+| Tuple      | One stored subject–relation–object fact              | A user is a maintainer of Repository A |
 
 A **check** asks one complete question:
 
@@ -73,7 +73,8 @@ const model: AuthorizationGraphModel = {
       },
       permissions: {
         contributor: 'userset("maintainer") or userset("reviewer")',
-        can_view_repository: 'userset("contributor") or userset("administrator")',
+        can_view_repository:
+          'userset("contributor") or userset("administrator")',
         can_merge: 'userset("maintainer") or userset("administrator")',
         can_publish_release: 'userset("contributor")',
       },
@@ -137,12 +138,12 @@ Identifiers use `type:id`. A subject may also be:
 Most of BXL works over one JSON value. Authorization additionally needs to
 follow relationship edges. Four reserved graph calls provide that ability.
 
-| BXL authorization expression | Meaning |
-| --- | --- |
-| `direct()` | Read tuples stored directly on this object and relation |
-| `userset("editor")` | Resolve another relation or permission on the same object |
+| BXL authorization expression         | Meaning                                                                            |
+| ------------------------------------ | ---------------------------------------------------------------------------------- |
+| `direct()`                           | Read tuples stored directly on this object and relation                            |
+| `userset("editor")`                  | Resolve another relation or permission on the same object                          |
 | `userset_from("folder"; "can_read")` | Follow the object in the `folder` relation, then resolve its `can_read` permission |
-| `except(base; subtract)` | Everyone in `base` except subjects in `subtract` |
+| `except(base; subtract)`             | Everyone in `base` except subjects in `subtract`                                   |
 
 Use BXL `or` and `and` for union and intersection:
 
@@ -208,7 +209,8 @@ const model: AuthorizationGraphModel = {
         blocked: ['user'],
       },
       permissions: {
-        can_read: 'except(userset("owner") or userset("editor"); userset("blocked"))',
+        can_read:
+          'except(userset("owner") or userset("editor"); userset("blocked"))',
         can_edit: 'userset("owner") or userset("editor")',
       },
     },
@@ -217,7 +219,11 @@ const model: AuthorizationGraphModel = {
 
 const tuples: RelationshipTuple[] = [
   { subject: 'user:alice', relation: 'owner', object: 'document:budget' },
-  { subject: 'group:finance#member', relation: 'editor', object: 'document:budget' },
+  {
+    subject: 'group:finance#member',
+    relation: 'editor',
+    object: 'document:budget',
+  },
   { subject: 'user:bob', relation: 'member', object: 'group:finance' },
   { subject: 'user:mallory', relation: 'blocked', object: 'document:budget' },
 ];
@@ -241,7 +247,7 @@ if (!decision.ok) {
 
 decision.value.allowed; // true
 decision.value.metrics; // { steps, tupleReads, maxDepth }
-decision.value.trace;   // ordered relationship-resolution events
+decision.value.trace; // ordered relationship-resolution events
 ```
 
 Why Bob is allowed:
@@ -466,24 +472,21 @@ directly from an untrusted client and then treat the answer as enforcement.
 The `authorization` builtin library exposes the same kernel inside a BXL
 program:
 
-| Function | Result |
-| --- | --- |
-| `auth_check(model; tuples; request)` | Boolean; errors fail closed to `false` |
+| Function                                    | Result                                              |
+| ------------------------------------------- | --------------------------------------------------- |
+| `auth_check(model; tuples; request)`        | Boolean; errors fail closed to `false`              |
 | `auth_check_result(model; tuples; request)` | Structured safe result, including traces and errors |
-| `auth_list_objects(model; tuples; request)` | Structured `ListObjects` result |
-| `auth_list_users(model; tuples; request)` | Structured `ListUsers` result |
-| `ip_in_cidr(address; cidr)` | Boolean IPv4/CIDR condition helper |
+| `auth_list_objects(model; tuples; request)` | Structured `ListObjects` result                     |
+| `auth_list_users(model; tuples; request)`   | Structured `ListUsers` result                       |
+| `ip_in_cidr(address; cidr)`                 | Boolean IPv4/CIDR condition helper                  |
 
 ```ts
 import { prepareNativeJq } from '@cardstack/bxl';
 
-const program = prepareNativeJq(
-  'auth_check(.model; .tuples; .request)',
-  {
-    libraries: ['core', 'authorization'],
-    readableSyntax: false,
-  },
-);
+const program = prepareNativeJq('auth_check(.model; .tuples; .request)', {
+  libraries: ['core', 'authorization'],
+  readableSyntax: false,
+});
 
 const allowed = program.run({ model, tuples, request }).outputs[0];
 ```
@@ -521,14 +524,14 @@ before protected data or mutation capability is released.
 
 These solve related but different problems.
 
-| Question | Best tool |
-| --- | --- |
-| Is Alice an editor directly or through a group? | Authorization graph |
-| Does a repository reviewer inherit repository-view permission? | Authorization graph |
-| Is the bid above the current bid and before the deadline? | BXL `policy` expression over a trusted request envelope |
-| Which fields should an account owner, auditor, or anonymous visitor see? | BXL projection/view expression after authorization |
-| May this write change only the `preferredName` field? | BXL `policy` expression over old/new values |
-| Which records match a bounded indexed search predicate? | BXL `predicate` profile or host query language |
+| Question                                                                 | Best tool                                               |
+| ------------------------------------------------------------------------ | ------------------------------------------------------- |
+| Is Alice an editor directly or through a group?                          | Authorization graph                                     |
+| Does a repository reviewer inherit repository-view permission?           | Authorization graph                                     |
+| Is the bid above the current bid and before the deadline?                | BXL `policy` expression over a trusted request envelope |
+| Which fields should an account owner, auditor, or anonymous visitor see? | BXL projection/view expression after authorization      |
+| May this write change only the `preferredName` field?                    | BXL `policy` expression over old/new values             |
+| Which records match a bounded indexed search predicate?                  | BXL `predicate` profile or host query language          |
 
 A common application flow combines them:
 
@@ -579,12 +582,12 @@ review every change.”
 
 Common checks:
 
-| Question | Subject | Permission | Object |
-| --- | --- | --- | --- |
-| May a maintainer merge this change? | user | `merger` | change request |
-| May an assigned reviewer inspect security findings? | user | `security_reviewer` | change request |
-| May a release manager approve a release? | user | `approver` | release |
-| May a contributor view the release dashboard? | user | `viewer` | dashboard |
+| Question                                            | Subject | Permission          | Object         |
+| --------------------------------------------------- | ------- | ------------------- | -------------- |
+| May a maintainer merge this change?                 | user    | `merger`            | change request |
+| May an assigned reviewer inspect security findings? | user    | `security_reviewer` | change request |
+| May a release manager approve a release?            | user    | `approver`          | release        |
+| May a contributor view the release dashboard?       | user    | `viewer`            | dashboard      |
 
 ### Hospital: care teams, patient self-access, and break glass
 
@@ -743,14 +746,14 @@ Enumeration also supports `maxCandidates` and `maxResults`.
 
 Default ceilings are intentionally finite:
 
-| Limit | Default |
-| --- | ---: |
-| Graph depth | 25 |
-| Resolution steps | 10,000 |
-| Tuple reads | 100,000 |
-| Trace events | 1,000 |
+| Limit                  | Default |
+| ---------------------- | ------: |
+| Graph depth            |      25 |
+| Resolution steps       |  10,000 |
+| Tuple reads            | 100,000 |
+| Trace events           |   1,000 |
 | Enumeration candidates | 100,000 |
-| Enumeration results | 100,000 |
+| Enumeration results    | 100,000 |
 
 Limit exhaustion returns `evaluation-limit-exceeded` or
 `resolution-depth-exceeded`. Other stable error kinds distinguish invalid
@@ -771,15 +774,15 @@ with a permissive fallback.
 
 The kernel is a decision engine, not a complete access-control system.
 
-| Kernel owns | Trusted host owns |
-| --- | --- |
-| Model validation and graph compilation | Authentication and subject binding |
-| Tuple validation and indexing | Protected tuple custody and mutation rules |
-| Synchronous bounded checks | Pinning the enacted model/version |
-| Cycle-safe userset recursion | Loading authoritative object state |
-| Conditions over supplied context | Supplying trusted time, network, and transaction facts |
-| Structured errors, metrics, and traces | Denying on error and writing audit records |
-| ListObjects/ListUsers over known candidates | Database/query planning and pagination |
+| Kernel owns                                 | Trusted host owns                                      |
+| ------------------------------------------- | ------------------------------------------------------ |
+| Model validation and graph compilation      | Authentication and subject binding                     |
+| Tuple validation and indexing               | Protected tuple custody and mutation rules             |
+| Synchronous bounded checks                  | Pinning the enacted model/version                      |
+| Cycle-safe userset recursion                | Loading authoritative object state                     |
+| Conditions over supplied context            | Supplying trusted time, network, and transaction facts |
+| Structured errors, metrics, and traces      | Denying on error and writing audit records             |
+| ListObjects/ListUsers over known candidates | Database/query planning and pagination                 |
 
 A secure request path should:
 
@@ -829,17 +832,17 @@ Test and learning surfaces:
 
 The compatibility claim is semantic:
 
-| Supported behavior | Production BXL representation |
-| --- | --- |
-| Direct relationship | `direct()` |
-| Computed userset | `userset("relation")` |
-| Tuple-to-userset traversal | `userset_from("tupleset"; "computed")` |
-| Union and intersection | BXL `or` and `and` |
-| Difference | `except(base; subtract)` |
-| Userset subjects and typed wildcards | `group#member`, `user:*` |
-| Conditions | Typed BXL `policy` expressions |
-| Check, ListObjects, ListUsers | Prepared synchronous APIs |
-| Cycles, limits, invalid inputs | Fail-closed structured results |
+| Supported behavior                   | Production BXL representation          |
+| ------------------------------------ | -------------------------------------- |
+| Direct relationship                  | `direct()`                             |
+| Computed userset                     | `userset("relation")`                  |
+| Tuple-to-userset traversal           | `userset_from("tupleset"; "computed")` |
+| Union and intersection               | BXL `or` and `and`                     |
+| Difference                           | `except(base; subtract)`               |
+| Userset subjects and typed wildcards | `group#member`, `user:*`               |
+| Conditions                           | Typed BXL `policy` expressions         |
+| Check, ListObjects, ListUsers        | Prepared synchronous APIs              |
+| Cycles, limits, invalid inputs       | Fail-closed structured results         |
 
 OpenFGA model DSL, CEL, its server API, storage protocol, and network runtime do
 not ship in the production BXL bundle.
@@ -861,12 +864,12 @@ npm run test:authorization:conformance
 The pinned corpus at OpenFGA commit
 `2c19e265fc73858fc0a5468fc517dc3bbf727e94` contains:
 
-| Operation | Assertions |
-| --- | ---: |
-| Check | 491 |
-| ListObjects | 348 |
-| ListUsers | 388 |
-| **Total** | **1,227** |
+| Operation   | Assertions |
+| ----------- | ---------: |
+| Check       |        491 |
+| ListObjects |        348 |
+| ListUsers   |        388 |
+| **Total**   |  **1,227** |
 
 The command fails while any assertion is wrong, cannot be imported, is
 unsupported, or is omitted from accounting. There is no passing skip category.
@@ -958,8 +961,5 @@ paths.
   `derive`, and `compute` execution contracts.
 - [`realm-collaboration-use-cases.md`](./realm-collaboration-use-cases.md)
   shows stateful gateway policies and durable event patterns.
-- [`openfga-synchronous-kernel-port-plan.md`](./openfga-synchronous-kernel-port-plan.md)
-  records the implementation plan, conformance strategy, and completion
-  evidence behind this user guide.
 - [`../tests/authorization/README.md`](../tests/authorization/README.md)
   documents the pinned fixture and zero-skip test contract.

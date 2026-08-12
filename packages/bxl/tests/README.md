@@ -2,43 +2,27 @@
 
 Every public BXL syntax and API promise has an executable test here.
 
+A suite is a standalone `.ts` entry point: it asserts with `node:assert` and
+prints one summary line. Node runs them directly — the package is erasable
+TypeScript, so there is no loader hook or transpile step.
+
 ## Layout
 
-- `unit/`      — narrow unit tests (compiler, linter, formatter, parser)
-- `cli/`       — end-to-end CLI smoke
-- `security/`  — sandbox guarantees (env blocked, budget limits, output caps)
-- `browser/`   — minified-bundle smoke in happy-dom
-- `fixtures/`  — shared input/schema fixtures
+- `unit/` — compiler, linter, formatter, parser, mutation planner, and
+  authorization correctness, plus the Excel/jq function matrices
+- `smoke/` — end-to-end checks over the assembled runtime: sandbox limits,
+  error handling, lazy formula chunks loading on demand, the bundled surface
+- `boxel/` — the Boxel-flavored runtime and factory rules a card runtime
+  depends on, over plain-object fixtures (see [`boxel/README.md`](./boxel/README.md))
+- `authorization/` — OpenFGA conformance fixtures and the harness that drives
+  them (see [`authorization/README.md`](./authorization/README.md))
 
-## Suites
+## Running
 
-| Script                        | Purpose                                            |
-| ----------------------------- | -------------------------------------------------- |
-| `test:unit`                   | compiler, linter, formatter, parser correctness    |
-| `test:cli`                    | CLI subcommand smoke                               |
-| `test:security`               | `env()` blocked, output cap, step cap, byte cap    |
-| `test:browser`                | loads `dist/browser/bxl.min.<hash>.js` in happy-dom |
-| `test:size`                   | bundle-size report and budget gate                 |
+```sh
+pnpm test                       # every suite
+pnpm test tests/boxel           # one directory
+node tests/unit/linter-cli.ts   # one suite
+```
 
-## Ported from staging
-
-The initial test corpus is ported from the legacy `jqxlv2/tests/`
-staging suite:
-
-| Staging file                  | Target location                                  |
-| ----------------------------- | ------------------------------------------------ |
-| `cli-smoke.ts`                | `tests/cli/smoke.ts`                             |
-| `bxl-150-cli.ts`              | `tests/unit/bxl-150.test.ts`                     |
-| `bxl-formula-cli.ts`          | `tests/unit/formula.test.ts`                     |
-| `bxl-edge-cli.ts`             | `tests/unit/edge-cases.test.ts`                  |
-| `bxl-contexts-cli.ts`         | `tests/unit/contexts.test.ts`                    |
-| `conversion-cli.ts`           | `tests/unit/conversion.test.ts`                  |
-| `excel-paste-cli.ts`          | `tests/unit/excel-paste.test.ts`                 |
-| `format-conversion-cli.ts`    | `tests/unit/format-conversion.test.ts`           |
-| `pred-filter-cli.ts`          | `tests/unit/pred-filter.test.ts`                 |
-| `linter-cli.ts`               | `tests/unit/linter.test.ts`                      |
-| `syntax-highlight-cli.ts`     | `tests/unit/syntax-highlight.test.ts`            |
-| `fuzzy-input-cli.ts`          | `tests/unit/fuzzy-input.test.ts`                 |
-
-The security suite is new for v0.1 — sandbox guarantees were tested inline in
-`cli-smoke.ts` previously; they get their own file here.
+`pnpm test` prints a line per suite and exits non-zero if any fails.

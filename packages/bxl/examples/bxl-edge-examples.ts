@@ -247,7 +247,7 @@ export const bxlWarningExamples: BxlEdgeExample[] = [
   {
     id: 15,
     level: 'edge error',
-    name: 'legacy pseudo syntax now errors',
+    name: 'deprecated pseudo syntax errors',
     expression: '"Line Item":first.SKU',
     expectIssueCodes: ['legacy-pseudo-class-removed'],
     expectError: true,

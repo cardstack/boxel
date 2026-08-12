@@ -126,12 +126,13 @@ function applyBinaryMath(
 }
 
 // ────────────────────────────────────────────────────────────────────
-// Numerical helpers for jq libm-compat builtins.
-// These fill upstream stubs (`erf`, `gamma`, `j0`, `nextafter`, etc.)
-// per BXL design decisions documented in UPSTREAM-DIFFS.md:
+// Numerical helpers backing the jq libm-compatible builtins (`erf`,
+// `gamma`, `j0`, `nextafter`, and friends). Where BXL's semantics are a
+// deliberate choice rather than a mechanical port of jq's:
 //   - `gamma/0` and `tgamma/0` both compute true Γ (Excel-canonical)
 //   - `atan2/2` follows jq/POSIX argument order (y; x) — see filter below
-//   - 4 sandbox-only functions (`input/0` etc.) remain notImplementedError
+//   - the sandbox has no I/O, so `input/0` and its siblings raise
+//     notImplementedError rather than reading a stream
 // ────────────────────────────────────────────────────────────────────
 
 const F64_BUF = new ArrayBuffer(8);

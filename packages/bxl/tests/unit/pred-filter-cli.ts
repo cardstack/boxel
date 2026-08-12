@@ -9,8 +9,8 @@
 //                — anchored forward ranges from the front/back.
 //   `[#1, #2, #7..#9, #11]`
 //                — ordered selector union (preserves collection order).
-//   `[row N]`   — legacy one-based shortcut; still parses, solidify
-//                 rewrites to `[#N]` + linter info code.
+//   `[row N]`   — deprecated one-based shortcut; parses, and solidify
+//                 rewrites it to `[#N]` alongside a linter info code.
 //   bare `[N]`  — zero-based jq-native escape hatch (info-level lint).
 //   implicit `[all]` — `"Line Item"."Line Total"` auto-iterates when
 //                      the preceding field is an array.

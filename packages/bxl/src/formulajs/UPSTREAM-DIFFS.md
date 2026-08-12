@@ -27,16 +27,16 @@ subset targeting **scalar and analytic** use:
 BXL's modules are organized by role, not by Excel category. The table maps
 each BXL file to its upstream sources.
 
-| BXL file              | Upstream source modules                    | Purpose |
-| --- | --- | --- |
-| `bessel.ts`           | `engineering.js`                           | Bessel special functions that require upstream's external `bessel` dependency. This module is only imported through BXL's async lazy formula path. |
-| `common.ts`           | `utils/*`, `information.js`, `statistical.js` | Input coercion (`parseExcel*`), type guards, aggregate helpers (`sumExcelRange`, `maxExcelRange`). |
-| `criteria.ts`         | `statistical.js` (criteria matching), `text.js` (wildcards) | `SUMIF` / `COUNTIF` / `AVERAGEIF` predicate matching. |
-| `dateSerial.ts`       | `date-time.js`, `utils/date.js`            | Excel serial-day arithmetic, `DATE`, `YEAR`, `MONTH`, `DAY`, `NOW`, `NETWORKDAYS`, `WORKDAY`, `DATEDIF`, `WEEKNUM`. |
-| `engineering.ts`      | `engineering.js`                           | `BIN2DEC`, `HEX2DEC`, `BITAND`, `BITXOR`, `ROMAN`, `ARABIC`, complex-number ops (`IMSINH`, `IMCOSH`, etc.). |
-| `errors.ts`           | `information.js` (error type checks) + ours | `EXCEL_ERROR` enum, `throwExcelError`, `ExcelError` class. Our adaptation of upstream's return-value sentinels (`#N/A`, `#VALUE!`) to throwable errors. |
-| `financial.ts`        | `financial.js`                             | `PMT`, `FV`, `PV`, `NPV`, `IRR`, `RATE`, `NPER`, `IPMT`, `PPMT`, etc. |
-| `statistical.ts`      | `statistical.js`                           | Distribution/test helpers that require upstream's external `jstat` dependency. This module is only imported through BXL's async lazy formula path. |
+| BXL file         | Upstream source modules                                     | Purpose                                                                                                                                                 |
+| ---------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bessel.ts`      | `engineering.js`                                            | Bessel special functions that require upstream's external `bessel` dependency. This module is only imported through BXL's async lazy formula path.      |
+| `common.ts`      | `utils/*`, `information.js`, `statistical.js`               | Input coercion (`parseExcel*`), type guards, aggregate helpers (`sumExcelRange`, `maxExcelRange`).                                                      |
+| `criteria.ts`    | `statistical.js` (criteria matching), `text.js` (wildcards) | `SUMIF` / `COUNTIF` / `AVERAGEIF` predicate matching.                                                                                                   |
+| `dateSerial.ts`  | `date-time.js`, `utils/date.js`                             | Excel serial-day arithmetic, `DATE`, `YEAR`, `MONTH`, `DAY`, `NOW`, `NETWORKDAYS`, `WORKDAY`, `DATEDIF`, `WEEKNUM`.                                     |
+| `engineering.ts` | `engineering.js`                                            | `BIN2DEC`, `HEX2DEC`, `BITAND`, `BITXOR`, `ROMAN`, `ARABIC`, complex-number ops (`IMSINH`, `IMCOSH`, etc.).                                             |
+| `errors.ts`      | `information.js` (error type checks) + ours                 | `EXCEL_ERROR` enum, `throwExcelError`, `ExcelError` class. Our adaptation of upstream's return-value sentinels (`#N/A`, `#VALUE!`) to throwable errors. |
+| `financial.ts`   | `financial.js`                                              | `PMT`, `FV`, `PV`, `NPV`, `IRR`, `RATE`, `NPER`, `IPMT`, `PPMT`, etc.                                                                                   |
+| `statistical.ts` | `statistical.js`                                            | Distribution/test helpers that require upstream's external `jstat` dependency. This module is only imported through BXL's async lazy formula path.      |
 
 ## Our adaptations
 
@@ -69,8 +69,7 @@ preamble.
 ### 4. Curated function set
 
 Count: BXL's native formula-filter registry exposes **280** Excel functions
-(plus 7 jq-defined helpers like `IF`, `IFERROR`, `IFNA`), drawn from upstream's
-397. See `jqxl-syntax-reference` §Formula matrix for the authoritative list.
+(plus 7 jq-defined helpers like `IF`, `IFERROR`, `IFNA`), drawn from upstream's 397. See [`docs/formulas.md`](../../docs/formulas.md) for the authoritative list.
 
 ## Bringing in new upstream functions
 

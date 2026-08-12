@@ -158,6 +158,6 @@ continues through BXL's general synchronous resolver.
 
 ## Reporting attribution issues
 
-If you believe code in this repository is missing proper attribution, please
-open an issue at <https://github.com/cardstack/bxl/issues>, or email
+If you believe code here is missing proper attribution, please open an issue
+at <https://github.com/cardstack/boxel/issues>, or email
 security@cardstack.com for coordinated handling.

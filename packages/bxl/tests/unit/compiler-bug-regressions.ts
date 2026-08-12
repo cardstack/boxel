@@ -1,5 +1,5 @@
-// Regression tests for three compiler bugs fixed after guide work surfaced
-// them:
+// Regression tests for three compiler defects, each guarded by asserting
+// both the compiled jq surface and the evaluated value:
 //
 //   1. Removed readable string word operators reject clearly; lowercase jq
 //      pipe forms remain valid.
@@ -193,8 +193,8 @@ assertEval('(Amount = 100)', false, '#3 evaluates negative case');
 const predResult = evaluateBxl('[1,2,3] | [.[] | select(. > 1)]', { x: 1 });
 ok(Array.isArray(predResult.value), '#3 predicate-bracket path still works');
 
-// CSS-style pseudo-classes are removed. Positional access must go through
-// [#...] selectors, so legacy `:first` now fails at compile time.
+// There are no CSS-style pseudo-classes: positional access goes through
+// [#...] selectors, so `:first` fails at compile time.
 throws(
   () => compileReadableSyntax('"Line Item":first.SKU', { schema: itemScheme }),
   /CSS-style pseudo-class syntax was removed/,

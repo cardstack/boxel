@@ -1,55 +1,52 @@
 # tests/boxel — Boxel-flavored BXL suites
 
-These suites validate the runtime relaxations and the
-`expression`/`jq`/`fx`/`bxl` factory that .gts files in a Boxel realm
-import via `from '../bxl'`. They run inside BXL CI so a regression
-that would break a hospital card is caught upstream — before the
-realm bundle is shipped.
+These suites validate the null-tolerance rules and the
+`expression`/`jq`/`fx`/`bxl` factory that card source uses inside `computeVia`.
+They run over plain JS objects, which makes them fast and free of any host
+setup — the cost is that they cannot exercise anything requiring a live card
+runtime.
 
-The fixtures (`fixtures/hospital.ts`) are plain JS objects mirroring
-the hospital fixture's serialized cards. **No** Boxel runtime,
-**no** decorators, **no** `https://cardstack.com/base/...` imports —
-adding any of those means the test belongs in the realm-server repo
-instead.
+The fixtures (`fixtures/hospital.ts`) are plain objects shaped like serialized
+cards. **No** Boxel runtime, **no** decorators, **no**
+`https://cardstack.com/base/...` imports — a test needing any of those belongs
+in the host or realm-server suite instead.
 
-## Sections
+## Rules
 
-Each test name is tagged with the docs/internals/port-from-jqxl.md section it
-asserts (e.g. `§7 division by zero returns null`). When a case fails,
-look up the matching section in the port doc to see the rule and the
-original incident.
+Each test name is tagged with the rule it asserts (e.g.
+`§7 division by zero returns null`). Each suite's header comment states its
+rules, so a failing case name points straight at the one that broke.
 
-| File | Port-doc sections |
-|---|---|
-| `runtime-null-tolerance.ts` | §6 (null iteration) · §7 (null arithmetic) · §8 (assertString/Number) · §9 (startswith/endswith) · §11a (factory smoke) |
-| `expression-factory.ts` | §10 (jq backslash) · §11 (mode dispatch) · §11a (`as` materialization, Excel-error catch) |
-| `compiler-readable.ts` | §11 (readableSyntax dispatch) · §12 (PascalCase fallback) · §13 (JQ_KEYWORDS guard) · §16 (mixed-syntax) |
-| `excel-error-tolerance.ts` | §11a (Excel-error catch — sentinels surface as null at the bxl() boundary) |
-| `materialize.ts` | §11a (`as: Cls` Object.assign fallback path — no Boxel runtime) |
-| `probe-fields.ts` | §15 (probe-field regressions — one assertion per hospital probe field) |
-| `fielddef-threading.ts` | §11a + §18 (multi-stage `{ as: Cls }` threading — the insurance pipeline pattern) |
+| File                        | Rules                                                                                                                    |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `runtime-null-tolerance.ts` | §6 null iteration · §7 null arithmetic · §8 assertString/Number coercion · §9 startswith/endswith                        |
+| `expression-factory.ts`     | §10 jq backslash preservation · §11 mode dispatch · §11a `as` materialization and Excel-error catch                      |
+| `compiler-readable.ts`      | §12 PascalCase fallback · §13 JQ_KEYWORDS guard · §16 mixed syntax                                                       |
+| `excel-error-tolerance.ts`  | Excel error sentinels surface as `null` at the `bxl()` boundary                                                          |
+| `materialize.ts`            | The `as: Cls` fallback path — `new Cls()` plus `Object.assign`, with no card runtime present                             |
+| `probe-fields.ts`           | One assertion per probe field on the hospital fixture                                                                    |
+| `fielddef-threading.ts`     | Multi-stage `{ as: Cls }` threading — the insurance pipeline pattern                                                     |
+| `card-source-mutation.ts`   | The card-source mutation adapter: schema derivation, computed-field skips, relationship serialization, stale-plan safety |
+| `update-via-bxl.ts`         | The `updateViaBxl` adapter                                                                                               |
 
 ## Running
 
-```bash
-npm run test:boxel        # just this folder
-npm run test              # full suite (unit + smoke + boxel)
+```sh
+pnpm test tests/boxel   # just this folder
+pnpm test               # full suite
 ```
 
 ## Adding a fuzz pattern
 
 1. Add a new fixture export to `fixtures/hospital.ts`.
-2. Mirror the data in the matching realm fixture so the realm and the
-   unit tests stay in lockstep.
-3. Add a `check(...)` case asserting the runtime behavior, naming it
-   with the relevant port-doc section.
+2. Add a `check(...)` case asserting the runtime behavior, naming it with the
+   relevant rule.
 
 ## What lives elsewhere
 
-- `getFields`-aware `as` materialization (the `field.fieldType` /
-  `field.card` traversal) needs Boxel's runtime to be loaded — that
-  path is exercised in the realm-server repo, not here. The Node
-  fallback (`new Cls(); Object.assign(instance, raw)`) is what these
-  tests cover.
-- Realm push/index/prerender plumbing belongs in the realm-server's
+- `getFields`-aware `as` materialization — the `field.fieldType` /
+  `field.card` traversal — needs a loaded card runtime, so it is exercised in
+  the host's integration suite. What these tests cover is the fallback
+  (`new Cls(); Object.assign(instance, raw)`).
+- Realm push, indexing, and prerender plumbing belong to the realm-server's
   own integration suite.

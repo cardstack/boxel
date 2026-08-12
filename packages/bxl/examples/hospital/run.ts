@@ -3,11 +3,7 @@
 // Boxel runtime — just BXL evaluating against plain JS data.
 //
 // Usage:
-//   node scripts/run-ts-entry.mjs examples/hospital/run.ts
-//
-// Or, if you've installed @cardstack/bxl globally / locally and prefer
-// the published surface:
-//   tsx examples/hospital/run.ts
+//   node examples/hospital/run.ts
 
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';

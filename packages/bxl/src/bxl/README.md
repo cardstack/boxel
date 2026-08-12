@@ -1,17 +1,17 @@
 # src/bxl/
 
-**Origin:** original code in this repository. Licensed under MIT
+**Origin:** original Cardstack code. Licensed under MIT
 (see [`/LICENSE`](../../LICENSE)).
 
 This directory contains BXL's **readable syntax layer**: the compiler,
 formatter, linter, bridge, registry, and syntax-highlighting grammar that
-make Excel-looking expressions compile down to canonical jqxl.
+make Excel-looking expressions compile down to canonical jq.
 
 ## Layering
 
 ```
 src/bxl/  (this folder)
-  ├── compiler/     readable BXL → canonical jqxl (source-level rewrite)
+  ├── compiler/     readable BXL → canonical jq (source-level rewrite)
   ├── formatter/    solid / readable / multi-line formatters
   ├── linter/       parser-only diagnostics (imports jqtools/parser, never evaluate)
   ├── ast/          semantic AST + execution profile validation
@@ -26,7 +26,7 @@ BXL imports from both `src/jqtools/` and `src/formulajs/`. The reverse is
 
 ## Responsibilities
 
-- **`compiler/readable-syntax.ts`** — rewrites readable BXL to canonical jqxl
+- **`compiler/readable-syntax.ts`** — rewrites readable BXL to canonical jq
   before tokenizing. Handles label paths, positional selectors
   (`[#first]`, `[#last]`, `[#last-N]`, `[#N..#last-K]`, `[#only]`, `[#odd]`, `[#even]`, `[#N]`, `[#-N]`,
   `[* .pred]`, `[all]`), predicate

@@ -36,7 +36,7 @@ Specifically:
   comprehensions cover array composition.
 - `OFFSET`, `INDIRECT`, `ADDRESS` — no spreadsheet grid.
 
-See `jqxl-syntax-reference` Use Cases for idiomatic BXL replacements.
+See [`docs/syntax-reference.md`](../../docs/syntax-reference.md) for idiomatic BXL replacements.
 
 ## Our adaptations vs. upstream
 

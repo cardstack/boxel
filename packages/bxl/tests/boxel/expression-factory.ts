@@ -1,9 +1,9 @@
 // Boxel-flavored expression-factory suite.
 //
 // Validates `expression`, `expr`, `bxl`, `jq`, and `fx` — the public
-// surface that .gts files use inside `computeVia`. Maps to
-// docs/internals/port-from-jqxl.md §10, §11, §11a.
+// surface that .gts files use inside `computeVia`.
 //
+// Rules:
 //   §10  — `jq` tagged template preserves backslashes (sidesteps the
 //          JS escape gotcha for `\(...)` interpolation).
 //   §11  — `bxl()` defaults `readableSyntax: false` for jq-tagged

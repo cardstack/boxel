@@ -3,8 +3,8 @@
 **Origin:** derived from [alexxander/jq-tools](https://github.com/alexxander/jq-tools)
 at `v0.0.11` (MIT). See [`/NOTICE.md`](../../NOTICE.md) for full attribution.
 
-This directory contains the canonical **jqxl v1** runtime — the parser,
-tokenizer, AST, evaluator, and builtin filters. It is the pure jq-in-TypeScript
+This directory contains the **canonical jq runtime** — the parser, tokenizer,
+AST, evaluator, and builtin filters. It is the pure jq-in-TypeScript
 implementation that the BXL readable layer compiles down to.
 
 ## Layering rules

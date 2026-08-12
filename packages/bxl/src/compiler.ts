@@ -1,7 +1,7 @@
 /**
  * @cardstack/bxl/compiler — sub-entry.
  *
- * Readable BXL → canonical jqxl source. Does NOT pull in the evaluator or
+ * Readable BXL → canonical jq source. Does NOT pull in the evaluator or
  * formulajs. Keep this entry small for editor integrations that only need
  * to compile.
  */

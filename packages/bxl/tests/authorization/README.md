@@ -46,7 +46,7 @@ Run the host-neutral coordination command-capability, target-isolation,
 nested-team, and enumeration tests with:
 
 ```sh
-node scripts/run-ts-entry.mjs tests/unit/bxl-authorization-cli.ts
+node tests/unit/bxl-authorization-cli.ts
 ```
 
 The checked-in fixture is generalized: it preserves coordination behaviors
@@ -55,7 +55,7 @@ without source realm URLs, organization names, or copied identities.
 Run the synthetic software-release governance fixture with:
 
 ```sh
-node scripts/run-ts-entry.mjs tests/unit/release-governance-policy-cli.ts
+node tests/unit/release-governance-policy-cli.ts
 ```
 
 It executes 40 decisions and 10 capability-list expectations across

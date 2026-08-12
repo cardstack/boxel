@@ -11,32 +11,32 @@ There are 88 statically declared BXL programs across eight source files: 53
 `jq`-tagged GTS declarations and 35 plain template declarations consumed by the
 live-auction daemon runtime.
 
-| Source | Declarations | What it demonstrates |
-| --- | ---: | --- |
-| `collaboration-by-example.gts` | 2 | Minimal auction admission and accepted-state update |
-| `POCs/stream-policy-harness/stream-policy-harness.gts` | 27 | Tickets, audience interaction, turn games, timed trivia, and a clock transition |
-| `POCs/ledger-lab/ledger-lab-gateway.gts` | 24 | Auction, agent activity, spatial presence, and market-tick ledgers |
-| `POCs/live-auction-lab/agent-activity-plan.mjs` | 7 | Agent activity admission, state/event branches, and projection |
-| `POCs/live-auction-lab/auction-bid-segment.gts` | 7 | FieldDef-hosted auction stream plan |
-| `POCs/live-auction-lab/auction-stream-plan.mjs` | 7 | Daemon-hosted auction stream plan |
-| `POCs/live-auction-lab/crypto-ticker-plan.mjs` | 7 | Trusted market-source stream |
-| `POCs/live-auction-lab/spatial-presence-plan.mjs` | 7 | Bounded move/chat presence stream |
-| **Total** | **88** | **15 policy and 73 derive declarations** |
+| Source                                                 | Declarations | What it demonstrates                                                            |
+| ------------------------------------------------------ | -----------: | ------------------------------------------------------------------------------- |
+| `collaboration-by-example.gts`                         |            2 | Minimal auction admission and accepted-state update                             |
+| `POCs/stream-policy-harness/stream-policy-harness.gts` |           27 | Tickets, audience interaction, turn games, timed trivia, and a clock transition |
+| `POCs/ledger-lab/ledger-lab-gateway.gts`               |           24 | Auction, agent activity, spatial presence, and market-tick ledgers              |
+| `POCs/live-auction-lab/agent-activity-plan.mjs`        |            7 | Agent activity admission, state/event branches, and projection                  |
+| `POCs/live-auction-lab/auction-bid-segment.gts`        |            7 | FieldDef-hosted auction stream plan                                             |
+| `POCs/live-auction-lab/auction-stream-plan.mjs`        |            7 | Daemon-hosted auction stream plan                                               |
+| `POCs/live-auction-lab/crypto-ticker-plan.mjs`         |            7 | Trusted market-source stream                                                    |
+| `POCs/live-auction-lab/spatial-presence-plan.mjs`      |            7 | Bounded move/chat presence stream                                               |
+| **Total**                                              |       **88** | **15 policy and 73 derive declarations**                                        |
 
 The declarations occupy these gateway slots:
 
-| Slot | Count | Required result |
-| --- | ---: | --- |
-| `admission` | 14 | One Boolean |
-| `rejectionReason` | 13 | One stable reason string |
-| `acceptedStatePatch` | 14 | One object |
-| `rejectedStatePatch` | 13 | One object |
-| `acceptedEvent` | 13 | One object |
-| `rejectedEvent` | 13 | One object |
-| projection `attributes` | 5 | One object |
-| clock `when` | 1 | One Boolean |
-| clock `statePatch` | 1 | One object |
-| clock `event` | 1 | One object |
+| Slot                    | Count | Required result          |
+| ----------------------- | ----: | ------------------------ |
+| `admission`             |    14 | One Boolean              |
+| `rejectionReason`       |    13 | One stable reason string |
+| `acceptedStatePatch`    |    14 | One object               |
+| `rejectedStatePatch`    |    13 | One object               |
+| `acceptedEvent`         |    13 | One object               |
+| `rejectedEvent`         |    13 | One object               |
+| projection `attributes` |     5 | One object               |
+| clock `when`            |     1 | One Boolean              |
+| clock `statePatch`      |     1 | One object               |
+| clock `event`           |     1 | One object               |
 
 Run the source audit against any checkout without importing its Ember modules:
 
@@ -62,12 +62,12 @@ bounded JSON envelope and BXL evaluates only that value:
 
 ```ts
 interface GatewayEnvelope {
-  config: unknown;       // cached policy parameters and allowlists
-  state: unknown;        // current authoritative projection
-  input: unknown;        // typed command/intent payload
-  derived: unknown;      // trusted identity, time, budget, and authority facts
+  config: unknown; // cached policy parameters and allowlists
+  state: unknown; // current authoritative projection
+  input: unknown; // typed command/intent payload
+  derived: unknown; // trusted identity, time, budget, and authority facts
   request: {
-    receivedAt: string;  // gateway clock, not expression-local time
+    receivedAt: string; // gateway clock, not expression-local time
     receivedAtMs?: number;
   };
   decision?: { accepted: boolean; reason?: string };
@@ -223,14 +223,14 @@ and authoring examples.
 
 ## What BXL guarantees—and what it does not
 
-| BXL expression/runtime | Gateway or host |
-| --- | --- |
-| Deterministic evaluation over one supplied JSON value | Authoritative state lookup |
-| Policy/derive capability validation | Authentication and role/actor binding |
-| Bounded steps, time, outputs, and output bytes | Serialization of concurrent commands |
-| Boolean admission and pure state/event projections | Idempotency and event identity |
-| Structured parse/profile/runtime failures | Trusted clock and normalized time facts |
-| No direct I/O or persistence | Atomic state + ledger persistence and cursor updates |
+| BXL expression/runtime                                | Gateway or host                                      |
+| ----------------------------------------------------- | ---------------------------------------------------- |
+| Deterministic evaluation over one supplied JSON value | Authoritative state lookup                           |
+| Policy/derive capability validation                   | Authentication and role/actor binding                |
+| Bounded steps, time, outputs, and output bytes        | Serialization of concurrent commands                 |
+| Boolean admission and pure state/event projections    | Idempotency and event identity                       |
+| Structured parse/profile/runtime failures             | Trusted clock and normalized time facts              |
+| No direct I/O or persistence                          | Atomic state + ledger persistence and cursor updates |
 
 A static or precompiled BXL program can reduce parse/compile work, but it does
 not make the overall workflow atomic or authoritative. Those properties come
@@ -241,7 +241,7 @@ from the gateway around the expression.
 Run the committed semantic corpus:
 
 ```sh
-node scripts/run-ts-entry.mjs tests/unit/realm-collaboration-cli.ts
+node tests/unit/realm-collaboration-cli.ts
 ```
 
 Static declaration cases are profile-validated. Every case is evaluated with

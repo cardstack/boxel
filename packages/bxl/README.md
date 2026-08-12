@@ -36,7 +36,7 @@ evaluateBxl('ROUND(Subtotal * "Tax Rate" / 100, 2)', invoice, { schema });
 // => 12.38
 ```
 
-> **Current release: `0.5.1`.** The public API is intentionally unstable below 1.0 — see [RELEASE-PLAN.md](./RELEASE-PLAN.md).
+> The public API is intentionally unstable below 1.0: minor and patch versions may change syntax behavior. See [CHANGELOG.md](./CHANGELOG.md).
 
 ---
 
@@ -73,7 +73,7 @@ The eight design decisions that make BXL feel the way it does:
 - **Source idioms are preserved** — `ROUND("Unit Price", 2)` is paste-compatible with Excel. `present(x)`, `when(p, q)`, `words(s)` are BXL-native. `isEmail(x)` and `isURL(x, options)` keep validator.js's familiar camelCase shape.
 - **One sandbox, many surfaces** — the same language powers computed fields, form validation, visibility rules, workflow gates, access policies, and annotation targets.
 
-The full reference with syntax-highlighted examples is at **[bxl.boxel.site](https://bxl.boxel.site)** (also shipped as [`docs/syntax-reference.html`](./docs/syntax-reference.html) and [`docs/syntax-reference.md`](./docs/syntax-reference.md)); the formal grammar lives in [`docs/grammar.ebnf`](./docs/grammar.ebnf).
+The full reference with syntax-highlighted examples is at **[bxl.boxel.site](https://bxl.boxel.site)**, and in Markdown as [`docs/syntax-reference.md`](./docs/syntax-reference.md); the formal grammar lives in [`docs/grammar.ebnf`](./docs/grammar.ebnf).
 
 ## A tour of the syntax
 
@@ -85,29 +85,48 @@ import { evaluateBxl } from '@cardstack/bxl';
 // Schema: what fields exist, what humans call them.
 const schema = {
   fields: [
-    { key: 'subtotal',  label: 'Subtotal' },
-    { key: 'taxRate',   label: 'Tax Rate' },
+    { key: 'subtotal', label: 'Subtotal' },
+    { key: 'taxRate', label: 'Tax Rate' },
     { key: 'taxAmount', label: 'Tax Amount' },
-    { key: 'total',     label: 'Total' },
+    { key: 'total', label: 'Total' },
     {
-      key: 'lineItems', label: 'Line Item', kind: 'array',
-      item: { fields: [
-        { key: 'sku',       label: 'SKU' },
-        { key: 'quantity',  label: 'Quantity' },
-        { key: 'unitPrice', label: 'Unit Price' },
-        { key: 'lineTotal', label: 'Line Total' },
-        { key: 'taxable',   label: 'Taxable' },
-      ] },
+      key: 'lineItems',
+      label: 'Line Item',
+      kind: 'array',
+      item: {
+        fields: [
+          { key: 'sku', label: 'SKU' },
+          { key: 'quantity', label: 'Quantity' },
+          { key: 'unitPrice', label: 'Unit Price' },
+          { key: 'lineTotal', label: 'Line Total' },
+          { key: 'taxable', label: 'Taxable' },
+        ],
+      },
     },
   ],
 };
 
 // Fixture: any JSON that matches the schema.
 const invoice = {
-  subtotal: 150, taxRate: 8.25, taxAmount: 12.38, total: 162.38,
+  subtotal: 150,
+  taxRate: 8.25,
+  taxAmount: 12.38,
+  total: 162.38,
   lineItems: [
-    { sku: 'COPY-01',   quantity: 1, unitPrice: 50,  lineTotal: 50,  taxable: true  },
-    { sku: 'BRAND-RED', quantity: 5, unitPrice: 20,  lineTotal: 100, taxable: false },
+    {
+      sku: 'COPY-01',
+      quantity: 1,
+      unitPrice: 50,
+      lineTotal: 50,
+      taxable: true,
+    },
+    {
+      sku: 'BRAND-RED',
+      quantity: 5,
+      unitPrice: 20,
+      lineTotal: 100,
+      taxable: false,
+    },
   ],
 };
 ```
@@ -134,26 +153,26 @@ evaluateBxl('SUM("Line Item"[* ."Taxable"]."Line Total")', invoice, { schema });
 // => 50  (only the taxable row)
 
 // 6 · Positional selectors
-evaluateBxl('"Line Item"[#first].SKU',         invoice, { schema }); // => 'COPY-01'
-evaluateBxl('"Line Item"[#last].Quantity',     invoice, { schema }); // => 5
+evaluateBxl('"Line Item"[#first].SKU', invoice, { schema }); // => 'COPY-01'
+evaluateBxl('"Line Item"[#last].Quantity', invoice, { schema }); // => 5
 evaluateBxl('"Line Item"[#last-1]."Unit Price"', invoice, { schema }); // => 20
 
 // 7 · Paste Excel unchanged
 evaluateBxl(
   '=IF("Tax Rate" > 0, ROUND(Subtotal * "Tax Rate" / 100, 2), 0)',
-  invoice, { schema },
+  invoice,
+  { schema },
 );
 // => 12.38
 
 // 8 · Invariants — "if this applies, then this must hold"
-evaluateBxl(
-  'when(Subtotal > 0, Total = Subtotal + "Tax Amount")',
-  invoice, { schema },
-);
+evaluateBxl('when(Subtotal > 0, Total = Subtotal + "Tax Amount")', invoice, {
+  schema,
+});
 // => true
 
 // 9 · Presence — form-friendly vs Excel-strict
-evaluateBxl('present("Tax Amount")',     invoice, { schema }); // => true
+evaluateBxl('present("Tax Amount")', invoice, { schema }); // => true
 evaluateBxl('NOT ISBLANK("Tax Amount")', invoice, { schema }); // => true (Excel semantics)
 ```
 
@@ -163,16 +182,16 @@ evaluateBxl('NOT ISBLANK("Tax Amount")', invoice, { schema }); // => true (Excel
 
 BXL is evaluated from eight distinct positions in a typical application. Each uses the same parser, the same dependency tracker, and the same sandbox — so a field constraint, a workflow gate, and a reactive predicate all share a vocabulary the author learns once.
 
-| Position                | What it does                      | Example                                                 |
-| ----------------------- | --------------------------------- | ------------------------------------------------------- |
-| **Formula field**       | Computed value on a record        | `SUM("Line Item"."Line Total")`                         |
-| **Constraint**          | Validation rule with a message    | `"End Date" > "Start Date"`                             |
-| **Visible-when**        | Conditional field rendering       | `Status = "in-review"`                                  |
-| **Autofill / default**  | Computed initial value            | `slugify(Title)`                                        |
-| **Workflow gate**       | Advance condition                 | `all(Steps[…]; Status = "done")`                        |
-| **Notification trigger**| Fire when threshold crossed       | `"Budget Remaining" < 1000`                             |
-| **Reactive predicate**  | Watch-and-fire rule               | `age("Last Heartbeat") > DURATION("60s")`               |
-| **Query transform**     | Bulk derivation over an array     | <code>"Line Item" &#124; map(Quantity * "Unit Price")</code> |
+| Position                 | What it does                   | Example                                                       |
+| ------------------------ | ------------------------------ | ------------------------------------------------------------- |
+| **Formula field**        | Computed value on a record     | `SUM("Line Item"."Line Total")`                               |
+| **Constraint**           | Validation rule with a message | `"End Date" > "Start Date"`                                   |
+| **Visible-when**         | Conditional field rendering    | `Status = "in-review"`                                        |
+| **Autofill / default**   | Computed initial value         | `slugify(Title)`                                              |
+| **Workflow gate**        | Advance condition              | `all(Steps[…]; Status = "done")`                              |
+| **Notification trigger** | Fire when threshold crossed    | `"Budget Remaining" < 1000`                                   |
+| **Reactive predicate**   | Watch-and-fire rule            | `age("Last Heartbeat") > DURATION("60s")`                     |
+| **Query transform**      | Bulk derivation over an array  | <code>"Line Item" &#124; map(Quantity \* "Unit Price")</code> |
 
 For server-scale lists, keep retrieval and processing separate: the host query language owns filtering, search relevance, ordering, and pagination; BXL processes the bounded JSON result that comes back. See [Query Then Process](./docs/query-then-process.md) for the pattern, including a Boxel query example, an illustrative PostgreSQL JSONB lowering, and a BXL process step using Excel functions.
 
@@ -180,11 +199,11 @@ For server-scale lists, keep retrieval and processing separate: the host query l
 
 BXL is one of three layers where logic lives in a typical application. Each layer has different constraints, different audit characteristics, and different change cycles.
 
-- **BXL expressions** — logic that is *data*: constraints, formulas, predicates, defaults, visibility, transforms. Stored as strings, shipped alongside records, editable at runtime without a redeploy.
-- **Class methods and computed properties** — logic that is *code compiled with the type*: getters, `@computed` columns on an ORM model, derived fields declared on a class. Ships with the module; changes require a redeploy.
+- **BXL expressions** — logic that is _data_: constraints, formulas, predicates, defaults, visibility, transforms. Stored as strings, shipped alongside records, editable at runtime without a redeploy.
+- **Class methods and computed properties** — logic that is _code compiled with the type_: getters, `@computed` columns on an ORM model, derived fields declared on a class. Ships with the module; changes require a redeploy.
 - **Application code with side effects** — controllers, handlers, services: writes, deletes, network calls, LLM invocations, external APIs. Full language power, attributable, auditable.
 
-One-line rule: **BXL for logic-as-data · class methods for logic-as-type · application code for changes-to-the-world.** Derive-mode BXL never writes; Mutation BXL can describe a write-set, but only the host may authorize and commit it. Application code never embeds in records. When in doubt, ask *"could a stranger run this expression a million times against my data?"* — if yes, it's BXL; if no, it's application code.
+One-line rule: **BXL for logic-as-data · class methods for logic-as-type · application code for changes-to-the-world.** Derive-mode BXL never writes; Mutation BXL can describe a write-set, but only the host may authorize and commit it. Application code never embeds in records. When in doubt, ask _"could a stranger run this expression a million times against my data?"_ — if yes, it's BXL; if no, it's application code.
 
 ### User-defined helpers live inside the expression
 
@@ -217,59 +236,80 @@ export const donationForm = {
   name: 'Donation',
   fields: [
     { key: 'firstName', label: 'First Name', required: true },
-    { key: 'lastName',  label: 'Last Name',  required: true },
+    { key: 'lastName', label: 'Last Name', required: true },
 
-    { key: 'email', label: 'Email',
+    {
+      key: 'email',
+      label: 'Email',
+      validate: [{ expr: 'isEmail(Email)', message: 'Must be a valid email' }],
+    },
+    {
+      key: 'phone',
+      label: 'Phone',
       validate: [
-        { expr: 'isEmail(Email)',
-          message: 'Must be a valid email' },
+        {
+          expr: 'isMobilePhone(Phone, "en-US", {strictMode:true})',
+          message: 'Must be a valid US mobile number',
+        },
       ],
     },
-    { key: 'phone', label: 'Phone',
+    {
+      key: 'website',
+      label: 'Website',
       validate: [
-        { expr: 'isMobilePhone(Phone, "en-US", {strictMode:true})',
-          message: 'Must be a valid US mobile number' },
-      ],
-    },
-    { key: 'website', label: 'Website',
-      validate: [
-        { expr: 'isURL(Website, {require_protocol:true})',
-          message: 'Website must include http:// or https://' },
+        {
+          expr: 'isURL(Website, {require_protocol:true})',
+          message: 'Website must include http:// or https://',
+        },
       ],
     },
 
-    { key: 'amount', label: 'Donation Amount', type: 'number',
+    {
+      key: 'amount',
+      label: 'Donation Amount',
+      type: 'number',
       validate: [
-        { expr: '"Donation Amount" > 0',
-          message: 'Amount must be positive' },
+        { expr: '"Donation Amount" > 0', message: 'Amount must be positive' },
       ],
     },
 
     // Visible-when: only show employer field for gifts over the match threshold
-    { key: 'employer', label: 'Employer',
-      visibleWhen: '"Donation Amount" >= 250' },
+    {
+      key: 'employer',
+      label: 'Employer',
+      visibleWhen: '"Donation Amount" >= 250',
+    },
 
     // Conditional default: prefill matching program IF employer is filled
-    { key: 'matchingProgram', label: 'Matching Program',
+    {
+      key: 'matchingProgram',
+      label: 'Matching Program',
       visibleWhen: 'present(Employer)',
-      defaultFrom:  'Employer."Matching Program"' },
+      defaultFrom: 'Employer."Matching Program"',
+    },
 
-    { key: 'recurring',     label: 'Make Recurring',  type: 'boolean' },
-    { key: 'paymentMethod', label: 'Payment Method',
-      visibleWhen: 'Recurring' },
+    { key: 'recurring', label: 'Make Recurring', type: 'boolean' },
+    { key: 'paymentMethod', label: 'Payment Method', visibleWhen: 'Recurring' },
 
     // Computed field: total annual gift via IF branching
-    { key: 'totalAnnual', label: 'Total Annual Gift',
-      computedVia: 'IF(Recurring, "Donation Amount" * 12, "Donation Amount")' },
+    {
+      key: 'totalAnnual',
+      label: 'Total Annual Gift',
+      computedVia: 'IF(Recurring, "Donation Amount" * 12, "Donation Amount")',
+    },
   ],
 
   // Record-level constraints — run on save, cross-field
   constraints: [
-    { expr: 'when(Recurring, present("Payment Method"))',
-      message: 'Recurring donations require a payment method on file' },
+    {
+      expr: 'when(Recurring, present("Payment Method"))',
+      message: 'Recurring donations require a payment method on file',
+    },
 
-    { expr: 'when(present("Matching Program"), "Donation Amount" >= "Matching Program"."Minimum")',
-      message: 'Gift below employer matching minimum' },
+    {
+      expr: 'when(present("Matching Program"), "Donation Amount" >= "Matching Program"."Minimum")',
+      message: 'Gift below employer matching minimum',
+    },
   ],
 };
 ```
@@ -365,7 +405,7 @@ BXL:    "Line Item"[SKU = "BRAND-RED"]."Unit Price"
 
 ### 4 · XQuery · a small debt to FLWOR thinking
 
-XQuery (W3C) showed that a query grammar can grow into a full expression language — let-bindings, conditionals, sequence composition, and data reshape — without bolting on a separate scripting layer. BXL stays smaller (no FLWOR keywords, no XML schema types, no modules) but adopts the same premise: one language should cover computation *and* reshape, not just lookup.
+XQuery (W3C) showed that a query grammar can grow into a full expression language — let-bindings, conditionals, sequence composition, and data reshape — without bolting on a separate scripting layer. BXL stays smaller (no FLWOR keywords, no XML schema types, no modules) but adopts the same premise: one language should cover computation _and_ reshape, not just lookup.
 
 FLWOR is XQuery's five-clause expression: **F**or (iterate) · **L**et (bind) · **W**here (filter) · **O**rder by (sort) · **R**eturn (shape).
 
@@ -376,6 +416,7 @@ XQuery:  sum(for $li in $invoice/lineItem
              where $li/taxable = "true"
              return $li/lineTotal)
 ```
+
 ```bxl
 BXL:     SUM("Line Item"[* ."Taxable"]."Line Total")
 ```
@@ -398,6 +439,7 @@ XQuery:
   }</top-items>
 </summary>
 ```
+
 ```bxl
 BXL (jq, plus SUM from the Excel layer):
 . as $inv |                                       # bind root (XQuery's $inv)
@@ -419,15 +461,16 @@ XQuery constructs XML trees element-by-element, with templating inline. BXL cons
 
 ### 5 · Schematron · the validation-rule shape, newly relevant
 
-Schematron (ISO/IEC 19757-3) is the standard for rule-based tree validation: match a pattern, assert a condition, emit a message. Unlike grammar-based validators like XSD, Schematron checks *relationships between values* — "if this, then that" — using XPath expressions against the document tree.
+Schematron (ISO/IEC 19757-3) is the standard for rule-based tree validation: match a pattern, assert a condition, emit a message. Unlike grammar-based validators like XSD, Schematron checks _relationships between values_ — "if this, then that" — using XPath expressions against the document tree.
 
-It's been quietly important since 2006, and it's back in focus because of how LLMs change the shape of incoming data. As generative tooling produces more loosely-structured documents — free-text forms filled in by an agent, invoice JSON pulled from a receipt OCR, a draft contract authored by a model — validation moves later in the pipeline. A fixed schema catches missing fields; a rule language catches *things that should be true but aren't*.
+It's been quietly important since 2006, and it's back in focus because of how LLMs change the shape of incoming data. As generative tooling produces more loosely-structured documents — free-text forms filled in by an agent, invoice JSON pulled from a receipt OCR, a draft contract authored by a model — validation moves later in the pipeline. A fixed schema catches missing fields; a rule language catches _things that should be true but aren't_.
 
 BXL's validation surface reuses Schematron's shape — a rule is a boolean expression with an attached message — but the rules sit inline in form schemas and data-model definitions rather than a separate XML document.
 
 ```xml
 Schematron:  <assert test="total = sum(lineItem/lineTotal)">Total mismatch</assert>
 ```
+
 ```ts
 BXL:         { expr: 'Total = SUM("Line Item"."Line Total")',
                message: 'Total mismatch' }
@@ -444,10 +487,10 @@ CSS:  tr:first-child, tr:last-child, tr:nth-child(2n+1)
 BXL:  "Line Item"[#first], "Line Item"[#last], "Line Item"[#odd], "Line Item"[#1, #2, #7..#9, #11]
 ```
 
-That's most of the debt. CSS is otherwise a different *kind* of language — a styling rule engine that runs against the DOM to produce rendered boxes, not a general expression language:
+That's most of the debt. CSS is otherwise a different _kind_ of language — a styling rule engine that runs against the DOM to produce rendered boxes, not a general expression language:
 
 - `calc()`, `clamp()`, `attr()` compute values, but only CSS-legal typed values (lengths, numbers, colors) for layout. You can't propagate the result into business logic.
-- `:invalid`, `:required`, `:user-invalid` *react* to validation state defined in HTML attributes or JavaScript; CSS doesn't author the rules.
+- `:invalid`, `:required`, `:user-invalid` _react_ to validation state defined in HTML attributes or JavaScript; CSS doesn't author the rules.
 - `var(--x, fallback)` + the cascade resolve a property by lookup-with-fallback, not by expression-level branching.
 - `counter()` and `:has()` walk the tree for rendering; they don't aggregate values in any arithmetic sense.
 
@@ -479,7 +522,7 @@ CEL:  has(request.auth.claims.role) && request.auth.claims.role == "admin"
 BXL:  NOT ISBLANK(Request.Auth.Claims.Role) and Request.Auth.Claims.Role = "admin"
 ```
 
-(CEL's `has()` tests whether a field is *set* — null-only. BXL's exact match is `NOT ISBLANK(x)`. BXL's `present(x)` is stricter — null *or* empty string — which is usually what you want on a form, not on an auth claim.)
+(CEL's `has()` tests whether a field is _set_ — null-only. BXL's exact match is `NOT ISBLANK(x)`. BXL's `present(x)` is stricter — null _or_ empty string — which is usually what you want on a form, not on an auth claim.)
 
 CEL is stronger than BXL at pure policy and authorization — its type system is designed for predicate evaluation and its tooling is mature. BXL is stronger at the spreadsheet side of the house (Excel paste, formula helpers, the VLOOKUP-shape predicate). The two share a philosophical parent: a tiny, safe, embeddable DSL beats a general-purpose sandbox every time.
 
@@ -493,9 +536,10 @@ For the common case — map / filter / reduce over an array — BXL is a shorter
 
 ```js
 invoice.lineItems
-  .filter(li => li.taxable)
+  .filter((li) => li.taxable)
   .reduce((sum, li) => sum + li.lineTotal, 0);
 ```
+
 ```bxl
 SUM("Line Item"[* ."Taxable"]."Line Total")
 ```
@@ -506,26 +550,26 @@ Both answer the same question. The JS version has `fetch` and `process.env` in s
 
 Each language above is strong at one or two of the jobs a typical business app needs — validation, computed fields, data processing, conditional defaults, storage as data. No single one covers the whole set.
 
-| Role                                  | Excel | jq | XPath | XQuery | Schematron | CSS | JSONata | CEL | JS | BXL |
+| Role                                  | Excel | jq  | XPath | XQuery | Schematron | CSS | JSONata | CEL | JS  | BXL |
 | ------------------------------------- | :---: | :-: | :---: | :----: | :--------: | :-: | :-----: | :-: | :-: | :-: |
-| Validation rules + messages           |  🟡  | ⚪ |  ⚪  |   ⚪   |    🟢     |  — |   ⚪   | 🟢 | 🟡 | 🟢 |
-| Computed / formula fields             |  🟢  | 🟡 |  🟡  |   🟡   |     —     | ⚪ |   🟢   | 🟡 | 🟡 | 🟢 |
-| Data processing / aggregation         |  ⚪  | 🟢 |  🟡  |   🟢   |     —     |  — |   🟢   | 🟡 | 🟡 | 🟢 |
-| Streaming over huge inputs            |  ⚪  | 🟢 |  🟡  |   🟢   |    ⚪     |  — |   ⚪   | ⚪ | 🟡 | 🟡 |
-| Descendant + ancestor tree nav        |   —  | 🟡 |  🟢  |   🟢   |    🟢     | 🟡 |   🟡   |  — | ⚪ | 🟡 |
-| User-defined functions / recursion    |  🟡  | 🟢 |  ⚪  |   🟢   |     —     |  — |   🟡   | ⚪ | 🟢 | 🟢 |
-| Modules / code reuse across files     |  ⚪  | 🟡 |   —  |   🟢   |    🟡     | 🟡 |   ⚪   | ⚪ | 🟢 |  — |
-| Conditional defaults                  |  🟡  | 🟡 |  🟡  |   🟡   |     —     | 🟡 |   🟡   | 🟡 | 🟡 | 🟢 |
-| Sandbox by default (no I/O)           |  🟢  | 🟢 |  🟢  |   🟡   |    🟢     | 🟢 |   🟢   | 🟢 |  — | 🟢 |
-| Readable to non-engineers             |  🟢  |  — |   —  |    —   |     —     | ⚪ |   ⚪   | ⚪ |  — | 🟢 |
-| Paste from spreadsheet                |  🟢  |  — |   —  |    —   |     —     |  — |    —   |  — |  — | 🟢 |
-| Works on JSON natively                |   —  | 🟢 |   —  |    —   |     —     |  — |   🟢   | 🟡 | 🟢 | 🟢 |
-| Embeds in JSON as data (serializable) |  🟡  | 🟢 |  🟡  |   🟡   |    ⚪    | 🟡 |   🟢   | 🟢 | ⚪ | 🟢 |
-| One language across every job         |  ⚪  | 🟡 |  ⚪  |   🟡   |     —     |  — |   🟡   | 🟡 | 🟢 | 🟢 |
+| Validation rules + messages           |  🟡   | ⚪  |  ⚪   |   ⚪   |     🟢     |  —  |   ⚪    | 🟢  | 🟡  | 🟢  |
+| Computed / formula fields             |  🟢   | 🟡  |  🟡   |   🟡   |     —      | ⚪  |   🟢    | 🟡  | 🟡  | 🟢  |
+| Data processing / aggregation         |  ⚪   | 🟢  |  🟡   |   🟢   |     —      |  —  |   🟢    | 🟡  | 🟡  | 🟢  |
+| Streaming over huge inputs            |  ⚪   | 🟢  |  🟡   |   🟢   |     ⚪     |  —  |   ⚪    | ⚪  | 🟡  | 🟡  |
+| Descendant + ancestor tree nav        |   —   | 🟡  |  🟢   |   🟢   |     🟢     | 🟡  |   🟡    |  —  | ⚪  | 🟡  |
+| User-defined functions / recursion    |  🟡   | 🟢  |  ⚪   |   🟢   |     —      |  —  |   🟡    | ⚪  | 🟢  | 🟢  |
+| Modules / code reuse across files     |  ⚪   | 🟡  |   —   |   🟢   |     🟡     | 🟡  |   ⚪    | ⚪  | 🟢  |  —  |
+| Conditional defaults                  |  🟡   | 🟡  |  🟡   |   🟡   |     —      | 🟡  |   🟡    | 🟡  | 🟡  | 🟢  |
+| Sandbox by default (no I/O)           |  🟢   | 🟢  |  🟢   |   🟡   |     🟢     | 🟢  |   🟢    | 🟢  |  —  | 🟢  |
+| Readable to non-engineers             |  🟢   |  —  |   —   |   —    |     —      | ⚪  |   ⚪    | ⚪  |  —  | 🟢  |
+| Paste from spreadsheet                |  🟢   |  —  |   —   |   —    |     —      |  —  |    —    |  —  |  —  | 🟢  |
+| Works on JSON natively                |   —   | 🟢  |   —   |   —    |     —      |  —  |   🟢    | 🟡  | 🟢  | 🟢  |
+| Embeds in JSON as data (serializable) |  🟡   | 🟢  |  🟡   |   🟡   |     ⚪     | 🟡  |   🟢    | 🟢  | ⚪  | 🟢  |
+| One language across every job         |  ⚪   | 🟡  |  ⚪   |   🟡   |     —      |  —  |   🟡    | 🟡  | 🟢  | 🟢  |
 
 🟢 strong &nbsp;·&nbsp; 🟡 ok / partial &nbsp;·&nbsp; ⚪ weak &nbsp;·&nbsp; — none
 
-BXL didn't invent any row. It's the smallest language that covers the everyday-business rows at once — validation, computed fields, data processing, defaults, readability, paste-from-spreadsheet — by composing the wins of the ones that came before. User-defined functions coexist with the Excel layer: `def score_band(n): ...; score_band(91)` sits next to `SUM(...)` in the same expression, so custom helpers feel like first-class BXL calls. The XPath-family specialties (ancestor axes, upward tree walking) stay specialties: BXL traverses *down* into nested data via jq's `..`, but it doesn't carry a `parent::` axis. Streaming over huge inputs inherits what jq offers (lazy enough in practice, but not BXL-level streaming), and there is no module system — BXL is one expression, not a programming environment.
+BXL didn't invent any row. It's the smallest language that covers the everyday-business rows at once — validation, computed fields, data processing, defaults, readability, paste-from-spreadsheet — by composing the wins of the ones that came before. User-defined functions coexist with the Excel layer: `def score_band(n): ...; score_band(91)` sits next to `SUM(...)` in the same expression, so custom helpers feel like first-class BXL calls. The XPath-family specialties (ancestor axes, upward tree walking) stay specialties: BXL traverses _down_ into nested data via jq's `..`, but it doesn't carry a `parent::` axis. Streaming over huge inputs inherits what jq offers (lazy enough in practice, but not BXL-level streaming), and there is no module system — BXL is one expression, not a programming environment.
 
 For a typical business record — invoices, offers, contracts, forms, tickets, events, reports — the common rows in that table are real daily requirements. BXL covers them with one parser, one evaluator, and one sandbox.
 
@@ -554,7 +598,7 @@ These six guarantees are what let the platform embed BXL inside Guides, workflow
 - **Deterministic** — no clock or random unless the host injects them.
 - **Worker-safe** — for hard memory ceilings or non-cooperative cancellation, run BXL in a Worker or isolate and terminate from the host.
 
-See [`docs/sandbox.md`](./docs/sandbox.md) for the full threat model and contract.
+See [`docs/profiles.md`](./docs/profiles.md) for the per-profile execution contract.
 
 ---
 
@@ -566,14 +610,14 @@ The objection is also fair: a language that can do all of that should not be acc
 
 Profiles are the practical answer. BXL stays one language and one AST, but hosts can validate a strict subset for the place where the expression will run. The full language remains available where full computation is appropriate; narrower profiles reject expressions that exceed their execution contract before they become runtime surprises.
 
-| Profile | Intent | Typical use | What the subset protects |
-| --- | --- | --- | --- |
-| `compute` | Full browser/local value computation | formulas, transforms, UI validation, query transforms | Preserves the current BXL contract: readable jq plus Excel helpers and validator.js functions, including lazy extensions on async runtime paths. |
-| `policy` | Bounded request-time authorization | write gates, field redaction decisions | Keeps request checks deterministic and fail-closed; allows bounded scalar helpers but rejects aggregate and collection-scanning calls. |
-| `authorization` | Bounded relationship-graph authorization | OpenFGA-semantic rewrites, BXL authorization capability rules | Extends `policy` only with compiler-lowered graph forms such as `direct`, `userset`, `userset_from`, and `except`. |
-| `predicate` | Query-time boolean filtering | row-level read filters, search constraints | Requires a query-shaped boolean predicate; rejects transforms, runtime-only helpers, validator.js functions, and non-lowerable FormulaJS calls unless a host explicitly lowers them. |
-| `derive` | Headless write/index-time computation | `computeVia`, denormalized fields, search facets | Allows deterministic record-local Excel/jq computation, including lazy extensions and aggregation, while rejecting request context and volatile runtime behavior. |
-| `mutation` | Bounded single-Card DML planning | `updateCard` tool calls, streaming edits, atomic field changes, and collection rearrangement | Resolves readable, schema-known locations against one loaded Card or Field and produces a pure mutation plan; enforces exact-one versus explicit bulk intent while keeping authorization, persistence, network access, and cross-document search outside the profile. |
+| Profile         | Intent                                   | Typical use                                                                                  | What the subset protects                                                                                                                                                                                                                                              |
+| --------------- | ---------------------------------------- | -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `compute`       | Full browser/local value computation     | formulas, transforms, UI validation, query transforms                                        | Preserves the current BXL contract: readable jq plus Excel helpers and validator.js functions, including lazy extensions on async runtime paths.                                                                                                                      |
+| `policy`        | Bounded request-time authorization       | write gates, field redaction decisions                                                       | Keeps request checks deterministic and fail-closed; allows bounded scalar helpers but rejects aggregate and collection-scanning calls.                                                                                                                                |
+| `authorization` | Bounded relationship-graph authorization | OpenFGA-semantic rewrites, BXL authorization capability rules                                | Extends `policy` only with compiler-lowered graph forms such as `direct`, `userset`, `userset_from`, and `except`.                                                                                                                                                    |
+| `predicate`     | Query-time boolean filtering             | row-level read filters, search constraints                                                   | Requires a query-shaped boolean predicate; rejects transforms, runtime-only helpers, validator.js functions, and non-lowerable FormulaJS calls unless a host explicitly lowers them.                                                                                  |
+| `derive`        | Headless write/index-time computation    | `computeVia`, denormalized fields, search facets                                             | Allows deterministic record-local Excel/jq computation, including lazy extensions and aggregation, while rejecting request context and volatile runtime behavior.                                                                                                     |
+| `mutation`      | Bounded single-Card DML planning         | `updateCard` tool calls, streaming edits, atomic field changes, and collection rearrangement | Resolves readable, schema-known locations against one loaded Card or Field and produces a pure mutation plan; enforces exact-one versus explicit bulk intent while keeping authorization, persistence, network access, and cross-document search outside the profile. |
 
 Boxel `computeVia` belongs in `derive`, not `compute`: it often needs aggregation over nested record data, but it runs in a headless write/index-time environment where the result should not depend on the current user, request, wall clock, or runtime metadata. The `bxl()` / `expression()` factory enforces this profile when it constructs a compute function. In particular, unrestricted `prepareBxl()` accepts jq `def`, while `bxl()` / `expression()` rejects it with `derive-def-banned`; use a built-in helper when the same computation must run as `computeVia`.
 
@@ -628,12 +672,12 @@ external effects.
 
 BXL Authorization uses four nouns:
 
-| Noun | Meaning |
-| --- | --- |
-| Resource | The concrete thing on which an operation would be invoked. |
-| Party | A person, device, service, team, or other actor. |
-| Seat | A relationship-backed role the Party occupies for that Resource. |
-| Capability | A named command or mutation the Party may invoke. |
+| Noun       | Meaning                                                          |
+| ---------- | ---------------------------------------------------------------- |
+| Resource   | The concrete thing on which an operation would be invoked.       |
+| Party      | A person, device, service, team, or other actor.                 |
+| Seat       | A relationship-backed role the Party occupies for that Resource. |
+| Capability | A named command or mutation the Party may invoke.                |
 
 Policy rules are ordinary bounded BXL expressions:
 
@@ -678,10 +722,9 @@ cases. The production engine is BXL-native synchronous TypeScript. It does not
 ship an OpenFGA server, WASM runtime, DSL parser, CEL runtime, storage adapter,
 or network client.
 
-Start with [`docs/authorization.md`](./docs/authorization.md), run the
-generalized examples with `npm run example:authorization`, or open the browser
-harness with `npm run demo:authorization`. Runtime architecture, OpenFGA source
-citations, licensing, and merge gates are in
+Start with [`docs/authorization.md`](./docs/authorization.md), then run the
+generalized examples with `pnpm example:authorization`. Runtime architecture,
+OpenFGA source citations, licensing, and merge gates are in
 [`src/authorization/README.md`](./src/authorization/README.md).
 
 ---
@@ -792,7 +835,8 @@ const { document, plan } = mutateBxlCardSource(
     targetId: cloneFrom,
     resolveReference: (reference) => resolveAgainstSource(reference),
     formatReference: (cardId) => formatForTarget(cardId),
-    resolveCard: (cardId) => validatedCardIds.has(cardId) ? { id: cardId } : undefined,
+    resolveCard: (cardId) =>
+      validatedCardIds.has(cardId) ? { id: cardId } : undefined,
     serializeContainedValue({ path }) {
       // Required when a new contained value has a polymorphic FieldDef that
       // cannot be inferred from plain JSON (for example Spec.containedExamples).
@@ -833,10 +877,9 @@ Use `prepareBxlMutationOperations(operations, options)` for the equivalent
 `createBxlMutationStatementStream()` to frame arbitrary token chunks without
 ever emitting a partial statement. Start with the
 [usage guide](./docs/mutation-language-guide.md) and
-[profile contract](./docs/mutation-profile.md), run all semantic fixtures with
-`npm run example:mutation`, run the realm-shaped subset with
-`npm run example:mutation:realm`, or open the standalone workbench with
-`npm run demo:mutation`.
+[profile contract](./docs/mutation-profile.md), then run all semantic fixtures
+with `pnpm example:mutation` and the realm-shaped subset with
+`pnpm example:mutation:realm`.
 
 ---
 
@@ -860,15 +903,15 @@ Our own work — the readable-syntax compiler, linter, formatter, sandbox, and r
 
 ```ts
 import {
-  evaluateBxl,      // readable BXL → JSON value (full runtime)
-  compileBxl,       // readable BXL → canonical jq source (no evaluation)
+  evaluateBxl, // readable BXL → JSON value (full runtime)
+  compileBxl, // readable BXL → canonical jq source (no evaluation)
   compileBxlPredicateToSql, // predicate-profile BXL → parameterized SQL
-  lintBxl,          // parser-only diagnostics (no formula helpers, no evaluator)
-  solidifyBxl,      // normalize fuzzy input to Solid BXL (one-liner, canonical)
-  expandBxl,        // wrap at pipes / multi-arg calls for readability
-  collapseBxl,      // round-trip back to single-line canonical
-  bxlToJq,          // strip BXL sugar, emit pure jq
-  jqToBxl,          // upgrade jq source to readable BXL
+  lintBxl, // parser-only diagnostics (no formula helpers, no evaluator)
+  solidifyBxl, // normalize fuzzy input to Solid BXL (one-liner, canonical)
+  expandBxl, // wrap at pipes / multi-arg calls for readability
+  collapseBxl, // round-trip back to single-line canonical
+  bxlToJq, // strip BXL sugar, emit pure jq
+  jqToBxl, // upgrade jq source to readable BXL
 
   // BXL Authorization — Resource · Party · Seat · Capability authoring
   prepareBxlAuthorizationSafe,
@@ -879,11 +922,11 @@ import {
 
   // Boxel realm authoring — factory + tagged templates that read well
   // inside @field decorators (see "Authoring inside Boxel" below)
-  expression,       // factory: returns a function bound to `this` (the card)
-  expr,             // alias of expression
-  bxl,              // alias of expression
-  jq,               // tagged template — plain jq (preserves `\(...)`)
-  fx,               // tagged template — Excel-like readable BXL
+  expression, // factory: returns a function bound to `this` (the card)
+  expr, // alias of expression
+  bxl, // alias of expression
+  jq, // tagged template — plain jq (preserves `\(...)`)
+  fx, // tagged template — Excel-like readable BXL
 } from '@cardstack/bxl';
 ```
 
@@ -898,7 +941,7 @@ Every function takes an optional `{ schema, runtimeLimits }` options object. Sub
 @cardstack/bxl/syntax/textmate — TextMate grammar for editors
 ```
 
-Full API reference in [`docs/api.md`](./docs/api.md).
+Every public symbol carries JSDoc in `src/index.ts`.
 
 New authorization code should use `prepareBxlAuthorizationSafe` and the
 `bxl-authorization/1` model described in the dedicated
@@ -908,7 +951,7 @@ New authorization code should use `prepareBxlAuthorizationSafe` and the
 
 `runtime-bare` is intentionally a capability subset, not a second spelling of the full runtime. Calls such as `AND(...)`, `ROUND(...)`, or `DATE(...)` report that the spreadsheet formula library is absent and point to `@cardstack/bxl/runtime`. jq collection operators such as `map`, `select`, array `+`, and pipes remain available.
 
-Some names in older dialect inventories are jq operations rather than BXL functions: use `[Rows[] | select(predicate)]` for `FILTER`, `Rows | map(expression)` for `MAP`, `array + [value]` for append, and `left + right` for array concatenation (`CONCAT(...)` is also available for text). Use the `null` literal to construct a blank and `ISBLANK(value)` to test one. `DATE(...)` and `DAYS(...)` are implemented; `SECOND(...)` extracts a time component, while `SECONDS(...)` is not a defined duration helper.
+Some names that read like BXL functions are jq operations instead: use `[Rows[] | select(predicate)]` for `FILTER`, `Rows | map(expression)` for `MAP`, `array + [value]` for append, and `left + right` for array concatenation (`CONCAT(...)` is also available for text). Use the `null` literal to construct a blank and `ISBLANK(value)` to test one. `DATE(...)` and `DAYS(...)` are implemented; `SECOND(...)` extracts a time component, while `SECONDS(...)` is not a defined duration helper.
 
 ---
 
@@ -920,7 +963,7 @@ Some names in older dialect inventories are jq operations rather than BXL functi
 import { expression, fx, jq } from '@cardstack/bxl';
 
 class HospitalPatient extends CardDef {
-  @field severity      = contains(StringField);
+  @field severity = contains(StringField);
   @field admissionDate = contains(StringField);
 
   // Plain string — readable BXL syntax. PascalCase identifiers fall
@@ -946,85 +989,55 @@ class HospitalPatient extends CardDef {
 
 ### When to use which tag
 
-| Source                     | Use         | Why                                                                                                                                                |
-|----------------------------|-------------|----------------------------------------------------------------------------------------------------------------------------------------------------|
-| `'.severity'`              | plain jq, but plain string is fine | The compiler runs readable-syntax by default; lowercase paths are inert.                                                                          |
-| `'Severity'`               | plain string | PascalCase fallback resolves bare identifiers to `.camelCase` field paths.                                                                         |
-| `fx\`ROUND(Salary / 2080, 2)\`` | `fx`        | Marks the source as Excel-like at the call site. Same compilation as a plain string today, but explicit when other tags appear in the same file.  |
-| `jq\`"\(.foo)/\(.bar)"\``  | `jq`        | Backticks preserve `\(…)` interpolation — a regular JS string silently drops the backslash, then the runtime never sees the interpolation.        |
-| Pure jq with no PascalCase | `jq`        | Skips the readable-syntax compile step when the compute function is constructed.                                                                   |
+| Source                          | Use                                | Why                                                                                                                                              |
+| ------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `'.severity'`                   | plain jq, but plain string is fine | The compiler runs readable-syntax by default; lowercase paths are inert.                                                                         |
+| `'Severity'`                    | plain string                       | PascalCase fallback resolves bare identifiers to `.camelCase` field paths.                                                                       |
+| `fx\`ROUND(Salary / 2080, 2)\`` | `fx`                               | Marks the source as Excel-like at the call site. Same compilation as a plain string today, but explicit when other tags appear in the same file. |
+| `jq\`"\(.foo)/\(.bar)"\``       | `jq`                               | Backticks preserve `\(…)` interpolation — a regular JS string silently drops the backslash, then the runtime never sees the interpolation.       |
+| Pure jq with no PascalCase      | `jq`                               | Skips the readable-syntax compile step when the compute function is constructed.                                                                 |
 
 Other authoring helpers worth knowing:
 
-- `expression(source, { as: SomeFieldDef })` — for `contains(BaseField, …)` / `containsMany(BaseField, …)` computeds whose output should materialize as a subclass instance. Mirrors jqxl's `{ as: ... }`.
+- `expression(source, { as: SomeFieldDef })` — for `contains(BaseField, …)` / `containsMany(BaseField, …)` computeds whose output should materialize as a subclass instance.
 - `expression(source).bxl` exposes the prepared `source`, `compiledSource`, `warnings`, `deps`, and memoization mode so a host runtime can inspect dependency metadata without reparsing.
 - `expression(source, { memoize: false })` disables per-instance computeVia memoization for the rare expression that must re-run on every access. The default memoization mode is microtask-scoped; Boxel can call `beginBxlComputeCycle()` around a render/index pass to make the cache boundary explicit.
 - Excel error sentinels (`#N/A`, `#DIV/0!`, `#VALUE!`, …) raised inside the compute are caught at the factory boundary and surfaced as `null` instead of crashing the indexer.
 - The runtime tolerates null/undefined operands on `-`, `*`, `/`, `%` — the result propagates as `null` rather than throwing. Iterating null yields an empty stream.
 
-For the canonical reference on jq vs fx vs plain-string mode, see [`docs/syntax-modes.md`](./docs/syntax-modes.md). When a CardDef threads inputs into a child FieldDef via `{ as: ... }` materialization, [`docs/realm-composition.md`](./docs/realm-composition.md) is the canonical reference. If you're coming from a legacy jqxl runtime, [`docs/migration-from-jqxl.md`](./docs/migration-from-jqxl.md) walks the user-visible API renames. The full set of runtime relaxations is in [`docs/internals/port-from-jqxl.md`](./docs/internals/port-from-jqxl.md) §6–18, with one section per rule. The realm-flavored test suite in [`tests/boxel/`](./tests/boxel/) locks each rule to the exact behavior the realm depends on.
-
-### Pushing changes to a realm
-
-When BXL's source changes and you want a running realm to pick up the bundle plus a fresh index, the `bxl-sync` script wraps the standard recovery sequence:
-
-```sh
-npm run realm:sync                            # uses .bxl-realm-sync.json defaults
-npm run realm:sync -- --workspace /abs/path   # override target
-npm run realm:sync -- --no-reindex            # build + sync only
-npm run realm:sync -- --no-minify             # readable debug bundle
-npm run realm:sync -- --split-chunks          # legacy chunked bundle
-```
-
-It rebuilds the bundle, pushes it via `boxel sync`, then runs `boxel run-command full-reindex-realm`. The normal realm artifact is one minified `bxl/index.ts` file with all formula/function libraries included; stale `bxl-chunks/` files are removed during mirroring and sync. With the realm URL configured (`realmUrl` in `.bxl-realm-sync.json`), the reindex step fires automatically; without it, the script prints the run-command incantation to copy.
-
-The same script ships as the `bxl-sync` bin so it's reachable as `npx @cardstack/bxl-sync` once published. Pair with `BXL_BUILD_INFO.buildTime` to confirm the served bundle is the one you just pushed.
-
----
-
-## CLI
-
-```sh
-npm install --global @cardstack/bxl
-
-bxl compile  '"Line Item"[#1].SKU'
-bxl eval     '"Line Item"[#first].SKU'  --input invoice.json --schema invoice.schema.json
-bxl lint     'IF(Subtotal = 0, "empty", Subtotal)'
-bxl solidify 'subtotal * tax rate'
-```
-
-One-shot pipes too: `echo '{"n":42}' | bxl eval 'n * 2'` prints `84`.
+For the canonical reference on jq vs fx vs plain-string mode, see [`docs/syntax-modes.md`](./docs/syntax-modes.md). When a CardDef threads inputs into a child FieldDef via `{ as: ... }` materialization, [`docs/realm-composition.md`](./docs/realm-composition.md) is the canonical reference. The Boxel-flavored suite in [`tests/boxel/`](./tests/boxel/) locks each null-tolerance and factory rule to the exact behavior a card runtime depends on.
 
 ---
 
 ## Docs
 
 - **[bxl.boxel.site](https://bxl.boxel.site)** — live site with the syntax reference rendered, syntax-highlighted, and searchable
-- [`docs/syntax-reference.html`](./docs/syntax-reference.html) — the same reference as a standalone HTML file (open locally in a browser)
-- [`docs/syntax-reference.md`](./docs/syntax-reference.md) — same reference in Markdown, for GitHub browsing and plain-text viewers
+- [`docs/syntax-reference.md`](./docs/syntax-reference.md) — the same reference in Markdown, for GitHub browsing and plain-text viewers
 - [`docs/grammar.ebnf`](./docs/grammar.ebnf) — formal grammar
-- [`docs/sandbox.md`](./docs/sandbox.md) — sandbox contract and threat model
+- [`docs/syntax-modes.md`](./docs/syntax-modes.md) — jq vs fx vs plain-string call-site modes
 - [`docs/profiles.md`](./docs/profiles.md) — profile contracts for restricted execution surfaces
+- [`docs/formulas.md`](./docs/formulas.md) — Excel helper matrix (implemented, BXL-only, via jq, won't add)
+- [`docs/browser-runtime.md`](./docs/browser-runtime.md) — browser runtime patterns, worker usage, errors
+- [`docs/mutation-profile.md`](./docs/mutation-profile.md) — the Card-native write planner's contract
 - [`docs/authorization.md`](./docs/authorization.md) — relationship authorization from first principles, with synchronous APIs, domain models, and security boundaries
 - [`src/authorization/README.md`](./src/authorization/README.md) — runtime architecture, Boxel integration lifecycle, OpenFGA/Zanzibar provenance, and merge gates
-- [`docs/realm-collaboration-use-cases.md`](./docs/realm-collaboration-use-cases.md) — real gateway admission, transition, event, clock, and ledger patterns
-- [`docs/excel-compatibility.md`](./docs/excel-compatibility.md) — what pasted Excel formulas support
-- [`docs/formulas.md`](./docs/formulas.md) — Excel helper matrix (implemented, BXL-only, via jq, won't add)
-- [`docs/api.md`](./docs/api.md) — TypeScript API and option defaults
+- [`docs/realm-collaboration-use-cases.md`](./docs/realm-collaboration-use-cases.md) — gateway admission, transition, event, clock, and ledger patterns
+- [`docs/README.md`](./docs/README.md) — index of the full documentation set
 
 ---
 
 ## Development
 
 ```sh
-npm install
-npm test           # tests/unit/ + tests/smoke/ — 489+ cases
-npm run typecheck  # tsc --noEmit
-npm run build      # esbuild → dist/
-npm run perf:computed -- --iterations 3 --reads-per-field 2
+pnpm test              # every suite under tests/unit, tests/smoke, tests/boxel
+pnpm test tests/boxel  # one directory
+pnpm lint              # lint:js (ESLint + prettier) and lint:types (tsc --noEmit)
 ```
 
-`perf:computed` extracts Boxel `expression(fx|jq\`...\`)` fields from a local realm, hydrates a plain-object card graph, calibrates a successful field/card execution plan, and times direct evaluation, prepared evaluation, non-memoized `expression()`, and memoized `expression()`. The JSON artifact is written to `.perf/boxel-computed/latest.json` and is intentionally ignored by git.
+There is no build step. The package ships raw erasable TypeScript with `.ts`
+import specifiers: Node runs the sources directly and the host bundles them.
+A suite is a standalone entry point, so `node tests/unit/linter-cli.ts` runs
+exactly one.
 
 ### Layout
 
@@ -1037,11 +1050,16 @@ src/
 
 Strict layering: `jqtools/` and `formulajs/` do not import each other or `bxl/`. `bxl/` imports both as needed.
 
-### Contributing
+### Conventions
 
-Issues and PRs welcome. Add a regression test under `tests/unit/` for any parser/compiler change (see `tests/unit/compiler-bug-regressions.ts` for the pattern) and a matching note in `docs/grammar.ebnf` if the public surface shifts. UPPERCASE helper names are reserved for real Excel functions, lowercase names are for jq/BXL-native helpers, and preserved upstream APIs such as validator.js keep their established casing — see [`docs/formulas.md`](./docs/formulas.md#naming-convention).
+Any parser or compiler change carries a regression test under `tests/unit/`
+(`tests/unit/compiler-bug-regressions.ts` shows the pattern), plus a matching
+note in `docs/grammar.ebnf` when the public surface shifts.
 
-Security reports: please email `security@boxel.ai` rather than filing a public issue.
+Helper naming: UPPERCASE names are reserved for real Excel functions,
+lowercase names are for jq/BXL-native helpers, and preserved upstream APIs
+such as validator.js keep their established casing — see
+[`docs/formulas.md`](./docs/formulas.md#naming-convention).
 
 ---
 

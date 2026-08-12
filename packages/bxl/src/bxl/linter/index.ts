@@ -527,12 +527,12 @@ function lintSelectors(issues: BxlLintIssue[], tokens: ReadableSyntaxToken[]) {
     const inner = tokens.slice(index + 1, close);
 
     if (isHumanIndex(inner)) {
-      // `[row N]` / `[item N]` are legacy shortcuts kept for backward
-      // compatibility. Canonical BXL is `[#N]`.
+      // `[row N]` / `[item N]` are deprecated shortcuts the parser accepts.
+      // Canonical BXL is `[#N]`.
       addIssue(issues, {
         code: 'row-shortcut-deprecated',
         severity: 'info',
-        message: `Selector [${inner[0].value} ${inner[1].value}] is the legacy form of the one-based shortcut.`,
+        message: `Selector [${inner[0].value} ${inner[1].value}] is the deprecated form of the one-based shortcut.`,
         suggestion: `Prefer [#${inner[1].value}] — solidify will rewrite automatically.`,
       });
     } else if (isNativeNumericIndex(inner) || isNativeNumericSlice(inner)) {

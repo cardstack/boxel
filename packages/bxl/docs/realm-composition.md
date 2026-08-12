@@ -51,8 +51,8 @@ When `bxl()` sees `{ as: FlightProfitField }`:
    `.passengers`, `Aircraft.Seats` → `.aircraft.seats`, etc.
 2. Produces a plain object with the input keys.
 3. Materializes the object as an instance of `FlightProfitField` via
-   `getFields` (or `Object.assign` outside the realm runtime — see
-   [`port-from-jqxl.md`](./internals/port-from-jqxl.md) §11a).
+   `getFields`, falling back to `Object.assign` when no card runtime is
+   loaded.
 4. Inside the FieldDef, every `computeVia` runs against the
    materialized `this` and resolves PascalCase identifiers against
    the copied input fields.

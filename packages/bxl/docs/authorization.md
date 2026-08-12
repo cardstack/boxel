@@ -14,12 +14,12 @@ still rejects a request because it is another player's turn.
 
 ## The four nouns
 
-| Noun | Meaning |
-| --- | --- |
-| Resource | The concrete resource on which the operation would be invoked. |
-| Party | A person, device, service, team, or other actor. |
-| Seat | A relationship-backed role the Party occupies for that Resource. |
-| Capability | A named command or mutation the Party may invoke. |
+| Noun       | Meaning                                                          |
+| ---------- | ---------------------------------------------------------------- |
+| Resource   | The concrete resource on which the operation would be invoked.   |
+| Party      | A person, device, service, team, or other actor.                 |
+| Seat       | A relationship-backed role the Party occupies for that Resource. |
+| Capability | A named command or mutation the Party may invoke.                |
 
 Capabilities should normally match semantic commands:
 
@@ -39,7 +39,7 @@ prefer a specific capability such as EditCitation or UpdateRoster.
 
 Prepare one immutable policy document and one finite relationship snapshot:
 
-~~~ts
+```ts
 import {
   prepareBxlAuthorizationSafe,
   type BxlAuthorizationDocument,
@@ -50,16 +50,16 @@ const prepared = prepareBxlAuthorizationSafe(document, snapshot);
 if (!prepared.ok) throw new Error(prepared.error.message);
 
 const authorization = prepared.value;
-~~~
+```
 
 The prepared evaluator exposes four synchronous queries:
 
-~~~ts
+```ts
 authorization.checkCapability({ party, capability, resource });
 authorization.listResources({ party, capability });
 authorization.listParties({ resource, capability });
 authorization.listCapabilities({ party, resource });
-~~~
+```
 
 The enumeration APIs are symmetric with `checkCapability`. A capability appears in
 `listCapabilities` exactly when `checkCapability` returns yes for the same Party,
@@ -72,7 +72,7 @@ A public authorization document contains one or more named types. The scope's
 or module path. The host maps each loaded resource to one of these types when it
 builds the snapshot. Put presentation text in `displayName`.
 
-~~~ts
+```ts
 interface BxlAuthorizationDocument {
   schema: 'bxl-authorization/1';
   id?: string;
@@ -92,36 +92,36 @@ interface BxlAuthorizationDocument {
     }>;
   }>;
 }
-~~~
+```
 
 The `where` and `refuse.when` strings use the BXL `authorization` profile, a
 strict superset of `policy` that adds only compiler-lowered relationship-graph
 forms. The public
 authorization vocabulary is deliberately small:
 
-| Form | Meaning |
-| --- | --- |
-| `Seat.Operator` | The Party occupies this relationship-backed seat on the target Resource. |
-| `Capability.View` | Reuse another capability in the same scope. |
-| `Party.Anyone` | Any concrete Party identifier, matching Zanzibar-style typed-wildcard semantics. |
-| `Party.Member` | A Party present in `snapshot.members`. |
-| `Party.Guest` | A Party present in `snapshot.guests`. |
-| `via(Resource.Parent; Capability.View)` | Follow a declared Resource link and evaluate the target scope's capability. |
-| `a and b`, `a or b`, `(a)` | Ordinary BXL boolean composition. |
+| Form                                    | Meaning                                                                          |
+| --------------------------------------- | -------------------------------------------------------------------------------- |
+| `Seat.Operator`                         | The Party occupies this relationship-backed seat on the target Resource.         |
+| `Capability.View`                       | Reuse another capability in the same scope.                                      |
+| `Party.Anyone`                          | Any concrete Party identifier, matching Zanzibar-style typed-wildcard semantics. |
+| `Party.Member`                          | A Party present in `snapshot.members`.                                           |
+| `Party.Guest`                           | A Party present in `snapshot.guests`.                                            |
+| `via(Resource.Parent; Capability.View)` | Follow a declared Resource link and evaluate the target scope's capability.      |
+| `a and b`, `a or b`, `(a)`              | Ordinary BXL boolean composition.                                                |
 
 Examples:
 
-~~~bxl
+```bxl
 Seat.Owner or Seat.Admin
 (Seat.ReviewTeam and Seat.SecurityReviewer) or Seat.ReleaseManager
 via(Resource.Project; Capability.Edit)
 Party.Member and Seat.Contributor
-~~~
+```
 
 Positive eligibility belongs in `where`. Explicit denials belong in `refuse`
 and win after eligibility succeeds:
 
-~~~ts
+```ts
 {
   name: 'Publish',
   where: 'Seat.Editor or Seat.Owner',
@@ -132,7 +132,7 @@ and win after eligibility succeeds:
     },
   ],
 }
-~~~
+```
 
 Do not put traversal functions in authored policy. A rule is
 `Seat.ReviewTeam`, not `recursiveUserset(Seat.ReviewTeam)`. If the ReviewTeam
@@ -144,17 +144,14 @@ carry the userset graph and the kernel expands it synchronously.
 An inventory service needs to distinguish a loading-dock scanner from a
 supervisor:
 
-~~~ts
+```ts
 const document: BxlAuthorizationDocument = {
   schema: 'bxl-authorization/1',
   id: 'inventory-capabilities',
   scopes: [
     {
       name: 'InventoryLedger',
-      seats: [
-        { name: 'Scanner' },
-        { name: 'Admin' },
-      ],
+      seats: [{ name: 'Scanner' }, { name: 'Admin' }],
       capabilities: [
         { name: 'RecordScan', where: 'Seat.Scanner' },
         { name: 'AmendEntry', where: 'Seat.Admin' },
@@ -164,11 +161,11 @@ const document: BxlAuthorizationDocument = {
     },
   ],
 };
-~~~
+```
 
 The host loads the concrete resources, parties, and seat assignments:
 
-~~~ts
+```ts
 const snapshot: BxlAuthorizationSnapshot = {
   resources: [
     {
@@ -193,11 +190,11 @@ const snapshot: BxlAuthorizationSnapshot = {
     },
   ],
 };
-~~~
+```
 
 The scanner can invoke RecordScan but not AmendEntry:
 
-~~~ts
+```ts
 authorization.checkCapability({
   party: 'device:loading-dock-scanner',
   capability: 'RecordScan',
@@ -211,7 +208,7 @@ authorization.checkCapability({
   resource: 'inventory-ledger:main',
 });
 // allowed: false
-~~~
+```
 
 The authorization layer does not inspect whether the scanner is online, the
 shipment exists, or the batch is closed. Those are command rules evaluated
@@ -224,14 +221,14 @@ For example, Change A's ReviewTeam seat can point to a change-specific review
 team, which contains a product-security team, which contains the individual
 reviewer. The capability rule remains about the relationship:
 
-~~~ts
+```ts
 capabilities: [
   {
     name: 'ReviewSecurity',
     where: 'Seat.ReviewTeam and Seat.SecurityReviewer',
   },
 ],
-~~~
+```
 
 Recursion lives in the relationship tuples, not in the policy syntax. A
 ReviewTeam assignment to a Party userset such as ChangeAReviewers#Member tells
@@ -250,25 +247,25 @@ a different group.
 
 A seat can come from the governed Resource:
 
-~~~ts
+```ts
 {
   name: 'Owner',
   from: 'Resource.Owner',
 }
-~~~
+```
 
 If a ConnectedApp resource contains:
 
-~~~ts
+```ts
 links: {
   owner: 'person:store-owner',
   appPrincipal: 'service:fulfillment-bot',
 }
-~~~
+```
 
 then these declarations bind the human owner and service principal:
 
-~~~ts
+```ts
 seats: [
   { name: 'Owner', from: 'Resource.Owner' },
   { name: 'App', from: 'Resource.AppPrincipal' },
@@ -278,7 +275,7 @@ capabilities: [
   { name: 'RevokeApp', where: 'Seat.Owner' },
   { name: 'PerformAppAction', where: 'Seat.App' },
 ],
-~~~
+```
 
 The service can perform the app action but cannot grant itself authority. The
 owner can grant or revoke the app but does not automatically act as the app.
@@ -291,7 +288,7 @@ permanent relationship on the resource.
 
 A team can occupy a seat:
 
-~~~ts
+```ts
 parties: [
   { party: 'person:judge-a' },
   { party: 'person:judge-b' },
@@ -310,7 +307,7 @@ seats: [
     holders: ['team:spring-judges'],
   },
 ],
-~~~
+```
 
 Both members inherit SubmitScore when the capability is Seat.Judge. Membership
 is cycle-safe and bounded by the same authorization evaluation limits as every
@@ -338,7 +335,7 @@ decision epoch.
 Use listCapabilities to build command surfaces without duplicating policy
 logic:
 
-~~~ts
+```ts
 const result = authorization.listCapabilities({
   party: 'person:inventory-supervisor',
   resource: 'inventory-ledger:main',
@@ -348,7 +345,7 @@ if (!result.ok) throw new Error(result.error.message);
 
 result.value.capabilities;
 // ['AmendEntry', 'RecordOfflineBatch', 'RevokePolicy']
-~~~
+```
 
 The API applies maxCandidates and maxResults limits. It reports accumulated
 steps, tuple reads, and maximum recursion depth.
@@ -414,26 +411,26 @@ and re-preparing a snapshot after a membership edit.
 
 Run it with:
 
-~~~sh
-node scripts/run-ts-entry.mjs tests/unit/bxl-authorization-cli.ts
-node scripts/run-ts-entry.mjs tests/unit/release-governance-policy-cli.ts
-~~~
+```sh
+node tests/unit/bxl-authorization-cli.ts
+node tests/unit/release-governance-policy-cli.ts
+```
 
 The private graph kernel separately runs the pinned OpenFGA semantic corpus:
 
-~~~sh
+```sh
 npm run test:authorization:conformance
-~~~
+```
 
 That corpus remains a semantic kernel test. OpenFGA syntax and identifiers are
 not part of the BXL Authorization authoring API.
 
 Run the non-SLO performance regression gate and the descriptive benchmark with:
 
-~~~sh
+```sh
 npm run test:authorization:performance
 npm run bench:authorization
-~~~
+```
 
 The architecture and upstream attribution are summarized in
 [`src/authorization/README.md`](../src/authorization/README.md).

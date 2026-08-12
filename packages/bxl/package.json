@@ -53,6 +53,9 @@
   },
   "scripts": {
     "bench:authorization": "node scripts/bench-authorization.ts",
+    "example:authorization": "node examples/authorization/run.ts",
+    "example:mutation": "node tests/unit/bxl-mutation-fixtures-cli.ts",
+    "example:mutation:realm": "node tests/unit/bxl-mutation-realm-fixtures-cli.ts",
     "fixtures:authorization:verify": "node scripts/verify-authorization-fixtures.ts",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",

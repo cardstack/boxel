@@ -3,7 +3,7 @@
 // against plain JS data.
 //
 // Usage:
-//   node scripts/run-ts-entry.mjs examples/insurance/run.ts
+//   node examples/insurance/run.ts
 
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';

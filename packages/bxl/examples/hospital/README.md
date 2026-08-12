@@ -7,19 +7,19 @@ runs straight against Node.
 
 ## Files
 
-| File              | Purpose                                                                |
-|-------------------|------------------------------------------------------------------------|
-| `patient.json`    | One serialized HospitalPatient instance (cardiology, moderate severity).|
-| `schema.ts`       | `ReadableSchema` mirroring the card's field layout — labels match the PascalCase identifiers used in `expressions.ts`. |
-| `expressions.ts`  | Eight expressions covering the three syntax modes (plain string, `fx`, `jq`). Each notes which BXL feature it exercises. |
-| `run.ts`          | Runnable script — evaluates every expression, prints result + pass/fail. |
+| File             | Purpose                                                                                                                  |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `patient.json`   | One serialized HospitalPatient instance (cardiology, moderate severity).                                                 |
+| `schema.ts`      | `ReadableSchema` mirroring the card's field layout — labels match the PascalCase identifiers used in `expressions.ts`.   |
+| `expressions.ts` | Eight expressions covering the three syntax modes (plain string, `fx`, `jq`). Each notes which BXL feature it exercises. |
+| `run.ts`         | Runnable script — evaluates every expression, prints result + pass/fail.                                                 |
 
 ## Running
 
 From the repo root:
 
 ```sh
-node scripts/run-ts-entry.mjs examples/hospital/run.ts
+node examples/hospital/run.ts
 ```
 
 Or with `tsx` if you have it installed locally / globally:
@@ -51,9 +51,10 @@ Expected: `8/8 expressions evaluated successfully`.
 ## What this example deliberately doesn't show
 
 - No `@field` decorators, no `contains` / `containsMany`, no realm
-  server. That layer lives in the realm-server repo; BXL's contract
-  ends at the `expression(...) → function` boundary.
+  server. BXL's contract ends at the `expression(...) → function`
+  boundary; the card layer above it is exercised by the host and
+  realm-server suites.
 - No `getFields`-aware `as: SomeFieldDef` materialization — that
   needs Boxel's runtime to be loaded. The Node fallback (`new Cls();
-  Object.assign(instance, raw)`) is exercised in
+Object.assign(instance, raw)`) is exercised in
   [`tests/boxel/expression-factory.ts`](../../tests/boxel/expression-factory.ts).

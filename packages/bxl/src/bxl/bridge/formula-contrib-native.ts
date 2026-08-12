@@ -1856,7 +1856,7 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
 
   *'SWITCH/1'(_input, args) {
     // SWITCH(expr; val1; result1; val2; result2; ...; default)
-    // In jqxl, called as SWITCH([expr, val1, result1, val2, result2, ...])
+    // Arguments arrive as one array: SWITCH([expr, val1, result1, ...])
     if (!Array.isArray(args) || args.length < 3)
       throwExcelError(EXCEL_ERROR.value);
     const expr = args[0];

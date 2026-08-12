@@ -1,11 +1,11 @@
-// Boxel-flavored readable-syntax compiler suite (M2).
+// Boxel-flavored readable-syntax compiler suite.
 //
-// Validates the compiler additions the realm depends on, organized
-// per port-doc section. Asserts both the canonical jq the compiler
-// produces AND that evaluation against fixture data lines up — so a
-// regression in either the rewrite logic or the runtime gets caught.
+// Validates the readable-syntax rules a card runtime depends on. Each case
+// asserts both the canonical jq the compiler produces AND that evaluation
+// against fixture data lines up, so a break in either the rewrite logic or
+// the runtime gets caught.
 //
-// Section mapping:
+// Rules:
 //   §12  — PascalCase → camelCase fallback (no-schema mode)
 //   §13  — JQ_KEYWORDS guard for the function-call branch
 //   §16  — mixed-syntax (PascalCase head + jq nested, vice versa)
@@ -69,8 +69,9 @@ check('§12 ALL-UPPERCASE ident is left as a function/operator', () => {
 });
 
 check('§12 quoted string literal stays a string (not camelCased)', () => {
-  // Realm regression: `Category = "Hardware"` used to compile to
-  // `.category == .hardware` because the fallback fired on the RHS.
+  // The PascalCase → camelCase fallback must not fire on the right-hand
+  // side of a comparison: `Category = "Hardware"` compiles the literal as a
+  // string, not as `.hardware`.
   // The token-type guard now skips quoted strings.
   strictEqual(compiledNoSchema('Severity == "High"'), '.severity == "High"');
 });

@@ -474,8 +474,8 @@ function normalizationEdits(
     const fourth = tokens[index + 4];
     const fifth = tokens[index + 5];
 
-    // `[row N]` / `[item N]` — legacy pseudo-row shortcuts, now canonicalized
-    // to `[#N]`. The runtime still parses both for backward compat.
+    // `[row N]` / `[item N]` — deprecated pseudo-row shortcuts, canonicalized
+    // to `[#N]`. The runtime accepts both forms.
     if (
       first?.type === 'ident' &&
       ['row', 'item'].includes(first.value.toLowerCase()) &&

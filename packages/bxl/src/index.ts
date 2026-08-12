@@ -3,7 +3,7 @@
  *
  * Re-exports the compiler, linter, formatter, and full-runtime evaluator.
  * For size-constrained bundles, use one of the sub-entries:
- *   - '@cardstack/bxl/compiler'     — readable BXL → canonical jqxl
+ *   - '@cardstack/bxl/compiler'     — readable BXL → canonical jq
  *   - '@cardstack/bxl/linter'       — parser-only diagnostics
  *   - '@cardstack/bxl/runtime'      — evaluator + default formula libraries
  *   - '@cardstack/bxl/runtime-bare' — evaluator without default formulas
@@ -153,18 +153,13 @@ export type {
 export const VERSION = '0.5.1';
 
 /**
- * Build identity, useful for debugging stale caches in the realm
- * bundle. The realm-bundle script
- * (`scripts/build-realm-bundle.mjs`) replaces `buildTime: 'dev'`
- * with the wall-clock build timestamp at bundling time, so a
- * served bundle's `BXL_BUILD_INFO.buildTime` reveals when it was
- * produced.
+ * Runtime identity: the version plus the set of behaviors this build of the
+ * library implements.
  *
- * `features` is the canonical list of port-doc rules baked into
- * the bundle. If you suspect a card is hitting a regression, grep
- * the served bundle for the feature string before tearing the
- * realm-server stack down — a missing feature means the rebuild
- * never landed.
+ * `features` holds stable machine-readable identifiers, one per behavior a
+ * consumer might want to detect rather than assume. A consumer that sees an
+ * expected identifier missing is talking to a runtime that predates the
+ * behavior.
  *
  * @example
  * ```ts
@@ -173,21 +168,19 @@ export const VERSION = '0.5.1';
  * console.log(BXL_BUILD_INFO);
  * // {
  * //   version: '0.5.1',
- * //   buildTime: '2026-05-07T15:42:01.000Z',
  * //   features: ['null-tolerance', 'jq-fx-tags', 'as-materialize',
- * //              'pascalcase-fallback', 'jq-keywords-guard'],
+ * //              'pascalcase-fallback', 'jq-keywords-guard', ...],
  * // }
  * ```
  */
 export const BXL_BUILD_INFO = {
   version: VERSION,
-  buildTime: 'dev',
   features: [
-    'null-tolerance', // port-doc §6–9
-    'jq-fx-tags', // §10, §11
-    'as-materialize', // §11a
-    'pascalcase-fallback', // §12
-    'jq-keywords-guard', // §13
+    'null-tolerance',
+    'jq-fx-tags',
+    'as-materialize',
+    'pascalcase-fallback',
+    'jq-keywords-guard',
     'authorization-kernel',
     'bxl-authorization',
     'mutation-planner',
@@ -395,7 +388,7 @@ export interface BxlOptions {
    * Field metadata used by the readable-syntax compiler to resolve
    * label paths (e.g. `"Line Item"` → `.lineItems`). When omitted, the
    * compiler falls back to a single-word PascalCase → camelCase rule
-   * for bare identifiers — see docs/internals/port-from-jqxl.md §12.
+   * for bare identifiers.
    */
   schema?: ReadableSchema;
   /**
@@ -425,10 +418,11 @@ export interface BxlOptions {
    * - an array → each entry gets the same treatment.
    * - `null` / a scalar → returned as-is.
    *
-   * Mirrors jqxl's `{ as: SomeFieldDef }` so a Boxel
+   * A Boxel
    * `contains(BaseField, { computeVia: bxl(..., { as: SubField }) })`
-   * gets back a real subclass instance the serializer can identify,
-   * rather than a plain object that hits "could not identify card".
+   * therefore gets back a real subclass instance the serializer can
+   * identify, rather than a plain object that hits "could not identify
+   * card".
    */
   as?: new () => unknown;
   /**
@@ -831,13 +825,13 @@ function makeTagged(
   };
 }
 
-// Boxel's `getFields` is loaded out-of-band by the realm bundle entry
-// (`src/realm-bundle-entry.ts`), which performs the
-// `https://cardstack.com/base/card-api` import and registers the function
-// on `globalThis`. We can't import the URL statically here because Node's
-// ESM loader rejects `https:` schemes at module-load time, breaking
-// non-realm consumers (tests, tooling). The realm bundle still ships the
-// URL import as an external statement; it just lives in the entry shim.
+// Boxel's `getFields` arrives out-of-band: a host registers it on
+// `globalThis` and `safeFieldMap` picks it up from there. This module does not
+// import `https://cardstack.com/base/card-api` itself, because Node's ESM
+// loader rejects `https:` schemes at module-load time — a static import would
+// break every consumer that runs outside a realm (tests, tooling, the
+// realm-server). Absent a registration, the field-aware paths degrade rather
+// than throw.
 type GetFieldsFn = (
   instance: unknown,
   options?: { includeComputeds?: boolean },
