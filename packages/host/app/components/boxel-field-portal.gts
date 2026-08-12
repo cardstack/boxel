@@ -76,6 +76,15 @@ class BoxelFieldPortal extends Component<Signature> {
   static write: ((value: unknown) => void) | undefined;
   static relativeTo: RealmResourceIdentifier | undefined;
   static fieldMeta: PortalFieldMeta | undefined;
+  /**
+   * A trusted Base component is available only for terminal relationship
+   * failures. Base owns the broken-link visual contract; the portal still
+   * owns every present authored value, so authored templates always re-enter
+   * the execution router rather than leaking through Direct rendering.
+   */
+  static readBrokenComponent: (() => PortalComponent | undefined) | undefined;
+  static isBroken: (() => boolean) | undefined;
+  static readItems: (() => PortalComponent[]) | undefined;
 
   @consume(DefaultFormatsContextName)
   declare private defaultFormats: FieldFormats | undefined;
@@ -104,6 +113,17 @@ class BoxelFieldPortal extends Component<Signature> {
     return this.fieldMeta?.fieldName;
   }
 
+  private get brokenComponent(): PortalComponent | undefined {
+    let constructor = this.constructor as typeof BoxelFieldPortal;
+    return constructor.isBroken?.()
+      ? constructor.readBrokenComponent?.()
+      : undefined;
+  }
+
+  private get items(): PortalComponent[] | undefined {
+    return (this.constructor as typeof BoxelFieldPortal).readItems?.();
+  }
+
   private get boxel(): BaseDef | undefined {
     return isBaseDefInstance(this.value) ? this.value : undefined;
   }
@@ -118,9 +138,17 @@ class BoxelFieldPortal extends Component<Signature> {
     // Card-ness selects the cascade axis for the plural case too: main's
     // `linksToMany` items render in the CARD axis (`defaultFormats.cardDef`,
     // links-to-many-component.gts), not the field axis.
-    let rendersCards = this.boxel
-      ? isCardInstance(this.boxel)
-      : Boolean(this.boxels?.every((instance) => isCardInstance(instance)));
+    // Relationship fields are card-valued by declaration even while a
+    // missing target is represented by a terminal sentinel rather than a
+    // CardDef instance. Deriving this only from the momentary value would
+    // incorrectly switch a broken link from the card-format cascade to the
+    // FieldDef cascade at exactly the point the placeholder takes over.
+    let rendersCards =
+      this.fieldType === 'linksTo' ||
+      this.fieldType === 'linksToMany' ||
+      (this.boxel
+        ? isCardInstance(this.boxel)
+        : Boolean(this.boxels?.every((instance) => isCardInstance(instance))));
     let defaults = this.defaultFormats ?? {
       cardDef: 'isolated',
       fieldDef: 'embedded',
@@ -159,7 +187,23 @@ class BoxelFieldPortal extends Component<Signature> {
       stamped by the renderer on its own slot root (the one registration
       site, shared with root renders); this portal contributes the field
       identity overlays classify entries by. }}
-    {{#if this.boxel}}
+    {{#if this.brokenComponent}}
+      <this.brokenComponent @format={{this.format}} ...attributes />
+    {{else if this.items}}
+      <div
+        class='plural-field {{this.fieldType}}-field'
+        data-test-plural-view-field={{this.fieldName}}
+        data-test-plural-view={{this.fieldType}}
+        data-test-plural-view-format={{this.format}}
+        ...attributes
+      >
+        {{#each this.items as |Item|}}
+          <div class='{{this.fieldType}}-itemContainer'>
+            <Item @format={{this.format}} />
+          </div>
+        {{/each}}
+      </div>
+    {{else if this.boxel}}
       <BoxelExecutionRenderer
         @card={{this.boxel}}
         @format={{this.format}}
@@ -197,12 +241,20 @@ function createPortalClass(
   relativeTo: RealmResourceIdentifier | undefined,
   fieldMeta: PortalFieldMeta | undefined,
   write: ((value: unknown) => void) | undefined,
+  options: {
+    readBrokenComponent?: () => PortalComponent | undefined;
+    isBroken?: () => boolean;
+    readItems?: () => PortalComponent[];
+  } = {},
 ): PortalComponent {
   return class extends BoxelFieldPortal {
     static read = read;
     static write = write;
     static relativeTo = relativeTo;
     static fieldMeta = fieldMeta;
+    static readBrokenComponent = options.readBrokenComponent;
+    static isBroken = options.isBroken;
+    static readItems = options.readItems;
   } as unknown as PortalComponent;
 }
 
@@ -211,9 +263,11 @@ export function createBoxelFieldPortal(
   relativeTo?: RealmResourceIdentifier,
   fieldMeta?: PortalFieldMeta,
   write?: (value: unknown) => void,
+  relationship?: {
+    isBroken(index: number): boolean;
+    component(index: number): PortalComponent | undefined;
+  },
 ): PortalComponent {
-  let target = createPortalClass(read, relativeTo, fieldMeta, write);
-
   // Plurality is a property of the FIELD (its declared kind), never of a
   // value captured at creation time — a `containsMany` that is momentarily
   // empty is still plural, and a live `read()` may legally change length on
@@ -222,7 +276,12 @@ export function createBoxelFieldPortal(
     fieldMeta?.fieldType !== 'containsMany' &&
     fieldMeta?.fieldType !== 'linksToMany'
   ) {
-    return target;
+    return createPortalClass(read, relativeTo, fieldMeta, write, {
+      isBroken: relationship ? () => relationship.isBroken(0) : undefined,
+      readBrokenComponent: relationship
+        ? () => relationship.component(0)
+        : undefined,
+    });
   }
 
   // RP-3.4: "`@fields` of a plural field is array-like (iterable, length,
@@ -268,12 +327,22 @@ export function createBoxelFieldPortal(
             }
           }
         : undefined,
+      {
+        isBroken: relationship ? () => relationship.isBroken(index) : undefined,
+        readBrokenComponent: relationship
+          ? () => relationship.component(index)
+          : undefined,
+      },
     );
     itemPortals.set(index, portal);
     return portal;
   };
   let itemPortalsInOrder = (): PortalComponent[] =>
     currentArray().map((_entry, index) => itemPortalFor(index)!);
+
+  let target = createPortalClass(read, relativeTo, fieldMeta, write, {
+    readItems: itemPortalsInOrder,
+  });
 
   return new Proxy(target, {
     get(proxyTarget, property, received) {

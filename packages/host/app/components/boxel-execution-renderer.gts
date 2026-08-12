@@ -156,6 +156,19 @@ function isIsolatedEditToggle(from: Format, to: Format): boolean {
 }
 
 /**
+ * A resource re-evaluation is not itself a new presentation identity. Ember
+ * can dirty an argument's tag while preserving the exact same card object
+ * (for example when an autosave acknowledgement refreshes the surrounding
+ * stack resource). Keep the mounted slot whenever the requested format is
+ * unchanged, in addition to the deliberately continuous isolated/edit
+ * toggle. A genuinely different card, component provider, or incompatible
+ * format still starts without a retained slot and therefore remounts.
+ */
+function canRetainPresentation(from: Format, to: Format): boolean {
+  return from === to || isIsolatedEditToggle(from, to);
+}
+
+/**
  * Matches `DEFAULT_CARD_CONTEXT`'s no-op in `@cardstack/base`: when no
  * operator-mode context provides a real `cardComponentModifier`, tracking
  * silently registers nothing. Its signature mirrors the real tracker
@@ -364,7 +377,7 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
       previousExecution &&
       previousExecution.card === card &&
       previousExecution.componentCodeRef === componentCodeRef &&
-      isIsolatedEditToggle(previousExecution.format, effectiveFormat) &&
+      canRetainPresentation(previousExecution.format, effectiveFormat) &&
       (previousExecution.state.slot?.owner === 'direct' ||
         previousExecution.state.slot?.owner === 'capsule')
         ? previousExecution.state
@@ -373,7 +386,7 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
       previousExecution &&
       previousExecution.card === card &&
       previousExecution.componentCodeRef === componentCodeRef &&
-      isIsolatedEditToggle(previousExecution.format, effectiveFormat) &&
+      canRetainPresentation(previousExecution.format, effectiveFormat) &&
       previousExecution.state.slot?.owner === 'sandbox'
         ? previousExecution.state
         : undefined;

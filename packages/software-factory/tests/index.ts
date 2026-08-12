@@ -18,6 +18,7 @@ import './factory-context-builder.test.ts';
 import './factory-tool-builder.test.ts';
 import './factory-tool-schema-adapter.test.ts';
 import './factory-agent-claude-code.test.ts';
+import './factory-agent-opencode.test.ts';
 import './issue-loop.test.ts';
 import './issue-scheduler.test.ts';
 import './run-log.test.ts';

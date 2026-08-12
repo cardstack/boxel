@@ -1,15 +1,17 @@
 import { on } from '@ember/modifier';
 import Service from '@ember/service';
-import { click, waitFor } from '@ember/test-helpers';
+import { click, settled, waitFor } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
+import { TrackedObject } from 'tracked-built-ins';
 
 import { relativeTo, rri } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
+import { createBoxelFieldPortal } from '@cardstack/host/components/boxel-field-portal';
 import CardRenderer from '@cardstack/host/components/card-renderer';
 
 import { percySnapshot, testRealmURL } from '../../helpers';
@@ -227,6 +229,56 @@ module('Integration | preview', function (hooks) {
       `${testRealmURL}BoundaryCard/one`,
       'the authored portal preserves the canonical relative module base',
     );
+  });
+
+  test('an authored relationship portal preserves trusted Base broken-link slots without directly rendering present authored siblings', async function (assert) {
+    const BrokenLink = <template>
+      <span data-test-rp-broken-link>Missing relationship</span>
+    </template>;
+
+    let values: unknown[] = ['present relationship', 'present sibling'];
+    let relationshipState = new TrackedObject({ broken: false });
+    let Portal = createBoxelFieldPortal(
+      () => values,
+      undefined,
+      { fieldType: 'linksToMany', fieldName: 'pets' },
+      undefined,
+      {
+        isBroken: (index) => index === 0 && relationshipState.broken,
+        component: (index) => (index === 0 ? (BrokenLink as never) : undefined),
+      },
+    );
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><Portal /></template>
+      },
+    );
+
+    assert
+      .dom('.boxel-field-portal-value')
+      .includesText(
+        'present relationship',
+        'the initially live relationship uses the Host portal',
+      );
+    assert.dom('[data-test-rp-broken-link]').doesNotExist();
+
+    values[0] = undefined;
+    relationshipState.broken = true;
+    await settled();
+
+    assert
+      .dom('[data-test-rp-broken-link]')
+      .hasText(
+        'Missing relationship',
+        'the failed slot delegates only its placeholder to trusted Base',
+      );
+    assert
+      .dom('.boxel-field-portal-value')
+      .hasText(
+        'present sibling',
+        'the live sibling stays on the Host portal path',
+      );
   });
 
   test('Direct runtime preserves main glimmer-scoped-css confinement', async function (assert) {

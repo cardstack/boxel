@@ -1,8 +1,9 @@
-import { waitFor, waitUntil } from '@ember/test-helpers';
+import { settled, waitFor, waitUntil } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
+import { TrackedObject } from 'tracked-built-ins';
 
 import type {
   LooseCardResource,
@@ -351,6 +352,83 @@ module('Integration | rp-continuity', function (hooks) {
       settledHTML,
       'RP-20.2: the system is quiescent at rest — no churn without input',
     );
+  });
+
+  test('RP-20.1: reevaluating a Direct presentation with the same canonical card retains input identity and focus', async function (assert) {
+    let card = await createJournal();
+    let presentation = new TrackedObject({ revision: 0 });
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        get card() {
+          // Model the surrounding stack/resource publishing a fresh
+          // acknowledgement while preserving Store's canonical instance.
+          // The tracked read dirties CardRenderer's argument tag without
+          // changing the card's presentation identity.
+          presentation.revision;
+          return card;
+        }
+
+        <template>
+          <CardRenderer
+            @card={{this.card}}
+            @format='edit'
+            @execution='direct'
+          />
+        </template>
+      },
+    );
+    await waitFor('input', { timeout: 10000 });
+
+    let input = [...document.querySelectorAll<HTMLInputElement>('input')].find(
+      (candidate) => candidate.value === 'First Light',
+    );
+    assert.ok(input, 'the direct default edit template rendered the field');
+    input!.focus();
+
+    presentation.revision++;
+    await settled();
+
+    assert.strictEqual(
+      [...document.querySelectorAll<HTMLInputElement>('input')].find(
+        (candidate) => candidate.value === 'First Light',
+      ),
+      input,
+      'a same-card acknowledgement does not remount the Direct field',
+    );
+    assert.strictEqual(
+      document.activeElement,
+      input,
+      'focus remains on the retained Direct field',
+    );
+  });
+
+  test('RP-20.1: a retained Direct presentation follows an edit-to-isolated format transition', async function (assert) {
+    let card = await createJournal();
+    let presentation = new TrackedObject<{
+      format: 'edit' | 'isolated';
+    }>({ format: 'edit' });
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <CardRenderer
+            @card={{card}}
+            @format={{presentation.format}}
+            @execution='direct'
+          />
+        </template>
+      },
+    );
+    await waitFor('input', { timeout: 10000 });
+
+    presentation.format = 'isolated';
+    await waitFor('[data-test-journal]', { timeout: 10000 });
+
+    assert
+      .dom('[data-test-journal]')
+      .exists('the retained Direct component observes the new format context');
+    assert.dom('input').doesNotExist('the edit template was replaced');
   });
 
   test('RP-20.2: the live model is a pure read-through — reads mutate nothing, and mutations are visible on the next read with no delivery machinery', async function (assert) {

@@ -357,6 +357,7 @@ export class OpencodeFactoryAgent implements LoopAgent {
     // last report, which is cumulative for the session. Declared out here so
     // the return paths below can carry it.
     let turnUsage: TurnUsage | undefined;
+    let sessionWaitResult: SessionWaitResult | undefined;
 
     try {
       let session = await client.session.create({
@@ -439,7 +440,9 @@ export class OpencodeFactoryAgent implements LoopAgent {
         await Promise.race([
           signalCaptured,
           sessionErrored,
-          waitForSessionIdle(client, sessionId, workspaceDir),
+          waitForSessionIdle(client, sessionId, workspaceDir).then((result) => {
+            sessionWaitResult = result;
+          }),
         ]);
       } finally {
         // Best-effort drain so sockets close cleanly when they can,
@@ -486,6 +489,14 @@ export class OpencodeFactoryAgent implements LoopAgent {
         toolCalls: toolCallLog,
         usage,
         message: `opencode session error: ${sessionErrorMessage}`,
+      };
+    }
+    if (sessionWaitResult?.status === 'transport-error') {
+      return {
+        status: 'blocked',
+        toolCalls: toolCallLog,
+        usage,
+        message: sessionWaitResult.message,
       };
     }
     return {
@@ -758,25 +769,35 @@ function serializeSignalResult(result: unknown): unknown {
  * canonical realpath opencode normalized at create time (`/var →
  * /private/var` on macOS), already resolved by the caller.
  */
-async function waitForSessionIdle(
+export type SessionWaitResult =
+  | { status: 'idle' }
+  | { status: 'transport-error'; message: string };
+
+export async function waitForSessionIdle(
   client: { session: { list: (opts?: any) => Promise<unknown> } },
   sessionId: string,
   workspaceDir: string,
-): Promise<void> {
-  const POLL_INTERVAL_MS = 750;
+  options: {
+    pollIntervalMs?: number;
+    stabilityWindowMs?: number;
+    maxWaitMs?: number;
+    maxConsecutiveListFailures?: number;
+  } = {},
+): Promise<SessionWaitResult> {
+  const POLL_INTERVAL_MS = options.pollIntervalMs ?? 750;
   // Generous: `time.updated` appears to tick on step boundaries rather
   // than per `message.part.delta`, and opus can sit 30+ seconds
   // "thinking" between steps. The polling is only a fallback for when
   // the model exits without calling `signal_done` / `request_clarification`,
   // so the wider window costs nothing on the happy path (signal-captured
   // race short-circuits this).
-  const STABILITY_WINDOW_MS = 60_000;
-  const MAX_WAIT_MS = 30 * 60 * 1000; // 30 minutes; comfortable upper bound for opus
+  const STABILITY_WINDOW_MS = options.stabilityWindowMs ?? 60_000;
+  const MAX_WAIT_MS = options.maxWaitMs ?? 30 * 60 * 1000; // 30 minutes; comfortable upper bound for opus
   // After this many consecutive `session.list` failures, give up — the
   // opencode subprocess has almost certainly died (TypeError: fetch
-  // failed). We return cleanly so the outer factory loop can continue
-  // to the next iteration instead of crashing the whole run.
-  const MAX_CONSECUTIVE_LIST_FAILURES = 5;
+  // failed). Report a terminal transport failure so the outer factory
+  // loop cannot retry against the same dead child until its deadline.
+  const MAX_CONSECUTIVE_LIST_FAILURES = options.maxConsecutiveListFailures ?? 5;
   // Periodic heartbeat so users running `factory:go` see proof the
   // model is making progress (or stuck) instead of staring at a
   // silent terminal for minutes.
@@ -809,10 +830,9 @@ async function waitForSessionIdle(
     } catch (err) {
       consecutiveFailures++;
       if (consecutiveFailures >= MAX_CONSECUTIVE_LIST_FAILURES) {
-        log.warn(
-          `opencode session.list failed ${consecutiveFailures}× in a row (${describeFetchError(err)}); treating session as ended`,
-        );
-        return;
+        let message = `opencode session.list failed ${consecutiveFailures}× in a row (${describeFetchError(err)}); the agent transport is unavailable`;
+        log.warn(message);
+        return { status: 'transport-error', message };
       }
     }
 
@@ -827,7 +847,7 @@ async function waitForSessionIdle(
           stableSince !== undefined &&
           Date.now() - stableSince >= STABILITY_WINDOW_MS
         ) {
-          return;
+          return { status: 'idle' };
         }
       }
     }

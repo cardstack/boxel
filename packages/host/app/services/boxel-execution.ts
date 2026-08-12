@@ -1270,6 +1270,33 @@ export default class BoxelExecutionService extends Service {
                   (card as unknown as Record<string, unknown>)[property] =
                     value;
                 },
+            field.fieldType === 'linksTo' || field.fieldType === 'linksToMany'
+              ? {
+                  isBroken: (index) => {
+                    let member = api.getRelationshipMembershipState(
+                      card as CardDef,
+                      property,
+                    ).membership?.[index];
+                    return (
+                      member?.kind === 'error' || member?.kind === 'not-found'
+                    );
+                  },
+                  component: (index) => {
+                    let nativeField = Reflect.get(rootComponent, property) as
+                      | Record<string, BoxComponent>
+                      | BoxComponent
+                      | undefined;
+                    if (!nativeField) {
+                      return undefined;
+                    }
+                    return field.fieldType === 'linksToMany'
+                      ? (nativeField as Record<string, BoxComponent>)[
+                          String(index)
+                        ]
+                      : (nativeField as BoxComponent);
+                  },
+                }
+              : undefined,
           );
           authored.set(property, portal);
         }
