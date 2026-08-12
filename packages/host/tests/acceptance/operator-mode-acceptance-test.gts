@@ -37,7 +37,8 @@ import {
 } from '@cardstack/host/utils/local-storage-keys';
 
 import {
-  captureReusableIndex,
+  withCachedRealmSetup,
+  setupRealmCacheTeardown,
   percySnapshot,
   setupLocalIndexing,
   setupOnSave,
@@ -73,14 +74,8 @@ let realm2URL = 'http://test-realm/user/test2/';
 module('Acceptance | operator mode tests', function (hooks) {
   let testRealm: Realm;
   setupApplicationTest(hooks);
-  // This module builds two realms per test with identical fixtures, so the
-  // index is taken once and restored per test. The capture is explicit
-  // because the automatic one lands after the first realm, which would omit
-  // the second.
-  setupLocalIndexing(hooks, {
-    reuseIndexAcrossTests: 'operatorModeAcceptance',
-    captureIndexManually: true,
-  });
+  setupLocalIndexing(hooks);
+  setupRealmCacheTeardown(hooks);
   setupOnSave(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -323,182 +318,182 @@ module('Acceptance | operator mode tests', function (hooks) {
       });
     }
 
-    ({ realm: testRealm } = await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'address.gts': { Address },
-        'boom-person.gts': { BoomPerson },
-        'exploding-person.gts': { ExplodingPerson },
-        'country-with-no-embedded-template.gts': { CountryWithNoEmbedded },
-        'address-with-no-embedded-template.gts': { AddressWithNoEmbedded },
-        'person.gts': { Person },
-        'pet.gts': { Pet },
-        'shipping-info.gts': { ShippingInfo },
-        'README.txt': `Hello World`,
-        'person-entry.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              cardTitle: 'Person Card',
-              cardDescription: 'Spec for Person Card',
-              specType: 'card',
-              ref: {
-                module: testRRI('person'),
-                name: 'Person',
+    // Both realms are the same for every test in this module, so the indexed
+    // result is cached and restored rather than rebuilt.
+    await withCachedRealmSetup(async () => {
+      ({ realm: testRealm } = await setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'address.gts': { Address },
+          'boom-person.gts': { BoomPerson },
+          'exploding-person.gts': { ExplodingPerson },
+          'country-with-no-embedded-template.gts': { CountryWithNoEmbedded },
+          'address-with-no-embedded-template.gts': { AddressWithNoEmbedded },
+          'person.gts': { Person },
+          'pet.gts': { Pet },
+          'shipping-info.gts': { ShippingInfo },
+          'README.txt': `Hello World`,
+          'person-entry.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                cardTitle: 'Person Card',
+                cardDescription: 'Spec for Person Card',
+                specType: 'card',
+                ref: {
+                  module: testRRI('person'),
+                  name: 'Person',
+                },
               },
-            },
-            meta: {
-              adoptsFrom: {
-                module: '@cardstack/base/spec',
-                name: 'Spec',
-              },
-            },
-          },
-        },
-        'Pet/mango.json': {
-          data: {
-            attributes: {
-              name: 'Mango',
-            },
-            meta: {
-              adoptsFrom: {
-                module: testRRI('pet'),
-                name: 'Pet',
-              },
-            },
-          },
-        },
-        'Pet/vangogh.json': {
-          data: {
-            attributes: {
-              name: 'Van Gogh',
-            },
-            meta: {
-              adoptsFrom: {
-                module: testRRI('pet'),
-                name: 'Pet',
-              },
-            },
-          },
-        },
-        'Person/fadhlan.json': {
-          data: {
-            attributes: {
-              firstName: 'Fadhlan',
-              address: {
-                city: 'Bandung',
-                country: 'Indonesia',
-                shippingInfo: {
-                  preferredCarrier: 'DHL',
-                  remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
+              meta: {
+                adoptsFrom: {
+                  module: '@cardstack/base/spec',
+                  name: 'Spec',
                 },
               },
             },
-            relationships: {
-              pet: {
-                links: {
-                  self: `${testRealmURL}Pet/mango`,
+          },
+          'Pet/mango.json': {
+            data: {
+              attributes: {
+                name: 'Mango',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: testRRI('pet'),
+                  name: 'Pet',
                 },
               },
             },
-            meta: {
-              adoptsFrom: {
-                module: testRRI('person'),
-                name: 'Person',
+          },
+          'Pet/vangogh.json': {
+            data: {
+              attributes: {
+                name: 'Van Gogh',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: testRRI('pet'),
+                  name: 'Pet',
+                },
               },
             },
           },
-        },
-        'Person/error.json': {
-          // Lands as instance-error from the seed indexing pass — the
-          // cardTitle compute throws on `status: 'boom'`, and there is
-          // no prior clean render so the row has no last-known-good HTML.
-          data: {
-            attributes: {
-              firstName: 'Error',
-              status: 'boom',
-            },
-            meta: {
-              adoptsFrom: {
-                module: testRRI('exploding-person'),
-                name: 'ExplodingPerson',
+          'Person/fadhlan.json': {
+            data: {
+              attributes: {
+                firstName: 'Fadhlan',
+                address: {
+                  city: 'Bandung',
+                  country: 'Indonesia',
+                  shippingInfo: {
+                    preferredCarrier: 'DHL',
+                    remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
+                  },
+                },
+              },
+              relationships: {
+                pet: {
+                  links: {
+                    self: `${testRealmURL}Pet/mango`,
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: testRRI('person'),
+                  name: 'Person',
+                },
               },
             },
           },
-        },
-        'boom.json': {
-          data: {
-            attributes: {
-              firstName: 'Boom!',
-            },
-            meta: {
-              adoptsFrom: {
-                module: './boom-person',
-                name: 'BoomPerson',
+          'Person/error.json': {
+            // Lands as instance-error from the seed indexing pass — the
+            // cardTitle compute throws on `status: 'boom'`, and there is
+            // no prior clean render so the row has no last-known-good HTML.
+            data: {
+              attributes: {
+                firstName: 'Error',
+                status: 'boom',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: testRRI('exploding-person'),
+                  name: 'ExplodingPerson',
+                },
               },
             },
           },
-        },
-        'grid.json': {
-          data: {
-            type: 'card',
-            attributes: {},
-            meta: {
-              adoptsFrom: {
-                module: '@cardstack/base/cards-grid',
-                name: 'CardsGrid',
+          'boom.json': {
+            data: {
+              attributes: {
+                firstName: 'Boom!',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './boom-person',
+                  name: 'BoomPerson',
+                },
               },
             },
           },
-        },
-        'index.json': {
-          data: {
-            type: 'card',
-            meta: {
-              adoptsFrom: {
-                module: '@cardstack/base/cards-grid',
-                name: 'CardsGrid',
+          'grid.json': {
+            data: {
+              type: 'card',
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: '@cardstack/base/cards-grid',
+                  name: 'CardsGrid',
+                },
               },
             },
           },
+          'index.json': {
+            data: {
+              type: 'card',
+              meta: {
+                adoptsFrom: {
+                  module: '@cardstack/base/cards-grid',
+                  name: 'CardsGrid',
+                },
+              },
+            },
+          },
+          'realm.json': realmConfigCardJSON({
+            name: 'Test Workspace B',
+            backgroundURL:
+              'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+            iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+          }),
         },
-        'realm.json': realmConfigCardJSON({
-          name: 'Test Workspace B',
-          backgroundURL:
-            'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-          iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-        }),
-      },
-    }));
+      }));
 
-    setActiveRealms([testRealmURL, realm2URL]);
+      setActiveRealms([testRealmURL, realm2URL]);
 
-    await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      realmURL: realm2URL,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'person.gts': { Person },
-        'Person/1.json': {
-          data: {
-            attributes: {
-              firstName: 'Fadhlan',
-            },
-            meta: {
-              adoptsFrom: {
-                module: rri(`${realm2URL}person`),
-                name: 'Person',
+      await setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        realmURL: realm2URL,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'person.gts': { Person },
+          'Person/1.json': {
+            data: {
+              attributes: {
+                firstName: 'Fadhlan',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: rri(`${realm2URL}person`),
+                  name: 'Person',
+                },
               },
             },
           },
         },
-      },
+      });
     });
-
-    // Both realms are built and indexed and no test body has run yet, so this
-    // is the moment this module's reusable index has to be taken.
-    await captureReusableIndex();
 
     setRealmPermissions({
       [realm2URL]: ['read', 'write'],
