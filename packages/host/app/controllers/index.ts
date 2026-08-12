@@ -17,5 +17,7 @@ export default class IndexController extends Controller {
   @tracked sid: string | null = null;
   @tracked clientSecret: string | null = null;
   @tracked debug = false;
+  // Shows per-message and per-session AI token counts in the assistant panel
+  @tracked showTokens = false;
   @tracked openProfileSettings: string | null = null;
 }

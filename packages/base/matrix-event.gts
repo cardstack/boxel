@@ -265,7 +265,24 @@ export interface CardMessageContent {
     attachedFiles?: (SerializedFile & { content?: string; error?: string })[];
     attachedCards?: (SerializedFile & { content?: string; error?: string })[];
     context?: BoxelContext;
+    // What the provider billed for the turn that produced this message. Only
+    // on the bot's own messages, and only once the model has reported it —
+    // the counts arrive at the end of the stream, so they land on a late
+    // edit, not on the event that started the message.
+    usage?: TokenUsage;
   };
+}
+
+export interface TokenUsage {
+  promptTokens?: number;
+  completionTokens?: number;
+  // How many of promptTokens were served from the provider's prompt cache
+  // (billed at a fraction of the fresh-input price). Absent when the
+  // provider reports no cache detail.
+  cachedTokens?: number;
+  // What the provider charged for the whole request, in USD. Absent when
+  // the provider reports no inline cost.
+  costUsd?: number;
 }
 
 export interface SkillsConfigEvent extends RoomStateEvent {
