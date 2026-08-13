@@ -59,6 +59,13 @@ module('Unit | isFileDefCodeRef', function (hooks) {
       ),
       'PngDef',
     );
+    assert.true(
+      isFileDefCodeRef(
+        { module: baseRRI('woff2-font-def'), name: 'Woff2Def' },
+        virtualNetwork,
+      ),
+      'Woff2Def',
+    );
   });
 
   test('rejects a non-FileDef card ref', function (assert) {
