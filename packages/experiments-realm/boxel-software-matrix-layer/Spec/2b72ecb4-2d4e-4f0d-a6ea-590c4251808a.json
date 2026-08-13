@@ -10,7 +10,10 @@
         "name": "WorkHistoryEntryField"
       },
       "readMe": "# Work History Entry Field\n\n## Summary\nA compound FieldDef holding one prior job as reported on a resume: `company`, `title`, `startDate`/`endDate` (`DateField`), and a free-text `description`. Meant to be repeated via `containsMany` on a host card so a whole employment history round-trips without a linked card per job.\n\n## Import\n```ts\nimport { WorkHistoryEntryField } from './work-history-entry-field';\n```\n\n## Usage — three or more ways this is used\n\n**1. `Candidate.workHistory`** (built, this PR) — a `containsMany` list rendered\nas the isolated view's \"Work history\" panel, and populated by the Extract\nResume command's field-population step when the candidate has none yet.\n\n**2. An Employee's resume-on-file record** (future) — once hired, the same\nprior-employment shape is useful on the Employee card for HR reference,\nwithout re-deriving a separate \"job history\" structure.\n\n**3. An Alumni/Contact card tracking career history** (future) — any card that\nkeeps a person's career trajectory (a CRM contact, an alumni directory entry)\ncan reuse this field instead of inventing its own company/title/date-range\nshape.\n\nOnly usage 1 is currently wired into a card; 2 and 3 are named as the second\nand third consumers this field is designed for, not yet built.\n\n## Template Usage\n```hbs\n<ul>\n  <@fields.workHistory />\n</ul>\n```\n\n**Non-goals:** structured resume storage beyond what a human or an AI\ntranscribes from resume text — there is no verification, background-check, or\nreference-check semantics here, and no attempt to normalize company names\nagainst a canonical registry. Salary/compensation history does not belong on\nthis field (see `Offer.salary` for that).\n\n**Example in use:** `Candidate/applied-jordan` carries two work-history\nentries (Nimbus Analytics, Senior Frontend Engineer, 2022–present; Brightline\nHealth, Frontend Engineer, 2019–2022), matching the career narrative already\npresent in that candidate's AI-generated interview questions.\n",
-      "containedExamples": [{}, {}]
+      "containedExamples": [
+        {},
+        {}
+      ]
     },
     "relationships": {
       "linkedExamples.0": {

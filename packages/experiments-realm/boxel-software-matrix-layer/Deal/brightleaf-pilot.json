@@ -11,7 +11,9 @@
       },
       "stage": "closed lost",
       "closeDate": "2026-07-31",
-      "competitors": ["FigJam workaround"],
+      "competitors": [
+        "FigJam workaround"
+      ],
       "cardInfo": {
         "name": null,
         "summary": null,
