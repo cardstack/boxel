@@ -54,6 +54,22 @@ function asciiTag(view: DataView, offset: number): string {
   return out;
 }
 
+// Fixed-length name and tag fields (an OS/2 vendor tag, a padded name record)
+// pad with trailing spaces or NULs. Trim both ends by code point rather than
+// with a regex, so a legitimate trailing accented letter in a UTF-16 name
+// survives while the C0 padding does not.
+function trimPadding(value: string): string {
+  let start = 0;
+  let end = value.length;
+  while (end > start && value.charCodeAt(end - 1) <= 0x20) {
+    end--;
+  }
+  while (start < end && value.charCodeAt(start) <= 0x20) {
+    start++;
+  }
+  return value.slice(start, end);
+}
+
 // A face's tables, abstracted over the three containers so the metadata readers
 // don't care whether the bytes arrived bare, deflate-wrapped (WOFF), or
 // Brotli-wrapped (WOFF2). `flavor` is the sfnt version, which alone names the
@@ -245,10 +261,9 @@ function decodeNameString(
     platformID === 3 ||
     (platformID === 1 && encodingID !== 0);
   try {
-    return new TextDecoder(utf16 ? 'utf-16be' : 'latin1')
-      .decode(bytes)
-      .replace(/ +$/g, '')
-      .trim();
+    return trimPadding(
+      new TextDecoder(utf16 ? 'utf-16be' : 'latin1').decode(bytes),
+    );
   } catch {
     return '';
   }
@@ -331,7 +346,7 @@ function parseOs2Table(table: Uint8Array): {
   let view = new DataView(table.buffer, table.byteOffset, table.byteLength);
   let weightClass = view.getUint16(4);
   let widthClass = view.getUint16(6);
-  let vendorId = asciiTag(view, 58).replace(/ +$/g, '').trim();
+  let vendorId = trimPadding(asciiTag(view, 58));
   let fsSelection = view.getUint16(62);
   return {
     weightClass: weightClass > 0 ? weightClass : undefined,
