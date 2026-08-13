@@ -73,6 +73,20 @@ module('Unit | isFileDefCodeRef', function (hooks) {
       ),
       'ThreeMfDef',
     );
+    assert.true(
+      isFileDefCodeRef(
+        { module: baseRRI('gltf-model-def'), name: 'GltfDef' },
+        virtualNetwork,
+      ),
+      'GltfDef',
+    );
+    assert.true(
+      isFileDefCodeRef(
+        { module: baseRRI('gltf-model-def'), name: 'GlbDef' },
+        virtualNetwork,
+      ),
+      'GlbDef',
+    );
   });
 
   test('rejects a non-FileDef card ref', function (assert) {

@@ -51,6 +51,8 @@ const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
   '.webm': { module: baseModule('webm-video-def'), name: 'WebmDef' },
   '.stl': { module: baseModule('stl-model-def'), name: 'StlDef' },
   '.3mf': { module: baseModule('three-mf-def'), name: 'ThreeMfDef' },
+  '.glb': { module: baseModule('gltf-model-def'), name: 'GlbDef' },
+  '.gltf': { module: baseModule('gltf-model-def'), name: 'GltfDef' },
   '.mismatch': {
     module: './filedef-mismatch' as RealmResourceIdentifier,
     name: 'FileDef',
