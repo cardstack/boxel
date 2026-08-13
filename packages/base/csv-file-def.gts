@@ -21,8 +21,8 @@ import type { FilePreviewSignature } from './file-formats/file-preview-stage';
 import { fencedCodeBlock } from './markdown-helpers';
 
 const EXCERPT_MAX_LENGTH = 500;
-// An embedded cell shows the head of the table under a fade; the isolated view
-// shows the whole thing.
+// An embedded cell shows the head of the table with a "… N more rows" note;
+// the isolated view shows the whole thing.
 const EMBEDDED_MAX_ROWS = 20;
 
 function getExtension(url: string): string {
@@ -212,10 +212,10 @@ class CsvPreview extends GlimmerComponent<FilePreviewSignature> {
     return Array.from(this.source?.columns ?? []).map(String);
   }
 
-  // Embedded shows the head of the table under a fade; isolated shows every
-  // row. `csvToHtml` owns the whole pipeline: it escapes every cell first and
-  // then assembles the markup, so no second sanitizer pass reparses our own
-  // generated HTML during prerender/indexing.
+  // Embedded shows the head of the table with a "… N more rows" note; isolated
+  // shows every row. `csvToHtml` owns the whole pipeline: it escapes every cell
+  // first and then assembles the markup, so no second sanitizer pass reparses
+  // our own generated HTML during prerender/indexing.
   get tableHtml() {
     let maxRows =
       this.args.mode === 'embedded' ? EMBEDDED_MAX_ROWS : undefined;

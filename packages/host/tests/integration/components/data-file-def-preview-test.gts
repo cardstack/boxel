@@ -16,7 +16,7 @@ const JSON_SOURCE = JSON.stringify(
   {
     name: 'my-app',
     version: '1.0.0',
-    dependencies: { lodash: '^4.17.21' },
+    dependencies: { lodash: '^4.17.21', engines: { node: '18' } },
   },
   null,
   2,
@@ -90,6 +90,12 @@ module('Integration | json/csv file def preview', function (hooks) {
         .dom('[data-test-json-preview] .jt-key')
         .exists('keys are marked in the tree');
       assert.dom('[data-test-json-preview]').containsText('dependencies');
+      assert
+        .dom('[data-test-json-preview] .jt-node[open] .jt-node[open]')
+        .exists('the root and its direct children start expanded');
+      assert
+        .dom('[data-test-json-preview] .jt-node .jt-node .jt-node:not([open])')
+        .exists('deeper levels start collapsed');
     });
 
     test(`CSV renders a table in the ${format} shell`, async function (assert) {
@@ -117,6 +123,44 @@ module('Integration | json/csv file def preview', function (hooks) {
     assert.dom('[data-test-csv-preview] .data-summary').containsText('cols');
   });
 
+  test('a scalar-root JSON fitted shows its type, not a vacuous key count', async function (assert) {
+    let file = new JsonFileDef({
+      id: 'http://example.com/data/answer.json',
+      url: 'http://example.com/data/answer.json',
+      name: 'answer.json',
+      contentType: 'application/json',
+      content: '42',
+      rootType: 'number',
+      keyCount: 0,
+    });
+    await renderCard(loader, file, 'fitted');
+    assert.dom('[data-test-json-preview] .data-summary').containsText('value');
+    assert.dom('[data-test-json-preview] .data-summary').containsText('number');
+    assert
+      .dom('[data-test-json-preview] .data-summary')
+      .doesNotContainText('0');
+  });
+
+  test('embedded JSON budgets the tree; isolated renders it in full', async function (assert) {
+    let file = new JsonFileDef({
+      id: 'http://example.com/data/big.json',
+      url: 'http://example.com/data/big.json',
+      name: 'big.json',
+      contentType: 'application/json',
+      content: JSON.stringify(Array.from({ length: 300 }, (_, i) => i)),
+      rootType: 'array',
+      keyCount: 300,
+    });
+    await renderCard(loader, file, 'embedded');
+    assert
+      .dom('[data-test-json-preview] .jt-truncated')
+      .containsText('200', 'embedded stops at its node budget');
+    await renderCard(loader, file, 'isolated');
+    assert
+      .dom('[data-test-json-preview] .jt-truncated')
+      .doesNotExist('isolated renders every node');
+  });
+
   test('invalid JSON falls back to raw text rather than an empty pane', async function (assert) {
     let file = new JsonFileDef({
       id: 'http://example.com/data/broken.json',
@@ -128,6 +172,21 @@ module('Integration | json/csv file def preview', function (hooks) {
     await renderCard(loader, file, 'isolated');
     assert.dom('[data-test-json-preview] .jt-tree').doesNotExist();
     assert.dom('[data-test-json-preview] .jt-raw').containsText('not valid');
+  });
+
+  test('invalid JSON fitted labels the parse failure rather than counting keys', async function (assert) {
+    let file = new JsonFileDef({
+      id: 'http://example.com/data/broken.json',
+      url: 'http://example.com/data/broken.json',
+      name: 'broken.json',
+      contentType: 'application/json',
+      content: '{ not valid json',
+      rootType: '',
+      keyCount: 0,
+    });
+    await renderCard(loader, file, 'fitted');
+    assert.dom('[data-test-json-preview]').containsText('Invalid JSON');
+    assert.dom('[data-test-json-preview] .data-summary').doesNotExist();
   });
 
   test('the data shells label the recognized kind, not the base displayName', async function (assert) {

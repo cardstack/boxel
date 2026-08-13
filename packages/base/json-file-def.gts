@@ -21,8 +21,11 @@ import { fencedCodeBlock } from './markdown-helpers';
 
 const EXCERPT_MAX_LENGTH = 500;
 // A very large document would otherwise render into megabytes of tree markup;
-// stop after this many nodes and show a truncation note.
+// stop after this many nodes and show a truncation note. The embedded shell is
+// a fixed-height pane inside a collection, so it gets a much smaller budget —
+// the isolated view is where the whole document belongs.
 const TREE_MAX_NODES = 2000;
+const EMBEDDED_MAX_NODES = 200;
 // Root and its direct children render expanded; deeper levels start collapsed.
 const TREE_AUTO_OPEN_DEPTH = 1;
 
@@ -137,6 +140,7 @@ function keyLabelHtml(key: string | undefined): string {
 
 interface TreeCtx {
   nodes: number;
+  maxNodes: number;
   truncated: boolean;
 }
 
@@ -146,7 +150,7 @@ function renderTreeNode(
   depth: number,
   ctx: TreeCtx,
 ): string {
-  if (ctx.nodes >= TREE_MAX_NODES) {
+  if (ctx.nodes >= ctx.maxNodes) {
     ctx.truncated = true;
     return '';
   }
@@ -179,17 +183,17 @@ function renderTreeNode(
   let children = tag('div', childrenHtml, 'class="jt-children"');
 
   let attrs =
-    depth < TREE_AUTO_OPEN_DEPTH ? 'class="jt-node" open' : 'class="jt-node"';
+    depth <= TREE_AUTO_OPEN_DEPTH ? 'class="jt-node" open' : 'class="jt-node"';
   return tag('details', summary + children, attrs);
 }
 
-function jsonToTreeHtml(parsed: JsonValue): string {
-  let ctx: TreeCtx = { nodes: 0, truncated: false };
+function jsonToTreeHtml(parsed: JsonValue, maxNodes: number): string {
+  let ctx: TreeCtx = { nodes: 0, maxNodes, truncated: false };
   let html = renderTreeNode(parsed, undefined, 0, ctx);
   if (ctx.truncated) {
     html += tag(
       'p',
-      `… tree truncated at ${TREE_MAX_NODES} nodes`,
+      `… tree truncated at ${maxNodes} nodes`,
       'class="jt-truncated"',
     );
   }
@@ -237,7 +241,9 @@ class JsonPreview extends GlimmerComponent<FilePreviewSignature> {
     if (!ok) {
       return htmlSafe('');
     }
-    return htmlSafe(jsonToTreeHtml(value as JsonValue));
+    let maxNodes =
+      this.args.mode === 'embedded' ? EMBEDDED_MAX_NODES : TREE_MAX_NODES;
+    return htmlSafe(jsonToTreeHtml(value as JsonValue, maxNodes));
   }
 
   get isValid(): boolean {
@@ -259,27 +265,49 @@ class JsonPreview extends GlimmerComponent<FilePreviewSignature> {
     return Number(this.source?.keyCount ?? 0);
   }
 
+  // `extractAttributes` stores an empty root type when the document didn't
+  // parse, so an empty string here means "couldn't parse", not "no type".
+  get isUnparsed(): boolean {
+    return this.rootType === '';
+  }
+
+  get hasEntryCount(): boolean {
+    return this.rootType === 'object' || this.rootType === 'array';
+  }
+
   get countLabel(): string {
-    let type = this.rootType;
-    if (type === 'array') {
+    if (this.rootType === 'array') {
       return this.keyCount === 1 ? 'item' : 'items';
     }
-    return this.keyCount === 1 ? 'key' : 'keys';
+    if (this.rootType === 'object') {
+      return this.keyCount === 1 ? 'key' : 'keys';
+    }
+    // A scalar root (top-level string/number/boolean/null) has no entries to
+    // count; the summary shows its type as the fact instead.
+    return 'value';
+  }
+
+  get countValue(): string {
+    return this.hasEntryCount ? this.keyCount.toLocaleString() : this.rootType;
   }
 
   <template>
     {{#if this.isFitted}}
       <div class='data-preview data-preview--fitted' data-test-json-preview>
         {{#if this.hasContent}}
-          <dl class='data-summary'>
-            <div class='data-summary__metric'>
-              <dt>{{this.countLabel}}</dt>
-              <dd>{{this.keyCount}}</dd>
-            </div>
-            {{#if this.rootType}}
-              <div class='data-summary__type'>{{this.rootType}}</div>
-            {{/if}}
-          </dl>
+          {{#if this.isUnparsed}}
+            <p class='data-preview__empty'>Invalid JSON</p>
+          {{else}}
+            <dl class='data-summary'>
+              <div class='data-summary__metric'>
+                <dt>{{this.countLabel}}</dt>
+                <dd>{{this.countValue}}</dd>
+              </div>
+              {{#if this.hasEntryCount}}
+                <div class='data-summary__type'>{{this.rootType}}</div>
+              {{/if}}
+            </dl>
+          {{/if}}
         {{else}}
           <p class='data-preview__empty'>No content</p>
         {{/if}}
@@ -473,8 +501,9 @@ export class JsonFileDef extends FileDef {
   @field title = contains(StringField);
   @field excerpt = contains(StringField);
   @field content = contains(StringField);
-  // Surfaced by the shells as the hero fact ("N keys") and by the fitted
-  // preview, computed once at index time so a cell never parses the document.
+  // Structural facts computed once at index time so a fitted cell never parses
+  // the document. `rootType` and `keyCount` drive the fitted preview's summary;
+  // `lineCount` is what the shells present as the hero fact.
   @field rootType = contains(StringField);
   @field keyCount = contains(NumberField);
   @field lineCount = contains(NumberField);
