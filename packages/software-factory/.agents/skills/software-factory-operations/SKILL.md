@@ -81,7 +81,7 @@ first, then `Edit` (or `Write` the merged document back) — see
 | `Boards/<slug>.json`             | `{module: "<tracker-module-url>", name: "IssueTracker"}`     |
 | `Issues/<slug>.json`             | `{module: "<tracker-module-url>", name: "Issue"}`            |
 | `Knowledge Articles/<slug>.json` | `{module: "<tracker-module-url>", name: "KnowledgeArticle"}` |
-| `Spec/<slug>.json`               | `{module: "https://cardstack.com/base/spec", name: "Spec"}`  |
+| `Spec/<slug>.json`               | `{module: "@cardstack/base/spec", name: "Spec"}`             |
 
 `<tracker-module-url>` is derived from the target realm's origin
 (`<origin>/software-factory/darkfactory`) — see the
@@ -146,12 +146,12 @@ Issue cards carry a `comments` array on `attributes`. To append:
 ### Catalog Spec card shape
 
 Spec cards (`Spec/<slug>.json`) adopt from
-`https://cardstack.com/base/spec` / `Spec`. Fetch the live schema:
+`@cardstack/base/spec` / `Spec`. Fetch the live schema:
 
 ```bash
 boxel run-command @cardstack/boxel-host/commands/get-card-type-schema/default \
   --realm <target-realm-url> \
-  --input '{"codeRef": {"module": "https://cardstack.com/base/spec", "name": "Spec"}}'
+  --input '{"codeRef": {"module": "@cardstack/base/spec", "name": "Spec"}}'
 ```
 
 What the schema does **not** tell you and you must supply for
@@ -178,7 +178,7 @@ entry-point cards:
 
 The full document envelope is the same as for tracker cards (`data`
 / `type: "card"` / `attributes` / `relationships` / `meta.adoptsFrom`),
-just with the `https://cardstack.com/base/spec` adoptsFrom.
+just with the `@cardstack/base/spec` adoptsFrom.
 
 ## Realm-side reads (via `boxel` CLI)
 
@@ -366,7 +366,7 @@ Same `--json` shape as `evaluate-module`: parse the wrapper's
 
 **Do not** pass a `Spec/...json` path or any card whose
 `adoptsFrom.module` is a base-realm URL
-(`https://cardstack.com/base/...`). Specs adopt from the base
+(`@cardstack/base/...`). Specs adopt from the base
 realm, and the prerender refuses cross-origin module loads with
 "moduleUrl origin does not match realmUrl origin". To validate
 Specs, run `boxel test` (which exercises the Spec's
@@ -414,7 +414,7 @@ QUnit card tests" below.
    instances or Spec cards — it forces the API decisions early.
 4. **Write card instances** (`.json`) into the workspace.
 5. **Write a Catalog Spec card** (`Spec/<card-name>.json`) — adopts
-   from `https://cardstack.com/base/spec` / `Spec`. Link sample
+   from `@cardstack/base/spec` / `Spec`. Link sample
    instances via `relationships.linkedExamples`.
 6. **Pre-flight: `boxel parse` locally — _before_ any push.** From
    inside the workspace dir, run `boxel parse` (no flags — it
@@ -822,7 +822,7 @@ table stakes; without it your tests don't get past validation.
   or base64-encoded content.
 - **Use absolute `adoptsFrom.module` URLs** when referencing
   definitions that live in a different realm (e.g., the source
-  realm's tracker schema or `https://cardstack.com/base/spec`).
+  realm's tracker schema or `@cardstack/base/spec`).
 - **Start small and iterate.** Write the smallest working
   implementation first, then add the test. If tests fail, read the
   failure output carefully before making targeted fixes — don't
