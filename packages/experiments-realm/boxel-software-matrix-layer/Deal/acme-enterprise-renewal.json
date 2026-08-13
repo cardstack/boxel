@@ -11,7 +11,10 @@
       },
       "stage": "negotiation",
       "closeDate": "2026-08-25",
-      "competitors": ["LegacySoft", "StayPut Inc"],
+      "competitors": [
+        "LegacySoft",
+        "StayPut Inc"
+      ],
       "terms": "- 24-month term, annual billing\n- 8% multi-year discount contingent on signature before **Aug 25**\n- Includes priority support retainer and two on-site training days",
       "cardInfo": {
         "name": null,

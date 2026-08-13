@@ -1,11 +1,1 @@
-{
-  "data": {
-    "type": "card",
-    "meta": {
-      "adoptsFrom": {
-        "module": "@cardstack/base/workspace",
-        "name": "Workspace"
-      }
-    }
-  }
-}
+{"data":{"type":"card","meta":{"adoptsFrom":{"module":"@cardstack/base/workspace","name":"Workspace"}}}}

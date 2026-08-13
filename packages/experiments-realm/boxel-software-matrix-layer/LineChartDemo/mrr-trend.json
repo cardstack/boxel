@@ -3,8 +3,26 @@
     "type": "card",
     "attributes": {
       "seriesName": "MRR — trailing 8 months",
-      "labels": ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug"],
-      "values": [3200, 3450, 3450, 4100, 4680, 5120, 5490, 5880],
+      "labels": [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug"
+      ],
+      "values": [
+        3200,
+        3450,
+        3450,
+        4100,
+        4680,
+        5120,
+        5490,
+        5880
+      ],
       "cardInfo": {
         "name": "MRR Trend",
         "summary": null,
