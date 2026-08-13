@@ -230,7 +230,10 @@ function pol100Doc(policyStatus: string) {
 
 export const bxlTrackingPol100Renewal = pol100Doc('Renewed');
 
-export const bxlTrackingRealmContents: Record<string, unknown> = {
+export const bxlTrackingRealmContents: Record<
+  string,
+  string | Record<string, unknown>
+> = {
   'tracking.gts': bxlTrackingCardSource,
   'Customer/acme.json': {
     data: {

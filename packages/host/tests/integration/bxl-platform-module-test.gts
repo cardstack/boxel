@@ -64,7 +64,7 @@ module('Integration | bxl platform module', function (hooks) {
     let entry = await realm.realmIndexQueryEngine.instance(new URL(id));
     if (!entry || entry.type === 'instance-error') {
       throw new Error(
-        `expected ${id} to index cleanly, got ${JSON.stringify(entry?.error?.errorDetail?.message)}`,
+        `expected ${id} to index cleanly, got ${JSON.stringify(entry?.error)}`,
       );
     }
     return (entry as IndexedInstance).searchDoc ?? {};

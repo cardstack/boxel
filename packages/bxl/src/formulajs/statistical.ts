@@ -1,3 +1,7 @@
+// See bessel.ts for why this is a reference rather than a tsconfig include
+// or an import.
+// eslint-disable-next-line @typescript-eslint/triple-slash-reference
+/// <reference path="../types/jstat.d.ts" />
 import jStatImport from 'jstat';
 
 import {

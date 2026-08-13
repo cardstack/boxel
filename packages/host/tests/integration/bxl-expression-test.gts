@@ -81,7 +81,7 @@ module('Integration | bxl expressions on real cards', function (hooks) {
     let entry = await realm.realmIndexQueryEngine.instance(new URL(id));
     if (!entry || entry.type === 'instance-error') {
       throw new Error(
-        `expected ${id} to index cleanly, got ${JSON.stringify(entry?.error?.errorDetail?.message)}`,
+        `expected ${id} to index cleanly, got ${JSON.stringify(entry?.error)}`,
       );
     }
     return (entry as IndexedInstance).searchDoc ?? {};
@@ -144,8 +144,10 @@ module('Integration | bxl expressions on real cards', function (hooks) {
 
   test('missing links propagate null through jq paths and the card still indexes', async function (assert) {
     let searchDoc = await indexedSearchDoc(`${testRealmURL}Policy/pol-200`);
-    assert.strictEqual(searchDoc.customerName ?? null, null);
-    assert.strictEqual(searchDoc.underwriterName ?? null, null);
+    let customerName = searchDoc.customerName ?? null;
+    let underwriterName = searchDoc.underwriterName ?? null;
+    assert.strictEqual(customerName, null);
+    assert.strictEqual(underwriterName, null);
     assert.strictEqual(
       searchDoc.paidClaimsTotal,
       0,
@@ -159,8 +161,9 @@ module('Integration | bxl expressions on real cards', function (hooks) {
     let searchDoc = await indexedSearchDoc(`${testRealmURL}Claim/clm-3`);
     assert.strictEqual(searchDoc.incurredAmount, 0);
     assert.strictEqual(searchDoc.severityBand, 'Minor');
+    let customerName = searchDoc.customerName ?? null;
     assert.strictEqual(
-      searchDoc.customerName ?? null,
+      customerName,
       null,
       'the two-hop path yields null when the first hop is missing',
     );
@@ -172,8 +175,10 @@ module('Integration | bxl expressions on real cards', function (hooks) {
 
   test('Excel error sentinels surface as null, never a crashed compute', async function (assert) {
     let searchDoc = await indexedSearchDoc(`${testRealmURL}Policy/pol-100`);
-    assert.strictEqual(searchDoc.notApplicable ?? null, null, '#N/A → null');
-    assert.strictEqual(searchDoc.divByZero ?? null, null, '#DIV/0! → null');
+    let notApplicable = searchDoc.notApplicable ?? null;
+    let divByZero = searchDoc.divByZero ?? null;
+    assert.strictEqual(notApplicable, null, '#N/A → null');
+    assert.strictEqual(divByZero, null, '#DIV/0! → null');
   });
 
   // ===========================================================================
