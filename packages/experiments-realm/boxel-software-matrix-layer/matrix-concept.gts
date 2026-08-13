@@ -777,6 +777,8 @@ export class MatrixConcept extends CardDef {
                         class='spec-link'
                         {{on 'click' this.openSpec}}
                       >Open the Spec to review →</button>
+                    {{else if this.isInteractive}}
+                      <span class='spec-link spec-loading'>Loading Spec…</span>
                     {{else}}
                       <a
                         class='spec-link'
@@ -1119,6 +1121,13 @@ export class MatrixConcept extends CardDef {
           font-weight: 600;
           background: transparent;
           cursor: pointer;
+        }
+        .spec-loading {
+          color: var(--muted-foreground, #6b7280);
+          border-color: var(--border, #e5e7eb);
+        }
+        .spec-loading:hover {
+          background: transparent;
         }
         .spec-target {
           margin-left: 0.5rem;
