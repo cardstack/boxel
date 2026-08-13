@@ -101,7 +101,9 @@ module('Integration | ai-assistant-panel | token usage', function (hooks) {
       isStreamingFinished: true,
     });
     await waitFor(`[data-test-room="${roomId}"] [data-test-message-idx="0"]`);
-    assert.dom('[data-test-message-idx="0"] .token-usage').doesNotExist();
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-token-usage]')
+      .doesNotExist();
 
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Here is your answer.',
@@ -151,6 +153,41 @@ module('Integration | ai-assistant-panel | token usage', function (hooks) {
     await waitFor('[data-test-conversation-token-usage]');
     assert.dom('[data-test-conversation-token-usage]').containsText('3,000 in');
     assert.dom('[data-test-conversation-token-usage]').containsText('300 out');
+  });
+
+  test('optional figures are dropped from the session total unless every turn reported them', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'First answer.',
+      msgtype: 'm.text',
+      isStreamingFinished: true,
+      data: {
+        usage: {
+          promptTokens: 1000,
+          completionTokens: 100,
+          cachedTokens: 800,
+          costUsd: 0.01,
+        },
+      },
+    });
+    // The second turn reports token counts only — its cost and cache detail
+    // are missing, so summing the other turn's figures would understate.
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'Second answer.',
+      msgtype: 'm.text',
+      isStreamingFinished: true,
+      data: {
+        usage: { promptTokens: 2000, completionTokens: 200 },
+      },
+    });
+
+    await waitFor('[data-test-conversation-token-usage]');
+    assert.dom('[data-test-conversation-token-usage]').containsText('3,000 in');
+    assert
+      .dom('[data-test-conversation-token-usage]')
+      .doesNotContainText('cached');
+    assert.dom('[data-test-conversation-token-usage]').doesNotContainText('$');
   });
 
   test('a usage object without token counts does not add a session-total turn', async function (assert) {

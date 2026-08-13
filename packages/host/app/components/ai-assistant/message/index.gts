@@ -540,10 +540,7 @@ export default class AiAssistantMessage extends Component<Signature> {
         {{/if}}
 
         {{#if this.tokenUsage}}
-          <div
-            class='token-usage'
-            data-test-token-usage={{@usage.promptTokens}}
-          >
+          <div class='token-usage' data-test-token-usage>
             {{this.tokenUsage}}
           </div>
         {{/if}}

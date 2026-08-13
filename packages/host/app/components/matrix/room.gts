@@ -1149,9 +1149,9 @@ export default class Room extends Component<Signature> {
     let promptTokens = 0;
     let completionTokens = 0;
     let cachedTokens = 0;
-    let sawCached = false;
+    let turnsWithCached = 0;
     let costUsd = 0;
-    let sawCost = false;
+    let turnsWithCost = 0;
     let turnsWithUsage = 0;
     for (let message of this.messages) {
       let usage = message.usage;
@@ -1168,11 +1168,11 @@ export default class Room extends Component<Signature> {
       completionTokens += usage.completionTokens ?? 0;
       if (usage.cachedTokens != null) {
         cachedTokens += usage.cachedTokens;
-        sawCached = true;
+        turnsWithCached++;
       }
       if (usage.costUsd != null) {
         costUsd += usage.costUsd;
-        sawCost = true;
+        turnsWithCost++;
       }
     }
     // With a single counted turn the total merely repeats that message's own
@@ -1184,8 +1184,10 @@ export default class Room extends Component<Signature> {
     return formatTokenUsage({
       promptTokens,
       completionTokens,
-      ...(sawCached ? { cachedTokens } : {}),
-      ...(sawCost ? { costUsd } : {}),
+      // An optional figure is only a session total when every counted turn
+      // reported it; a partial sum would read as the whole bill.
+      ...(turnsWithCached === turnsWithUsage ? { cachedTokens } : {}),
+      ...(turnsWithCost === turnsWithUsage ? { costUsd } : {}),
     });
   }
 
