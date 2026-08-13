@@ -4,6 +4,7 @@ import { basename } from 'path';
 import {
   checkDomainAvailability,
   fetchPublishabilityReport,
+  fetchPublishProgress,
   publishRealm,
   RealmOperationError,
   unpublishRealm,
@@ -275,6 +276,144 @@ module(basename(import.meta.filename), function () {
         assert.ok(err instanceof Error);
         assert.ok(/Timed out after 20ms/.test((err as Error).message));
       }
+    });
+
+    test('fetchPublishProgress reads the realm server, passing the published realm as a parameter', async function (assert) {
+      let { client, calls } = makeClient(() =>
+        jsonResponse(200, {
+          data: {
+            type: 'publish-progress',
+            id: 'https://mike.boxel.space/notes/',
+            attributes: { phase: 'index', filesCompleted: 42, totalFiles: 270 },
+          },
+        }),
+      );
+
+      // Pass a URL without a trailing slash to exercise normalization.
+      let progress = await fetchPublishProgress(client, {
+        publishedRealmURL: 'https://mike.boxel.space/notes',
+      });
+
+      assert.deepEqual(progress, {
+        phase: 'index',
+        filesCompleted: 42,
+        totalFiles: 270,
+      });
+      assert.strictEqual(
+        calls[0].url,
+        `${REALM_SERVER_URL}_publish-progress?published_realm_url=${encodeURIComponent(
+          'https://mike.boxel.space/notes/',
+        )}`,
+      );
+    });
+
+    // Progress is sampled on its own timer rather than read off the readiness
+    // response, because a readiness poll can be held open for seconds at a
+    // time. Driving both from one client here shows the two run independently.
+    test('waitForReady reports progress while polling readiness', async function (assert) {
+      let readings = [
+        { phase: 'index', filesCompleted: 10, totalFiles: 270 },
+        { phase: 'index', filesCompleted: 10, totalFiles: 270 },
+        { phase: 'render', filesCompleted: 3, totalFiles: 270 },
+      ];
+      let reported: unknown[] = [];
+      let progressPolls = 0;
+      let { client } = makeClient((url) => {
+        if (url.includes('_publish-progress')) {
+          let reading =
+            readings[Math.min(progressPolls++, readings.length - 1)];
+          return jsonResponse(200, {
+            data: {
+              type: 'publish-progress',
+              id: 'https://mike.boxel.space/notes/',
+              attributes: reading,
+            },
+          });
+        }
+        // Stay not-ready until both distinct readings have been delivered, so
+        // the wait outlives the progress sequence rather than racing it —
+        // sampling stops the moment readiness passes.
+        return new Response(null, { status: reported.length >= 2 ? 200 : 503 });
+      });
+
+      await waitForReady(client, {
+        publishedRealmURL: 'https://mike.boxel.space/notes/',
+        timeoutMs: 2000,
+        pollIntervalMs: 1,
+        progressPollIntervalMs: 1,
+        onProgress: (progress) => reported.push(progress),
+      });
+
+      assert.deepEqual(
+        reported,
+        [
+          { phase: 'index', filesCompleted: 10, totalFiles: 270 },
+          { phase: 'render', filesCompleted: 3, totalFiles: 270 },
+        ],
+        'reports each change once — the repeated reading is not re-reported',
+      );
+    });
+
+    // The freeze this feature exists to make visible must not be one it can
+    // cause. A progress request that never settles — a server that accepts the
+    // connection and then goes silent — cannot be allowed to hold up a wait
+    // whose readiness check has already passed.
+    test('waitForReady resolves and abandons the request when a progress sample never settles', async function (assert) {
+      let aborted = false;
+      let { client } = makeClient((url, init) => {
+        if (url.includes('_publish-progress')) {
+          return new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () => {
+              aborted = true;
+              reject(new Error('aborted'));
+            });
+          });
+        }
+        return new Response(null, { status: 200 });
+      });
+
+      let outcome = await Promise.race([
+        waitForReady(client, {
+          publishedRealmURL: 'https://mike.boxel.space/notes/',
+          timeoutMs: 2000,
+          pollIntervalMs: 1,
+          progressPollIntervalMs: 1,
+          onProgress: () => {},
+        }).then(() => 'resolved'),
+        new Promise((resolve) => setTimeout(() => resolve('hung'), 3000)),
+      ]);
+
+      assert.strictEqual(
+        outcome,
+        'resolved',
+        'the readiness result is not held up by the outstanding progress read',
+      );
+      assert.true(aborted, 'the outstanding progress read is abandoned');
+    });
+
+    // A realm server that doesn't serve the route (or a transient failure) must
+    // not turn a publish that is progressing normally into a failure.
+    test('waitForReady still resolves when progress sampling fails', async function (assert) {
+      let progressPolls = 0;
+      let { client } = makeClient((url, _init, callIndex) => {
+        if (url.includes('_publish-progress')) {
+          progressPolls++;
+          return new Response(null, { status: 404 });
+        }
+        return new Response(null, { status: callIndex === 0 ? 503 : 200 });
+      });
+
+      let reported: unknown[] = [];
+      await waitForReady(client, {
+        publishedRealmURL: 'https://mike.boxel.space/notes/',
+        timeoutMs: 1000,
+        pollIntervalMs: 5,
+        progressPollIntervalMs: 1,
+        onProgress: (progress) => reported.push(progress),
+      });
+
+      assert.strictEqual(reported.length, 0, 'nothing is reported');
+      assert.true(progressPolls > 0, 'progress was attempted');
     });
   });
 });

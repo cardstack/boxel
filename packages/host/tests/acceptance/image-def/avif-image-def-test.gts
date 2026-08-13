@@ -363,7 +363,7 @@ module('Acceptance | avif image def', function (hooks) {
     let { status } = await capturePrerenderResult('innerHTML');
     assert.strictEqual(status, 'ready', 'render completed');
 
-    let imgSelector = '[data-prerender] .image-isolated__img';
+    let imgSelector = '[data-prerender] [data-test-image-preview]';
     let img = document.querySelector(imgSelector) as HTMLImageElement | null;
     assert.ok(img, 'img element is rendered');
     assert.ok(

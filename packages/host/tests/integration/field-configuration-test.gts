@@ -55,6 +55,9 @@ class DeferredLinkStore implements CardStore {
   canonicalizeId(id: string): string {
     return this.#virtualNetwork.unresolveURL(id);
   }
+  realmForId(id: string): string | undefined {
+    return this.#virtualNetwork.realmForReference(id);
+  }
   private cardInstances = new Map<string, CardDefType>();
   private fileMetaInstances = new Map<string, FileDef>();
   private readyCardDocs = new Map<string, SingleCardDocument>();

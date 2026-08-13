@@ -53,9 +53,15 @@ interface QueryWithInterpolationsBase {
   };
 }
 
+// `realms` accepts a bare string here, unlike the resolved `Query`: an
+// interpolation like `$this.someField` is a single placeholder standing in for
+// the whole list, and resolves to an array before the query is executed.
 export type QueryWithInterpolations =
   | (QueryWithInterpolationsBase & { realm?: string; realms?: never })
-  | (QueryWithInterpolationsBase & { realms?: string[]; realm?: never });
+  | (QueryWithInterpolationsBase & {
+      realms?: string | string[];
+      realm?: never;
+    });
 
 export type CardURL = string;
 export type Filter =

@@ -31,6 +31,7 @@ import {
   type FromScratchResult,
   type IncrementalDoneResult,
 } from '@cardstack/runtime-common/tasks/indexer';
+import { FULL_REINDEX_JOB_TIMEOUT_SEC } from '@cardstack/runtime-common/tasks/full-reindex';
 import queueTests from '@cardstack/runtime-common/tests/queue-test';
 import { basename } from 'path';
 
@@ -1056,14 +1057,14 @@ module(basename(import.meta.filename), function () {
             publisher.publish<void>({
               jobType: 'full-reindex',
               concurrencyGroup: 'full-reindex-group',
-              timeout: 6 * 60,
+              timeout: FULL_REINDEX_JOB_TIMEOUT_SEC,
               priority: 0,
               args: { realmUrls: ['http://example.com/a/'] },
             }),
             publisher2.publish<void>({
               jobType: 'full-reindex',
               concurrencyGroup: 'full-reindex-group',
-              timeout: 6 * 60,
+              timeout: FULL_REINDEX_JOB_TIMEOUT_SEC,
               priority: 0,
               args: {
                 realmUrls: ['http://example.com/a/', 'http://example.com/b/'],
@@ -1410,7 +1411,184 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('worker stops waiting for job after its been running longer than max time-out', async function (assert) {
+    // Wait for a reservation row to close, then hand it back. Used by the
+    // finalize tests below, whose jobs never reach a verdict — so there is no
+    // `job.done` to await.
+    async function waitForClosedReservation(jobId: number) {
+      // Budget has to clear the runner's 10s poll interval: `start()` returns
+      // before `LISTEN jobs` is established, so a `NOTIFY` from publish can be
+      // lost and the poll is then the only thing that picks the job up.
+      let started = Date.now();
+      while (Date.now() - started < 20000) {
+        let rows = (await adapter.execute(
+          `SELECT * FROM job_reservations WHERE job_id = $1 ORDER BY id`,
+          { bind: [jobId] },
+        )) as unknown as {
+          id: number;
+          completed_at: Date | null;
+          completion_reason: string | null;
+        }[];
+        if (rows[0]?.completed_at) {
+          return rows;
+        }
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      throw new Error(`reservation for job ${jobId} never closed`);
+    }
+
+    test('releases its reservation when the job was decided while the handler ran', async function (assert) {
+      // The verdict is unavoidably lost here — something else already wrote
+      // this job's outcome, and overwriting it would be worse. Leaving the
+      // reservation open is what must not happen: its lease outlives the
+      // attempt, and the worker-manager watchdog cannot tell an open row
+      // whose lease lapsed from a worker wedged inside its handler. It would
+      // reject the job a second time and kill this (healthy) worker.
+      let jobIdFromHandler: number | undefined;
+      runner.register('logJob', async (args: any) => {
+        jobIdFromHandler = args.jobInfo.jobId;
+        // Stand in for the watchdog deciding the job out from under us.
+        await adapter.execute(
+          `UPDATE jobs SET status='rejected', finished_at=NOW(),
+             result='{"status":500,"message":"watchdog"}'::jsonb
+           WHERE id=$1`,
+          { bind: [args.jobInfo.jobId] },
+        );
+        return null;
+      });
+
+      let job = await publisher.publish({
+        jobType: 'logJob',
+        concurrencyGroup: 'decided-underneath',
+        timeout: 5,
+        args: {},
+      });
+      // The job ends up rejected by the seeded outcome, and nothing awaits it.
+      // Without a handler attached, the publisher's poll would surface an
+      // unhandled rejection if it drained before teardown.
+      job.done.catch(() => {});
+      let reservations = await waitForClosedReservation(job.id);
+
+      assert.strictEqual(
+        jobIdFromHandler,
+        job.id,
+        'the handler ran for the published job',
+      );
+      assert.strictEqual(
+        reservations.length,
+        1,
+        'exactly one reservation was created',
+      );
+      assert.strictEqual(
+        reservations[0].completion_reason,
+        'interrupted',
+        'the reservation is closed as interrupted, not left open for the watchdog',
+      );
+
+      let [jobRow] = (await adapter.execute(
+        `SELECT status, result FROM jobs WHERE id = $1`,
+        { bind: [job.id] },
+      )) as unknown as {
+        status: string;
+        result: { message?: string } | null;
+      }[];
+      assert.strictEqual(
+        jobRow.status,
+        'rejected',
+        'the outcome already on the job row is left alone',
+      );
+      assert.strictEqual(
+        jobRow.result?.message,
+        'watchdog',
+        'the finalize did not overwrite the existing result',
+      );
+    });
+
+    test('commits a verdict produced past the lease when no live reservation competes', async function (assert) {
+      // A retried job always has a sibling reservation row, so treating any
+      // sibling as a competitor would discard the verdict of every retry that
+      // overran its lease — and an unrecorded verdict is what strands the
+      // reservation in the first place. Only a reservation that is still open
+      // AND unexpired owns the job.
+      runner.register('logJob', async (args: any) => {
+        await adapter.execute(
+          `UPDATE job_reservations SET locked_until = NOW() - INTERVAL '1 second'
+           WHERE id=$1`,
+          { bind: [args.jobInfo.reservationId] },
+        );
+        await adapter.execute(
+          `INSERT INTO job_reservations
+             (job_id, worker_id, locked_until, completed_at, completion_reason)
+           VALUES ($1, 'earlier-attempt', NOW() - INTERVAL '1 minute', NOW(), 'completed')`,
+          { bind: [args.jobInfo.jobId] },
+        );
+        return 42;
+      });
+
+      let job = await publisher.publish<number>({
+        jobType: 'logJob',
+        concurrencyGroup: 'lease-lapsed-uncontested',
+        timeout: 5,
+        args: {},
+      });
+
+      assert.strictEqual(
+        await job.done,
+        42,
+        'the verdict is recorded even though the lease had lapsed',
+      );
+    });
+
+    test('yields a verdict produced past the lease to the worker now holding the job', async function (assert) {
+      runner.register('logJob', async (args: any) => {
+        await adapter.execute(
+          `UPDATE job_reservations SET locked_until = NOW() - INTERVAL '1 second'
+           WHERE id=$1`,
+          { bind: [args.jobInfo.reservationId] },
+        );
+        await adapter.execute(
+          `INSERT INTO job_reservations (job_id, worker_id, locked_until)
+           VALUES ($1, 'worker-that-reclaimed-it', NOW() + INTERVAL '5 minutes')`,
+          { bind: [args.jobInfo.jobId] },
+        );
+        return null;
+      });
+
+      let job = await publisher.publish({
+        jobType: 'logJob',
+        concurrencyGroup: 'lease-lapsed-contested',
+        timeout: 5,
+        args: {},
+      });
+      let reservations = await waitForClosedReservation(job.id);
+
+      assert.strictEqual(
+        reservations[0].completion_reason,
+        'completed',
+        'closed rather than left to age out, and counted: the retry would run ' +
+          'under the same deadline this attempt just overran, so a job that ' +
+          'always overruns must still run out of attempts',
+      );
+      assert.strictEqual(
+        reservations[1].completed_at,
+        null,
+        "the reclaiming worker's reservation is untouched",
+      );
+
+      let [jobRow] = (await adapter.execute(
+        `SELECT status FROM jobs WHERE id = $1`,
+        { bind: [job.id] },
+      )) as unknown as { status: string }[];
+      assert.strictEqual(
+        jobRow.status,
+        'unfulfilled',
+        'the job is left for the worker that holds it',
+      );
+    });
+
+    test('worker stops waiting for a job that outruns its lease', async function (assert) {
+      // The abort deadline is the reservation's lease — the job's own timeout
+      // clamped by the worker ceiling — so here the job's 1s timeout binds
+      // under a 2s ceiling.
       let events: string[] = [];
       let runs = 0;
       let logJob = async () => {
@@ -1438,7 +1616,7 @@ module(basename(import.meta.filename), function () {
       } catch (error: any) {
         assert.strictEqual(
           error.message,
-          'Timed-out after 2s waiting for job 1 to complete',
+          'Timed-out after 1s waiting for job 1 to complete',
         );
       }
     });
@@ -1550,7 +1728,13 @@ module(basename(import.meta.filename), function () {
         );
       });
 
-      test('job can timeout; timed out job is picked up by another worker', async function (assert) {
+      test('a job that outruns its lease is failed rather than handed to a peer mid-flight', async function (assert) {
+        // A handler that kept running past its lease would leave the job
+        // claimable while still working on it, so a peer would run the same job
+        // concurrently — two workers writing the same rows. Aborting at the
+        // lease instead costs the peer retry: a job that cannot finish inside
+        // its own timeout fails, and that failure is attributable to the
+        // attempt that actually ran.
         let events: string[] = [];
         let runs = 0;
         let logJob = async () => {
@@ -1573,19 +1757,29 @@ module(basename(import.meta.filename), function () {
           args: null,
         });
 
-        // just after our job has timed out, kick the queue so that another worker
-        // will notice it. Otherwise we'd be stuck until the polling comes around.
-        await new Promise((r) => setTimeout(r, 1100));
+        // Well past the 1s lease, then kick the queue so a peer would claim
+        // the job if it were still claimable.
+        await new Promise((r) => setTimeout(r, 1500));
         await adapter.execute('NOTIFY jobs');
 
-        let result = await job.done;
+        try {
+          await job.done;
+          throw new Error('expected the timed-out job to be rejected');
+        } catch (error: any) {
+          assert.strictEqual(
+            error.message,
+            'Timed-out after 1s waiting for job 1 to complete',
+            'the attempt that ran owns the failure',
+          );
+        }
 
-        assert.strictEqual(result, 1);
-
-        // at this point the long-running first job is still stuck. it will
-        // eventually also log "job0 finish", but that is absorbed by our test
-        // afterEach
-        assert.deepEqual(events, ['job0 start', 'job1 start', 'job1 finish']);
+        // Give a peer a chance to pick it up, so the assertion below means
+        // "nobody claimed it" rather than "nobody has got round to it yet".
+        await new Promise((r) => setTimeout(r, 300));
+        assert.false(
+          events.includes('job1 start'),
+          `no peer re-ran the job; events=${JSON.stringify(events)}`,
+        );
       });
     });
   });

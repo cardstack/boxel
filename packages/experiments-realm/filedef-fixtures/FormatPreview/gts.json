@@ -1,0 +1,47 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "gts · Format Preview",
+      "cardInfo": {
+        "name": "gts · Format Preview",
+        "summary": "Simple, moderate, and complex gts fixtures across atom, embedded, isolated, and the 16 fitted envelopes."
+      }
+    },
+    "relationships": {
+      "previewFiles.0": {
+        "links": {
+          "self": "../samples/gts-simple.sample.gts"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/gts-simple.sample.gts"
+        }
+      },
+      "previewFiles.1": {
+        "links": {
+          "self": "../samples/gts-moderate.sample.gts"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/gts-moderate.sample.gts"
+        }
+      },
+      "previewFiles.2": {
+        "links": {
+          "self": "../samples/gts-complex.sample.gts"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/gts-complex.sample.gts"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../format-preview",
+        "name": "FileDefFormatPreview"
+      }
+    }
+  }
+}

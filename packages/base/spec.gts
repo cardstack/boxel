@@ -764,6 +764,12 @@ class Fitted extends Component<typeof Spec> {
         .spec-fitted {
           align-items: center;
         }
+        @container fitted-card (1.0 < aspect-ratio) and (250px <= width) {
+          .spec-fitted {
+            padding-inline: var(--boxel-sp-sm);
+            gap: var(--boxel-sp-xs);
+          }
+        }
         @container fitted-card (aspect-ratio <= 1 / 1) and (150px <= width) and (170px <= height <= 250px) {
           .spec-fitted :deep(.thumbnail-section) {
             flex: 1;
@@ -1086,6 +1092,9 @@ export class SpecTag extends GlimmerComponent<SpecTagSignature> {
     {{/if}}
     <style scoped>
       .spec-tag-pill {
+        --boxel-pill-padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
+
+        flex-shrink: 0;
         word-break: initial;
         text-transform: uppercase;
       }

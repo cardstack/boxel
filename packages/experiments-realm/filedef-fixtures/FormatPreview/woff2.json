@@ -1,0 +1,47 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "woff2 · Format Preview",
+      "cardInfo": {
+        "name": "woff2 · Format Preview",
+        "summary": "Simple, moderate, and complex woff2 fixtures across atom, embedded, isolated, and the 16 fitted envelopes."
+      }
+    },
+    "relationships": {
+      "previewFiles.0": {
+        "links": {
+          "self": "../samples/woff2-simple.woff2"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/woff2-simple.woff2"
+        }
+      },
+      "previewFiles.1": {
+        "links": {
+          "self": "../samples/woff2-moderate.woff2"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/woff2-moderate.woff2"
+        }
+      },
+      "previewFiles.2": {
+        "links": {
+          "self": "../samples/woff2-complex.woff2"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/woff2-complex.woff2"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../format-preview",
+        "name": "FileDefFormatPreview"
+      }
+    }
+  }
+}

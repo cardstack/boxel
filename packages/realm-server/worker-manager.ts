@@ -45,8 +45,6 @@ import {
   userInitiatedPrerenderHtmlPriority,
   systemInitiatedPrerenderHtmlPriority,
   query as _query,
-  param,
-  separatedByCommas,
   IndexWriter,
   isUrlLike,
   VirtualNetwork,
@@ -81,6 +79,11 @@ import {
 } from './handlers/handle-indexing-dashboard.ts';
 import { writeRuntimeMetadataFile } from './lib/runtime-metadata-file.ts';
 import { finalizeOrphanedReservations } from './lib/finalize-orphan-reservations.ts';
+import { findStuckReservations } from './lib/stuck-reservations.ts';
+import {
+  markFailedJob,
+  type MarkFailedJobResult,
+} from './lib/mark-failed-job.ts';
 import {
   decodeWorkerRequestIpc,
   dispatchWorkerRequest,
@@ -714,30 +717,31 @@ let adapter: PgAdapter;
 });
 
 async function monitorWorker(workerId: string, worker: ChildProcess) {
-  let stuckJobs = (await query([
-    `SELECT id, job_id FROM job_reservations jr WHERE worker_id=`,
-    param(workerId),
-    `AND completed_at IS NULL AND locked_until < NOW() - INTERVAL '30 seconds'`,
-    `AND NOT EXISTS (`,
-    // Skip stale reservations if this worker has already retried the job with a newer reservation.
-    `  SELECT 1 FROM job_reservations newer WHERE`,
-    `    newer.worker_id = jr.worker_id AND`,
-    `    newer.job_id = jr.job_id AND`,
-    `    newer.id > jr.id`,
-    `)`,
-  ])) as { id: string; job_id: string }[];
+  let stuckJobs = await findStuckReservations(adapter, workerId);
 
   if (stuckJobs.length > 0) {
     Sentry.captureMessage(
-      `Detected stuck jobs for worker ${workerId}. job id(s): ${stuckJobs.map((j) => j.job_id).join()}. recycling worker`,
+      `Detected stuck jobs for worker ${workerId}. job id(s): ${stuckJobs.map((j) => j.jobId).join()}. recycling worker`,
     );
     log.error(`detected stuck jobs for worker ${workerId}`);
-    for (let { id, job_id: jobId } of stuckJobs) {
+    for (let { id, jobId } of stuckJobs) {
       log.info(`marking job ${jobId} as timed-out for worker ${workerId}`);
       let currentState =
         ((worker as any).__boxelIndexState as IndexState | undefined) ?? {};
       let { url, realm, deps } = currentState;
-      if (url && realm && deps) {
+      // `markFailedJob` decides whether this job is still ours to fail, and
+      // does it in the same statement that writes the outcome. A lapsed lease
+      // makes the job claimable, so any check made out here would be a
+      // snapshot that another worker can invalidate before the write lands.
+      let outcome = await markFailedJob(adapter, {
+        reservationId: id,
+        workerId,
+        jobId,
+        message: `Timed-out. Worker manager killed unresponsive worker ${workerId} for job reservation ${id}`,
+      });
+      // Skip the error doc only when another worker holds the job — that
+      // attempt is the authority on what its index rows should say.
+      if (outcome !== 'not-ours' && url && realm && deps) {
         await markFailedIndexEntry({
           url,
           realm,
@@ -745,13 +749,10 @@ async function monitorWorker(workerId: string, worker: ChildProcess) {
           message: `worker time-out encountered while indexing ${url}`,
         });
       }
-      await markFailedJob({
-        reservationId: id,
-        workerId,
-        jobId,
-        message: `Timed-out. Worker manager killed unresponsive worker ${workerId} for job reservation ${id}`,
-      });
     }
+    // Kill regardless of which branch each reservation took: holding a
+    // reservation open past its lease without finalizing means the child
+    // never returned from its handler, whoever owns the job now.
     log.info(`killing worker ${workerId} due to stuck jobs`);
     worker.kill();
   }
@@ -796,64 +797,6 @@ async function markFailedIndexEntry({
     });
   }
   await batch.done();
-}
-
-async function markFailedJob({
-  workerId,
-  jobId,
-  reservationId,
-  message,
-}: {
-  workerId: string | undefined;
-  jobId: string;
-  message: string;
-  reservationId?: string;
-}) {
-  log.info(`marking job ${jobId} as failed for worker ${workerId}`);
-  let id: string;
-  if (!reservationId) {
-    [{ id }] = (await query([
-      `SELECT id FROM job_reservations WHERE job_id=`,
-      param(jobId),
-      `AND completed_at IS NULL`,
-    ])) as { id: string }[];
-    if (!id) {
-      log.error(
-        `Cannot determine job_reservation id for failed job ${jobId} of worker ${workerId}`,
-      );
-      return;
-    }
-  } else {
-    id = reservationId;
-  }
-
-  await query([
-    `UPDATE jobs SET `,
-    ...separatedByCommas([
-      [
-        `result =`,
-        param({
-          status: 500,
-          message: `Worker manager detected fatal error in worker ${workerId} for job ${jobId} with job_reservation id ${id}: ${message}`,
-        }),
-      ],
-      [`status = 'rejected'`],
-      [`finished_at = NOW()`],
-    ]),
-    'WHERE id =',
-    param(jobId),
-  ] as Expression);
-  // The worker had uninterrupted access to the job and produced no
-  // verdict before being killed by the watchdog (stuck) or after a fatal
-  // error log line. That counts as a real attempt for cap purposes,
-  // unlike the SIGTERM/child-crash paths which mark 'interrupted'.
-  await query([
-    `UPDATE job_reservations
-     SET completed_at = NOW(), completion_reason = 'completed'
-     WHERE id =`,
-    param(id),
-  ]);
-  await query([`NOTIFY jobs_finished`]);
 }
 
 async function startWorker(
@@ -946,18 +889,31 @@ async function startWorker(
         `[worker ${name} priority ${priority}]${maybeLogUrl}: ${message}`,
       );
       if (message.includes('FATAL ERROR')) {
+        // Snapshot the render state before any await: a `status|…` message
+        // from the child can replace `currentState` mid-flight, and this error
+        // belongs to whatever the child was rendering when it died.
+        let { url, realm, deps, jobId } = currentState ?? {};
         (async () => {
-          if (currentState?.url && currentState?.realm) {
-            let { url, realm, deps } = currentState;
+          if (url) {
             message = `encountered fatal error indexing ${url}: ${message}`;
-            await markFailedIndexEntry({ url, realm, deps, message });
           }
-          if (workerId && currentState?.jobId) {
-            await markFailedJob({
+          // Fail the job first, because whether the job's outcome landed here
+          // decides whether the index error doc is ours to write.
+          let outcome: MarkFailedJobResult = 'no-reservation';
+          if (workerId && jobId) {
+            outcome = await markFailedJob(adapter, {
               workerId,
-              jobId: currentState.jobId,
+              jobId,
               message,
             });
+          }
+          // `not-ours` is the only case that yields those rows to someone
+          // else. With no reservation to attribute the failure to, nothing
+          // else owns them, so the error doc is still worth writing — the
+          // child's own exit handler closing the reservation first is a race
+          // this path can lose.
+          if (outcome !== 'not-ours' && url && realm) {
+            await markFailedIndexEntry({ url, realm, deps, message });
           }
         })().catch((e) => {
           Sentry.captureException(e);
@@ -980,7 +936,16 @@ async function startWorker(
           // (`shutdown()`) can run finalizeOrphanedReservations against
           // every live child without having to capture closure scope.
           (worker as any).__workerId = id;
-          watchdog = setInterval(() => monitorWorker(id, worker), 60_000);
+          // `findStuckReservations` and `markFailedJob` both throw on a DB
+          // error, and an unhandled rejection out of an interval callback
+          // would take the whole manager down over a transient blip. The
+          // next tick retries in a minute.
+          watchdog = setInterval(() => {
+            monitorWorker(id, worker).catch((e) => {
+              Sentry.captureException(e);
+              log.error(`worker: monitorWorker failed for worker ${id}`, e);
+            });
+          }, 60_000);
           log.info(`[worker ${name} priority ${priority}]: worker ready`);
           r();
         } else if (

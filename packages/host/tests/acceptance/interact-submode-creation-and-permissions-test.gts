@@ -39,6 +39,7 @@ module(
     let { setRealmPermissions, setActiveRealms } = setupInteractSubmodeTests(
       hooks,
       {
+        reuseIndexAcrossTests: 'interactCreationAndPermissions',
         setRealm() {},
       },
     );

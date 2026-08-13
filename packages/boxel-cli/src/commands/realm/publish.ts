@@ -3,6 +3,7 @@ import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import {
   fetchPublishabilityReport,
   publishRealm as publishRealmOperation,
+  type PublishProgress,
   type PublishRealmOutput,
   RealmOperationError,
   waitForReady,
@@ -20,6 +21,7 @@ import {
 import { resolveRealmSecretSeed } from '../../lib/prompt.ts';
 import { unpublishRealm } from './unpublish.ts';
 import { cliLog } from '../../lib/cli-log.ts';
+import { createPublishProgressReporter } from '../../lib/publish-progress-reporter.ts';
 import { FG_CYAN, FG_GREEN, FG_RED, RESET } from '../../lib/colors.ts';
 
 const DEFAULT_TIMEOUT_MS = 300_000;
@@ -40,6 +42,13 @@ export interface PublishOptions {
    */
   force?: boolean;
   profileManager?: ProfileManager;
+  /**
+   * Called with each fresh indexing/prerendering reading while waiting for
+   * readiness. Defaults to a terminal renderer writing to stderr — an
+   * in-place line when stderr is a TTY, throttled lines otherwise. Pass a
+   * no-op to suppress it.
+   */
+  onProgress?: (progress: PublishProgress) => void;
   /** Seed-mode admin auth — mints an owner-scoped realm-server token. */
   realmSecretSeed?: string;
   /**
@@ -156,13 +165,21 @@ export async function publishRealm(
   };
 
   if (options.waitForReady !== false) {
-    await waitForReady(client, {
-      publishedRealmURL: result.publishedRealmURL,
-      timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-      // A published realm's rendered HTML is its deliverable, so wait until it
-      // is live (not just indexed) before reporting the publish complete.
-      awaitPrerenderHtml: true,
-    });
+    // Indexing and prerendering a large realm take minutes; report progress so
+    // the wait is legible rather than an unexplained pause.
+    let reporter = createPublishProgressReporter();
+    try {
+      await waitForReady(client, {
+        publishedRealmURL: result.publishedRealmURL,
+        timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+        // A published realm's rendered HTML is its deliverable, so wait until it
+        // is live (not just indexed) before reporting the publish complete.
+        awaitPrerenderHtml: true,
+        onProgress: options.onProgress ?? reporter.onProgress,
+      });
+    } finally {
+      reporter.finish();
+    }
   }
 
   return result;

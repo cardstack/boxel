@@ -32,6 +32,12 @@ const EMPTY_PREDICATE_KEYS = new Set([
 export const THIS_INTERPOLATION_PREFIX = '$this.';
 export const THIS_REALM_TOKEN = '$REALM';
 
+function isInterpolationToken(value: unknown): boolean {
+  return (
+    typeof value === 'string' && value.startsWith(THIS_INTERPOLATION_PREFIX)
+  );
+}
+
 export interface NormalizeQueryDefinitionParams {
   fieldDefinition: FieldDefinition;
   queryDefinition: QueryWithInterpolations;
@@ -41,11 +47,21 @@ export interface NormalizeQueryDefinitionParams {
   resolvePathValue: (path: string) => any;
   resource?: LooseCardResource | FileMetaResource;
   relativeTo?: RealmResourceIdentifier | URL;
+  // Map a value in `realms` onto the realm that holds it. A realm identifier
+  // maps to itself; a resource identifier (`@scope/name/Foo/1`) maps to its
+  // realm. Supplied by the caller because the realm mappings live in a
+  // VirtualNetwork, which neither this module nor a card definition may reach
+  // — see `resolveInstanceURL` in card-api. Returning undefined drops the
+  // entry, so an unrecognized realm can't silently widen the search.
+  resolveRealmForReference?: (reference: string) => string | undefined;
 }
 
 export interface NormalizedQueryDefinitionResult {
   query: Query;
-  realm: string;
+  // Every realm the query targets. A query-backed field that filters on
+  // absolute references is cross-realm by nature, so this is a set rather than
+  // the containing realm alone.
+  realms: string[];
 }
 
 export function normalizeQueryDefinition({
@@ -57,6 +73,7 @@ export function normalizeQueryDefinition({
   resolvePathValue,
   resource,
   relativeTo,
+  resolveRealmForReference,
 }: NormalizeQueryDefinitionParams): NormalizedQueryDefinitionResult | null {
   let workingQuery: QueryWithInterpolations = JSON.parse(
     JSON.stringify(queryDefinition),
@@ -177,60 +194,112 @@ export function normalizeQueryDefinition({
     }
   }
 
-  let specifiedRealm: any = queryAny.realm ?? THIS_REALM_TOKEN;
-  let interpolatedRealm = interpolateNode(specifiedRealm, 'realm');
-  if (interpolatedRealm !== undefined) {
-    specifiedRealm = interpolatedRealm;
-  }
+  // `realm` (singular) and `realms` (plural) are mutually exclusive in the
+  // Query grammar; either may be an interpolation. Absent both, the field
+  // targets the realm holding the instance.
+  let specifiedRealms: any =
+    queryAny.realms ?? queryAny.realm ?? THIS_REALM_TOKEN;
   delete queryAny.realm;
+  delete queryAny.realms;
 
   if (aborted) {
     return null;
   }
 
-  const resolveRealm = (value: any): string => {
-    if (value == null) {
-      return realmURL.href;
-    }
-    if (Array.isArray(value)) {
-      if (value.length === 0) {
-        return realmURL.href;
+  // Expand the authored target into one entry per realm, each carrying where it
+  // came from. Realms are interpolated here rather than through
+  // `interpolateNode` for two reasons: that pass substitutes values in place,
+  // losing which entries were written into the query and which came from the
+  // instance's data — a distinction the two need opposite treatment for — and
+  // it leaves an interpolation that yields a list as a nested array. Expanding
+  // per entry keeps provenance and flattens in one step, so a list mixing
+  // literal realms with interpolations behaves as each entry was authored.
+  type RealmEntry = { value: unknown; interpolated: boolean };
+  const expandRealmEntries = (authored: any): RealmEntry[] => {
+    let authoredEntries = Array.isArray(authored) ? authored : [authored];
+    let expanded: RealmEntry[] = [];
+    for (let entry of authoredEntries) {
+      if (!isInterpolationToken(entry)) {
+        expanded.push({ value: entry, interpolated: false });
+        continue;
       }
-      if (value.length > 1) {
-        throw new Error(
-          `query field "${fieldName}" only supports a single realm but received multiple entries`,
-        );
-      }
-      return resolveRealm(value[0]);
-    }
-    if (typeof value !== 'string') {
-      throw new Error(
-        `query field "${fieldName}" must resolve realm to a string`,
+      let resolved = resolvePathValue(
+        resolveInterpolationPath(entry.slice(THIS_INTERPOLATION_PREFIX.length)),
       );
+      if (resolved == null) {
+        continue;
+      }
+      for (let value of Array.isArray(resolved) ? resolved : [resolved]) {
+        expanded.push({ value, interpolated: true });
+      }
     }
-    if (value.length === 0) {
+    return expanded;
+  };
+
+  // One entry -> zero or more realms. An entry naming a realm resolves to it;
+  // an entry naming a resource inside a realm resolves to that realm, which is
+  // what lets a field say "search wherever these references live" without the
+  // card needing to know the realm layout.
+  const resolveOneRealm = ({
+    value,
+    interpolated,
+  }: RealmEntry): string | undefined => {
+    if (typeof value !== 'string' || value.length === 0) {
       throw new Error(
-        `query field "${fieldName}" must resolve realm to a non-empty string`,
+        interpolated
+          ? `query field "${fieldName}" must resolve realm interpolation to non-empty strings`
+          : `query field "${fieldName}" must resolve realm to a non-empty string`,
       );
     }
     if (value === THIS_REALM_TOKEN) {
       return realmURL.href;
     }
-    if (value.startsWith(THIS_INTERPOLATION_PREFIX)) {
-      let interpolated = resolvePathValue(
-        resolveInterpolationPath(value.slice(THIS_INTERPOLATION_PREFIX.length)),
-      );
-      if (typeof interpolated === 'string' && interpolated.length > 0) {
-        return interpolated;
-      }
-      throw new Error(
-        `query field "${fieldName}" must resolve realm interpolation "${value}" to a non-empty string`,
-      );
+    if (!resolveRealmForReference) {
+      return value;
     }
-    return value;
+    let resolved = resolveRealmForReference(value);
+    if (resolved) {
+      return resolved;
+    }
+    // The resolver only knows the realms this process holds mappings for, which
+    // is not every realm that exists. A realm written into the query is honored
+    // as written — a field may target a peer this process has never heard of,
+    // and that worked before. Values that arrived by interpolation are the
+    // instance's own data, so an unplaceable one is dropped rather than
+    // mistaken for a realm to search.
+    //
+    // Provenance decides this, not spelling: a realm href may legitimately be
+    // written without a trailing slash (`buildQuerySearchURL` and
+    // `parseRealmsParam` both normalize that), so shape says nothing about
+    // whether a string names a realm or a resource.
+    return interpolated ? undefined : value;
   };
 
-  let resolvedRealm = resolveRealm(specifiedRealm);
+  const resolveRealms = (authored: any): string[] => {
+    if (authored == null) {
+      return [realmURL.href];
+    }
+    let entries = expandRealmEntries(authored);
+    if (entries.length === 0) {
+      return [realmURL.href];
+    }
+    let seen = new Set<string>();
+    for (let entry of entries) {
+      let resolved = resolveOneRealm(entry);
+      if (resolved) {
+        seen.add(resolved);
+      }
+    }
+    // Every entry resolved to a realm this network doesn't know. Falling back
+    // to the containing realm would quietly search the wrong place, so treat it
+    // the same as an empty predicate: the field has no realm to search.
+    return [...seen];
+  };
+
+  let resolvedRealms = resolveRealms(specifiedRealms);
+  if (resolvedRealms.length === 0) {
+    return null;
+  }
 
   // Resolve in RRI space: the resource's canonical id (prefix form for mapped
   // realms, URL otherwise) is a valid base for relative code-ref resolution,
@@ -275,7 +344,7 @@ export function normalizeQueryDefinition({
     }
   }
 
-  return { query: workingQuery as Query, realm: resolvedRealm };
+  return { query: workingQuery as Query, realms: resolvedRealms };
 }
 
 export function getValueForResourcePath(
@@ -319,10 +388,20 @@ export function getValueForResourcePath(
   return current;
 }
 
-export function buildQuerySearchURL(realmHref: string, query: Query): string {
-  let baseHref = realmHref.endsWith('/') ? realmHref : `${realmHref}/`;
+// The seed URL a query-backed relationship advertises as `links.search`. It is
+// addressed to the first realm — a search endpoint on any realm can fan out —
+// while `realms` names every realm the query covers, so the client rebuilding
+// this query lands on the same set.
+export function buildQuerySearchURL(
+  realmHrefs: string | string[],
+  query: Query,
+): string {
+  let hrefs = (Array.isArray(realmHrefs) ? realmHrefs : [realmHrefs]).map(
+    (href) => (href.endsWith('/') ? href : `${href}/`),
+  );
+  let baseHref = hrefs[0];
   let searchURL = new URL('./_search', baseHref);
-  searchURL.searchParams.set('realms', baseHref);
+  searchURL.searchParams.set('realms', hrefs.join(','));
   // A query-backed field resolves to linked instances, so it asks the
   // entry engine for a data-only projection: each entry carries its
   // full `item` (`card`/`file-meta`) serialization, no prerendered HTML.

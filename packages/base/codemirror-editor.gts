@@ -1649,7 +1649,8 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
           gap: 4px;
           background-color: var(--boxel-100, #f0f0f0);
           border: 1px solid var(--boxel-border-color, #c4c4c4);
-          border-radius: var(--boxel-border-radius, 4px);
+          /* 2px less rounded than the default: the atom pill read too round. */
+          border-radius: calc(var(--boxel-border-radius, 4px) - 2px);
           padding: 1px 6px;
           font-size: 0.85em;
           cursor: pointer;

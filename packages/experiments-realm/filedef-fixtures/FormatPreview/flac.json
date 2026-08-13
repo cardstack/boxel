@@ -1,0 +1,47 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "flac · Format Preview",
+      "cardInfo": {
+        "name": "flac · Format Preview",
+        "summary": "Simple, moderate, and complex flac fixtures across atom, embedded, isolated, and the 16 fitted envelopes."
+      }
+    },
+    "relationships": {
+      "previewFiles.0": {
+        "links": {
+          "self": "../samples/flac-simple.flac"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/flac-simple.flac"
+        }
+      },
+      "previewFiles.1": {
+        "links": {
+          "self": "../samples/flac-moderate.flac"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/flac-moderate.flac"
+        }
+      },
+      "previewFiles.2": {
+        "links": {
+          "self": "../samples/flac-complex.flac"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/flac-complex.flac"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../format-preview",
+        "name": "FileDefFormatPreview"
+      }
+    }
+  }
+}

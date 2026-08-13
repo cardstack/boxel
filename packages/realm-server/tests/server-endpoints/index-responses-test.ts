@@ -1529,20 +1529,28 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           }
 
           // `_publish-realm` returns 202 before indexing finishes. Drive a
-          // reconcile pass to mount the published realm, then hit its readiness
-          // check, which awaits start() + any in-flight index — so this blocks
-          // until the swapped files are indexed and the assertions below query
-          // indexed content.
+          // reconcile pass to mount the published realm, then poll its
+          // readiness check until it reports ready, so the assertions below
+          // query indexed content. Poll rather than asking once: readiness
+          // bounds how long it will hold a single request and answers 503 with
+          // `Retry-After` once that budget is spent, so a from-scratch index
+          // longer than the budget takes more than one request to observe.
           await testRealmServer.testingOnlyReconcile();
-          let readinessResponse = await request
-            .get(`${publishedRealmPath}_readiness-check`)
-            .set('Host', publishedRealmHost)
-            .set('Accept', 'application/vnd.api+json');
-          if (readinessResponse.status !== 200) {
-            throw new Error(
-              `Published realm not ready: ${readinessResponse.status} ${readinessResponse.text}`,
-            );
-          }
+          await waitUntil(
+            async () =>
+              (
+                await request
+                  .get(`${publishedRealmPath}_readiness-check`)
+                  .set('Host', publishedRealmHost)
+                  .set('Accept', 'application/vnd.api+json')
+              ).status === 200,
+            {
+              timeout: 120_000,
+              interval: 1000,
+              timeoutMessage:
+                'published realm never passed its readiness check',
+            },
+          );
           // Readiness drains the index channel only; head HTML lands via the
           // realm's prerender_html job, so settle that channel before the
           // assertions read it.

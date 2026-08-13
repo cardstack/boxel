@@ -4,6 +4,7 @@ import {
   indexingConcurrencyGroup,
 } from './jobs/indexing.ts';
 import { awaitPublishedHtmlReady } from './jobs/prerender-html.ts';
+import { settledBy } from './settled-by.ts';
 import type { RealmVisibility } from './realm-visibility.ts';
 import type { SearchOpts } from './search-utils.ts';
 import { buildSearchErrorBody, SearchRequestError } from './search-utils.ts';
@@ -61,8 +62,10 @@ import type { LocalPath } from './paths.ts';
 import { RealmPaths, ensureTrailingSlash, join } from './paths.ts';
 import type ms from 'ms';
 import {
+  DEFAULT_AUDIO_SIZE_LIMIT_BYTES,
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
+  DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
 } from './constants.ts';
 import {
   persistFileMeta,
@@ -183,8 +186,11 @@ import { fetcher } from './fetcher.ts';
 import { RealmIndexQueryEngine } from './realm-index-query-engine.ts';
 import { RealmIndexUpdater } from './realm-index-updater.ts';
 import serialize from './file-serializer.ts';
-import { validateWriteSize } from './write-size-validation.ts';
-import { md5 } from 'super-fast-md5';
+import {
+  fileSizeLimitFor,
+  validateWriteSize,
+} from './write-size-validation.ts';
+import { computeContentHash, isSampledContentHash } from './content-hash.ts';
 import { resolveFileDefCodeRef } from './file-def-code-ref.ts';
 
 import type { Utils } from './matrix-backend-authentication.ts';
@@ -323,6 +329,16 @@ const COALESCE_NOTIFY_WAIT_MS = 180_000;
 // so the exemption holds for header-less probes too. Keep in sync with
 // `#publicEndpoints`.
 const ARCHIVED_SEAL_EXEMPT_PATHS = new Set(['_readiness-check', '_session']);
+// How long one `_readiness-check` request holds while the gates it clears
+// settle, before answering not-ready instead. Shared across those gates rather
+// than granted per gate: the hold is a courtesy to the poller, `Retry-After`
+// already tells it to come back, and a hold longer than a caller's per-attempt
+// deadline yields a connection timeout instead of a status the loop can read.
+// Sized to the same per-attempt deadline the index-lane budget is sized to.
+// `awaitPrerenderHtml` readiness gates on rendered HTML after this budget and
+// carries its own, longer one — a published realm's HTML can take minutes and
+// its callers are pollers with deadlines to match.
+const READINESS_REQUEST_BUDGET_MS = 10_000;
 const MODULE_ETAG_VARIANT = 'module';
 const SOURCE_ETAG_VARIANT = 'source';
 // Card+JSON ETag is `"<indexed_at>-<realmInfoHash>:card"` — quoted
@@ -454,7 +470,8 @@ type CachedSourceFileEntry = {
   ref: FileRef;
   defaultHeaders: Record<string, string>;
   canonicalPath: LocalPath;
-  // md5 of the materialized body, computed once on cache populate. Used
+  // Content fingerprint of the materialized body, computed once on cache
+  // populate. Used
   // as the ETag base so two writes within the same unix second still
   // produce distinct ETags — see `buildEtag` for the rationale.
   contentHash: string | undefined;
@@ -499,7 +516,7 @@ type ModuleTranspileResult = {
   dependencyKeys: Set<string>;
 };
 
-// ETag base prefers a content fingerprint (md5 of the file body) over
+// ETag base prefers a content fingerprint (derived from the file body) over
 // `lastModified` because the unix-second timestamp collides for two
 // writes that land in the same second — and `cachedFetch` (loader →
 // cached-fetch) will then serve a stale 304-cached body. We compute the
@@ -508,6 +525,31 @@ type ModuleTranspileResult = {
 // cache entry so subsequent serves reuse it. Adapters that don't yet
 // surface a content fingerprint fall back to `lastModified` and keep the
 // pre-existing behavior.
+//
+// An `etagBase` must be a TOTAL identity of the body, because displacing
+// `lastModified` gives up the only signal that sees every write. A sampled
+// fingerprint (see `computeContentHash`) is not total — it cannot see a large
+// file's middle — so it is joined with `lastModified` rather than replacing
+// it: the hash resolves two writes inside one second, and the timestamp
+// covers a same-length middle-only edit the hash misses. An mtime-only touch
+// then busts the cache, which is the safe direction and already how every
+// file without a fingerprint behaves.
+// Joins a sampled fingerprint with the file's mtime so the ETag base is a
+// total identity again. Returns a whole fingerprint unchanged, and undefined
+// when there is none (the caller then falls back to mtime alone).
+function totalEtagBase(
+  etagBase: string | undefined,
+  lastModified: number | undefined,
+): string | undefined {
+  if (etagBase == null) {
+    return undefined;
+  }
+  if (lastModified == null || !isSampledContentHash(etagBase)) {
+    return etagBase;
+  }
+  return `${etagBase}:${lastModified}`;
+}
+
 function buildEtag(
   base: string | number | undefined,
   variant?: string,
@@ -596,24 +638,9 @@ export function ifNoneMatchMatches(headerValue: string, etag: string): boolean {
     .some((token) => token.trim().replace(/^W\//, '') === normalizedEtag);
 }
 
-function computeContentHash(content: string | Uint8Array): string {
-  try {
-    if (content instanceof Uint8Array) {
-      return md5(content);
-    }
-    return md5(new TextEncoder().encode(content));
-  } catch {
-    try {
-      return md5(String(content));
-    } catch {
-      throw new Error('Failed to compute content hash');
-    }
-  }
-}
-
-// Cheap helper for the source endpoint: returns md5 of the body when the
-// ref has already been materialized to a string or Uint8Array. Returns
-// undefined for stream refs (the caller falls back to lastModified).
+// Cheap helper for the source endpoint: returns the content fingerprint of the
+// body when the ref has already been materialized to a string or Uint8Array.
+// Returns undefined for stream refs (the caller falls back to lastModified).
 function contentHashFromMaterializedRef(ref: FileRef): string | undefined {
   let { content } = ref;
   if (typeof content === 'string' || content instanceof Uint8Array) {
@@ -902,6 +929,8 @@ export class Realm {
   #transpileCoordinator?: PopulateCoordinator;
   #cardSizeLimitBytes: number;
   #fileSizeLimitBytes: number;
+  #audioSizeLimitBytes: number;
+  #videoSizeLimitBytes: number;
 
   #publicEndpoints: RouteTable<true> = new Map([
     [
@@ -989,6 +1018,8 @@ export class Realm {
       definitionLookup,
       cardSizeLimitBytes,
       fileSizeLimitBytes,
+      audioSizeLimitBytes,
+      videoSizeLimitBytes,
       transpileCoordinator,
     }: {
       url: string;
@@ -1002,6 +1033,8 @@ export class Realm {
       definitionLookup: DefinitionLookup;
       cardSizeLimitBytes?: number;
       fileSizeLimitBytes?: number;
+      audioSizeLimitBytes?: number;
+      videoSizeLimitBytes?: number;
       // CS-11030: when set, the realm coalesces concurrent cross-process
       // transpiles through an advisory-lock + NOTIFY winner/loser flow
       // and persists the resulting bytes to `module_transpile_cache` so
@@ -1033,6 +1066,10 @@ export class Realm {
       cardSizeLimitBytes ?? DEFAULT_CARD_SIZE_LIMIT_BYTES;
     this.#fileSizeLimitBytes =
       fileSizeLimitBytes ?? DEFAULT_FILE_SIZE_LIMIT_BYTES;
+    this.#audioSizeLimitBytes =
+      audioSizeLimitBytes ?? DEFAULT_AUDIO_SIZE_LIMIT_BYTES;
+    this.#videoSizeLimitBytes =
+      videoSizeLimitBytes ?? DEFAULT_VIDEO_SIZE_LIMIT_BYTES;
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
     this.#copiedFromRealm = opts?.copiedFromRealm;
     let owner: string | undefined;
@@ -1257,10 +1294,10 @@ export class Realm {
     // Report not-ready as a 503 with a retry hint rather than a false 200: a
     // poller keeps waiting, and a single-shot caller sees the failure instead
     // of treating the work it is waiting on as complete. `X-Boxel-Not-Ready`
-    // names which stage is outstanding — the two have different causes and
-    // different remedies, and the poll loops that consume this discard the
+    // names which stage is outstanding — each has a different cause and a
+    // different remedy, and the poll loops that consume this discard the
     // body, so the header is the only place an operator can read it from.
-    let notReady = (stage: 'index' | 'prerender-html') =>
+    let notReady = (stage: 'startup' | 'index' | 'prerender-html') =>
       createResponse({
         body: null,
         init: {
@@ -1274,16 +1311,46 @@ export class Realm {
         requestContext,
       });
 
-    await this.#startedUp.promise;
     // #startedUp is a one-time gate that resolves after the first start()'s
     // from-scratch index. On a republish the realm is already mounted with a
     // resolved #startedUp, so awaiting it alone would report ready before the
     // reindex of the swapped files completes. Also await any in-flight full or
     // incremental index so a publish poll only succeeds once the just-published
     // content is indexed.
+    //
+    // Both waits are budgeted for the same reason the shared-state gates below
+    // are: this endpoint's contract is that a not-yet answers, not that the
+    // connection is held until the answer is yes. An unbounded wait here is
+    // worse than no answer, because the canonical caller
+    // (`realm-operations.waitForReady`) polls serially with no per-request
+    // deadline and only re-checks its own overall budget between requests — so
+    // one held-open request parks the whole poll loop for as long as the gate
+    // stalls, and the client sees a hung connection rather than a status it can
+    // read. Returning 503 keeps the loop ticking against its own deadline, and
+    // a gate that clears later is picked up by the next poll.
+    //
+    // One deadline spans every gate below, so a request costs one hold no
+    // matter how many gates it clears. Each log line reports the time that gate
+    // actually spent, not the budget: when startup consumes most of it the
+    // later gates expire almost immediately, and a message naming the full
+    // budget would send an operator looking for a slow index that never
+    // happened.
+    let waitStartedAt = Date.now();
+    let requestDeadline = waitStartedAt + READINESS_REQUEST_BUDGET_MS;
+    if (!(await settledBy(this.#startedUp.promise, requestDeadline))) {
+      this.#log.warn(
+        `readiness check for ${this.url} is still waiting on realm startup after ${Date.now() - waitStartedAt}ms`,
+      );
+      return notReady('startup');
+    }
+    let startupSettledAt = Date.now();
     let inflight = this.indexing();
-    if (inflight) {
-      await inflight;
+    if (inflight && !(await settledBy(inflight, requestDeadline))) {
+      this.#log.warn(
+        `readiness check for ${this.url} is still waiting on in-flight indexing after ${Date.now() - startupSettledAt}ms ` +
+          `(realm startup used ${startupSettledAt - waitStartedAt}ms of the ${READINESS_REQUEST_BUDGET_MS}ms budget)`,
+      );
+      return notReady('index');
     }
 
     // Both gates above read per-process state: they see only the indexing this
@@ -1297,7 +1364,18 @@ export class Realm {
     // rows, so the realm's index lane holding no outstanding work is the same
     // answer everywhere. A realm with no server-side queue has no such lane and
     // reports settled without a query.
-    if (!(await awaitRealmIndexSettled(this.#dbAdapter, this.url))) {
+    // This gate shares the in-process gates' deadline rather than starting a
+    // fresh budget, so one request costs one hold no matter how many gates it
+    // clears. That keeps the endpoint inside the per-attempt deadline the
+    // budget is sized against — the CI readiness probes cap each attempt at
+    // `curl --max-time 15`, and a request that spent its budget on startup and
+    // then started another full budget here would blow past that and hand the
+    // probe a connection timeout instead of a status it can read.
+    if (
+      !(await awaitRealmIndexSettled(this.#dbAdapter, this.url, {
+        timeoutMs: Math.max(0, requestDeadline - Date.now()),
+      }))
+    ) {
       // The lane never drained within budget — a job queued behind a long
       // backlog, or one whose worker died and has yet to be reaped. Keep the
       // caller polling instead of reporting a realm ready whose index is
@@ -2193,7 +2271,7 @@ export class Realm {
         isCardDocumentString(content)
           ? 'card'
           : 'file';
-      this.assertWriteSize(content, sizeType);
+      this.assertWriteSize(content, sizeType, path);
       let isNewFile: boolean;
       if (typeof content === 'string') {
         let existingFile = await readFileAsText(path, (p) =>
@@ -2563,14 +2641,14 @@ export class Realm {
         }
         if (isModuleResource(resource)) {
           let content = resource.attributes?.content ?? '';
-          this.assertWriteSize(content, 'file');
+          this.assertWriteSize(content, 'file', localPath);
           files.set(localPath, content);
         } else if (isCardResource(resource)) {
           let doc = {
             data: resource,
           };
           let jsonString = JSON.stringify(doc, null, 2);
-          this.assertWriteSize(jsonString, 'card');
+          this.assertWriteSize(jsonString, 'card', localPath);
           files.set(localPath, jsonString);
         } else {
           return createResponse({
@@ -3890,7 +3968,7 @@ export class Realm {
     options?: {
       defaultHeaders?: Record<string, string>;
       etagVariant?: string;
-      // Optional content-derived fingerprint (e.g. md5 of body bytes).
+      // Optional content-derived fingerprint derived from the body bytes.
       // Takes precedence over `ref.lastModified` for the ETag — see
       // `buildEtag`. Callers that have the materialized body already
       // (the source endpoint cache-miss path) compute this for free.
@@ -3912,7 +3990,7 @@ export class Realm {
       ? `${cacheVisibility}, max-age=60, must-revalidate`
       : `${cacheVisibility}, max-age=0`;
     let etag = buildEtag(
-      options?.etagBase ?? ref.lastModified,
+      totalEtagBase(options?.etagBase, ref.lastModified) ?? ref.lastModified,
       options?.etagVariant,
     );
     let lastModified = formatRFC7231(ref.lastModified * 1000);
@@ -4180,9 +4258,19 @@ export class Realm {
     });
   }
 
-  private assertWriteSize(content: string | Uint8Array, type: 'card' | 'file') {
+  private assertWriteSize(
+    content: string | Uint8Array,
+    type: 'card' | 'file',
+    path: LocalPath,
+  ) {
     let limit =
-      type === 'card' ? this.#cardSizeLimitBytes : this.#fileSizeLimitBytes;
+      type === 'card'
+        ? this.#cardSizeLimitBytes
+        : fileSizeLimitFor(path, {
+            default: this.#fileSizeLimitBytes,
+            audio: this.#audioSizeLimitBytes,
+            video: this.#videoSizeLimitBytes,
+          });
     try {
       validateWriteSize(content, limit, type);
     } catch (error: any) {
@@ -4335,7 +4423,7 @@ export class Realm {
         }
         // Compute the content fingerprint while we have the body in
         // memory — `cachedRef.content` is already a string/Uint8Array
-        // post-materialization, so this is a single md5 with no extra I/O.
+        // post-materialization, so this is a single hash with no extra I/O.
         let contentHash = contentHashFromMaterializedRef(cachedRef);
         if (
           sourceCacheGenSnapshot &&

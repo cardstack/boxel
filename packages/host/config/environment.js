@@ -6,6 +6,8 @@ const path = require('path');
 const DEFAULT_CARD_RENDER_TIMEOUT_MS = 30_000;
 const DEFAULT_CARD_SIZE_LIMIT_BYTES = 512 * 1024; // 512KB
 const DEFAULT_FILE_SIZE_LIMIT_BYTES = 5 * 1024 * 1024; // 5MB
+const DEFAULT_AUDIO_SIZE_LIMIT_BYTES = 20 * 1024 * 1024; // 20MB
+const DEFAULT_VIDEO_SIZE_LIMIT_BYTES = 50 * 1024 * 1024; // 50MB
 
 let sqlSchema = fs.readFileSync(getLatestSchemaFile(), 'utf8');
 
@@ -151,6 +153,12 @@ module.exports = function (environment) {
     fileSizeLimitBytes: Number(
       process.env.FILE_SIZE_LIMIT_BYTES ?? DEFAULT_FILE_SIZE_LIMIT_BYTES,
     ),
+    audioSizeLimitBytes: Number(
+      process.env.AUDIO_SIZE_LIMIT_BYTES ?? DEFAULT_AUDIO_SIZE_LIMIT_BYTES,
+    ),
+    videoSizeLimitBytes: Number(
+      process.env.VIDEO_SIZE_LIMIT_BYTES ?? DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
+    ),
     // In environment mode, use computed Traefik hostname (not env var, which
     // may be stale from mise's shell-activation cache in standard mode).
     iconsURL: process.env.BOXEL_ENVIRONMENT
@@ -219,6 +227,9 @@ module.exports = function (environment) {
 
     // Catalog realms are not available in test environment
     ENV.resolvedCatalogRealmURL = undefined;
+    // Neither is the OpenRouter catalog realm; tests that exercise the model
+    // cost-tier lookup point this at their own test realm explicitly.
+    ENV.resolvedOpenRouterRealmURL = undefined;
     ENV.defaultSystemCardId = 'http://test-realm/test/SystemCard/default';
     ENV.defaultFieldSpecId = 'http://test-realm/test/fields/field';
   }
