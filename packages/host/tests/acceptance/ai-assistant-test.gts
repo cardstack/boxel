@@ -37,8 +37,6 @@ import type MonacoService from '@cardstack/host/services/monaco-service';
 import { AiAssistantMessageDrafts } from '@cardstack/host/utils/local-storage-keys';
 
 import {
-  withCachedRealmSetup,
-  setupRealmCacheTeardown,
   setupLocalIndexing,
   addSkillToAiAssistant,
   setupOnSave,
@@ -144,8 +142,13 @@ function modelNameFor(llmId: string): string {
 
 module('Acceptance | AI Assistant tests', function (hooks) {
   setupApplicationTest(hooks);
-  setupLocalIndexing(hooks);
-  setupRealmCacheTeardown(hooks);
+  // Every test in this module builds the same realm fixtures in the beforeEach
+  // below, so the realm is indexed once and that index restored for each
+  // subsequent test. What a test writes afterwards stays with that test — the
+  // snapshot is restored, not carried forward.
+  setupLocalIndexing(hooks, {
+    reuseIndexAcrossTests: 'aiAssistant',
+  });
   setupOnSave(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -428,153 +431,149 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       modelConfigurations: [deepseekModel, geminiFlashModel, openAiGpt5Model],
     });
 
-    // Every test builds these fixtures identically, so the indexed result is
-    // cached for the module and restored rather than rebuilt.
-    await withCachedRealmSetup(async () => {
-      await setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        contents: {
-          ...SYSTEM_CARD_FIXTURE_CONTENTS,
-          'person.gts': { Person },
-          'pet.gts': { Pet },
-          'broken-card.gts': `
-            import { CardDef, field, contains } from '@cardstack/base/card-api';
-            import StringField from '@cardstack/base/string';
-            import { BrokenField } from './does-not-exist';
-            export class BrokenCard extends CardDef {
-              static displayName = 'Broken Card';
-              @field name = contains(StringField);
-              @field broken = contains(BrokenField);
-            }
-          `,
-          'BrokenCard/errored.json': {
-            data: {
-              attributes: {
-                name: 'Errored Instance',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: '../broken-card',
-                  name: 'BrokenCard',
-                },
+    await setupAcceptanceTestRealm({
+      mockMatrixUtils,
+      contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
+        'person.gts': { Person },
+        'pet.gts': { Pet },
+        'broken-card.gts': `
+          import { CardDef, field, contains } from '@cardstack/base/card-api';
+          import StringField from '@cardstack/base/string';
+          import { BrokenField } from './does-not-exist';
+          export class BrokenCard extends CardDef {
+            static displayName = 'Broken Card';
+            @field name = contains(StringField);
+            @field broken = contains(BrokenField);
+          }
+        `,
+        'BrokenCard/errored.json': {
+          data: {
+            attributes: {
+              name: 'Errored Instance',
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../broken-card',
+                name: 'BrokenCard',
               },
             },
           },
-          'country.gts': countryDefinition,
-          'Country/indonesia.json': {
-            data: {
-              attributes: {
-                name: 'Indonesia',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}country`,
-                  name: 'Country',
-                },
-              },
-            },
-          },
-          'Pet/ringo.json': new Pet({ name: 'Ringo' }),
-          'Person/hassan.json': new Person({
-            firstName: 'Hassan',
-            lastName: 'Abdel-Rahman',
-            pet: mangoPet,
-            friends: [mangoPet],
-          }),
-          'Pet/mango.json': mangoPet,
-          'Pet/vangogh.json': new Pet({ name: 'Van Gogh' }),
-          'Person/fadhlan.json': new Person({
-            firstName: 'Fadhlan',
-            pet: mangoPet,
-            friends: [mangoPet],
-          }),
-          'plant.gts': `
-            import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
-            export class Plant extends CardDef {
-              static displayName = "Plant";
-              @field commonName = contains(StringField);
-            }
-          `,
-          'Plant/highbush-blueberry.json': {
-            data: {
-              attributes: {
-                commonName: 'Highbush Blueberry',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: `../plant`,
-                  name: 'Plant',
-                },
-              },
-            },
-          },
-          'Spec/plant-spec.json': {
-            data: {
-              type: 'card',
-              attributes: {
-                ref: {
-                  name: 'Plant',
-                  module: `${testRealmURL}plant`,
-                },
-                specType: 'card',
-                cardTitle: 'Plant spec',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: '@cardstack/base/spec',
-                  name: 'Spec',
-                },
-              },
-            },
-          },
-          'Skill/example.json': {
-            data: {
-              attributes: {
-                cardTitle: 'Example Skill',
-                cardDescription: 'This skill card is for testing purposes',
-                instructions: 'This is an example skill card',
-                commands: [],
-              },
-              meta: {
-                adoptsFrom: skillCardRef,
-              },
-            },
-          },
-          'Skill/example2.json': {
-            data: {
-              attributes: {
-                cardTitle: 'Example 2 Skill',
-                cardDescription: 'This skill card is also for testing purposes',
-                instructions: 'This is a second example skill card',
-                commands: [],
-              },
-              meta: {
-                adoptsFrom: skillCardRef,
-              },
-            },
-          },
-          'ModelConfiguration/gpt-4o-mini.json': openAiGpt4oMiniModel,
-          'ModelConfiguration/gpt-5.json': openAiGpt5Model,
-          'ModelConfiguration/gpt-5-extended.json': openAiGpt5ExtendedModel,
-          'ModelConfiguration/claude-sonnet-4.6.json':
-            anthropicClaudeSonnet46Model,
-          'ModelConfiguration/claude-sonnet-4.5.json':
-            anthropicClaudeSonnet45Model,
-          'ModelConfiguration/claude-sonnet-3.7.json':
-            anthropicClaudeSonnet37Model,
-          'SystemCard/default.json': defaultSystemCard,
-          'ModelConfiguration/deepseek-chat-v3-0324.json': deepseekModel,
-          'ModelConfiguration/gemini-2.5-flash.json': geminiFlashModel,
-          'SystemCard/productivity.json': alternateSystemCard,
-          'index.json': new CardsGrid(),
-          'realm.json': realmConfigCardJSON({
-            name: 'Test Workspace B',
-            backgroundURL:
-              'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-            iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-          }),
         },
-      });
+        'country.gts': countryDefinition,
+        'Country/indonesia.json': {
+          data: {
+            attributes: {
+              name: 'Indonesia',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}country`,
+                name: 'Country',
+              },
+            },
+          },
+        },
+        'Pet/ringo.json': new Pet({ name: 'Ringo' }),
+        'Person/hassan.json': new Person({
+          firstName: 'Hassan',
+          lastName: 'Abdel-Rahman',
+          pet: mangoPet,
+          friends: [mangoPet],
+        }),
+        'Pet/mango.json': mangoPet,
+        'Pet/vangogh.json': new Pet({ name: 'Van Gogh' }),
+        'Person/fadhlan.json': new Person({
+          firstName: 'Fadhlan',
+          pet: mangoPet,
+          friends: [mangoPet],
+        }),
+        'plant.gts': `
+          import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
+          export class Plant extends CardDef {
+            static displayName = "Plant";
+            @field commonName = contains(StringField);
+          }
+        `,
+        'Plant/highbush-blueberry.json': {
+          data: {
+            attributes: {
+              commonName: 'Highbush Blueberry',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `../plant`,
+                name: 'Plant',
+              },
+            },
+          },
+        },
+        'Spec/plant-spec.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              ref: {
+                name: 'Plant',
+                module: `${testRealmURL}plant`,
+              },
+              specType: 'card',
+              cardTitle: 'Plant spec',
+            },
+            meta: {
+              adoptsFrom: {
+                module: '@cardstack/base/spec',
+                name: 'Spec',
+              },
+            },
+          },
+        },
+        'Skill/example.json': {
+          data: {
+            attributes: {
+              cardTitle: 'Example Skill',
+              cardDescription: 'This skill card is for testing purposes',
+              instructions: 'This is an example skill card',
+              commands: [],
+            },
+            meta: {
+              adoptsFrom: skillCardRef,
+            },
+          },
+        },
+        'Skill/example2.json': {
+          data: {
+            attributes: {
+              cardTitle: 'Example 2 Skill',
+              cardDescription: 'This skill card is also for testing purposes',
+              instructions: 'This is a second example skill card',
+              commands: [],
+            },
+            meta: {
+              adoptsFrom: skillCardRef,
+            },
+          },
+        },
+        'ModelConfiguration/gpt-4o-mini.json': openAiGpt4oMiniModel,
+        'ModelConfiguration/gpt-5.json': openAiGpt5Model,
+        'ModelConfiguration/gpt-5-extended.json': openAiGpt5ExtendedModel,
+        'ModelConfiguration/claude-sonnet-4.6.json':
+          anthropicClaudeSonnet46Model,
+        'ModelConfiguration/claude-sonnet-4.5.json':
+          anthropicClaudeSonnet45Model,
+        'ModelConfiguration/claude-sonnet-3.7.json':
+          anthropicClaudeSonnet37Model,
+        'SystemCard/default.json': defaultSystemCard,
+        'ModelConfiguration/deepseek-chat-v3-0324.json': deepseekModel,
+        'ModelConfiguration/gemini-2.5-flash.json': geminiFlashModel,
+        'SystemCard/productivity.json': alternateSystemCard,
+        'index.json': new CardsGrid(),
+        'realm.json': realmConfigCardJSON({
+          name: 'Test Workspace B',
+          backgroundURL:
+            'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+          iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+        }),
+      },
     });
 
     getService('matrix-service').fetchMatrixHostedFile = async (_url) => {
