@@ -925,10 +925,25 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
 
   <template>
     {{#if this.cm}}
-      <div class='codemirror-editor' data-test-codemirror-editor ...attributes>
+      {{! `data-overlay-clip-container` / `data-overlay-clip-header` mark the
+          boundary the operator-mode overlay layer clips against: adorn overlays
+          drawn over embedded compose-preview cards are cut off where a card
+          scrolls behind the sticky toolbar, so the outline no longer paints on
+          top of it (CS-11699). Consumed by the `offset` middleware in
+          operator-mode/overlays.gts. }}
+      <div
+        class='codemirror-editor'
+        data-overlay-clip-container
+        data-test-codemirror-editor
+        ...attributes
+      >
         {{! ── Docked toolbar ── }}
         {{! template-lint-disable no-pointer-down-event-binding }}
-        <div class='codemirror-toolbar' data-test-markdown-toolbar>
+        <div
+          class='codemirror-toolbar'
+          data-overlay-clip-header
+          data-test-markdown-toolbar
+        >
           {{yield to='leadingControls'}}
           {{#if (has-block 'leadingControls')}}
             <span class='toolbar-divider'></span>

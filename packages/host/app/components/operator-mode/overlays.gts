@@ -45,6 +45,22 @@ interface OverlaySignature {
   };
 }
 
+// Returns the `clip-path` that hides the portion of an overlay scrolled behind
+// a sticky header (e.g. the rich-markdown compose toolbar), or '' when the card
+// is clear of the header. `refTop` is the decorated card's viewport top and
+// `headerBottom` the header's viewport bottom, so `headerBottom - refTop` is how
+// far the overlay's top has slid under the header. Negative side/bottom insets
+// keep the adorn box-shadow ring (≤0.25rem spread) visible on the un-clipped
+// edges; '' fully restores the overlay (and its top-overhanging type-label) when
+// nothing occludes it. Exported for unit testing. See CS-11699.
+export function stickyHeaderClipPath(
+  refTop: number,
+  headerBottom: number,
+): string {
+  let clipTop = Math.max(0, headerBottom - refTop);
+  return clipTop > 0 ? `inset(${clipTop}px -0.5rem -0.5rem -0.5rem)` : '';
+}
+
 export default class Overlays extends Component<OverlaySignature> {
   @tracked overlayClassName = this.args.overlayClassName ?? 'base-overlay';
   private boundRenderedCardElements = new Map<
@@ -134,6 +150,29 @@ export default class Overlays extends Component<OverlaySignature> {
         floating.style.borderRadius =
           window.getComputedStyle(reference).borderRadius;
       }
+
+      // Clip the overlay where a scrolled card slides behind a sticky header
+      // (the rich-markdown compose toolbar) — otherwise the adorn outline paints
+      // on top of the toolbar, because the overlay is a positioned sibling above
+      // the card's stacking-context-sealed subtree and z-index can't arbitrate
+      // it (CS-11699). Mirrors the overflow-occlusion the stack-item header
+      // already relies on, but at the toolbar's dynamic bottom edge. A no-op for
+      // cards outside a marked clip container (the `closest` returns null), so
+      // the `querySelector` never runs for non-editor overlay consumers. Always
+      // assigned so the clip clears as the card scrolls back into the clear.
+      let clipPath = '';
+      if (reference instanceof HTMLElement) {
+        let header = reference
+          .closest('[data-overlay-clip-container]')
+          ?.querySelector<HTMLElement>('[data-overlay-clip-header]');
+        if (header) {
+          clipPath = stickyHeaderClipPath(
+            refRect.top,
+            header.getBoundingClientRect().bottom,
+          );
+        }
+      }
+      floating.style.clipPath = clipPath;
 
       // Position the overlay from the live reference rect relative to the
       // floating element's own offset parent, rather than floating-ui's
