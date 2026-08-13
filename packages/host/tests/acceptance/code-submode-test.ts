@@ -1625,11 +1625,18 @@ module('Acceptance | code submode tests', function (_hooks) {
         .previousElementSibling as HTMLElement;
       let previewPanel = previewResizeHandle!.nextElementSibling as HTMLElement;
       assert
+        .dom(editorPanel)
+        .hasAttribute(
+          'data-boxel-panel-id',
+          /.+/,
+          'the element before the handle is a resizable panel',
+        );
+      assert
         .dom(previewPanel)
         .hasAttribute(
           'data-boxel-panel-id',
           /.+/,
-          'the handle sits between two resizable panels',
+          'the element after the handle is a resizable panel',
         );
 
       // Drag by a fraction of the preview panel's own width rather than a
