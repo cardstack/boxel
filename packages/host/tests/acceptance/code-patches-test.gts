@@ -2072,14 +2072,14 @@ ${REPLACE_MARKER}\n\`\`\``;
     let statusWhenToolRan: string | undefined;
     let originalPatch = store.patch.bind(store);
     let eventId: string;
-    store.patch = (...args: Parameters<typeof store.patch>) => {
+    store.patch = ((...args: Parameters<typeof originalPatch>) => {
       statusWhenToolRan = toolService.getCodePatchStatus({
         roomId,
         eventId,
         codeBlockIndex: 0,
       });
       return originalPatch(...args);
-    };
+    }) as typeof store.patch;
 
     let codeBlock = `\`\`\`
 http://test-realm/test/hello.txt
