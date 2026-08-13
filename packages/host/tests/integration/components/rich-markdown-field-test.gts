@@ -133,6 +133,55 @@ module('Integration | RichMarkdownField', function (hooks) {
     );
   });
 
+  test('docked toolbar and editor mount share an overflow-clipping wrapper so the sticky toolbar corners conform to the rounded editor outline', async function (assert) {
+    class TestCard extends CardDef {
+      @field body = contains(RichMarkdownField);
+      static edit = class Edit extends Component<typeof this> {
+        <template><@fields.body /></template>
+      };
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-card.gts': { TestCard },
+      },
+    });
+
+    let card = new TestCard({
+      body: new RichMarkdownField({ content: 'Edit me' }),
+    });
+    let root = await renderCard(loader, card, 'edit');
+    await waitFor('[data-test-codemirror-body]', { timeout: 5000 });
+
+    let wrapper = root.querySelector(
+      '[data-test-codemirror-body]',
+    ) as HTMLElement;
+    assert.dom(wrapper).exists('the clipping wrapper is rendered');
+    // The wrapper must clip (not scroll) so the toolbar's square bottom
+    // corners follow the editor's rounded outline when it docks at the
+    // bottom, while keeping position: sticky resolving to the outer panel.
+    assert.strictEqual(
+      getComputedStyle(wrapper).overflowY,
+      'clip',
+      'the wrapper clips its overflow',
+    );
+    // Toolbar + mount live inside the wrapper (so they get clipped)…
+    assert
+      .dom('[data-test-markdown-toolbar]', wrapper)
+      .exists('the toolbar is inside the clipping wrapper');
+    assert
+      .dom('[data-test-codemirror-mount]', wrapper)
+      .exists('the editor mount is inside the clipping wrapper');
+    // …but the wrapper is nested directly in the bordered/rounded editor.
+    assert
+      .dom(wrapper.parentElement)
+      .hasClass(
+        'codemirror-editor',
+        'the wrapper is a direct child of the editor container',
+      );
+  });
+
   test('renders with null content without error', async function (assert) {
     class TestCard extends CardDef {
       @field body = contains(RichMarkdownField);

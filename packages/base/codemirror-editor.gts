@@ -938,129 +938,132 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
         data-test-codemirror-editor
         ...attributes
       >
-        {{! ── Docked toolbar ── }}
-        {{! template-lint-disable no-pointer-down-event-binding }}
-        <div
-          class='codemirror-toolbar'
-          data-overlay-clip-header
-          data-test-markdown-toolbar
-        >
-          {{yield to='leadingControls'}}
-          {{#if (has-block 'leadingControls')}}
-            <span class='toolbar-divider'></span>
-          {{/if}}
+        <div class='codemirror-body' data-test-codemirror-body>
+          {{! ── Docked toolbar ── }}
+          {{! template-lint-disable no-pointer-down-event-binding }}
+          <div
+            class='codemirror-toolbar'
+            data-overlay-clip-header
+            data-test-markdown-toolbar
+          >
+            {{yield to='leadingControls'}}
+            {{#if (has-block 'leadingControls')}}
+              <span class='toolbar-divider'></span>
+            {{/if}}
 
-          {{#if this._currentBfmRef}}
-            <Tooltip @placement='top' data-test-toolbar-tooltip='edit-embed'>
-              <:trigger>
-                <button
-                  class='toolbar-btn'
-                  data-test-toolbar='edit-embed'
-                  type='button'
-                  aria-label='Edit embed'
-                  {{on 'mousedown' this._preventFocusLoss}}
-                  {{on 'click' this._openEditEmbed}}
-                ><PencilIcon width='16' height='16' /></button>
-              </:trigger>
-              <:content>
-                <span class='toolbar-tooltip'>
-                  <span class='toolbar-tooltip__label'>Edit embed</span>
-                </span>
-              </:content>
-            </Tooltip>
-          {{else}}
-            <div class='toolbar-embed-trigger'>
-              <Tooltip @placement='top' data-test-toolbar-tooltip='add-embed'>
+            {{#if this._currentBfmRef}}
+              <Tooltip @placement='top' data-test-toolbar-tooltip='edit-embed'>
                 <:trigger>
                   <button
-                    class='toolbar-btn
-                      {{if this._embedPopoverOpen "toolbar-btn--active"}}'
-                    data-test-toolbar='add-embed'
+                    class='toolbar-btn'
+                    data-test-toolbar='edit-embed'
                     type='button'
-                    aria-label='Add embed'
-                    aria-expanded={{if this._embedPopoverOpen 'true' 'false'}}
+                    aria-label='Edit embed'
                     {{on 'mousedown' this._preventFocusLoss}}
-                    {{on 'click' this._toggleEmbedPopover}}
-                  ><PlusIcon width='16' height='16' /></button>
+                    {{on 'click' this._openEditEmbed}}
+                  ><PencilIcon width='16' height='16' /></button>
                 </:trigger>
                 <:content>
                   <span class='toolbar-tooltip'>
-                    <span class='toolbar-tooltip__label'>Add embed</span>
+                    <span class='toolbar-tooltip__label'>Edit embed</span>
                   </span>
                 </:content>
               </Tooltip>
-              {{#if this._embedPopoverOpen}}
-                <div
-                  class='toolbar-embed-popover'
-                  data-test-toolbar-embed-popover
-                >
-                  <button
-                    type='button'
-                    class='toolbar-embed-popover__item'
-                    data-test-toolbar-embed='card'
-                    {{on 'mousedown' this._preventFocusLoss}}
-                    {{on 'click' (fn this._openEmbedChooser 'card')}}
-                  >Add a card</button>
-                  <button
-                    type='button'
-                    class='toolbar-embed-popover__item'
-                    data-test-toolbar-embed='file'
-                    {{on 'mousedown' this._preventFocusLoss}}
-                    {{on 'click' (fn this._openEmbedChooser 'file')}}
-                  >Add a file</button>
-                </div>
-              {{/if}}
-            </div>
-          {{/if}}
-          <span class='toolbar-divider'></span>
-
-          {{#each this.toolbarButtons as |btn|}}
-            {{#if btn.divider}}
-              <span class='toolbar-divider'></span>
             {{else}}
-              {{! Every item gets a styled tooltip — the label, plus a shortcut
+              <div class='toolbar-embed-trigger'>
+                <Tooltip @placement='top' data-test-toolbar-tooltip='add-embed'>
+                  <:trigger>
+                    <button
+                      class='toolbar-btn
+                        {{if this._embedPopoverOpen "toolbar-btn--active"}}'
+                      data-test-toolbar='add-embed'
+                      type='button'
+                      aria-label='Add embed'
+                      aria-expanded={{if this._embedPopoverOpen 'true' 'false'}}
+                      {{on 'mousedown' this._preventFocusLoss}}
+                      {{on 'click' this._toggleEmbedPopover}}
+                    ><PlusIcon width='16' height='16' /></button>
+                  </:trigger>
+                  <:content>
+                    <span class='toolbar-tooltip'>
+                      <span class='toolbar-tooltip__label'>Add embed</span>
+                    </span>
+                  </:content>
+                </Tooltip>
+                {{#if this._embedPopoverOpen}}
+                  <div
+                    class='toolbar-embed-popover'
+                    data-test-toolbar-embed-popover
+                  >
+                    <button
+                      type='button'
+                      class='toolbar-embed-popover__item'
+                      data-test-toolbar-embed='card'
+                      {{on 'mousedown' this._preventFocusLoss}}
+                      {{on 'click' (fn this._openEmbedChooser 'card')}}
+                    >Add a card</button>
+                    <button
+                      type='button'
+                      class='toolbar-embed-popover__item'
+                      data-test-toolbar-embed='file'
+                      {{on 'mousedown' this._preventFocusLoss}}
+                      {{on 'click' (fn this._openEmbedChooser 'file')}}
+                    >Add a file</button>
+                  </div>
+                {{/if}}
+              </div>
+            {{/if}}
+            <span class='toolbar-divider'></span>
+
+            {{#each this.toolbarButtons as |btn|}}
+              {{#if btn.divider}}
+                <span class='toolbar-divider'></span>
+              {{else}}
+                {{! Every item gets a styled tooltip — the label, plus a shortcut
                   key badge when the item has a CodeMirror binding. The tooltip
                   is suppressed while the control is disabled. }}
-              <Tooltip
-                @placement='top'
-                @disabled={{btn.disabled}}
-                data-test-toolbar-tooltip={{btn.testId}}
-              >
-                <:trigger>
-                  <button
-                    class='toolbar-btn {{if btn.active "toolbar-btn--active"}}'
-                    data-test-toolbar={{btn.testId}}
-                    type='button'
-                    aria-label={{btn.label}}
-                    aria-pressed={{btn.ariaPressed}}
-                    disabled={{btn.disabled}}
-                    {{on 'mousedown' this._preventFocusLoss}}
-                    {{on 'click' btn.action}}
-                  >{{#let btn.icon as |Icon|}}<Icon
-                        width='16'
-                        height='16'
-                      />{{/let}}</button>
-                </:trigger>
-                <:content>
-                  <span class='toolbar-tooltip'>
-                    <span class='toolbar-tooltip__label'>{{btn.label}}</span>
-                    {{#if btn.shortcut}}
-                      <kbd class='shortcut-key'>{{btn.shortcut}}</kbd>
-                    {{/if}}
-                  </span>
-                </:content>
-              </Tooltip>
-            {{/if}}
-          {{/each}}
-        </div>
+                <Tooltip
+                  @placement='top'
+                  @disabled={{btn.disabled}}
+                  data-test-toolbar-tooltip={{btn.testId}}
+                >
+                  <:trigger>
+                    <button
+                      class='toolbar-btn
+                        {{if btn.active "toolbar-btn--active"}}'
+                      data-test-toolbar={{btn.testId}}
+                      type='button'
+                      aria-label={{btn.label}}
+                      aria-pressed={{btn.ariaPressed}}
+                      disabled={{btn.disabled}}
+                      {{on 'mousedown' this._preventFocusLoss}}
+                      {{on 'click' btn.action}}
+                    >{{#let btn.icon as |Icon|}}<Icon
+                          width='16'
+                          height='16'
+                        />{{/let}}</button>
+                  </:trigger>
+                  <:content>
+                    <span class='toolbar-tooltip'>
+                      <span class='toolbar-tooltip__label'>{{btn.label}}</span>
+                      {{#if btn.shortcut}}
+                        <kbd class='shortcut-key'>{{btn.shortcut}}</kbd>
+                      {{/if}}
+                    </span>
+                  </:content>
+                </Tooltip>
+              {{/if}}
+            {{/each}}
+          </div>
 
-        {{! template-lint-disable no-invalid-interactive }}
-        <div
-          class='codemirror-mount'
-          data-test-codemirror-mount
-          {{on 'mousedown' this._focusEditorOnPointerDown}}
-          {{this.mountEditor this.cm @content @onUpdate this.livePreview}}
-        ></div>
+          {{! template-lint-disable no-invalid-interactive }}
+          <div
+            class='codemirror-mount'
+            data-test-codemirror-mount
+            {{on 'mousedown' this._focusEditorOnPointerDown}}
+            {{this.mountEditor this.cm @content @onUpdate this.livePreview}}
+          ></div>
+        </div>
       </div>
 
       {{#if this.livePreview}}
@@ -1167,6 +1170,23 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
         .codemirror-editor:focus-within {
           border-color: var(--ring, var(--boxel-highlight));
           outline-color: var(--ring, var(--boxel-highlight));
+        }
+
+        /* Wraps the sticky toolbar + editor mount so the editor's rounded
+           corners clip the toolbar's square bottom corners when it docks at
+           the bottom on scroll. `overflow: clip` (not `hidden`) does this
+           without establishing a scroll container, so the toolbar keeps
+           sticking to the outer scroll panel. The card-search / format-picker
+           popovers stay outside this wrapper so they can still overflow the
+           editor box. The radius is inset by the 1px border so it hugs the
+           border's inner curve. */
+        .codemirror-body {
+          display: flex;
+          flex-direction: column;
+          flex: 1;
+          min-height: 0;
+          border-radius: calc(var(--boxel-border-radius) - 1px);
+          overflow: clip;
         }
 
         /* Fill the field so clicking anywhere below the text focuses it. */
