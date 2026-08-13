@@ -175,10 +175,11 @@ module('Integration | card-copy', function (hooks) {
     // Defer matrix startup until all test realms (including read-only) are
     // registered to avoid _info fetch races during matrix boot.
     // These three realms are the same for every test in this module, so the
-    // indexed result is cached and restored rather than rebuilt. The fourth
-    // realm one test builds for itself stays outside this: a cache hit
-    // replaces every table, which would discard the realms that test already
-    // has.
+    // indexed result is cached and restored rather than rebuilt. One test
+    // re-provisions the read-only realm for itself, with wider permissions and
+    // an extra card, and that has to stay outside this block: a cache hit
+    // deletes and refills every table, which would discard the three realms it
+    // had just restored.
     await withCachedRealmSetup(async () => {
       ({ realm: realm1 } = await setupIntegrationTestRealm({
         mockMatrixUtils,
