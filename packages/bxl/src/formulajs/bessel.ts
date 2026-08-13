@@ -1,3 +1,10 @@
+// The reference (rather than tsconfig `include`) carries the ambient module
+// declaration into any project that reaches this file through its import
+// graph — the host type-checks these sources under its own tsconfig, which
+// never sees this package's include list. An `import` cannot do this job:
+// it would be executed at node runtime, where a .d.ts is not loadable.
+// eslint-disable-next-line @typescript-eslint/triple-slash-reference
+/// <reference path="../types/bessel.d.ts" />
 import besselImport from 'bessel';
 
 import { parseExcelNumber } from './common.ts';

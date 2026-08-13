@@ -266,6 +266,8 @@ export type {
   BxlSafeResult,
 };
 
+export { loadAllFormulaExtensions } from './bxl/bridge/lazy-formulas.ts';
+
 export {
   BXL_AUTHORIZATION_IR_SCHEMA,
   BXL_AUTHORIZATION_SCHEMA,
@@ -825,13 +827,25 @@ function makeTagged(
   };
 }
 
-// Boxel's `getFields` arrives out-of-band: a host registers it on
-// `globalThis` and `safeFieldMap` picks it up from there. This module does not
-// import `https://cardstack.com/base/card-api` itself, because Node's ESM
-// loader rejects `https:` schemes at module-load time — a static import would
-// break every consumer that runs outside a realm (tests, tooling, the
-// realm-server). Absent a registration, the field-aware paths degrade rather
-// than throw.
+// Boxel's `getFields` arrives out-of-band. This module does not import
+// `https://cardstack.com/base/card-api` itself, because Node's ESM loader
+// rejects `https:` schemes at module-load time — a static import would break
+// every consumer that runs outside a realm (tests, tooling, the
+// realm-server). Two bridges exist, tried in order:
+//
+// 1. Instance-carried: card-api stamps its own `getFields` onto
+//    `BaseDef.prototype` under the cross-realm symbol below, so a value made
+//    by any card-api copy resolves the copy that created it — correct even
+//    when several loader universes are alive at once.
+// 2. `globalThis.__cardstackGetFields`: the ambient fallback a host
+//    registers, for values that carry no stamp. For a card-api instance
+//    (marked with the registered `isBaseInstance` symbol) this fallback is
+//    ambiguous — the ambient copy may not be the one that created the
+//    value — so that case logs a one-time warning. Plain classes resolve
+//    through the ambient copy silently: their field map is empty either
+//    way, and the plain-copy fallback is their intended behavior.
+//
+// Absent both, the field-aware paths degrade rather than throw.
 type GetFieldsFn = (
   instance: unknown,
   options?: { includeComputeds?: boolean },
@@ -845,15 +859,39 @@ type GetFieldsFn = (
 >;
 
 const GET_FIELDS_KEY = '__cardstackGetFields' as const;
+const GET_FIELDS_BRIDGE = Symbol.for('cardstack.getFields');
+const IS_BASE_INSTANCE = Symbol.for('isBaseInstance');
 
 function getCardstackGetFields(): GetFieldsFn | undefined {
   const fn = (globalThis as unknown as Record<string, unknown>)[GET_FIELDS_KEY];
   return typeof fn === 'function' ? (fn as GetFieldsFn) : undefined;
 }
 
+let warnedAmbientGetFields = false;
+
+function getFieldsFor(value: object): GetFieldsFn | undefined {
+  const fn = (value as Record<symbol, unknown>)[GET_FIELDS_BRIDGE];
+  if (typeof fn === 'function') {
+    return fn as GetFieldsFn;
+  }
+  const ambient = getCardstackGetFields();
+  if (ambient && !warnedAmbientGetFields && IS_BASE_INSTANCE in value) {
+    warnedAmbientGetFields = true;
+    console.warn(
+      '@cardstack/bxl: resolving field metadata for a card-api value ' +
+        'through the ambient __cardstackGetFields global because the ' +
+        'value carries no instance-scoped bridge. When more than one ' +
+        'card-api copy is loaded, the ambient copy may not be the one ' +
+        'that created this value, and field-aware materialization can ' +
+        'silently degrade.',
+    );
+  }
+  return ambient;
+}
+
 function safeFieldMap(value: unknown) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const getFields = getCardstackGetFields();
+  const getFields = getFieldsFor(value);
   if (!getFields) return null;
   try {
     return getFields(value, { includeComputeds: false });
@@ -863,7 +901,6 @@ function safeFieldMap(value: unknown) {
 }
 
 function fieldMapForShape(shape: new () => unknown, instance: unknown) {
-  if (!getCardstackGetFields()) return null;
   for (const target of [instance, shape]) {
     const map = safeFieldMap(target);
     if (map && Object.keys(map).length > 0) return map;

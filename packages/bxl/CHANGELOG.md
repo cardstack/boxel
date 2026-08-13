@@ -10,7 +10,24 @@ versions may change syntax behavior until `1.0.0`.
 
 ## [Unreleased]
 
+### Added
+
+- **`loadAllFormulaExtensions()`.** Loads every lazy formula chunk
+  (statistical, Bessel, engineering/financial, validation) and folds it into
+  `DEFAULT_BUILTIN_LIBRARIES`, so hosts can serve the module to authors whose
+  synchronous `expression()` computeVia expressions may name any function.
+  A failed chunk load no longer sticks: the memo clears on rejection so the
+  next call retries.
+
 ### Changed
+
+- **`{ as: FieldDef }` field-metadata resolution is instance-carried
+  first.** Materialization reads the value's own bridge — card-api stamps
+  its `getFields` onto `BaseDef.prototype` under
+  `Symbol.for('cardstack.getFields')` — and only then falls back to the
+  ambient `globalThis.__cardstackGetFields`, which logs a one-time warning
+  when consulted for a card-api-marked value. This keeps materialization
+  correct when several card-api copies are loaded at once.
 
 - **The package ships raw erasable TypeScript from `src/`.** The `exports`
   map points at `.ts` sources; there is no build step and no `dist/`.
