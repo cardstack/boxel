@@ -1,4 +1,4 @@
-import { RealmPaths } from '@cardstack/runtime-common';
+import { RealmPaths, ri } from '@cardstack/runtime-common';
 
 import HostBaseTool from '../lib/host-base-tool';
 
@@ -23,7 +23,19 @@ export default class ValidateRealmTool extends HostBaseTool<
   protected async run(
     input: BaseToolModule.ValidateRealmInput,
   ): Promise<BaseToolModule.ValidateRealmResult> {
-    let realmIdentifier = new RealmPaths(new URL(input.realmIdentifier)).url;
+    // Normalizing the input is part of this tool's contract, and the input is
+    // model-authored, so an equivalent-but-non-canonical URL spelling — host
+    // casing, `..` segments, a default port — has to resolve to the realm it
+    // names rather than be reported invalid. Parsing is what canonicalizes a
+    // URL; a scoped prefix identifier has no such spelling variance and
+    // doesn't parse as one, so it is taken as written.
+    let canonical = input.realmIdentifier;
+    try {
+      canonical = new URL(input.realmIdentifier).href;
+    } catch {
+      // not URL-shaped — a scoped prefix identifier
+    }
+    let realmIdentifier = new RealmPaths(ri(canonical)).url;
 
     let { realmIdentifiers } = await new GetAvailableRealmIdentifiersTool(
       this.toolContext,
