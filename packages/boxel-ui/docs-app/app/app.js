@@ -6,6 +6,8 @@ import '@cardstack/boxel-ui/styles/global.css';
 import '@cardstack/boxel-ui/styles/fonts.css';
 import '@cardstack/boxel-ui/styles/variables.css';
 import '@cardstack/boxel-ui/styles/theme.css';
+// After global.css, which declares the layer order this imports into.
+import './vendor.css';
 import './deprecation-workflow';
 
 import setupInspector from '@embroider/legacy-inspector-support/ember-source-4.12';

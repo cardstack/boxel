@@ -1,5 +1,3 @@
-import 'ember-power-select/styles';
-
 import Component from '@glimmer/component';
 import type { ComponentLike } from '@glint/template';
 import type { PowerSelectArgs } from 'ember-power-select/components/power-select';

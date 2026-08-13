@@ -258,7 +258,7 @@ class BoxelDropdown extends Component<Signature> {
     </BasicDropdown>
 
     <style scoped>
-      @layer {
+      @layer boxelComponentL1 {
         .boxel-dropdown__content {
           --boxel-dropdown-content-border-radius: var(--boxel-border-radius);
           --dropdown-background-color: var(
@@ -272,6 +272,12 @@ class BoxelDropdown extends Component<Signature> {
           --dropdown-text-color: var(
             --boxel-dropdown-text-color,
             var(--foreground, var(--boxel-dark))
+          );
+          /* Only the variants below override this; the fallback keeps the
+             hovered menu item from resolving an undefined var. */
+          --dropdown-selected-text-color: var(
+            --boxel-dropdown-selected-text-color,
+            var(--dropdown-text-color)
           );
           --dropdown-shadow: 0 5px 15px 0 rgb(0 0 0 / 25%);
           --dropdown-highlight-color: var(
