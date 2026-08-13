@@ -10,7 +10,7 @@
       "implemented": false,
       "evidenceTier": "POC realm",
       "auditStatus": "POC only",
-      "whereImplemented": "experiments-realm/commands/approve-offer-command.gts (ApproveOfferCommand) \u2014 candidate offer \u2192 onboarding Employee, wired to Pipeline tab",
+      "whereImplemented": "experiments-realm/commands/approve-offer-command.gts (ApproveOfferCommand) — candidate offer → onboarding Employee, wired to Pipeline tab",
       "reference": null,
       "catalogMatch": null,
       "provenance": "periodic:Approve",

@@ -17,7 +17,7 @@
       "domainKit": null,
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1.1 \u00b7 Catalog implementation exists but Revenue OS does not consume it \u2014 no v1 site; wraps platform @context.searchResultsComponent; lands with Campaign Tracker",
+      "notes": "v1.1 · Catalog implementation exists but Revenue OS does not consume it — no v1 site; wraps platform @context.searchResultsComponent; lands with Campaign Tracker",
       "sharedSpec": null,
       "specTarget": null,
       "consumers": null,

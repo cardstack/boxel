@@ -17,7 +17,7 @@
       "domainKit": "Commerce",
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1 \u00b7 Built \u2014 experiments-realm/payment.gts, POC tier",
+      "notes": "v1 · Built — experiments-realm/payment.gts, POC tier",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/payment",
       "specTarget": "shared block",
       "consumers": "invoice, record-payment",
