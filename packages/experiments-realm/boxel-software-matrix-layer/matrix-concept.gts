@@ -90,6 +90,15 @@ function stateClass(state: string | undefined): string {
   }
 }
 
+// "Done" is the builder's claim, not the pipeline's verdict — the UI says
+// Built and reserves done-language for review approval. Data keeps the sheet
+// vocabulary.
+export function displayState(state: string | undefined): string | undefined {
+  return state === 'Done' ? 'Built' : state;
+}
+
+const ACTING_AS_KEY = 'matrix-acting-as';
+
 export class MatrixConcept extends CardDef {
   static displayName = 'Matrix Concept';
   static icon = LayoutGridIcon;
@@ -117,6 +126,9 @@ export class MatrixConcept extends CardDef {
   // verify-specs.py, never by hand or by the crawl.
   @field sharedSpec = contains(StringField);
   @field specTarget = contains(SpecTargetField);
+  // Verifier-owned: shared-realm modules that import this concept's block —
+  // proof of consumption, not a claim.
+  @field consumers = contains(StringField);
   // Human-set during review, only meaningful on catalog-matched rows: a pure
   // listing can be spec'd as-is; otherwise a block must be built here first.
   @field catalogDisposition = contains(CatalogDispositionField);
@@ -212,7 +224,7 @@ export class MatrixConcept extends CardDef {
           {{#if @model.workState}}
             <span
               class='state {{stateClass @model.workState}}'
-            >{{@model.workState}}</span>
+            >{{displayState @model.workState}}</span>
           {{/if}}
         </span>
       </div>
@@ -294,20 +306,24 @@ export class MatrixConcept extends CardDef {
           color: var(--muted-foreground, #6b7280);
         }
         .state-done {
-          background: var(--state-done-bg, #dcfce7);
-          color: var(--state-done-fg, #166534);
+          border: 1px solid var(--state-built-fg, #334155);
+          color: var(--state-built-fg, #334155);
+          background: transparent;
         }
         .state-progress {
-          background: var(--state-progress-bg, #dbeafe);
+          border: 1px solid var(--state-progress-fg, #1e40af);
           color: var(--state-progress-fg, #1e40af);
+          background: transparent;
         }
         .state-next {
-          background: var(--state-next-bg, #fef3c7);
+          border: 1px solid var(--state-next-fg, #92400e);
           color: var(--state-next-fg, #92400e);
+          background: transparent;
         }
         .state-blocked {
-          background: var(--state-blocked-bg, #fee2e2);
+          border: 1px solid var(--state-blocked-fg, #991b1b);
           color: var(--state-blocked-fg, #991b1b);
+          background: transparent;
         }
         .state-none {
           background: var(--muted, #f3f4f6);
@@ -323,7 +339,7 @@ export class MatrixConcept extends CardDef {
         <div class='top'>
           <span class='layer'>{{@model.layer}}</span>
           {{#if @model.implemented}}
-            <span class='dot' title='Implemented'></span>
+            <span class='dot' title='Code exists'></span>
           {{/if}}
         </div>
         <span class='symbol'>{{@model.symbol}}</span>
@@ -337,7 +353,7 @@ export class MatrixConcept extends CardDef {
         {{#if @model.workState}}
           <span
             class='line-state state {{stateClass @model.workState}}'
-          >{{@model.workState}}</span>
+          >{{displayState @model.workState}}</span>
         {{/if}}
       </div>
       <style scoped>
@@ -423,20 +439,24 @@ export class MatrixConcept extends CardDef {
           border-radius: 999px;
         }
         .state-done {
-          background: var(--state-done-bg, #dcfce7);
-          color: var(--state-done-fg, #166534);
+          border: 1px solid var(--state-built-fg, #334155);
+          color: var(--state-built-fg, #334155);
+          background: transparent;
         }
         .state-progress {
-          background: var(--state-progress-bg, #dbeafe);
+          border: 1px solid var(--state-progress-fg, #1e40af);
           color: var(--state-progress-fg, #1e40af);
+          background: transparent;
         }
         .state-next {
-          background: var(--state-next-bg, #fef3c7);
+          border: 1px solid var(--state-next-fg, #92400e);
           color: var(--state-next-fg, #92400e);
+          background: transparent;
         }
         .state-blocked {
-          background: var(--state-blocked-bg, #fee2e2);
+          border: 1px solid var(--state-blocked-fg, #991b1b);
           color: var(--state-blocked-fg, #991b1b);
+          background: transparent;
         }
         @container fitted-card (min-height: 90px) {
           .line-tier {
@@ -463,6 +483,7 @@ export class MatrixConcept extends CardDef {
     @tracked stateReason = '';
     @tracked statusMessage = '';
     @tracked busy = false;
+    @tracked showReviewForm = false;
 
     private reviewList: ReturnType<getCards> | undefined;
     private teammateList: ReturnType<getCards> | undefined;
@@ -470,6 +491,12 @@ export class MatrixConcept extends CardDef {
 
     constructor(owner: Owner, args: any) {
       super(owner, args);
+      try {
+        this.reviewerId =
+          globalThis.sessionStorage?.getItem(ACTING_AS_KEY) ?? '';
+      } catch {
+        // storage unavailable (prerender)
+      }
       let ctx = this.args.context;
       let realms = () => this.realms;
       this.specResource = (ctx as any)?.getCard?.(
@@ -536,11 +563,64 @@ export class MatrixConcept extends CardDef {
       return this.teammates.find((t) => (t as any).id === this.reviewerId);
     }
 
+    // Derived from the thread, never stored — mirrors the tracker's logic.
+    get reviewStatus(): string | undefined {
+      let reviews = this.reviews;
+      if (reviews.some((r) => r.verdict === 'needs work' && !r.resolved)) {
+        return 'changes requested';
+      }
+      if (reviews.some((r) => r.verdict === 'approve')) {
+        return 'approved';
+      }
+      if ((this.args.model as MatrixConcept).workState === 'Done') {
+        return 'awaiting review';
+      }
+      return undefined;
+    }
+
+    // Claims wear outlines; derived facts get filled pills.
+    get statusBadge(): { label: string; cls: string } | undefined {
+      switch (this.reviewStatus) {
+        case 'approved':
+          return { label: 'Approved', cls: 'rs-approved' };
+        case 'changes requested':
+          return { label: 'Changes requested', cls: 'rs-changes' };
+        case 'awaiting review':
+          return { label: 'Built · awaiting review', cls: 'rs-waiting' };
+      }
+      let ws = (this.args.model as MatrixConcept).workState;
+      return ws
+        ? { label: displayState(ws)!, cls: stateClass(ws) }
+        : undefined;
+    }
+
+    get ladder() {
+      let m = this.args.model as MatrixConcept;
+      let approved = this.reviewStatus === 'approved';
+      return [
+        { label: 'Built', done: m.workState === 'Done' || approved },
+        { label: 'Spec', done: Boolean(m.sharedSpec) },
+        { label: 'Approved', done: approved },
+      ];
+    }
+
+    get consumerList(): string[] {
+      return ((this.args.model as MatrixConcept).consumers ?? '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+
     @action setVerdict(e: Event) {
       this.reviewVerdict = (e.target as HTMLSelectElement).value;
     }
     @action setReviewer(e: Event) {
       this.reviewerId = (e.target as HTMLSelectElement).value;
+      try {
+        globalThis.sessionStorage?.setItem(ACTING_AS_KEY, this.reviewerId);
+      } catch {
+        // storage unavailable
+      }
     }
     @action setBody(e: Event) {
       this.reviewBody = (e.target as HTMLTextAreaElement).value;
@@ -550,6 +630,9 @@ export class MatrixConcept extends CardDef {
     }
     @action setStateReason(e: Event) {
       this.stateReason = (e.target as HTMLInputElement).value;
+    }
+    @action toggleReviewForm() {
+      this.showReviewForm = !this.showReviewForm;
     }
 
     @action async submitReview() {
@@ -573,6 +656,7 @@ export class MatrixConcept extends CardDef {
         } as any);
         this.reviewBody = '';
         this.statusMessage = '';
+        this.showReviewForm = false;
       } catch (e: any) {
         this.statusMessage = e?.message ?? 'Review failed to save';
       } finally {
@@ -646,183 +730,238 @@ export class MatrixConcept extends CardDef {
               {{@model.lane}}</p>
             <h1>{{@model.concept}}</h1>
           </div>
-          {{#if @model.workState}}
-            <span
-              class='state {{stateClass @model.workState}}'
-            >{{@model.workState}}</span>
-          {{/if}}
+          <div class='ch-status'>
+            {{#if this.statusBadge}}
+              <span
+                class='state {{this.statusBadge.cls}}'
+              >{{this.statusBadge.label}}</span>
+            {{/if}}
+            <ol class='ladder'>
+              {{#each this.ladder as |step|}}
+                <li class='ladder-step {{if step.done "is-done"}}'>
+                  <span class='ladder-dot'></span>
+                  {{step.label}}
+                </li>
+              {{/each}}
+            </ol>
+          </div>
         </header>
 
-        <section class='panel'>
-          <h2>Evidence</h2>
-          <dl>
-            <dt>Implemented</dt>
-            <dd>{{if @model.implemented 'Yes' 'No'}}</dd>
-            <dt>Evidence tier</dt>
-            <dd>{{if @model.evidenceTier @model.evidenceTier '—'}}</dd>
-            {{#if @model.whereImplemented}}
-              <dt>Where</dt>
-              <dd class='mono'>{{@model.whereImplemented}}</dd>
-            {{/if}}
-            {{#if @model.catalogMatch}}
-              <dt>Catalog match</dt>
-              <dd class='mono'>{{@model.catalogMatch}}</dd>
-            {{/if}}
-            {{#if @model.catalogDisposition}}
-              <dt>Catalog disposition</dt>
-              <dd>{{@model.catalogDisposition}}</dd>
-            {{/if}}
-            {{#if @model.sharedSpec}}
-              <dt>Spec</dt>
-              <dd>
-                {{#if this.specCard}}
-                  <button
-                    type='button'
-                    class='spec-link'
-                    {{on 'click' this.openSpec}}
-                  >Open the Spec to review →</button>
-                {{else}}
-                  <a
-                    class='spec-link'
-                    href={{@model.sharedSpec}}
-                    target='_blank'
-                    rel='noopener noreferrer'
-                  >Open the Spec to review ↗</a>
+        <div class='cols'>
+          <div class='col'>
+            <section class='panel'>
+              <h2>Evidence</h2>
+              <dl>
+                <dt>Crawl-counted</dt>
+                <dd>{{if @model.implemented 'Yes' 'No'}}</dd>
+                <dt>Evidence tier</dt>
+                <dd>{{if @model.evidenceTier @model.evidenceTier '—'}}</dd>
+                {{#if @model.whereImplemented}}
+                  <dt>Where</dt>
+                  <dd class='mono'>{{@model.whereImplemented}}</dd>
                 {{/if}}
-                {{#if @model.specTarget}}
-                  <span class='spec-target'>ref → {{@model.specTarget}}</span>
+                {{#if @model.catalogMatch}}
+                  <dt>Catalog match</dt>
+                  <dd class='mono'>{{@model.catalogMatch}}</dd>
                 {{/if}}
-              </dd>
-            {{/if}}
-          </dl>
-        </section>
-
-        <section class='panel'>
-          <h2>Identity</h2>
-          <dl>
-            {{#if @model.provenance}}
-              <dt>Provenance</dt>
-              <dd>{{@model.provenance}}</dd>
-            {{/if}}
-            {{#if @model.domainKit}}
-              <dt>Domain kit</dt>
-              <dd>{{@model.domainKit}}</dd>
-            {{/if}}
-            {{#if @model.owner}}
-              <dt>Owner</dt>
-              <dd>{{@model.owner}}</dd>
-            {{/if}}
-          </dl>
-        </section>
-
-        {{#if @model.notes}}
-          <section class='panel'>
-            <h2>Notes</h2>
-            <p class='notes'>{{@model.notes}}</p>
-          </section>
-        {{/if}}
-
-        {{#if this.isInteractive}}
-          <section class='panel'>
-            <h2>Workflow</h2>
-            <div class='action-row'>
-              <select aria-label='Acting as' {{on 'change' this.setReviewer}}>
-                <option value='' selected={{eq this.reviewerId ''}}>Acting
-                  as…</option>
-                {{#each this.teammates as |t|}}
-                  <option
-                    value={{t.id}}
-                    selected={{eq this.reviewerId t.id}}
-                  >{{t.name}}</option>
-                {{/each}}
-              </select>
-              <select aria-label='New state' {{on 'change' this.setNewState}}>
-                <option value='' selected={{eq this.newState ''}}>Change state
-                  to…</option>
-                {{#each this.workStates as |s|}}
-                  <option
-                    value={{s}}
-                    selected={{eq this.newState s}}
-                  >{{s}}</option>
-                {{/each}}
-              </select>
-              <input
-                type='text'
-                placeholder='Reason (one line)'
-                value={{this.stateReason}}
-                aria-label='Reason'
-                {{on 'input' this.setStateReason}}
-              />
-              <BoxelButton
-                @kind='secondary'
-                @size='extra-small'
-                @disabled={{this.busy}}
-                {{on 'click' this.changeState}}
-              >Change state</BoxelButton>
-            </div>
-            {{#if this.statusMessage}}
-              <p class='status'>{{this.statusMessage}}</p>
-            {{/if}}
-          </section>
-        {{/if}}
-
-        <section class='panel'>
-          <h2>Reviews</h2>
-          {{#if this.isInteractive}}
-            <div class='review-form'>
-              <div class='action-row'>
-                <select aria-label='Verdict' {{on 'change' this.setVerdict}}>
-                  {{#each this.verdicts as |v|}}
-                    <option
-                      value={{v}}
-                      selected={{eq this.reviewVerdict v}}
-                    >{{v}}</option>
-                  {{/each}}
-                </select>
-                <span class='hint'>reviewing as
-                  {{if this.selectedReviewer.name this.selectedReviewer.name '…'}}</span>
-              </div>
-              <textarea
-                rows='3'
-                placeholder='What did you find? Approvals and change requests both deserve a reason.'
-                aria-label='Review body'
-                value={{this.reviewBody}}
-                {{on 'input' this.setBody}}
-              ></textarea>
-              <BoxelButton
-                @kind='primary'
-                @size='extra-small'
-                @disabled={{this.busy}}
-                {{on 'click' this.submitReview}}
-              >Submit review</BoxelButton>
-            </div>
-          {{/if}}
-          <div class='thread'>
-            {{#each this.reviews as |r|}}
-              <div class='thread-item'>
-                {{#let (this.reviewComponent r) as |R|}}
-                  <R @format='embedded' />
-                {{/let}}
-                {{#if this.isInteractive}}
-                  {{#unless r.resolved}}
-                    <BoxelButton
-                      @kind='text-only'
-                      @size='extra-small'
-                      @disabled={{this.busy}}
-                      {{on 'click' (fn this.resolveReview r)}}
-                    >Mark resolved</BoxelButton>
-                  {{/unless}}
+                {{#if @model.catalogDisposition}}
+                  <dt>Catalog disposition</dt>
+                  <dd>{{@model.catalogDisposition}}</dd>
                 {{/if}}
-              </div>
-            {{else}}
-              <p class='empty'>No reviews yet</p>
-            {{/each}}
+                {{#if @model.sharedSpec}}
+                  <dt>Spec</dt>
+                  <dd>
+                    {{#if this.specCard}}
+                      <button
+                        type='button'
+                        class='spec-link'
+                        {{on 'click' this.openSpec}}
+                      >Open the Spec to review →</button>
+                    {{else}}
+                      <a
+                        class='spec-link'
+                        href={{@model.sharedSpec}}
+                        target='_blank'
+                        rel='noopener noreferrer'
+                      >Open the Spec to review ↗</a>
+                    {{/if}}
+                    {{#if @model.specTarget}}
+                      <span class='spec-target'>ref →
+                        {{@model.specTarget}}</span>
+                    {{/if}}
+                  </dd>
+                {{/if}}
+                {{#if this.consumerList.length}}
+                  <dt>Used by</dt>
+                  <dd class='consumers'>
+                    {{#each this.consumerList as |m|}}
+                      <span class='consumer-chip'>{{m}}</span>
+                    {{/each}}
+                  </dd>
+                {{/if}}
+              </dl>
+            </section>
+
+            <section class='panel'>
+              <h2>Identity</h2>
+              <dl>
+                {{#if @model.provenance}}
+                  <dt>Provenance</dt>
+                  <dd>{{@model.provenance}}</dd>
+                {{/if}}
+                {{#if @model.domainKit}}
+                  <dt>Domain kit</dt>
+                  <dd>{{@model.domainKit}}</dd>
+                {{/if}}
+                {{#if @model.owner}}
+                  <dt>Owner</dt>
+                  <dd>{{@model.owner}}</dd>
+                {{/if}}
+              </dl>
+            </section>
+
+            {{#if @model.notes}}
+              <section class='panel'>
+                <h2>Notes</h2>
+                <p class='notes'>{{@model.notes}}</p>
+              </section>
+            {{/if}}
           </div>
-        </section>
+
+          <div class='col'>
+            {{#if this.isInteractive}}
+              <section class='panel'>
+                <h2>Workflow</h2>
+                <div class='action-row'>
+                  <select
+                    aria-label='Acting as'
+                    {{on 'change' this.setReviewer}}
+                  >
+                    <option value='' selected={{eq this.reviewerId ''}}>Acting
+                      as…</option>
+                    {{#each this.teammates as |t|}}
+                      <option
+                        value={{t.id}}
+                        selected={{eq this.reviewerId t.id}}
+                      >{{t.name}}</option>
+                    {{/each}}
+                  </select>
+                  <select
+                    aria-label='New state'
+                    {{on 'change' this.setNewState}}
+                  >
+                    <option value='' selected={{eq this.newState ''}}>Change
+                      state to…</option>
+                    {{#each this.workStates as |s|}}
+                      <option
+                        value={{s}}
+                        selected={{eq this.newState s}}
+                      >{{displayState s}}</option>
+                    {{/each}}
+                  </select>
+                  <input
+                    type='text'
+                    placeholder='Reason (one line)'
+                    value={{this.stateReason}}
+                    aria-label='Reason'
+                    {{on 'input' this.setStateReason}}
+                  />
+                  <BoxelButton
+                    @kind='secondary'
+                    @size='extra-small'
+                    @disabled={{this.busy}}
+                    {{on 'click' this.changeState}}
+                  >Change state</BoxelButton>
+                </div>
+                {{#if this.statusMessage}}
+                  <p class='status'>{{this.statusMessage}}</p>
+                {{/if}}
+              </section>
+            {{/if}}
+
+            <section class='panel'>
+              <h2>Reviews</h2>
+              {{#if this.isInteractive}}
+                {{#if this.showReviewForm}}
+                  <div class='review-form'>
+                    <div class='action-row'>
+                      <select
+                        aria-label='Verdict'
+                        {{on 'change' this.setVerdict}}
+                      >
+                        {{#each this.verdicts as |v|}}
+                          <option
+                            value={{v}}
+                            selected={{eq this.reviewVerdict v}}
+                          >{{v}}</option>
+                        {{/each}}
+                      </select>
+                      <span class='hint'>reviewing as
+                        {{if
+                          this.selectedReviewer.name
+                          this.selectedReviewer.name
+                          '…'
+                        }}</span>
+                    </div>
+                    <textarea
+                      rows='3'
+                      placeholder='What did you find? Approvals and change requests both deserve a reason.'
+                      aria-label='Review body'
+                      value={{this.reviewBody}}
+                      {{on 'input' this.setBody}}
+                    ></textarea>
+                    <div class='form-actions'>
+                      <BoxelButton
+                        @kind='primary'
+                        @size='extra-small'
+                        @disabled={{this.busy}}
+                        {{on 'click' this.submitReview}}
+                      >Submit review</BoxelButton>
+                      <BoxelButton
+                        @kind='text-only'
+                        @size='extra-small'
+                        {{on 'click' this.toggleReviewForm}}
+                      >Cancel</BoxelButton>
+                    </div>
+                  </div>
+                {{else}}
+                  <div class='review-form-cta'>
+                    <BoxelButton
+                      @kind='secondary'
+                      @size='extra-small'
+                      {{on 'click' this.toggleReviewForm}}
+                    >Write review</BoxelButton>
+                  </div>
+                {{/if}}
+              {{/if}}
+              <div class='thread'>
+                {{#each this.reviews as |r|}}
+                  <div class='thread-item'>
+                    {{#let (this.reviewComponent r) as |R|}}
+                      <R @format='embedded' />
+                    {{/let}}
+                    {{#if this.isInteractive}}
+                      {{#unless r.resolved}}
+                        <BoxelButton
+                          @kind='text-only'
+                          @size='extra-small'
+                          @disabled={{this.busy}}
+                          {{on 'click' (fn this.resolveReview r)}}
+                        >Mark resolved</BoxelButton>
+                      {{/unless}}
+                    {{/if}}
+                  </div>
+                {{else}}
+                  <p class='empty'>No reviews yet</p>
+                {{/each}}
+              </div>
+            </section>
+          </div>
+        </div>
       </article>
       <style scoped>
         .concept-page {
-          max-width: 40rem;
+          max-width: 72rem;
           margin: 0 auto;
           padding: 2rem 1.5rem;
           display: flex;
@@ -833,6 +972,7 @@ export class MatrixConcept extends CardDef {
           display: flex;
           align-items: center;
           gap: 1rem;
+          flex-wrap: wrap;
           border-bottom: 2px solid var(--foreground, #111111);
           padding-bottom: 1.25rem;
         }
@@ -850,7 +990,7 @@ export class MatrixConcept extends CardDef {
         }
         .ch-id {
           flex: 1;
-          min-width: 0;
+          min-width: 14rem;
         }
         .doc-kind {
           margin: 0 0 0.125rem;
@@ -865,6 +1005,64 @@ export class MatrixConcept extends CardDef {
           font-size: 1.625rem;
           line-height: 1.1;
           font-family: var(--font-heading, inherit);
+        }
+        .ch-status {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-end;
+          gap: 0.5rem;
+        }
+        .ladder {
+          list-style: none;
+          margin: 0;
+          padding: 0;
+          display: flex;
+          align-items: center;
+          gap: 0;
+          font-size: 0.6875rem;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          color: var(--muted-foreground, #9ca3af);
+        }
+        .ladder-step {
+          display: flex;
+          align-items: center;
+          gap: 0.3125rem;
+        }
+        .ladder-step + .ladder-step::before {
+          content: '';
+          display: block;
+          width: 1.25rem;
+          height: 1px;
+          margin: 0 0.375rem;
+          background: var(--border, #e5e7eb);
+        }
+        .ladder-dot {
+          width: 0.5rem;
+          height: 0.5rem;
+          border-radius: 999px;
+          border: 1.5px solid var(--border, #d1d5db);
+          background: transparent;
+        }
+        .ladder-step.is-done {
+          color: var(--foreground, #111111);
+        }
+        .ladder-step.is-done .ladder-dot {
+          border-color: var(--state-done-check, #16a34a);
+          background: var(--state-done-check, #16a34a);
+        }
+        .cols {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(21rem, 1fr));
+          gap: 1.25rem;
+          align-items: start;
+        }
+        .col {
+          display: flex;
+          flex-direction: column;
+          gap: 1.25rem;
+          min-width: 0;
         }
         .panel {
           border: 1px solid var(--border, #e5e7eb);
@@ -930,6 +1128,19 @@ export class MatrixConcept extends CardDef {
           letter-spacing: 0.04em;
           color: var(--muted-foreground, #6b7280);
         }
+        .consumers {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.25rem;
+        }
+        .consumer-chip {
+          font-family: var(--font-mono, monospace);
+          font-size: 0.6875rem;
+          padding: 0.125rem 0.4375rem;
+          border-radius: 0.375rem;
+          background: var(--muted, #f3f4f6);
+          color: var(--foreground, #374151);
+        }
         .notes {
           margin: 0;
           font-size: 0.875rem;
@@ -969,8 +1180,13 @@ export class MatrixConcept extends CardDef {
           box-sizing: border-box;
           resize: vertical;
         }
-        .review-form :deep(button) {
-          align-self: flex-start;
+        .form-actions {
+          display: flex;
+          gap: 0.5rem;
+          align-items: center;
+        }
+        .review-form-cta {
+          margin-bottom: 1rem;
         }
         .hint {
           font-size: 0.75rem;
@@ -1028,18 +1244,34 @@ export class MatrixConcept extends CardDef {
           color: var(--muted-foreground, #6b7280);
         }
         .state-done {
-          background: var(--state-done-bg, #dcfce7);
-          color: var(--state-done-fg, #166534);
+          border: 1px solid var(--state-built-fg, #334155);
+          color: var(--state-built-fg, #334155);
+          background: transparent;
         }
         .state-progress {
-          background: var(--state-progress-bg, #dbeafe);
+          border: 1px solid var(--state-progress-fg, #1e40af);
           color: var(--state-progress-fg, #1e40af);
+          background: transparent;
         }
         .state-next {
+          border: 1px solid var(--state-next-fg, #92400e);
+          color: var(--state-next-fg, #92400e);
+          background: transparent;
+        }
+        .state-blocked {
+          border: 1px solid var(--state-blocked-fg, #991b1b);
+          color: var(--state-blocked-fg, #991b1b);
+          background: transparent;
+        }
+        .rs-approved {
+          background: var(--state-done-bg, #dcfce7);
+          color: var(--tier-platform-fg, #166534);
+        }
+        .rs-waiting {
           background: var(--state-next-bg, #fef3c7);
           color: var(--state-next-fg, #92400e);
         }
-        .state-blocked {
+        .rs-changes {
           background: var(--state-blocked-bg, #fee2e2);
           color: var(--state-blocked-fg, #991b1b);
         }

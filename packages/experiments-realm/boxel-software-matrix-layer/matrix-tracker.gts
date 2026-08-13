@@ -20,7 +20,7 @@ import {
 } from '@cardstack/runtime-common';
 import LayoutGridIcon from '@cardstack/boxel-icons/layout-grid';
 import { DonutChart, type DonutSegment } from './donut-chart';
-import { MatrixConcept } from './matrix-concept';
+import { MatrixConcept, displayState } from './matrix-concept';
 import { ConceptReview } from './concept-review';
 
 const TIER_ORDER = [
@@ -40,12 +40,24 @@ const SPEC_STATES = [
   { key: 'none', label: 'Not started', color: '#e5e7eb' },
 ];
 const STATE_ORDER = ['Done', 'In Progress', 'Next', 'Blocked'];
+const REVIEW_STATES = ['awaiting review', 'changes requested', 'approved'];
 const ALL = 'all';
 // Card-context searches are clamped to 100 items per page (search-bounds.ts),
 // so the full matrix is read as fixed pages and concatenated. Bump when the
 // matrix outgrows PAGE_COUNT * PAGE_SIZE.
 const PAGE_SIZE = 100;
 const PAGE_COUNT = 8;
+
+function timeAgo(d: Date | undefined): string {
+  let t = d?.getTime?.();
+  if (!t) return '';
+  let s = Math.max(0, (Date.now() - t) / 1000);
+  if (s < 60) return 'just now';
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  if (s < 2592000) return `${Math.floor(s / 86400)}d ago`;
+  return `${Math.floor(s / 2592000)}mo ago`;
+}
 
 export class MatrixTracker extends CardDef {
   static displayName = 'Matrix Tracker';
@@ -69,7 +81,10 @@ export class MatrixTracker extends CardDef {
     @tracked stateFilter = ALL;
     @tracked ownerFilter = ALL;
     @tracked specStateFilter = ALL;
+    @tracked reviewFilter = ALL;
     @tracked lagOnly = false;
+    @tracked implementedOnly = false;
+    @tracked queueFilter = 'awaiting review';
     @tracked query = '';
 
     private conceptPages: (ReturnType<getCards> | undefined)[] = [];
@@ -150,6 +165,7 @@ export class MatrixTracker extends CardDef {
     get stateCounts() {
       return STATE_ORDER.map((state) => ({
         state,
+        label: displayState(state),
         count: this.concepts.filter((c) => c.workState === state).length,
       }));
     }
@@ -225,6 +241,9 @@ export class MatrixTracker extends CardDef {
     openReviewCount = (c: MatrixConcept) =>
       this.reviewsFor(c).filter((r) => !r.resolved).length;
 
+    lastActivity = (c: MatrixConcept) =>
+      timeAgo(this.reviewsFor(c)[0]?.createdAt);
+
     get awaitingReview(): MatrixConcept[] {
       return this.concepts.filter(
         (c) => this.reviewStatus(c) === 'awaiting review',
@@ -259,17 +278,18 @@ export class MatrixTracker extends CardDef {
         .sort((a, b) => parseFloat(a!) - parseFloat(b!));
       return layers.map((layer) => {
         let group = this.concepts.filter((c) => c.layer === layer);
-        let done = group.filter((c) => c.implemented).length;
-        let percent = group.length
-          ? Math.round((done / group.length) * 100)
-          : 0;
+        let coded = group.filter((c) => c.implemented).length;
+        let verified = group.filter((c) => this.isVerified(c)).length;
+        let pct = (n: number) =>
+          group.length ? Math.round((n / group.length) * 100) : 0;
         return {
           layer,
           layerName: group[0]?.layerName,
-          done,
+          coded,
+          verified,
           total: group.length,
-          percent,
-          barStyle: htmlSafe(`width: ${percent}%`),
+          codedStyle: htmlSafe(`width: ${pct(coded)}%`),
+          verifiedStyle: htmlSafe(`width: ${pct(verified)}%`),
         };
       });
     }
@@ -290,6 +310,9 @@ export class MatrixTracker extends CardDef {
     get stateOptions() {
       return STATE_ORDER;
     }
+    get reviewStateOptions() {
+      return REVIEW_STATES;
+    }
     get ownerOptions() {
       return [...new Set(this.concepts.map((c) => c.owner))].filter(
         Boolean,
@@ -304,6 +327,47 @@ export class MatrixTracker extends CardDef {
     }
     get showOverview() {
       return !this.isInteractive || this.activeTab === 'overview';
+    }
+
+    get queueChips() {
+      let stateCount = (s: string) =>
+        this.stateCounts.find((x) => x.state === s)?.count ?? 0;
+      return [
+        {
+          key: 'awaiting review',
+          label: 'Awaiting review',
+          count: this.awaitingReview.length,
+        },
+        {
+          key: 'changes requested',
+          label: 'Changes requested',
+          count: this.changesRequested.length,
+        },
+        { key: 'approved', label: 'Approved', count: this.approved.length },
+        { key: 'Done', label: 'Built', count: stateCount('Done') },
+        {
+          key: 'In Progress',
+          label: 'In Progress',
+          count: stateCount('In Progress'),
+        },
+        { key: 'Next', label: 'Next', count: stateCount('Next') },
+        { key: 'Blocked', label: 'Blocked', count: stateCount('Blocked') },
+      ];
+    }
+
+    get queueList(): MatrixConcept[] {
+      switch (this.queueFilter) {
+        case 'awaiting review':
+          return this.awaitingReview;
+        case 'changes requested':
+          return this.changesRequested;
+        case 'approved':
+          return this.approved;
+        default:
+          return this.concepts.filter(
+            (c) => c.workState === this.queueFilter,
+          );
+      }
     }
 
     get filtered(): MatrixConcept[] {
@@ -329,6 +393,12 @@ export class MatrixTracker extends CardDef {
           )
             return false;
           if (
+            this.reviewFilter !== ALL &&
+            this.reviewStatus(c) !== this.reviewFilter
+          )
+            return false;
+          if (this.implementedOnly && !c.implemented) return false;
+          if (
             this.lagOnly &&
             !(c.workState === 'Done' && !this.isVerified(c))
           )
@@ -351,6 +421,20 @@ export class MatrixTracker extends CardDef {
     }
 
     tierOf = (c: MatrixConcept) => c.evidenceTier ?? '—';
+    stateOf = (c: MatrixConcept) => displayState(c.workState) ?? '';
+
+    private resetFilters() {
+      this.layerFilter = ALL;
+      this.laneFilter = ALL;
+      this.tierFilter = ALL;
+      this.stateFilter = ALL;
+      this.ownerFilter = ALL;
+      this.specStateFilter = ALL;
+      this.reviewFilter = ALL;
+      this.lagOnly = false;
+      this.implementedOnly = false;
+      this.query = '';
+    }
 
     @action setLayer(e: Event) {
       this.layerFilter = (e.target as HTMLSelectElement).value;
@@ -370,12 +454,68 @@ export class MatrixTracker extends CardDef {
     @action setSpecState(e: Event) {
       this.specStateFilter = (e.target as HTMLSelectElement).value;
     }
+    @action setReviewFilter(e: Event) {
+      this.reviewFilter = (e.target as HTMLSelectElement).value;
+    }
     @action setTab(key: string) {
       this.activeTab = key;
     }
+    @action setQueueFilter(key: string) {
+      this.queueFilter = key;
+    }
     @action drillToBacklog(state: string) {
+      this.resetFilters();
       this.specStateFilter = state;
       this.activeTab = 'concepts';
+    }
+    @action drillState(state: string) {
+      this.resetFilters();
+      this.stateFilter = state;
+      this.activeTab = 'concepts';
+    }
+    @action drillVerifiedDone() {
+      this.resetFilters();
+      this.stateFilter = 'Done';
+      this.specStateFilter = 'verified';
+      this.activeTab = 'concepts';
+    }
+    @action drillLag() {
+      this.resetFilters();
+      this.lagOnly = true;
+      this.activeTab = 'concepts';
+    }
+    @action drillFunnel(label: string) {
+      this.resetFilters();
+      if (label === 'Code exists') {
+        this.implementedOnly = true;
+      } else if (label === 'Spec-verified') {
+        this.specStateFilter = 'verified';
+      } else {
+        this.reviewFilter = 'approved';
+      }
+      this.activeTab = 'concepts';
+    }
+    @action drillQueue(key: string) {
+      this.queueFilter = key;
+      this.activeTab = 'queue';
+    }
+    @action drillSpecState(label: string) {
+      let s = SPEC_STATES.find((x) => x.label === label);
+      if (!s) return;
+      this.resetFilters();
+      this.specStateFilter = s.key;
+      this.activeTab = 'concepts';
+    }
+    @action drillLayer(layer: string) {
+      this.resetFilters();
+      this.layerFilter = layer;
+      this.activeTab = 'concepts';
+    }
+    @action clearLag() {
+      this.lagOnly = false;
+    }
+    @action clearImplementedOnly() {
+      this.implementedOnly = false;
     }
     get specStateOptions() {
       return SPEC_STATES.map((s) => ({ key: s.key, label: s.label }));
@@ -385,9 +525,6 @@ export class MatrixTracker extends CardDef {
     }
     reviewComponent = (card: ConceptReview) =>
       (card.constructor as typeof CardDef).getComponent(card);
-    @action toggleLagOnly() {
-      this.lagOnly = !this.lagOnly;
-    }
     @action openCard(item: CardDef) {
       (this.args as any).viewCard?.(item, 'isolated');
     }
@@ -401,14 +538,20 @@ export class MatrixTracker extends CardDef {
           </div>
           <div class='funnel'>
             {{#each this.funnel as |stage|}}
-              <div class='funnel-row'>
+              <button
+                type='button'
+                class='funnel-row'
+                title='Show these concepts'
+                {{on 'click' (fn this.drillFunnel stage.label)}}
+              >
                 <span class='funnel-label'>{{stage.label}}</span>
                 <div class='funnel-bar'><div
                     class='funnel-fill'
                     style={{stage.style}}
                   ></div></div>
                 <span class='funnel-count'>{{stage.count}}</span>
-              </div>
+                <span class='chev'>›</span>
+              </button>
             {{/each}}
             <p class='sub'>of {{this.total}} concepts</p>
           </div>
@@ -434,6 +577,7 @@ export class MatrixTracker extends CardDef {
               @segments={{this.specStateSegments}}
               @centerValue='{{this.specVerifiedCount}}'
               @centerLabel='spec-verified'
+              @onSelect={{this.drillSpecState}}
             />
             <p class='tier-note'>Done means a Spec here whose ref resolves —
               to a shared block, base-realm code, or a pure catalog listing.
@@ -445,48 +589,64 @@ export class MatrixTracker extends CardDef {
             <h2>Coverage by layer</h2>
             <div class='layer-list'>
               {{#each this.layerRows as |row|}}
-                <div class='layer-row'>
+                <button
+                  type='button'
+                  class='layer-row'
+                  title='Show layer {{row.layer}}'
+                  {{on 'click' (fn this.drillLayer row.layer)}}
+                >
                   <span class='layer-id'>{{row.layer}}</span>
                   <span class='layer-name'>{{row.layerName}}</span>
-                  <span class='layer-count'>{{row.done}}/{{row.total}}</span>
-                  <div class='bar'><div
-                      class='bar-fill'
-                      style={{row.barStyle}}
-                    ></div></div>
-                </div>
+                  <span
+                    class='layer-count'
+                  >{{row.verified}}/{{row.total}}</span>
+                  <div class='bar'>
+                    <div class='bar-code' style={{row.codedStyle}}></div>
+                    <div
+                      class='bar-verified'
+                      style={{row.verifiedStyle}}
+                    ></div>
+                  </div>
+                </button>
               {{/each}}
             </div>
+            <p class='tier-note'>Solid = spec-verified · pale = code exists</p>
           </div>
 
           <div class='panel'>
             <h2>Work in flight</h2>
             <div class='state-list'>
               {{#each this.stateCounts as |s|}}
-                <div class='state-row'>
-                  <span class='state-name'>{{s.state}}</span>
-                  <span class='state-count'>{{s.count}}</span>
-                </div>
+                <button
+                  type='button'
+                  class='state-row'
+                  title='Show these concepts'
+                  {{on 'click' (fn this.drillState s.state)}}
+                >
+                  <span class='state-name'>{{s.label}}</span>
+                  <span class='state-count'>{{s.count}}
+                    <span class='chev'>›</span></span>
+                </button>
               {{/each}}
             </div>
             <div class='verify-row'>
               {{#if this.doneVerifiedCount}}
-                <span
-                  class='verify-chip'
+                <button
+                  type='button'
+                  class='chip chip-verified'
+                  {{on 'click' this.drillVerifiedDone}}
                 >{{this.doneVerifiedCount}}
-                  done, verified</span>
+                  built, verified
+                  <span class='chev'>›</span></button>
               {{/if}}
               {{#if this.doneUnverifiedCount}}
-                {{#if this.isInteractive}}
-                  <button
-                    type='button'
-                    class='lag-chip {{if this.lagOnly "active"}}'
-                    {{on 'click' this.toggleLagOnly}}
-                  >{{this.doneUnverifiedCount}}
-                    done, no evidence yet</button>
-                {{else}}
-                  <span class='lag-chip'>{{this.doneUnverifiedCount}}
-                    done, no evidence yet</span>
-                {{/if}}
+                <button
+                  type='button'
+                  class='chip chip-lag'
+                  {{on 'click' this.drillLag}}
+                >{{this.doneUnverifiedCount}}
+                  built, no evidence yet
+                  <span class='chev'>›</span></button>
               {{/if}}
             </div>
           </div>
@@ -494,20 +654,33 @@ export class MatrixTracker extends CardDef {
           <div class='panel'>
             <h2>Review pipeline</h2>
             <div class='state-list'>
-              <div class='state-row'>
+              <button
+                type='button'
+                class='state-row'
+                {{on 'click' (fn this.drillQueue 'awaiting review')}}
+              >
                 <span class='state-name'>Awaiting review</span>
-                <span class='state-count'>{{this.awaitingReview.length}}</span>
-              </div>
-              <div class='state-row'>
+                <span class='state-count'>{{this.awaitingReview.length}}
+                  <span class='chev'>›</span></span>
+              </button>
+              <button
+                type='button'
+                class='state-row'
+                {{on 'click' (fn this.drillQueue 'changes requested')}}
+              >
                 <span class='state-name'>Changes requested</span>
-                <span
-                  class='state-count'
-                >{{this.changesRequested.length}}</span>
-              </div>
-              <div class='state-row'>
+                <span class='state-count'>{{this.changesRequested.length}}
+                  <span class='chev'>›</span></span>
+              </button>
+              <button
+                type='button'
+                class='state-row'
+                {{on 'click' (fn this.drillQueue 'approved')}}
+              >
                 <span class='state-name'>Approved</span>
-                <span class='state-count'>{{this.approved.length}}</span>
-              </div>
+                <span class='state-count'>{{this.approved.length}}
+                  <span class='chev'>›</span></span>
+              </button>
             </div>
           </div>
         </section>
@@ -516,10 +689,20 @@ export class MatrixTracker extends CardDef {
         {{#if (eq this.activeTab 'queue')}}
           {{#if this.isInteractive}}
             <section class='queue-grid'>
-              <div class='panel'>
-                <h2>Awaiting review ({{this.awaitingReview.length}})</h2>
+              <div class='panel queue-panel'>
+                <div class='chip-row'>
+                  {{#each this.queueChips as |chip|}}
+                    <button
+                      type='button'
+                      class='filter-chip
+                        {{if (eq this.queueFilter chip.key) "active"}}'
+                      {{on 'click' (fn this.setQueueFilter chip.key)}}
+                    >{{chip.label}}
+                      <span class='chip-count'>{{chip.count}}</span></button>
+                  {{/each}}
+                </div>
                 <div class='queue-list'>
-                  {{#each this.awaitingReview as |c|}}
+                  {{#each this.queueList as |c|}}
                     <button
                       type='button'
                       class='queue-row'
@@ -527,71 +710,65 @@ export class MatrixTracker extends CardDef {
                     >
                       <span class='cell-symbol'>{{c.symbol}}</span>
                       <span class='cell-concept'>{{c.concept}}</span>
+                      {{#if c.sharedSpec}}
+                        <span class='mini-chip'>spec ✓</span>
+                      {{else}}
+                        <span class='mini-chip mini-missing'>no spec</span>
+                      {{/if}}
                       <span class='cell-owner'>{{if c.owner c.owner ''}}</span>
+                      <span class='cell-time'>{{this.lastActivity c}}</span>
                     </button>
                   {{else}}
-                    <p class='empty'>Nothing waiting — the queue is clear</p>
+                    <p class='empty'>Nothing here — this list is clear</p>
                   {{/each}}
                 </div>
               </div>
-              <div class='panel'>
-                <h2>Changes requested ({{this.changesRequested.length}})</h2>
-                <div class='queue-list'>
-                  {{#each this.changesRequested as |c|}}
+              <div class='queue-side'>
+                <div class='panel'>
+                  <h2>Spec backlog</h2>
+                  <div class='queue-list'>
                     <button
                       type='button'
-                      class='queue-row'
-                      {{on 'click' (fn this.openCard c)}}
+                      class='queue-row backlog-row'
+                      {{on 'click' (fn this.drillToBacklog 'catalog')}}
                     >
-                      <span class='cell-symbol'>{{c.symbol}}</span>
-                      <span class='cell-concept'>{{c.concept}}</span>
-                      <span class='cell-owner'>{{if c.owner c.owner ''}}</span>
+                      <span class='cell-concept'>Catalog available — needs a
+                        Spec here (pure listing) or a block</span>
+                      <span
+                        class='backlog-count'
+                      >{{this.catalogAvailable.length}}</span>
                     </button>
-                  {{else}}
-                    <p class='empty'>No open change requests</p>
-                  {{/each}}
-                </div>
-              </div>
-              <div class='panel'>
-                <h2>Spec backlog</h2>
-                <div class='queue-list'>
-                  <button
-                    type='button'
-                    class='queue-row backlog-row'
-                    {{on 'click' (fn this.drillToBacklog 'catalog')}}
-                  >
-                    <span class='cell-concept'>Catalog available — needs a
-                      Spec here (pure listing) or a block</span>
-                    <span class='backlog-count'>{{this.catalogAvailable.length}}</span>
-                  </button>
-                  <button
-                    type='button'
-                    class='queue-row backlog-row'
-                    {{on 'click' (fn this.drillToBacklog 'platform')}}
-                  >
-                    <span class='cell-concept'>Platform available — code in
-                      base, needs a Spec here</span>
-                    <span class='backlog-count'>{{this.platformAvailable.length}}</span>
-                  </button>
-                </div>
-              </div>
-              <div class='panel feed-panel'>
-                <h2>Recent activity</h2>
-                <div class='feed'>
-                  {{#each this.recentReviews as |r|}}
                     <button
                       type='button'
-                      class='feed-item'
-                      {{on 'click' (fn this.openCard r)}}
+                      class='queue-row backlog-row'
+                      {{on 'click' (fn this.drillToBacklog 'platform')}}
                     >
-                      {{#let (this.reviewComponent r) as |R|}}
-                        <R @format='embedded' />
-                      {{/let}}
+                      <span class='cell-concept'>Platform available — code in
+                        base, needs a Spec here</span>
+                      <span
+                        class='backlog-count'
+                      >{{this.platformAvailable.length}}</span>
                     </button>
-                  {{else}}
-                    <p class='empty'>No reviews yet — open a concept and file
-                      the first one</p>
-                  {{/each}}
+                  </div>
+                </div>
+                <div class='panel feed-panel'>
+                  <h2>Recent activity</h2>
+                  <div class='feed'>
+                    {{#each this.recentReviews as |r|}}
+                      <button
+                        type='button'
+                        class='feed-item'
+                        {{on 'click' (fn this.openCard r)}}
+                      >
+                        {{#let (this.reviewComponent r) as |R|}}
+                          <R @format='embedded' />
+                        {{/let}}
+                      </button>
+                    {{else}}
+                      <p class='empty'>No reviews yet — open a concept and
+                        file the first one</p>
+                    {{/each}}
+                  </div>
                 </div>
               </div>
             </section>
@@ -642,7 +819,7 @@ export class MatrixTracker extends CardDef {
                   <option
                     value={{opt}}
                     selected={{eq this.stateFilter opt}}
-                  >{{opt}}</option>
+                  >{{displayState opt}}</option>
                 {{/each}}
               </select>
               <select aria-label='Owner' {{on 'change' this.setOwner}}>
@@ -670,6 +847,21 @@ export class MatrixTracker extends CardDef {
                   >{{opt.label}}</option>
                 {{/each}}
               </select>
+              <select
+                aria-label='Review status'
+                {{on 'change' this.setReviewFilter}}
+              >
+                <option
+                  value='all'
+                  selected={{eq this.reviewFilter 'all'}}
+                >Any review status</option>
+                {{#each this.reviewStateOptions as |opt|}}
+                  <option
+                    value={{opt}}
+                    selected={{eq this.reviewFilter opt}}
+                  >{{opt}}</option>
+                {{/each}}
+              </select>
               <BoxelInput
                 class='search'
                 @type='search'
@@ -678,7 +870,35 @@ export class MatrixTracker extends CardDef {
                 @placeholder='Search concept, symbol, provenance…'
               />
             </div>
+            {{#if this.lagOnly}}
+              <div class='active-filters'>
+                <button
+                  type='button'
+                  class='chip chip-lag'
+                  {{on 'click' this.clearLag}}
+                >Built, no evidence yet ✕</button>
+              </div>
+            {{/if}}
+            {{#if this.implementedOnly}}
+              <div class='active-filters'>
+                <button
+                  type='button'
+                  class='chip chip-verified'
+                  {{on 'click' this.clearImplementedOnly}}
+                >Code exists ✕</button>
+              </div>
+            {{/if}}
             <div class='rows'>
+              <div class='row row-head'>
+                <span>Symbol</span>
+                <span>Concept</span>
+                <span>Layer</span>
+                <span>Lane</span>
+                <span>Evidence</span>
+                <span>State</span>
+                <span>Owner</span>
+                <span>Review</span>
+              </div>
               {{#each this.filtered as |c|}}
                 <button
                   type='button'
@@ -690,8 +910,7 @@ export class MatrixTracker extends CardDef {
                   <span class='cell-layer'>{{c.layer}}</span>
                   <span class='cell-lane'>{{c.lane}}</span>
                   <span class='cell-tier'>{{this.tierOf c}}</span>
-                  <span class='cell-state'>{{if c.workState c.workState ''}}
-                  </span>
+                  <span class='cell-state'>{{this.stateOf c}}</span>
                   <span class='cell-owner'>{{if c.owner c.owner ''}}</span>
                   <span class='cell-review'>
                     {{#if (eq (this.reviewStatus c) 'approved')}}
@@ -746,6 +965,10 @@ export class MatrixTracker extends CardDef {
           font-size: 0.875rem;
           color: var(--muted-foreground, #6b7280);
         }
+        .chev {
+          color: var(--muted-foreground, #9ca3af);
+          font-weight: 700;
+        }
         .funnel {
           display: flex;
           flex-direction: column;
@@ -755,10 +978,22 @@ export class MatrixTracker extends CardDef {
         }
         .funnel-row {
           display: grid;
-          grid-template-columns: 7.5rem 1fr 3rem;
+          grid-template-columns: 7.5rem 1fr 3rem 0.75rem;
           align-items: center;
           gap: 0.625rem;
+          font: inherit;
           font-size: 0.8125rem;
+          padding: 0.125rem 0.25rem;
+          margin: -0.125rem -0.25rem;
+          border: none;
+          border-radius: 0.375rem;
+          background: transparent;
+          color: inherit;
+          text-align: left;
+          cursor: pointer;
+        }
+        .funnel-row:hover {
+          background: var(--muted, #f3f4f6);
         }
         .funnel-label {
           color: var(--muted-foreground, #6b7280);
@@ -787,6 +1022,10 @@ export class MatrixTracker extends CardDef {
         }
         .backlog-row {
           grid-template-columns: 1fr auto;
+        }
+        .backlog-row .cell-concept {
+          white-space: normal;
+          font-weight: 500;
         }
         .backlog-count {
           font-weight: 700;
@@ -829,7 +1068,19 @@ export class MatrixTracker extends CardDef {
           align-items: baseline;
           column-gap: 0.5rem;
           row-gap: 0.25rem;
+          width: 100%;
+          font: inherit;
           font-size: 0.8125rem;
+          padding: 0.25rem 0.375rem;
+          border: none;
+          border-radius: 0.375rem;
+          background: transparent;
+          color: inherit;
+          text-align: left;
+          cursor: pointer;
+        }
+        .layer-row:hover {
+          background: var(--muted, #f3f4f6);
         }
         .layer-id {
           font-weight: 700;
@@ -845,15 +1096,23 @@ export class MatrixTracker extends CardDef {
           font-variant-numeric: tabular-nums;
         }
         .bar {
+          position: relative;
           grid-column: 1 / -1;
           height: 0.375rem;
           border-radius: 999px;
           background: var(--muted, #f3f4f6);
           overflow: hidden;
         }
-        .bar-fill {
-          height: 100%;
+        .bar-code,
+        .bar-verified {
+          position: absolute;
+          inset: 0 auto 0 0;
           border-radius: 999px;
+        }
+        .bar-code {
+          background: var(--tier-platform-bg, #bbf7d0);
+        }
+        .bar-verified {
           background: var(--tier-platform-fg, #16a34a);
         }
         .state-list {
@@ -864,7 +1123,20 @@ export class MatrixTracker extends CardDef {
         .state-row {
           display: flex;
           justify-content: space-between;
+          align-items: center;
+          width: 100%;
+          font: inherit;
           font-size: 0.8125rem;
+          padding: 0.25rem 0.375rem;
+          border: none;
+          border-radius: 0.375rem;
+          background: transparent;
+          color: inherit;
+          text-align: left;
+          cursor: pointer;
+        }
+        .state-row:hover {
+          background: var(--muted, #f3f4f6);
         }
         .state-count {
           font-weight: 700;
@@ -876,33 +1148,42 @@ export class MatrixTracker extends CardDef {
           flex-wrap: wrap;
           gap: 0.375rem;
         }
-        .verify-chip {
+        .chip {
           display: inline-flex;
+          align-items: center;
+          gap: 0.25rem;
+          font: inherit;
           font-size: 0.75rem;
           font-weight: 600;
           padding: 0.25rem 0.625rem;
           border-radius: 999px;
+          cursor: pointer;
+        }
+        .chip-verified {
           border: 1px solid var(--state-done-fg, #166534);
           background: var(--state-done-bg, #dcfce7);
           color: var(--state-done-fg, #166534);
         }
-        .lag-chip {
-          display: inline-flex;
-          font-size: 0.75rem;
-          font-weight: 600;
-          padding: 0.25rem 0.625rem;
-          border-radius: 999px;
+        .chip-verified:hover {
+          background: var(--state-done-fg, #166534);
+          color: var(--state-done-bg, #dcfce7);
+        }
+        .chip-lag {
           border: 1px solid var(--state-next-fg, #92400e);
           background: var(--state-next-bg, #fef3c7);
           color: var(--state-next-fg, #92400e);
-          cursor: pointer;
         }
-        .lag-chip.active {
+        .chip-lag:hover {
           background: var(--state-next-fg, #92400e);
           color: var(--state-next-bg, #fef3c7);
         }
-        span.lag-chip {
-          cursor: default;
+        .chip .chev {
+          color: inherit;
+          opacity: 0.7;
+        }
+        .active-filters {
+          display: flex;
+          gap: 0.375rem;
         }
         .table-panel {
           display: flex;
@@ -967,9 +1248,50 @@ export class MatrixTracker extends CardDef {
         }
         .queue-grid {
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+          grid-template-columns: minmax(0, 3fr) minmax(18rem, 2fr);
           gap: 1rem;
           align-items: start;
+        }
+        .queue-side {
+          display: flex;
+          flex-direction: column;
+          gap: 1rem;
+        }
+        .queue-panel {
+          display: flex;
+          flex-direction: column;
+          gap: 0.75rem;
+        }
+        .chip-row {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.375rem;
+        }
+        .filter-chip {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.375rem;
+          font: inherit;
+          font-size: 0.75rem;
+          font-weight: 600;
+          padding: 0.25rem 0.625rem;
+          border-radius: 999px;
+          border: 1px solid var(--border, #e5e7eb);
+          background: transparent;
+          color: var(--muted-foreground, #6b7280);
+          cursor: pointer;
+        }
+        .filter-chip:hover {
+          background: var(--muted, #f3f4f6);
+        }
+        .filter-chip.active {
+          border-color: var(--foreground, #111111);
+          background: var(--foreground, #111111);
+          color: var(--background, #ffffff);
+        }
+        .chip-count {
+          font-variant-numeric: tabular-nums;
+          font-weight: 700;
         }
         .queue-list,
         .feed {
@@ -981,7 +1303,7 @@ export class MatrixTracker extends CardDef {
         }
         .queue-row {
           display: grid;
-          grid-template-columns: 2.5rem 1fr 4.5rem;
+          grid-template-columns: 2.5rem 1fr auto 4.5rem 4rem;
           gap: 0.5rem;
           align-items: center;
           padding: 0.4375rem 0.625rem;
@@ -996,6 +1318,27 @@ export class MatrixTracker extends CardDef {
         }
         .queue-row:hover {
           background: var(--muted, #f3f4f6);
+        }
+        .mini-chip {
+          font-size: 0.625rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          padding: 0.125rem 0.4375rem;
+          border-radius: 999px;
+          background: var(--state-done-bg, #dcfce7);
+          color: var(--state-done-fg, #166534);
+          white-space: nowrap;
+        }
+        .mini-missing {
+          background: var(--muted, #f3f4f6);
+          color: var(--muted-foreground, #6b7280);
+        }
+        .cell-time {
+          font-size: 0.6875rem;
+          color: var(--muted-foreground, #6b7280);
+          text-align: right;
+          white-space: nowrap;
         }
         .feed-item {
           padding: 0;
@@ -1052,10 +1395,22 @@ export class MatrixTracker extends CardDef {
           cursor: pointer;
           color: inherit;
         }
+        .row-head {
+          cursor: default;
+          position: sticky;
+          top: 0;
+          z-index: 1;
+          background: var(--card, #ffffff);
+          font-size: 0.625rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.06em;
+          color: var(--muted-foreground, #6b7280);
+        }
         .row:last-child {
           border-bottom: none;
         }
-        .row:hover {
+        .row:not(.row-head):hover {
           background: var(--muted, #f3f4f6);
         }
         .cell-symbol {
@@ -1088,6 +1443,11 @@ export class MatrixTracker extends CardDef {
           font-size: 0.8125rem;
           color: var(--muted-foreground, #6b7280);
         }
+        @media (max-width: 800px) {
+          .queue-grid {
+            grid-template-columns: 1fr;
+          }
+        }
         @media (max-width: 640px) {
           .row {
             grid-template-columns: 3rem 1fr 6.5rem;
@@ -1096,6 +1456,9 @@ export class MatrixTracker extends CardDef {
           .cell-lane,
           .cell-tier,
           .cell-owner {
+            display: none;
+          }
+          .row-head {
             display: none;
           }
         }

@@ -1,5 +1,7 @@
 import GlimmerComponent from '@glimmer/component';
 import { htmlSafe } from '@ember/template';
+import { on } from '@ember/modifier';
+import { fn } from '@ember/helper';
 
 export interface DonutSegment {
   label: string;
@@ -17,6 +19,7 @@ interface DonutChartSignature {
     centerLabel?: string;
     centerValue?: string;
     formatValue?: (n: number) => string;
+    onSelect?: (label: string) => void;
     segments: DonutSegment[];
   };
   Element: HTMLElement;
@@ -94,12 +97,26 @@ export class DonutChart extends GlimmerComponent<DonutChartSignature> {
         </svg>
         <figcaption class='legend'>
           {{#each this.arcs as |arc|}}
-            <span class='legend-item'>
-              <span class='swatch' style={{arc.swatchStyle}}></span>
-              <span class='legend-label'>{{arc.label}}</span>
-              <span class='legend-value'>{{this.format arc.value}}
-                ({{arc.percent}}%)</span>
-            </span>
+            {{#if @onSelect}}
+              <button
+                type='button'
+                class='legend-item legend-button'
+                {{on 'click' (fn @onSelect arc.label)}}
+              >
+                <span class='swatch' style={{arc.swatchStyle}}></span>
+                <span class='legend-label'>{{arc.label}}</span>
+                <span class='legend-value'>{{this.format arc.value}}
+                  ({{arc.percent}}%)</span>
+                <span class='chev'>›</span>
+              </button>
+            {{else}}
+              <span class='legend-item'>
+                <span class='swatch' style={{arc.swatchStyle}}></span>
+                <span class='legend-label'>{{arc.label}}</span>
+                <span class='legend-value'>{{this.format arc.value}}
+                  ({{arc.percent}}%)</span>
+              </span>
+            {{/if}}
           {{/each}}
         </figcaption>
       {{else}}
@@ -160,6 +177,24 @@ export class DonutChart extends GlimmerComponent<DonutChartSignature> {
       .legend-value {
         color: var(--muted-foreground, #6b7280);
         font-variant-numeric: tabular-nums;
+      }
+      .legend-button {
+        font: inherit;
+        padding: 0.125rem 0.25rem;
+        margin: -0.125rem -0.25rem;
+        border: none;
+        border-radius: 0.375rem;
+        background: transparent;
+        color: inherit;
+        text-align: left;
+        cursor: pointer;
+      }
+      .legend-button:hover {
+        background: var(--muted, #f3f4f6);
+      }
+      .chev {
+        color: var(--muted-foreground, #9ca3af);
+        font-weight: 700;
       }
       .empty {
         margin: 0;
