@@ -1119,7 +1119,11 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
       yield applyUnaryMath(input, Math.sinh);
     },
     *'sort/0'(input: any[]) {
-      yield input.sort(compare);
+      // jq values are immutable: sort a copy, never the caller's array.
+      // The input can be a live card array (where an in-place sort would
+      // mutate card state and fire its change subscribers) or a read-only
+      // lazy view that rejects writes outright.
+      yield [...input].sort(compare);
     },
     *'split/1'(input, split) {
       yield assertString(input).split(assertString(split));

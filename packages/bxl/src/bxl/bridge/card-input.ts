@@ -114,10 +114,19 @@ const MATERIALIZED_TARGET = Symbol('bxl.materializedCardInputTarget');
 
 interface AncestorEntry {
   target: object;
-  /** The target's `id` at wrap time; `undefined` when it has none. */
-  id: unknown;
+  /**
+   * The target's `id` at wrap time when the target is a card;
+   * `undefined` for non-cards, which never participate in id-based
+   * clipping — ordinary JSON is free to carry `id` values that collide
+   * with a card's without being that card.
+   */
+  cardId: unknown;
   /** Property name through which the target was reached, for errors. */
   via: string;
+}
+
+function isCard(value: object): boolean {
+  return GET_FIELDS_BRIDGE in value || IS_BASE_INSTANCE in value;
 }
 
 function idOf(value: object): unknown {
@@ -128,6 +137,10 @@ function idOf(value: object): unknown {
     // value can't participate in id-based cycle clipping.
     return undefined;
   }
+}
+
+function cardIdOf(value: object): unknown {
+  return isCard(value) ? idOf(value) : undefined;
 }
 
 function describePath(ancestors: AncestorEntry[]): string {
@@ -157,14 +170,18 @@ function wrapValue(
   // bound program evaluation.
   checkRuntimeBudget();
 
-  const id = idOf(value);
+  const cardId = cardIdOf(value);
   for (const ancestor of ancestors) {
     // Cycle guard, mirroring the platform's `queryableValue`: object
     // identity alone misses a logical cycle when the same card re-enters
     // as a different object instance (query resolution producing fresh
-    // objects mid-walk), so the same-id check clips those too.
-    if (ancestor.target === value || (id != null && ancestor.id === id)) {
-      return { id };
+    // objects mid-walk), so cards also clip by id. Non-card values clip
+    // by identity only.
+    if (
+      ancestor.target === value ||
+      (cardId != null && ancestor.cardId === cardId)
+    ) {
+      return { id: idOf(value) };
     }
   }
 
@@ -180,7 +197,7 @@ function wrapValue(
     return wrapArray(value, ancestors, via);
   }
 
-  if (GET_FIELDS_BRIDGE in value || IS_BASE_INSTANCE in value) {
+  if (isCard(value)) {
     return wrapCard(value, ancestors, via);
   }
 
@@ -200,7 +217,7 @@ function childAncestors(
   ancestors: AncestorEntry[],
   via: string,
 ): AncestorEntry[] {
-  return [...ancestors, { target, id: idOf(target), via }];
+  return [...ancestors, { target, cardId: cardIdOf(target), via }];
 }
 
 /** Traps shared by every facade: reads forward to the raw target (so
@@ -400,10 +417,10 @@ function wrapPlainObject(
  * this is a no-op for programs evaluated over plain JSON.
  */
 export function unwrapMaterializedCardInput(value: unknown): unknown {
-  return unwrap(value, new Set());
+  return unwrap(value, new Map());
 }
 
-function unwrap(value: unknown, seen: Set<object>): unknown {
+function unwrap(value: unknown, memo: Map<object, unknown>): unknown {
   if (value === null || typeof value !== 'object') {
     return value;
   }
@@ -411,32 +428,43 @@ function unwrap(value: unknown, seen: Set<object>): unknown {
   if (target !== undefined) {
     return target;
   }
-  // A raw cyclic container can reach here through the general-purpose
-  // entry points; leave revisited values as-is rather than recursing.
-  if (seen.has(value)) {
-    return value;
+  // Aliasing: a container jq binds once and embeds several times must
+  // resolve to ONE unwrapped result, or later occurrences would keep
+  // their lazy views.
+  const existing = memo.get(value);
+  if (existing !== undefined) {
+    return existing;
   }
-  seen.add(value);
+  // Pre-register the identity mapping so a cycle in a raw (never-wrapped)
+  // graph — reachable through the general-purpose entry points — resolves
+  // to the original object instead of recursing. Containers that embed a
+  // lazy view are jq-built and therefore acyclic, so for them this
+  // placeholder is always overwritten with the rebuilt form below.
+  memo.set(value, value);
 
   if (Array.isArray(value)) {
     let changed = false;
     const out = value.map((entry) => {
-      const unwrapped = unwrap(entry, seen);
+      const unwrapped = unwrap(entry, memo);
       changed ||= unwrapped !== entry;
       return unwrapped;
     });
-    return changed ? out : value;
+    const result = changed ? out : value;
+    memo.set(value, result);
+    return result;
   }
 
   if (Object.getPrototypeOf(value) === Object.prototype) {
     let changed = false;
     const out: Record<string, unknown> = {};
     for (const [key, entry] of Object.entries(value)) {
-      const unwrapped = unwrap(entry, seen);
+      const unwrapped = unwrap(entry, memo);
       changed ||= unwrapped !== entry;
       out[key] = unwrapped;
     }
-    return changed ? out : value;
+    const result = changed ? out : value;
+    memo.set(value, result);
+    return result;
   }
 
   return value;

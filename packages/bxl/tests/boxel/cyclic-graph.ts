@@ -170,6 +170,32 @@ check('a fresh instance of a visited card clips by id', () => {
   deepStrictEqual(run('.claims[0].policy', policy), { id: 'pol-1' });
 });
 
+check('ordinary JSON with an id colliding with a card id stays intact', () => {
+  // id-based clipping is a card-to-card affair; contained JSON is free to
+  // carry id values equal to an ancestor card's without being that card.
+  const policy = new PolicyStub({
+    id: 'pol-1',
+    annualPremium: 12000,
+    claims: [],
+  }) as PolicyStub & { metadata?: unknown };
+  fieldMaps.set(PolicyStub, {
+    ...fieldMaps.get(PolicyStub)!,
+    metadata: { fieldType: 'contains' },
+  });
+  Object.defineProperty(policy, 'metadata', {
+    value: { id: 'pol-1', label: 'x' },
+    enumerable: false,
+    configurable: true,
+  });
+  try {
+    strictEqual(run('.metadata["label"]', policy), 'x');
+  } finally {
+    const map = { ...fieldMaps.get(PolicyStub)! };
+    delete (map as Record<string, unknown>).metadata;
+    fieldMaps.set(PolicyStub, map);
+  }
+});
+
 check('a diamond is not a cycle: shared values materialize fully', () => {
   // Two claims sharing one policy is re-entry only along a single path;
   // reads that do not loop back are untouched.
@@ -264,6 +290,28 @@ check('outputs hand back the raw graph, not the lazy view', () => {
   strictEqual(run('.', policy), policy);
   strictEqual(run('.claims', policy), policy.claims);
   strictEqual(run('.claims[0]', policy), policy.claims[0]);
+});
+
+check('sort works on a wrapped array and never mutates the original', () => {
+  const nums = [3, 1, 2];
+  const holder = { nums };
+  deepStrictEqual(run('.nums | sort', holder), [1, 2, 3]);
+  deepStrictEqual(nums, [3, 1, 2]);
+});
+
+check('an aliased jq container unwraps at every occurrence', () => {
+  const policy = makeCyclicPolicy([
+    { id: 'clm-1', claimStatus: 'Open', paidAmount: 3200 },
+  ]);
+  // The container bound once and embedded twice must resolve to one
+  // unwrapped result — both occurrences hand back the raw claims array.
+  const out = run(
+    '{ n: .claims } as $shared | { a: $shared, b: $shared }',
+    policy,
+  ) as { a: { n: unknown }; b: { n: unknown } };
+  strictEqual(out.a.n, policy.claims);
+  strictEqual(out.b.n, policy.claims);
+  strictEqual(out.a, out.b);
 });
 
 check('outputs nested in jq-built containers unwrap as well', () => {
