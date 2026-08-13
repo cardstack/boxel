@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "repository": "https://github.com/openfga/openfga",
+    "commit": "2c19e265fc73858fc0a5468fc517dc3bbf727e94",
+    "license": "Apache-2.0"
+  },
+  "files": [
+    {
+      "path": "consolidated_1_1_tests.yaml",
+      "sourcePath": "assets/tests/consolidated_1_1_tests.yaml",
+      "sha256": "91a47d5fd92709bd40352bf5b7115f099720ab0f1f25f5ed34fb688bf03d4ce9",
+      "counts": {
+        "tests": 137,
+        "stages": 160,
+        "checkAssertions": 360,
+        "listObjectsAssertions": 270,
+        "listUsersAssertions": 295
+      }
+    },
+    {
+      "path": "abac_tests.yaml",
+      "sourcePath": "assets/tests/abac_tests.yaml",
+      "sha256": "a7fd7de1abea18dcc344f8d95fca7782decf1ede505df223a8f7832c7b747faa",
+      "counts": {
+        "tests": 24,
+        "stages": 28,
+        "checkAssertions": 131,
+        "listObjectsAssertions": 78,
+        "listUsersAssertions": 93
+      }
+    }
+  ],
+  "totals": {
+    "tests": 161,
+    "stages": 188,
+    "checkAssertions": 491,
+    "listObjectsAssertions": 348,
+    "listUsersAssertions": 388,
+    "assertions": 1227
+  }
+}

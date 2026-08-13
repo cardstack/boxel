@@ -129,3 +129,7 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/boxel-cli
+      - name: Lint BXL
+        if: ${{ !cancelled() }}
+        run: pnpm run lint
+        working-directory: packages/bxl
