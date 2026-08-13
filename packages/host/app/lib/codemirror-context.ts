@@ -967,7 +967,7 @@ function createCardTargetNotifier(
 // ── Slash command autocompletion ─────────────────────────────────────────────
 
 function createSlashCommandSource(
-  onOpenCardSearch: () => void,
+  onOpenEmbedChooser: () => void,
 ): (context: CompletionContext) => CompletionResult | null {
   return function slashCommandSource(
     context: CompletionContext,
@@ -998,7 +998,7 @@ function createSlashCommandSource(
             // Delete the typed `/…` so the caret sits where the directive
             // should land, then open the chooser — it inserts at the selection.
             view.dispatch({ changes: { from, to, insert: '' } });
-            onOpenCardSearch();
+            onOpenEmbedChooser();
           },
         },
       ],
@@ -1187,7 +1187,7 @@ export interface CreateEditorStateOptions {
   content: string;
   onDocChange: (text: string) => void;
   onCardTargetsChange: (targets: CardWidgetTarget[]) => void;
-  onOpenCardSearch: () => void;
+  onOpenEmbedChooser: () => void;
   onSelectionChange?: (info: SelectionInfo) => void;
   /** When false, all syntax markers are visible (source mode). Default true. */
   livePreview?: boolean;
@@ -1198,13 +1198,13 @@ function createEditorState(options: CreateEditorStateOptions): EditorState {
     content,
     onDocChange,
     onCardTargetsChange,
-    onOpenCardSearch,
+    onOpenEmbedChooser,
     onSelectionChange,
     livePreview = true,
   } = options;
 
   let decoField = createDecorationField(livePreview);
-  let slashSource = createSlashCommandSource(onOpenCardSearch);
+  let slashSource = createSlashCommandSource(onOpenEmbedChooser);
 
   let extensions: Extension[] = [
     markdown({ base: markdownLanguage }),

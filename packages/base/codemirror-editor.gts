@@ -90,7 +90,7 @@ interface CodeMirrorContext {
     content: string;
     onDocChange: (text: string) => void;
     onCardTargetsChange: (targets: CardWidgetTarget[]) => void;
-    onOpenCardSearch: () => void;
+    onOpenEmbedChooser: () => void;
     onSelectionChange?: (info: SelectionInfo) => void;
     livePreview?: boolean;
   }) => any;
@@ -247,13 +247,13 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     this._isLoaded = true;
   }
 
-  // ── Card search logic ────────────────────────────────────────────────────
+  // ── Slash-command embed chooser ──────────────────────────────────────────
 
   // Typing `/card` reuses the same embed chooser modal as the toolbar's
   // Add-embed button. The slash completion's `apply` already deleted the typed
   // `/`, so the caret sits where the directive should land — `_openEmbedChooser`
   // inserts at the current selection.
-  private _handleOpenCardSearch = () => {
+  private _handleOpenEmbedChooser = () => {
     if (isDestroying(this) || isDestroyed(this)) return;
     this._openEmbedChooser('card');
   };
@@ -869,7 +869,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
         }
       },
       onCardTargetsChange: this._handleTargetChange,
-      onOpenCardSearch: this._handleOpenCardSearch,
+      onOpenEmbedChooser: this._handleOpenEmbedChooser,
       onSelectionChange: this._handleSelectionChange,
     });
 
