@@ -13,7 +13,7 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 // dependency graph, so a glyph taken from it costs nothing extra.
 import { Warning } from '@cardstack/boxel-ui/icons';
 
-import { fileIconFor, humanSize } from './file-presentation';
+import { downloadNameFor, fileIconFor, humanSize } from './file-presentation';
 import type { FileFormat, FileViewModel } from './file-view-model';
 
 import type { ComponentLike } from '@glint/template';
@@ -96,10 +96,6 @@ export class FilePreviewStage extends GlimmerComponent<StageSignature> {
     return humanSize(this.model?.contentSize);
   }
 
-  get downloadName() {
-    return this.model?.name || undefined;
-  }
-
   // The reading formats have room for a labeled fallback card; the budgeted
   // fitted cell stays a bare glyph so it never competes with the metadata strip
   // the fitted shell draws beside it.
@@ -152,11 +148,7 @@ export class FilePreviewStage extends GlimmerComponent<StageSignature> {
         {{#if @preview}}
           <@preview @model={{@model}} @mode={{@mode}} @fields={{@fields}} />
         {{else}}
-          <div
-            class='generic-pane'
-            data-mode={{@mode}}
-            data-test-file-no-preview
-          >
+          <div class='generic-pane' data-test-file-no-preview>
             <this.icon
               class='gp-icon'
               width={{this.genericIconSize}}
@@ -166,7 +158,7 @@ export class FilePreviewStage extends GlimmerComponent<StageSignature> {
             {{#if this.showGenericDetail}}
               <div
                 class='gp-name'
-                title={{@model.name}}
+                title={{this.displayName}}
                 data-test-file-generic-name
               >{{this.displayName}}</div>
               <div class='gp-facts'>
@@ -181,7 +173,7 @@ export class FilePreviewStage extends GlimmerComponent<StageSignature> {
                 <a
                   class='gp-download'
                   href={{@model.url}}
-                  download={{this.downloadName}}
+                  download={{downloadNameFor @model}}
                   data-test-file-generic-download
                 >Download</a>
               {{/if}}

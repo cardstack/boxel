@@ -24,6 +24,7 @@ import { isSampledContentHash } from '@cardstack/runtime-common';
 
 import {
   boundedVideoFrameAspectRatio,
+  downloadNameFor,
   fileIconFor,
   humanSize,
   shortDate,
@@ -58,10 +59,6 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
 
   get icon() {
     return fileIconFor(this.args.model);
-  }
-
-  get downloadName() {
-    return this.args.model?.name || undefined;
   }
 
   // Keep the clipboard write inside the browser gesture that asked for it.
@@ -344,7 +341,7 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
             <a
               class='act primary'
               href={{@model.url}}
-              download={{this.downloadName}}
+              download={{downloadNameFor @model}}
               data-test-file-download
             >Download</a>
             {{! The pressed control announces its own success without extra
