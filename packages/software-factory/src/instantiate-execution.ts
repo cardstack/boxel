@@ -21,6 +21,7 @@ import {
 } from '@cardstack/runtime-common/card-document-shape';
 import { specRef } from '@cardstack/runtime-common/constants';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
+import { resolveRRIReference } from '@cardstack/runtime-common/url';
 
 import { logger } from './logger.ts';
 import { validateRealmRelativePath } from './realm-relative-path.ts';
@@ -440,6 +441,31 @@ export async function runInstantiateInMemory(
 // Helpers
 // ---------------------------------------------------------------------------
 
+// A module reference inside a card document takes one of three forms: a
+// prefix-form RRI (`@cardstack/base/spec`), an absolute URL, or a path
+// relative to the document holding it. `new URL(ref, base)` reads only the
+// last two correctly — it mistakes a prefix-form RRI for a relative path and
+// joins it onto the base, so `@cardstack/base/spec` under a realm URL yields
+// a same-origin path that names nothing.
+//
+// `resolveRRIReference` dispatches on the form, leaving a prefix-form RRI
+// intact. A prefix-form RRI carries no origin, so `origin` is undefined for
+// it: callers comparing against a URL-form realm treat that as "not this
+// realm", which is the answer the prerender needs — it loads same-origin
+// URL-form modules only, and proving a prefix names the target realm would
+// take realm mappings this tool has no VirtualNetwork to supply.
+function resolveModuleRef(
+  module: string,
+  relativeTo: string,
+): { ref: string; origin: string | undefined } {
+  let ref = resolveRRIReference(module, rri(relativeTo));
+  try {
+    return { ref, origin: new URL(ref).origin };
+  } catch {
+    return { ref, origin: undefined };
+  }
+}
+
 async function runSingleInstance(
   path: string,
   targetRealm: string,
@@ -569,7 +595,11 @@ async function prepareExampleInstance(
     };
   }
 
-  let moduleUrl = rri(new URL(adoptsFrom.module, exampleCardUrl).href);
+  let { ref: resolvedModule, origin: moduleOrigin } = resolveModuleRef(
+    adoptsFrom.module,
+    exampleCardUrl,
+  );
+  let moduleUrl = rri(resolvedModule);
 
   // The prerender refuses cross-origin module loads. The most common way
   // an agent triggers this is by passing a `Spec/...json` path: Specs
@@ -577,13 +607,16 @@ async function prepareExampleInstance(
   // different origin than any user realm. Catch it here with a clearer
   // error than the prerender's "moduleUrl origin … does not match
   // realmUrl origin …" so the agent knows what to do instead.
-  let moduleOrigin = new URL(moduleUrl).origin;
   let targetRealmOrigin = new URL(targetRealm).origin;
   if (moduleOrigin !== targetRealmOrigin) {
     return {
       error:
         `Example "${exampleUrl}" adopts from a module at ${moduleUrl} ` +
-        `(origin ${moduleOrigin}), but instantiation is scoped to the ` +
+        `(${
+          moduleOrigin
+            ? `origin ${moduleOrigin}`
+            : 'a realm addressed by prefix, not by origin'
+        }), but instantiation is scoped to the ` +
         `target realm at ${targetRealmOrigin}. This typically means you ` +
         `passed a Spec card path — Specs adopt from the base realm and ` +
         `cannot be instantiated cross-origin. To validate Specs, call ` +
@@ -717,9 +750,12 @@ async function defaultSearchSpecs(
       continue;
     }
 
-    // Resolve relative module URL against the spec card's own URL.
+    // Resolve the module reference against the spec card's own URL.
     let specCardUrl = new URL(specId, ensureTrailingSlash(realmUrl)).href;
-    let moduleUrl = new URL(ref.module, specCardUrl).href;
+    let { ref: moduleUrl, origin: refModuleOrigin } = resolveModuleRef(
+      ref.module,
+      specCardUrl,
+    );
 
     // LOCAL PATCH (CS-12195): a Spec whose `ref.module` is itself
     // cross-origin from the target realm (a bare instance of a base-realm
@@ -733,8 +769,11 @@ async function defaultSearchSpecs(
     // same way non-instantiable specTypes are skipped above: parse, eval,
     // and lint already validate everything about the instance data that's
     // actually this realm's responsibility; the base card class itself is
-    // validated by the base realm's own suite, not here.
-    let refModuleOrigin = new URL(moduleUrl).origin;
+    // validated by the base realm's own suite, not here. A `ref.module` in
+    // prefix form lands here too: it names a realm this tool cannot match
+    // against a URL-form target without realm mappings, so it is skipped
+    // rather than handed to the prerender as a same-origin path that names
+    // nothing.
     let targetRealmOrigin = new URL(realmUrl).origin;
     if (refModuleOrigin !== targetRealmOrigin) {
       log.info(
