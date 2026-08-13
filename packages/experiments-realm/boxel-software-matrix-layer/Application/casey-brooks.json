@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Casey Brooks",
+      "email": "casey.brooks@example.com",
+      "phone": "+1 415 555 0199",
+      "source": "Careers page",
+      "positionTitle": "Senior Backend Engineer",
+      "appliedDate": "2026-07-10",
+      "status": "converted",
+      "resumeText": "CASEY BROOKS\ncasey.brooks@example.com | +1 555 0199\n\nSUMMARY\nBackend engineer, 7 years, distributed systems.\n\nEXPERIENCE\nSenior Backend Engineer — Alderbridge (2019–2026)\n- Led migration to event-driven architecture\n- Mentored 3 junior engineers\n\nSKILLS\nJava, Kotlin, Kafka, PostgreSQL, distributed systems",
+      "cardInfo": {
+        "name": "Casey Brooks (application)"
+      }
+    },
+    "relationships": {
+      "position": {
+        "links": {
+          "self": "../Position/senior-backend-engineer"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../application",
+        "name": "Application"
+      }
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Talent & Resource Tracker",
+      "cardDescription": "ATS + HRIS app card: hiring pipeline, employee directory, interview calendar, and org chart in one tabbed shell",
+      "specType": "app",
+      "ref": {
+        "module": "./talent-resource-tracker/talent-resource-tracker",
+        "name": "TalentResourceTracker"
+      },
+      "readMe": "# Talent & Resource Tracker\n\n## Summary\nAn applicant tracking system (ATS) and employee resource manager. Tabs: Dashboard (headcount, open pipeline, average time-to-hire), Directory (query-driven employee card list), Pipeline (candidates by stage with Approve/Reject actions), Calendar (interview scheduling month grid), and Org Chart (manager-hierarchy tree).\n\n## Import\n```ts\nimport { TalentResourceTracker } from './talent-resource-tracker';\n```\n\n## Usage — three or more ways this is used\n\n**1. As the app shell.** One CardDef with nine `linksToMany` collections and\neight tabs. `prefersWideFormat = true`; it defines only `isolated`, because it\nis opened as a workspace rather than embedded.\n\n**2. As a work queue.** The Pipeline tab is a kanban whose columns are the\nCandidate stages. Dropping a card runs the matching command —\n`AdvanceToOfferCommand` into offer, `ApproveOfferCommand` into hired,\n`RejectCandidateCommand` into rejected — so a drag and a button click produce\nthe same result.\n\n**3. As a live directory.** The Directory tab is the **only** tab that queries\nthe realm (`CardList` filtered by type + name + department). The other seven\nread the card's own `linksToMany` arrays, which is why a newly created Meeting\nor Employee must be linked to the tracker to appear on the Calendar or Org\nChart — and why the Directory is immune to that.\n\n**4. As a dashboard.** Stat tiles plus a stage-distribution donut computed from\nthe linked candidates; `avgTimeToHire` averages `timeToHire` across hires.\n\n**5. As an org chart.** `buildOrgTree` folds the linked Employees' `manager`\nedges into a forest, promoting orphans to roots rather than dropping them.\n\n## Template Usage\nThe isolated view is the whole app. Pipeline drops run the matching command: into offer runs AdvanceToOfferCommand (same as the offer card's three-state Create offer → Edit offer / Send offer button); into hired routes through `approveOrReviewChain`, which runs ApproveOfferCommand or, if the approval chain is still in progress, surfaces a message and opens the Offer instead; into rejected runs RejectCandidateCommand. A backward drag past a draft/extended offer rescinds it (offer.status = 'rescinded', the candidate's offerState mirror cleared); accepted offers block the backward drag.\n\n**Non-goals:** catalog packaging (deliberately deferred project-wide); multi-org tenancy.\n"
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "./talent-resource-tracker/TalentResourceTracker/tracker"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

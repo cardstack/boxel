@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Team",
+      "cardDescription": "A team with a lead and members, showing computed headcount",
+      "specType": "card",
+      "ref": {
+        "module": "../team",
+        "name": "Team"
+      },
+      "readMe": "# Team\n\n## Summary\nA team card with `name`, `mission`, a `lead` (linksTo Employee) and `members` (linksToMany Employee). `headcount` is computed from the members list.\n\n## Import\n```ts\nimport { Team } from './team';\n```\n\n## Usage — three or more ways this is used\n\n**1. As an org grouping.** `lead` (linksTo Employee) and `members`\n(linksToMany Employee) express one team; `headcount` is a **computed\nStringField**, which is what lets the fitted view show a member count without\nresolving the members link.\n\n**2. As a project owner.** `Project.team` points here, so a project can show\nwhich team is delivering it.\n\n**3. As a composition readout.** The isolated view groups members by `status`,\nso a manager sees \"3 active, 1 onboarding\" without opening anyone.\n\n**4. As a mission statement holder.** `mission` is rendered in the hero, not as\na fact row — a team's reason to exist is more useful than its member list.\n\n**5. As a denormalization example.** `leadName` mirrors `lead.name` for the\nsame prerendered-fitted reason as every other card here.\n\n## Template Usage\nEmbedded view shows mission and lead; fitted view is an icon + name + headcount row.\n\n**Non-goals:** nested sub-teams; team-level permissions; capacity planning.\n"
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Team/engineering"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

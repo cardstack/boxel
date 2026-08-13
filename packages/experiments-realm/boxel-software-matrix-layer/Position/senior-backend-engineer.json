@@ -1,0 +1,59 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "jobTitle": "Senior Backend Engineer",
+      "department": "Engineering",
+      "status": "open",
+      "postedDate": "2026-06-01",
+      "targetStartDate": "2026-08-01",
+      "headcount": 1,
+      "salaryMin": 160000,
+      "salaryMax": 200000,
+      "jobDescription": "Own core services and data pipelines. 5+ years backend experience, distributed systems a plus.",
+      "cardInfo": {
+        "name": "Senior Backend Engineer",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "workLocation": "San Francisco, CA (Hybrid)",
+      "employmentType": "full-time",
+      "experienceLevel": "senior",
+      "requisitionCode": null,
+      "remoteEligible": false,
+      "approvalChain": {
+        "steps": [],
+        "startedAt": null
+      }
+    },
+    "relationships": {
+      "hiringManager": {
+        "links": {
+          "self": "../Employee/marcus-webb"
+        }
+      },
+      "requiredSkills.0": {
+        "links": {
+          "self": "../Skill/go"
+        }
+      },
+      "requiredSkills.1": {
+        "links": {
+          "self": "../Skill/postgresql"
+        }
+      },
+      "requiredSkills.2": {
+        "links": {
+          "self": "../Skill/grpc"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../position",
+        "name": "Position"
+      }
+    }
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Position",
+      "cardDescription": "A job requisition: title, department, hiring manager, lifecycle status, headcount, salary range, and job description",
+      "specType": "card",
+      "ref": {
+        "module": "../position",
+        "name": "Position"
+      },
+      "readMe": "# Position\n\n## Summary\nA job requisition/opening. `jobTitle`, `department` (plain string), `status` (open | on-hold | filled | closed), `postedDate`, `targetStartDate`, `headcount`, `salaryMin`/`salaryMax`, `jobDescription`, and `hiringManager` (linksTo any Employee-shaped card). `title` is computed from `jobTitle`.\n\n## Import\n```ts\nimport { Position } from './position';\n```\n\n## Usage — three or more ways this is used\n\n**1. As the requisition three other cards point at.** `Application.position`,\n`Candidate.position` and `Offer.position` all link here, so the job title,\ndepartment and salary band live in exactly one place.\n\n**2. As the salary-band source.** `salaryRangeLabel` / `salaryRangeLabelFull`\nrender `salaryMin`/`salaryMax` as a compact `$140k–$170k` for tiles and a full\n`$140,000 – $170,000` for the detail view. Both are null-safe **and zero-safe**.\n\n**3. As the requirement list.** `requiredSkills` is a\n`linksToMany(() => Skill)`, so a Position states its bar in the same vocabulary\nthe resume extractor matches against.\n\n**4. As the approval chain.** `hiringManager` owns the req; `approvalChain`\n(an `ApprovalChainField` — see approval-chain-field.gts) is the sequential\nsign-off gate that must reach `status: 'approved'` before hiring proceeds\nthrough it. Replaces the old `approvers` (`linksToMany(() => Employee)`),\nwhich recorded who COULD approve but never whether or in what order they had.\n\n**5. As a staleness signal.** `postedDate` feeds `daysOpen()`; a req open 45+\ndays while still `open` is flagged as ageing — a state none of the four\nhand-set statuses can express.\n\n## Template Usage\nIsolated shows the full facts grid (headcount, salary range, dates, hiring manager) plus job description. Fitted degrades from a badge (icon + status) up through a tile that adds salary range and headcount.\n\n## Reuse notes\n`department` is a plain StringField, not a `linksTo` a Team card — this keeps Position consumable by any HRIS-flavored app that has *an* Employee-like hiring manager but not necessarily this app's Team model. `hiringManager` only assumes the target satisfies the base Employee shape (name/role/department), not the specific `employee` class.\n\n**Non-goals:** public job-posting copy/SEO fields (a separate JobPosting concept would own that); candidate sourcing/channel tracking (Application.source owns that).\n"
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Position/platform-engineer"
+        }
+      },
+      "linkedExamples.1": {
+        "links": {
+          "self": "../Position/senior-backend-engineer"
+        }
+      },
+      "linkedExamples.2": {
+        "links": {
+          "self": "../Position/frontend-engineer"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

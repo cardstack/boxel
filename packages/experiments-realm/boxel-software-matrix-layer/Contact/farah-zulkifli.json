@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "firstName": "Farah",
+      "lastName": "Zulkifli",
+      "email": "farah.zulkifli@acme-industries.example",
+      "phone": "+60322821888",
+      "jobTitle": "Chief Financial Officer",
+      "role": "decision maker",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../contact",
+        "name": "Contact"
+      }
+    },
+    "relationships": {
+      "account": {
+        "links": {
+          "self": "../Account/acme-industries"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/ledger"
+        }
+      }
+    }
+  }
+}

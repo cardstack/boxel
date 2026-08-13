@@ -1,0 +1,42 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "planName": "Data Add-on",
+      "price": {
+        "amount": 199,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "billingCycle": "monthly",
+      "startDate": "2026-03-01",
+      "status": "canceled",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      },
+      "canceledAt": "2026-06-15"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../subscription",
+        "name": "Subscription"
+      }
+    },
+    "relationships": {
+      "account": {
+        "links": {
+          "self": "../Account/acme-industries"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/ledger"
+        }
+      }
+    }
+  }
+}

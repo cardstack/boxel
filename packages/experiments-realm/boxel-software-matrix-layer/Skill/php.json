@@ -1,0 +1,18 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "PHP",
+      "category": "language",
+      "cardInfo": {
+        "name": "PHP"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../skill",
+        "name": "Skill"
+      }
+    }
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "Account",
+        "module": "../account"
+      },
+      "specType": "card",
+      "readMe": "## Account\n\nThe party record every commercial document links to. Tracked as the layer-matrix **Customer** element; named Account here to match the Revenue OS data architecture. Consumes base fields: `EmailField`, `PhoneNumberField` (E.164 string), `AddressField`, plus `domain`/`industry` strings and `owner = linksTo(User)` so any User subtype (Teammate, and later agents or contractors) is assignable.\n\nCustomer status is an event fact, not a stored flag: `firstPaidAt` is written once when the first payment lands (by the Record Payment command); `isCustomer` is `computeVia !!firstPaidAt`. Before that the account renders as Prospect, and afterwards the isolated view can say \"customer since\".\n\n```ts\nimport { Account } from '../account';\n@field account = linksTo(Account);\n```\n\nLinked from Invoice, Order, and Subscription. Examples cover a paying company account, a person account with no subscription, and a prospect with no billing history.\n\n**Non-goals:** person/company split, multiple contacts per account (Contact links here instead), pipeline status — those belong to the CRM records (Lead/Opportunity/Deal). Revenue rollups (totalRevenue, MRR) are neither stored nor computed here — they come from the AccountMetrics query block.",
+      "cardInfo": {
+        "name": "Account",
+        "summary": "Billing/CRM party record: name, domain, industry, contact info, owner link, and firstPaidAt-driven customer status. Link target for Invoice, Order, Subscription.",
+        "notes": null,
+        "cardThumbnailURL": null
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Account/acme-industries"
+        }
+      },
+      "linkedExamples.1": {
+        "links": {
+          "self": "../Account/nadia-rahman"
+        }
+      },
+      "linkedExamples.2": {
+        "links": {
+          "self": "../Account/brightleaf-studio"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

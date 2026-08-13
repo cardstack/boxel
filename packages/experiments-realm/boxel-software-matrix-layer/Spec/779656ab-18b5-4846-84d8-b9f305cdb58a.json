@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Interview Round Field",
+      "cardDescription": "Enum field classifying which round of the interview loop a Meeting represents (phone screen, technical, onsite, panel, final)",
+      "specType": "field",
+      "ref": {
+        "module": "../interview-round-field",
+        "name": "InterviewRoundField"
+      },
+      "readMe": "# Interview Round Field\n\n## Summary\nA StringField enum (phone-screen | technical | onsite | panel | final) built with `enumField`, naming which stage of a multi-round interview loop a given `Meeting` represents.\n\n## Import\n```ts\nimport { InterviewRoundField, INTERVIEW_ROUND_OPTIONS } from './interview-round-field';\n```\n\n## Usage — three or more ways this is used\n\nIt is a **primitive** FieldDef (extends `StringField`), so it serializes as a\nbare string and cannot hold `containedExamples` — the linked example is a\ncard that actually carries the field.\n\n**1. `Meeting.roundType`** — shown in the Meeting isolated view's Details\npanel next to `meetingType`, distinguishing \"this interview is the technical\nround\" from \"this interview is the final round\" for the same candidate.\n\n**2. `ScheduleInterviewInput.roundType`** (in\n`commands/schedule-interview-command.gts`) — the input a caller sets when\nscripting a new interview meeting, so the created Meeting is classified from\nthe moment it exists.\n\n**3. Distinguishing a candidate's multiple Meetings.** A candidate can have\nseveral linked interview Meetings (e.g. `interview-amara-1` and\n`interview-amara-2`); `roundType` is what tells them apart on the Candidate's\ninterview-feedback list beyond just the date.\n\n## Template Usage\n```hbs\n<@fields.roundType @format='atom' @displayContainer={{false}} />\n```\n\n**Non-goals:** meeting *type* (interview vs one-on-one vs standup — see\n`Meeting.meetingType` / `MeetingTypeField` for that); scheduling logic or\nconflict detection.\n\n**Example in use:** `Meeting/interview-amara-1` carries `roundType:\ntechnical`.\n"
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Meeting/interview-amara-1"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

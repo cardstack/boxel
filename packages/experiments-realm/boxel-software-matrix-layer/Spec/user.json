@@ -1,0 +1,38 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "User",
+        "module": "../user"
+      },
+      "specType": "card",
+      "readMe": "## User\n\nThe layer-matrix **User** element: the minimal assignment identity (name, email, initials-avatar renders in every format). This card pre-existed in the realm (consumed by blog-post, sprint-task, task); the Revenue OS work added its formats and made it the base for flavored extensions.\n\n**Type Owner fields against this base, not a flavor:**\n\n```ts\nimport { User } from '../user';\n@field owner = linksTo(User);\n```\n\nCard adoption makes the link polymorphic — a `Teammate` (or any future subtype: agent, contractor) satisfies an `owner` slot. `Teammate` (`../teammate`) extends User with `jobTitle` and richer format overrides; see its Spec.\n\n**Non-goals:** authentication, permissions, Matrix identity — assignment record, not an auth principal. Org structure belongs to Team/Role.",
+      "cardInfo": {
+        "name": "User",
+        "summary": "Base assignment identity (matrix: User). Owner fields are linksTo(User); subtypes like Teammate satisfy them via adoption.",
+        "notes": null,
+        "cardThumbnailURL": null
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../User/priya-shah"
+        }
+      },
+      "linkedExamples.1": {
+        "links": {
+          "self": "../Teammate/dana-whitfield"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

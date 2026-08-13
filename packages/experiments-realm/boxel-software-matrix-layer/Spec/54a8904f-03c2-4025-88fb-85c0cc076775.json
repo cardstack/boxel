@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Score Field",
+      "cardDescription": "1–5 star rating field for interview scores and vendor performance",
+      "specType": "field",
+      "ref": {
+        "module": "../score-field",
+        "name": "ScoreField"
+      },
+      "readMe": "# Score Field\n\n## Summary\nA NumberField subclass rendering a 1–5 star picker (edit), a star row (embedded), and a compact `★ n` (atom). Used for interview ratings, candidate overall scores, and vendor performance.\n\n## Import\n```ts\nimport { ScoreField } from './score-field';\n```\n\n## Usage — three or more ways this is used\n\nIt is a **primitive** FieldDef (extends `NumberField`), so it serializes as a\nbare number and cannot hold `containedExamples` — the linked example is a card\nthat actually uses it.\n\n**1. `Candidate.overallScore`** — the recruiter's aggregate read on a person,\nshown as a pill on the pipeline board.\n\n**2. `Meeting.interviewScore`** — one interviewer's 1–5 verdict; the board\naverages every linked Meeting into `★ 4.3 avg · 3`.\n\n**3. `Vendor.performanceRating`** — supplier quality, rendered as ★★★★☆ plus\nthe numeral so meaning survives greyscale.\n\n**Zero is a real value.** Every consumer must guard with\n`typeof v === 'number'`, not truthiness — `Candidate.overallScoreLabel` returns\n`'0/5 · not yet scored'` rather than an em dash, because \"scored zero\" and \"not\nscored\" are different facts.\n\n**Unset renders as an em dash.** The embedded and atom templates guard with an\n`isSet` check — a null/undefined score renders `—` instead of an empty star\nrow, so \"not scored\" is visibly different from every real value (including 0).\nThe star colour is no longer a literal hex: it is a `color-mix` dilution\ntoward the consuming card's own foreground token, so the stars follow the\ntheme like every other status treatment.\n\n## Template Usage\n```hbs\n<@fields.interviewScore />\n```\n\n**Non-goals:** scales other than 1–5; half-star values; weighted or multi-dimension scoring. Primitive field — the model IS the number (extends NumberField).\n\n**Example in use:** the linked Meeting (interview-amara-1) carries `interviewScore: 4` — inline `containedExamples` cannot hold primitive FieldDefs (platform limitation).\n",
+      "containedExamples": []
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Meeting/interview-amara-1"
+        }
+      }
+    }
+  }
+}

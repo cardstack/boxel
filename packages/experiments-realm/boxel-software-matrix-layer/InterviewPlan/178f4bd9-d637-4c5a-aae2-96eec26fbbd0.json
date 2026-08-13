@@ -1,0 +1,50 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "createdDate": "2026-06-30",
+      "rounds": [
+        {
+          "roundType": "phone-screen",
+          "questions": "## Culture & motivation (2 questions)\n\n1. What drew you to apply for a Platform Engineer role specifically, versus a product-team infrastructure role?\n2. How do you like to work with the teams who consume your platform — as a support desk, as embedded partners, or something else?\n\n## Logistics & fit (2 questions)\n\n1. What's your notice period, and do you have any upcoming commitments that would affect a start date?\n2. This role is remote-eligible — what does your ideal remote working setup and schedule look like?\n\n## Basic role fit (2 questions)\n\n1. Walk me through your experience owning CI/CD pipelines or infrastructure tooling at scale.\n2. Have you worked directly with Kubernetes and Terraform in a production environment?"
+        },
+        {
+          "roundType": "technical",
+          "questions": "## Role-specific depth (4 questions)\n\n1. Describe a CI/CD pipeline you built or owned that served many independent teams. How did you handle failure isolation so one team's broken build didn't block everyone else?\n2. Walk through a Kubernetes migration you've been part of — what was the starting state, and what did cutover look like?\n3. How do you structure a Terraform codebase to support dozens of services — modules, workspaces, a monorepo?\n4. What's your approach to drift detection and remediation across a large Terraform-managed estate?\n\n## Problem-solving / coding (3 questions)\n\n1. Given a deploy pipeline that's intermittently flaky, how would you go about isolating the root cause?\n2. How would you design a rollout mechanism that lets one team canary a change without affecting others?\n3. Sketch how you'd instrument a build system to answer \"which step is our biggest bottleneck\" with data, not guesses.\n\n## Red-flag probes (2 questions)\n\n1. What's the largest production incident you've caused, and what changed in your process afterward?\n2. Platform work can become invisible when it goes well — how do you make sure your impact is legible to the org?"
+        },
+        {
+          "roundType": "onsite",
+          "questions": "## Problem-solving (3 questions)\n\n1. A team reports their deploys have gotten 3x slower over the past month with no code changes on their end — how do you investigate?\n2. Design a permissions model for who can approve production deploys across 40+ services with different risk profiles.\n3. How would you migrate a stateful service to a new cluster with zero downtime?\n\n## System design (2 questions)\n\n1. Design the internal developer platform for a 200-engineer org going from 10 to 100 services over two years.\n2. How would you design observability (logs/metrics/traces) so that a new service gets useful dashboards on day one with no manual setup?\n\n## Behavioral (3 questions)\n\n1. Tell me about a time you had to say no to a team's request because it introduced platform-wide risk. How did that conversation go?\n2. Describe bringing a legacy or undocumented system under control — how did you approach it and measure success?\n3. Tell me about mentoring another engineer through a platform-level project.\n\n## Red-flag probes (2 questions)\n\n1. Your background is concentrated at one employer — what's driven you to look now, and what are you hoping is different here?\n2. How have you kept your skills current outside of day-to-day work?"
+        },
+        {
+          "roundType": "final",
+          "questions": "## Behavioral (3 questions)\n\n1. Looking back at your platform work so far, what's the change you're proudest of, and why?\n2. Tell me about a disagreement with a stakeholder over platform direction that you ultimately lost — how did you handle it?\n3. How do you decide when to build a tool in-house versus adopt something off the shelf?\n\n## Culture fit (3 questions)\n\n1. What does a healthy relationship between a platform team and its consuming teams look like to you?\n2. How do you like to receive critical feedback on your work?\n3. What would make you say no to this offer if we extended one?\n\n## Closing questions (2 questions)\n\n1. Is there anything from the earlier rounds you'd like to revisit or clarify?\n2. What questions do you have for us about the team, the roadmap, or the role?"
+        }
+      ],
+      "cardInfo": {
+        "name": "Interview Plan — Platform Engineer",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "position": {
+        "links": {
+          "self": "../Position/platform-engineer"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../interview-plan",
+        "name": "InterviewPlan"
+      }
+    }
+  }
+}

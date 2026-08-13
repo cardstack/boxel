@@ -1,0 +1,43 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Duration Field",
+      "cardDescription": "Value + unit duration field (minutes to months) with humanized pill display",
+      "specType": "field",
+      "ref": {
+        "module": "../duration-field",
+        "name": "DurationField"
+      },
+      "readMe": "# Duration Field\n\n## Summary\nA composite FieldDef holding `value` (number) + `unit` (minutes | hours | days | weeks | months) with a computed humanized `label`. Edit is a number input + unit select; embedded is a clock pill; atom is compact (`45m`, `3d`, `2w`).\n\n## Import\n```ts\nimport { DurationField } from './duration-field';\n```\n\n## Usage — three or more ways this is used\n\nA **compound** FieldDef serializing as `{ value, unit }` (`label` is computed\nand not persisted). Units: minutes | hours | days | weeks | months | years.\n\n**1. `Employee.tenure`** — computed from `startDate`. It runs through\n`normalizedDuration()`, which picks the unit by magnitude: ≥365 days reads as\nyears, ≥60 as months, otherwise days. A four-digit day count is technically\ncorrect and useless.\n\n**2. `Candidate.timeToHire`** — computed from `appliedDate` → `decisionDate`.\nDeliberately left in **days**, because that is the unit recruiters actually use.\n\n**3. `Meeting.duration`** — hand-entered interview length in minutes.\n\n**4. `Project.estimatedEffort`** — months of planned work; combined with\n`startDate` it yields the projected end date and elapsed percentage.\n\n**5. `Vendor.contractLength`** — contract term; combined with `contractStart`\nit yields the renewal countdown.\n\n**Caveat:** `unit` is a plain StringField with a description, **not** an\nenumField, so nothing stops an invalid unit being written programmatically —\nthe edit-mode select is the only guard.\n\n## Template Usage\n```hbs\n<@fields.duration />\n<@fields.duration @format='atom' />\n```\n\n**Non-goals:** calendar-aware durations (business days, holidays). OPEN QUESTION for the author: `base/time/duration` already ships in base — consume it, or keep this value+unit editor as a deliberate divergence for people-ops durations (tenure, time-to-hire) and record why here.\n",
+      "containedExamples": [
+        {
+          "value": null,
+          "unit": null
+        }
+      ],
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "@cardstack/base/spec",
+        "name": "Spec"
+      },
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "../duration-field",
+              "name": "DurationField"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

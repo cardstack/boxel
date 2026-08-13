@@ -1,0 +1,36 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Priya Nair",
+      "email": "priya.nair@example.com",
+      "phone": "+1 555 0104",
+      "role": "Senior Backend Engineer",
+      "department": "Engineering",
+      "startDate": "2024-02-12",
+      "status": "active",
+      "salary": 150000,
+      "cardInfo": {
+        "name": "Priya Nair"
+      },
+      "photo": {
+        "url": "https://images.pexels.com/photos/1181690/pexels-photo-1181690.jpeg",
+        "sourceMode": "url"
+      },
+      "ptoAllowanceDays": 25
+    },
+    "relationships": {
+      "manager": {
+        "links": {
+          "self": "./marcus-webb"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../employee",
+        "name": "Employee"
+      }
+    }
+  }
+}

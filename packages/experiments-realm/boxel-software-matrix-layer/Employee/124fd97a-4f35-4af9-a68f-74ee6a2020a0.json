@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "role": "Platform Engineer",
+      "department": null,
+      "startDate": "2026-08-09",
+      "status": "onboarding",
+      "employmentType": null,
+      "terminationDate": null,
+      "ptoBalance": null,
+      "onboardingStatus": null,
+      "salary": 145000,
+      "name": "Tomás Ribeiro",
+      "email": "tomas.ribeiro@example.com",
+      "phone": "+1 555 0142",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "photo": {
+        "url": "https://images.pexels.com/photos/762020/pexels-photo-762020.jpeg",
+        "sourceMode": "url"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../employee",
+        "name": "Employee"
+      }
+    }
+  }
+}

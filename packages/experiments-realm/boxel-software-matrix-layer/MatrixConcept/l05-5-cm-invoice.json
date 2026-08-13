@@ -17,7 +17,7 @@
       "domainKit": "Commerce",
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1 \u00b7 Built \u2014 experiments-realm/invoice.gts, POC tier. Open decision: overdue is both a stored status and a computed condition",
+      "notes": "v1 · Built — experiments-realm/invoice.gts, POC tier. Open decision: overdue is both a stored status and a computed condition",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/invoice",
       "cardInfo": {
         "name": null,

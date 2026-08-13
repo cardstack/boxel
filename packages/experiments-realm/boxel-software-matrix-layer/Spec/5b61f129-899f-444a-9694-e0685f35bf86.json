@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Project",
+      "cardDescription": "A project with lead, team, optional vendor, start date, and estimated effort",
+      "specType": "card",
+      "ref": {
+        "module": "../project",
+        "name": "Project"
+      },
+      "readMe": "# Project\n\n## Summary\nA project with `status` (planned | active | done), a `lead` (Employee), a `team`, an optional external `vendor`, a `startDate` and an `estimatedEffort` DurationField.\n\n## Import\n```ts\nimport { Project } from './project';\n```\n\n## Usage — three or more ways this is used\n\n**1. As a delivery record spanning internal and external.** It is the only card\nthat links a `lead` (Employee), a `team` (Team) **and** a `vendor` (Vendor), so\n\"who is actually doing this\" is answerable from one place.\n\n**2. As a schedule derivation.** `startDate` + `estimatedEffort` feed\n`scheduleFacts()`, which computes the projected end date and the elapsed\npercentage. Both isolated and fitted call the same function, so the two formats\ncannot disagree about progress.\n\n**3. As a status track.** `status` (planned | active | done) renders as a\nthree-step progress bar plus a plain-language trail\n(`planned ✓ → active → done`).\n\n**4. As the vendor's justification.** A Vendor card has no outbound links, so\nthe only way to see what a vendor is being paid for is through the Projects\nthat point at it.\n\n**5. As a fitted tile.** `leadName`, `teamName` and `vendorName` are all\ndenormalized for the fitted view.\n\n## Template Usage\nEmbedded view shows status, start, effort, lead, and vendor; fitted is an icon row.\n\n**Non-goals:** task/milestone breakdown; budgets. Staffing context only — a fuller Project block lives at matrix layer 05.\n"
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Project/platform-rebuild"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "TalentBridge Agency",
+      "contactName": "Renee Fontaine",
+      "email": "renee@talentbridge.example.com",
+      "website": "https://talentbridge.example.com",
+      "serviceCategory": "Staffing agency",
+      "contractStart": "2026-01-15",
+      "contractLength": {
+        "value": 12,
+        "unit": "months"
+      },
+      "performanceRating": 4,
+      "rateCard": [
+        {
+          "role": "Senior Backend Engineer",
+          "hourlyRate": 120
+        },
+        {
+          "role": "Platform / DevOps Engineer",
+          "hourlyRate": 110
+        },
+        {
+          "role": "QA Engineer",
+          "hourlyRate": 85
+        }
+      ],
+      "agreementTerms": "Net-30 payment on monthly invoices. 15% placement fee on conversion to permanent hire. Either party may terminate an engagement with 20 business days written notice. Rates locked through 2027-01-15.",
+      "spendYtd": 187400,
+      "cardInfo": {
+        "name": "TalentBridge Agency"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../vendor",
+        "name": "Vendor"
+      }
+    }
+  }
+}

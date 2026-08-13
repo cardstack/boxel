@@ -1,0 +1,22 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Advance to Offer Command",
+      "cardDescription": "Moves a candidate to the offer stage and drafts the Offer card — reaching the stage and sending an offer are kept as different facts",
+      "specType": "command",
+      "ref": {
+        "module": "../commands/advance-to-offer-command",
+        "name": "AdvanceToOfferCommand"
+      },
+      "readMe": "# Advance to Offer Command\n\n## Summary\nMoves a Candidate into the `offer` pipeline stage and creates their Offer as a DRAFT — because reaching the offer stage and having sent an offer are different facts. The comp package is assembled on the draft; `ExtendOfferCommand` is the separate, deliberate act that flips it to `extended`. Without this command the `draft` status in OFFER_STATUSES was unreachable and the intermediate state lived only in a UI pill.\n\n## Input Fields\n- **candidate**: the Candidate to advance (linksTo, required)\n\n## Output Fields\n- **message**: what happened (StringField)\n- **offer**: the created (or pre-existing) draft Offer (linksTo)\n\n## Behavior\n- Sets `candidate.status = 'offer'`\n- If the candidate has no Offer yet, creates one as `status: 'draft'` seeded from the candidate (`position`, `offeredTitle` from appliedRole; `salary` starts unset on a fresh draft) and links it back via `candidate.offer`\n- Mirrors `candidate.offerState = offer.status` so the board pill can render without a link read\n\n## Guards — two legitimate entry points\nThe stage guard accepts EITHER:\n1. a candidate at `interviewing` (the normal forward advance — drag into the offer column or the offer card's button), OR\n2. a candidate already AT `offer` with no `offerState` — i.e. the stage was set by hand or the draft was deleted; the board's **Create offer** button is this case, drafting the missing Offer without demanding the stage be walked backwards first.\n\nAnything else throws a wrong-stage error naming the current stage.\n\n## Usage — three or more ways this is used\n1. From the tracker board's offer column: dropping an interviewing candidate into `offer` runs this command, so a drag and the button produce the same draft — the three meaningful drops (offer/hired/rejected) are symmetric\n2. From the offer-stage card's three-state button: **Create offer** (this command, for a stage-set-by-hand candidate with no draft) → **Edit offer** / **Send offer** (ExtendOfferCommand) once the draft exists\n3. As an AI-assistant tool: attach a Candidate and say \"move them to offer\" — the assistant gets the same stage guard and draft-not-sent semantics\n\n## Lifecycle context\nThis command starts the offer lifecycle (draft → extended → accepted/declined, or rescinded). A backward drag on the board past a draft/extended offer rescinds it (`offer.status = 'rescinded'`, the `offerState` mirror cleared), after which re-advancing through this command drafts a fresh package; accepted offers block the backward drag.\n\n## Example\nA command is not a card instance, so a Spec's linkedExamples/containedExamples (which hold card data) cannot hold one. The in-use stand-in is the board's Create offer / drag-into-offer flow plus a real Offer it drafted: `Offer/df5b8208-9ecc-4132-b595-700dd0a73d77` (Morgan Lee) began life as this command's draft and has since progressed through `extended` to `accepted` — the full lifecycle this command opens.\n\n**Non-goals:** sending the offer (ExtendOfferCommand — the deliberate act); hiring (ApproveOfferCommand); generating the letter (GenerateOfferLetterCommand); negotiating terms (edit the draft Offer card).\n"
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

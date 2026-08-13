@@ -1,0 +1,47 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Acme Plant 2 Expansion",
+      "value": {
+        "amount": 24000,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "stage": "discovery",
+      "closeDate": "2026-09-30",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      },
+      "probability": null,
+      "lastStageChangedAt": "2026-07-28"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../opportunity",
+        "name": "Opportunity"
+      }
+    },
+    "relationships": {
+      "account": {
+        "links": {
+          "self": "../Account/acme-industries"
+        }
+      },
+      "owner": {
+        "links": {
+          "self": "../Teammate/dana-whitfield"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/ledger"
+        }
+      }
+    }
+  }
+}

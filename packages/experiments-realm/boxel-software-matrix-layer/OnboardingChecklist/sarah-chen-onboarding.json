@@ -1,0 +1,83 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "tasks": [
+        {
+          "title": "Contract & paperwork setup",
+          "status": "complete",
+          "completedDate": "2026-08-05",
+          "notes": "Contract signed and filed",
+          "dueDate": "2026-08-04"
+        },
+        {
+          "title": "Equipment & access provisioning",
+          "status": "complete",
+          "completedDate": "2026-08-05",
+          "notes": "VPN and tools access configured",
+          "dueDate": "2026-08-05"
+        },
+        {
+          "title": "Team introduction & scope review",
+          "status": "in-progress",
+          "completedDate": null,
+          "notes": "Initial scope meeting scheduled",
+          "dueDate": "2026-08-06"
+        },
+        {
+          "title": "Project kickoff",
+          "status": "pending",
+          "completedDate": null,
+          "notes": null,
+          "dueDate": "2026-08-10"
+        }
+      ],
+      "createdDate": "2026-08-03",
+      "cardInfo": {
+        "name": "Sarah Chen's Onboarding",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "completedDate": null
+    },
+    "relationships": {
+      "contractor": {
+        "links": {
+          "self": "../Contractor/sarah-chen"
+        }
+      },
+      "template": {
+        "links": {
+          "self": "../OnboardingTemplate/sales-onboarding"
+        }
+      },
+      "tasks.0.assignee": {
+        "links": {
+          "self": "../Employee/dana-kim"
+        }
+      },
+      "tasks.1.assignee": {
+        "links": {
+          "self": "../Employee/marcus-webb"
+        }
+      },
+      "tasks.2.assignee": {
+        "links": {
+          "self": "../Employee/sofia-reyes"
+        }
+      },
+      "tasks.3.assignee": {
+        "links": {
+          "self": "../Employee/sofia-reyes"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../onboarding-checklist",
+        "name": "OnboardingChecklist"
+      }
+    }
+  }
+}

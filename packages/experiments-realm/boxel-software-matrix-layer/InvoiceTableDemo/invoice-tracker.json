@@ -1,0 +1,51 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "Invoice Tracker",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../table-demo",
+        "name": "InvoiceTableDemo"
+      }
+    },
+    "relationships": {
+      "records.0": {
+        "links": {
+          "self": "../Invoice/inv-2026-041"
+        }
+      },
+      "records.1": {
+        "links": {
+          "self": "../Invoice/inv-2026-052"
+        }
+      },
+      "records.2": {
+        "links": {
+          "self": "../Invoice/inv-2026-033"
+        }
+      },
+      "records.3": {
+        "links": {
+          "self": "../Invoice/inv-2026-018"
+        }
+      },
+      "records.4": {
+        "links": {
+          "self": "../Invoice/inv-f-007"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/ledger"
+        }
+      }
+    }
+  }
+}

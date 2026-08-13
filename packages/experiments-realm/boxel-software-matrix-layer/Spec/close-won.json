@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "default",
+        "module": "../close-won"
+      },
+      "specType": "command",
+      "readMe": "## Close Won\n\nThe convergence step, as a command: mark a Deal or Opportunity `closed won` and flow it onward with no manual handoff — activates a yearly **Subscription** on the deal's account at the deal value, and creates the **first draft Invoice** (30-day terms, one line item, linked to the subscription, owner carried over from the deal).\n\n```ts\nimport CloseWonCommand from '../close-won';\nlet { subscription, invoice, message } = await new CloseWonCommand(\n  commandContext,\n).execute({ deal });\n```\n\nThe command re-fetches the deal before reading its links, so it never depends on the caller's load state — a caller may pass a card whose `owner` or `account` was never loaded, and an unresolved link would otherwise produce an ownerless invoice. Compound values (price, lineItems) are patched as JSON after save rather than constructed as field instances.\n\nThe Contract step of the chain is absent until a Contract block exists; the command says so in its result message rather than silently skipping it.\n\nThe linked example is the command's natural target: a deal in negotiation.\n\n**Non-goals:** contract generation, proration and mid-cycle billing, multi-currency conversion.",
+      "cardInfo": {
+        "name": "Close Won",
+        "summary": "Deal → closed won → active Subscription + first draft Invoice on the account. Contract step deferred to v1.1.",
+        "notes": null,
+        "cardThumbnailURL": null
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Deal/acme-enterprise-renewal"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

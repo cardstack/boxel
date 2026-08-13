@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Contractor",
+      "cardDescription": "Contractor profile: name, contact, contract status, billable rate, VAT ID, invoice frequency, contract window (start/end dates with computed days remaining and expiry alerts), and vendor/project links",
+      "specType": "card",
+      "ref": {
+        "module": "../contractor",
+        "name": "Contractor"
+      },
+      "readMe": "# Contractor\n\n## Summary\nA contractor resource linked from Offers and Projects. Extends PersonBase with `status` (active | inactive | terminated), `billableRate` (hourly/daily rate in dollars), `vatId` (for invoicing), `invoiceFrequency` (monthly | quarterly | annually), a contract window (`contractStartDate` / `contractEndDate`), and `vendor` / `project` links (the agency they come through, the project they are staffed on). Two derived fields hang off the window: `daysRemaining` (a SIGNED computed NumberField — negative once expired, undefined when open-ended) and `expiryLabel` (a denormalized computed StringField: \"23d left\" / \"ends today\" / \"expired\" / '' when open-ended). `title` is computed from `name`.\n\n## Import\n```ts\nimport { Contractor, expiryTone, EXPIRY_TONE_COLORS } from './contractor';\n```\n\n## Usage — three or more ways this is used\n\n**1. As the external resource pool.** Contractors are linked from Offers as alternative hiring paths — when a requisition is filled via contract labor instead of permanent hire, the offer points at a Contractor instance instead of creating an Employee record.\n\n**2. As the invoicing source.** The `billableRate`, `invoiceFrequency`, and `vatId` drive invoice generation; the billing system queries contractors by `invoiceFrequency` to batch-generate monthly/quarterly/annual invoices.\n\n**3. As the project staffing model.** `project` links the contractor to the Project they are staffed on and `vendor` to the agency supplying them; the project dashboard shows billable cost alongside headcount, and the vendor's rate card can be sanity-checked against `billableRate`.\n\n**4. As a contract-renewal alarm.** `daysRemaining`/`expiryLabel` drive an amber treatment inside 30 days and red once expired (`expiryTone` + `EXPIRY_TONE_COLORS`, the same `stateColor` dilution every other status pill uses). The alert shows in every format: isolated Contract panel, embedded/atom expiry chip, and the fitted tile.\n\n**5. As the Talent & Resource Tracker's Contractors tab.** The tracker (talent-resource-tracker.gts) does NOT hold contractors in a linksToMany — it runs a live `getCards` query for every Contractor in the realm and renders them through `@context.searchResultsComponent` as a prerendered fitted grid, so new contractors appear the moment they are created.\n\n## Template Usage\nIsolated displays contact info, rate & terms, and a Contract panel (status, start/end dates, days remaining with the amber/red urgency treatment, vendor and project atoms, VAT ID) in a 2-column layout. Embedded is a one-liner with avatar, name, status pill, and an expiry chip that only appears inside the 30-day window. Fitted degrades through tiers: name → rate + expiry label → end-date/invoice/VAT facts. Atom is the name plus the urgent-only expiry chip.\n\n**Why `expiryLabel` exists (fitted-safe denormalization):** prerendered fitted must not read links, and re-deriving urgency from `contractEndDate` in every consumer invites drift. `expiryLabel` and `daysRemaining` are the contractor's OWN attributes, computed once next to the data — the fitted tile, embedded chip, and atom chip all read the same two scalars, so a tile and the isolated view can never disagree about how urgent the same end date is. `daysRemaining` is deliberately signed (utils' `daysBetween` clamps at 0, which would erase \"ended three weeks ago\" into \"ends today\"). The same rationale added `vendorName` and `projectName` — denormalized computed copies of the linked vendor's and project's names — so the tall fitted tiers can name the agency and engagement without a link read.\n\n## Examples\n- `Contractor/sarah-chen` — active, $95/hr monthly, contract window 2026-02-01 → 2026-09-01 via TalentBridge Agency on Platform Rebuild; inside the 30-day window, so she demonstrates the amber expiry treatment everywhere.\n- `Contractor/marcus-rodriguez` — active, $120/hr quarterly, window 2026-05-15 → 2027-02-15 via TalentBridge Agency on Benefits Migration; months out, so no alert renders — the quiet baseline case.\n\n## Reuse notes\nContractors reuse the PersonBase avatar/initials/name infrastructure so they render consistently across the app. Contract status colors (active=green, inactive=amber, terminated=red) follow the same v1 pattern as Employee and Candidate statuses.\n\n**Non-goals:** Contract documents/file storage (separate document management); billable hours tracking (belongs in time-tracking integration); benefit eligibility (Contractors are out-of-scope for benefits); auto-renewal workflow (the alert surfaces the decision, a human makes it).\n"
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Contractor/sarah-chen"
+        }
+      },
+      "linkedExamples.1": {
+        "links": {
+          "self": "../Contractor/marcus-rodriguez"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

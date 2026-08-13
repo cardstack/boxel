@@ -1,0 +1,52 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "offeredTitle": "Platform Engineer",
+      "salary": 172000,
+      "equity": 4000,
+      "bonus": 10000,
+      "startDate": "2026-08-24",
+      "extendedDate": "2026-08-07",
+      "expirationDate": "2026-08-14",
+      "decisionDate": "2026-08-10",
+      "status": "accepted",
+      "approvalChain": {
+        "startedAt": "2026-08-06T09:00:00.000Z",
+        "steps": [
+          {
+            "decision": "approved",
+            "decidedAt": "2026-08-06T16:00:00.000Z",
+            "comment": "Approved ahead of the Tomás offer."
+          }
+        ]
+      },
+      "cardInfo": {
+        "name": "Morgan Lee — Offer"
+      }
+    },
+    "relationships": {
+      "candidate": {
+        "links": {
+          "self": "../Candidate/7e615db9-3bf9-4704-9aa0-885d7b79d357"
+        }
+      },
+      "position": {
+        "links": {
+          "self": "../Position/platform-engineer"
+        }
+      },
+      "approvalChain.steps.0.approver": {
+        "links": {
+          "self": "../Employee/marcus-webb"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../offer",
+        "name": "Offer"
+      }
+    }
+  }
+}

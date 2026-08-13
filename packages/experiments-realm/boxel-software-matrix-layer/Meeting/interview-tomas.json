@@ -1,0 +1,46 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Tomás Ribeiro — Final Round",
+      "meetingType": "interview",
+      "roundType": "final",
+      "date": "2026-08-12T11:00:00.000Z",
+      "duration": {
+        "value": 45,
+        "unit": "minutes"
+      },
+      "interviewScore": 5,
+      "notes": "Excellent platform depth; recommend offer.",
+      "cardInfo": {
+        "name": "Tomás — Final Round",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "scorecard": {
+        "criteria": [],
+        "recommendation": null,
+        "overallNotes": null
+      }
+    },
+    "relationships": {
+      "candidate": {
+        "links": {
+          "self": "../Candidate/offer-tomas"
+        }
+      },
+      "interviewers.0": {
+        "links": {
+          "self": "../Employee/marcus-webb"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../meeting",
+        "name": "Meeting"
+      }
+    }
+  }
+}

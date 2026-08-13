@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Acme Talent & Resource Tracker",
+      "cardInfo": {
+        "name": "Acme Talent & Resource Tracker",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../talent-resource-tracker",
+        "name": "TalentResourceTracker"
+      }
+    }
+  }
+}
