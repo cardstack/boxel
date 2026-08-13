@@ -374,7 +374,13 @@ module('Unit | Boxel execution engine', function () {
 
     try {
       let generation = await session.update({
-        ...executionRequest('document.createElement("canvas")'),
+        principal: 'user:one',
+        surfaceId: 'surface:one',
+        trusted: false,
+        format: 'isolated',
+        moduleIdentifier: 'https://example.test/card',
+        source: 'document.createElement("canvas")',
+        purpose: 'host-display',
         hostRequestedMode: 'direct',
         canonicalCard: {} as never,
       });

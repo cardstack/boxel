@@ -46,19 +46,15 @@ import type { BaseDef } from '@cardstack/base/card-api';
  */
 const SUPPORTED_EXECUTION_FEATURES: ReadonlySet<string> = new Set();
 
-export interface BoxelExecutionRequest {
+interface CommonBoxelExecutionRequest {
   /** Viewer/app execution principal, never inferred from the Realm URL. */
   principal: string;
   /** Stable identity of the mounted visual surface. */
   surfaceId: string;
   trusted: boolean;
-  /** Host-authorized tier selection; authored records cannot set this. */
-  hostRequestedMode?: 'direct';
   format: string;
   moduleIdentifier: string;
   source: string;
-  resource: LooseCardResource;
-  document: LooseSingleCardDocument;
   relativeTo?: RealmResourceIdentifier;
   purpose: MaterializationPurpose;
   /**
@@ -79,6 +75,30 @@ export interface BoxelExecutionRequest {
   /** Host-only diagnostic correlation. Never sent to a runtime boundary. */
   performance?: BoxelExecutionPerformanceContext;
 }
+
+/**
+ * Direct and boundary runtimes share one request protocol, but not one
+ * payload. Direct retains the canonical Store instance and must not pay to
+ * manufacture a serialized graph that no consumer reads. Capsule and
+ * Sandbox have an actual data boundary, so their automatic request carries
+ * the cloneable JSON:API document required by `createFromSerialized()`.
+ */
+export type DirectBoxelExecutionRequest = CommonBoxelExecutionRequest & {
+  hostRequestedMode: 'direct';
+  canonicalCard: BaseDef;
+  resource?: never;
+  document?: never;
+};
+
+export type BoundaryBoxelExecutionRequest = CommonBoxelExecutionRequest & {
+  hostRequestedMode?: undefined;
+  resource: LooseCardResource;
+  document: LooseSingleCardDocument;
+};
+
+export type BoxelExecutionRequest =
+  | DirectBoxelExecutionRequest
+  | BoundaryBoxelExecutionRequest;
 
 export interface BoxelExecutionGeneration {
   readonly generation: number;
@@ -539,17 +559,19 @@ export class BoxelExecutionSession {
         tier: lease.runtime.mode,
       });
       try {
-        card =
-          lease.runtime.mode === 'direct' && request.canonicalCard
-            ? (lease.runtime as DirectBoxelRuntime).retainCanonicalInstance(
-                request.canonicalCard,
-              )
-            : await lease.runtime.createFromSerialized(
-                request.resource,
-                request.document,
-                request.relativeTo,
-                request.purpose,
-              );
+        if (lease.runtime.mode === 'direct' && request.canonicalCard) {
+          card = (lease.runtime as DirectBoxelRuntime).retainCanonicalInstance(
+            request.canonicalCard,
+          );
+        } else {
+          let boundary = boundaryPayload(request);
+          card = await lease.runtime.createFromSerialized(
+            boundary.resource,
+            boundary.document,
+            request.relativeTo,
+            request.purpose,
+          );
+        }
         createStage.finish();
       } catch (error) {
         createStage.finish({ status: 'error' });
@@ -701,6 +723,9 @@ function asError(error: unknown): Error {
  * document — an explicit, per-document grant, not a realm-wide one.
  */
 function documentDeclaredModules(request: BoxelExecutionRequest): string[] {
+  if (request.hostRequestedMode === 'direct') {
+    return [];
+  }
   let modules = modulesConsumedInMeta(request.resource.meta);
   for (let resource of request.document.included ?? []) {
     if (resource.meta) {
@@ -708,4 +733,16 @@ function documentDeclaredModules(request: BoxelExecutionRequest): string[] {
     }
   }
   return [...new Set(modules)];
+}
+
+function boundaryPayload(request: BoxelExecutionRequest): {
+  resource: LooseCardResource;
+  document: LooseSingleCardDocument;
+} {
+  if (request.hostRequestedMode === 'direct') {
+    throw new Error(
+      'A Host-requested Direct payload cannot cross a serialized execution boundary',
+    );
+  }
+  return { resource: request.resource, document: request.document };
 }

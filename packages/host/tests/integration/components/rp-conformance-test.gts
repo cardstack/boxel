@@ -517,6 +517,59 @@ module('Integration | rp-conformance', function (hooks) {
     }
   });
 
+  test('RP-1.1: Direct carries canonical authority without manufacturing a boundary document', async function (assert) {
+    let card = await createGadget();
+    let boxelExecution = getService('boxel-execution');
+    let request = await boxelExecution.requestFor(
+      card,
+      'isolated',
+      boxelExecution.surfaceId(),
+      undefined,
+      'direct',
+    );
+
+    assert.strictEqual(
+      request.hostRequestedMode,
+      'direct',
+      'the Host capability is explicit in the request',
+    );
+    assert.strictEqual(
+      request.canonicalCard,
+      card,
+      'Direct transfers the canonical Store handle',
+    );
+    assert.false(
+      'document' in request,
+      'Direct does not allocate a serialized boundary document',
+    );
+    assert.false(
+      'resource' in request,
+      'Direct does not allocate a projected resource',
+    );
+    assert.strictEqual(
+      request.source,
+      '',
+      'Direct does not fetch source that its admission path never classifies',
+    );
+
+    let session = boxelExecution.createSession();
+    try {
+      let generation = await session.update(request);
+      assert.strictEqual(
+        generation?.lease.decision.mode,
+        'direct',
+        'the payload materializes through the Direct RP adapter',
+      );
+      assert.strictEqual(
+        generation?.renderRecord.instance.model.name,
+        'Widget',
+        'the Direct adapter still projects the canonical model into its semantic record',
+      );
+    } finally {
+      await session.destroy();
+    }
+  });
+
   // "Identity map: same canonical id + assignable class ⇒ the same instance
   // object, updated in place; ... One instance is keyed under its localId and
   // every known remote id; a remote id claimed by a second local id is a hard

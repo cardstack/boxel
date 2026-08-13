@@ -34,7 +34,9 @@ import {
 import { createBoxelFieldPortal } from '@cardstack/host/components/boxel-field-portal';
 import config from '@cardstack/host/config/environment';
 import BoxelExecutionEngine, {
+  type BoundaryBoxelExecutionRequest,
   type BoxelExecutionRequest,
+  type DirectBoxelExecutionRequest,
   type BoxelExecutionSession,
 } from '@cardstack/host/lib/boxel-execution-engine';
 import {
@@ -390,6 +392,27 @@ export default class BoxelExecutionService extends Service {
     card: BaseDef,
     format: Format | undefined,
     surfaceId: string,
+    relativeTo: RealmResourceIdentifier | undefined,
+    hostRequestedMode: 'direct',
+  ): Promise<DirectBoxelExecutionRequest>;
+  async requestFor(
+    card: BaseDef,
+    format: Format | undefined,
+    surfaceId: string,
+    relativeTo?: RealmResourceIdentifier,
+    hostRequestedMode?: undefined,
+  ): Promise<BoundaryBoxelExecutionRequest>;
+  async requestFor(
+    card: BaseDef,
+    format: Format | undefined,
+    surfaceId: string,
+    relativeTo: RealmResourceIdentifier | undefined,
+    hostRequestedMode: 'direct' | undefined,
+  ): Promise<BoxelExecutionRequest>;
+  async requestFor(
+    card: BaseDef,
+    format: Format | undefined,
+    surfaceId: string,
     relativeTo?: RealmResourceIdentifier,
     hostRequestedMode?: 'direct',
   ): Promise<BoxelExecutionRequest> {
@@ -407,6 +430,40 @@ export default class BoxelExecutionService extends Service {
     }
     let moduleIdentifier = identity.module;
     this.ensureLocalIdentity(card);
+
+    // Direct is the canonical-Store adapter of the rendering protocol. It
+    // needs the Card API for live projection, but it has no serialization or
+    // source boundary: the engine retains `canonicalCard` and the Direct
+    // runtime derives its render record from that instance. Avoid building a
+    // complete included JSON:API graph (and fetching source) only to discard
+    // both during materialization. Besides reducing allocation pressure, this
+    // makes the request payload state the actual authority being transferred.
+    if (hostRequestedMode === 'direct') {
+      let api = await recordExecutionPromise(
+        performance,
+        'card-api',
+        this.cardService.getAPI(),
+      );
+      this.cardAPI = api;
+      let request: DirectBoxelExecutionRequest = {
+        principal: this.principal,
+        surfaceId,
+        hostRequestedMode: 'direct',
+        trusted: true,
+        format: format ?? 'isolated',
+        moduleIdentifier,
+        source: '',
+        relativeTo: relativeTo ?? executionRelativeTo(card),
+        purpose: format === 'edit' ? 'interactive-edit' : 'host-display',
+        canonicalCard: card,
+        performance,
+      };
+      requestStage.finish({
+        counters: { includedResources: 0, sourceCharacters: 0 },
+      });
+      return request;
+    }
+
     let [source, initialDocument, api] = await Promise.all([
       recordExecutionPromise(
         performance,
@@ -459,23 +516,21 @@ export default class BoxelExecutionService extends Service {
     // Direct runtime derives its cloneable RP record from the canonical card
     // at render time instead. Capsule and Sandbox still need the bounded,
     // settled Host projection before data crosses their execution boundary.
-    if (hostRequestedMode !== 'direct') {
-      let projectionStage = startBoxelExecutionStage({
-        ...performance,
-        stage: 'projection-settle',
+    let projectionStage = startBoxelExecutionStage({
+      ...performance,
+      stage: 'projection-settle',
+    });
+    try {
+      let settled = await this.settleHostProjection(card, api);
+      hostProjection = settled.projection;
+      hadPendingRelationship = settled.hadPendingRelationship;
+      querySeeds = settled.querySeeds;
+      projectionStage.finish({
+        counters: { passes: settled.relationshipSettlementPasses },
       });
-      try {
-        let settled = await this.settleHostProjection(card, api);
-        hostProjection = settled.projection;
-        hadPendingRelationship = settled.hadPendingRelationship;
-        querySeeds = settled.querySeeds;
-        projectionStage.finish({
-          counters: { passes: settled.relationshipSettlementPasses },
-        });
-      } catch (error) {
-        projectionStage.finish({ status: 'error' });
-        throw error;
-      }
+    } catch (error) {
+      projectionStage.finish({ status: 'error' });
+      throw error;
     }
     if (hadPendingRelationship) {
       document = await recordExecutionPromise(
@@ -506,10 +561,10 @@ export default class BoxelExecutionService extends Service {
       api,
       (id) => this.network.virtualNetwork.unresolveURL(id),
     );
-    let request: BoxelExecutionRequest = {
+    let request: BoundaryBoxelExecutionRequest = {
       principal: this.principal,
       surfaceId,
-      hostRequestedMode,
+      hostRequestedMode: undefined,
       // A Loader-shimmed module is host-defined by construction: its class
       // identity lives in the host process and its realm file serves only a
       // shim marker (no evaluable source exists for Capsule/Sandbox to
