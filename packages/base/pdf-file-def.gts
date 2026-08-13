@@ -51,7 +51,17 @@ export class PdfDef extends FileDef {
     getStream: () => Promise<ByteStream>,
     options: { contentHash?: string; contentSize?: number } = {},
   ): Promise<SerializedFile<{ documentInfo?: DocumentInfo }>> {
-    let base = await super.extractAttributes(url, getStream, options);
+    // Buffer the file at most once: `super.extractAttributes` may read the
+    // stream to compute the content hash/size, and the metadata sniff needs the
+    // same bytes — so both go through one memoized read rather than each
+    // re-fetching the file.
+    let bytesPromise: Promise<Uint8Array> | undefined;
+    let memoizedStream = async () => {
+      bytesPromise ??= byteStreamToUint8Array(await getStream());
+      return bytesPromise;
+    };
+
+    let base = await super.extractAttributes(url, memoizedStream, options);
 
     // A known oversize file skips the read entirely rather than buffering it to
     // then reject it.
@@ -64,7 +74,7 @@ export class PdfDef extends FileDef {
 
     let bytes: Uint8Array;
     try {
-      bytes = await byteStreamToUint8Array(await getStream());
+      bytes = await memoizedStream();
     } catch {
       // A stream that won't read is not a reason to fail the whole extract; the
       // base file identity is already gathered.

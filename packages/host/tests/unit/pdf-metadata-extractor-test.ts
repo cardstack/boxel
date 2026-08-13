@@ -92,6 +92,39 @@ module('Unit | pdf metadata extractor', function (hooks) {
     assert.strictEqual(info.created, '2023-01-15T09:30:00Z');
   });
 
+  test('drops a CreationDate that cannot normalize to a real date', async function (assert) {
+    // The value feeds a DateTimeField; a non-date string would deserialize to an
+    // Invalid Date that throws on the next toISOString(), so it must be dropped
+    // rather than stored raw. Covers both a non-matching string and a
+    // grammar-matching but impossible date (month 13).
+    let garbage = await extractPdfMetadata(
+      pdfBytes([
+        '%PDF-1.7\n',
+        '6 0 obj<</Title(No Date)/CreationDate(not a pdf date)>>endobj\n',
+        'trailer<</Info 6 0 R>>\n',
+      ]),
+    );
+    assert.strictEqual(garbage.title, 'No Date');
+    assert.strictEqual(
+      garbage.created,
+      undefined,
+      'unparseable string dropped',
+    );
+
+    let impossible = await extractPdfMetadata(
+      pdfBytes([
+        '%PDF-1.7\n',
+        '6 0 obj<</CreationDate(D:20231345000000Z)>>endobj\n',
+        'trailer<</Info 6 0 R>>\n',
+      ]),
+    );
+    assert.strictEqual(
+      impossible.created,
+      undefined,
+      'well-formed but impossible date dropped',
+    );
+  });
+
   test('falls back to the page-tree /Count when no leaf pages are legible', async function (assert) {
     let bytes = pdfBytes([
       '%PDF-1.4\n',

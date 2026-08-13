@@ -221,8 +221,10 @@ function readNamedString(corpus: string, key: string): string | undefined {
 }
 
 // A PDF date is `D:YYYYMMDDHHmmSS` followed by an optional timezone
-// (`Z`, or `+HH'mm'`). Normalize to ISO-8601 when the year is legible; leave the
-// raw string otherwise, since a half-parsed date is worse than the original.
+// (`Z`, or `+HH'mm'`). Normalize to ISO-8601, or return undefined: this value
+// feeds a `DateTimeField`, and a string that isn't a valid date deserializes to
+// an Invalid Date that throws on the next `toISOString()` — so a non-date string
+// is worse than no value, not better.
 function parsePdfDate(raw: string | undefined): string | undefined {
   if (!raw) {
     return undefined;
@@ -231,7 +233,7 @@ function parsePdfDate(raw: string | undefined): string | undefined {
     /D:(\d{4})(\d{2})?(\d{2})?(\d{2})?(\d{2})?(\d{2})?([+-Z])?(\d{2})?'?(\d{2})?/,
   );
   if (!match) {
-    return raw;
+    return undefined;
   }
   let [, year, month, day, hour, minute, second, tzSign, tzHour, tzMinute] =
     match;
@@ -241,7 +243,10 @@ function parsePdfDate(raw: string | undefined): string | undefined {
     tzSign === 'Z' || !tzSign
       ? 'Z'
       : `${tzSign}${tzHour ?? '00'}:${tzMinute ?? '00'}`;
-  return `${date}T${time}${zone}`;
+  let iso = `${date}T${time}${zone}`;
+  // A grammar match can still spell an impossible date (month 13, day 40); only
+  // return one the datetime field can round-trip.
+  return Number.isNaN(Date.parse(iso)) ? undefined : iso;
 }
 
 function pruneUndefined(info: DocumentInfo): DocumentInfo {
