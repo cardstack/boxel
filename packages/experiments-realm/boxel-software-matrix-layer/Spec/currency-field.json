@@ -1,0 +1,50 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Currency field",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/currency",
+        "name": "default"
+      },
+      "readMe": "# Currency\n\n## Summary\nBase-realm ISO currency field with a picker edit UI. Lives at\n`https://cardstack.com/base/currency` (default export `CurrencyField`).\n\n## API\n- `code` \u2014 ISO 4217 currency code (StringField, e.g. USD, MYR, JPY)\n\nThe module also exports a `Currency` CardDef for card-instance usage.\n\n## Usage\n```ts\nimport CurrencyField from 'https://cardstack.com/base/currency';\n\n@field settlementCurrency = contains(CurrencyField);\n```\nFor an amount *plus* its currency in one value, use the Amount with\nCurrency field, which composes this one.",
+      "containedExamples": [
+        {
+          "code": "USD"
+        },
+        {
+          "code": "MYR"
+        }
+      ],
+      "cardInfo": {
+        "name": "Currency",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "https://cardstack.com/base/currency",
+              "name": "default"
+            }
+          },
+          {
+            "adoptsFrom": {
+              "module": "https://cardstack.com/base/currency",
+              "name": "default"
+            }
+          }
+        ]
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

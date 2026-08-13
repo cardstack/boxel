@@ -1,0 +1,42 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Coordinate field",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/coordinate",
+        "name": "default"
+      },
+      "readMe": "# Coordinate\n\n## Summary\nBase-realm x/y coordinate pair. Lives at\n`https://cardstack.com/base/coordinate` (default export `CoordinateField`).\n\n## API\n- `x`, `y` \u2014 NumberFields\n\n## Usage\n```ts\nimport CoordinateField from 'https://cardstack.com/base/coordinate';\n\n@field position = contains(CoordinateField);\n```\nGeneral-purpose plane coordinates (chart points, canvas positions, grid\ncells). For geographic latitude/longitude prefer the catalog geo-point\nfield, which carries map-aware components.",
+      "containedExamples": [
+        {
+          "x": 320,
+          "y": 480
+        }
+      ],
+      "cardInfo": {
+        "name": "Coordinate",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "https://cardstack.com/base/coordinate",
+              "name": "default"
+            }
+          }
+        ]
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

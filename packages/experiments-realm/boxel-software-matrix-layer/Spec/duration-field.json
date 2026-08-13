@@ -1,0 +1,46 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Duration field",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/time/duration",
+        "name": "default"
+      },
+      "readMe": "# Duration\n\n## Summary\nBase-realm elapsed-time field decomposed into calendar units. Lives at\n`https://cardstack.com/base/time/duration` (default export `DurationField`).\n\n## API\n- `years`, `months`, `days`, `hours`, `minutes`, `seconds` \u2014 NumberFields\n\n## Usage\n```ts\nimport DurationField from 'https://cardstack.com/base/time/duration';\n\n@field contractLength = contains(DurationField);\n```\nConsumed in the shared realm by the App 2 Vendor card\n(`contractStart`/`contractLength`). Units are stored as entered \u2014 the field\ndoes not normalize (90 minutes stays 90 minutes).",
+      "containedExamples": [
+        {
+          "years": 1,
+          "months": 6,
+          "days": 0,
+          "hours": 0,
+          "minutes": 0,
+          "seconds": 0
+        }
+      ],
+      "cardInfo": {
+        "name": "Duration",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "https://cardstack.com/base/time/duration",
+              "name": "default"
+            }
+          }
+        ]
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Percentage field",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/percentage",
+        "name": "default"
+      },
+      "readMe": "# Percentage\n\n## Summary\nBase-realm percentage field \u2014 a NumberField subclass that renders its value\nas `NN%` (rounded to 2 decimals). Lives at\n`https://cardstack.com/base/percentage` (default export `PercentageField`).\n\n## API\nPrimitive number. Store `12.5` to display `12.5%` \u2014 the value is the\npercentage itself, not a 0-1 fraction.\n\n## Usage\n```ts\nimport PercentageField from 'https://cardstack.com/base/percentage';\n\n@field winProbability = contains(PercentageField);\n```\nNegative values render escaped (`\\-NN%`) so a leading minus is not\nmistaken for markdown (CS-10786).",
+      "containedExamples": [
+        12.5
+      ],
+      "cardInfo": {
+        "name": "Percentage",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "https://cardstack.com/base/percentage",
+              "name": "default"
+            }
+          }
+        ]
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

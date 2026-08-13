@@ -1,0 +1,50 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Address field",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/address",
+        "name": "default"
+      },
+      "readMe": "# Address\n\n## Summary\nBase-realm compound field for a postal address. Lives at\n`https://cardstack.com/base/address` (default export `AddressField`).\n\n## API\n- `addressLine1`, `addressLine2` \u2014 street lines (StringField)\n- `city`, `state`, `postalCode`, `poBoxNumber` \u2014 StringFields\n- `country` \u2014 a `CountryField` (`{ name, code }`) with a picker edit UI\n- `fullAddress` \u2014 computed one-line rendering of the whole address\n\n## Usage\n```ts\nimport AddressField from 'https://cardstack.com/base/address';\n\n@field shippingAddress = contains(AddressField);\n```\nEmbedded format renders the composed address; edit format is a full form\nincluding the country picker.",
+      "containedExamples": [
+        {
+          "addressLine1": "12 Jalan Bukit Bintang",
+          "addressLine2": null,
+          "city": "Kuala Lumpur",
+          "state": "WP Kuala Lumpur",
+          "postalCode": "55100",
+          "country": {
+            "name": "Malaysia",
+            "code": "MY"
+          },
+          "poBoxNumber": null
+        }
+      ],
+      "cardInfo": {
+        "name": "Address",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "https://cardstack.com/base/address",
+              "name": "default"
+            }
+          }
+        ]
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

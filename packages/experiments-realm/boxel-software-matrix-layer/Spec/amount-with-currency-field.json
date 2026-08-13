@@ -1,0 +1,56 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Amount with Currency field",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/amount-with-currency",
+        "name": "default"
+      },
+      "readMe": "# Amount with Currency\n\n## Summary\nBase-realm money field pairing a numeric amount with an ISO currency. Lives\nat `https://cardstack.com/base/amount-with-currency` (default export\n`AmountWithCurrency`).\n\n## API\n- `amount` \u2014 NumberField\n- `currency` \u2014 a `CurrencyField` (`{ code }`, e.g. USD, MYR) with a picker\n\n## Usage\n```ts\nimport AmountWithCurrency from 'https://cardstack.com/base/amount-with-currency';\n\n@field dealValue = contains(AmountWithCurrency);\n```\nRenders the amount formatted with its currency. For plain unitless numbers\nuse NumberField; for percentages use the Percentage field.",
+      "containedExamples": [
+        {
+          "amount": 24000,
+          "currency": {
+            "code": "USD"
+          }
+        },
+        {
+          "amount": 149.5,
+          "currency": {
+            "code": "MYR"
+          }
+        }
+      ],
+      "cardInfo": {
+        "name": "Amount with Currency",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "https://cardstack.com/base/amount-with-currency",
+              "name": "default"
+            }
+          },
+          {
+            "adoptsFrom": {
+              "module": "https://cardstack.com/base/amount-with-currency",
+              "name": "default"
+            }
+          }
+        ]
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
