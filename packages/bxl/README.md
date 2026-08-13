@@ -372,8 +372,9 @@ query-backed `claims` contains that same Claim — while jq's data model is
 JSON: acyclic by construction. `expression()` bridges the two by handing the
 program a **lazy, cycle-guarded view** of the card:
 
-- **Path access is lazy.** `.claims[0].paidAmount` reads exactly the fields
-  it names; nothing else on the graph is touched or computed.
+- **Path access is lazy.** `.claims[0].paidAmount` reads the fields it
+  names, plus each traversed card's `id` — the cycle guard consults it —
+  and nothing else on the graph is touched or computed.
 - **Re-entry clips to a bounded reference.** When a walk reaches a card
   already on its own traversal path — by object identity _or_ by id, since
   query resolution can hand back a fresh instance of a visited card — the

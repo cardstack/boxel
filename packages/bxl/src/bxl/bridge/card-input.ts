@@ -7,7 +7,8 @@
 //
 // - `materializeCardInput` wraps the compute target in a lazy view that
 //   materializes fields only as the program touches them. Path access
-//   (`.claims[0].paidAmount`) costs exactly the fields it reads, and
+//   (`.claims[0].paidAmount`) costs the fields it reads plus each
+//   traversed card's `id` (the cycle guard consults it), and
 //   structural operations (`unique`, `tojson`, `==`, `to_entries`)
 //   enumerate a card's field map on demand instead of seeing an opaque
 //   empty object. Re-entering a value already on the current traversal
