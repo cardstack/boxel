@@ -65,43 +65,80 @@ function astUsesFilterSet(node: unknown, filters: Set<string>): boolean {
   return false;
 }
 
+// A rejected chunk load must not stick: the memo caches the in-flight
+// promise so concurrent callers share one import, but a failure (e.g. a
+// transient network error fetching the chunk) clears the slot so the next
+// caller retries — otherwise every later evaluation would re-reject off
+// the cached rejection and the family could never load.
+function memoizedLoad(
+  read: () => Promise<void> | undefined,
+  write: (value: Promise<void> | undefined) => void,
+  load: () => Promise<void>,
+): Promise<void> {
+  let pending = read();
+  if (!pending) {
+    pending = load().catch((error) => {
+      write(undefined);
+      throw error;
+    });
+    write(pending);
+  }
+  return pending;
+}
+
 async function ensureStatisticalLoaded() {
-  formulaStatisticalLoad ??= import('../registry/formula-statistical.ts').then(
-    ({ formulaStatisticalLibrary }) => {
-      registerBuiltinLibrary('formula-statistical', formulaStatisticalLibrary);
-    },
+  await memoizedLoad(
+    () => formulaStatisticalLoad,
+    (value) => (formulaStatisticalLoad = value),
+    () =>
+      import('../registry/formula-statistical.ts').then(
+        ({ formulaStatisticalLibrary }) => {
+          registerBuiltinLibrary(
+            'formula-statistical',
+            formulaStatisticalLibrary,
+          );
+        },
+      ),
   );
-  await formulaStatisticalLoad;
 }
 
 async function ensureBesselLoaded() {
-  formulaBesselLoad ??= import('../registry/formula-bessel.ts').then(
-    ({ formulaBesselLibrary }) => {
-      registerBuiltinLibrary('formula-bessel', formulaBesselLibrary);
-    },
+  await memoizedLoad(
+    () => formulaBesselLoad,
+    (value) => (formulaBesselLoad = value),
+    () =>
+      import('../registry/formula-bessel.ts').then(
+        ({ formulaBesselLibrary }) => {
+          registerBuiltinLibrary('formula-bessel', formulaBesselLibrary);
+        },
+      ),
   );
-  await formulaBesselLoad;
 }
 
 async function ensureExtrasBundleLoaded() {
-  formulaExtrasBundleLoad ??=
-    import('../registry/bundles/formula-extras.ts').then(
-      ({ formulaExtrasBundle }) => {
-        for (const [name, library] of Object.entries(formulaExtrasBundle)) {
-          registerBuiltinLibrary(name as BuiltinLibraryName, library);
-        }
-      },
-    );
-  await formulaExtrasBundleLoad;
+  await memoizedLoad(
+    () => formulaExtrasBundleLoad,
+    (value) => (formulaExtrasBundleLoad = value),
+    () =>
+      import('../registry/bundles/formula-extras.ts').then(
+        ({ formulaExtrasBundle }) => {
+          for (const [name, library] of Object.entries(formulaExtrasBundle)) {
+            registerBuiltinLibrary(name as BuiltinLibraryName, library);
+          }
+        },
+      ),
+  );
 }
 
 async function ensureValidationLoaded() {
-  validationLoad ??= import('../registry/validation.ts').then(
-    ({ validationLibrary }) => {
-      registerBuiltinLibrary('validation', validationLibrary);
-    },
+  await memoizedLoad(
+    () => validationLoad,
+    (value) => (validationLoad = value),
+    () =>
+      import('../registry/validation.ts').then(({ validationLibrary }) => {
+        registerBuiltinLibrary('validation', validationLibrary);
+      }),
   );
-  await validationLoad;
 }
 
 const EXTRAS_LIBRARIES: BuiltinLibraryName[] = [

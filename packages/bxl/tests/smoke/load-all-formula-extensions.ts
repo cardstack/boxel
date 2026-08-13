@@ -36,9 +36,11 @@ approx(expression(fx`ERF(0.5)`).call({}), 0.5205); // engineering
 approx(expression(fx`ABS(PMT(0.005, 12, -12000))`).call({}), 1032.7972, 1e-3); // financial
 approx(expression(fx`BESSELI(1.5, 1)`).call({}), 0.981666); // bessel
 approx(expression(fx`NORM.S.DIST(1, TRUE)`).call({}), 0.841345); // statistical
+strictEqual(expression(fx`isEmail("team@example.com")`).call({}), true); // validation
+strictEqual(expression(fx`isEmail("not-an-email")`).call({}), false);
 
 // Idempotent: a second call must not double-register or throw.
 await loadAllFormulaExtensions();
 strictEqual(expression(fx`ERF(0.5)`).call({}) === null, false);
 
-console.log('BXL load-all formula extensions: 6/6 cases passed');
+console.log('BXL load-all formula extensions: 8/8 cases passed');
