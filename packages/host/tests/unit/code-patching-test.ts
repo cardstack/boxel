@@ -6,7 +6,10 @@ import {
   SEPARATOR_MARKER,
 } from '@cardstack/runtime-common';
 
-import { parseSearchReplace } from '@cardstack/host/lib/search-replace-block-parsing';
+import {
+  isCompleteSearchReplaceBlock,
+  parseSearchReplace,
+} from '@cardstack/host/lib/search-replace-block-parsing';
 
 module(
   'Unit | code patching | parse search replace blocks',
@@ -165,6 +168,77 @@ ${REPLACE_MARKER}`;
         `{ "new": true }`,
         'the stray separator is not part of the replacement',
       );
+    });
+
+    // The model writes the markers from memory and does not reliably reproduce
+    // a bare run of ═. Observed in practice: the separator arrives with 19 ═
+    // instead of 15, while SEARCH and REPLACE — whose runs sit either side of a
+    // word — come through intact. Recognition matches the runs by shape, so a
+    // miscounted rule still yields an applyable patch.
+    const DRIFTED_SEPARATOR = `╠${'═'.repeat(19)}╣`;
+
+    test('recovers a block whose separator has the wrong number of ═', async function (assert) {
+      let block = `example-card.json
+${SEARCH_MARKER}
+{ "old": true }
+${DRIFTED_SEPARATOR}
+{ "new": true }
+${REPLACE_MARKER}`;
+
+      assert.true(
+        isCompleteSearchReplaceBlock(block),
+        'the block counts as complete',
+      );
+      let result = parseSearchReplace(block);
+      assert.strictEqual(result.searchContent, `{ "old": true }`);
+      assert.strictEqual(result.replaceContent, `{ "new": true }`);
+    });
+
+    test('recovers a drifted SEARCH or REPLACE marker too', async function (assert) {
+      let block = `example-card.json
+╔═ SEARCH ═╗
+{ "old": true }
+${SEPARATOR_MARKER}
+{ "new": true }
+╚══════ REPLACE ══════╝`;
+
+      assert.true(isCompleteSearchReplaceBlock(block));
+      let result = parseSearchReplace(block);
+      assert.strictEqual(result.searchContent, `{ "old": true }`);
+      assert.strictEqual(result.replaceContent, `{ "new": true }`);
+    });
+
+    test('strips a stray trailing separator that has drifted as well', async function (assert) {
+      let block = `game-1.json
+${SEARCH_MARKER}
+{ "old": true }
+${SEPARATOR_MARKER}
+{ "new": true }
+${DRIFTED_SEPARATOR}
+${REPLACE_MARKER}`;
+      let result = parseSearchReplace(block);
+      assert.strictEqual(result.replaceContent, `{ "new": true }`);
+    });
+
+    test('does not treat out-of-order markers as a complete block', async function (assert) {
+      let block = `game-1.json
+${REPLACE_MARKER}
+{ "old": true }
+${SEPARATOR_MARKER}
+{ "new": true }
+${SEARCH_MARKER}`;
+      assert.false(
+        isCompleteSearchReplaceBlock(block),
+        'the markers must appear in order',
+      );
+    });
+
+    test('a block with no separator at all is still incomplete', async function (assert) {
+      let block = `game-1.json
+${SEARCH_MARKER}
+{ "old": true }
+${REPLACE_MARKER}`;
+      assert.false(isCompleteSearchReplaceBlock(block));
     });
   },
 );

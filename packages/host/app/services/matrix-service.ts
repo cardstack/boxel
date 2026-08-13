@@ -39,9 +39,7 @@ import {
   logger,
   Deferred,
   ri,
-  SEARCH_MARKER,
-  REPLACE_MARKER,
-  SEPARATOR_MARKER,
+  isCompleteSearchReplaceBlock,
   isCardErrorJSONAPI,
   stringifyErrorForLog,
 } from '@cardstack/runtime-common';
@@ -3022,11 +3020,7 @@ export default class MatrixService extends Service {
     ) {
       // Check if the message contains code patches by looking for search/replace blocks
       let body = event.content.body as string;
-      if (
-        body.includes(SEARCH_MARKER) &&
-        body.includes(SEPARATOR_MARKER) &&
-        body.includes(REPLACE_MARKER)
-      ) {
+      if (isCompleteSearchReplaceBlock(body)) {
         this.toolService.queueEventForCodePatchProcessing(event);
       }
     }

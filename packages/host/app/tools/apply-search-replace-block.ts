@@ -1,11 +1,9 @@
 import {
-  REPLACE_MARKER,
-  SEARCH_MARKER,
-  SEPARATOR_MARKER,
+  findSearchReplaceBlock,
+  stripTrailingSeparatorMarker,
 } from '@cardstack/runtime-common';
 
 import HostBaseTool from '../lib/host-base-tool';
-import { stripTrailingSeparatorMarker } from '../lib/search-replace-block-parsing';
 
 import type * as BaseToolModule from '@cardstack/base/command';
 
@@ -88,20 +86,17 @@ export default class ApplySearchReplaceBlockTool extends HostBaseTool<
     searchPattern: string | null;
     replacePattern: string | null;
   } {
-    // Make sure the code block has all the required markers
-    if (
-      !codeBlock.includes(SEARCH_MARKER) ||
-      !codeBlock.includes(SEPARATOR_MARKER) ||
-      !codeBlock.includes(REPLACE_MARKER)
-    ) {
+    // Make sure the code block has all the required markers, in order
+    const block = findSearchReplaceBlock(codeBlock);
+    if (!block) {
       return { searchPattern: null, replacePattern: null };
     }
 
     // Extract the search and replace patterns
-    const searchStart = codeBlock.indexOf(SEARCH_MARKER) + SEARCH_MARKER.length;
-    const dividerPos = codeBlock.indexOf(SEPARATOR_MARKER);
-    const replaceStart = dividerPos + SEPARATOR_MARKER.length;
-    const replaceEnd = codeBlock.indexOf(REPLACE_MARKER);
+    const searchStart = block.search.end;
+    const dividerPos = block.separator.index;
+    const replaceStart = block.separator.end;
+    const replaceEnd = block.replace.index;
 
     if (searchStart >= dividerPos || replaceStart >= replaceEnd) {
       return { searchPattern: null, replacePattern: null };

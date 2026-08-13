@@ -80,11 +80,7 @@ import { isMarkdownFile } from '../paths.ts';
 import { SKILL_INSTRUCTIONS_MESSAGE, SYSTEM_MESSAGE } from './constants.ts';
 import { MAX_CORRECTNESS_FIX_ATTEMPTS } from './correctness-constants.ts';
 import { humanReadable } from '../code-ref.ts';
-import {
-  SEARCH_MARKER,
-  REPLACE_MARKER,
-  SEPARATOR_MARKER,
-} from '../constants.ts';
+import { findSearchReplaceBlock } from '../search-replace-markers.ts';
 
 const CARD_PATCH_COMMAND_NAMES = new Set(['patchCardInstance', 'patchFields']);
 const CHECK_CORRECTNESS_TOOL_NAME = 'checkCorrectness';
@@ -2652,30 +2648,20 @@ function elideCodeBlocks(
 
   let codeBlockIndex = 0;
 
-  while (
-    content.includes(SEARCH_MARKER) &&
-    content.includes(SEPARATOR_MARKER) &&
-    content.includes(REPLACE_MARKER)
-  ) {
-    const searchStartIndex: number = content.indexOf(SEARCH_MARKER);
-    const separatorIndex: number = content.indexOf(
-      SEPARATOR_MARKER,
-      searchStartIndex,
-    );
-    const replaceEndIndex: number = content.indexOf(
-      REPLACE_MARKER,
-      separatorIndex,
-    );
+  for (;;) {
+    const block = findSearchReplaceBlock(content);
+    if (!block) {
+      return content;
+    }
 
     // replace the content between the markers with a placeholder
     content =
-      content.substring(0, searchStartIndex) +
+      content.substring(0, block.start) +
       getPlaceholder(codeBlockIndex) +
-      content.substring(replaceEndIndex + REPLACE_MARKER.length);
+      content.substring(block.end);
 
     codeBlockIndex++;
   }
-  return content;
 }
 
 export function mxcUrlToHttp(mxc: string, baseUrl: string): string {
