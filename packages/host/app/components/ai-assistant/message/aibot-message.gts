@@ -343,11 +343,13 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
                 @modifiedCode={{this.codeDiffResource.modifiedCode}}
               />
             </codeBlock.actions>
-          {{else}}
+          {{else if this.codeDiffResource.isLoadingDiff}}
             {{! The header needs only the file URL, which is known as soon as
             the patch is parsed, so a diff still being fetched can name the file
             it belongs to. Without this the whole block renders empty and an
-            unresolved patch is indistinguishable from nothing at all. }}
+            unresolved patch is indistinguishable from nothing at all. A patch
+            that failed is not shown here — it has the footer's alert to speak
+            for it. }}
             {{#if @codeData.fileUrl}}
               <codeBlock.diffEditorHeader
                 @codeData={{@codeData}}
@@ -358,12 +360,10 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
                 @codePatchErrorMessage={{this.codePatchErrorMessage}}
               />
             {{/if}}
-            {{#if this.codeDiffResource.isLoadingDiff}}
-              <div class='code-patch-loading' data-test-code-patch-loading>
-                <LoadingIndicator @color='var(--boxel-light)' />
-                <span>Loading diff…</span>
-              </div>
-            {{/if}}
+            <div class='code-patch-loading' data-test-code-patch-loading>
+              <LoadingIndicator @color='var(--boxel-light)' />
+              <span>Loading diff…</span>
+            </div>
           {{/if}}
 
           {{#if this.codePatchErrorMessage}}
