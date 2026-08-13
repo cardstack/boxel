@@ -603,6 +603,12 @@ module('Acceptance | operator mode tests', function (hooks) {
   module(
     'card with an error that has a last known good state',
     function (hooks) {
+      // The realm-building beforeEach above runs for these tests too, and caches
+      // under this module's name, so the top-level teardown's prefix — fixed at
+      // registration from the outer name — cannot match it. Without this the
+      // snapshot stays attached for the rest of the shard.
+      setupRealmCacheTeardown(hooks);
+
       hooks.beforeEach(async function () {
         // Flip Person/fadhlan to ExplodingPerson with `status: 'boom'` so
         // the cardTitle compute throws on re-index. The card's
@@ -943,7 +949,13 @@ module('Acceptance | operator mode tests', function (hooks) {
     assert.dom('[data-test-code-mode]').doesNotExist();
   });
 
-  module('2 stacks', function () {
+  module('2 stacks', function (hooks) {
+    // The realm-building beforeEach above runs for these tests too, and caches
+    // under this module's name, so the top-level teardown's prefix — fixed at
+    // registration from the outer name — cannot match it. Without this the
+    // snapshot stays attached for the rest of the shard.
+    setupRealmCacheTeardown(hooks);
+
     test('Toggling submode will open code submode and toggling back will restore the stack', async function (assert) {
       await visitOperatorMode({
         stacks: [
@@ -996,6 +1008,12 @@ module('Acceptance | operator mode tests', function (hooks) {
   });
 
   module('realm session expiration', function (hooks) {
+    // The realm-building beforeEach above runs for these tests too, and caches
+    // under this module's name, so the top-level teardown's prefix — fixed at
+    // registration from the outer name — cannot match it. Without this the
+    // snapshot stays attached for the rest of the shard.
+    setupRealmCacheTeardown(hooks);
+
     let refreshInSec = 2;
 
     hooks.beforeEach(async function () {
@@ -1025,6 +1043,12 @@ module('Acceptance | operator mode tests', function (hooks) {
   });
 
   module('account popover', function (hooks) {
+    // The realm-building beforeEach above runs for these tests too, and caches
+    // under this module's name, so the top-level teardown's prefix — fixed at
+    // registration from the outer name — cannot match it. Without this the
+    // snapshot stays attached for the rest of the shard.
+    setupRealmCacheTeardown(hooks);
+
     type UserResponseAttributes = {
       matrixUserId: string;
       stripeCustomerId: string;
