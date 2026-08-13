@@ -28,6 +28,7 @@ import { AI_BOT_EXECUTOR } from '@cardstack/runtime-common/commands';
 import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
 import { getToolRequests } from '@cardstack/runtime-common/matrix-constants';
 
+import ENV from '@cardstack/host/config/environment';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type Realm from '@cardstack/host/services/realm';
 import CheckCorrectnessTool from '@cardstack/host/tools/check-correctness';
@@ -488,6 +489,20 @@ export default class ToolService extends Service {
           );
         }
         this.toolPatchWaitRetries.delete(`${roomId}|${eventId}`);
+
+        // Applied patches mean the write landed, not that the index has
+        // caught up — a tool loading a just-created card would still miss
+        // it. Wait for the tracked index invalidations of this message's
+        // patched files, the same milestone checkCorrectness waits on. A
+        // no-op when nothing was tracked (e.g. the patches were applied by
+        // another session).
+        for (let fileUrl of this.patchedFileUrls(message)) {
+          await this.waitForInvalidationAfterAIAssistantRequest(
+            roomId!,
+            fileUrl,
+            ENV.cardRenderTimeout,
+          );
+        }
 
         // Collect all ready commands for this message
         let readyTools: any[] = [];
@@ -1202,6 +1217,20 @@ export default class ToolService extends Service {
       }
     }
   };
+
+  // The distinct file URLs this message's code patches target.
+  private patchedFileUrls(message: {
+    htmlParts?: Array<{ codeData: CodeData | null }> | null;
+  }): string[] {
+    let urls = new Set<string>();
+    for (let part of message.htmlParts ?? []) {
+      let codeData = part.codeData;
+      if (codeData?.searchReplaceBlock && codeData.fileUrl) {
+        urls.add(codeData.fileUrl);
+      }
+    }
+    return [...urls];
+  }
 
   // True while any code patch in the message has not reached a terminal
   // state ('applied' or 'failed') — i.e. it is still 'ready' (queued for
