@@ -20,9 +20,12 @@ const filterArg = process.argv[2];
 const allRoots = ['tests/unit', 'tests/smoke', 'tests/boxel'];
 const roots = filterArg ? [filterArg.replace(/\/$/, '')] : allRoots;
 
+// Recursive, so a suite added in a subdirectory cannot be silently skipped;
+// fixtures are data modules, not suites, and are excluded by path.
 const suites = roots.flatMap((root) =>
-  readdirSync(join(packageRoot, root))
-    .filter((f) => f.endsWith('.ts'))
+  readdirSync(join(packageRoot, root), { recursive: true })
+    .map(String)
+    .filter((f) => f.endsWith('.ts') && !f.split(/[\\/]/).includes('fixtures'))
     .map((f) => join(root, f)),
 );
 
@@ -34,8 +37,14 @@ for (const suite of suites) {
   });
   const summary = (result.stdout || '').trim().split('\n').pop() || '';
   const label = suite.padEnd(36);
-  if (result.status === 0) {
+  // Every suite reports its case count on its final line. A clean exit with
+  // no summary means the suite's body never ran — an early return, a guard
+  // that stopped matching — so treat silence as failure, not success.
+  if (result.status === 0 && summary) {
     console.log(`OK   ${label} ${summary}`);
+  } else if (result.status === 0) {
+    failures++;
+    console.log(`FAIL ${label} (exited 0 but printed no summary)`);
   } else {
     failures++;
     console.log(`FAIL ${label}`);
