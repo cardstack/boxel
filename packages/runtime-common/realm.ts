@@ -7712,8 +7712,11 @@ function isGloballyPublicDependency(resourceUrl: string): boolean {
     resourceUrl.startsWith('@cardstack/boxel-icons') ||
     resourceUrl.startsWith('@cardstack/boxel-ui') ||
     resourceUrl.startsWith('@cardstack/boxel-host/commands') ||
+    // Only the package root: it re-exports BXL's entire public API and is
+    // the one specifier the host's VirtualNetwork shim serves. The
+    // package's sub-entries exist for size-constrained embeds outside the
+    // host and are not part of the card-facing surface.
     resourceUrl === '@cardstack/bxl' ||
-    resourceUrl.startsWith('@cardstack/bxl/') ||
     resourceUrl.startsWith(PACKAGES_FAKE_ORIGIN)
   ) {
     return true;
@@ -7729,8 +7732,7 @@ function isGloballyPublicDependency(resourceUrl: string): boolean {
     parsed.hostname === 'packages' &&
     (parsed.pathname.startsWith('/@cardstack/boxel-ui') ||
       parsed.pathname.startsWith('/@cardstack/boxel-host/commands') ||
-      parsed.pathname === '/@cardstack/bxl' ||
-      parsed.pathname.startsWith('/@cardstack/bxl/'))
+      parsed.pathname === '/@cardstack/bxl')
   ) {
     return true;
   }
