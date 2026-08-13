@@ -9,9 +9,7 @@
         "name": "default"
       },
       "readMe": "# Quantity\n\n## Summary\nCatalog shared field for counted amounts \u2014 a NumberField subclass. Lives in\nthe catalog realm at `fields/quantity/quantity` (default export\n`QuantityField`).\n\n## API\nPrimitive number, intended for unit counts (line-item quantities, stock\nlevels) as opposed to measurements or money.\n\n## Usage\n```ts\nimport QuantityField from 'https://app.boxel.ai/catalog/fields/quantity/quantity';\n\n@field quantity = contains(QuantityField);\n```\nThe shared-realm Line Item block models the same concern with a plain\nNumberField; adopting this field is the catalog-aligned choice when a realm\nalready consumes catalog fields.",
-      "containedExamples": [
-        3
-      ],
+      "containedExamples": [],
       "cardInfo": {
         "name": "Quantity",
         "summary": null,
@@ -21,14 +19,7 @@
     },
     "meta": {
       "fields": {
-        "containedExamples": [
-          {
-            "adoptsFrom": {
-              "module": "https://app.boxel.ai/catalog/fields/quantity/quantity",
-              "name": "default"
-            }
-          }
-        ]
+        "containedExamples": []
       },
       "adoptsFrom": {
         "module": "https://cardstack.com/base/spec",
