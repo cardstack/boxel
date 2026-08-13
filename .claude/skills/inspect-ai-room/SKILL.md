@@ -34,23 +34,23 @@ node scripts/inspect-room.mjs raw <roomId> [str]  # full event JSON, filtered by
   the host answers with an `app.boxel.toolResult` event. Code patches get
   `app.boxel.codePatchResult` events plus a `codePatchCorrectness` follow-up.
 
-## Diagnosing "the session stalled after a tool request"
+## Why didn't a tool auto-run?
 
 Silence after a bot message carrying a tool request means the **host** (Ember
-app in the browser tab) never executed it — the bot is just waiting. Check in
-order:
+app in the browser tab) never executed it — the bot is just waiting. Two
+gates decide auto-run:
 
-1. `state` — mode must be `act` for auto-run, unless the tool is declared
+1. `state` — mode must be `act`, unless the tool is declared
    `requiresApproval: false` in the declaring skill's frontmatter.
-2. `timeline` — compare the stalled message's `agent=` with earlier messages
-   whose tools DID run. The host only auto-runs tools whose
-   `data.context.agentId` matches its own (sessionStorage, per tab). A
-   mismatch means another tab owns the session.
-3. If the gates pass and there is still no `toolResult` (not even an
-   `invalid` one), the host's tool-processing drain died silently — an
-   exception mid-drain or the retry give-up path. Both log only to the
-   browser console; nothing reaches Matrix. The green Apply pill in the UI
-   still works as a manual fallback.
+2. `timeline` — compare the message's `agent=` with earlier messages whose
+   tools DID run. The host only auto-runs tools whose `data.context.agentId`
+   matches its own (sessionStorage, per tab): a tool sent through another tab
+   is by design never auto-run in this one.
+
+If both gates pass and there is no `toolResult` at all (not even an
+`invalid` one), the failure is host-side and only that tab's browser console
+has it — Matrix records nothing. The green Apply pill still runs the tool
+manually.
 
 ## Synapse DB (last resort)
 
