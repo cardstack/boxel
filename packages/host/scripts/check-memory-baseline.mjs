@@ -3,7 +3,7 @@
 // Compares per-module memory deltas from a CI run against a committed baseline.
 // Exits 0 on pass/warn, exits 1 on hard failure — when a module's delta clears
 // its recent ceiling by more than the larger of +50MB, 100% of the baseline, or
-// the module's own observed run-to-run swing.
+// the module's own demonstrated run-to-run noise band.
 //
 // Usage: node check-memory-baseline.mjs <reports-dir> <baseline-json>
 //
@@ -93,10 +93,13 @@ const baselineCeiling = (entry) => {
 //
 // For a window containing positive samples the floor is a no-op and this
 // reduces to the plain peak-to-peak spread. Modules with a tight window are
-// unaffected — the absolute/relative terms govern. Zero for a single-value
-// baseline that carries no sample window.
+// unaffected — the absolute/relative terms govern. Zero until the window
+// holds at least two samples: a single reading demonstrates no run-to-run
+// swing, so a newly baselined module stays behind the absolute threshold
+// until it has real history. Also zero for a legacy single-value baseline
+// that carries no sample window at all.
 const baselineNoiseBand = (entry) => {
-  if (Array.isArray(entry?.samples) && entry.samples.length > 0) {
+  if (Array.isArray(entry?.samples) && entry.samples.length > 1) {
     return Math.max(Math.max(...entry.samples), 0) - Math.min(...entry.samples);
   }
   return 0;
@@ -201,12 +204,16 @@ if (failures.length === 0 && warnings.length === 0) {
 }
 
 const samplesWindow = baseline.samplesWindow ?? 1;
+// "up to": modules newer than the window cap carry fewer samples, as does
+// every module while an existing baseline grows toward a raised cap.
 const baselineHeader =
-  samplesWindow > 1 ? `Baseline (mean of last ${samplesWindow})` : 'Baseline';
+  samplesWindow > 1
+    ? `Baseline (mean of up to ${samplesWindow} samples)`
+    : 'Baseline';
 
 if (failures.length > 0) {
   lines.push(
-    `### Failures (over recent ceiling by >${HARD_ABSOLUTE_MB}MB, >${HARD_RELATIVE * 100}%, or the observed swing)\n`,
+    `### Failures (over recent ceiling by >${HARD_ABSOLUTE_MB}MB, >${HARD_RELATIVE * 100}%, or the demonstrated noise band)\n`,
   );
   lines.push(
     `| Module | ${baselineHeader} | Current | Change | Recent samples |`,
