@@ -909,20 +909,34 @@ export default class CardPrerender extends Component {
 }
 
 async function withRenderContext<T>(cb: () => Promise<T>): Promise<T> {
-  let hadContext = Boolean((globalThis as any).__boxelRenderContext);
-  let restoreTimers: (() => void) | undefined;
-  if (!hadContext) {
-    (globalThis as any).__boxelRenderContext = true;
-    if (!isTesting()) {
-      restoreTimers = enableRenderTimerStub();
+  let globals = globalThis as typeof globalThis & {
+    __boxelRenderContext?: boolean;
+    __boxelInteractiveRenderContextDepth?: number;
+    __boxelInteractiveRenderRestoreTimers?: () => void;
+  };
+  let currentDepth = globals.__boxelInteractiveRenderContextDepth ?? 0;
+  let isInteractive = currentDepth > 0 || !globals.__boxelRenderContext;
+  if (isInteractive) {
+    globals.__boxelRenderContext = true;
+    globals.__boxelInteractiveRenderContextDepth = currentDepth + 1;
+    if (!isTesting() && currentDepth === 0) {
+      globals.__boxelInteractiveRenderRestoreTimers = enableRenderTimerStub();
     }
   }
   try {
     return await cb();
   } finally {
-    if (!hadContext) {
-      delete (globalThis as any).__boxelRenderContext;
-      restoreTimers?.();
+    if (isInteractive) {
+      let remainingDepth =
+        (globals.__boxelInteractiveRenderContextDepth ?? 1) - 1;
+      if (remainingDepth > 0) {
+        globals.__boxelInteractiveRenderContextDepth = remainingDepth;
+      } else {
+        delete globals.__boxelInteractiveRenderContextDepth;
+        delete globals.__boxelRenderContext;
+        globals.__boxelInteractiveRenderRestoreTimers?.();
+        delete globals.__boxelInteractiveRenderRestoreTimers;
+      }
     }
   }
 }

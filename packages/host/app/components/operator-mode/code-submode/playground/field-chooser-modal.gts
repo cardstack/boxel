@@ -47,7 +47,11 @@ const FieldChooser: TemplateOnlyComponent<Signature> = <template>
                 aria-label='Select instance {{add i 1}}'
                 data-test-field-instance={{i}}
               >
-                <CardRenderer @card={{instance.field}} @format='embedded' />
+                <CardRenderer
+                  @card={{instance.field}}
+                  @format='embedded'
+                  @execution='direct'
+                />
               </CardContainer>
             </li>
           {{/each}}

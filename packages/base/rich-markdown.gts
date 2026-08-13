@@ -137,6 +137,7 @@ export class RichMarkdownField extends FieldDef {
         @linkedCards={{@model.linkedCards}}
         @linkedFiles={{@model.linkedFiles}}
         @cardReferenceBaseUrl={{this.baseUrl}}
+        @relationshipOwner={{@model}}
       />
     </template>
   };
@@ -161,6 +162,7 @@ export class RichMarkdownField extends FieldDef {
         @linkedCards={{@model.linkedCards}}
         @linkedFiles={{@model.linkedFiles}}
         @cardReferenceBaseUrl={{this.baseUrl}}
+        @relationshipOwner={{@model}}
       />
     </template>
   };
@@ -233,6 +235,7 @@ export class RichMarkdownField extends FieldDef {
               @linkedCards={{@model.linkedCards}}
               @linkedFiles={{@model.linkedFiles}}
               @cardReferenceBaseUrl={{this.baseUrl}}
+              @relationshipOwner={{@model}}
             />
           </div>
         {{else}}

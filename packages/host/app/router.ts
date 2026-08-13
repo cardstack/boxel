@@ -25,6 +25,9 @@ Router.map(function () {
   this.route('command-runner', {
     path: '/command-runner/:request_id/:nonce',
   });
+  this.route('boxel-sandbox-runtime', {
+    path: '/_boxel-sandbox-runtime',
+  });
 
   this.route('index', { path: '/*path' });
   this.route('index-root', { path: '/' });

@@ -831,6 +831,10 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       .dom('[data-test-message-idx="0"] [data-test-boxel-card-header-title]')
       .containsText('Search Results');
 
+    // The header is Host chrome; Direct RP materializes the result card body
+    // asynchronously. Wait for the protocol-rendered collection instead of
+    // treating the synchronous header as a body-readiness signal.
+    await waitFor('.result-list li', { count: 2 });
     assert.dom('.result-list li').exists({ count: 2 });
 
     assert.dom('.result-list li:nth-child(1)').containsText('Jackie');
@@ -877,6 +881,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       .dom('[data-test-message-idx="0"] [data-test-boxel-card-header-title]')
       .containsText('Search Results');
 
+    await waitFor('.result-list li', { count: 1 });
     assert.dom('.result-list li:nth-child(1)').containsText('Mango');
     assert.dom('[data-test-toggle-show-button]').doesNotExist();
   });
@@ -912,6 +917,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       },
     });
     await waitFor('[data-test-tool-result-header]');
+    await waitFor('.result-list li', { count: 5 });
     assert.dom('.result-list li:nth-child(6)').doesNotExist();
     assert
       .dom('[data-test-toggle-show-button]')
@@ -976,6 +982,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       .containsText('Search Results');
 
     let resultListItem = '[data-test-result-list] > li';
+    await waitFor(resultListItem, { count: 5 });
     assert.dom(`${resultListItem}:nth-child(1)`).containsText('Buck');
     assert.dom(`${resultListItem}:nth-child(5)`).containsText('Ian');
 

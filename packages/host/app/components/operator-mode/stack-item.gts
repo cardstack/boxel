@@ -1,3 +1,4 @@
+import { registerDestructor } from '@ember/destroyable';
 import { fn } from '@ember/helper';
 import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
@@ -41,8 +42,8 @@ import { cn, cssVar, optional, not } from '@cardstack/boxel-ui/helpers';
 
 import { IconLink, IconTrash } from '@cardstack/boxel-ui/icons';
 
-import type { ToolContext } from '@cardstack/runtime-common';
 import {
+  type ToolContext,
   type Permissions,
   type getCard,
   type getCards,
@@ -64,6 +65,7 @@ import {
   baseCardRef,
 } from '@cardstack/runtime-common';
 
+import type { BoxelExecutionMode } from '@cardstack/host/lib/boxel-runtime';
 import {
   stackItemTypeToStoreReadType,
   type StackItem,
@@ -141,6 +143,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   @service declare private store: StoreService;
 
   @tracked private selectedCards = new TrackedSet<string>();
+  @tracked private executionMode: BoxelExecutionMode | undefined;
 
   private normalizeCardId(cardDefOrId: CardDefOrId): string {
     if (typeof cardDefOrId === 'string') {
@@ -676,6 +679,14 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }) ?? [],
     );
 
+    items.unshift(
+      new MenuItem({
+        label: `Execution: ${executionModeLabel(this.executionMode)}`,
+        action: () => undefined,
+        eyebrow: true,
+      }),
+    );
+
     if (this.isTopCard) {
       let expandItem = new MenuItem({
         label: this.isExpanded ? 'Restore Width' : 'Expand to Full Width',
@@ -830,12 +841,16 @@ export default class OperatorModeStackItem extends Component<Signature> {
         //    and some elements get removed before their animations complete
         // 2. Tests running with animation-duration: 0s can cause
         //    animations to abort before they're properly tracked
-        if (e.name === 'AbortError') {
-          this.clearAnimationType(animationName);
-          resolve?.();
-        } else {
+        if (e.name !== 'AbortError') {
           console.error(e);
         }
+        // Whatever went wrong with the animation, the item's lifecycle must
+        // still settle: startAnimation's awaited promise otherwise never
+        // resolves, its dropTask stays "running" forever, and every future
+        // close click on this item is silently dropped — a permanently dead
+        // close button over a purely cosmetic failure.
+        this.clearAnimationType(animationName);
+        resolve?.();
       });
   }
 
@@ -860,6 +875,22 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   private setupContentEl = (el: HTMLElement) => {
     this.contentEl = el;
+    let updateExecutionMode = () => {
+      let executionElement = el.querySelector<HTMLElement>(
+        '[data-boxel-execution="direct"], [data-boxel-execution="capsule"], [data-boxel-execution="sandbox"]',
+      );
+      let mode = executionElement?.dataset.boxelExecution;
+      this.executionMode = isBoxelExecutionMode(mode) ? mode : undefined;
+    };
+    let observer = new MutationObserver(updateExecutionMode);
+    observer.observe(el, {
+      attributes: true,
+      attributeFilter: ['data-boxel-execution'],
+      childList: true,
+      subtree: true,
+    });
+    scheduleOnce('afterRender', this, updateExecutionMode);
+    return () => observer.disconnect();
   };
 
   private setupContainerEl = (el: HTMLElement) => {
@@ -1148,6 +1179,13 @@ export default class OperatorModeStackItem extends Component<Signature> {
               @card={{this.card}}
               @format={{this.cardFormat}}
               @codeRef={{this.defaultCodeRef}}
+              {{! RP-9.9: a stack item's box comes from the viewport, not
+                from the card — .stack-item-card is a definite-height grid
+                whose content row stretches. That is main's contract for a
+                full-page card, and the reason authors style card roots
+                `height: 100%`. Declaring it here is what lets those roots
+                resolve against a real box on every execution tier. }}
+              @hostOwnsBox={{true}}
             />
             <OperatorModeOverlays
               @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}
@@ -1397,7 +1435,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
 interface ContentElementSignature {
   Args: {
     Named: {
-      onSetup: (element: HTMLElement) => void;
+      onSetup: (element: HTMLElement) => void | (() => void);
     };
   };
 }
@@ -1407,6 +1445,32 @@ class ContentElement extends Modifier<ContentElementSignature> {
     _positional: [],
     { onSetup }: ContentElementSignature['Args']['Named'],
   ) {
-    onSetup(element);
+    // A class-based modifier's modify() return value is ignored (unlike a
+    // function modifier) — the teardown must be registered explicitly, or
+    // setupContentEl's MutationObserver outlives the stack item for the
+    // app's lifetime.
+    let teardown = onSetup(element);
+    if (typeof teardown === 'function') {
+      registerDestructor(this, teardown);
+    }
+  }
+}
+
+function isBoxelExecutionMode(
+  value: string | undefined,
+): value is BoxelExecutionMode {
+  return value === 'direct' || value === 'capsule' || value === 'sandbox';
+}
+
+function executionModeLabel(mode: BoxelExecutionMode | undefined): string {
+  switch (mode) {
+    case 'direct':
+      return 'Direct';
+    case 'capsule':
+      return 'Capsule';
+    case 'sandbox':
+      return 'Sandbox';
+    default:
+      return 'Loading';
   }
 }

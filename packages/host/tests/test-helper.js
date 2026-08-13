@@ -13,6 +13,16 @@ import { selectShardModules } from './helpers/shard-modules';
 import testModuleTimings from './test-module-timings.json';
 
 export async function start(examOptions) {
+  if (
+    config.environment !== 'test' ||
+    config.APP?.rootElement !== '#ember-testing' ||
+    config.APP?.autoboot !== false
+  ) {
+    throw new Error(
+      'Host tests must boot with the test environment config (environment=test, rootElement=#ember-testing, autoboot=false)',
+    );
+  }
+
   // ember-basic-dropdown 9 has no boot-time initializer, and in a test
   // build it prefers the page-level wormhole div, which sits outside the
   // test root where scoped DOM helpers cannot see teleported content.
@@ -21,6 +31,7 @@ export async function start(examOptions) {
   const application = Application.create({
     ...config.APP,
     rootElement: '#ember-testing',
+    autoboot: false,
   });
 
   async function setupHostTests() {

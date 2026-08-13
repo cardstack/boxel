@@ -94,7 +94,7 @@ export default class MarkdownPreview extends Component<Signature> {
         {{this.captureMarkdownText}}
         aria-hidden='true'
       >
-        <CardRenderer @card={{@card}} @format='markdown' />
+        <CardRenderer @card={{@card}} @format='markdown' @execution='direct' />
       </div>
 
       {{#if (eq this.viewMode 'source')}}

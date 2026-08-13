@@ -33,6 +33,7 @@ import {
   type CardDef,
   type FileDef,
   getComponent,
+  getRelationshipMembershipState,
 } from '../card-api';
 import { CardContextConsumer } from '../field-component';
 function wrapTablesHtml(html: string | null | undefined): string {
@@ -104,16 +105,37 @@ export default class MarkDownTemplate extends GlimmerComponent<{
     linkedCards?: CardDef[] | null;
     linkedFiles?: FileDef[] | null;
     cardReferenceBaseUrl?: string | null;
+    relationshipOwner?: BaseDef | null;
   };
 }> {
   @tracked monacoContextInternal: any = undefined;
   @tracked renderSlots: RenderSlot[] = [];
-  // On the first modifier run linkedCards is likely still loading (empty [])
-  // so we skip unresolved Pills to avoid flashing them for refs that will
-  // soon resolve. On subsequent runs showFallback is true. For in-app
-  // navigation where linkedCards is already cached, we detect this by
-  // checking linkedCards.length > 0 on the first run.
-  private _modifierHasRun = false;
+
+  // Rich markdown and markdown FileDefs own query-backed linkedCards and
+  // linkedFiles relationships. Their arrays are empty both while loading and
+  // after a valid empty result, so array contents cannot represent terminal
+  // state. Read the canonical relationship status from the semantic owner.
+  // Plain MarkdownField values have no relationship owner and therefore
+  // settle immediately into their documented broken-reference fallback.
+  private get referenceQueriesSettled(): boolean {
+    let owner = this.args.relationshipOwner;
+    if (!owner) {
+      return true;
+    }
+
+    return ['linkedCards', 'linkedFiles'].every((fieldName) => {
+      try {
+        return (
+          getRelationshipMembershipState(owner as CardDef, fieldName)
+            .membership !== undefined
+        );
+      } catch {
+        // A consumer may use this template with an owner that does not expose
+        // both relationships. Such an absent query has nothing to await.
+        return true;
+      }
+    });
+  }
   get isPrerenderContext() {
     return Boolean((globalThis as any).__boxelRenderContext);
   }
@@ -208,22 +230,18 @@ export default class MarkDownTemplate extends GlimmerComponent<{
   }
 
   captureCardSlots = modifier(
-    (element: HTMLElement, _positional: unknown[]) => {
-      let linkedCards = this.args.linkedCards;
-      let linkedFiles = this.args.linkedFiles;
+    (
+      element: HTMLElement,
+      [
+        ,
+        linkedCards,
+        linkedFiles,
+        referenceQueriesSettled,
+      ]: [unknown, CardDef[] | null | undefined, FileDef[] | null | undefined, boolean],
+    ) => {
       let baseUrl = this.args.cardReferenceBaseUrl;
       let pendingUpdate = false;
       let pendingToken: unknown = undefined;
-      // On the very first modifier run the linked instances are likely still
-      // loading (empty []) so we skip unresolved Pills to avoid flashing them
-      // for refs that will soon resolve. On subsequent runs showFallback is
-      // true. We also enable it immediately if data is already present (in-app
-      // navigation with cached results).
-      let hasLinkedData =
-        (linkedCards != null && linkedCards.length > 0) ||
-        (linkedFiles != null && linkedFiles.length > 0);
-      let showFallback = this._modifierHasRun || hasLinkedData;
-      this._modifierHasRun = true;
 
       let collectSlots = (): RenderSlot[] => {
         let cardsByUrl = new Map<string, CardDef>();
@@ -305,10 +323,10 @@ export default class MarkDownTemplate extends GlimmerComponent<{
           }
 
           // No matching instance yet: show the sized loading shimmer until the
-          // linked instances have settled (showFallback), then fall back to the
-          // broken-link box. Skipping the broken state on the first modifier
-          // run avoids flashing it for refs that will soon resolve.
-          if (!showFallback) {
+          // linked queries acknowledge settlement, then fall back to the
+          // broken-link box. An empty result is a successful terminal state;
+          // it must not depend on a second modifier run or non-empty data.
+          if (!referenceQueriesSettled) {
             slots.push({
               element: el,
               refType,
@@ -495,7 +513,12 @@ export default class MarkDownTemplate extends GlimmerComponent<{
   <template>
     <div
       class='markdown-content'
-      {{this.captureCardSlots this.renderedHtml @linkedCards @linkedFiles}}
+      {{this.captureCardSlots
+        this.renderedHtml
+        @linkedCards
+        @linkedFiles
+        this.referenceQueriesSettled
+      }}
     >
       {{this.renderedHtml}}
     </div>

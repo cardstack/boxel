@@ -1,4 +1,5 @@
 import { click, render, waitFor } from '@ember/test-helpers';
+import GlimmerComponent from '@glimmer/component';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -11,6 +12,8 @@ import {
   type SerializedError,
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
+
+import CardRenderer from '@cardstack/host/components/card-renderer';
 
 import {
   provideConsumeContext,
@@ -31,12 +34,48 @@ import {
   StringField,
 } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
-import { renderCard } from '../../helpers/render-component';
+import { renderCard, renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
 import type { CardDef as CardDefType } from '@cardstack/base/card-api';
 
 const GHOST_URL = `${testRealmURL}Pet/ghost`;
+
+const rpCardsSource = `
+  import {
+    CardDef,
+    Component,
+    contains,
+    field,
+    linksTo,
+    linksToMany,
+  } from 'https://cardstack.com/base/card-api';
+  import StringField from 'https://cardstack.com/base/string';
+
+  export class Pet extends CardDef {
+    static displayName = 'Pet';
+    @field firstName = contains(StringField);
+    static embedded = class extends Component<typeof Pet> {
+      <template><span data-test-rp-pet-name><@fields.firstName /></span></template>
+    };
+  }
+
+  export class Person extends CardDef {
+    static displayName = 'Person';
+    @field firstName = contains(StringField);
+    @field pet = linksTo(Pet);
+    @field pets = linksToMany(Pet);
+    static isolated = class extends Component<typeof Person> {
+      <template>
+        <section data-test-slot='fitted'><@fields.pet @format='fitted' /></section>
+        <section data-test-slot='embedded'><@fields.pet @format='embedded' /></section>
+        <section data-test-slot='atom'><@fields.pet @format='atom' /></section>
+        <section data-test-slot='isolated'><@fields.pet @format='isolated' /></section>
+        <section data-test-pets-slot><@fields.pets @format='embedded' /></section>
+      </template>
+    };
+  }
+`;
 
 // The cards are declared inside a helper rather than at module scope because the
 // base-realm helpers (CardDef, field, …) are only populated once
@@ -100,12 +139,13 @@ function makeCards() {
 // the link 404s and the producer plants a `link-not-found` sentinel.
 async function createPerson(
   relationships: LooseCardResource['relationships'],
+  module = 'test-cards',
 ): Promise<CardDefType> {
   let store = getService('store');
   let resource: LooseCardResource = {
     attributes: { firstName: 'Hassan' },
     relationships,
-    meta: { adoptsFrom: { module: testRRI('test-cards'), name: 'Person' } },
+    meta: { adoptsFrom: { module: testRRI(module), name: 'Person' } },
   };
   return (await store.__dangerousCreateFromSerialized(
     resource,
@@ -188,6 +228,119 @@ module(
           .dom(`${slot} [data-test-pet]`)
           .doesNotExist(`${format} slot does not render a card`);
       }
+    });
+
+    test('the RP preserves trusted Base placeholders inside an authored card', async function (assert) {
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: { 'rp-test-cards.gts': rpCardsSource },
+      });
+      let person = await createPerson(
+        {
+          pet: { links: { self: GHOST_URL } },
+        },
+        'rp-test-cards',
+      );
+
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <CardRenderer
+              @card={{person}}
+              @format='isolated'
+              @execution='auto'
+            />
+          </template>
+        },
+      );
+      await waitFor('[data-boxel-execution]', { timeout: 10000 });
+      await waitFor('[data-test-broken-link-template]');
+
+      assert
+        .dom('[data-boxel-execution]')
+        .hasAttribute(
+          'data-boxel-execution',
+          'capsule',
+          'the authored parent stays inside the Capsule',
+        );
+      for (let format of ['fitted', 'embedded', 'atom', 'isolated']) {
+        assert
+          .dom(
+            `[data-test-slot='${format}'] [data-test-broken-link-template='${format}']`,
+          )
+          .exists(`trusted Base owns the ${format} failure presentation`);
+      }
+    });
+
+    test('the RP replaces one live linksToMany member with a trusted placeholder without disturbing its sibling', async function (assert) {
+      let ringoURL = `${testRealmURL}Pet/ringo`;
+      let mangoURL = `${testRealmURL}Pet/mango`;
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'rp-test-cards.gts': rpCardsSource,
+          'Pet/ringo.json': {
+            data: {
+              attributes: { firstName: 'Ringo' },
+              meta: {
+                adoptsFrom: {
+                  module: testRRI('rp-test-cards'),
+                  name: 'Pet',
+                },
+              },
+            },
+          },
+          'Pet/mango.json': {
+            data: {
+              attributes: { firstName: 'Mango' },
+              meta: {
+                adoptsFrom: {
+                  module: testRRI('rp-test-cards'),
+                  name: 'Pet',
+                },
+              },
+            },
+          },
+        },
+      });
+      let person = await createPerson(
+        {
+          'pets.0': { links: { self: ringoURL } },
+          'pets.1': { links: { self: mangoURL } },
+        },
+        'rp-test-cards',
+      );
+
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <CardRenderer
+              @card={{person}}
+              @format='isolated'
+              @execution='auto'
+            />
+          </template>
+        },
+      );
+      await waitFor('[data-test-rp-pet-name]', { count: 2, timeout: 10000 });
+
+      let api = (await loader.import(
+        '@cardstack/base/card-api',
+      )) as typeof import('@cardstack/base/card-api');
+      api.notifyLinksToTargetDeleted(person, ringoURL);
+      await waitFor('[data-test-pets-slot] [data-test-broken-link-template]', {
+        timeout: 10000,
+      });
+
+      assert
+        .dom('[data-test-pets-slot] [data-test-broken-link-template]')
+        .exists('the deleted member becomes the trusted warning');
+      assert
+        .dom('[data-test-pets-slot] [data-test-broken-link-url]')
+        .hasText(ringoURL, 'the warning retains the deleted reference');
+      assert
+        .dom('[data-test-pets-slot] [data-test-rp-pet-name]')
+        .hasText('Mango', 'the present sibling remains rendered through RP');
     });
 
     test('the reveal overlay is non-linking and offers copy + "Open anyway"', async function (assert) {

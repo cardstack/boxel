@@ -2206,8 +2206,11 @@ export function joinWithAnd(parts: string[]): string {
   return `${parts.slice(0, -1).join(', ')}, and ${parts.at(-1)}`;
 }
 
-export function formatRelativeTime(date: Date): string {
-  let diffMinutes = Math.floor((Date.now() - date.getTime()) / (60 * 1000));
+export function formatRelativeTime(
+  date: Date,
+  now: number = Date.now(),
+): string {
+  let diffMinutes = Math.floor((now - date.getTime()) / (60 * 1000));
   if (diffMinutes < 1) {
     return formatDate(date, 'h:mm a');
   }
@@ -2221,14 +2224,14 @@ export function formatRelativeTime(date: Date): string {
   return formatDate(date, 'EEE, MMM d, yyyy');
 }
 
-export function formatUpdatedTime(date: Date): string {
+export function formatUpdatedTime(
+  date: Date,
+  now: number = Date.now(),
+): string {
   // Clamp to 0: a clock skewed slightly ahead of the server (or a
   // just-written timestamp racing this render) can otherwise produce a
   // negative diff.
-  let diffSeconds = Math.max(
-    0,
-    Math.floor((Date.now() - date.getTime()) / 1000),
-  );
+  let diffSeconds = Math.max(0, Math.floor((now - date.getTime()) / 1000));
   if (diffSeconds === 0) {
     return 'Updated just now';
   }

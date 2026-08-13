@@ -213,6 +213,7 @@ class MarkdownPreview extends GlimmerComponent<FilePreviewSignature> {
             @linkedCards={{this.source.linkedCards}}
             @linkedFiles={{this.source.linkedFiles}}
             @cardReferenceBaseUrl={{this.source.id}}
+            @relationshipOwner={{this.source}}
           />
         {{else}}
           <p class='md-preview__empty'>No content</p>

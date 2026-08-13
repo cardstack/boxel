@@ -41,6 +41,9 @@ import {
   type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
 
+import { validateSharedDocumentScopedCSSRequest } from '@cardstack/host/lib/capsule-css-policy';
+import { isTrustedImport } from '@cardstack/host/lib/trusted-modules';
+
 import { knownFileMetaUrls } from '../lib/known-file-meta-urls';
 import { normalizeRealms } from '../lib/realm-utils';
 import { searchErrorEntry } from '../lib/search-error-entry';
@@ -693,11 +696,27 @@ export class SearchEntriesResource extends Resource<Args> {
 
   // The `css` resources base64-embed their whole stylesheet in the href; the
   // loader import is what registers each scoped stylesheet with the document,
-  // so entries are paint-ready when exposed.
+  // so entries are paint-ready when exposed. A trusted Cardstack module's own
+  // compiled scoped CSS (Boxel UI's CardContainer resets and theming wire
+  // nearly every rendering) is exempt from the Capsule CSS policy — it is
+  // Host-owned styling, not authored content — while every genuinely
+  // authored stylesheet still validates before sharing the Host document.
   private async loadStylesheets(doc: EntryCollectionDocument) {
     let hrefs = (doc.included ?? [])
       .filter(isCssResource)
-      .map((resource) => resource.attributes.href);
+      .map((resource) => resource.attributes.href)
+      .filter((href) => {
+        try {
+          validateSharedDocumentScopedCSSRequest(href, isTrustedImport);
+          return true;
+        } catch {
+          // Search HTML is still useful when an authored stylesheet cannot
+          // safely share the Host document. The live Boxel will render in its
+          // isolated execution mode; do not make file/search navigation fail
+          // because its prerender presentation was omitted.
+          return false;
+        }
+      });
     await Promise.all(
       hrefs.map((href) => this.loaderService.loader.import(href)),
     );

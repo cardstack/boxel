@@ -670,7 +670,7 @@ module('Integration | operator-mode | basics', function (hooks) {
     await waitUntil(() => {
       return document
         .querySelector(
-          `[data-test-stack-item-content] >[data-test-card="${packetId}"]`,
+          '[data-test-stack-card-index="1"] [data-test-pubpacket-isolated]',
         )
         ?.textContent?.includes(
           'Everyone knows that Alice ran the show in the Brady household.',

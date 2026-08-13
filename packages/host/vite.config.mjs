@@ -201,11 +201,139 @@ function quietOptimizedDepSourcemapWarnings() {
   };
 }
 
+function sandboxRuntimeSecurityHeaders() {
+  let install = (server) => {
+    server.middlewares.use((req, res, next) => {
+      let pathname;
+      try {
+        pathname = decodeURI((req.url ?? '').split('?')[0]);
+      } catch {
+        next();
+        return;
+      }
+      let hostname = (req.headers.host ?? '').split(':')[0];
+      let expectedSandboxHostnames = [
+        'user.localhost',
+        process.env.BOXEL_SANDBOX_HOSTNAME,
+      ].filter(Boolean);
+      if (!expectedSandboxHostnames.includes(hostname)) {
+        next();
+        return;
+      }
+      // Safari and Firefox use an opaque-origin sandbox rather than Chromium's
+      // credentialless attribute. Let that opaque document load this sandbox
+      // hostname's public Vite assets while the route CSP and MessageChannel
+      // still deny ambient Host/realm authority.
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      if (pathname !== '/_boxel-sandbox-runtime') {
+        next();
+        return;
+      }
+      let parentSource = process.env.BOXEL_HOST_HOSTNAME
+        ? `https://${process.env.BOXEL_HOST_HOSTNAME}`
+        : 'http://localhost:* https://localhost:*';
+      let resourceSource = `https://${req.headers.host}`;
+      res.setHeader(
+        'Content-Security-Policy',
+        [
+          `default-src 'self'`,
+          `script-src 'self' ${resourceSource} 'unsafe-inline' 'unsafe-eval' blob:`,
+          `style-src 'self' ${resourceSource} 'unsafe-inline' https://fonts.googleapis.com`,
+          `connect-src 'self' ${resourceSource} ${parentSource}`,
+          `img-src 'self' ${resourceSource} data: blob:`,
+          `font-src 'self' ${resourceSource} data: blob: https://fonts.gstatic.com`,
+          `media-src 'self' ${resourceSource} data: blob:`,
+          `worker-src 'none'`,
+          `child-src 'none'`,
+          `object-src 'none'`,
+          `base-uri 'none'`,
+          `form-action 'none'`,
+          `frame-ancestors ${parentSource}`,
+        ].join('; '),
+      );
+      res.setHeader('Referrer-Policy', 'no-referrer');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      next();
+    });
+  };
+  return {
+    name: 'boxel-sandbox-runtime-security-headers',
+    apply: 'serve',
+    configureServer: install,
+    configurePreviewServer: install,
+  };
+}
+
 // In environment mode (BOXEL_ENVIRONMENT set), scripts/vite-with-traefik.js
 // exposes the public Traefik hostname via BOXEL_HOST_HOSTNAME so we can let it
 // through Vite's host check (for both `vite` and `vite preview`) and tell the
 // HMR client where to reconnect (dev only).
 const envHostname = process.env.BOXEL_HOST_HOSTNAME;
+const sandboxHostname = process.env.BOXEL_SANDBOX_HOSTNAME;
+const envAllowedHosts = [envHostname, sandboxHostname].filter(Boolean);
+
+// Embroider materializes the app's config meta tag in the shared
+// node_modules/.embroider/content-for.json file. A focused `ember test` build
+// uses that same file and can replace a running environment-mode Host's
+// staging URLs with localhost URLs. Vite reads content-for.json again for the
+// next document request, so the already-running Host silently changes control
+// planes after a test run.
+//
+// Capture this Vite process's config at startup and restore only that meta tag
+// after Embroider has transformed the document. This does not change normal
+// builds. It makes an explicitly isolated environment own its document config
+// just as it already owns its Traefik route and dynamic port.
+function isolatedEnvironmentConfigPlugin(mode) {
+  if (!process.env.BOXEL_ENVIRONMENT) {
+    return;
+  }
+
+  let applicationEnvironment =
+    mode === 'production' ? 'production' : 'development';
+  let encodedConfigs = new Map(
+    [applicationEnvironment, 'test'].map((environment) => [
+      environment,
+      encodeURIComponent(
+        JSON.stringify(require('./config/environment')(environment)),
+      ),
+    ]),
+  );
+  let configMetaRE =
+    /(<meta\s+name="@cardstack\/host\/config\/environment"\s+content=")[^"]*("\s*\/?>)/;
+
+  function environmentForDocument(context) {
+    // Vite's development server uses the request path while a production
+    // build also provides the source filename. Check both so `/tests/` and
+    // the built `tests/index.html` receive the test configuration even though
+    // the overall Vite build deliberately runs in development mode.
+    let documentPaths = [context?.path, context?.filename].filter(Boolean);
+    let isTestDocument = documentPaths.some((documentPath) =>
+      /(?:^|[/\\])tests(?:[/\\]index\.html)?[/\\]?$/.test(
+        documentPath.split(/[?#]/, 1)[0],
+      ),
+    );
+    return isTestDocument ? 'test' : applicationEnvironment;
+  }
+
+  return {
+    name: 'boxel-isolated-environment-config',
+    enforce: 'post',
+    transformIndexHtml: {
+      order: 'post',
+      handler(html, context) {
+        if (!configMetaRE.test(html)) {
+          throw new Error(
+            'Unable to isolate Boxel environment config: config meta tag is missing',
+          );
+        }
+        let environment = environmentForDocument(context);
+        let encodedConfig = encodedConfigs.get(environment);
+        return html.replace(configMetaRE, `$1${encodedConfig}$2`);
+      },
+    },
+  };
+}
 
 export default defineConfig(({ mode }) => ({
   // Preserve function/class names. Boxel's card runtime introspects
@@ -274,6 +402,19 @@ export default defineConfig(({ mode }) => ({
       { find: /^util$/, replacement: require.resolve('util/') },
       // recast's main.js eagerly requires 'fs'; we stub it for the browser.
       { find: 'fs', replacement: require.resolve('./lib/empty-fs.js') },
+      // @percy/ember's package root is its Node-only Ember CLI build hook
+      // (broccoli + window.require('./package')), which crashes in the
+      // browser when Vite bundles it. Point the bare import at the addon's
+      // browser module and supply the build-generated env module ourselves.
+      {
+        find: /^@percy\/ember$/,
+        replacement:
+          require.resolve('@percy/ember/addon-test-support/@percy/ember/index.js'),
+      },
+      {
+        find: '@percy/ember/env',
+        replacement: require.resolve('./lib/percy-ember-env.js'),
+      },
     ],
   },
   plugins: [
@@ -281,6 +422,8 @@ export default defineConfig(({ mode }) => ({
     classicEmberSupport(),
     ember(),
     quietOptimizedDepSourcemapWarnings(),
+    sandboxRuntimeSecurityHeaders(),
+    isolatedEnvironmentConfigPlugin(mode),
     // extra plugins here
     babel({
       babelHelpers: 'runtime',
@@ -304,7 +447,7 @@ export default defineConfig(({ mode }) => ({
       'Cache-Control': 'no-store',
       'Document-Policy': 'js-profiling',
     },
-    ...(envHostname ? { allowedHosts: [envHostname] } : {}),
+    ...(envAllowedHosts.length > 0 ? { allowedHosts: envAllowedHosts } : {}),
     ...(_devHttps ? { https: _devHttps } : {}),
   },
   server: {
@@ -332,7 +475,7 @@ export default defineConfig(({ mode }) => ({
       clientFiles: ['./app/app.ts'],
     },
     ...(envHostname && {
-      allowedHosts: [envHostname],
+      allowedHosts: envAllowedHosts,
       hmr: {
         host: envHostname,
         // The page is served by Traefik over https on :443, so the

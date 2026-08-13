@@ -1,5 +1,6 @@
 import type ApplicationInstance from '@ember/application/instance';
 
+import { isBoxelSandboxRuntimeBoot } from '../routes/boxel-sandbox-runtime';
 import {
   isServiceWorkerSupported,
   registerAuthServiceWorker,
@@ -14,7 +15,19 @@ import type RealmService from '../services/realm';
 export function initialize(appInstance: ApplicationInstance): void {
   // Gate before lookup so we don't force eager instantiation of matrix /
   // realm services in tests or non-SW environments.
-  if (!isServiceWorkerSupported()) {
+  //
+  // Also gate on the Sandbox child's own bootstrap route: `appInstance
+  // .lookup('service:matrix-service')` below eagerly constructs
+  // MatrixService, whose constructor immediately starts its `loadState`
+  // task (`document.requestStorageAccess()` then Matrix SDK / sliding-sync
+  // connection). None of that is available or needed inside the Sandbox's
+  // credentialless, cross-origin iframe — `requestStorageAccess()` is
+  // disallowed there and rejects with `NotAllowedError`, and the SDK's
+  // subsequent homeserver connection attempt fails outright. The Sandbox
+  // child's own authority arrives entirely over its transferred
+  // `MessagePort` (RP-15.3), so this eager service-worker/token-sync setup
+  // is both unusable and unnecessary there.
+  if (!isServiceWorkerSupported() || isBoxelSandboxRuntimeBoot()) {
     return;
   }
   let matrixService = appInstance.lookup('service:matrix-service') as

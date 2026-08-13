@@ -18,6 +18,7 @@ import {
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import config from '@cardstack/host/config/environment';
+import { installBoxelLoaderCompatibilityModules } from '@cardstack/host/lib/boxel-loader-compatibility';
 import { clearKnownFileMetaUrls } from '@cardstack/host/lib/known-file-meta-urls';
 
 import { authErrorEventMiddleware } from '../utils/auth-error-guard';
@@ -53,6 +54,7 @@ export default class LoaderService extends Service {
   // index event never arrived (a logout, a failed indexing pass) cannot leave
   // a record for the next session, which has its own idea of what it loaded.
   private flushedForCodeChange = new Set<string>();
+  private executableModuleConsumers = new Map<string, number>();
 
   constructor(owner: Owner) {
     super(owner);
@@ -90,6 +92,41 @@ export default class LoaderService extends Service {
     return key ? this.flushedForCodeChange.has(key) : false;
   }
 
+  /**
+   * Retain the fact that an RP surface currently executes this module.
+   * Loader.isModuleLoaded() is an implementation cache observation, not a
+   * presentation-lifecycle fact: Direct RP can render a constructor already
+   * held by the Store, and unrelated loader replacements can empty that cache
+   * before the realm's index acknowledgement arrives. The Store uses this
+   * reference-counted interest to decide whether an executable invalidation
+   * must rebuild the live graph.
+   */
+  public retainExecutableModule(moduleIdentifier: string): () => void {
+    let key = this.loader.moduleKey(moduleIdentifier) ?? moduleIdentifier;
+    this.executableModuleConsumers.set(
+      key,
+      (this.executableModuleConsumers.get(key) ?? 0) + 1,
+    );
+    let released = false;
+    return () => {
+      if (released) {
+        return;
+      }
+      released = true;
+      let count = this.executableModuleConsumers.get(key) ?? 0;
+      if (count <= 1) {
+        this.executableModuleConsumers.delete(key);
+      } else {
+        this.executableModuleConsumers.set(key, count - 1);
+      }
+    };
+  }
+
+  public isExecutableModuleInUse(moduleIdentifier: string): boolean {
+    let key = this.loader.moduleKey(moduleIdentifier) ?? moduleIdentifier;
+    return (this.executableModuleConsumers.get(key) ?? 0) > 0;
+  }
+
   // Called whenever the loader is actually replaced. A code-change flush makes
   // every module the outgoing loader held invisible — not just the one being
   // written — so record the whole set, keyed the way the loader keys module
@@ -112,6 +149,12 @@ export default class LoaderService extends Service {
 
   public resetLoader(options?: {
     clearFetchCache?: boolean;
+    /**
+     * Replace the loader even when another reset happened inside the ordinary
+     * dedupe window. Use this only when the caller is advancing an executable
+     * source generation; suppressing that reset would leave stale code live.
+     */
+    force?: boolean;
     reason?: string;
     // Set when this flush is for a module whose own source changed. The realm
     // index event for that write lands afterwards, by which point the replaced
@@ -122,13 +165,22 @@ export default class LoaderService extends Service {
     // signalling that cached responses are stale (e.g. a module was
     // rewritten). Skipping this would cause re-indexing to use the old
     // (broken) module from the fetch cache.
-    if (options?.clearFetchCache) {
+    if (options?.clearFetchCache || options?.force) {
       this.resetTime = Date.now();
-      log.debug(`resetting loader (clearFetchCache, ${options.reason ?? ''})`);
-      clearFetchCache();
-      this.recordLoaderReplacement(this.loader, options.codeChange);
-      this.loader?.dispose();
-      this.loader = this.makeInstance();
+      log.debug(
+        `resetting loader (${options.clearFetchCache ? 'clearFetchCache' : 'forced'}, ${options.reason ?? ''})`,
+      );
+      if (options.clearFetchCache) {
+        clearFetchCache();
+      }
+      let previous = this.loader;
+      this.recordLoaderReplacement(previous, options.codeChange);
+      this.loader = options.clearFetchCache
+        ? this.makeInstance()
+        : previous
+          ? Loader.cloneLoader(previous)
+          : this.makeInstance();
+      previous?.dispose();
       return;
     }
 
@@ -196,6 +248,7 @@ export default class LoaderService extends Service {
         ),
       virtualNetwork: this.network.virtualNetwork,
     });
+    installBoxelLoaderCompatibilityModules(loader);
     return loader;
   }
 

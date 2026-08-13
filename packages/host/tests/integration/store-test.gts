@@ -28,6 +28,7 @@ import {
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 
+import CardRenderer from '@cardstack/host/components/card-renderer';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import type CardStore from '@cardstack/host/lib/gc-card-store';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
@@ -3009,12 +3010,13 @@ module('Integration | Store', function (hooks) {
 
     class ResourceConsumer extends GlimmerComponent {
       resource = getCard(this, () => driver.id);
-      get renderedCard() {
-        return this.resource.card?.constructor.getComponent(this.resource.card);
-      }
       <template>
         {{#if this.resource.card}}
-          <this.renderedCard data-test-rendered-card={{this.resource.id}} />
+          <CardRenderer
+            @card={{this.resource.card}}
+            @execution='direct'
+            data-test-rendered-card={{this.resource.id}}
+          />
         {{/if}}
       </template>
     }
@@ -3193,12 +3195,13 @@ module('Integration | Store', function (hooks) {
       get card() {
         return this.resource.cards[0];
       }
-      get renderedCard() {
-        return this.card?.constructor.getComponent(this.card);
-      }
       <template>
         {{#if this.card}}
-          <this.renderedCard data-test-rendered-card={{this.card.id}} />
+          <CardRenderer
+            @card={{this.card}}
+            @execution='direct'
+            data-test-rendered-card={{this.card.id}}
+          />
         {{/if}}
       </template>
     }
@@ -3394,12 +3397,13 @@ module('Integration | Store', function (hooks) {
       get card() {
         return this.resource.instances[0];
       }
-      get renderedCard() {
-        return this.card?.constructor.getComponent(this.card);
-      }
       <template>
         {{#if this.card}}
-          <this.renderedCard data-test-rendered-card={{this.card.id}} />
+          <CardRenderer
+            @card={{this.card}}
+            @execution='direct'
+            data-test-rendered-card={{this.card.id}}
+          />
         {{/if}}
       </template>
     }
@@ -3488,12 +3492,13 @@ module('Integration | Store', function (hooks) {
       get card() {
         return this.resource.cards[0];
       }
-      get renderedCard() {
-        return this.card?.constructor.getComponent(this.card);
-      }
       <template>
         {{#if this.card}}
-          <this.renderedCard data-test-rendered-card={{this.card.id}} />
+          <CardRenderer
+            @card={{this.card}}
+            @execution='direct'
+            data-test-rendered-card={{this.card.id}}
+          />
         {{/if}}
       </template>
     }
@@ -3579,12 +3584,13 @@ module('Integration | Store', function (hooks) {
 
     class ResourceConsumer extends GlimmerComponent {
       resource = getCard(this, () => driver.id);
-      get renderedCard() {
-        return this.resource.card?.constructor.getComponent(this.resource.card);
-      }
       <template>
         {{#if this.resource.card}}
-          <this.renderedCard data-test-rendered-card={{this.resource.id}} />
+          <CardRenderer
+            @card={{this.resource.card}}
+            @execution='direct'
+            data-test-rendered-card={{this.resource.id}}
+          />
         {{/if}}
       </template>
     }
@@ -3690,12 +3696,13 @@ module('Integration | Store', function (hooks) {
     let driver = new Driver();
     class ResourceConsumer extends GlimmerComponent {
       resource = getCard(this, () => driver.id);
-      get renderedCard() {
-        return this.resource.card?.constructor.getComponent(this.resource.card);
-      }
       <template>
         {{#if this.resource.card}}
-          <this.renderedCard data-test-rendered-card={{this.resource.id}} />
+          <CardRenderer
+            @card={{this.resource.card}}
+            @execution='direct'
+            data-test-rendered-card={{this.resource.id}}
+          />
         {{/if}}
       </template>
     }
@@ -3719,27 +3726,60 @@ module('Integration | Store', function (hooks) {
     );
 
     let rebuilds = countRebuilds();
+    let invalidationBatches: string[][] = [];
+    let originalReestablish = (storeService as any)
+      .reestablishReferencesForCodeChange;
+    (storeService as any).reestablishReferencesForCodeChange = async (
+      invalidations: string[],
+    ) => {
+      invalidationBatches.push(invalidations);
+      return originalReestablish.call(storeService, invalidations);
+    };
+    let invalidatedModules = [
+      personModule,
+      ...Array.from(
+        { length: 5 },
+        (_, index) => `${testRealmURL}burst-${index}.gts`,
+      ),
+    ];
     try {
       // Deliver executable invalidations faster than a rebuild can complete —
       // synchronously, before the first rebuild's re-fetch settles.
-      let event: RealmEventContent = {
-        eventName: 'index',
-        indexType: 'incremental',
-        realmURL: testRealmURL,
-        invalidations: [personModule],
-      };
-      for (let i = 0; i < 6; i++) {
-        (storeService as any).handleInvalidations(event);
+      for (let module of invalidatedModules) {
+        (storeService as any).handleInvalidations({
+          eventName: 'index',
+          indexType: 'incremental',
+          realmURL: testRealmURL,
+          invalidations: [module],
+        } as RealmEventContent);
       }
-      await settled();
+      // `settled()` observes every waiter in the application, including
+      // long-lived realm/index activity that this synthetic event burst did
+      // not start and does not need to finish. Wait on the finite operation
+      // this test owns instead: every invalidation has reached a rebuild and
+      // the keep-latest task has drained its pending run.
+      await waitUntil(
+        () =>
+          new Set(invalidationBatches.flat()).size ===
+            invalidatedModules.length &&
+          !(storeService as any).rebuildForCodeChange.isRunning,
+        { timeout: 10_000 },
+      );
     } finally {
       rebuilds.restore();
+      (storeService as any).reestablishReferencesForCodeChange =
+        originalReestablish;
     }
 
     let coalesced = rebuilds.count >= 1 && rebuilds.count <= 2;
     assert.ok(
       coalesced,
       `6 rapid executable invalidations coalesce to at most 2 rebuilds (saw ${rebuilds.count})`,
+    );
+    assert.deepEqual(
+      [...new Set(invalidationBatches.flat())].sort(),
+      [...invalidatedModules].sort(),
+      'coalescing preserves every executable invalidation for retained runtime eviction',
     );
 
     // End state reflects the latest generation: the open card is re-established
@@ -3919,21 +3959,28 @@ module('Integration | Store', function (hooks) {
     );
     let cardService = getService('card-service');
     let { content } = await cardService.getSource(rri(personModule));
+    let loaderBeforeSave = loaderService.loader;
 
     let telemetry = captureTelemetry();
     try {
-      // Saving a module flushes the loader at write time, well before the
-      // realm's index event for that write reaches the store. The flushed
-      // loader carries no loaded modules, so the store must not read the
-      // invalidation that follows as a change to a module nobody had loaded.
+      // Saving advances the executable generation immediately. The realm's
+      // index acknowledgement may arrive before saveSource resolves and the
+      // mounted Direct-RP surface may already have re-imported the module, so
+      // "currently absent from the loader" is not a stable distributed-system
+      // invariant. Loader identity is: this write must replace the generation,
+      // and its acknowledgement must rebuild the live RP graph.
       await cardService.saveSource(new URL(personModule), content, 'editor', {
         resetLoader: true,
       });
-      assert.false(
-        loaderService.loader.isModuleLoaded(personModule),
-        'precondition: the write flushed the module out of the loader',
+      assert.notStrictEqual(
+        loaderService.loader,
+        loaderBeforeSave,
+        'the write advanced the executable generation',
       );
-
+      // Deliver the acknowledgement deterministically. The in-memory realm's
+      // Matrix delivery is intentionally asynchronous and may land after this
+      // focused assertion has finished; handleInvalidations is the client
+      // boundary under test, not Matrix scheduling.
       (storeService as any).handleInvalidations({
         eventName: 'index',
         indexType: 'incremental',

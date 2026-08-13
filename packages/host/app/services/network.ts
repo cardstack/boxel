@@ -78,6 +78,18 @@ export default class NetworkService extends Service {
     // URL mapping kept for the fake https://cardstack.com/base/ → real URL.
     // addRealmMapping registers the @cardstack/base/ scoped prefix.
     virtualNetwork.addURLMapping(new URL(baseRealm.url), resolvedBaseRealmURL);
+    // Realm-authored modules can contain the resolved Base URL that was in
+    // effect when the realm server transpiled them. In particular, modules
+    // produced by the standard local stack use localhost:4201. Treat those
+    // URLs as spellings of Base, not as authority to contact the viewer's
+    // localhost. This keeps persisted/transpiled modules portable between a
+    // local Host, preview Host, and staging Host while preserving the narrow
+    // `/base/` boundary.
+    for (let localBaseRealmURL of localBaseRealmURLs) {
+      if (localBaseRealmURL.href !== resolvedBaseRealmURL.href) {
+        virtualNetwork.addURLMapping(localBaseRealmURL, resolvedBaseRealmURL);
+      }
+    }
     virtualNetwork.addRealmMapping(
       '@cardstack/base/',
       resolvedBaseRealmURL.href,
@@ -140,3 +152,8 @@ declare module '@ember/service' {
 function withTrailingSlash(url: string): string {
   return url.endsWith('/') ? url : `${url}/`;
 }
+
+const localBaseRealmURLs = [
+  new URL('https://localhost:4201/base/'),
+  new URL('http://localhost:4201/base/'),
+];

@@ -32,6 +32,8 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import type { Config as OpencodeConfig } from '@opencode-ai/sdk';
 
+import { AgentTransportUnavailableError } from '../transient-agent-error.ts';
+
 // `@opencode-ai/sdk` is ESM-only, so in a CommonJS load context a
 // top-level `import` would fail at module-load time on every test that
 // touches this file. Lazy-load via dynamic
@@ -357,6 +359,7 @@ export class OpencodeFactoryAgent implements LoopAgent {
     // last report, which is cumulative for the session. Declared out here so
     // the return paths below can carry it.
     let turnUsage: TurnUsage | undefined;
+    let sessionWaitResult: SessionWaitResult | undefined;
 
     try {
       let session = await client.session.create({
@@ -364,6 +367,7 @@ export class OpencodeFactoryAgent implements LoopAgent {
       });
       let sessionId = (session.data as { id: string }).id;
       log.info(`session: ${sessionId}`);
+      let requestController = new AbortController();
 
       // Subscribe to opencode's per-directory event bus. Drives both
       // visibility (tool calls + step transitions logged) and error
@@ -373,6 +377,7 @@ export class OpencodeFactoryAgent implements LoopAgent {
       let stopEventLog = subscribeForLogging(
         client,
         sessionId,
+        requestController.signal,
         (message) => {
           sessionErrorMessage = message;
           resolveSessionError();
@@ -400,6 +405,7 @@ export class OpencodeFactoryAgent implements LoopAgent {
       let promptPromise = client.session
         .prompt({
           path: { id: sessionId },
+          signal: requestController.signal,
           body: {
             model: {
               providerID: FACTORY_PROVIDER_ID,
@@ -439,9 +445,21 @@ export class OpencodeFactoryAgent implements LoopAgent {
         await Promise.race([
           signalCaptured,
           sessionErrored,
-          waitForSessionIdle(client, sessionId, workspaceDir),
+          waitForSessionIdle(client, sessionId, workspaceDir).then((result) => {
+            sessionWaitResult = result;
+          }),
         ]);
       } finally {
+        // Both SDK calls are intentionally long-lived: `prompt` waits for the
+        // whole model turn and `event.subscribe` owns an SSE connection. Once
+        // any independent completion signal wins the race, retaining either
+        // request only keeps undici sockets (and therefore the CLI process)
+        // alive. This is especially visible after the opencode child dies:
+        // the issue loop has already reached its terminal result, but the
+        // factory command otherwise survives until its outer watchdog kills
+        // it. Abort only our client-side requests; the session lifecycle is
+        // still closed by `close()` in the orchestrator's outer `finally`.
+        requestController.abort();
         // Best-effort drain so sockets close cleanly when they can,
         // bounded so we never block on the documented opencode 1.14.34
         // bug where `session.prompt` returns but never flushes the HTTP
@@ -487,6 +505,9 @@ export class OpencodeFactoryAgent implements LoopAgent {
         usage,
         message: `opencode session error: ${sessionErrorMessage}`,
       };
+    }
+    if (sessionWaitResult?.status === 'transport-error') {
+      throw new AgentTransportUnavailableError(sessionWaitResult.message);
     }
     return {
       status: toolCallLog.length > 0 ? 'done' : 'needs_iteration',
@@ -758,25 +779,35 @@ function serializeSignalResult(result: unknown): unknown {
  * canonical realpath opencode normalized at create time (`/var →
  * /private/var` on macOS), already resolved by the caller.
  */
-async function waitForSessionIdle(
+export type SessionWaitResult =
+  | { status: 'idle' }
+  | { status: 'transport-error'; message: string };
+
+export async function waitForSessionIdle(
   client: { session: { list: (opts?: any) => Promise<unknown> } },
   sessionId: string,
   workspaceDir: string,
-): Promise<void> {
-  const POLL_INTERVAL_MS = 750;
+  options: {
+    pollIntervalMs?: number;
+    stabilityWindowMs?: number;
+    maxWaitMs?: number;
+    maxConsecutiveListFailures?: number;
+  } = {},
+): Promise<SessionWaitResult> {
+  const POLL_INTERVAL_MS = options.pollIntervalMs ?? 750;
   // Generous: `time.updated` appears to tick on step boundaries rather
   // than per `message.part.delta`, and opus can sit 30+ seconds
   // "thinking" between steps. The polling is only a fallback for when
   // the model exits without calling `signal_done` / `request_clarification`,
   // so the wider window costs nothing on the happy path (signal-captured
   // race short-circuits this).
-  const STABILITY_WINDOW_MS = 60_000;
-  const MAX_WAIT_MS = 30 * 60 * 1000; // 30 minutes; comfortable upper bound for opus
+  const STABILITY_WINDOW_MS = options.stabilityWindowMs ?? 60_000;
+  const MAX_WAIT_MS = options.maxWaitMs ?? 30 * 60 * 1000; // 30 minutes; comfortable upper bound for opus
   // After this many consecutive `session.list` failures, give up — the
   // opencode subprocess has almost certainly died (TypeError: fetch
-  // failed). We return cleanly so the outer factory loop can continue
-  // to the next iteration instead of crashing the whole run.
-  const MAX_CONSECUTIVE_LIST_FAILURES = 5;
+  // failed). Report a terminal transport failure so the outer factory
+  // loop cannot retry against the same dead child until its deadline.
+  const MAX_CONSECUTIVE_LIST_FAILURES = options.maxConsecutiveListFailures ?? 5;
   // Periodic heartbeat so users running `factory:go` see proof the
   // model is making progress (or stuck) instead of staring at a
   // silent terminal for minutes.
@@ -809,10 +840,9 @@ async function waitForSessionIdle(
     } catch (err) {
       consecutiveFailures++;
       if (consecutiveFailures >= MAX_CONSECUTIVE_LIST_FAILURES) {
-        log.warn(
-          `opencode session.list failed ${consecutiveFailures}× in a row (${describeFetchError(err)}); treating session as ended`,
-        );
-        return;
+        let message = `opencode session.list failed ${consecutiveFailures}× in a row (${describeFetchError(err)}); the agent transport is unavailable`;
+        log.warn(message);
+        return { status: 'transport-error', message };
       }
     }
 
@@ -827,7 +857,7 @@ async function waitForSessionIdle(
           stableSince !== undefined &&
           Date.now() - stableSince >= STABILITY_WINDOW_MS
         ) {
-          return;
+          return { status: 'idle' };
         }
       }
     }
@@ -870,14 +900,19 @@ function num(v: unknown): number {
  * runs.
  */
 async function subscribeForLogging(
-  client: { event: { subscribe: () => Promise<unknown> } },
+  client: {
+    event: {
+      subscribe: (options?: { signal?: AbortSignal }) => Promise<unknown>;
+    };
+  },
   sessionId: string,
+  signal: AbortSignal,
   onError?: (message: string) => void,
   onUsage?: (usage: TurnUsage) => void,
 ): Promise<void> {
   let events: { stream: AsyncIterable<unknown> };
   try {
-    events = (await client.event.subscribe()) as {
+    events = (await client.event.subscribe({ signal })) as {
       stream: AsyncIterable<unknown>;
     };
   } catch {

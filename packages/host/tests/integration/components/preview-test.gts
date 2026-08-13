@@ -1,14 +1,17 @@
 import { on } from '@ember/modifier';
 import Service from '@ember/service';
-import { click, waitFor } from '@ember/test-helpers';
+import { click, settled, waitFor } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
+import { TrackedObject } from 'tracked-built-ins';
 
+import { relativeTo, rri } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
+import { createBoxelFieldPortal } from '@cardstack/host/components/boxel-field-portal';
 import CardRenderer from '@cardstack/host/components/card-renderer';
 
 import { percySnapshot, testRealmURL } from '../../helpers';
@@ -24,7 +27,24 @@ class MockLocalIndexer extends Service {
   url = new URL(testRealmURL);
 }
 
+function containsExecutableValue(value: unknown): boolean {
+  if (typeof value === 'function') {
+    return true;
+  }
+  if (Array.isArray(value)) {
+    return value.some(containsExecutableValue);
+  }
+  if (value && typeof value === 'object') {
+    return Object.values(value).some(containsExecutableValue);
+  }
+  return false;
+}
+
 module('Integration | preview', function (hooks) {
+  // This module is the low-level Direct/Glimmer oracle. Its fixtures are
+  // ephemeral in-memory instances backed by shimmed modules, not realm-served
+  // execution documents. Realm-backed automatic routing is covered by
+  // rp-realm-mirror-compatibility-test.gts.
   let loader: Loader;
   setupRenderingTest(hooks);
 
@@ -50,11 +70,328 @@ module('Integration | preview', function (hooks) {
     let card = new TestCard({ firstName: 'Mango ' });
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template><CardRenderer @card={{card}} /></template>
+        <template><CardRenderer @card={{card}} @execution='direct' /></template>
       },
     );
     await waitFor('[data-test-firstName]'); // we need to wait for the card instance to load
     assert.dom('[data-test-firstName]').hasText('Mango');
+  });
+
+  test('Direct runtime keeps component definitions local and emits a cloneable semantic record', async function (assert) {
+    let { field, contains, CardDef, CardInfoField, Component } = cardApi;
+    let { default: StringField } = string;
+
+    class RuntimeCard extends CardDef {
+      static displayName = 'Runtime Card';
+      static headerColor = '#112233';
+      static prefersWideFormat = true;
+
+      @field firstName = contains(StringField, {
+        description: 'The name shown by the card',
+        configuration: function (this: RuntimeCard) {
+          return { label: `Name for ${this.firstName}` };
+        },
+      });
+      @field greeting = contains(StringField, {
+        computeVia: function (this: RuntimeCard) {
+          return `Hello, ${this.firstName}`;
+        },
+      });
+
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <div data-test-runtime-card><@fields.greeting /></div>
+        </template>
+      };
+    }
+    loader.shimModule(`${testRealmURL}direct-runtime-card`, { RuntimeCard });
+
+    let card = new RuntimeCard({
+      firstName: 'Mango',
+      cardInfo: new CardInfoField({
+        name: 'Mango Runtime',
+        summary: 'A Direct runtime fixture',
+        cardThumbnailURL: 'https://example.com/mango.png',
+      }),
+    });
+    let runtime = getService('direct-boxel-runtime').runtime;
+
+    let firstSlot = runtime.getRenderSlot(card);
+    let secondSlot = runtime.getRenderSlot(card);
+    let record = await runtime.buildRenderRecord(card);
+
+    assert.strictEqual(
+      firstSlot,
+      secondSlot,
+      'the Direct runtime preserves render-slot identity',
+    );
+    assert.strictEqual(firstSlot.owner, 'direct');
+    assert.strictEqual(
+      typeof firstSlot.component,
+      'function',
+      'the Host-local render slot owns the executable component',
+    );
+    assert.deepEqual(
+      structuredClone(record),
+      record,
+      'the semantic record is structured-cloneable',
+    );
+    assert.false(
+      containsExecutableValue(record),
+      'the semantic record does not contain executable values',
+    );
+    assert.strictEqual(record.boxel.boxelKind, 'card');
+    assert.strictEqual(record.boxel.presentation.displayName, 'Runtime Card');
+    assert.strictEqual(record.boxel.presentation.headerColor, '#112233');
+    assert.true(record.boxel.presentation.prefersWideFormat);
+    assert.strictEqual(record.presentation.title, 'Mango Runtime');
+    assert.strictEqual(record.presentation.summary, 'A Direct runtime fixture');
+    assert.strictEqual(
+      record.presentation.thumbnailURL,
+      'https://example.com/mango.png',
+    );
+
+    let firstName = record.instance.fields.find(
+      (field) => field.fieldName === 'firstName',
+    );
+    let greeting = record.instance.fields.find(
+      (field) => field.fieldName === 'greeting',
+    );
+    assert.deepEqual(firstName?.resolvedConfiguration, {
+      label: 'Name for Mango',
+    });
+    assert.deepEqual(firstName?.presentation, {
+      description: 'The name shown by the card',
+    });
+    assert.strictEqual(greeting?.value, 'Hello, Mango');
+
+    let isolated = record.boxel.formats.find(
+      (format) => format.format === 'isolated',
+    );
+    let edit = record.boxel.formats.find((format) => format.format === 'edit');
+    assert.strictEqual(isolated?.provider.kind, 'authored');
+    assert.strictEqual(edit?.provider.kind, 'trusted-base');
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><CardRenderer @card={{card}} @execution='direct' /></template>
+      },
+    );
+    await waitFor('[data-test-runtime-card]');
+    assert
+      .dom('[data-test-runtime-card]')
+      .hasText('Hello, Mango', 'CardRenderer renders the Direct-owned slot');
+  });
+
+  test('Capsule field portals keep Base native and route authored FieldDefs through an explicit boundary', async function (assert) {
+    let { field, contains, CardDef, Component, FieldDef } = cardApi;
+    let { default: StringField } = string;
+
+    class AuthoredDetails extends FieldDef {
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <span>authored details</span>
+        </template>
+      };
+    }
+
+    class BoundaryCard extends CardDef {
+      @field name = contains(StringField);
+      @field details = contains(AuthoredDetails);
+    }
+
+    loader.shimModule(`${testRealmURL}boundary-card`, {
+      AuthoredDetails,
+      BoundaryCard,
+    });
+    let card = new BoundaryCard({
+      name: 'Ada',
+      details: new AuthoredDetails(),
+    });
+    card[relativeTo] = rri(`${testRealmURL}BoundaryCard/one`);
+    let direct = getService('direct-boxel-runtime').runtime;
+    let directFields = direct.getRenderSlot(card)
+      .component as unknown as Record<string, unknown>;
+    let fields = await getService('boxel-execution').fieldPortalsFor(card);
+
+    assert.strictEqual(
+      fields.name,
+      directFields.name,
+      'a trusted Base StringField remains a native Host portal',
+    );
+    assert.notStrictEqual(
+      fields.details,
+      directFields.details,
+      'an authored FieldDef cannot reuse the Host Direct renderer',
+    );
+    assert.strictEqual(
+      (fields.details as unknown as { relativeTo?: string }).relativeTo,
+      `${testRealmURL}BoundaryCard/one`,
+      'the authored portal preserves the canonical relative module base',
+    );
+  });
+
+  test('an authored relationship portal preserves trusted Base broken-link slots without directly rendering present authored siblings', async function (assert) {
+    let values: unknown[] = ['present relationship', 'present sibling'];
+    let relationshipState = new TrackedObject({ broken: false });
+    let Portal = createBoxelFieldPortal(
+      () => values,
+      undefined,
+      { fieldType: 'linksToMany', fieldName: 'pets' },
+      undefined,
+      {
+        broken: (index) =>
+          index === 0 && relationshipState.broken
+            ? {
+                kind: 'not-found',
+                reference: 'https://example.test/Pet/missing',
+                errorDoc: {
+                  message: 'Missing relationship',
+                  status: 404,
+                  additionalErrors: null,
+                },
+              }
+            : undefined,
+      },
+    );
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><Portal /></template>
+      },
+    );
+
+    assert
+      .dom('.boxel-field-portal-value')
+      .includesText(
+        'present relationship',
+        'the initially live relationship uses the Host portal',
+      );
+    assert.dom('[data-test-broken-link-template]').doesNotExist();
+
+    values[0] = undefined;
+    relationshipState.broken = true;
+    await settled();
+
+    assert
+      .dom('[data-test-broken-link-template]')
+      .exists('the failed slot delegates its state to the trusted placeholder');
+    assert
+      .dom('.boxel-field-portal-value')
+      .hasText(
+        'present sibling',
+        'the live sibling stays on the Host portal path',
+      );
+  });
+
+  test('Direct runtime preserves main glimmer-scoped-css confinement', async function (assert) {
+    let { CardDef, Component } = cardApi;
+
+    class ScopedRuntimeCard extends CardDef {
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <div
+            class='direct-runtime-css-canary'
+            data-test-direct-runtime-css-canary
+          >
+            Scoped card content
+          </div>
+          <style scoped>
+            .direct-runtime-css-canary {
+              outline: 7px solid rgb(1, 2, 3);
+            }
+          </style>
+        </template>
+      };
+    }
+    loader.shimModule(`${testRealmURL}direct-runtime-scoped-card`, {
+      ScopedRuntimeCard,
+    });
+
+    let card = new ScopedRuntimeCard({});
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <div class='direct-runtime-css-canary' data-test-host-css-canary>
+            Host content
+          </div>
+          <CardRenderer @card={{card}} @execution='direct' />
+        </template>
+      },
+    );
+    await waitFor('[data-test-direct-runtime-css-canary]');
+
+    let cardCanary = document.querySelector<HTMLElement>(
+      '[data-test-direct-runtime-css-canary]',
+    );
+    let hostCanary = document.querySelector<HTMLElement>(
+      '[data-test-host-css-canary]',
+    );
+    assert.ok(cardCanary, 'the Direct-owned card component rendered');
+    assert.ok(hostCanary, 'the Host canary rendered outside the card');
+
+    let scopeAttribute = Array.from(cardCanary?.attributes ?? [])
+      .map((attribute) => attribute.localName)
+      .find((attributeName) => attributeName.startsWith('data-scopedcss-'));
+    assert.ok(
+      scopeAttribute,
+      'main glimmer-scoped-css annotated the Direct-owned card element',
+    );
+    assert.false(
+      hostCanary?.hasAttribute(scopeAttribute ?? ''),
+      'the Host element does not receive the authored scope attribute',
+    );
+    assert.strictEqual(
+      getComputedStyle(cardCanary!).outlineWidth,
+      '7px',
+      'the authored rule applies inside the Direct render slot',
+    );
+    // Assert on outline-STYLE, not outline-width: since Chrome 151,
+    // getComputedStyle().outlineWidth serializes the COMPUTED width (3px —
+    // the `medium` initial value) even when outline-style is `none` and
+    // nothing paints, so a 0px width expectation reports a phantom "leak"
+    // on a perfectly confined element. An actually leaked authored rule
+    // would flip outline-style to `solid`.
+    assert.strictEqual(
+      getComputedStyle(hostCanary!).outlineStyle,
+      'none',
+      'the same class name cannot leak the authored rule into Host chrome',
+    );
+
+    // This fixture is defined in-repo, so its <style scoped> compiles
+    // through the BUILD-time glimmer-scoped-css plugin — a dev serve
+    // injects a plain vite style tag and a test/prod build extracts a
+    // LINKED stylesheet, and only realm-served modules install through the
+    // runtime loader's `maybeHandleScopedCSSRequest` (which stamps
+    // `data-boxel-scoped-css`). `document.styleSheets` covers every
+    // installation form, so assert on the parsed rules themselves.
+    let installedSelectors: string[] = [];
+    for (let sheet of Array.from(document.styleSheets)) {
+      let rules: CSSRuleList;
+      try {
+        rules = sheet.cssRules;
+      } catch {
+        continue;
+      }
+      for (let rule of Array.from(rules)) {
+        if (
+          rule instanceof CSSStyleRule &&
+          rule.selectorText.includes(`[${scopeAttribute}]`)
+        ) {
+          installedSelectors.push(rule.selectorText);
+        }
+      }
+    }
+    assert.true(
+      installedSelectors.length > 0,
+      'the compiled scoped stylesheet was installed',
+    );
+    assert.true(
+      installedSelectors.includes(
+        `.direct-runtime-css-canary[${scopeAttribute}]`,
+      ),
+      'the installed selector is attribute-scoped rather than global',
+    );
   });
 
   test('renders head meta tags preview for a card head format', async function (assert) {
@@ -78,6 +415,7 @@ module('Integration | preview', function (hooks) {
         </template>
       };
     }
+    loader.shimModule(`${testRealmURL}head-card`, { HeadCard });
 
     let headCard = new HeadCard({
       cardTitle: 'Preview Title',
@@ -90,11 +428,16 @@ module('Integration | preview', function (hooks) {
       card = headCard;
 
       <template>
-        <CardRenderer @card={{this.card}} @format={{@format}} />
+        <CardRenderer
+          @card={{this.card}}
+          @format={{@format}}
+          @execution='direct'
+        />
       </template>
     }
 
     await renderComponent(TestDriver, 'head');
+    await waitFor('.google-title');
 
     await percySnapshot(assert);
 
@@ -143,6 +486,9 @@ module('Integration | preview', function (hooks) {
         </template>
       };
     }
+    loader.shimModule(`${testRealmURL}fallback-head-card`, {
+      FallbackHeadCard,
+    });
 
     let fallbackCard = new FallbackHeadCard({
       cardTitle: 'Fallback Title',
@@ -153,11 +499,16 @@ module('Integration | preview', function (hooks) {
       card = fallbackCard;
 
       <template>
-        <CardRenderer @card={{this.card}} @format={{@format}} />
+        <CardRenderer
+          @card={{this.card}}
+          @format={{@format}}
+          @execution='direct'
+        />
       </template>
     }
 
     await renderComponent(TestDriver, 'head');
+    await waitFor('.google-title');
 
     assert.dom('.google-title').hasText('Fallback Title');
     assert
@@ -210,7 +561,11 @@ module('Integration | preview', function (hooks) {
       };
       <template>
         <button {{on 'click' this.flip}} data-test-flip-format>flip</button>
-        <CardRenderer @card={{this.card}} @format={{this.format}} />
+        <CardRenderer
+          @card={{this.card}}
+          @format={{this.format}}
+          @execution='direct'
+        />
       </template>
     }
 
@@ -282,7 +637,11 @@ module('Integration | preview', function (hooks) {
       };
       <template>
         <button {{on 'click' this.flip}} data-test-flip-format>flip</button>
-        <CardRenderer @card={{this.card}} @format={{this.format}} />
+        <CardRenderer
+          @card={{this.card}}
+          @format={{this.format}}
+          @execution='direct'
+        />
       </template>
     }
 
@@ -362,7 +721,11 @@ module('Integration | preview', function (hooks) {
       };
       <template>
         <button {{on 'click' this.flip}} data-test-flip-format>flip</button>
-        <CardRenderer @card={{this.card}} @format={{this.format}} />
+        <CardRenderer
+          @card={{this.card}}
+          @format={{this.format}}
+          @execution='direct'
+        />
       </template>
     }
 

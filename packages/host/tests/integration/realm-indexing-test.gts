@@ -4859,6 +4859,13 @@ module(`Integration | realm indexing`, function (hooks) {
       // prerender, bytes per index row), so treat an addition as a decision
       // rather than a snapshot to re-record. A family's own glyph belongs on
       // its subclass's `static icon`, not in a shared map.
+      //
+      // Host-provided package shims are deliberately absent. The RP treats
+      // those as trusted execution terminals: their implementation ships with
+      // the Host and cannot be invalidated by a realm source change. Recording
+      // them in a realm index row would expose Host implementation details as
+      // authored dependency edges without giving the indexer a useful source
+      // generation to watch.
       [
         '@cardstack/base/-private',
         '@cardstack/base/card-api',
@@ -4914,10 +4921,6 @@ module(`Integration | realm indexing`, function (hooks) {
         '@cardstack/base/string',
         '@cardstack/base/text-input-validator',
         '@cardstack/base/watched-array',
-        '@cardstack/boxel-ui/components',
-        '@cardstack/boxel-ui/helpers',
-        '@cardstack/boxel-ui/icons',
-        '@cardstack/boxel-ui/modifiers',
         `${iconsBase}@cardstack/boxel-icons/v1/icons/align-box-left-middle`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/align-left`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/arrow-left`,
@@ -4945,47 +4948,13 @@ module(`Integration | realm indexing`, function (hooks) {
         // so the live test realm's module resolves to the standard
         // `localhost:4202` address even when served at the env-mode hostname.
         'https://localhost:4202/test/person',
-        'https://packages/@cardstack/boxel-host/commands/copy-and-edit',
-        'https://packages/@cardstack/boxel-host/commands/copy-card',
-        'https://packages/@cardstack/boxel-host/commands/copy-card-as-markdown',
-        'https://packages/@cardstack/boxel-host/commands/copy-file-to-realm',
-        'https://packages/@cardstack/boxel-host/commands/create-ai-assistant-room',
-        'https://packages/@cardstack/boxel-host/commands/generate-example-cards',
-        'https://packages/@cardstack/boxel-host/commands/open-create-listing-modal',
-        'https://packages/@cardstack/boxel-host/commands/open-in-interact-mode',
-        'https://packages/@cardstack/boxel-host/commands/patch-theme',
-        'https://packages/@cardstack/boxel-host/commands/populate-with-sample-data',
-        'https://packages/@cardstack/boxel-host/commands/send-ai-assistant-message',
-        'https://packages/@cardstack/boxel-host/commands/show-card',
-        'https://packages/@cardstack/boxel-host/commands/show-file',
-        'https://packages/@cardstack/boxel-host/commands/switch-submode',
-        'https://packages/@cardstack/runtime-common',
-        'https://packages/@cardstack/runtime-common/marked-sync',
-        'https://packages/@ember/component',
-        'https://packages/@ember/component/template-only',
-        'https://packages/@ember/helper',
-        'https://packages/@ember/modifier',
-        'https://packages/@ember/object',
-        'https://packages/@ember/object/internals',
-        'https://packages/@ember/runloop',
-        'https://packages/@ember/template',
-        'https://packages/@ember/template-factory',
-        'https://packages/@glimmer/component',
-        'https://packages/@glimmer/tracking',
-        'https://packages/ember-concurrency',
-        'https://packages/ember-concurrency/-private/async-arrow-runtime',
-        'https://packages/ember-css-url',
-        'https://packages/ember-modifier',
-        'https://packages/ember-provide-consume-context',
-        'https://packages/lodash-es',
-        'https://packages/tracked-built-ins',
         // Sort the expected list so the assertion is robust against
         // the iconsBase URL scheme/host: standard mode puts icons at
         // `http://localhost:4206/`, env mode at `https://icons.<slug>.localhost/`,
         // and the lexical position of those entries among the other
         // URLs differs accordingly.
       ].sort(),
-      'the card references for the instance are correct',
+      'the card records realm-owned dependencies and terminates at trusted Host shims',
     );
   });
 
@@ -5038,6 +5007,8 @@ module(`Integration | realm indexing`, function (hooks) {
       // prerender, bytes per index row), so treat an addition as a decision
       // rather than a snapshot to re-record. A family's own glyph belongs on
       // its subclass's `static icon`, not in a shared map.
+      // Host package shims are trusted execution terminals; see the sibling
+      // assertion above for why they are not realm invalidation edges.
       [
         '@cardstack/base/-private',
         '@cardstack/base/boolean',
@@ -5097,10 +5068,6 @@ module(`Integration | realm indexing`, function (hooks) {
         '@cardstack/base/string',
         '@cardstack/base/text-input-validator',
         '@cardstack/base/watched-array',
-        '@cardstack/boxel-ui/components',
-        '@cardstack/boxel-ui/helpers',
-        '@cardstack/boxel-ui/icons',
-        '@cardstack/boxel-ui/modifiers',
         `${iconsBase}@cardstack/boxel-icons/v1/icons/align-box-left-middle`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/align-left`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/apps`,
@@ -5136,45 +5103,9 @@ module(`Integration | realm indexing`, function (hooks) {
         // so the live test realm's module resolves to the standard
         // `localhost:4202` address even when served at the env-mode hostname.
         'https://localhost:4202/test/person',
-        'https://packages/@cardstack/boxel-host/commands/copy-and-edit',
-        'https://packages/@cardstack/boxel-host/commands/copy-card',
-        'https://packages/@cardstack/boxel-host/commands/copy-card-as-markdown',
-        'https://packages/@cardstack/boxel-host/commands/copy-file-to-realm',
-        'https://packages/@cardstack/boxel-host/commands/create-ai-assistant-room',
-        'https://packages/@cardstack/boxel-host/commands/generate-example-cards',
-        'https://packages/@cardstack/boxel-host/commands/generate-readme-spec',
-        'https://packages/@cardstack/boxel-host/commands/open-create-listing-modal',
-        'https://packages/@cardstack/boxel-host/commands/open-in-interact-mode',
-        'https://packages/@cardstack/boxel-host/commands/patch-theme',
-        'https://packages/@cardstack/boxel-host/commands/populate-with-sample-data',
-        'https://packages/@cardstack/boxel-host/commands/send-ai-assistant-message',
-        'https://packages/@cardstack/boxel-host/commands/show-card',
-        'https://packages/@cardstack/boxel-host/commands/show-file',
-        'https://packages/@cardstack/boxel-host/commands/switch-submode',
-        'https://packages/@cardstack/runtime-common',
-        'https://packages/@cardstack/runtime-common/marked-sync',
-        'https://packages/@ember/component',
-        'https://packages/@ember/component/template-only',
-        'https://packages/@ember/helper',
-        'https://packages/@ember/modifier',
-        'https://packages/@ember/object',
-        'https://packages/@ember/object/internals',
-        'https://packages/@ember/runloop',
-        'https://packages/@ember/template',
-        'https://packages/@ember/template-factory',
-        'https://packages/@glimmer/component',
-        'https://packages/@glimmer/tracking',
-        'https://packages/ember-concurrency',
-        'https://packages/ember-concurrency/-private/async-arrow-runtime',
-        'https://packages/ember-css-url',
-        'https://packages/ember-modifier',
-        'https://packages/ember-provide-consume-context',
-        'https://packages/ember-resources',
-        'https://packages/lodash-es',
-        'https://packages/tracked-built-ins',
         // See note on iconsBase ordering above.
       ].sort(),
-      'the card references for the instance are correct',
+      'the polymorphic card records realm-owned dependencies and terminates at trusted Host shims',
     );
   });
 

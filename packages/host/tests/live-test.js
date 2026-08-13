@@ -84,10 +84,13 @@ export async function loadRealmTests(application) {
   // rather than through this loader — see it too.
   hostConfigEnvironment.default.resolvedCatalogRealmURL = catalogRealmURL;
 
-  const loaderInstance = application.buildInstance({
-    rootElement: '#ember-testing-loader',
-  });
-  await loaderInstance.boot();
+  // This owner exists only to resolve the loader service used to import realm
+  // test modules. Keep it out of Ember's interactive rendering lifecycle: a
+  // rootElement passed to buildInstance() is not a boot option, and booting an
+  // interactive instance would make this infrastructure contend with the
+  // application-test instance for #ember-testing.
+  const loaderInstance = application.buildInstance();
+  await loaderInstance.boot({ shouldRender: false });
   let loader = loaderInstance.lookup('service:loader-service').loader;
 
   loader.shimModule('qunit', QUnit);

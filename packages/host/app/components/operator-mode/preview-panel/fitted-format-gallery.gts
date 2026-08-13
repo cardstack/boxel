@@ -1,6 +1,5 @@
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
-import { cached } from '@glimmer/tracking';
 
 import { provide } from 'ember-provide-consume-context';
 
@@ -11,6 +10,8 @@ import {
   DefaultFormatsContextName,
   FITTED_FORMATS,
 } from '@cardstack/runtime-common';
+
+import CardRenderer from '@cardstack/host/components/card-renderer';
 
 import type { BaseDef } from '@cardstack/base/card-api';
 
@@ -40,11 +41,6 @@ export default class FittedFormatGallery extends Component<Signature> {
     return { cardDef: 'fitted', fieldDef: 'fitted' };
   }
 
-  @cached
-  get renderedCard() {
-    return this.args.card.constructor.getComponent(this.args.card);
-  }
-
   <template>
     <div class={{cn 'fitted-format-gallery' dark-mode=@isDarkMode}}>
       {{#each this.formats as |format|}}
@@ -61,10 +57,16 @@ export default class FittedFormatGallery extends Component<Signature> {
                 <div class='item-sizer' style={{setContainerSize spec}}>
                   {{#if @isFieldDef}}
                     <CardContainer class='item' @displayBoundaries={{true}}>
-                      <this.renderedCard class='field' />
+                      <CardRenderer
+                        @card={{@card}}
+                        @format='fitted'
+                        class='field'
+                      />
                     </CardContainer>
                   {{else}}
-                    <this.renderedCard
+                    <CardRenderer
+                      @card={{@card}}
+                      @format='fitted'
                       class='item'
                       @displayContainer={{true}}
                     />

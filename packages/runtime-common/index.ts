@@ -1033,7 +1033,11 @@ export interface RealmCards {
 export { v4 as uuidv4 } from '@lukeed/uuid'; // isomorphic UUID's using Math.random
 import type { LocalPath } from './paths.ts';
 import type { CardTypeFilter, Query, EveryFilter } from './query.ts';
-import { Loader } from './loader.ts';
+import {
+  Loader,
+  type ModuleEvaluator,
+  type ModuleRegistration,
+} from './loader.ts';
 export * from './frontmatter-parse.ts';
 export * from './paths.ts';
 export * from './realm-client.ts';
@@ -1043,6 +1047,7 @@ export * from './realm-index-card.ts';
 export * from './cached-fetch.ts';
 export * from './definition-lookup.ts';
 export * from './definitions.ts';
+export * from './boxel-execution-protocol.ts';
 export * from './searchable-routes.ts';
 export * from './catalog.ts';
 export * from './commands.ts';
@@ -1097,7 +1102,7 @@ export * from './github-submissions.ts';
 export { getCreatedTime } from './file-meta.ts';
 export { mergeRelationships } from './merge-relationships.ts';
 export { makeLogDefinitions, logger, reapplyLogLevels } from './log.ts';
-export { Loader };
+export { Loader, type ModuleEvaluator, type ModuleRegistration };
 export {
   fetchWithTransientRetry,
   isRetryableStatus,

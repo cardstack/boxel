@@ -5,19 +5,76 @@ export interface TokenSource {
   reauthenticate(realmURL: string): Promise<string | undefined>;
 }
 
+/**
+ * Let an explicitly interactive operation recover a realm session even when
+ * an unrelated render has set the tab-wide render-context marker. The depth
+ * counter makes nested and overlapping operations restore one another safely.
+ */
+export async function withReauthenticationAllowed<T>(
+  callback: () => Promise<T>,
+): Promise<T> {
+  let globals = globalThis as {
+    __boxelInteractiveRenderContextDepth?: number;
+  };
+  globals.__boxelInteractiveRenderContextDepth =
+    (globals.__boxelInteractiveRenderContextDepth ?? 0) + 1;
+  try {
+    return await callback();
+  } finally {
+    let remainingDepth =
+      (globals.__boxelInteractiveRenderContextDepth ?? 1) - 1;
+    if (remainingDepth > 0) {
+      globals.__boxelInteractiveRenderContextDepth = remainingDepth;
+    } else {
+      delete globals.__boxelInteractiveRenderContextDepth;
+    }
+  }
+}
+
+export function shouldSkipReauthenticationForContext({
+  inRenderContext,
+  interactiveRenderContextDepth,
+  isBrowserTestEnv,
+}: {
+  inRenderContext: boolean;
+  interactiveRenderContextDepth: number;
+  isBrowserTestEnv: boolean;
+}): boolean {
+  return (
+    inRenderContext && interactiveRenderContextDepth <= 0 && !isBrowserTestEnv
+  );
+}
+
 function shouldSkipReauthentication(): boolean {
   try {
-    let inRenderContext = Boolean((globalThis as any).__boxelRenderContext);
+    let globals = globalThis as {
+      __boxelRenderContext?: unknown;
+      __boxelInteractiveRenderContextDepth?: unknown;
+      QUnit?: unknown;
+    };
+    let inRenderContext = Boolean(globals.__boxelRenderContext);
+    let interactiveRenderContextDepth =
+      typeof globals.__boxelInteractiveRenderContextDepth === 'number'
+        ? globals.__boxelInteractiveRenderContextDepth
+        : 0;
     // Host tests also run the indexer and the app in the same js runtime which
     // can be very confusing. We err on the side of host tests needing
     // reauthentication retries enabled so browser-loaded assets can recover
     // from transient 401s.
     let isBrowserTestEnv =
-      typeof window !== 'undefined' && Boolean((globalThis as any).QUnit);
-    return inRenderContext && !isBrowserTestEnv;
+      typeof window !== 'undefined' && Boolean(globals.QUnit);
+    return shouldSkipReauthenticationForContext({
+      inRenderContext,
+      interactiveRenderContextDepth,
+      isBrowserTestEnv,
+    });
   } catch {
     return false;
   }
+}
+
+function mayRetryAnonymously(request: Request): boolean {
+  return request.method === 'GET' || request.method === 'HEAD';
 }
 
 export function authorizationMiddleware(
@@ -43,6 +100,25 @@ export function authorizationMiddleware(
         token = await tokenSource.reauthenticate(realmURL);
         if (token) {
           req.headers.set('Authorization', token);
+        } else {
+          // Reauthentication may intentionally settle on anonymous access.
+          // In particular, a public realm must remain readable after a stale
+          // persisted token is rejected. Do not resend that rejected token.
+          req.headers.delete('Authorization');
+        }
+        response = await next(req);
+
+        // A browser can retain a realm token that is still rejected after
+        // reauthentication. Public realm reads must remain available in that
+        // state: the realm server accepts them without an Authorization
+        // header. Keep this fallback bounded to safe reads so a mutation is
+        // never replayed anonymously.
+        if (
+          response.status === 401 &&
+          req.headers.has('Authorization') &&
+          mayRetryAnonymously(req)
+        ) {
+          req.headers.delete('Authorization');
           response = await next(req);
         }
       }

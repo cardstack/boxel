@@ -97,7 +97,11 @@ jobs:
           aws-region: us-east-1
       - name: Load app environment variables
         shell: bash
-        run: cat packages/host/config/production.env >> $GITHUB_ENV
+        run: |
+          cat packages/host/config/production.env >> $GITHUB_ENV
+          # Production preview nonce hosts use the DNS-ready preview edge until
+          # the boxelusercontent.com wildcard DNS record is provisioned.
+          echo "BOXEL_SANDBOX_RUNTIME_URL=https://boxelusercontent.dev" >> $GITHUB_ENV
       - name: Deploy boxel-host preview
         uses: ./.github/actions/deploy-ember-preview
         env:

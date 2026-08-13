@@ -35,6 +35,12 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
 
+      - name: Check rendering-protocol statement/test bijection
+        # RP-0.3: a conformance test citing a statement the spec no longer
+        # makes fails the build. Coverage of the reverse direction is
+        # report-only until the spec reaches NORMATIVE status (--strict).
+        if: ${{ !cancelled() }}
+        run: pnpm run lint:rp-bijection
       - name: Lint Boxel Icons
         if: ${{ !cancelled() }}
         run: pnpm run lint

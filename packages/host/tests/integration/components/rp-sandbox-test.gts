@@ -1,0 +1,1584 @@
+import 'ses';
+
+import { render, settled, waitFor, waitUntil } from '@ember/test-helpers';
+import GlimmerComponent from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
+
+import { getService } from '@universal-ember/test-support';
+import { module, test } from 'qunit';
+
+import {
+  BOXEL_SURFACE_PROTOCOL_VERSION,
+  Loader,
+  VirtualNetwork,
+  baseCardRef,
+  fetcher,
+  type LooseCardResource,
+  type SurfaceHandle,
+} from '@cardstack/runtime-common';
+
+import {
+  createSandboxModuleEvaluator,
+  measureRenderedOutput,
+  reportIntrinsicHeight,
+  reportRenderDiagnosticOnResize,
+  rewriteDynamicImports,
+  whenNonzeroSize,
+} from '@cardstack/host/components/boxel-sandbox-runtime';
+import CardRenderer from '@cardstack/host/components/card-renderer';
+
+import {
+  SandboxMatrixServiceStub,
+  initialize as initializeSandboxMatrixServiceStub,
+} from '@cardstack/host/instance-initializers/stub-matrix-service-for-sandbox';
+import { classifyBoxelSource } from '@cardstack/host/lib/boxel-source-classifier';
+import { htmlComponent } from '@cardstack/host/lib/html-component';
+import {
+  SandboxFetchClient,
+  SandboxFetchServer,
+} from '@cardstack/host/lib/sandbox-fetch-transport';
+import SandboxModuleAuthority from '@cardstack/host/lib/sandbox-module-authority';
+import {
+  installSandboxRuntimeErrorReporter,
+  postRenderDiagnostic,
+} from '@cardstack/host/lib/sandbox-runtime-host';
+import SandboxRuntimeProcess from '@cardstack/host/lib/sandbox-runtime-process';
+import { SandboxSurfaceClient } from '@cardstack/host/lib/sandbox-surface-transport';
+import { isBoxelSandboxRuntimeBoot } from '@cardstack/host/routes/boxel-sandbox-runtime';
+
+import type SurfaceServiceType from '@cardstack/host/services/surface-service';
+
+import {
+  testRealmURL,
+  testRRI,
+  setupCardLogs,
+  setupIntegrationTestRealm,
+  setupLocalIndexing,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
+} from '../../helpers';
+import { setupMockMatrix } from '../../helpers/mock-matrix';
+import { renderComponent } from '../../helpers/render-component';
+import { setupRenderingTest } from '../../helpers/setup';
+
+import type { BaseDef, CardDef, Format } from '@cardstack/base/card-api';
+
+// A CardDef whose module directly imports a raw browser-authority package
+// (`ember-modifier`) rather than going through Base's trusted component
+// primitives. RP-6.1 (R2) requires the classifier to route this to the
+// Sandbox tier: the entry point for the origin-isolated iframe renderer that
+// hosts cards like a Three.js WebGL scene.
+const webglWidgetSource = `
+  import {
+    CardDef,
+    Component,
+    contains,
+    field,
+  } from 'https://cardstack.com/base/card-api';
+  import StringField from 'https://cardstack.com/base/string';
+  import { modifier } from 'ember-modifier';
+
+  const paintLabel = modifier((element, [text]) => {
+    element.textContent = text;
+  });
+
+  export class WebglWidget extends CardDef {
+    static displayName = 'WebglWidget';
+    @field label = contains(StringField);
+    static isolated = class Isolated extends Component<typeof WebglWidget> {
+      <template>
+        <div data-test-webgl-widget {{paintLabel @model.label}}></div>
+      </template>
+    };
+  }
+`;
+
+async function renderThroughExecutionRenderer(card: BaseDef, format?: Format) {
+  await renderComponent(
+    class TestDriver extends GlimmerComponent {
+      <template>
+        {{! Ordinary product callsites omit @execution. The top-level
+            CardRenderer boundary must classify both Capsule and Sandbox
+            modules without callers opting into safety. }}
+        <CardRenderer @card={{card}} @format={{format}} @execution='auto' />
+      </template>
+    },
+  );
+}
+
+// The standard-view override exactly as interact mode's Toggle Standard
+// View passes it (stack-item.gts): baseCardRef with automatic policy routing.
+async function renderWithBaseTemplateOverride(card: BaseDef, format?: Format) {
+  await renderComponent(
+    class TestDriver extends GlimmerComponent {
+      <template>
+        <CardRenderer
+          @card={{card}}
+          @format={{format}}
+          @codeRef={{baseCardRef}}
+          @execution='auto'
+        />
+      </template>
+    },
+  );
+}
+
+// No browser-authority imports: RP-6.1 R4 routes this module to Capsule —
+// the tier whose standard-view override must resolve HOST-SIDE through the
+// trusted Base template (RP-6.5), same as a missing authored format.
+const plainWidgetSource = `
+  import {
+    CardDef,
+    Component,
+    contains,
+    field,
+  } from 'https://cardstack.com/base/card-api';
+  import StringField from 'https://cardstack.com/base/string';
+
+  export class PlainWidget extends CardDef {
+    static displayName = 'PlainWidget';
+    @field label = contains(StringField);
+    static isolated = class Isolated extends Component<typeof PlainWidget> {
+      <template>
+        <div data-test-plain-widget>{{@model.label}}</div>
+      </template>
+    };
+  }
+`;
+
+// RP-6.3 exception fixture: a Sandbox-classified module (raw ember-modifier
+// import) that ALSO authors its own in-place edit template — this module
+// keeps the same live Sandbox iframe across a pencil-toggle round trip.
+const inPlaceEditorSource = `
+  import {
+    CardDef,
+    Component,
+    contains,
+    field,
+  } from 'https://cardstack.com/base/card-api';
+  import StringField from 'https://cardstack.com/base/string';
+  import { modifier } from 'ember-modifier';
+
+  const paintLabel = modifier((element, [text]) => {
+    element.textContent = text;
+  });
+
+  export class InPlaceEditor extends CardDef {
+    static displayName = 'InPlaceEditor';
+    @field label = contains(StringField);
+    static isolated = class Isolated extends Component<typeof InPlaceEditor> {
+      <template>
+        <div data-test-in-place-isolated {{paintLabel @model.label}}></div>
+      </template>
+    };
+    static edit = class Edit extends Component<typeof InPlaceEditor> {
+      <template>
+        <div data-test-in-place-edit {{paintLabel @model.label}}></div>
+      </template>
+    };
+  }
+`;
+
+// `Roster` forward-references `Classroom` through a linksTo thunk while
+// `Classroom` is declared LATER in the module — main's sanctioned pattern.
+// Evaluation must not invoke the thunk before `Classroom` initializes.
+const forwardLinkSource = `
+  import {
+    CardDef,
+    Component,
+    contains,
+    field,
+    linksTo,
+  } from 'https://cardstack.com/base/card-api';
+  import StringField from 'https://cardstack.com/base/string';
+
+  export class Roster extends CardDef {
+    static displayName = 'Roster';
+    @field label = contains(StringField);
+    @field classroom = linksTo(() => Classroom);
+    static isolated = class Isolated extends Component<typeof Roster> {
+      <template>
+        <div data-test-forward-roster>{{@model.label}}</div>
+      </template>
+    };
+  }
+
+  export class Classroom extends CardDef {
+    static displayName = 'Classroom';
+    @field name = contains(StringField);
+  }
+`;
+
+module('Integration | rp-sandbox', function (hooks) {
+  setupRenderingTest(hooks);
+  setupLocalIndexing(hooks);
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
+    activeRealms: [testRealmURL],
+    autostart: true,
+  });
+  setupRealmCacheTeardown(hooks);
+
+  let restorePrerenderedComponentFor: (() => void) | undefined;
+
+  hooks.afterEach(function () {
+    restorePrerenderedComponentFor?.();
+    restorePrerenderedComponentFor = undefined;
+  });
+
+  hooks.beforeEach(async function () {
+    await withCachedRealmSetup(async () =>
+      setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'webgl-widget.gts': webglWidgetSource,
+          'plain-widget.gts': plainWidgetSource,
+          'forward-link.gts': forwardLinkSource,
+          'in-place-editor.gts': inPlaceEditorSource,
+        },
+      }),
+    );
+  });
+
+  setupCardLogs(hooks, async () =>
+    getService('loader-service').loader.import('@cardstack/base/card-api'),
+  );
+
+  async function createFromResource(
+    resource: LooseCardResource,
+  ): Promise<CardDef> {
+    let store = getService('store');
+    return await store.__dangerousCreateFromSerialized(
+      resource,
+      { data: resource },
+      new URL(testRealmURL),
+    );
+  }
+
+  async function createWidget(
+    overrides: Partial<LooseCardResource> = {},
+  ): Promise<CardDef> {
+    return await createFromResource({
+      attributes: { label: 'hello' },
+      meta: {
+        adoptsFrom: { module: testRRI('webgl-widget'), name: 'WebglWidget' },
+      },
+      ...overrides,
+    });
+  }
+
+  test('RP-6.1: a quoted style attribute with interpolation classifies to the Sandbox tier', async function (assert) {
+    // `style='background: {{row.tone}}'` compiles to a concat expression —
+    // never the bare trusted cssVar invocation the Capsule admits. Before
+    // the classifier learned this form, such modules classified Capsule and
+    // the evaluator then refused the template at admission, leaving the
+    // card unrenderable instead of routed to the iframe where inline
+    // styles are supported.
+    let classification = await classifyBoxelSource(`
+      import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+      export class TonedCard extends CardDef {
+        static isolated = class Isolated extends Component<typeof TonedCard> {
+          <template>
+            <div style='background: {{@model.cardTitle}}'>toned</div>
+          </template>
+        };
+      }
+    `);
+    assert.strictEqual(classification.tier, 'sandbox');
+    assert.strictEqual(
+      classification.reason,
+      'browser-runtime:dynamic-inline-style',
+    );
+  });
+
+  test('RP-6.1: a bare `typeof window` guard stays Capsule-eligible, while an actual window reference still classifies to the Sandbox tier', async function (assert) {
+    // `typeof` on an unresolvable name evaluates to 'undefined' WITHOUT
+    // throwing, so the standard isomorphic guard runs correctly inside the
+    // Capsule compartment and acquires no browser authority.
+    let guarded = await classifyBoxelSource(`
+      import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+      export class GuardedCard extends CardDef {
+        get environment() {
+          return typeof window !== 'undefined' ? 'browser' : 'other';
+        }
+      }
+    `);
+    assert.strictEqual(
+      guarded.tier,
+      'capsule',
+      'the typeof-guard alone does not force the iframe',
+    );
+
+    let using = await classifyBoxelSource(`
+      import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+      export class UsingCard extends CardDef {
+        get width() {
+          return typeof window !== 'undefined' ? window.innerWidth : 0;
+        }
+      }
+    `);
+    assert.strictEqual(
+      using.tier,
+      'sandbox',
+      'actually READING window (even inside the guarded branch) still classifies to the Sandbox tier',
+    );
+    assert.true(using.signals.includes('window'));
+  });
+
+  test('RP-6.3: the edit surface of a Sandbox module with NO authored edit template renders host-side — never a structurally read-only iframe form', async function (assert) {
+    let card = await createWidget();
+
+    await renderThroughExecutionRenderer(card, 'edit');
+
+    // The trusted Base editor operates on the canonical store host-side;
+    // the iframe tier has no child→parent write leg, so routing edit there
+    // produces a dead form (RP-6.3).
+    await waitFor('[data-boxel-execution]', { timeout: 20000 });
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-boxel-execution]')
+          ?.getAttribute('data-boxel-execution') !== 'prerender',
+      { timeout: 20000 },
+    );
+    let slot = document.querySelector('[data-boxel-execution]');
+    assert.notStrictEqual(
+      slot?.getAttribute('data-boxel-execution'),
+      'sandbox',
+      'edit never mounts the iframe for a standard-editor module',
+    );
+    assert
+      .dom('.boxel-execution-sandbox-slot iframe')
+      .doesNotExist('no iframe is created for the edit surface');
+  });
+
+  test('RP-6.3: returning from a host-side default editor reuses the live Sandbox process', async function (assert) {
+    let card = await createWidget();
+
+    class FormatState {
+      @tracked format: Format = 'isolated';
+    }
+    let state = new FormatState();
+
+    await render(
+      <template>
+        <CardRenderer
+          @card={{card}}
+          @format={{state.format}}
+          @execution='auto'
+        />
+      </template>,
+    );
+
+    await waitFor('[data-boxel-execution="sandbox"]', { timeout: 5000 });
+    let initialIframe = document.querySelector(
+      '[data-boxel-execution="sandbox"] iframe',
+    );
+    assert.ok(initialIframe, 'the isolated format starts in the Sandbox');
+
+    state.format = 'edit';
+    await settled();
+    await waitFor('[data-boxel-execution]', { timeout: 20000 });
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-boxel-execution]')
+          ?.getAttribute('data-boxel-execution') !== 'sandbox',
+      { timeout: 20000 },
+    );
+    assert
+      .dom('.boxel-execution-sandbox-slot iframe')
+      .doesNotExist('the trusted Base editor owns the edit surface');
+
+    state.format = 'isolated';
+    await settled();
+    await waitFor('[data-boxel-execution="sandbox"]', { timeout: 5000 });
+
+    assert
+      .dom('[data-boxel-execution="sandbox"]')
+      .exists('the isolated format returns through the Sandbox path');
+    assert
+      .dom('.boxel-execution-error')
+      .doesNotExist('the format transition does not surface a runtime error');
+  });
+
+  test('RP-6.3 exception: a module authoring its own `static edit` template keeps the Sandbox iframe for edit', async function (assert) {
+    let card = await createFromResource({
+      attributes: { label: 'in place' },
+      meta: {
+        adoptsFrom: {
+          module: testRRI('in-place-editor'),
+          name: 'InPlaceEditor',
+        },
+      },
+    });
+
+    await renderThroughExecutionRenderer(card, 'edit');
+
+    await waitFor('[data-boxel-execution="sandbox"]', { timeout: 20000 });
+    assert
+      .dom('[data-boxel-execution="sandbox"]')
+      .exists('the authored in-place editor mounts in the Sandbox');
+    assert
+      .dom('[data-boxel-execution="sandbox"] iframe')
+      .exists(
+        'the same retained iframe mechanism serves the edit surface — in-iframe state survives the isolated↔edit switch',
+      );
+  });
+
+  test('RP-7.2: a forward-referenced linksTo(() => X) thunk stays lazy through Capsule evaluation — resolution is first-access, never definition time', async function (assert) {
+    // Main resolves relationship thunks on first access, never at
+    // field-definition time. The Capsule facade used to invoke the thunk
+    // while the module was still evaluating, throwing `Cannot access 'X'
+    // before initialization` for any module that declares the referenced
+    // card LATER in the same file — main-authored realms do this routinely.
+    let card = await createFromResource({
+      attributes: { label: 'forward hello' },
+      meta: {
+        adoptsFrom: { module: testRRI('forward-link'), name: 'Roster' },
+      },
+    });
+
+    await renderThroughExecutionRenderer(card, 'isolated');
+
+    await waitFor('[data-test-forward-roster]', { timeout: 5000 });
+    assert
+      .dom('[data-test-forward-roster]')
+      .hasText('forward hello', 'the authored isolated template rendered');
+    assert
+      .dom('[data-boxel-execution="capsule"]')
+      .exists('the plain module renders in the Capsule tier');
+    assert
+      .dom('.boxel-execution-error')
+      .doesNotExist('no temporal-dead-zone failure surfaces');
+  });
+
+  test('RP-6.1: a module that imports a raw browser-authority package classifies to the Sandbox tier', async function (assert) {
+    let classification = await classifyBoxelSource(webglWidgetSource);
+
+    assert.strictEqual(
+      classification.tier,
+      'sandbox',
+      'a raw ember-modifier import requires the stronger process boundary (RP-6.1 R2)',
+    );
+    assert.true(
+      classification.reason.startsWith('browser-runtime:'),
+      'the routing decision names the browser-runtime signal that triggered it',
+    );
+    assert.true(
+      classification.signals.includes('ember-modifier'),
+      'the specific signal detected is the raw ember-modifier import',
+    );
+  });
+
+  test('RP-15.3, RP-6.4: mounting a Sandbox-routed card creates a real, credentialless iframe BORN inside its own presentation slot, and fails closed to the chrome error presentation when the child cannot complete its bootstrap', async function (assert) {
+    let card = await createWidget();
+    let execution = getService('boxel-execution');
+    let originalPrerenderedComponentFor =
+      execution.prerenderedComponentFor.bind(execution);
+    execution.prerenderedComponentFor = async () =>
+      htmlComponent(
+        '<div data-test-last-known-good>hello from the last good generation</div>',
+      );
+    restorePrerenderedComponentFor = () => {
+      execution.prerenderedComponentFor = originalPrerenderedComponentFor;
+    };
+
+    await renderThroughExecutionRenderer(card, 'isolated');
+
+    // getRenderSlot() no longer awaits the full connect+render handshake
+    // before resolving — it can't: the iframe cannot exist until it has a
+    // permanent mount point, and that mount point is the slot element this
+    // very resolution causes the Host to render. So the Sandbox slot (and
+    // the iframe mounted inside it) appears promptly, well before any
+    // handshake with the child completes.
+    await waitFor('[data-boxel-execution="sandbox"]', { timeout: 5000 });
+    let iframeSelector =
+      '[data-boxel-execution="sandbox"] iframe.boxel-sandbox-process';
+    await waitFor(iframeSelector, { timeout: 5000 });
+    let iframe = document.querySelector<HTMLIFrameElement>(iframeSelector);
+    assert.ok(
+      iframe,
+      'a real iframe element is created for the Sandbox process',
+    );
+    assert.strictEqual(
+      iframe?.parentElement,
+      document.querySelector('[data-boxel-execution="sandbox"]'),
+      'the iframe is a direct child of its presentation slot — born there, not moved there',
+    );
+    assert.strictEqual(
+      iframe?.getAttribute('sandbox'),
+      'allow-scripts allow-same-origin',
+      'the iframe carries the origin-isolation sandbox attribute',
+    );
+    assert.true(
+      iframe?.hasAttribute('credentialless'),
+      'the iframe is credentialless: no ambient cookies or storage cross into it',
+    );
+    let src = iframe?.getAttribute('src') ?? '';
+    assert.true(
+      src.includes('/_boxel-sandbox-runtime'),
+      'the iframe is addressed at the sandbox bootstrap route',
+    );
+    assert.true(
+      src.includes('bootstrapId='),
+      'the bootstrap carries a per-process, unguessable bootstrap id',
+    );
+
+    // This integration-test harness does not serve the Sandbox child's
+    // origin (`user.localhost`), so the bootstrap handshake this iframe just
+    // started can never complete. RP-15.3 requires that a Sandbox render
+    // never go silently blank when that happens: it must fail closed to a
+    // Host-owned error presentation, tearing down the Sandbox slot (and the
+    // failed process/iframe with it — the presentation slot modifier's own
+    // teardown calls unmount()) rather than leaving a dead, booting-forever
+    // iframe on screen. The inert server-prerendered generation remains
+    // visible beneath that error. (SandboxRuntimeProcess's
+    // document loading and the connect handshake have independent bounded
+    // deadlines; onMountFailed is what turns either background failure into
+    // this visible state, since getRenderSlot() already returned before the
+    // failure could fire.)
+    await waitFor('.boxel-execution-error', { timeout: 20000 });
+    assert
+      .dom('.boxel-execution-error')
+      .hasAttribute(
+        'role',
+        'alert',
+        'chrome owns the error presentation (RP-15.1)',
+      );
+    assert
+      .dom('[data-boxel-execution="last-known-good"]')
+      .hasTextContaining(
+        'hello from the last good generation',
+        'the substantive last-known-good generation remains visible',
+      );
+    assert
+      .dom(
+        '[data-boxel-execution="last-known-good"] .boxel-execution-placeholder',
+      )
+      .hasAttribute(
+        'inert',
+        '',
+        'the failed generation cannot be interacted with',
+      );
+    assert
+      .dom('.boxel-execution-error--overlay')
+      .exists('the diagnostic floats over the retained generation');
+    assert
+      .dom('.boxel-execution-error--overlay [data-test-error-display]')
+      .exists('the diagnostic uses the canonical Host warning panel');
+    assert
+      .dom('[data-boxel-execution="sandbox"]')
+      .doesNotExist(
+        'the Sandbox slot (and its failed iframe) is torn down once the handshake is known to have failed',
+      );
+  });
+
+  test('RP-6.5: the standard-view base-template override resolves host-side through the trusted Base template for a Capsule-classified card', async function (assert) {
+    let card = await createFromResource({
+      attributes: { label: 'plain hello' },
+      meta: {
+        adoptsFrom: { module: testRRI('plain-widget'), name: 'PlainWidget' },
+      },
+    });
+
+    await renderWithBaseTemplateOverride(card, 'isolated');
+
+    // trustedBaseRenderSlotFor resolves the override over the canonical
+    // instance via the Direct runtime — the render mounts as a Direct slot,
+    // not a Capsule one.
+    await waitFor('[data-boxel-execution="direct"]', { timeout: 5000 });
+    assert
+      .dom('[data-boxel-execution="direct"]')
+      .exists('the override mounts the trusted Base template host-side');
+    assert
+      .dom('[data-test-plain-widget]')
+      .doesNotExist(
+        'the authored isolated template does not render — the Base template replaced it',
+      );
+    assert
+      .dom('[data-boxel-execution="capsule"]')
+      .doesNotExist('no Capsule slot mounts for the overridden render');
+  });
+
+  test('RP-6.5: the standard-view base-template override is refused for a Sandbox-classified card — the authored render stays confined to the iframe', async function (assert) {
+    let card = await createWidget();
+
+    await renderWithBaseTemplateOverride(card, 'isolated');
+
+    // Classification still routes Sandbox; the override must not
+    // de-escalate the render into the main document (RP-6.1 R5).
+    await waitFor('[data-boxel-execution="sandbox"]', { timeout: 5000 });
+    await waitFor(
+      '[data-boxel-execution="sandbox"] iframe.boxel-sandbox-process',
+      { timeout: 5000 },
+    );
+    assert
+      .dom('[data-boxel-execution="sandbox"] iframe.boxel-sandbox-process')
+      .exists(
+        'the Sandbox slot and its iframe mount exactly as without the override',
+      );
+    assert
+      .dom('[data-boxel-execution="direct"]')
+      .doesNotExist(
+        'no host-side Base-template render is created for a Sandbox-classified module',
+      );
+    assert
+      .dom('[data-test-webgl-widget]')
+      .doesNotExist('no authored content renders in the main document');
+  });
+
+  test('RP-15.3: an uncaught error or unhandled rejection before ready is held and released as a single runtime-error control message once ready posts', async function (assert) {
+    let channel = new MessageChannel();
+    let received: {
+      kind: string;
+      transportVersion: number;
+      type: string;
+      error: { name: string; message: string };
+    }[] = [];
+    channel.port2.addEventListener('message', (event) => {
+      received.push(event.data);
+    });
+    channel.port2.start();
+    channel.port1.start();
+
+    // Listeners are installed before module evaluation begins (not after
+    // 'ready'), so a module's own top-level side effect, or a promise it
+    // eagerly kicks off, can reject in a microtask before bootstrap ever
+    // reaches 'ready'. Posting that immediately would race the parent's own
+    // bootstrap-vs-failure handling, so it is held until release().
+    // A private EventTarget stands in for the child window: dispatching a
+    // real ErrorEvent on `window` would also reach the test runner's own
+    // global error handler and fail the test from outside.
+    let childEvents = new EventTarget();
+    let reporter = installSandboxRuntimeErrorReporter(
+      channel.port1,
+      childEvents,
+    );
+    try {
+      childEvents.dispatchEvent(
+        new ErrorEvent('error', {
+          error: new Error('boom during bootstrap'),
+          message: 'boom during bootstrap',
+        }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      assert.strictEqual(
+        received.length,
+        0,
+        'a failure before release() is held, not posted immediately',
+      );
+
+      reporter.release();
+      await waitUntil(() => received.length > 0, { timeout: 2000 });
+      assert.strictEqual(
+        received.length,
+        1,
+        'release() flushes exactly the held failure',
+      );
+      let [message] = received;
+      assert.strictEqual(message?.kind, 'boxel-sandbox-control');
+      assert.strictEqual(message?.type, 'runtime-error');
+      assert.strictEqual(message?.error.message, 'boom during bootstrap');
+
+      // A runtime-error is a terminal, once-only signal: neither a second
+      // pre-release failure nor a post-release one reopens it.
+      childEvents.dispatchEvent(
+        new ErrorEvent('error', {
+          error: new Error('after release'),
+          message: 'after release',
+        }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      assert.strictEqual(
+        received.length,
+        1,
+        'a runtime-error is a terminal, once-only signal',
+      );
+    } finally {
+      reporter.stop();
+      channel.port1.close();
+      channel.port2.close();
+    }
+  });
+
+  test('RP-15.3: a held pre-release failure is discarded by stop() rather than posted, since a bootstrap failure is already reported as failed', async function (assert) {
+    let channel = new MessageChannel();
+    let received: unknown[] = [];
+    channel.port2.addEventListener('message', (event) => {
+      received.push(event.data);
+    });
+    channel.port2.start();
+    channel.port1.start();
+
+    let childEvents = new EventTarget();
+    let reporter = installSandboxRuntimeErrorReporter(
+      channel.port1,
+      childEvents,
+    );
+    childEvents.dispatchEvent(
+      new ErrorEvent('error', { error: new Error('boom'), message: 'boom' }),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    // Mirrors the bootstrap catch path: stop(), never release(), because a
+    // 'failed' control message already covers this case.
+    reporter.stop();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    assert.strictEqual(
+      received.length,
+      0,
+      'a held failure discarded by stop() never posts, so it cannot double-report alongside failed',
+    );
+    channel.port1.close();
+    channel.port2.close();
+  });
+
+  test('RP-15.3: rewriteDynamicImports rewrites only real dynamic import() call sites, leaving comments and string contents untouched', function (assert) {
+    let source = `
+export async function loadThree() {
+  // a comment mentioning import(x) should not be rewritten
+  let note = "please don't call import(fake) in here";
+  const THREE = await import('https://esm.sh/three@0.160.0');
+  return { THREE, note };
+}
+`;
+    let rewritten = rewriteDynamicImports(source);
+
+    assert.true(
+      rewritten.includes(
+        "__boxelDynamicImport__('https://esm.sh/three@0.160.0')",
+      ),
+      'the real dynamic import call site is rewritten to route through the guarded loader',
+    );
+    assert.true(
+      rewritten.includes(
+        '// a comment mentioning import(x) should not be rewritten',
+      ),
+      'comment text that happens to contain "import(" is untouched',
+    );
+    assert.true(
+      rewritten.includes(`"please don't call import(fake) in here"`),
+      'string literal text that happens to contain "import(" is untouched',
+    );
+  });
+
+  test('RP-15.3: a dynamic import() embedded in authored source is routed through the same Loader and module-authority check as a static import', async function (assert) {
+    // `transpileAmd` only rewrites static import/export declarations — a
+    // dynamic `import(...)` call inside a module's own body (the common way
+    // a card lazily loads a heavyweight third-party library like Three.js)
+    // survives untouched into the eval'd factory, where a bare `eval()`
+    // would run it as a real native dynamic import: resolved against
+    // whatever script happens to be executing, and fetched without ever
+    // reaching SandboxFetchClient. createSandboxModuleEvaluator closes that
+    // gap by rewriting those call sites to route through the same Loader
+    // (and therefore the same authority-checked SandboxFetchClient) as
+    // every static import.
+    let channel = new MessageChannel();
+    let sources: Record<string, string> = {
+      'https://realm.example/fabrication-viewer':
+        "export async function loadThree() {\n  const THREE = await import('https://esm.sh/three@0.160.0');\n  return THREE;\n}\n",
+      'https://esm.sh/three@0.160.0':
+        "export * from '/three@0.160.0/es2022/three.mjs';",
+      'https://esm.sh/three@0.160.0/es2022/three.mjs':
+        'export const REVISION = "160";',
+    };
+    let requested: string[] = [];
+    let authority = new SandboxModuleAuthority(
+      (identifier) => identifier,
+      () => false,
+    );
+    authority.allow([
+      'https://realm.example/fabrication-viewer',
+      'https://esm.sh/three@0.160.0',
+    ]);
+    let server = new SandboxFetchServer(
+      channel.port1,
+      async (input) => {
+        let url = String(input);
+        requested.push(url);
+        let source = sources[url];
+        return source === undefined
+          ? new Response('not found', { status: 404 })
+          : new Response(source, { status: 200 });
+      },
+      (url) => authority.has(url),
+      (url, contentType, body) => authority.observe(url, contentType, body),
+    );
+    let client = new SandboxFetchClient(channel.port2);
+    channel.port1.start();
+    channel.port2.start();
+
+    let virtualNetwork = new VirtualNetwork(globalThis.fetch);
+    virtualNetwork.mount((request: Request) => client.fetch(request));
+    let fetchFn = fetcher(virtualNetwork.fetch, [], virtualNetwork);
+    let loader: Loader = new Loader(fetchFn, virtualNetwork.resolveImport, {
+      virtualNetwork,
+      moduleEvaluator: createSandboxModuleEvaluator(() => loader),
+    });
+
+    try {
+      let mod = await loader.import<{
+        loadThree: () => Promise<{ REVISION: string }>;
+      }>('https://realm.example/fabrication-viewer');
+      let three = await mod.loadThree();
+
+      assert.strictEqual(
+        three.REVISION,
+        '160',
+        'the dynamically imported module evaluates and its export is usable',
+      );
+      assert.deepEqual(
+        requested,
+        [
+          'https://realm.example/fabrication-viewer',
+          'https://esm.sh/three@0.160.0',
+          'https://esm.sh/three@0.160.0/es2022/three.mjs',
+        ],
+        "the dynamic import and its own declared sub-import both crossed the authority-checked SandboxFetchClient broker at esm.sh's real origin, exactly like a static import",
+      );
+    } finally {
+      client.destroy();
+      server.destroy();
+      channel.port1.close();
+      channel.port2.close();
+    }
+  });
+
+  test('RP-6.4 | G-07: trusted Base and authored children compose inside one Sandbox-local Loader', async function (assert) {
+    let channel = new MessageChannel();
+    let sources: Record<string, string> = {
+      'https://realm.example/browser-card': `
+        import { BASE_LABEL } from 'https://cardstack.com/base/test-field';
+        import { authoredLabel } from './authored-child';
+        export const result = BASE_LABEL + ' -> ' + authoredLabel;
+      `,
+      'https://realm.example/authored-child':
+        "export const authoredLabel = 'authored child';",
+      'https://cardstack.com/base/test-field':
+        "export const BASE_LABEL = 'trusted Base field';",
+    };
+    let requested: string[] = [];
+    let authority = new SandboxModuleAuthority(
+      (identifier) => identifier,
+      (identifier) => identifier.startsWith('https://cardstack.com/base/'),
+    );
+    authority.allow(['https://realm.example/browser-card']);
+    let server = new SandboxFetchServer(
+      channel.port1,
+      async (input) => {
+        let url = String(input);
+        requested.push(url);
+        let source = sources[url];
+        return source === undefined
+          ? new Response('not found', { status: 404 })
+          : new Response(source, {
+              headers: { 'content-type': 'text/javascript' },
+            });
+      },
+      (url) => authority.has(url),
+      (url, contentType, body) => authority.observe(url, contentType, body),
+    );
+    let client = new SandboxFetchClient(channel.port2);
+    channel.port1.start();
+    channel.port2.start();
+
+    let virtualNetwork = new VirtualNetwork(globalThis.fetch);
+    virtualNetwork.mount((request: Request) => client.fetch(request));
+    let fetchFn = fetcher(virtualNetwork.fetch, [], virtualNetwork);
+    let loader: Loader = new Loader(fetchFn, virtualNetwork.resolveImport, {
+      virtualNetwork,
+      moduleEvaluator: createSandboxModuleEvaluator(() => loader),
+    });
+
+    try {
+      let mod = await loader.import<{ result: string }>(
+        'https://realm.example/browser-card',
+      );
+
+      assert.strictEqual(
+        mod.result,
+        'trusted Base field -> authored child',
+        'trusted and authored exports are usable by the browser card in one child runtime',
+      );
+      assert.deepEqual(
+        [...requested].sort(),
+        [
+          'https://cardstack.com/base/test-field',
+          'https://realm.example/authored-child',
+          'https://realm.example/browser-card',
+        ],
+        'both nested modules were fetched by the same Sandbox-local Loader and authority broker',
+      );
+      await assert.rejects(
+        loader.import('https://realm.example/not-declared'),
+        /outside its classified graph/,
+        'the shared child Loader does not broaden authored module authority',
+      );
+    } finally {
+      client.destroy();
+      server.destroy();
+      channel.port1.close();
+      channel.port2.close();
+    }
+  });
+
+  test('RP-15.3: an esm.sh third-party module response is admitted and its own declared imports are recursively observed even without a javascript content-type', async function (assert) {
+    // Three.js-style cards load third-party packages from esm.sh. The
+    // classified graph must admit an esm.sh entry module's own declared
+    // sub-imports the same way it does for any other admitted module, even
+    // though esm.sh does not reliably label every response as javascript
+    // (SandboxModuleAuthority's `isJavaScript` special-cases the esm.sh
+    // hostname for exactly this reason).
+    let channel = new MessageChannel();
+    let authority = new SandboxModuleAuthority(
+      (identifier) => identifier,
+      () => false,
+    );
+    authority.allow(['https://esm.sh/three@0.160.0']);
+    let sources: Record<string, string> = {
+      'https://esm.sh/three@0.160.0':
+        "export * from '/three@0.160.0/es2022/three.mjs';",
+      'https://esm.sh/three@0.160.0/es2022/three.mjs':
+        'export const REVISION = "160";',
+    };
+    let server = new SandboxFetchServer(
+      channel.port1,
+      async (input) => {
+        let url = String(input);
+        let source = sources[url];
+        // Deliberately no content-type header: the Fetch spec default for a
+        // string body is text/plain, not javascript.
+        return source === undefined
+          ? new Response('not found', { status: 404 })
+          : new Response(source, { status: 200 });
+      },
+      (url) => authority.has(url),
+      (url, contentType, body) => authority.observe(url, contentType, body),
+    );
+    let client = new SandboxFetchClient(channel.port2);
+    channel.port1.start();
+    channel.port2.start();
+
+    try {
+      await client.fetch('https://esm.sh/three@0.160.0');
+      let dependency = await client.fetch(
+        'https://esm.sh/three@0.160.0/es2022/three.mjs',
+      );
+      assert.strictEqual(
+        await dependency.text(),
+        'export const REVISION = "160";',
+        "the entry module's own declared sub-import is admitted despite a non-javascript content-type",
+      );
+      await assert.rejects(
+        client.fetch('https://esm.sh/some-unrelated-package@1.0.0'),
+        /outside its classified graph/,
+        'admission does not widen to sibling esm.sh packages the module never declared',
+      );
+    } finally {
+      client.destroy();
+      server.destroy();
+      channel.port1.close();
+      channel.port2.close();
+    }
+  });
+
+  test('RP-15.1: isBoxelSandboxRuntimeBoot reflects the current URL, the gate boot-time app-level service startup (matrix/realm/session) consults', function (assert) {
+    assert.false(
+      isBoxelSandboxRuntimeBoot(),
+      'the normal test document is not the Sandbox bootstrap route',
+    );
+
+    // history.pushState changes window.location without a real navigation
+    // or notifying Ember's own router — exactly what an instance-initializer
+    // observes (it runs before the Router has matched anything), and safely
+    // reversible for the rest of the suite.
+    let originalURL = window.location.href;
+    let candidatePathnames = [
+      '/_boxel-sandbox-runtime',
+      // A deployment's rootURL (an Ember app served under a base path)
+      // would prefix the served pathname with strict equality — this is
+      // why the check is a substring match, not `pathname === ...`.
+      '/host/_boxel-sandbox-runtime',
+      // A trailing slash likewise defeats strict equality.
+      '/_boxel-sandbox-runtime/',
+    ];
+    try {
+      for (let pathname of candidatePathnames) {
+        window.history.pushState(
+          null,
+          '',
+          `${pathname}?bootstrapId=test&parentOrigin=https://host.example`,
+        );
+        assert.true(
+          isBoxelSandboxRuntimeBoot(),
+          `the Sandbox bootstrap route is detected for pathname "${pathname}" — instance-initializers (register-auth-service-worker.ts) rely on exactly this to skip eagerly constructing MatrixService, whose constructor otherwise starts requestStorageAccess()/SDK connection inside the credentialless iframe`,
+        );
+      }
+    } finally {
+      window.history.pushState(null, '', originalURL);
+    }
+    assert.false(
+      isBoxelSandboxRuntimeBoot(),
+      'restored to the non-Sandbox URL after the assertion',
+    );
+  });
+
+  test('RP-15.1: the Sandbox boot registers a matrix-service stub only on the Sandbox route, and only that one registration', function (assert) {
+    // register-auth-service-worker.ts gating its OWN eager matrix-service
+    // lookup was not sufficient: ClientTelemetryService's constructor
+    // unconditionally reads `this.matrixService.userId`, lazily constructing
+    // the real MatrixService (whose constructor immediately starts
+    // requestStorageAccess()/SDK load) regardless. This initializer instead
+    // wins the `service:matrix-service` registration race for the whole
+    // Sandbox app instance, so it doesn't matter which consumer looks it up
+    // first — a fake ApplicationInstance stands in for the real one here so
+    // the registration call itself is observable without booting an app.
+    let registered: { key: string; factory: unknown }[] = [];
+    let fakeAppInstance = {
+      register: (key: string, factory: unknown) => {
+        registered.push({ key, factory });
+      },
+    } as unknown as Parameters<typeof initializeSandboxMatrixServiceStub>[0];
+
+    initializeSandboxMatrixServiceStub(fakeAppInstance);
+    assert.strictEqual(
+      registered.length,
+      0,
+      'outside the Sandbox route, the real matrix-service is left alone',
+    );
+
+    let originalURL = window.location.href;
+    try {
+      window.history.pushState(
+        null,
+        '',
+        '/_boxel-sandbox-runtime?bootstrapId=test&parentOrigin=https://host.example',
+      );
+      initializeSandboxMatrixServiceStub(fakeAppInstance);
+    } finally {
+      window.history.pushState(null, '', originalURL);
+    }
+
+    assert.strictEqual(
+      registered.length,
+      1,
+      'the Sandbox route registers exactly one replacement for matrix-service',
+    );
+    assert.strictEqual(registered[0]?.key, 'service:matrix-service');
+    assert.strictEqual(
+      registered[0]?.factory,
+      SandboxMatrixServiceStub,
+      'the registered factory is the stub, not the real MatrixService',
+    );
+
+    let stub = SandboxMatrixServiceStub.create() as unknown as Record<
+      string,
+      unknown
+    >;
+    assert.strictEqual(
+      stub['userId'],
+      undefined,
+      'a property read a lazy-matrix consumer already treats as optional (userId ?? null) degrades to undefined, not a throw',
+    );
+  });
+
+  test('RP-15.3: measureRenderedOutput distinguishes a populated render root from one that acked but painted nothing', function (assert) {
+    let missing = measureRenderedOutput(null, 'isolated');
+    assert.strictEqual(missing.format, 'isolated');
+    assert.strictEqual(missing.elementCount, 0);
+    assert.strictEqual(missing.textLength, 0);
+    assert.false(
+      missing.hasVisibleContent,
+      'a missing render root (the mount point never appeared) measures as no visible content',
+    );
+    assert.deepEqual(
+      missing.rootRect,
+      { width: 0, height: 0, top: 0, left: 0 },
+      'no element to measure a rect from',
+    );
+    assert.false(missing.rootHasOffsetParent);
+    assert.strictEqual(
+      typeof missing.documentVisibilityState,
+      'string',
+      'reports the real document.visibilityState regardless of root presence',
+    );
+    assert.true(
+      missing.bodyChildElementCount >= 0,
+      'reports the real document.body composition regardless of root presence — the paint-diagnosis fields this exists for',
+    );
+    assert.true(Array.isArray(missing.bodyChildren));
+
+    let empty = document.createElement('main');
+    document.body.append(empty);
+    try {
+      let diagnostic = measureRenderedOutput(empty, 'isolated');
+      assert.strictEqual(diagnostic.elementCount, 0);
+      assert.strictEqual(diagnostic.textLength, 0);
+      assert.false(
+        diagnostic.hasVisibleContent,
+        'an existing but empty render root (render() resolved, nothing rendered inside it) still measures as no visible content — this is the "acked but painted nothing" case',
+      );
+    } finally {
+      empty.remove();
+    }
+
+    let zeroSize = document.createElement('main');
+    zeroSize.textContent = 'Track: corridor-take-one';
+    zeroSize.style.width = '0';
+    zeroSize.style.height = '0';
+    zeroSize.style.overflow = 'hidden';
+    document.body.append(zeroSize);
+    try {
+      let diagnostic = measureRenderedOutput(zeroSize, 'isolated');
+      assert.true(
+        diagnostic.textLength > 0,
+        'has real text content, unlike the empty-root case above',
+      );
+      assert.false(
+        diagnostic.hasVisibleContent,
+        'text content alone is not sufficient — a zero-size root (present but unpainted, the exact defect a prior OR-based version of this check missed) must not read as visible',
+      );
+    } finally {
+      zeroSize.remove();
+    }
+
+    let populated = document.createElement('main');
+    populated.innerHTML = '<div><span>Track: corridor-take-one</span></div>';
+    document.body.append(populated);
+    try {
+      let diagnostic = measureRenderedOutput(populated, 'isolated');
+      assert.strictEqual(
+        diagnostic.elementCount,
+        2,
+        'counts every descendant element',
+      );
+      assert.strictEqual(
+        diagnostic.textLength,
+        'Track: corridor-take-one'.length,
+      );
+      assert.true(
+        diagnostic.hasVisibleContent,
+        'a render root with real, sized content measures as visible',
+      );
+      assert.true(
+        diagnostic.rootHasOffsetParent,
+        'an attached, painted element has an offsetParent',
+      );
+    } finally {
+      populated.remove();
+    }
+  });
+
+  test('RP-15.3: postRenderDiagnostic posts a bounded render-diagnostic message on the control port', async function (assert) {
+    let channel = new MessageChannel();
+    let received: unknown[] = [];
+    channel.port2.addEventListener('message', (event) => {
+      received.push(event.data);
+    });
+    channel.port2.start();
+    channel.port1.start();
+
+    postRenderDiagnostic(
+      channel.port1,
+      measureRenderedOutput(null, 'isolated'),
+    );
+
+    await waitUntil(() => received.length > 0, { timeout: 2000 });
+    let [message] = received as {
+      kind: string;
+      transportVersion: number;
+      format: string;
+      elementCount: number;
+      textLength: number;
+      hasVisibleContent: boolean;
+    }[];
+    assert.strictEqual(message?.kind, 'boxel-sandbox-render-diagnostic');
+    assert.strictEqual(message?.format, 'isolated');
+    assert.strictEqual(message?.elementCount, 0);
+    assert.strictEqual(message?.textLength, 0);
+    assert.false(message?.hasVisibleContent);
+
+    channel.port1.close();
+    channel.port2.close();
+  });
+
+  // False positive below (qunit/resolve-async): the two MessageChannel
+  // port.start() calls in this test are plain Web API calls (needed for
+  // addEventListener-based ports to dispatch queued messages), not
+  // assert.async()/done() callbacks. Every actual async operation in this
+  // test is a properly-awaited waitUntil().
+  // eslint-disable-next-line qunit/resolve-async
+  test('RP-15.3, RP-16.1: reportIntrinsicHeight measures the render root and reports its real height as the surface minimumHeight, deduped and stoppable', async function (assert) {
+    // The parent cannot ResizeObserve content inside a cross-origin iframe
+    // (unlike SurfaceElementModifier's SurfaceService.attach path for
+    // Direct/Capsule) — this is the child's own replacement, driving the
+    // existing `layout` capability with a measured `minimumHeight` instead
+    // of only the one-time `heightMode` the parent already sets before
+    // render. A real SandboxSurfaceClient/port pair drives this exactly as
+    // the mounted `attachSurface` modifier does in production.
+    let channel = new MessageChannel();
+    let layoutRequests: { heightMode: string; minimumHeight?: number }[] = [];
+    channel.port1.addEventListener('message', (event) => {
+      let request = event.data as {
+        kind?: string;
+        requestId?: string;
+        operation?: string;
+        layout?: { heightMode: string; minimumHeight?: number };
+      };
+      if (request?.kind !== 'boxel-surface-request') {
+        return;
+      }
+      if (request.operation === 'layout' && request.layout) {
+        layoutRequests.push(request.layout);
+      }
+      channel.port1.postMessage({
+        kind: 'boxel-surface-response',
+        protocolVersion: BOXEL_SURFACE_PROTOCOL_VERSION,
+        requestId: request.requestId,
+        ok: true,
+      });
+    });
+    channel.port1.start();
+    channel.port2.start();
+
+    let surface = new SandboxSurfaceClient(
+      channel.port2,
+      'surface:test' as SurfaceHandle,
+    );
+    let element = document.createElement('main');
+    element.style.width = '200px';
+    document.body.append(element);
+
+    try {
+      let stop = reportIntrinsicHeight(element, surface);
+      await waitUntil(() => layoutRequests.length > 0, { timeout: 2000 });
+      assert.deepEqual(
+        layoutRequests[0],
+        { heightMode: 'intrinsic', minimumHeight: 0 },
+        'reports a baseline immediately, before any content has rendered into an empty root',
+      );
+
+      element.textContent = 'Track: corridor-take-one';
+      element.style.height = '500px';
+      await waitUntil(() => layoutRequests.length > 1, { timeout: 2000 });
+      let last = layoutRequests[layoutRequests.length - 1];
+      assert.strictEqual(last?.heightMode, 'intrinsic');
+      assert.strictEqual(
+        last?.minimumHeight,
+        500,
+        "reports the element's real, resized height once the card's content lands",
+      );
+
+      let countAfterResize = layoutRequests.length;
+      stop();
+      element.style.height = '100px';
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      assert.strictEqual(
+        layoutRequests.length,
+        countAfterResize,
+        'stop() disconnects the observer — no further reports after teardown',
+      );
+    } finally {
+      element.remove();
+      surface.destroy();
+      channel.port1.close();
+      channel.port2.close();
+    }
+  });
+
+  // False positive below (qunit/resolve-async): reportRenderDiagnosticOnResize
+  // drives its callback off a real ResizeObserver, not an assert.async()/
+  // done() callback — every actual async operation in this test is a
+  // properly-awaited waitUntil().
+  // eslint-disable-next-line qunit/resolve-async
+  test('RP-15.3: reportRenderDiagnosticOnResize re-measures and reports again once a zero-geometry render root later gains real size — the page-reload case where the slot mounts before its ancestor has finished laying out', async function (assert) {
+    // Mirrors what actually happens on a page reload: the render root is
+    // born (and the child's own one-shot post-render measurement runs)
+    // while an ancestor in the PARENT document — the presentation slot's
+    // own stack-item, still mid opening-transition — has zero width, so the
+    // iframe's own viewport (and therefore this root, which fills it) is
+    // also zero-width. Nothing about that one-shot measurement is wrong —
+    // there really was no visible content yet — but nothing re-measures
+    // once real geometry lands, so the parent's onFirstPaint never fires
+    // and its placeholder overlay never hands off. This is the fix for
+    // that: the same box-change signal reportIntrinsicHeight already
+    // tracks for height also drives a re-measurement here.
+    let reports: ReturnType<typeof measureRenderedOutput>[] = [];
+    let measureAndReport = (element: HTMLElement) => {
+      reports.push(measureRenderedOutput(element, 'isolated'));
+    };
+
+    let root = document.createElement('main');
+    root.style.width = '0';
+    root.style.height = '0';
+    root.style.overflow = 'hidden';
+    root.innerHTML = '<div><span>Track: corridor-take-one</span></div>';
+    document.body.append(root);
+
+    try {
+      let stop = reportRenderDiagnosticOnResize(root, measureAndReport);
+      await waitUntil(() => reports.length > 0, { timeout: 2000 });
+      assert.false(
+        reports[0]?.hasVisibleContent,
+        'the initial measurement, taken while the root is still zero-size, correctly reports no visible content — exactly the "closed" placeholder overlay state on a fresh reload',
+      );
+
+      // The ancestor stack-item's opening transition finishes (or, in the
+      // real iframe case, the presentation slot itself gains its real
+      // width) and the root gains real geometry.
+      root.style.width = '1400px';
+      root.style.height = '600px';
+      await waitUntil(
+        () => reports[reports.length - 1]?.hasVisibleContent === true,
+        { timeout: 2000 },
+      );
+      let last = reports[reports.length - 1];
+      assert.true(
+        last?.hasVisibleContent,
+        "once the root gains real geometry, the resize-triggered re-measurement reports visible content without any new render() call — this is what lets the parent's onFirstPaint fire and hand off the placeholder",
+      );
+      assert.true((last?.rootRect.width ?? 0) > 0);
+
+      let countAfterResize = reports.length;
+      stop();
+      root.style.width = '300px';
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      assert.strictEqual(
+        reports.length,
+        countAfterResize,
+        'stop() disconnects the observer — no further reports after teardown',
+      );
+    } finally {
+      root.remove();
+    }
+  });
+
+  test("RP-15.3: whenNonzeroSize holds a card's first mount until its render root has real geometry — the correctness bar for a card that sizes a canvas/renderer exactly once with no ResizeObserver of its own", async function (assert) {
+    // A card class like a Three.js/WebGL viewer reads its mount point's
+    // geometry exactly once (a reasonable assumption on main, where a card
+    // only ever mounts at real size) and never re-measures. Re-measuring
+    // after the fact (reportRenderDiagnosticOnResize) cannot fix a renderer
+    // that already baked in zero-size dimensions — the card's first mount
+    // must not happen until real geometry exists.
+    let alreadySized = document.createElement('main');
+    alreadySized.style.width = '400px';
+    alreadySized.style.height = '300px';
+    document.body.append(alreadySized);
+    try {
+      let resolved = false;
+      void whenNonzeroSize(alreadySized).then(() => {
+        resolved = true;
+      });
+      await Promise.resolve();
+      assert.true(
+        resolved,
+        'a render root that already has real geometry resolves immediately — no delay on the common, non-reload case',
+      );
+    } finally {
+      alreadySized.remove();
+    }
+
+    let zeroSize = document.createElement('main');
+    zeroSize.style.width = '0';
+    zeroSize.style.height = '0';
+    document.body.append(zeroSize);
+    try {
+      let resolved = false;
+      void whenNonzeroSize(zeroSize, 2000).then(() => {
+        resolved = true;
+      });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      assert.false(
+        resolved,
+        'a zero-size render root — the reload case, before its ancestor has finished laying out — holds the mount rather than letting it proceed at zero size',
+      );
+
+      zeroSize.style.width = '1400px';
+      zeroSize.style.height = '600px';
+      await waitUntil(() => resolved, { timeout: 2000 });
+      assert.true(
+        resolved,
+        'resolves once the render root gains real geometry, without waiting out the full timeout',
+      );
+    } finally {
+      zeroSize.remove();
+    }
+
+    let neverSized = document.createElement('main');
+    neverSized.style.width = '0';
+    neverSized.style.height = '0';
+    document.body.append(neverSized);
+    try {
+      let resolved = false;
+      void whenNonzeroSize(neverSized, 50).then(() => {
+        resolved = true;
+      });
+      await waitUntil(() => resolved, { timeout: 2000 });
+      assert.true(
+        resolved,
+        'a render root that never gains real geometry (a genuinely collapsed/hidden slot, not just one mid-transition) is bounded — it resolves anyway after its timeout rather than hanging the render forever',
+      );
+    } finally {
+      neverSized.remove();
+    }
+  });
+
+  test('RP-15.3: the Sandbox process is born inside its presentation slot element and never re-parented — a repeat mount() is a no-op, and unmount() removes the iframe without moving it elsewhere', function (assert) {
+    // RP-15.3: "a live iframe is never re-parented." A cross-origin
+    // iframe's document reloads on ANY move — including one meant to
+    // preserve it (a parking lot) — so the only correct place to insert it
+    // is its permanent presentation slot, exactly once.
+    let released: unknown[] = [];
+    let surfaceService = {
+      register: () => 'surface:test',
+      release: (handle: unknown) => released.push(handle),
+      layout: () => undefined,
+    } as unknown as SurfaceServiceType;
+    let process = new SandboxRuntimeProcess({
+      childURL: 'https://sandbox.example.test/_boxel-sandbox-runtime',
+      childOrigin: 'https://sandbox.example.test',
+      surfaceService,
+      fetch: globalThis.fetch,
+      resolveModuleURL: (identifier) => identifier,
+      isTrustedModuleURL: () => false,
+      identity: { mode: 'sandbox', principal: 'user:test', surfaceId: 'x' },
+      connectTimeout: 60_000,
+    });
+
+    assert.false(
+      process.iframe.isConnected,
+      'the iframe does not exist in the document until mount()',
+    );
+
+    let slotElement = document.createElement('div');
+    document.body.append(slotElement);
+    try {
+      process.mount(slotElement);
+      let iframe = process.iframe;
+      assert.strictEqual(
+        iframe.parentElement,
+        slotElement,
+        'born directly inside its permanent slot element',
+      );
+      let srcAfterFirstMount = iframe.getAttribute('src');
+
+      process.mount(slotElement);
+      assert.strictEqual(
+        slotElement.children.length,
+        1,
+        'a repeat mount() call does not re-append (re-parent) the iframe',
+      );
+      assert.strictEqual(
+        iframe.getAttribute('src'),
+        srcAfterFirstMount,
+        'a repeat mount() does not reload the iframe',
+      );
+
+      process.unmount();
+      assert.false(
+        iframe.isConnected,
+        'unmount() removes the iframe from the document',
+      );
+      assert.strictEqual(
+        iframe.parentElement,
+        null,
+        'unmount() moves the iframe nowhere — it is simply gone, not relocated',
+      );
+    } finally {
+      process.destroy();
+      slotElement.remove();
+    }
+  });
+
+  test('RP-15.3: a failed connect (the timeout, since the child origin cannot boot here) reaches the Host as onMountFailed rather than an unhandled rejection', async function (assert) {
+    // getRenderSlot() no longer awaits the connect+render handshake before
+    // resolving (it mounts eagerly so the iframe can be born in its slot),
+    // so a background connect failure has to reach the Host some other
+    // way — this is that path.
+    let surfaceService = {
+      register: () => 'surface:test',
+      release: () => undefined,
+      layout: () => undefined,
+    } as unknown as SurfaceServiceType;
+    let process = new SandboxRuntimeProcess({
+      childURL: 'https://sandbox.example.test/_boxel-sandbox-runtime',
+      childOrigin: 'https://sandbox.example.test',
+      surfaceService,
+      fetch: globalThis.fetch,
+      resolveModuleURL: (identifier) => identifier,
+      isTrustedModuleURL: () => false,
+      identity: { mode: 'sandbox', principal: 'user:test', surfaceId: 'x' },
+      loadTimeout: 60_000,
+      // Short on purpose. The test dispatches the child document's load
+      // event below, so this exercises the post-load handshake phase rather
+      // than spending its transport budget on document/module loading.
+      connectTimeout: 50,
+    });
+
+    let slotElement = document.createElement('div');
+    document.body.append(slotElement);
+    let failures: Error[] = [];
+    process.onMountFailed((error) => failures.push(error));
+
+    try {
+      process.mount(slotElement);
+      process.iframe.dispatchEvent(new Event('load'));
+      await waitUntil(() => failures.length > 0, { timeout: 2000 });
+      assert.strictEqual(failures.length, 1);
+      assert.true(
+        /timed out/i.test(failures[0]?.message ?? ''),
+        'reports the connect timeout',
+      );
+
+      // A late subscriber (matches how the Host renderer subscribes only
+      // after getRenderSlot() resolves, which can race a fast failure)
+      // still gets the already-known failure, immediately.
+      let lateFailures: Error[] = [];
+      process.onMountFailed((error) => lateFailures.push(error));
+      assert.strictEqual(lateFailures.length, 1);
+    } finally {
+      process.destroy();
+      slotElement.remove();
+    }
+  });
+
+  test('RP-15.3: a cold Sandbox child gets a document-load budget independent of its transport handshake budget', async function (assert) {
+    let surfaceService = {
+      register: () => 'surface:test',
+      release: () => undefined,
+      layout: () => undefined,
+    } as unknown as SurfaceServiceType;
+    let process = new SandboxRuntimeProcess({
+      childURL: 'https://sandbox.example.test/_boxel-sandbox-runtime',
+      childOrigin: 'https://sandbox.example.test',
+      surfaceService,
+      fetch: globalThis.fetch,
+      resolveModuleURL: (identifier) => identifier,
+      isTrustedModuleURL: () => false,
+      identity: { mode: 'sandbox', principal: 'user:test', surfaceId: 'x' },
+      loadTimeout: 50,
+      // If this timer began at mount, it would win. It must not begin until
+      // the requested child document emits `load`.
+      connectTimeout: 1,
+    });
+
+    // A detached permanent slot makes document non-loading deterministic;
+    // no network behavior from the browser test harness is involved.
+    let detachedSlot = document.createElement('div');
+    let failures: Error[] = [];
+    process.onMountFailed((error) => failures.push(error));
+
+    try {
+      process.mount(detachedSlot);
+      await waitUntil(() => failures.length > 0, { timeout: 2000 });
+      assert.strictEqual(
+        failures[0]?.message,
+        'Timed out loading the Sandbox child',
+        'document boot fails on its own deadline, not the transport deadline',
+      );
+    } finally {
+      process.destroy();
+    }
+  });
+});
