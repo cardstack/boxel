@@ -235,3 +235,39 @@ export async function resolveLazyBuiltinLibrariesForExpressions(
   );
   return next;
 }
+
+const ALL_LAZY_LIBRARIES: BuiltinLibraryName[] = [
+  'formula-statistical',
+  'formula-bessel',
+  ...EXTRAS_LIBRARIES,
+  'validation',
+];
+
+/**
+ * Load every lazy formula extension and fold it into
+ * `DEFAULT_BUILTIN_LIBRARIES`, so synchronous evaluation — most
+ * importantly the `bxl()` / `expression()` computeVia factory, which
+ * cannot await a chunk mid-compute — sees the full formula surface.
+ *
+ * A host that hands BXL to card authors (where any expression may name
+ * any Excel function) awaits this once before serving the module. The
+ * chunks still arrive via dynamic import, so bundlers keep them out of
+ * the initial graph; embeds that skip this call keep the smaller core
+ * and the per-program auto-loading of the async APIs.
+ *
+ * Idempotent and safe to call concurrently — each chunk load is
+ * memoized module-wide.
+ */
+export async function loadAllFormulaExtensions(): Promise<void> {
+  await Promise.all([
+    ensureStatisticalLoaded(),
+    ensureBesselLoaded(),
+    ensureExtrasBundleLoaded(),
+    ensureValidationLoaded(),
+  ]);
+  for (const name of ALL_LAZY_LIBRARIES) {
+    if (!DEFAULT_BUILTIN_LIBRARIES.includes(name)) {
+      DEFAULT_BUILTIN_LIBRARIES.push(name);
+    }
+  }
+}
