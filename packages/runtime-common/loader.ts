@@ -429,17 +429,14 @@ export class Loader {
     let resolvedModule = new URL(moduleIdentifier);
     let resolvedModuleIdentifier = resolvedModule.href;
     if (!this.moduleShims.has(resolvedModuleIdentifier)) {
-      // Normalize tracker keys to the virtual-alias URL form when one
-      // exists (the dependency tracker requires `http://`/`https://`
-      // URLs — see `canonicalURL` in dependency-tracker.ts — so RRI
-      // prefix forms can't be used as keys). Without this, a base
-      // module imported via the virtual alias
-      // (`https://cardstack.com/base/X`) and the same module imported
-      // via the RRI prefix (`@cardstack/base/X` → resolveImport →
-      // resolved real URL `https://localhost:4201/base/X`) get tracked
-      // as two separate entries.
-      let trackingKey = this.canonicalizeTrackingKey(resolvedModuleIdentifier);
-      trackRuntimeModuleDependency(trackingKey, dependencyTrackingContext);
+      // Tracked under the module cache's key, so a module reached by any of
+      // its spellings — virtual alias, resolved real URL, RRI prefix — is one
+      // node rather than several. Sharing the key with the cache means a
+      // module's dependency identity and its class identity can't diverge.
+      trackRuntimeModuleDependency(
+        this.moduleCacheKey(resolvedModuleIdentifier),
+        dependencyTrackingContext,
+      );
     }
 
     await this.advanceToState(resolvedModule, 'evaluated');
@@ -546,18 +543,6 @@ export class Loader {
     return result;
   }
 
-  // The runtime dependency tracker keys module nodes by http(s) URL — its
-  // canonicalURL guard drops realm-prefix identifiers (see
-  // dependency-tracker.ts) — and this loader collapses each tracked module
-  // onto its virtual-alias URL when one is registered (see
-  // canonicalizeTrackingKey). Converts any module identifier, canonical RRI
-  // form included, into that tracking-key form. Callers recording
-  // loader-derived module identifiers with the tracker must cross this
-  // boundary; identifiers stay in canonical RRI form everywhere else.
-  dependencyTrackingKey(moduleIdentifier: string): string {
-    return this.canonicalizeTrackingKey(this.resolveImport(moduleIdentifier));
-  }
-
   private trackKnownModuleDependencies(
     rootModuleIdentifier: string,
     dependencyTrackingContext?: RuntimeDependencyTrackingContext,
@@ -580,11 +565,10 @@ export class Loader {
       rootModuleIdentifier,
     )) {
       if (!this.moduleShims.has(moduleIdentifier)) {
-        // Same canonicalization as the top-level import-time tracking
-        // call — collapse virtual-alias / resolved real URL forms onto
-        // the virtual-alias URL.
-        let trackingKey = this.canonicalizeTrackingKey(moduleIdentifier);
-        trackRuntimeModuleDependency(trackingKey, dependencyTrackingContext);
+        trackRuntimeModuleDependency(
+          this.moduleCacheKey(moduleIdentifier),
+          dependencyTrackingContext,
+        );
       }
     }
   }
@@ -947,18 +931,6 @@ export class Loader {
   // virtual-alias (`https://cardstack.com/base/X`) and resolved real URL
   // (`https://localhost:4201/base/X`) for the same module. Returns the
   // input unchanged when no virtual alias is registered.
-  private canonicalizeTrackingKey(moduleIdentifier: string): string {
-    if (!this.virtualNetwork) {
-      return moduleIdentifier;
-    }
-    try {
-      let parsed = new URL(moduleIdentifier);
-      let virtual = this.virtualNetwork.mapURL(parsed, 'real-to-virtual');
-      return virtual ? virtual.href : moduleIdentifier;
-    } catch {
-      return moduleIdentifier;
-    }
-  }
 
   private captureIdentitiesOfModuleExports(
     module: any,

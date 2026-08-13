@@ -809,4 +809,84 @@ module(basename(import.meta.filename), function (hooks) {
       'module dep is recorded once across repeated imports',
     );
   });
+
+  test('records prefix-form identifiers alongside URL-form ones', async function (assert) {
+    beginRuntimeDependencyTrackingSession({
+      sessionKey: 'session-prefix-form',
+      rootURL: 'https://example.com/root.json',
+      rootKind: 'instance',
+    });
+
+    await withRuntimeDependencyTrackingContext(
+      {
+        mode: 'non-query',
+        source: 'test:prefix-form',
+        consumer: 'https://example.com/root.json',
+        consumerKind: 'instance',
+      },
+      async () => {
+        // A module identifier, its executable extension stripped as for a URL.
+        trackRuntimeModuleDependency('@cardstack/base/card-api.gts');
+        // An instance identifier, given the `.json` suffix the index carries.
+        trackRuntimeInstanceDependency('@cardstack/catalog/Author/mango');
+        // A file identifier, kept verbatim.
+        trackRuntimeFileDependency('@cardstack/base/README.md');
+        // Query strings and fragments are stripped in prefix form too.
+        trackRuntimeModuleDependency('@cardstack/base/pet?v=2#frag');
+      },
+    );
+
+    let { deps } = snapshotRuntimeDependencies({ excludeQueryOnly: true });
+    assert.true(
+      deps.includes('@cardstack/base/card-api'),
+      'a prefix-form module dep is recorded with its extension stripped',
+    );
+    assert.true(
+      deps.includes('@cardstack/catalog/Author/mango.json'),
+      'a prefix-form instance dep is recorded in the form the index carries',
+    );
+    assert.true(
+      deps.includes('@cardstack/base/README.md'),
+      'a prefix-form file dep is recorded verbatim',
+    );
+    assert.true(
+      deps.includes('@cardstack/base/pet'),
+      'a prefix-form dep is recorded without its query string or fragment',
+    );
+  });
+
+  test('drops identifiers that are neither a URL nor a prefix-form RRI', async function (assert) {
+    beginRuntimeDependencyTrackingSession({
+      sessionKey: 'session-junk',
+      rootURL: 'https://example.com/root.json',
+      rootKind: 'instance',
+    });
+
+    await withRuntimeDependencyTrackingContext(
+      {
+        mode: 'non-query',
+        source: 'test:junk',
+        consumer: 'https://example.com/root.json',
+        consumerKind: 'instance',
+      },
+      async () => {
+        // None of these name a resource the index can invalidate against, so
+        // recording them would put an edge in the graph that nothing satisfies.
+        for (let junk of [
+          'lodash-es',
+          './relative-module',
+          '../up-one',
+          '/root-relative',
+          'data:text/javascript,export default 1',
+          'blob:https://example.com/abc',
+          '',
+        ]) {
+          trackRuntimeModuleDependency(junk);
+        }
+      },
+    );
+
+    let { deps } = snapshotRuntimeDependencies({ excludeQueryOnly: true });
+    assert.deepEqual(deps, [], 'no non-canonical identifier is recorded');
+  });
 });
