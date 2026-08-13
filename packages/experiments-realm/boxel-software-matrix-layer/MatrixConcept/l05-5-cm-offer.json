@@ -8,9 +8,9 @@
       "concept": "Offer",
       "symbol": "Of",
       "implemented": false,
-      "evidenceTier": null,
-      "auditStatus": "Missing",
-      "whereImplemented": null,
+      "evidenceTier": "POC realm",
+      "auditStatus": "POC only",
+      "whereImplemented": "experiments-realm/offer.gts (Offer CardDef) + commands/approve-chain-step-command.gts, commands/generate-offer-letter-command.gts",
       "reference": null,
       "catalogMatch": null,
       "provenance": null,
@@ -19,15 +19,16 @@
       "workState": "Done",
       "notes": "App 2: Talent & Resource Tracker (v1)",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/74385ab3-e12c-49e4-850f-8b36780f8159",
+      "specTarget": "shared block",
+      "consumers": "candidate, advance-to-offer-command, extend-offer-command, generate-offer-letter-command, talent-resource-tracker",
+      "consumerExamples": "{\"candidate\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Candidate/26b5aae6-a62f-4e2d-85d3-bbecf8d43298\", \"talent-resource-tracker\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/talent-resource-tracker/TalentResourceTracker/tracker\"}",
+      "catalogDisposition": null,
       "cardInfo": {
         "name": null,
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      },
-      "specTarget": "shared block",
-      "consumers": "candidate, advance-to-offer-command, extend-offer-command, generate-offer-letter-command, talent-resource-tracker",
-      "consumerExamples": "{\"candidate\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Candidate/26b5aae6-a62f-4e2d-85d3-bbecf8d43298\", \"talent-resource-tracker\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/talent-resource-tracker/TalentResourceTracker/tracker\"}"
+      }
     },
     "meta": {
       "adoptsFrom": {

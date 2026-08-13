@@ -8,26 +8,27 @@
       "concept": "Activity",
       "symbol": "Ac",
       "implemented": false,
-      "evidenceTier": null,
-      "auditStatus": "Missing",
-      "whereImplemented": null,
+      "evidenceTier": "POC realm",
+      "auditStatus": "POC only",
+      "whereImplemented": "experiments-realm/activity.gts | experiments-realm/boxel-software-matrix-layer/activity.gts | experiments-realm/local-inherit.gts",
       "reference": null,
       "catalogMatch": null,
       "provenance": "periodic:Activity",
       "domainKit": null,
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1 · Built — experiments-realm/activity.gts, typed timeline entry, POC tier",
+      "notes": "v1 \u00b7 Built \u2014 experiments-realm/activity.gts, typed timeline entry, POC tier",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/activity",
+      "specTarget": "shared block",
+      "consumers": "revenue-os",
+      "consumerExamples": "{\"revenue-os\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/RevenueOs/main\"}",
+      "catalogDisposition": null,
       "cardInfo": {
         "name": null,
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      },
-      "specTarget": "shared block",
-      "consumers": "revenue-os",
-      "consumerExamples": "{\"revenue-os\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/RevenueOs/main\"}"
+      }
     },
     "meta": {
       "adoptsFrom": {

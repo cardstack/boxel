@@ -10,7 +10,7 @@
       "implemented": false,
       "evidenceTier": "POC realm",
       "auditStatus": "POC only",
-      "whereImplemented": null,
+      "whereImplemented": "experiments-realm/employee.gts (Employee CardDef) \u2014 org-tree hierarchy, Directory tab (live query)",
       "reference": "institutional-meerkat/legal + audited kit realms",
       "catalogMatch": null,
       "provenance": null,
@@ -19,15 +19,16 @@
       "workState": "In Progress",
       "notes": "App 2: Talent & Resource Tracker",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/09eb327c-2494-4e30-8b6e-1e7b9972ab37",
+      "specTarget": "shared block",
+      "consumers": "approval-step-field, candidate, approve-offer-command, create-onboarding-checklist-command, extend-offer-command, schedule-interview-command, screen-application-command, org-tree, schedule-interview-dialog, interview-feedback-field, meeting, onboarding-checklist, performance-review, position, project, pto-request, talent-resource-tracker, team",
+      "consumerExamples": "{\"candidate\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Candidate/26b5aae6-a62f-4e2d-85d3-bbecf8d43298\", \"meeting\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Meeting/eng-standup\", \"onboarding-checklist\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/OnboardingChecklist/dana-kim-onboarding\", \"performance-review\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/PerformanceReview/leo-h2-2026\", \"position\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Position/frontend-engineer\", \"project\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Project/benefits-migration\", \"pto-request\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/PtoRequest/dana-vacation-draft\", \"talent-resource-tracker\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/talent-resource-tracker/TalentResourceTracker/tracker\", \"team\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Team/engineering\"}",
+      "catalogDisposition": null,
       "cardInfo": {
         "name": null,
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      },
-      "specTarget": "shared block",
-      "consumers": "approval-step-field, candidate, approve-offer-command, create-onboarding-checklist-command, extend-offer-command, schedule-interview-command, screen-application-command, org-tree, schedule-interview-dialog, interview-feedback-field, meeting, onboarding-checklist, performance-review, position, project, pto-request, talent-resource-tracker, team",
-      "consumerExamples": "{\"candidate\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Candidate/26b5aae6-a62f-4e2d-85d3-bbecf8d43298\", \"meeting\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Meeting/eng-standup\", \"onboarding-checklist\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/OnboardingChecklist/dana-kim-onboarding\", \"performance-review\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/PerformanceReview/leo-h2-2026\", \"position\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Position/frontend-engineer\", \"project\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Project/benefits-migration\", \"pto-request\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/PtoRequest/dana-vacation-draft\", \"talent-resource-tracker\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/talent-resource-tracker/TalentResourceTracker/tracker\", \"team\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Team/engineering\"}"
+      }
     },
     "meta": {
       "adoptsFrom": {

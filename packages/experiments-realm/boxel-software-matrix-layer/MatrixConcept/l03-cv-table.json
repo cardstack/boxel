@@ -8,26 +8,27 @@
       "concept": "Table",
       "symbol": "Ta",
       "implemented": false,
-      "evidenceTier": null,
-      "auditStatus": "Missing",
-      "whereImplemented": null,
+      "evidenceTier": "POC realm",
+      "auditStatus": "POC only",
+      "whereImplemented": "experiments-realm/boxel-software-matrix-layer/table.gts | experiments-realm/table.gts",
       "reference": null,
       "catalogMatch": null,
       "provenance": "periodic:Table",
       "domainKit": null,
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1 · Built — experiments-realm/table.gts, POC tier",
+      "notes": "v1 \u00b7 Built \u2014 experiments-realm/table.gts, POC tier",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/table",
+      "specTarget": "shared block",
+      "consumers": "revenue-os, table-demo",
+      "consumerExamples": "{\"revenue-os\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/RevenueOs/main\", \"table-demo\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/InvoiceTableDemo/invoice-tracker\"}",
+      "catalogDisposition": null,
       "cardInfo": {
         "name": null,
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      },
-      "specTarget": "shared block",
-      "consumers": "revenue-os, table-demo",
-      "consumerExamples": "{\"revenue-os\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/RevenueOs/main\", \"table-demo\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/InvoiceTableDemo/invoice-tracker\"}"
+      }
     },
     "meta": {
       "adoptsFrom": {

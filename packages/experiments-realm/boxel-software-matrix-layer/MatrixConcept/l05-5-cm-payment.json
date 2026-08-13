@@ -8,26 +8,27 @@
       "concept": "Payment",
       "symbol": "Pa",
       "implemented": false,
-      "evidenceTier": null,
-      "auditStatus": "Missing",
-      "whereImplemented": null,
+      "evidenceTier": "POC realm",
+      "auditStatus": "POC only",
+      "whereImplemented": "experiments-realm/boxel-software-matrix-layer/payment.gts | experiments-realm/payment.gts",
       "reference": null,
       "catalogMatch": null,
       "provenance": "periodic:Payment",
       "domainKit": "Commerce",
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1 · Built — experiments-realm/payment.gts, POC tier",
+      "notes": "v1 \u00b7 Built \u2014 experiments-realm/payment.gts, POC tier",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/payment",
+      "specTarget": "shared block",
+      "consumers": "invoice, record-payment",
+      "consumerExamples": "{\"invoice\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Invoice/inv-2026-018\"}",
+      "catalogDisposition": null,
       "cardInfo": {
         "name": null,
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      },
-      "specTarget": "shared block",
-      "consumers": "invoice, record-payment",
-      "consumerExamples": "{\"invoice\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Invoice/inv-2026-018\"}"
+      }
     },
     "meta": {
       "adoptsFrom": {

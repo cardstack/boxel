@@ -8,26 +8,27 @@
       "concept": "Duplicate",
       "symbol": "Du",
       "implemented": false,
-      "evidenceTier": null,
-      "auditStatus": "Missing",
-      "whereImplemented": null,
+      "evidenceTier": "POC realm",
+      "auditStatus": "POC only",
+      "whereImplemented": "experiments-realm/boxel-software-matrix-layer/duplicate.gts | experiments-realm/duplicate.gts",
       "reference": null,
       "catalogMatch": null,
       "provenance": "periodic:Duplicate",
       "domainKit": null,
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1 · Built — experiments-realm/duplicate.gts, POC tier. Clones any card (contained fields + links, not computeds); the consumer patches the copy to decide what differs. Exercised live: invoice → new draft",
+      "notes": "v1 \u00b7 Built \u2014 experiments-realm/duplicate.gts, POC tier. Clones any card (contained fields + links, not computeds); the consumer patches the copy to decide what differs. Exercised live: invoice \u2192 new draft",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/duplicate",
+      "specTarget": "shared block",
+      "consumers": "revenue-os",
+      "consumerExamples": "{\"revenue-os\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/RevenueOs/main\"}",
+      "catalogDisposition": null,
       "cardInfo": {
         "name": null,
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      },
-      "specTarget": "shared block",
-      "consumers": "revenue-os",
-      "consumerExamples": "{\"revenue-os\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/RevenueOs/main\"}"
+      }
     },
     "meta": {
       "adoptsFrom": {
