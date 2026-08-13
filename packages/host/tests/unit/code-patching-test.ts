@@ -1,6 +1,7 @@
 import { module, test } from 'qunit';
 
 import {
+  containsSearchReplaceMarker,
   REPLACE_MARKER,
   SEARCH_MARKER,
   SEPARATOR_MARKER,
@@ -239,6 +240,29 @@ ${SEARCH_MARKER}
 { "old": true }
 ${REPLACE_MARKER}`;
       assert.false(isCompleteSearchReplaceBlock(block));
+    });
+
+    // An answer too long for one event is split at a character count that knows
+    // nothing about what it is cutting through, so each half of a straddled
+    // block holds only some of the markers.
+    test('recognizes a lone marker from either half of a split block', async function (assert) {
+      assert.true(
+        containsSearchReplaceMarker(`${SEARCH_MARKER}\n{ "old": true }`),
+        'the head half',
+      );
+      assert.true(
+        containsSearchReplaceMarker(`{ "new": true }\n${REPLACE_MARKER}`),
+        'the tail half',
+      );
+      assert.true(
+        containsSearchReplaceMarker(`{ "x": 1 }\n${DRIFTED_SEPARATOR}`),
+        'a drifted separator alone',
+      );
+      assert.false(
+        containsSearchReplaceMarker('const x = 1;'),
+        'ordinary code carries no marker',
+      );
+      assert.false(containsSearchReplaceMarker(''), 'empty body');
     });
   },
 );

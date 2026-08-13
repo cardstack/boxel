@@ -64,6 +64,41 @@ function replaceCatalogRealmURL(value: string): string {
   return value.split(DEFAULT_CATALOG_REALM_URL).join(catalogRealmURL);
 }
 
+// The prompt marks the end of the stable conversation prefix with a
+// cache_control breakpoint, which turns that message's string content into a
+// content-part array. Tests that read a message's text must tolerate both
+// shapes, since which message carries the marker shifts with the history.
+function messageText(
+  message: { content: string | { type: string; text?: string }[] } | undefined,
+): string {
+  if (!message) {
+    return '';
+  }
+  let { content } = message;
+  if (typeof content === 'string') {
+    return content;
+  }
+  return content
+    .filter((part) => part.type === 'text')
+    .map((part) => part.text ?? '')
+    .join('');
+}
+
+// Total cache_control markers across the whole prompt. Anthropic allows at
+// most 4 per request; the prompt is designed to emit exactly 2 (system +
+// end of stable history), or 1 on a first turn with no history.
+function countCacheBreakpoints(
+  messages: { content: string | { cache_control?: unknown }[] }[],
+): number {
+  let count = 0;
+  for (let message of messages) {
+    if (Array.isArray(message.content)) {
+      count += message.content.filter((part) => part.cache_control).length;
+    }
+  }
+  return count;
+}
+
 function oldPatchTool(card: CardDef, properties: any): Tool {
   return {
     type: 'function',
@@ -189,12 +224,12 @@ module('buildPromptForModel', (hooks) => {
     // Should have a system prompt and a user prompt
     assert.equal(result.length, 3);
     assert.equal(result[0].role, 'system');
-    assert.equal(result[1].role, 'system');
+    assert.equal(result[1].role, 'user');
     assert.equal(result[2].role, 'user');
-    assert.equal(result[2].content, 'Hey');
 
+    assert.equal(messageText(result[1]), 'Hey');
     assert.equal(
-      result[1].content,
+      result[2].content,
       `The user is currently viewing the following user interface:
 Room ID: room1
 Submode: code
@@ -288,12 +323,12 @@ Current date and time: 2025-06-11T11:43:00.533Z
     // Should have a system prompt and a user prompt
     assert.equal(result.length, 3);
     assert.equal(result[0].role, 'system');
-    assert.equal(result[1].role, 'system');
+    assert.equal(result[1].role, 'user');
     assert.equal(result[2].role, 'user');
-    assert.equal(result[2].content, 'Hey');
 
+    assert.equal(messageText(result[1]), 'Hey');
     assert.equal(
-      result[1].content,
+      result[2].content,
       `The user is currently viewing the following user interface:
 Room ID: room1
 Submode: code
@@ -373,12 +408,12 @@ Current date and time: 2025-06-11T11:43:00.533Z
     // Should have a system prompt and a user prompt
     assert.equal(result.length, 3);
     assert.equal(result[0].role, 'system');
-    assert.equal(result[1].role, 'system');
+    assert.equal(result[1].role, 'user');
     assert.equal(result[2].role, 'user');
-    assert.equal(result[2].content, 'Hey');
 
+    assert.equal(messageText(result[1]), 'Hey');
     assert.equal(
-      result[1].content,
+      result[2].content,
       `The user is currently viewing the following user interface:
 Room ID: room1
 Submode: workspace-chooser
@@ -445,12 +480,12 @@ Current date and time: 2025-06-11T11:43:00.533Z
     // Should have a system prompt and a user prompt
     assert.equal(result.length, 3);
     assert.equal(result[0].role, 'system');
-    assert.equal(result[1].role, 'system');
+    assert.equal(result[1].role, 'user');
     assert.equal(result[2].role, 'user');
-    assert.equal(result[2].content, 'Hey');
 
+    assert.equal(messageText(result[1]), 'Hey');
     assert.equal(
-      result[1].content,
+      result[2].content,
       `The user is currently viewing the following user interface:
 Room ID: room1
 Submode: code
@@ -532,10 +567,10 @@ Current date and time: 2025-06-11T11:43:00.533Z
     // Should include the body as well as the card
     assert.equal(result.length, 3);
     assert.equal(result[0].role, 'system');
-    assert.equal(result[1].role, 'system');
+    assert.equal(result[1].role, 'user');
     assert.equal(result[2].role, 'user');
     assert.true(
-      (result[2].content as string).startsWith('Hey'),
+      messageText(result[1]).includes('Hey'),
       'message body should be in the user prompt',
     );
     if (
@@ -543,32 +578,32 @@ Current date and time: 2025-06-11T11:43:00.533Z
       history[0].content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE
     ) {
       assert.true(
-        (result[2].content as string).includes(`"firstName": "Terry"`),
+        messageText(result[1]).includes(`"firstName": "Terry"`),
         'attached card should be in the message that it was sent with 1',
       );
       assert.true(
-        (result[2].content as string).includes(`"lastName": "Pratchett"`),
+        messageText(result[1]).includes(`"lastName": "Pratchett"`),
         'attached card should be in the message that it was sent with 2',
       );
       assert.true(
-        (result[1].content as string).includes('Room ID: room1'),
-        'roomId should be in the system context message',
+        messageText(result[2]).includes('Room ID: room1'),
+        'roomId should be in the trailing context message',
       );
       assert.true(
-        (result[1].content as string).includes('Submode: interact'),
-        'submode should be in the system context message',
+        messageText(result[2]).includes('Submode: interact'),
+        'submode should be in the trailing context message',
       );
       assert.true(
-        (result[1].content as string).includes(
+        messageText(result[2]).includes(
           'Workspace: http://localhost:4201/experiments',
         ),
-        'workspace should be in the system context message',
+        'workspace should be in the trailing context message',
       );
       assert.true(
-        (result[1].content as string).includes(
+        messageText(result[2]).includes(
           'Open cards:\n - http://localhost:4201/experiments/Author/1\n',
         ),
-        'open card ids should be in the system context message',
+        'open card ids should be in the trailing context message',
       );
     } else {
       assert.true(
@@ -1034,7 +1069,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
 
     let userMessages = prompt.filter((message) => message.role === 'user');
     assert.ok(
-      (userMessages[0]?.content as string).includes(
+      messageText(userMessages[0]).includes(
         `
 Attached Files (files with newer versions don't show their content):
 [spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts)
@@ -1043,7 +1078,7 @@ Attached Files (files with newer versions don't show their content):
       ),
     );
     assert.ok(
-      (userMessages[1]?.content as string).includes(
+      messageText(userMessages[1]).includes(
         `
 Attached Files (files with newer versions don't show their content):
 [spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts)
@@ -1054,7 +1089,7 @@ Attached Files (files with newer versions don't show their content):
       ),
     );
     assert.ok(
-      (userMessages[2]?.content as string).includes(
+      messageText(userMessages[2]).includes(
         `
 Attached Files (files with newer versions don't show their content):
 [spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts):
@@ -1066,7 +1101,7 @@ Attached Files (files with newer versions don't show their content):
     );
 
     assert.ok(
-      (prompt[prompt.length - 2].content as string).includes(
+      messageText(prompt[prompt.length - 1]).includes(
         'File open in code editor: http://test-realm-server/my-realm/spaghetti-recipe.gts',
       ),
       'Context should include the URL of the file open in the code editor',
@@ -1369,26 +1404,24 @@ Attached Files (files with newer versions don't show their content):
       (message) => message.role === 'user',
     );
     assert.true(
-      (userMessages[0]?.content as string).includes(
+      messageText(userMessages[0]).includes(
         'http://localhost:4201/experiments/Author/1',
       ),
     );
     assert.false(
-      (userMessages[0]?.content as string).includes('"firstName": "Terry"'),
+      messageText(userMessages[0]).includes('"firstName": "Terry"'),
       'should not include the contents of the first version of the card in the first user message',
     );
     assert.true(
-      (userMessages[1]?.content as string).includes(
+      messageText(userMessages[1]).includes(
         'http://localhost:4201/experiments/Author/1',
       ),
     );
     assert.true(
-      (userMessages[1]?.content as string).includes(
-        '"firstName": "Newer Terry"',
-      ),
+      messageText(userMessages[1]).includes('"firstName": "Newer Terry"'),
     );
     assert.true(
-      (userMessages[1]?.content as string).includes(
+      messageText(userMessages[1]).includes(
         'http://localhost:4201/experiments/Author/2',
       ),
     );
@@ -1761,10 +1794,10 @@ Attached Files (files with newer versions don't show their content):
     let nonEditableCardsMessage =
       'You are unable to edit any cards, the user has not given you access, they need to open the card and let it be auto-attached.';
 
-    let userContextMessage = messages?.[messages.length - 2];
+    let userContextMessage = messages?.[messages.length - 1];
     assert.ok(
-      (userContextMessage?.content as string).includes(nonEditableCardsMessage),
-      'System context message should include the "unable to edit cards" message when there are attached cards and no tools, and no attached files, but was ' +
+      messageText(userContextMessage).includes(nonEditableCardsMessage),
+      'The context leading the user turn should include the "unable to edit cards" message when there are attached cards and no tools, and no attached files, but was ' +
         userContextMessage?.content,
     );
 
@@ -1784,7 +1817,7 @@ Attached Files (files with newer versions don't show their content):
     );
 
     assert.ok(
-      !(messages2?.[messages2.length - 2].content as string).includes(
+      !messageText(messages2?.[messages2.length - 2]).includes(
         nonEditableCardsMessage,
       ),
       'System context message should not include the "unable to edit cards" message when there are attached cards and a tool',
@@ -1810,7 +1843,7 @@ Attached Files (files with newer versions don't show their content):
     );
 
     assert.ok(
-      !(messages3?.[messages3.length - 2].content as string).includes(
+      !messageText(messages3?.[messages3.length - 2]).includes(
         nonEditableCardsMessage,
       ),
       'System context message should not include the "unable to edit cards" message when there is an attached file',
@@ -1997,6 +2030,7 @@ Attached Files (files with newer versions don't show their content):
     ).messages!;
     assert.equal(result.length, 3);
     assert.equal(result[0].role, 'system');
+    assert.equal(result[2].role, 'user');
     const systemPromptText = (result[0].content as TextContent[])
       .map((c) => c.text)
       .join('\n');
@@ -2128,9 +2162,9 @@ Attached Files (files with newer versions don't show their content):
       systemPromptText.includes('Use pirate colloquialism when responding.'),
       'skill card instructions included in the system message',
     );
-    assert.equal(result[2].role, 'user');
+    assert.equal(result[1].role, 'user');
     assert.true(
-      (result[2].content as string).includes(
+      messageText(result[1]).includes(
         '"appTitle": "Radio Episode Tracker for Nerds"',
       ),
       'attached card details included in the user message',
@@ -2367,6 +2401,7 @@ Attached Files (files with newer versions don't show their content):
       fakeMatrixClient,
     );
     assert.equal(messages!.length, 3);
+    assert.equal(messages![1].role, 'user');
     assert.equal(messages![2].role, 'user');
     assert.true(tools!.length === 1);
     assert.deepEqual(toolChoice, {
@@ -2725,7 +2760,7 @@ Attached Files (files with newer versions don't show their content):
     assert.equal(result[5].tool_call_id, 'tool-call-id-1');
     const expected = `Tool call executed, with result card: {"data":{"type":"card","attributes":{"title":"Search Results","description":"Here are the search results","results":[{"data":{"type":"card","id":"http://localhost:4201/drafts/Author/1","attributes":{"firstName":"Alice","lastName":"Enwunder","photo":null,"body":"Alice is a software engineer at Google.","description":null,"thumbnailURL":null},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}]},"meta":{"adoptsFrom":{"module":"@cardstack/base/search-results","name":"SearchResults"}}}}.`;
 
-    assert.equal((result[5].content as string).trim(), expected.trim());
+    assert.equal(messageText(result[5]).trim(), expected.trim());
   });
 
   test('pairs a pre-rename request/result (legacy wire keys) with the same tool_call_id', async () => {
@@ -2929,7 +2964,7 @@ Attached Files (files with newer versions don't show their content):
     );
     assert.ok(toolCallMessage, 'Should have a tool call message');
     assert.ok(
-      (toolCallMessage!.content as string).includes('Cloudy'),
+      messageText(toolCallMessage!).includes('Cloudy'),
       'Tool call result should include "Cloudy"',
     );
   });
@@ -3054,7 +3089,7 @@ Attached Files (files with newer versions don't show their content):
       'Should have one tool call message',
     );
     assert.ok(
-      (toolCallMessages[0].content as string).includes('Tool call executed'),
+      messageText(toolCallMessages[0]).includes('Tool call executed'),
       'Tool call result should include "Tool call executed"',
     );
   });
@@ -3175,11 +3210,11 @@ Attached Files (files with newer versions don't show their content):
       'Should have two tool call messages',
     );
     assert.ok(
-      (toolCallMessages[0].content as string).includes('Cloudy'),
+      messageText(toolCallMessages[0]).includes('Cloudy'),
       'Tool call result should include "Cloudy"',
     );
     assert.ok(
-      (toolCallMessages[1].content as string).includes('Sunny'),
+      messageText(toolCallMessages[1]).includes('Sunny'),
       'Tool call result should include "Sunny"',
     );
   });
@@ -3347,8 +3382,9 @@ Attached Files (files with newer versions don't show their content):
     // we should not have any tools available
     assert.true(tools!.length == 0, 'Should not have tools available');
 
+    assert.equal(messageText(messages![1]), 'Command Definitions');
     assert.equal(
-      messages![1].content,
+      messages![2].content,
       `The user is currently viewing the following user interface:
 Room ID: !XuZQzeYAGZzFQFYUzQ:localhost
 Submode: interact
@@ -3516,10 +3552,10 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
     assert.deepEqual(
       messages!.map((m) => m.role),
-      ['system', 'system', 'user', 'assistant'],
+      ['system', 'user', 'assistant', 'user'],
     );
     assert.equal(
-      messages![3].content,
+      messageText(messages![2]),
       'Updating the file...\n' +
         'http://test.com/spaghetti-recipe.gts\n' +
         '[Omitting previously suggested and applied code change]\n' +
@@ -3617,14 +3653,12 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
     assert.equal(messages![2].role, 'assistant');
     assert.equal(
-      messages![2].content,
+      messageText(messages![2]),
       'I see a card with the ID "http://localhost:4201/admin/personal/BusinessCard/business_card". It appears to be a business card for Jane Smith, a Senior Software Architect at Innovative Solutions Inc.',
     );
     assert.equal(messages![3].role, 'user');
     assert.true(
-      (messages![3].content as string).startsWith(
-        'change the name to stephanie',
-      ),
+      messageText(messages![3]).startsWith('change the name to stephanie'),
     );
     assert.equal(messages![4].role, 'assistant');
     assert.equal(
@@ -3638,7 +3672,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       'patchCardInstance',
       'Should have patchCardInstance tool call',
     );
-    assert.true((messages![6].content as string).includes('Business Card V2'));
+    assert.true(messageText(messages![6]).includes('Business Card V2'));
   });
 
   test('Responds to successful completion of lone code patch', async function () {
@@ -3661,7 +3695,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.ok(userMessages.length >= 1, 'Should have user messages');
     assert.false(
       userMessages.some((message) =>
-        (message.content as string).includes(
+        messageText(message).includes(
           '(The user has successfully applied code patch',
         ),
       ),
@@ -3712,7 +3746,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.ok(userMessages.length >= 1, 'Should have user messages');
     assert.false(
       userMessages.some((message) =>
-        (message.content as string).includes('(The user has successfully'),
+        messageText(message).includes('(The user has successfully'),
       ),
       'Code patch result messages should be omitted',
     );
@@ -3781,13 +3815,17 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.strictEqual(shouldRespond, true, 'AiBot should solicit a response');
     assert.deepEqual(
       messages!.map((m) => m.role),
-      ['system', 'user', 'assistant', 'tool', 'system'],
+      ['system', 'user', 'assistant', 'tool', 'user'],
     );
     const userMessages = messages!.filter((message) => message.role === 'user');
-    assert.strictEqual(userMessages.length, 1, 'Should have one user message');
+    assert.strictEqual(
+      userMessages.length,
+      2,
+      'The question plus the trailing context message',
+    );
     assert.false(
       userMessages.some((message) =>
-        (message.content as string).includes(
+        messageText(message).includes(
           '(The user has successfully applied code patch',
         ),
       ),
@@ -3802,7 +3840,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       'Should have one tool result message',
     );
     assert.ok(
-      (toolResultMessages[0].content as string).includes('Cloudy'),
+      messageText(toolResultMessages[0]).includes('Cloudy'),
       'Tool call result should include "Cloudy"',
     );
   });
@@ -3848,13 +3886,17 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.strictEqual(shouldRespond, true, 'AiBot should solicit a response');
     assert.deepEqual(
       messages!.map((m) => m.role),
-      ['system', 'user', 'assistant', 'tool', 'system'],
+      ['system', 'user', 'assistant', 'tool', 'user'],
     );
     const userMessages = messages!.filter((message) => message.role === 'user');
-    assert.strictEqual(userMessages.length, 1, 'Should have one user message');
+    assert.strictEqual(
+      userMessages.length,
+      2,
+      'The question plus the trailing context message',
+    );
     assert.false(
       userMessages.some((message) =>
-        (message.content as string).includes(
+        messageText(message).includes(
           '(The user has successfully applied code patch',
         ),
       ),
@@ -3869,7 +3911,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       'Should have one tool result message',
     );
     assert.ok(
-      (toolResultMessages[0].content as string).includes('Cloudy'),
+      messageText(toolResultMessages[0]).includes('Cloudy'),
       'Tool call result should include "Cloudy"',
     );
   });
@@ -3894,15 +3936,13 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.ok(userMessages.length >= 1, 'Should have user messages');
     assert.false(
       userMessages.some((message) =>
-        (message.content as string).includes(
-          'The user tried to apply code patch',
-        ),
+        messageText(message).includes('The user tried to apply code patch'),
       ),
       'Code patch result messages should be omitted',
     );
   });
 
-  test('context message is placed before last user message when just one user message', async () => {
+  test('context trails as its own user message when there is just one user message', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
@@ -3919,11 +3959,19 @@ Current date and time: 2025-06-11T11:43:00.533Z
       fakeMatrixClient,
     );
     assert.equal(messages![0].role, 'system');
-    assert.equal(messages![1].role, 'system');
+    assert.equal(messages![1].role, 'user');
     assert.equal(messages![2].role, 'user');
+    assert.ok(
+      messageText(messages![2]).startsWith('The user is currently viewing'),
+      'the context trails the conversation as its own message',
+    );
+    assert.notOk(
+      messageText(messages![1]).includes('The user is currently viewing'),
+      'the user turn stays byte-stable across requests: no context is folded into it',
+    );
   });
 
-  test('context message is placed before last user message when multiple user messages', async () => {
+  test('context trails as its own user message when there are multiple user messages', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
@@ -3942,8 +3990,16 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.equal(messages![0].role, 'system');
     assert.equal(messages![1].role, 'user');
     assert.equal(messages![2].role, 'assistant');
-    assert.equal(messages![3].role, 'system');
+    assert.equal(messages![3].role, 'user');
     assert.equal(messages![4].role, 'user');
+    assert.ok(
+      messageText(messages![4]).startsWith('The user is currently viewing'),
+      'the context trails the conversation as its own message',
+    );
+    assert.notOk(
+      messageText(messages![3]).includes('The user is currently viewing'),
+      'the last user turn stays byte-stable across requests: no context is folded into it',
+    );
   });
 
   test('context message is placed after the last tool call if the last message is a tool call', async () => {
@@ -3967,10 +4023,10 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.equal(messages![5].role, 'user');
     assert.equal(messages![6].role, 'assistant');
     assert.equal(messages![7].role, 'tool');
-    assert.equal(messages![8].role, 'system');
+    assert.equal(messages![8].role, 'user');
   });
 
-  test('context message is placed after the last user message if the last message is an assistant message', async () => {
+  test('context trails as its own user message when the last message is an assistant message', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
@@ -3987,9 +4043,50 @@ Current date and time: 2025-06-11T11:43:00.533Z
       fakeMatrixClient,
     );
     assert.equal(messages![0].role, 'system');
-    assert.equal(messages![1].role, 'system');
-    assert.equal(messages![2].role, 'user');
-    assert.equal(messages![3].role, 'assistant');
+    assert.equal(messages![1].role, 'user');
+    assert.equal(messages![2].role, 'assistant');
+    assert.equal(messages![3].role, 'user');
+    assert.ok(
+      messageText(messages![3]).startsWith('The user is currently viewing'),
+      'the context trails the conversation as its own message',
+    );
+  });
+
+  test('the leading system prompt is the only system message', async () => {
+    // For models without a native mid-conversation system role, OpenRouter
+    // hoists every non-leading `system` message into the top-level system
+    // parameter. Volatile content hoisted that way lands in front of the
+    // whole conversation and defeats the prompt cache — so nothing after
+    // messages[0] may carry the system role.
+    for (let fixture of [
+      'user-message-last-single.json',
+      'user-message-last-multiple.json',
+      'assistant-message-last.json',
+      'tool-call-last.json',
+      'code-blocks.json',
+      'connect-tool-calls-to-results.json',
+    ]) {
+      const eventList: DiscreteMatrixEvent[] = JSON.parse(
+        readFileSync(
+          path.join(import.meta.dirname, 'resources/chats', fixture),
+          'utf-8',
+        ),
+      );
+      const { messages } = await getPromptParts(
+        eventList,
+        '@aibot:localhost',
+        fakeMatrixClient,
+      );
+      if (!messages) {
+        // A history the bot would not answer builds no message array.
+        continue;
+      }
+      assert.equal(messages![0].role, 'system', `${fixture}: leading system`);
+      assert.false(
+        messages!.slice(1).some((message) => message.role === 'system'),
+        `${fixture}: no system message after the leading one`,
+      );
+    }
   });
 
   test('context message contains the current date and time', async () => {
@@ -4008,13 +4105,13 @@ Current date and time: 2025-06-11T11:43:00.533Z
       '@aibot:localhost',
       fakeMatrixClient,
     );
-    assert.equal(messages![3].role, 'system');
+    assert.equal(messages![4].role, 'user');
     assert.true(
-      !!(messages![3].content as string).match(
+      !!messageText(messages![4]).match(
         /Current date and time: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/,
       ),
       'Context message should contain the current date and time but was ' +
-        messages![3].content,
+        messages![4].content,
     );
   });
 
@@ -4042,11 +4139,11 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
     assert.ok(toolCallMessage, 'Should have a tool call message');
     assert.true(
-      (toolCallMessage!.content as string).includes('executed'),
+      messageText(toolCallMessage!).includes('executed'),
       'Tool call result should reflect that the tool was executed',
     );
     assert.true(
-      (toolCallMessage!.content as string).includes(
+      messageText(toolCallMessage!).includes(
         `
 Attached Files (files with newer versions don't show their content):
 [postcard.gts](http://test-realm-server/user/test-realm/postcard.gts):
@@ -4080,11 +4177,11 @@ Attached Files (files with newer versions don't show their content):
     );
     assert.ok(toolCallMessage, 'Should have a tool call message');
     assert.true(
-      (toolCallMessage!.content as string).includes('executed'),
+      messageText(toolCallMessage!).includes('executed'),
       'Tool call result should reflect that the tool was executed',
     );
     assert.true(
-      (toolCallMessage!.content as string).includes(
+      messageText(toolCallMessage!).includes(
         `
 Attached Cards (cards with newer versions don't show their content):
 [
@@ -4834,9 +4931,7 @@ new content
     let userMessages =
       messages?.filter((message) => message.role === 'user') ?? [];
     let retryMessages = userMessages.filter((message) =>
-      (message.content as string).includes(
-        'Propose fixes for the above errors',
-      ),
+      messageText(message).includes('Propose fixes for the above errors'),
     );
     assert.strictEqual(
       retryMessages.length,
@@ -4845,7 +4940,7 @@ new content
     );
 
     let failureLimitMessages = userMessages.filter((message) =>
-      (message.content as string).includes(
+      messageText(message).includes(
         'Automated correctness fixes have already been attempted 3 times',
       ),
     );
@@ -4856,7 +4951,7 @@ new content
     );
     let failureLimitMessage = failureLimitMessages[0];
     assert.notOk(
-      (failureLimitMessage?.content as string).includes(
+      messageText(failureLimitMessage).includes(
         'Propose fixes for the above errors',
       ),
       'The failure limit prompt should not ask for another round of fixes',
@@ -5031,9 +5126,7 @@ new content
     );
     assert.ok(secondToolMessage, 'Second correctness result should be present');
     assert.ok(
-      (secondToolMessage!.content as string).includes(
-        'attempts so far: 1 of 3',
-      ),
+      messageText(secondToolMessage!).includes('attempts so far: 1 of 3'),
       'Correctness attempts reset to the first attempt when a new patch event begins for the same target',
     );
   });
@@ -5171,7 +5264,7 @@ new
     ];
 
     const summaryMessage =
-      'The automated correctness checks have finished. Summarize the results based on the tool output above in one short sentence. Do not mention: correctness, automated correctness checks, tool calls.';
+      'The automated correctness checks have finished. Summarize the results based on the tool output above in one short sentence. Do not mention: correctness, automated correctness checks, tool calls. If work you already described remains unfinished, carry straight on with it in the same reply — this is a note on what just landed, not a request to stop.';
 
     const promptParts = await getPromptParts(
       eventList,
@@ -5180,13 +5273,24 @@ new
     );
     let enabledUserMessages =
       promptParts.messages?.filter((message) => message.role === 'user') ?? [];
+    // The instruction exists for this one request only, so it rides the
+    // volatile trailing context message rather than the history — a history
+    // entry that vanishes on the next request would defeat the prompt cache.
+    let trailingMessage = promptParts.messages?.at(-1);
+    assert.equal(trailingMessage?.role, 'user');
     assert.true(
-      enabledUserMessages.some((message) => message.content === summaryMessage),
-      'Summary should be included',
+      messageText(trailingMessage).endsWith(summaryMessage),
+      'Summary should be appended to the trailing context message',
+    );
+    assert.false(
+      promptParts.messages
+        ?.slice(0, -1)
+        .some((message) => messageText(message).includes(summaryMessage)),
+      'Summary must not be a history entry — it vanishes on the next request',
     );
     assert.false(
       enabledUserMessages.some((message) =>
-        (message.content as string).includes(
+        messageText(message).includes(
           'The user has successfully applied code patch 1.',
         ),
       ),
@@ -5299,6 +5403,266 @@ new
     );
   });
 
+  test('marks the last real message as cacheable and leaves the trailing context unmarked', async () => {
+    // Three-turn history ending in a user message. The context (which carries
+    // the current time, so it changes every request) trails as its own
+    // message; the cache breakpoint lands on the last real message, and the
+    // volatile trailing context must never carry one.
+    const userEvent = (
+      event_id: string,
+      ts: number,
+      body: string,
+    ): DiscreteMatrixEvent => ({
+      type: 'm.room.message',
+      event_id,
+      origin_server_ts: ts,
+      content: {
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        format: 'org.matrix.custom.html',
+        body,
+        isStreamingFinished: true,
+        data: { context: { tools: [], functions: [] } },
+      },
+      sender: '@user:localhost',
+      room_id: 'room1',
+      unsigned: { age: 1000, transaction_id: event_id },
+      status: EventStatus.SENT,
+    });
+    const history: DiscreteMatrixEvent[] = [
+      userEvent('1', 1000, 'First question'),
+      {
+        type: 'm.room.message',
+        event_id: '2',
+        origin_server_ts: 2000,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'First answer',
+          isStreamingFinished: true,
+          data: {},
+        },
+        sender: '@aibot:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: '2' },
+        status: EventStatus.SENT,
+      },
+      userEvent('3', 3000, 'Second question'),
+    ];
+
+    const result = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      [],
+      [],
+      [],
+      fakeMatrixClient,
+    );
+
+    // [system, user, assistant, user, trailing context]
+    assert.deepEqual(
+      result.map((m) => m.role),
+      ['system', 'user', 'assistant', 'user', 'user'],
+    );
+    let lastUserMessage = result[3];
+    assert.ok(
+      Array.isArray(lastUserMessage.content) &&
+        (lastUserMessage.content.at(-1) as TextContent).cache_control?.type ===
+          'ephemeral',
+      'The last real message carries the history cache breakpoint',
+    );
+    assert.equal(
+      messageText(lastUserMessage),
+      'Second question',
+      'No context is folded into the user message — its bytes must not change between requests',
+    );
+    let contextMessage = result[4];
+    assert.notOk(
+      Array.isArray(contextMessage.content) &&
+        (contextMessage.content as TextContent[]).some(
+          (part) => part.cache_control,
+        ),
+      'The trailing context message carries no breakpoint — it changes every request',
+    );
+    assert.equal(
+      countCacheBreakpoints(result),
+      2,
+      'Exactly two breakpoints: system message + end of stable history',
+    );
+  });
+
+  test('marks the trailing tool result as cacheable when the history ends with one', async function () {
+    // Tool results are where pulled skill files land, so when the turn ends
+    // with one, the breakpoint must cover it — that content must not be
+    // re-billed fresh on every later request. The trailing system context
+    // message stays unmarked (it carries the current time).
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(
+          import.meta.dirname,
+          'resources/chats/code-block-and-command-two-results-a.json',
+        ),
+        'utf-8',
+      ),
+    );
+    mockResponses.set('mxc://mock-server/weather-report-1', {
+      ok: true,
+      text: JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: { temperature: '22°C', conditions: 'Cloudy' },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/admin/onnx/commandexample',
+              name: 'WeatherReport',
+            },
+          },
+        },
+      }),
+    });
+
+    const { messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.deepEqual(
+      messages!.map((m) => m.role),
+      ['system', 'user', 'assistant', 'tool', 'user'],
+    );
+    let toolMessage = messages![3];
+    assert.ok(
+      Array.isArray(toolMessage.content) &&
+        (toolMessage.content.at(-1) as TextContent).cache_control?.type ===
+          'ephemeral',
+      'The trailing tool result carries the history cache breakpoint',
+    );
+    let contextMessage = messages![4];
+    assert.notOk(
+      Array.isArray(contextMessage.content) &&
+        (contextMessage.content as TextContent[]).some(
+          (part) => part.cache_control,
+        ),
+      'The trailing context message carries no breakpoint',
+    );
+    assert.equal(
+      countCacheBreakpoints(messages!),
+      2,
+      'Exactly two breakpoints: system message + trailing tool result',
+    );
+  });
+
+  test('the shared history serializes byte-identically across consecutive turns, apart from the moving marker', async () => {
+    // The invariant the prompt cache lives on: request N+1's messages must
+    // be an exact byte extension of request N's stable prefix, marker aside
+    // — including the string-vs-parts shape of each message's content.
+    const makeEvent = (
+      event_id: string,
+      ts: number,
+      body: string,
+      sender = '@user:localhost',
+    ): DiscreteMatrixEvent => ({
+      type: 'm.room.message',
+      event_id,
+      origin_server_ts: ts,
+      content: {
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        format: 'org.matrix.custom.html',
+        body,
+        isStreamingFinished: true,
+        data:
+          sender === '@user:localhost'
+            ? { context: { tools: [], functions: [] } }
+            : {},
+      },
+      sender,
+      room_id: 'room1',
+      unsigned: { age: 1000, transaction_id: event_id },
+      status: EventStatus.SENT,
+    });
+    const turnOne: DiscreteMatrixEvent[] = [
+      makeEvent('1', 1000, 'First question'),
+    ];
+    const turnTwo: DiscreteMatrixEvent[] = [
+      ...turnOne,
+      makeEvent('2', 2000, 'First answer', '@aibot:localhost'),
+      makeEvent('3', 3000, 'Second question'),
+    ];
+
+    const promptOne = await buildPromptForModel(
+      turnOne,
+      '@aibot:localhost',
+      [],
+      [],
+      [],
+      fakeMatrixClient,
+    );
+    const promptTwo = await buildPromptForModel(
+      turnTwo,
+      '@aibot:localhost',
+      [],
+      [],
+      [],
+      fakeMatrixClient,
+    );
+
+    // Strip the marker (it is allowed to move) and each prompt's volatile
+    // trailing context message, then require an exact prefix match.
+    const stripMarkers = (message: (typeof promptOne)[number]) =>
+      JSON.stringify(message, (key, value) =>
+        key === 'cache_control' ? undefined : value,
+      );
+    const stableOne = promptOne.slice(0, -1).map(stripMarkers);
+    const stableTwo = promptTwo.slice(0, -1).map(stripMarkers);
+    for (let i = 0; i < stableOne.length; i++) {
+      assert.equal(
+        stableTwo[i],
+        stableOne[i],
+        `message ${i} must serialize identically on the next turn`,
+      );
+    }
+  });
+
+  test('a first-turn prompt marks the system prompt and the first user message', async () => {
+    // One user message and nothing before it: the user message is the whole
+    // stable history, so it carries the second breakpoint — the next request
+    // re-reads it from cache.
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1000,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Hello',
+          isStreamingFinished: true,
+          data: { context: { tools: [], functions: [] } },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: '1' },
+        status: EventStatus.SENT,
+      },
+    ];
+    const result = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      [],
+      [],
+      [],
+      fakeMatrixClient,
+    );
+    assert.deepEqual(
+      result.map((m) => m.role),
+      ['system', 'user', 'user'],
+    );
+    assert.equal(
+      countCacheBreakpoints(result),
+      2,
+      'System breakpoint plus the first user message',
+    );
+  });
+
   test('excludes assistant messages with empty body and no tool calls', async () => {
     const history: DiscreteMatrixEvent[] = [
       {
@@ -5389,8 +5753,8 @@ new
     const userMessages = result.filter((message) => message.role === 'user');
     assert.equal(
       userMessages.length,
-      2,
-      'Both user messages should be included',
+      3,
+      'Both user messages plus the trailing context message',
     );
   });
 
@@ -5569,10 +5933,13 @@ new
     const userMessages = result.filter((message) => message.role === 'user');
     assert.equal(
       userMessages.length,
-      1,
-      'Only the non-empty user message should be included',
+      2,
+      'The non-empty user message plus the trailing context message',
     );
-    assert.equal(userMessages[0].content, 'Hello');
+    assert.true(
+      messageText(userMessages[0]).endsWith('Hello'),
+      'the surviving user message keeps its body',
+    );
   });
   test('only the most recent message attachments include file content in the prompt', async () => {
     // Policy: files attached to older messages should show metadata only,
@@ -5676,17 +6043,17 @@ new
 
     // Older message's unique file (config.json) should show metadata only, not content
     assert.ok(
-      (userMessages[0]?.content as string).includes('[config.json]'),
+      messageText(userMessages[0]).includes('[config.json]'),
       'First message mentions config.json',
     );
     assert.notOk(
-      (userMessages[0]?.content as string).includes('"key": "value"'),
+      messageText(userMessages[0]).includes('"key": "value"'),
       'First message should NOT include config.json content (not the current message)',
     );
 
     // Most recent message's file (utils.ts) should include content
     assert.ok(
-      (userMessages[1]?.content as string).includes(
+      messageText(userMessages[1]).includes(
         'export function hello() { return "world"; }',
       ),
       'Most recent message should include utils.ts content',
@@ -5835,7 +6202,7 @@ new
     );
 
     let userMessages = prompt.filter((m) => m.role === 'user');
-    let content = userMessages[0]?.content as string;
+    let content = messageText(userMessages[0]);
 
     assert.ok(
       content.includes('"name":"Alice"'),
@@ -5931,7 +6298,7 @@ new
     );
 
     let userMessages = prompt.filter((m) => m.role === 'user');
-    let firstMessage = userMessages[0]?.content as string;
+    let firstMessage = messageText(userMessages[0]);
     assert.ok(
       firstMessage.includes('diagram.png'),
       'older image attachment should still be mentioned',
@@ -6633,7 +7000,7 @@ new
     // The command result for the unauthorized file should contain a rejection
     let toolMessages = prompt.filter((m) => m.role === 'tool');
     let rejectionMessage = toolMessages.find((m) =>
-      (m.content as string).includes('not-attached-file.ts'),
+      messageText(m).includes('not-attached-file.ts'),
     );
 
     assert.ok(
@@ -6642,7 +7009,7 @@ new
     );
 
     if (rejectionMessage) {
-      let rejectionContent = rejectionMessage.content as string;
+      let rejectionContent = messageText(rejectionMessage);
       assert.ok(
         rejectionContent.includes('not previously attached') ||
           rejectionContent.includes('not authorized') ||

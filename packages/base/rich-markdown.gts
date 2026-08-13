@@ -75,12 +75,21 @@ export class RichMarkdownField extends FieldDef {
     },
   });
 
-  /** Cards referenced in the markdown, loaded via query. */
+  /**
+   * Cards referenced in the markdown, loaded via query.
+   *
+   * `realms` interpolates the reference ids themselves: a query field with no
+   * realm targets only the realm holding this card, which can never match a
+   * reference into another realm. Each id is resolved to the realm containing
+   * it by whoever runs the query — the realm mappings live there, not in a card
+   * definition — so this reads as "search wherever these references live".
+   */
   @field linkedCards = linksToMany(CardDef, {
     query: {
       filter: {
         in: { id: '$this.cardReferenceUrls' },
       },
+      realms: '$this.cardReferenceUrls',
     },
   });
 
@@ -104,6 +113,7 @@ export class RichMarkdownField extends FieldDef {
       filter: {
         in: { url: '$this.fileReferenceUrls' },
       },
+      realms: '$this.fileReferenceUrls',
     },
   });
 

@@ -23,7 +23,9 @@ import { renderComponent } from '../../helpers/render-component';
 import { setupOperatorModeTests } from './operator-mode/setup';
 
 module('Integration | operator-mode | ui', function (hooks) {
-  let ctx = setupOperatorModeTests(hooks);
+  let ctx = setupOperatorModeTests(hooks, {
+    reuseIndexAcrossTests: 'operatorModeUi',
+  });
 
   let noop = () => {};
 

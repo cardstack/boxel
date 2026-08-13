@@ -11,7 +11,7 @@ validated: source-proven
 - Hero / landing sections of an app card where the user sees a "wow" first.
 - Catalog browsers — combine with filter state for a live 3D shelf that reacts to selections.
 
-Pick a flat grid (`CardsGrid`, `searchResultsComponent` with `display: grid`) when speed of scanning matters more than impact. The 3D carousel is for the *hero* spot.
+Pick a flat grid (the default index card's Library, `searchResultsComponent` with `display: grid`) when speed of scanning matters more than impact. The 3D carousel is for the *hero* spot.
 
 **The insight:** The placement math is trivial. For `n` cards at index `i`, the angle is `(i / n) × 360deg`. Each slot gets `--card-index` and `--total-cards` as CSS variables; the slot's transform reads them and computes:
 

@@ -1,0 +1,47 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "png · Format Preview",
+      "cardInfo": {
+        "name": "png · Format Preview",
+        "summary": "Simple, moderate, and complex png fixtures across atom, embedded, isolated, and the 16 fitted envelopes."
+      }
+    },
+    "relationships": {
+      "previewFiles.0": {
+        "links": {
+          "self": "../samples/png-simple.png"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/png-simple.png"
+        }
+      },
+      "previewFiles.1": {
+        "links": {
+          "self": "../samples/png-moderate.png"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/png-moderate.png"
+        }
+      },
+      "previewFiles.2": {
+        "links": {
+          "self": "../samples/png-complex.png"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/png-complex.png"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../format-preview",
+        "name": "FileDefFormatPreview"
+      }
+    }
+  }
+}

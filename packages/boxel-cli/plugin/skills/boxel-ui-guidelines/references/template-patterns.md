@@ -46,6 +46,7 @@ static isolated = class Isolated extends Component<typeof this> {
 
 Fitted cards are rendered at many different container sizes — from small badges to large tiles. The template must look good at any size, not just one target size. Design for fluid resizing:
 
+- **Do not** use `box-shadow: inset` left-border accents (e.g. `inset 3px 0 0 <color>`) on the fitted card wrapper — this styling is not desired
 - Prioritize the most essential information (see common fields that all cards have such as `cardTitle`, `cardDescription` and `cardThumbnailURL`) — the card may be tiny, so show only what fits
 - For image columns/panels, use `cqh` (container query height) units so sizing scales with the card: `width: 40cqh; min-width: 3.75rem; max-width: 12.5rem`
 - Use `text-overflow: ellipsis` with `white-space: nowrap` for single-line labels, or clamp multi-line text with `-webkit-line-clamp`
@@ -129,6 +130,8 @@ Wrap inputs with `FieldContainer` for consistent label + input layout. Use compo
 
 ### Icons
 
+**Always set explicit `width` and `height` attributes on an icon component** — never size an icon through CSS (`.glyph { width: 1.5rem }`) alone. The attributes give the SVG an intrinsic size, which is required for it to render at the right dimensions during prerender where the scoped CSS may not have applied yet; CSS-only sizing collapses or mis-sizes the glyph in those passes. Use CSS on the icon only for color. This is the one place plain numeric (px-equivalent) sizing is expected — the rem-over-px preference does not apply to icon `width`/`height` attributes.
+
 Icons and SVGs must not use hardcoded hex fills — use theme color tokens via CSS:
 
 ```gts
@@ -137,7 +140,10 @@ Icons and SVGs must not use hardcoded hex fills — use theme color tokens via C
   <ellipse fill='#fed7aa' /><circle fill='#ef4444' />
 </svg>
 
-// Correct — styled with theme token
+// Avoid — no intrinsic size; relies on CSS that may not apply during prerender
+<ChefHat class='chef-hat-icon' />
+
+// Correct — explicit width/height attributes, CSS for color only
 <ChefHat width='12' height='12' class='chef-hat-icon' />
 ```
 
@@ -145,6 +151,68 @@ Icons and SVGs must not use hardcoded hex fills — use theme color tokens via C
 .chef-hat-icon {
   color: var(--muted-foreground);
 }
+```
+
+### Semantic, accessible HTML
+
+Choose elements by meaning; reserve `<div>` for pure geometry/layout machinery:
+
+- Titles are headings (`<h1>`–`<h4>` at the level the surface calls for), never styled divs.
+- Prose goes in `<p>`, not bare text in divs.
+- Intro blocks (title + subtitle/description) are wrapped in `<header>`.
+- Groups of controls get `role='toolbar'` plus an `aria-label` describing the group.
+- Computed/live readouts (counters, results, status values) use `<output>`.
+- Icon-only buttons carry an `aria-label`; purely decorative elements (glyphs, ornaments, background shapes) get `aria-hidden='true'`.
+
+Attribute ordering: `data-test-*` attributes go **absolutely last** on an element — after all other attributes and after modifiers.
+
+```gts
+// Avoid — divs for everything, no accessible names
+<div class='title'>{{@model.cardTitle}}</div>
+<div class='controls'>
+  <button {{on 'click' this.zoomIn}}><PlusIcon /></button>
+</div>
+<div class='count'>{{this.count}}</div>
+
+// Correct — semantic elements, labels, data-test last
+<header class='intro'>
+  <h2><@fields.cardTitle /></h2>
+  <p class='subtitle'><@fields.cardDescription /></p>
+</header>
+<div class='controls' role='toolbar' aria-label='Zoom controls'>
+  <button
+    type='button'
+    aria-label='Zoom in'
+    {{on 'click' this.zoomIn}}
+    data-test-zoom-in
+  >
+    <PlusIcon width='16' height='16' aria-hidden='true' />
+  </button>
+</div>
+<output class='count' data-test-count>{{this.count}}</output>
+```
+
+### Assume the same card renders more than once per page
+
+The host renders cards without iframes, and the same card instance can be open in multiple workbench stacks side by side — producing duplicate `id`s and duplicate class trees in one document. Write all interaction, animation, scroll, and DOM-lookup code accordingly:
+
+- **Scope every DOM query to the component's own subtree.** Start from the event target or an element captured via modifier and use `element.closest('.boxel-card-container')` (falling back to `ownerDocument`) as the query root — never `document.getElementById` / `document.querySelectorAll('.some-card-class')`, which hit the *first* match, so code in the second stack's copy silently operates on the first stack's DOM.
+- Same rule for `querySelectorAll` in animation loops, `IntersectionObserver` targets, and anchor-scroll targets (native `#anchor` jumps are document-wide too).
+- **JS query hooks are data attributes, not class names.** Classes are for styling only; give the element a dedicated data attribute and select on that. `data-test-*` attributes are reserved for tests — never use them as runtime hooks.
+- Avoid global side effects for per-card behavior: no unscoped `<style>` injections, no `document`-level listeners keyed to one card's state.
+
+```gts
+// Avoid — document-wide lookup (hits the first stack's copy) on a styling class
+const target = document.querySelector('.timeline-row[data-year="2024"]');
+
+// Correct — scoped to this card's own container, data-attribute hook
+scrollToYear = (event: Event) => {
+  const root =
+    (event.target as HTMLElement).closest('.boxel-card-container') ??
+    (event.target as HTMLElement).ownerDocument;
+  const target = root.querySelector('[data-timeline-year="2024"]');
+  target?.scrollIntoView({ behavior: 'smooth' });
+};
 ```
 
 ### Entrance animations — never put `opacity: 0` in base CSS

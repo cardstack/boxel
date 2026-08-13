@@ -16,7 +16,10 @@ import { FieldContainer, BoxelSelect } from '@cardstack/boxel-ui/components';
 import CalendarPlus from '@cardstack/boxel-icons/calendar-plus';
 
 class Edit extends Component<typeof Event> {
-  @tracked selectedEventType = { name: this.args.model.eventType };
+  @tracked selectedEventType: { name: string } | null = this.args.model
+    .eventType
+    ? { name: this.args.model.eventType }
+    : null;
   @tracked eventTypeItems = [
     { name: 'Email' },
     { name: 'Meeting' },
@@ -25,7 +28,10 @@ class Edit extends Component<typeof Event> {
     { name: 'None' },
   ];
 
-  @action updateEventType(type: { name: string }) {
+  @action updateEventType(type: { name: string } | null) {
+    if (!type) {
+      return;
+    }
     this.selectedEventType = type;
     this.args.model.eventType = type.name;
   }

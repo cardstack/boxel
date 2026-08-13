@@ -113,6 +113,16 @@ test.describe('Publish realm', () => {
   }) => {
     await openPublishRealmModal(page);
 
+    // Use a unique subdomain per attempt. The claim persists on the
+    // realm-server, and a partial first attempt leaves a fixed name already
+    // taken, so every Playwright retry in the same run would then fail the
+    // "no error message" assertion on re-claim. A fresh name each attempt
+    // keeps retries isolated (CS-12428). The extra hyphens keep it clear of
+    // the single-hyphen reserved patterns, and it stays well under 63 chars.
+    let subdomain = `acceptable-subdomain-${Date.now().toString(36)}${Math.random()
+      .toString(36)
+      .slice(2, 6)}`;
+
     await page.locator('[data-test-custom-subdomain-setup-button]').click();
 
     let customSubdomainInput = page.locator(
@@ -128,7 +138,7 @@ test.describe('Publish realm', () => {
       page.locator('[data-test-boxel-input-group-error-message]'),
     ).toHaveText('Punycode domains are not allowed for security reasons');
 
-    await customSubdomainField.fill('acceptable-subdomain');
+    await customSubdomainField.fill(subdomain);
     await claimButton.click();
 
     await expect(
@@ -144,23 +154,29 @@ test.describe('Publish realm', () => {
     ).toBeChecked();
     await page.locator('[data-test-publish-button]').click();
 
+    // Wait for the publish to finish as its own step, before arming the popup
+    // listener. Publishing a brand-new realm runs a from-scratch index plus a
+    // prerender pass server-side, and this control only renders once the
+    // claimed domain reports published. Waiting explicitly means a stalled
+    // publish fails on the wait — naming the stage that stalled — instead of
+    // reporting a popup that never arrived alongside a click that was still
+    // waiting for its target.
+    let openPublishedSiteButton = page.locator(
+      '[data-test-publish-realm-modal] [data-test-open-custom-subdomain-button]',
+    );
+    await openPublishedSiteButton.waitFor({ state: 'visible' });
+
     let newTabPromise = page.waitForEvent('popup');
 
-    await page
-      .locator(
-        '[data-test-publish-realm-modal] [data-test-open-custom-subdomain-button]',
-      )
-      .click();
+    await openPublishedSiteButton.click();
 
     let newTab = await newTabPromise;
     await newTab.waitForLoadState();
 
-    await expect(newTab).toHaveURL(
-      'https://acceptable-subdomain.localhost:4205/',
-    );
+    await expect(newTab).toHaveURL(`https://${subdomain}.localhost:4205/`);
     await expect(
       newTab.locator(
-        '[data-test-card="https://acceptable-subdomain.localhost:4205/index"]',
+        `[data-test-card="https://${subdomain}.localhost:4205/index"]`,
       ),
     ).toBeVisible();
     await newTab.close();

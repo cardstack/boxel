@@ -17,4 +17,5 @@ export default class IndexController extends Controller {
   @tracked sid: string | null = null;
   @tracked clientSecret: string | null = null;
   @tracked debug = false;
+  @tracked openProfileSettings: string | null = null;
 }

@@ -8,6 +8,7 @@ import type { Realm } from '@cardstack/runtime-common/realm';
 
 import {
   SYSTEM_CARD_FIXTURE_CONTENTS,
+  captureReusableIndex,
   makeMinimalPng,
   setupAcceptanceTestRealm,
   setupAuthEndpoints,
@@ -27,14 +28,36 @@ export const personalRealmURL = `http://test-realm/personal/`;
 type InteractSubmodeSetupOptions = {
   setRealm: (realm: Realm) => void;
   fileSizeLimitBytes?: number;
+  audioSizeLimitBytes?: number;
+  videoSizeLimitBytes?: number;
+  // Index these four realms once for the module and restore that index before
+  // each subsequent test, instead of re-indexing all four per test. Pass a name
+  // unique to the module (matching /^[A-Za-z][A-Za-z0-9_]*$/) — the fixtures are
+  // identical across the modules sharing this helper, but a snapshot alias can
+  // only be exported once, so each module keeps its own.
+  //
+  // Omit it and the module indexes per test as before.
+  reuseIndexAcrossTests?: string;
 };
 
 export function setupInteractSubmodeTests(
   hooks: NestedHooks,
-  { setRealm, fileSizeLimitBytes }: InteractSubmodeSetupOptions,
+  {
+    setRealm,
+    fileSizeLimitBytes,
+    audioSizeLimitBytes,
+    videoSizeLimitBytes,
+    reuseIndexAcrossTests,
+  }: InteractSubmodeSetupOptions,
 ) {
   setupApplicationTest(hooks);
-  setupLocalIndexing(hooks);
+  // This helper builds four realms, so the default capture point — as soon as
+  // the first one finishes indexing — would omit the other three. It captures
+  // explicitly below instead, once all four are built.
+  setupLocalIndexing(hooks, {
+    reuseIndexAcrossTests,
+    captureIndexManually: true,
+  });
   setupOnSave(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -324,6 +347,8 @@ export function setupInteractSubmodeTests(
     ({ realm } = await setupAcceptanceTestRealm({
       mockMatrixUtils,
       fileSizeLimitBytes,
+      audioSizeLimitBytes,
+      videoSizeLimitBytes,
       contents: {
         ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'address.gts': { Address },
@@ -543,6 +568,10 @@ export function setupInteractSubmodeTests(
         }),
       },
     });
+
+    // All four realms are built and indexed, and the test body hasn't run yet,
+    // so this is the moment the module's reusable index has to be taken.
+    await captureReusableIndex();
 
     setRealm(realm);
   });

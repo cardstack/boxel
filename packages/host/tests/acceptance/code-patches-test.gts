@@ -26,6 +26,8 @@ import {
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
   APP_BOXEL_TOOL_REQUESTS_KEY,
   APP_BOXEL_LLM_MODE,
+  APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
+  APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import {
@@ -1603,6 +1605,57 @@ ${REPLACE_MARKER}
       .doesNotExist(
         'Code patch sent before act mode is still not auto-applied',
       );
+  });
+
+  test('a patch split across continuation events is still auto-applied in act mode', async function (assert) {
+    // An answer too long for one event is cut at a character count that knows
+    // nothing about what it is cutting through, so a SEARCH/REPLACE block ends
+    // up straddling the boundary: no single event holds all three markers, and
+    // only the head of the chain carries the joined body the patch is parsed
+    // from. The UI reads that joined body and offers an apply button, so a
+    // patch that never reached the queue looks identical to one waiting to be
+    // applied — in act mode it should simply apply.
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}hello.txt`,
+    });
+    await click('[data-test-open-ai-assistant]');
+    let roomId = getRoomIds().pop()!;
+
+    await click('[data-test-llm-mode-option="act"]');
+
+    let head = `\`\`\`
+http://test-realm/test/hello.txt
+${SEARCH_MARKER}
+Hello, world!
+`;
+    let tail = `${SEPARATOR_MARKER}
+Hi, from across the split!
+${REPLACE_MARKER}
+\`\`\``;
+
+    let agentId = getService('matrix-service').agentId;
+    let headEventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: head,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY]: true,
+      data: { context: { agentId } },
+    });
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: tail,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_CONTINUATION_OF_CONTENT_KEY]: headEventId,
+      data: { context: { agentId } },
+    });
+
+    await waitFor('[data-test-apply-state="applied"]', { timeout: 5000 });
+    assert
+      .dom('[data-test-apply-state="applied"]')
+      .exists('the patch applies even though it was split across two events');
   });
 
   test('LLM mode for a message is resolved by room order, not just timestamp', async function (assert) {

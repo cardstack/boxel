@@ -30,7 +30,7 @@ To build the entire repository and run the application, follow these steps:
 4. Build the boxel-ui addon:
 
    ```zsh
-   cd ./packages/boxel-ui/addon
+   cd ./packages/boxel-ui
    pnpm rebuild:icons
    pnpm build
    ```

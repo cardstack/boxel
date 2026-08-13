@@ -146,7 +146,10 @@ class AtomTemplate extends Component<typeof DealEvent> {
 }
 
 class EditTemplate extends Component<typeof DealEvent> {
-  @tracked selectedEventType = { name: this.args.model.eventType };
+  @tracked selectedEventType: { name: string } | null = this.args.model
+    .eventType
+    ? { name: this.args.model.eventType }
+    : null;
   @tracked eventTypeItems = [
     { name: 'Email' },
     { name: 'Meeting' },
@@ -155,7 +158,10 @@ class EditTemplate extends Component<typeof DealEvent> {
     { name: 'None' },
   ];
 
-  @action updateEventType(type: { name: string }) {
+  @action updateEventType(type: { name: string } | null) {
+    if (!type) {
+      return;
+    }
     this.selectedEventType = type;
     this.args.model.eventType = type.name;
   }

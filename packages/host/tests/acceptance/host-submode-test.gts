@@ -1,6 +1,7 @@
 import {
   click,
   fillIn,
+  settled,
   triggerEvent,
   waitFor,
   waitUntil,
@@ -11,11 +12,20 @@ import { module, test } from 'qunit';
 
 import { TrackedObject } from 'tracked-built-ins';
 
-import { Deferred, baseRealm, param, query } from '@cardstack/runtime-common';
+import {
+  Deferred,
+  baseRealm,
+  param,
+  query,
+  type PublishProgress,
+} from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
+import type RealmService from '@cardstack/host/services/realm';
 
 import {
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
   getDbAdapter,
   setupLocalIndexing,
   setupOnSave,
@@ -223,6 +233,12 @@ module('Acceptance | host submode', function (hooks) {
   });
 
   module('with a dangling host routing rule', function (hooks) {
+    // Each snapshot this module's tests create stays attached until it is
+    // deleted, and SQLite caps attached databases per connection. The prefix is
+    // derived from the running module's name, and nested modules have distinct
+    // names, so every scope that runs tests registers its own teardown.
+    setupRealmCacheTeardown(hooks);
+
     hooks.beforeEach(async function () {
       let dbAdapter = await getDbAdapter();
       await query(dbAdapter, [
@@ -254,10 +270,23 @@ module('Acceptance | host submode', function (hooks) {
           },
         },
       };
-      await setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        contents: realmContents,
+      // Each of these nested modules builds the same realm for every one of its
+      // tests, so the indexed result is cached per module and restored instead
+      // of being rebuilt. The seeded realm_metadata row above is part of what
+      // the snapshot captures, so a restored test starts from the same state.
+      await withCachedRealmSetup(async () => {
+        await setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          contents: realmContents,
+        });
       });
+
+      // `withUpdatedTestRealmInfo` reads the realm service's resource for this
+      // realm, and some tests read it before their own visit. Nothing in the
+      // harness registers it — app components do, incidentally, while rendering
+      // during setup — so ask for it here rather than depend on what the setup
+      // visit happened to render.
+      await (getService('realm') as RealmService).ensureRealmMeta(testRealmURL);
     });
 
     test('publish modal warns that a routing rule points to a missing card', async function (assert) {
@@ -282,11 +311,30 @@ module('Acceptance | host submode', function (hooks) {
   });
 
   module('with a realm that is not publishable', function (hooks) {
+    // Each snapshot this module's tests create stays attached until it is
+    // deleted, and SQLite caps attached databases per connection. The prefix is
+    // derived from the running module's name, and nested modules have distinct
+    // names, so every scope that runs tests registers its own teardown.
+    setupRealmCacheTeardown(hooks);
+
     hooks.beforeEach(async function () {
-      await setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        contents: realmContents,
+      // Each of these nested modules builds the same realm for every one of its
+      // tests, so the indexed result is cached per module and restored instead
+      // of being rebuilt. The seeded realm_metadata row above is part of what
+      // the snapshot captures, so a restored test starts from the same state.
+      await withCachedRealmSetup(async () => {
+        await setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          contents: realmContents,
+        });
       });
+
+      // `withUpdatedTestRealmInfo` reads the realm service's resource for this
+      // realm, and some tests read it before their own visit. Nothing in the
+      // harness registers it — app components do, incidentally, while rendering
+      // during setup — so ask for it here rather than depend on what the setup
+      // visit happened to render.
+      await (getService('realm') as RealmService).ensureRealmMeta(testRealmURL);
     });
 
     test('host submode is not available', async function (assert) {
@@ -312,6 +360,12 @@ module('Acceptance | host submode', function (hooks) {
   });
 
   module('with a realm that is publishable', function (hooks) {
+    // Each snapshot this module's tests create stays attached until it is
+    // deleted, and SQLite caps attached databases per connection. The prefix is
+    // derived from the running module's name, and nested modules have distinct
+    // names, so every scope that runs tests registers its own teardown.
+    setupRealmCacheTeardown(hooks);
+
     hooks.beforeEach(async function () {
       // CS-10053: publishable lives in realm_metadata now. Seed the row
       // BEFORE setupAcceptanceTestRealm so parseRealmInfo's first read
@@ -324,10 +378,23 @@ module('Acceptance | host submode', function (hooks) {
         param(true),
         `) ON CONFLICT (url) DO UPDATE SET publishable = true`,
       ]);
-      await setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        contents: realmContents,
+      // Each of these nested modules builds the same realm for every one of its
+      // tests, so the indexed result is cached per module and restored instead
+      // of being rebuilt. The seeded realm_metadata row above is part of what
+      // the snapshot captures, so a restored test starts from the same state.
+      await withCachedRealmSetup(async () => {
+        await setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          contents: realmContents,
+        });
       });
+
+      // `withUpdatedTestRealmInfo` reads the realm service's resource for this
+      // realm, and some tests read it before their own visit. Nothing in the
+      // harness registers it — app components do, incidentally, while rendering
+      // during setup — so ask for it here rather than depend on what the setup
+      // visit happened to render.
+      await (getService('realm') as RealmService).ensureRealmMeta(testRealmURL);
     });
 
     test('host submode is available', async function (assert) {
@@ -538,6 +605,59 @@ module('Acceptance | host submode', function (hooks) {
         .hasAttribute('data-test-view-card-demo-active-tab', 'details');
     });
 
+    // Submode counterpart, through operator-mode-state-service. ViewCardDemo
+    // cycles 1 → 2 → 3 → 1, so 1 above 2 is an "up" link (CS-12434).
+    test('viewing a card already in the trail unwinds to it', async function (assert) {
+      let belowCardId = `${testRealmURL}ViewCardDemo/2`;
+      let topCardId = `${testRealmURL}ViewCardDemo/1`;
+
+      // 3 as primary keeps both stack cards off the root, so this takes the
+      // unwind branch rather than the close-everything one.
+      await visitOperatorMode({
+        submode: 'host',
+        trail: [
+          `${testRealmURL}ViewCardDemo/3.json`,
+          `${belowCardId}.json`,
+          `${topCardId}.json`,
+        ],
+      });
+
+      let topSelector = `[data-test-host-mode-stack-item="${topCardId}"]`;
+      let belowSelector = `[data-test-host-mode-stack-item="${belowCardId}"]`;
+      await waitFor(`${topSelector} [data-test-view-card-demo-button]`);
+
+      await click(`${topSelector} [data-test-view-card-demo-button]`);
+
+      await waitUntil(() => !document.querySelector(topSelector));
+      assert
+        .dom(belowSelector)
+        .exists('unwinds to the targeted card rather than stacking a copy');
+    });
+
+    test('clicking the scrim closes the top card of the trail', async function (assert) {
+      let belowCardId = `${testRealmURL}ViewCardDemo/2`;
+      let topCardId = `${testRealmURL}ViewCardDemo/3`;
+
+      await visitOperatorMode({
+        submode: 'host',
+        trail: [
+          `${testRealmURL}ViewCardDemo/1.json`,
+          `${belowCardId}.json`,
+          `${topCardId}.json`,
+        ],
+      });
+
+      let topSelector = `[data-test-host-mode-stack-item="${topCardId}"]`;
+      await waitFor(topSelector);
+
+      await click('[data-test-host-mode-stack]');
+
+      await waitUntil(() => !document.querySelector(topSelector));
+      assert
+        .dom(`[data-test-host-mode-stack-item="${belowCardId}"]`)
+        .exists('only the top card closes');
+    });
+
     test('breadcrumbs can close stacked cards', async function (assert) {
       let card1Id = `${testRealmURL}Person/1`;
       let card2Id = `${testRealmURL}index`;
@@ -656,6 +776,27 @@ module('Acceptance | host submode', function (hooks) {
     });
 
     module('publish and unpublish realm', function (hooks) {
+      // This module calls no caching helper of its own, so the registration below
+      // looks superfluous. It isn't. The parent's beforeEach runs for these tests
+      // too and caches the realm it builds under a key from
+      // `getCurrentModuleCacheKey()`, which reads the *running test's* module
+      // name — for a test in here that is the composed
+      // "… > with a realm that is publishable > publish and unpublish realm". So
+      // the parent exports a snapshot under this module's name and leaves it
+      // attached.
+      //
+      // Teardown deletes by `snapshot_${simpleHash(moduleName)}_`, and the hash
+      // of the parent's name is not the hash of this one, so the parent's
+      // registration cannot reach these. Without this line one snapshot database
+      // stays attached for the rest of the shard, against SQLite's per-connection
+      // cap on attached databases.
+      //
+      // A consequence, not a defect: the parent's own tests and these cache the
+      // same realm under two keys, so it is indexed once per scope rather than
+      // shared. That is inherent to keying by module name — don't "deduplicate"
+      // it by dropping a registration.
+      setupRealmCacheTeardown(hooks);
+
       let publishDeferred: Deferred<void>;
       let unpublishDeferred: Deferred<void>;
 
@@ -770,6 +911,104 @@ module('Acceptance | host submode', function (hooks) {
           )
           .hasAttribute('href', `https://testuser.${publishedSpaceHost}/test/`)
           .hasAttribute('target', '_blank');
+      });
+
+      // Indexing and prerendering a realm take minutes, and a bare spinner
+      // can't tell slow progress from a hang. The popover is where a publish in
+      // flight is inspected, so it has to name the pass and count through it.
+      test('the publishing popover reports indexing and rendering progress', async function (assert) {
+        let readyDeferred = new Deferred<void>();
+        let reportProgress: ((progress: PublishProgress) => void) | undefined;
+        getService('realm-server').waitForRealmReady = async (_url, opts) => {
+          reportProgress = opts?.onProgress;
+          await readyDeferred.promise;
+        };
+        // The publish itself is accepted immediately here; the wait under test
+        // is the indexing that follows the 202.
+        publishDeferred.fulfill();
+
+        await visitOperatorMode({
+          submode: 'host',
+          trail: [`${testRealmURL}Person/1.json`],
+        });
+
+        await click('[data-test-publish-realm-button]');
+        await click('[data-test-default-domain-checkbox]');
+        await click('[data-test-publish-button]');
+
+        await waitFor('[data-test-publish-realm-button].publishing');
+
+        // The modal stays open over the publish, so it reports the wait too.
+        assert
+          .dom('[data-test-publish-progress-status]')
+          .hasText('Starting…', 'the modal names a pass right away');
+        assert
+          .dom(
+            '[data-test-publish-progress-status] [data-test-boxel-progress-bar]',
+          )
+          .doesNotExist('no bar until the pass reports a total');
+
+        await click('[data-test-publish-realm-button]');
+        await waitFor('.publishing-realm-popover');
+
+        assert
+          .dom('[data-test-publish-progress-phase]')
+          .hasText('Starting', 'names a pass before any reading arrives');
+        assert
+          .dom('[data-test-publish-progress-counts]')
+          .doesNotExist('no counts until the pass reports a total');
+
+        reportProgress!({
+          phase: 'index',
+          filesCompleted: 42,
+          totalFiles: 270,
+        });
+        await settled();
+
+        assert.dom('[data-test-publish-progress-phase]').hasText('Indexing');
+        assert
+          .dom('[data-test-publish-progress-counts]')
+          .hasText('42 of 270 files');
+        assert
+          .dom('[data-test-publish-progress-status]')
+          .hasText('Indexing 42 of 270 files…');
+        // Both surfaces draw a determinate bar once the pass reports a total.
+        for (let scope of [
+          '[data-test-publish-progress-status]',
+          '.publishing-realm-popover',
+        ]) {
+          assert
+            .dom(`${scope} [data-test-boxel-progress-bar]`)
+            .hasAttribute('aria-valuenow', '42');
+          assert
+            .dom(`${scope} [data-test-boxel-progress-bar]`)
+            .hasAttribute('aria-valuemax', '270');
+        }
+
+        reportProgress!({
+          phase: 'render',
+          filesCompleted: 3,
+          totalFiles: 270,
+        });
+        await settled();
+
+        assert
+          .dom('[data-test-publish-progress-phase]')
+          .hasText('Rendering', 'follows the publish into its second pass');
+        assert
+          .dom('[data-test-publish-progress-counts]')
+          .hasText('3 of 270 files');
+
+        readyDeferred.fulfill();
+        await waitUntil(
+          () =>
+            !document.querySelector(
+              '[data-test-publish-realm-button].publishing',
+            ),
+        );
+        assert
+          .dom('.publishing-realm-popover')
+          .doesNotExist('the progress display goes away with the publish');
       });
 
       test('preselects previously published domains on refresh', async function (assert) {

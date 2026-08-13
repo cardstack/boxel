@@ -1,0 +1,47 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "html · Format Preview",
+      "cardInfo": {
+        "name": "html · Format Preview",
+        "summary": "Simple, moderate, and complex html fixtures across atom, embedded, isolated, and the 16 fitted envelopes."
+      }
+    },
+    "relationships": {
+      "previewFiles.0": {
+        "links": {
+          "self": "../samples/html-simple.html"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/html-simple.html"
+        }
+      },
+      "previewFiles.1": {
+        "links": {
+          "self": "../samples/html-moderate.html"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/html-moderate.html"
+        }
+      },
+      "previewFiles.2": {
+        "links": {
+          "self": "../samples/html-complex.html"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/html-complex.html"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../format-preview",
+        "name": "FileDefFormatPreview"
+      }
+    }
+  }
+}

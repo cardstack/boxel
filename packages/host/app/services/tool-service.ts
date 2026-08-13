@@ -617,7 +617,10 @@ export default class ToolService extends Service {
           );
           continue;
         }
-        let message = roomResource.messages.find((m) => m.eventId === eventId);
+        // Resolve through the continuation chain: a long answer arrives as
+        // several events, and only the head of the chain carries the joined
+        // body every patch was parsed from.
+        let message = roomResource.messageForEventId(eventId);
         if (!message) {
           // The event was queued for auto-apply but its message isn't in the
           // room timeline yet — room processing lagged or dropped it. The event

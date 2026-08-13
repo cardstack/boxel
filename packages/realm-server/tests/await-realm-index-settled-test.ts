@@ -6,7 +6,10 @@ import {
   awaitRealmIndexSettled,
   indexingConcurrencyGroup,
 } from '@cardstack/runtime-common/jobs/indexing';
-import { prerenderHtmlConcurrencyGroup } from '@cardstack/runtime-common/jobs/prerender-html';
+import {
+  awaitPublishedHtmlReady,
+  prerenderHtmlConcurrencyGroup,
+} from '@cardstack/runtime-common/jobs/prerender-html';
 import { setupDB } from './helpers/index.ts';
 
 const realmURL = 'http://localhost:4201/test/';
@@ -32,6 +35,60 @@ async function enqueueIndexJob(
     },
   )) as { id: number }[];
   return id;
+}
+
+// A live `boxel_index` row at `generation`, or a tombstone / index-errored one.
+// Sets only the columns the HTML gate reads.
+async function insertIndexRow(
+  dbAdapter: PgAdapter,
+  realm: string,
+  name: string,
+  generation: number,
+  opts?: { isDeleted?: boolean; hasError?: boolean },
+): Promise<void> {
+  await dbAdapter.execute(
+    `INSERT INTO boxel_index
+       (url, file_alias, realm_url, type, generation, is_deleted, has_error, error_doc)
+     VALUES ($1, $2, $3, 'instance', $4, $5, $6, $7)`,
+    {
+      bind: [
+        `${realm}${name}`,
+        `${realm}${name}`,
+        realm,
+        generation,
+        opts?.isDeleted ?? false,
+        opts?.hasError ?? false,
+        opts?.hasError ? JSON.stringify({ message: 'boom' }) : null,
+      ],
+    },
+  );
+}
+
+// The matching `prerendered_html` row, whose `generation` the gate compares
+// against the index row's own. A tombstone (`isDeleted`) carries no HTML,
+// matching what `tombstonePrerenderedHtmlEntries` seeds.
+async function insertHtmlRow(
+  dbAdapter: PgAdapter,
+  realm: string,
+  name: string,
+  generation: number,
+  opts?: { isDeleted?: boolean },
+): Promise<void> {
+  await dbAdapter.execute(
+    `INSERT INTO prerendered_html
+       (url, file_alias, realm_url, type, generation, is_deleted, isolated_html)
+     VALUES ($1, $2, $3, 'instance', $4, $5, $6)`,
+    {
+      bind: [
+        `${realm}${name}`,
+        `${realm}${name}`,
+        realm,
+        generation,
+        opts?.isDeleted ?? false,
+        opts?.isDeleted ? null : '<div>rendered</div>',
+      ],
+    },
+  );
 }
 
 module(basename(import.meta.filename), function (hooks) {
@@ -163,6 +220,145 @@ module(basename(import.meta.filename), function (hooks) {
 
       await waiting;
       assert.true(settled, 'the gate releases once the lane drains');
+    });
+  });
+
+  module('awaitPublishedHtmlReady', function () {
+    test('a realm with no index rows is caught up', async function (assert) {
+      assert.true(
+        await awaitPublishedHtmlReady(dbAdapter, realmURL, { timeoutMs: 200 }),
+        'a realm that has never been indexed has no HTML to await',
+      );
+    });
+
+    test('a live row whose HTML is missing holds the gate', async function (assert) {
+      await insertIndexRow(dbAdapter, realmURL, 'card-1', 3);
+      assert.false(
+        await awaitPublishedHtmlReady(dbAdapter, realmURL, {
+          timeoutMs: 200,
+          pollIntervalMs: 50,
+        }),
+        'an unrendered row is not ready',
+      );
+    });
+
+    test('a live row whose HTML is behind its own generation holds the gate', async function (assert) {
+      await insertIndexRow(dbAdapter, realmURL, 'card-1', 3);
+      await insertHtmlRow(dbAdapter, realmURL, 'card-1', 2);
+      assert.false(
+        await awaitPublishedHtmlReady(dbAdapter, realmURL, {
+          timeoutMs: 200,
+          pollIntervalMs: 50,
+        }),
+        'HTML from an earlier generation is stale for this row',
+      );
+    });
+
+    test('HTML at the row generation is caught up', async function (assert) {
+      await insertIndexRow(dbAdapter, realmURL, 'card-1', 3);
+      await insertHtmlRow(dbAdapter, realmURL, 'card-1', 3);
+      assert.true(
+        await awaitPublishedHtmlReady(dbAdapter, realmURL, { timeoutMs: 200 }),
+        'a row rendered at its own generation is ready',
+      );
+    });
+
+    // `realm_generations.current_generation` advances on every index batch,
+    // while the prerender channel writes rows only at the generation its
+    // spawning pass anticipated — so the watermark can sit above every rendered
+    // row on a realm that is fully rendered. Readiness must not read it.
+    test('a current_generation ahead of every rendered row does not hold the gate', async function (assert) {
+      await insertIndexRow(dbAdapter, realmURL, 'card-1', 3);
+      await insertHtmlRow(dbAdapter, realmURL, 'card-1', 3);
+      await dbAdapter.execute(
+        `INSERT INTO realm_generations (realm_url, current_generation, loader_epoch)
+           VALUES ($1, 9, 'epoch')`,
+        { bind: [realmURL] },
+      );
+      assert.true(
+        await awaitPublishedHtmlReady(dbAdapter, realmURL, { timeoutMs: 200 }),
+        'every live row is rendered, so the realm is ready regardless of the watermark',
+      );
+    });
+
+    // Readiness is a whole-realm property: any single unrendered row holds it.
+    test('one rendered row does not vouch for an unrendered sibling', async function (assert) {
+      await insertIndexRow(dbAdapter, realmURL, 'card-1', 3);
+      await insertHtmlRow(dbAdapter, realmURL, 'card-1', 3);
+      await insertIndexRow(dbAdapter, realmURL, 'card-2', 3);
+      assert.false(
+        await awaitPublishedHtmlReady(dbAdapter, realmURL, {
+          timeoutMs: 200,
+          pollIntervalMs: 50,
+        }),
+        'the unrendered sibling still holds the gate',
+      );
+    });
+
+    // Preserve the established readiness behavior: a render visit that leaves
+    // a tombstone at the row's generation has completed, even though it
+    // produced no markup. Readiness reports completion rather than turning a
+    // terminal render outcome into a permanently blocked publish.
+    test('a prerendered_html tombstone at the row generation is caught up', async function (assert) {
+      await insertIndexRow(dbAdapter, realmURL, 'card-1', 3);
+      await insertHtmlRow(dbAdapter, realmURL, 'card-1', 3, {
+        isDeleted: true,
+      });
+      assert.true(
+        await awaitPublishedHtmlReady(dbAdapter, realmURL, { timeoutMs: 200 }),
+        'a current-generation tombstone is a completed render outcome',
+      );
+    });
+
+    // Neither has servable HTML to wait on, matching the exclusions in
+    // findStalePrerenderedHtmlRows.
+    test('tombstones and index-errored rows do not hold the gate', async function (assert) {
+      await insertIndexRow(dbAdapter, realmURL, 'deleted', 3, {
+        isDeleted: true,
+      });
+      await insertIndexRow(dbAdapter, realmURL, 'broken', 3, {
+        hasError: true,
+      });
+      assert.true(
+        await awaitPublishedHtmlReady(dbAdapter, realmURL, { timeoutMs: 200 }),
+        'a deletion and an index error leave the HTML gate clear',
+      );
+    });
+
+    test('the gate is scoped to one realm', async function (assert) {
+      await insertIndexRow(dbAdapter, otherRealmURL, 'card-1', 3);
+      assert.true(
+        await awaitPublishedHtmlReady(dbAdapter, realmURL, { timeoutMs: 200 }),
+        "another realm's unrendered row does not hold this realm's gate",
+      );
+      assert.false(
+        await awaitPublishedHtmlReady(dbAdapter, otherRealmURL, {
+          timeoutMs: 200,
+          pollIntervalMs: 50,
+        }),
+        'that realm holds its own gate',
+      );
+    });
+
+    test('the gate releases when the render lands', async function (assert) {
+      await insertIndexRow(dbAdapter, realmURL, 'card-1', 3);
+
+      let ready: boolean | undefined;
+      let waiting = awaitPublishedHtmlReady(dbAdapter, realmURL, {
+        timeoutMs: 30_000,
+        pollIntervalMs: 100,
+      }).then((result) => {
+        ready = result;
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      assert.strictEqual(ready, undefined, 'still waiting while unrendered');
+
+      await insertHtmlRow(dbAdapter, realmURL, 'card-1', 3);
+      await dbAdapter.execute(`NOTIFY jobs_finished`);
+
+      await waiting;
+      assert.true(ready, 'the gate releases once the HTML lands');
     });
   });
 });

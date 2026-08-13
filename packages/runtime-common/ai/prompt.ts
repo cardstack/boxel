@@ -1307,6 +1307,14 @@ const CORRECTNESS_SUCCESS_SUMMARY_INSTRUCTION =
 
 const CORRECTNESS_FAILURE_LIMIT_INSTRUCTION = `Automated correctness fixes have already been attempted ${MAX_CORRECTNESS_FIX_ATTEMPTS} times and the target is still failing validation. Stop proposing further automated patches; instead, summarize the remaining errors and ask the user how they want to proceed. Do not mention correctness or automated checks or tool calls.`;
 
+// This lands mid-answer, right after a file is written, and it is the last
+// thing the model reads before replying — so an instruction that only asks
+// for a summary reads as the end of the work. It was: a build announced as
+// two cards delivered one, reported it was clean, and stopped, because
+// nothing resumes a plan across turns.
+const CHECK_CORRECTNESS_SUMMARY_INSTRUCTION =
+  'The automated correctness checks have finished. Summarize the results based on the tool output above in one short sentence. Do not mention: correctness, automated correctness checks, tool calls. If work you already described remains unfinished, carry straight on with it in the same reply — this is a note on what just landed, not a request to stop.';
+
 function extractCorrectnessResultCard(
   toolResult?: ToolResultEvent,
 ): CorrectnessResultSummary | undefined {
@@ -1649,13 +1657,6 @@ export async function buildPromptForModel(
       }
     }
   }
-  if (shouldPromptCheckCorrectnessSummary(history, aiBotUserId)) {
-    historicalMessages.push({
-      role: 'user',
-      content:
-        'The automated correctness checks have finished. Summarize the results based on the tool output above in one short sentence. Do not mention: correctness, automated correctness checks, tool calls.',
-    });
-  }
   let systemMessageParts = [SYSTEM_MESSAGE];
 
   systemMessageParts.push(
@@ -1696,28 +1697,67 @@ export async function buildPromptForModel(
     tools,
     disabledSkillIds,
   );
-  // The context should be placed where it explains the state of the host.
-  // This is either:
-  // * After the last tool call message, if the last message was a tool call
-  // * Before the last user message otherwise
-  // OpenAI will error if you put the system message between the
-  // assistant and tool messages.
-  let contextMessage: OpenAIPromptMessage = {
-    role: 'system',
-    content: contextContent,
-  };
-  let lastMessage = messages[messages.length - 1];
-  if (lastMessage.role === 'tool') {
-    messages.push(contextMessage);
-  } else {
-    // Find the last user message and insert context before it
-    let lastUserIndex = findLastIndex(messages, (msg) => msg.role === 'user');
-    if (lastUserIndex !== -1) {
-      messages.splice(lastUserIndex, 0, contextMessage);
-    }
-  }
+  // The context carries the current time, so its bytes change on every
+  // request. Prompt caching is an exact prefix match, so it trails the
+  // conversation as its own message, after the cache marker — never folded
+  // into a history message, whose bytes must stay stable across requests.
+  // Its role must be `user`: OpenRouter hoists non-leading `system`
+  // messages into the top-level system parameter, which would put this
+  // volatile content in front of the whole conversation and defeat the
+  // cache.
+  normalizeHistoryContentShape(messages);
+  addHistoryCacheBreakpoint(messages, messages.length - 1);
+  // The correctness-summary instruction applies to this request only, so it
+  // rides the volatile trailing message; a history entry that vanishes on
+  // the next request would both churn the history and waste the marker.
+  let trailingContent = shouldPromptCheckCorrectnessSummary(
+    history,
+    aiBotUserId,
+  )
+    ? `${contextContent}\n\n${CHECK_CORRECTNESS_SUMMARY_INSTRUCTION}`
+    : contextContent;
+  messages.push({ role: 'user', content: trailingContent });
 
   return messages;
+}
+
+// Serializes every history message in the parts-array form, every turn.
+// The cache marker needs the parts form and moves forward each turn; if
+// only the marked message were converted, messages would flip between the
+// string and parts shapes as the marker passes through — different bytes on
+// the wire, so each flip is a cache miss at that position. Empty contents
+// stay untouched: an empty text part would be rejected.
+function normalizeHistoryContentShape(messages: OpenAIPromptMessage[]) {
+  for (let i = 1; i < messages.length; i++) {
+    let message = messages[i];
+    if (typeof message.content === 'string' && message.content) {
+      message.content = [{ type: 'text', text: message.content }];
+    }
+  }
+}
+
+// Marks the end of the stable history as cacheable — the second of the
+// prompt's two breakpoints (the first sits on the system message). This is
+// what keeps pulled skill files (readRealmFile results) from being
+// re-billed at full price on every later request. Walks backward past
+// unmarkable messages (empty content); never marks messages[0], the system
+// message.
+function addHistoryCacheBreakpoint(
+  messages: OpenAIPromptMessage[],
+  index: number,
+) {
+  for (let i = Math.min(index, messages.length - 1); i >= 1; i--) {
+    // Contents were normalized to the parts form before this runs; anything
+    // still a string is empty and cannot carry a marker.
+    let { content } = messages[i];
+    if (Array.isArray(content) && content.length > 0) {
+      content[content.length - 1] = {
+        ...content[content.length - 1],
+        cache_control: { type: 'ephemeral' },
+      };
+      return;
+    }
+  }
 }
 
 function collectPendingCodePatchCorrectnessCheck(

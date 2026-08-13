@@ -1,0 +1,47 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "text · Format Preview",
+      "cardInfo": {
+        "name": "text · Format Preview",
+        "summary": "Simple, moderate, and complex text fixtures across atom, embedded, isolated, and the 16 fitted envelopes."
+      }
+    },
+    "relationships": {
+      "previewFiles.0": {
+        "links": {
+          "self": "../samples/text-simple.txt"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/text-simple.txt"
+        }
+      },
+      "previewFiles.1": {
+        "links": {
+          "self": "../samples/text-moderate.txt"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/text-moderate.txt"
+        }
+      },
+      "previewFiles.2": {
+        "links": {
+          "self": "../samples/text-complex.txt"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/text-complex.txt"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../format-preview",
+        "name": "FileDefFormatPreview"
+      }
+    }
+  }
+}

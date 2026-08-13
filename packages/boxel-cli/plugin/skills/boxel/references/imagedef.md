@@ -71,9 +71,9 @@ The path must start with `./`, `../`, or be a full URL — see [`core-concept.md
 
 {{!-- Template-owned rendering (when you need pixel control) --}}
 {{#if @model.heroImageURL}}
-  <img src={{@model.heroImageURL}} alt={{@model.title}} class='hero' />
+  <img src={{@model.heroImageURL}} alt={{@model.cardTitle}} class='hero' />
 {{else if @model.heroImage}}
-  <img src={{@model.heroImage.url}} alt={{@model.title}} class='hero' />
+  <img src={{@model.heroImage.url}} alt={{@model.cardTitle}} class='hero' />
 {{/if}}
 ```
 

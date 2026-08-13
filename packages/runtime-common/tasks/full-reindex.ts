@@ -25,6 +25,21 @@ interface FullReindexArgs {
 
 export { fullReindex };
 
+// A full reindex enqueues one from-scratch job per realm and does not wait for
+// any of them, so its cost is a DB round trip per realm and grows with the
+// realm count — a couple of seconds per realm in practice, and observed as high
+// as 398s against a previous 360s budget.
+//
+// The budget is deliberately generous relative to that. The failure mode of
+// aborting early is silent: the realms the fan-out never reached are simply
+// left un-reindexed, with nothing to retry them. And it costs little, because
+// `full-reindex-group` is used by no other job type, so a long lease delays
+// only the next full reindex — which coalesces into this one anyway.
+//
+// A worker clamps any declared timeout to its own ceiling, so raising this
+// above `FROM_SCRATCH_JOB_TIMEOUT_SEC` would silently have no effect.
+export const FULL_REINDEX_JOB_TIMEOUT_SEC = 30 * 60;
+
 function isObjectLike(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }

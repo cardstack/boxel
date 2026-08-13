@@ -1,0 +1,47 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "mov · Format Preview",
+      "cardInfo": {
+        "name": "mov · Format Preview",
+        "summary": "Simple, moderate, and complex mov fixtures across atom, embedded, isolated, and the 16 fitted envelopes."
+      }
+    },
+    "relationships": {
+      "previewFiles.0": {
+        "links": {
+          "self": "../samples/mov-simple.mov"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/mov-simple.mov"
+        }
+      },
+      "previewFiles.1": {
+        "links": {
+          "self": "../samples/mov-moderate.mov"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/mov-moderate.mov"
+        }
+      },
+      "previewFiles.2": {
+        "links": {
+          "self": "../samples/mov-complex.mov"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/mov-complex.mov"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../format-preview",
+        "name": "FileDefFormatPreview"
+      }
+    }
+  }
+}

@@ -11,8 +11,10 @@ import {
   type VirtualNetwork,
   type DBAdapter,
   type QueuePublisher,
+  DEFAULT_AUDIO_SIZE_LIMIT_BYTES,
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
+  DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
 } from '@cardstack/runtime-common';
 import fsExtra from 'fs-extra';
 const { ensureDirSync } = fsExtra;
@@ -949,6 +951,8 @@ export class RealmServer {
     | undefined;
   private cardSizeLimitBytes: number;
   private fileSizeLimitBytes: number;
+  private audioSizeLimitBytes: number;
+  private videoSizeLimitBytes: number;
   private domainsForPublishedRealms:
     | {
         boxelSpace?: string;
@@ -1035,6 +1039,12 @@ export class RealmServer {
     this.fileSizeLimitBytes = Number(
       process.env.FILE_SIZE_LIMIT_BYTES ?? DEFAULT_FILE_SIZE_LIMIT_BYTES,
     );
+    this.audioSizeLimitBytes = Number(
+      process.env.AUDIO_SIZE_LIMIT_BYTES ?? DEFAULT_AUDIO_SIZE_LIMIT_BYTES,
+    );
+    this.videoSizeLimitBytes = Number(
+      process.env.VIDEO_SIZE_LIMIT_BYTES ?? DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
+    );
     this.virtualNetwork = virtualNetwork;
     this.matrixClient = matrixClient;
 
@@ -1079,6 +1089,8 @@ export class RealmServer {
       getIndexHTML: this.getIndexHTML,
       cardSizeLimitBytes: this.cardSizeLimitBytes,
       fileSizeLimitBytes: this.fileSizeLimitBytes,
+      audioSizeLimitBytes: this.audioSizeLimitBytes,
+      videoSizeLimitBytes: this.videoSizeLimitBytes,
     });
     let serveFromRealm = createServeFromRealm({
       realms: this.realms,

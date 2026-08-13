@@ -1,7 +1,6 @@
+import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
-
-import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 
 import HostModeStackItem from './stack-item';
 
@@ -23,17 +22,34 @@ export default class HostModeStack extends Component<Signature> {
     }
   }
 
+  // Dismiss belongs to the scrim alone: a document-wide click-outside also
+  // fires for the click that navigated the stack, closing the card it just
+  // opened. Tests for a click inside a card rather than target ===
+  // currentTarget, since `.inner` fills the scrim and takes background clicks.
+  @action
+  onScrimClick(event: Event) {
+    let target = event.target;
+    if (
+      target instanceof Element &&
+      target.closest('[data-host-mode-stack-item]') !== null
+    ) {
+      return;
+    }
+    this.closeTopCard();
+  }
+
   <template>
-    <div class='host-mode-stack' data-test-host-mode-stack ...attributes>
+    {{! The scrim is a shortcut for the top card's close button, not the only
+    way out, so it stays a plain element rather than gaining a button role. }}
+    {{! template-lint-disable no-invalid-interactive }}
+    <div
+      class='host-mode-stack'
+      {{on 'click' this.onScrimClick}}
+      data-test-host-mode-stack
+      ...attributes
+    >
       <div class='inner' tabindex='-1'>
-        <div
-          class='stack-items'
-          {{onClickOutside
-            this.closeTopCard
-            exceptSelector='[data-host-mode-breadcrumbs]'
-          }}
-          data-test-host-mode-stack-items
-        >
+        <div class='stack-items' data-test-host-mode-stack-items>
           {{#each @stackItemCardIds key='cardId' as |cardId index|}}
             <HostModeStackItem
               @cardId={{cardId}}

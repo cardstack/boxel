@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Waymark — Clear field operations</title>
+  <!-- Original CC0 fixture for the Cardstack FileDef developer handoff. -->
+  <style>
+    :root { color-scheme:dark; --night:#170c3a; --violet:#5b2cff; --acid:#dfff00; --pink:#ff5ab3; --white:#fffaf2; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; color:var(--white); background:var(--violet); font:16px/1.45 Arial,sans-serif; overflow-x:hidden; }
+    a { color:inherit; text-decoration:none; }
+    .shell { width:min(1180px,calc(100% - 40px)); margin:auto; }
+    nav { height:76px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid rgba(255,255,255,.34); }
+    .brand { display:flex; align-items:center; gap:12px; font-size:18px; font-weight:900; letter-spacing:-.04em; }
+    .mark { width:32px; height:32px; display:grid; place-items:center; background:var(--acid); color:var(--night); border-radius:50% 50% 50% 8px; transform:rotate(-12deg); }
+    .navlinks { display:flex; align-items:center; gap:26px; font-size:13px; font-weight:800; }
+    .pill { display:inline-flex; min-height:42px; align-items:center; padding:0 18px; border:1px solid currentColor; border-radius:999px; font-weight:900; }
+    .hero { position:relative; min-height:610px; display:grid; grid-template-columns:1.08fr .92fr; gap:36px; align-items:center; padding:58px 0 72px; }
+    .copy { position:relative; z-index:2; }
+    .eyebrow { margin:0; font:800 11px/1 ui-monospace,monospace; letter-spacing:.15em; text-transform:uppercase; color:var(--acid); }
+    h1 { max-width:7.8ch; margin:20px 0 28px; font:900 clamp(64px,10vw,132px)/.76 Arial,sans-serif; letter-spacing:-.09em; }
+    .lede { max-width:540px; margin:0 0 28px; font-size:19px; }
+    .actions { display:flex; gap:12px; flex-wrap:wrap; }
+    .actions .primary { background:var(--acid); color:var(--night); border-color:var(--acid); }
+    .map { position:relative; height:480px; background:var(--night); border-radius:50% 50% 12px 50%; transform:rotate(5deg); box-shadow:24px 24px 0 var(--pink); }
+    .map::before { content:""; position:absolute; inset:15%; border:4px dashed var(--acid); border-left-color:transparent; border-radius:52% 42% 58% 38%; transform:rotate(-22deg); }
+    .stop { position:absolute; width:82px; aspect-ratio:1; display:grid; place-items:center; border:3px solid var(--night); border-radius:50%; background:var(--white); color:var(--night); font:900 18px/1 ui-monospace,monospace; transform:rotate(-5deg); }
+    .stop.one { left:8%; bottom:14%; background:var(--pink); }
+    .stop.two { left:46%; top:8%; background:var(--acid); }
+    .stop.three { right:5%; bottom:22%; }
+    .ticker { margin:0 calc(50% - 50vw); padding:18px 0; overflow:hidden; border-block:1px solid rgba(255,255,255,.4); background:var(--night); color:var(--acid); font:800 12px/1 ui-monospace,monospace; letter-spacing:.12em; white-space:nowrap; text-transform:uppercase; }
+    .ticker span { display:inline-block; padding-left:5vw; word-spacing:2vw; }
+    @media (max-width:760px) { .navlinks a:not(.pill){display:none}.hero{grid-template-columns:1fr;padding-top:42px}.map{height:360px}h1{font-size:70px} }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <nav aria-label="Main navigation"><a class="brand" href="#"><span class="mark">W</span>WAYMARK</a><div class="navlinks"><a href="#product">Platform</a><a href="#results">Results</a><a class="pill" href="#demo">Book a demo</a></div></nav>
+    <main class="hero" id="product">
+      <section class="copy"><p class="eyebrow">Field operations / made visible</p><h1>Move with clarity.</h1><p class="lede">Live assignments, site notes, and delivery evidence become one bright operating picture your whole team can act on.</p><div class="actions"><a class="pill primary" href="#demo">Start a pilot →</a><a class="pill" href="#results">31% less dispatch</a></div></section>
+      <section class="map" aria-label="Abstract route map"><span class="stop one">01</span><span class="stop two">07</span><span class="stop three">12</span></section>
+    </main>
+    <section class="ticker" id="results"><span>12 stops live ✦ 98% proof captured ✦ 2.4× faster resolution ✦ all routes visible ✦</span></section>
+  </div>
+</body>
+</html>

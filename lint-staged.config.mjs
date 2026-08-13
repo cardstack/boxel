@@ -16,6 +16,24 @@ import { fileURLToPath } from 'node:url';
 // Drop them before routing so they're never scanned or handed to any tool.
 const PNPM_OWNED_FILES = new Set(['pnpm-lock.yaml', 'pnpm-workspace.yaml']);
 
+// Trees whose contents are copied in verbatim from another repo and must keep
+// that repo's bytes. `.prettierignore` already covers them, but eslint applies
+// prettier formatting through eslint-plugin-prettier and never consults
+// `.prettierignore` — so without this skip, staging a copied `.gts` reformats
+// it and drifts the copy from its source. Regenerating (`pnpm build:skills`)
+// then reports phantom diffs. Match on a path segment so absolute staged paths
+// work.
+const VERBATIM_COPIED_TREES = [
+  '/packages/boxel-cli/plugin/skills/',
+  // Licensed FileDef sample files whose bytes must match the integrity
+  // manifest in the sibling SOURCES.md.
+  '/packages/experiments-realm/filedef-fixtures/samples/',
+];
+const isVerbatimCopy = (file) => {
+  const posix = file.replace(/\\/g, '/');
+  return VERBATIM_COPIED_TREES.some((tree) => posix.includes(tree));
+};
+
 // Resolve .prettierignore next to this config (repo root) rather than relying
 // on cwd, so getFileInfo's `ignored` verdict matches what the prettier CLI in
 // lint-autofix.mjs actually honors.
@@ -47,6 +65,7 @@ export default async (stagedFiles) => {
 
   for (const file of stagedFiles) {
     if (PNPM_OWNED_FILES.has(basename(file))) continue;
+    if (isVerbatimCopy(file)) continue;
     const ext = extname(file);
     let routed = false;
     if (ESLINT_EXTENSIONS.has(ext)) {

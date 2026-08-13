@@ -20,6 +20,8 @@ import {
   IconSearch,
 } from '@cardstack/boxel-ui/icons';
 
+import { isSampledContentHash } from '@cardstack/runtime-common';
+
 import {
   boundedVideoFrameAspectRatio,
   fileIconFor,
@@ -127,7 +129,17 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
         `${humanSize(m.contentSize)} · ${m.contentSize.toLocaleString()} bytes`,
       );
     }
-    push('MD5', m.contentHash, true);
+    // A whole-content fingerprint is a plain md5, so it is worth naming as
+    // one — it matches what `md5sum` reports. A sampled fingerprint covers
+    // only the file's head and tail, so calling it an md5 would invite a
+    // comparison that can never match.
+    if (m.contentHash) {
+      push(
+        isSampledContentHash(m.contentHash) ? 'Checksum (sampled)' : 'MD5',
+        m.contentHash,
+        true,
+      );
+    }
     if (m.width && m.height) {
       push('Dimensions', `${m.width} × ${m.height} px`);
     }
@@ -176,9 +188,39 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
   }
 
   // A `contains` FieldDef is always an instance, so presence has to mean "has
-  // at least one meaningful value" rather than "is not null".
+  // at least one meaningful value" rather than "is not null" — and the value
+  // list must cover every field the pane's templates can render, or a thinly
+  // tagged photo hides rows the pane would have shown.
   get hasExif() {
-    return Boolean(this.args.model?.exif);
+    let capture = this.args.model?.exif?.capture;
+    let location = this.args.model?.exif?.location;
+    return Boolean(
+      capture?.cameraName ||
+      capture?.lensModel ||
+      capture?.focalLength?.display ||
+      capture?.aperture?.display ||
+      capture?.exposureTime?.display ||
+      capture?.iso ||
+      capture?.flash?.label ||
+      capture?.orientation?.label ||
+      capture?.capturedAt ||
+      capture?.software ||
+      location?.coordinates ||
+      location?.altitude?.display ||
+      location?.place ||
+      location?.source?.label,
+    );
+  }
+
+  get hasColorProfile() {
+    let c = this.args.model?.colorProfile;
+    return Boolean(
+      c?.colorSpace?.code ||
+      c?.bitDepth ||
+      c?.channels ||
+      c?.iccProfile ||
+      c?.hasAlpha != null,
+    );
   }
 
   get hasEncoding() {
@@ -480,6 +522,10 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
             <h2 class='insp-group'>EXIF metadata</h2>
             <div class='insp-family'><@fields.exif /></div>
           {{/if}}
+          {{#if this.hasColorProfile}}
+            <h2 class='insp-group'>Color profile</h2>
+            <div class='insp-family'><@fields.colorProfile /></div>
+          {{/if}}
           {{#if this.hasEncoding}}
             <h2 class='insp-group'>Encoding</h2>
             <div class='insp-family'><@fields.encoding /></div>
@@ -635,13 +681,27 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
         gap: 20px;
         align-items: start;
       }
-      /* HTML owns a full-width document stage; its metadata follows below in
-         reading order. */
-      .iso[data-preview-kind='html'] .iso-cols {
+      /* HTML and long-form text own a full-width document stage; a document is
+         read top to bottom, so its metadata follows below in reading order
+         rather than competing for width beside it. */
+      .iso[data-preview-kind='html'] .iso-cols,
+      .iso[data-preview-kind='markdown'] .iso-cols,
+      .iso[data-preview-kind='doc'] .iso-cols {
         grid-template-columns: minmax(0, 1fr);
         gap: 24px;
       }
-      .iso[data-preview-kind='html'] .inspector {
+      .iso[data-preview-kind='html'] .inspector,
+      .iso[data-preview-kind='markdown'] .inspector,
+      .iso[data-preview-kind='doc'] .inspector {
+        width: 100%;
+      }
+      /* Source code reads as a full-width document too: its metadata follows
+         below in reading order rather than competing for width beside it. */
+      .iso[data-preview-kind='code'] .iso-cols {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 24px;
+      }
+      .iso[data-preview-kind='code'] .inspector {
         width: 100%;
       }
       @container (max-width: 760px) {
@@ -665,6 +725,26 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
       /* A real mockup or report needs a browser-sized viewport. */
       .iso[data-preview-kind='html'] .iso-stage {
         height: clamp(560px, 72vh, 920px);
+        background: var(--card);
+      }
+      /* A source file grows to its own length rather than scrolling inside a
+         fixed hero: the whole point of the isolated view is to read the file
+         top to bottom. It keeps a floor so a short file still presents as a
+         page, and its own dark surface stays clipped to the rounded frame. */
+      .iso[data-preview-kind='code'] .iso-stage {
+        height: auto;
+        min-height: 240px;
+        overflow: hidden;
+        background: var(--boxel-dark, #1e1e1e);
+      }
+      /* A prose document grows to its own length rather than scrolling inside a
+         fixed hero: the whole point of the isolated view is to read it. It keeps
+         a floor so a one-line file still presents as a page. */
+      .iso[data-preview-kind='markdown'] .iso-stage,
+      .iso[data-preview-kind='doc'] .iso-stage {
+        height: auto;
+        min-height: 240px;
+        overflow: visible;
         background: var(--card);
       }
       /* Exact aspect ratio within useful limits; matte beyond them. */

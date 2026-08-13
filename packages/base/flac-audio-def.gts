@@ -1,12 +1,21 @@
 import { readFirstBytes } from '@cardstack/runtime-common';
 import FileAudioIcon from '@cardstack/boxel-icons/file-audio';
-import AudioDef from './audio-file-def';
+import AudioDef, {
+  audioAttributes,
+  waveformFor,
+  type AudioAttributes,
+} from './audio-file-def';
 import type { ByteStream, SerializedFile } from './file-api';
-import { extractFlacDuration } from './flac-meta-extractor';
+import {
+  FLAC_METADATA_WINDOW_BYTES,
+  extractFlacDuration,
+  extractFlacEncoding,
+  extractFlacTags,
+} from './flac-meta-extractor';
 
-// "fLaC" marker (4) + STREAMINFO block header (4) + STREAMINFO data (34) = 42.
-// Round up to leave room for stream-chunking artefacts.
-const FLAC_MAX_HEADER_BYTES = 256;
+// The encoding read needs only STREAMINFO, 42 bytes in — but the tag read needs
+// the VORBIS_COMMENT block, which sits behind whatever other metadata blocks the
+// encoder wrote. See `FLAC_METADATA_WINDOW_BYTES` for why that is much further.
 
 export class FlacDef extends AudioDef {
   static displayName = 'FLAC Audio';
@@ -16,15 +25,32 @@ export class FlacDef extends AudioDef {
   static async extractAttributes(
     url: string,
     getStream: () => Promise<ByteStream>,
-    options: { contentHash?: string } = {},
-  ): Promise<SerializedFile<{ duration: number }>> {
+    options: { contentHash?: string; contentSize?: number } = {},
+  ): Promise<SerializedFile<{ duration: number } & AudioAttributes>> {
     let base = await super.extractAttributes(url, getStream, options);
-    let bytes = await readFirstBytes(await getStream(), FLAC_MAX_HEADER_BYTES);
+    let bytes = await readFirstBytes(
+      await getStream(),
+      FLAC_METADATA_WINDOW_BYTES,
+    );
     let { duration } = extractFlacDuration(bytes);
+
+    // Bound before the waveform call so the decode budget can be predicted from
+    // the sample rate and channel count the container already stated.
+    let encoding = extractFlacEncoding(bytes);
 
     return {
       ...base,
       duration,
+      ...audioAttributes(
+        encoding,
+        extractFlacTags(bytes),
+        await waveformFor(getStream, {
+          durationSeconds: duration,
+          sampleRateHz: encoding?.sampleRateHz,
+          channels: encoding?.channels,
+          contentSize: base.contentSize,
+        }),
+      ),
     };
   }
 }

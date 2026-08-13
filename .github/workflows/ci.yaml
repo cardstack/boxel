@@ -38,6 +38,7 @@ jobs:
       realm-server: ${{ steps.filter.outputs.realm-server }}
       vscode-boxel-tools: ${{ steps.filter.outputs.vscode-boxel-tools }}
       boxel-cli: ${{ steps.filter.outputs.boxel-cli }}
+      bxl: ${{ steps.filter.outputs.bxl }}
       bench-amd: ${{ steps.filter.outputs.bench-amd }}
       bench-realm: ${{ steps.filter.outputs.bench-realm }}
       # Force all tests to run when on ci-bisect* branches
@@ -103,6 +104,7 @@ jobs:
               - *shared
               - 'packages/boxel-icons/**'
               - 'packages/boxel-ui/**'
+              - 'packages/boxel-ui/docs-app/**'
             matrix:
               - *shared
               - 'packages/base/**'
@@ -128,6 +130,12 @@ jobs:
             boxel-cli:
               - *shared
               - 'packages/boxel-cli/**'
+            bxl:
+              # The suite is self-contained — plain objects under Node, no
+              # stack and no browser — so it stays cheap even when the
+              # shared CI-boot paths trigger it.
+              - *shared
+              - 'packages/bxl/**'
             bench-amd:
               # The AMD transpiler is a runtime-common module with no
               # cross-workspace deps that affect its wall-time, so the
@@ -217,6 +225,21 @@ jobs:
       - name: Bot Runner test suite
         run: pnpm test
         working-directory: packages/bot-runner
+
+  bxl-test:
+    name: BXL Tests
+    needs: change-check
+    if: needs.change-check.outputs.bxl == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: bxl-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      - name: BXL test suite
+        run: pnpm test
+        working-directory: packages/bxl
 
   eslint-plugin-boxel-test:
     name: ESLint Plugin Boxel Tests
@@ -340,7 +363,10 @@ jobs:
           SKIP_ICONS_BUILD: ${{ steps.icons-cache.outputs.cache-hit }}
       - name: Run test suite
         run: pnpm test
-        working-directory: packages/boxel-ui/test-app
+        working-directory: packages/boxel-ui
+      - name: Run docs app test suite
+        run: pnpm test
+        working-directory: packages/boxel-ui/docs-app
 
   boxel-ui-raw-icon-changes-only:
     name: Boxel UI ensure raw icon changes only
@@ -355,7 +381,7 @@ jobs:
       - uses: ./.github/actions/init
       - name: Rebuild boxel-ui icons
         run: pnpm rebuild:icons
-        working-directory: packages/boxel-ui/addon
+        working-directory: packages/boxel-ui
       - name: Fail if generated icons have been changed without underlying raw icon changing
         run: git diff --exit-code
 
@@ -850,7 +876,7 @@ jobs:
         working-directory: packages/boxel-icons
       - name: Build Boxel UI
         run: pnpm run build
-        working-directory: packages/boxel-ui/addon
+        working-directory: packages/boxel-ui
       - name: Build host dist
         run: pnpm build
         working-directory: packages/host

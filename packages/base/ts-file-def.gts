@@ -1,9 +1,11 @@
 import { byteStreamToUint8Array } from '@cardstack/runtime-common';
 import { htmlSafe } from '@ember/template';
 import FileCodeIcon from '@cardstack/boxel-icons/file-code';
+import GlimmerComponent from '@glimmer/component';
 import {
   BaseDefComponent,
   Component,
+  NumberField,
   StringField,
   contains,
   field,
@@ -14,6 +16,7 @@ import {
   type ByteStream,
   type SerializedFile,
 } from './file-api';
+import type { FilePreviewSignature } from './file-formats/file-preview-stage';
 import { fencedCodeBlock } from './markdown-helpers';
 import { highlightTs } from './ts-highlight';
 export { highlightTs } from './ts-highlight';
@@ -43,356 +46,125 @@ function truncateExcerpt(text: string): string {
   return `${text.slice(0, EXCERPT_MAX_LENGTH - 3).trimEnd()}...`;
 }
 
-function tsTitle(
-  model: { title?: string | null; name?: string | null } | null | undefined,
-): string {
-  return model?.title ?? model?.name ?? 'Untitled TypeScript module';
-}
-
-class Isolated extends Component<typeof TsFileDef> {
-  get hasContent() {
-    return Boolean(this.args.model?.content?.trim());
+// The family renderer the four shared shells mount into. Source code has no
+// prose structure to render, so every format shows the bytes in a syntax-
+// highlighted monospace column — the full source for embedded/isolated, the
+// projection's already-budgeted head snippet for a fitted collection cell. The
+// same renderer serves TypeScript and GTS: `highlightTs` marks up `<template>`
+// tags too, so a `.gts` component reads correctly without a second pass.
+class CodePreview extends GlimmerComponent<FilePreviewSignature> {
+  get content(): string {
+    let model = this.args.model;
+    if (this.args.mode === 'fitted') {
+      // `contentPreview` is truncated to the fitted character/line budget in
+      // `fileViewModel`, so a cell can never be handed the whole file.
+      return model?.contentPreview ?? '';
+    }
+    return String(model?.source?.content ?? model?.contentPreview ?? '');
   }
 
-  get highlightedContent() {
-    let content = this.args.model?.content ?? '';
-    if (!content.trim()) {
+  get hasContent(): boolean {
+    return Boolean(this.content.trim());
+  }
+
+  // `highlightTs()` owns the whole rendering pipeline for this preview: it
+  // escapes the source first and only adds the syntax-highlight wrappers we
+  // control, so no second sanitizer pass reparses our own HTML during
+  // prerender/indexing.
+  get highlighted() {
+    if (!this.hasContent) {
       return htmlSafe('');
     }
-    // `highlightTs()` owns the whole rendering pipeline for this preview: it
-    // escapes the TypeScript source first and only adds the syntax-highlight
-    // wrappers we control. A second sanitizer pass just reparses our own HTML
-    // during prerender/indexing and was showing up as avoidable DOMParser churn.
-    return htmlSafe(highlightTs(content));
+    return htmlSafe(highlightTs(this.content));
   }
 
-  get title() {
-    return tsTitle(this.args.model);
+  get truncated(): boolean {
+    return (
+      this.args.mode === 'fitted' && Boolean(this.args.model?.previewTruncated)
+    );
   }
 
   <template>
-    <article class='ts-isolated' data-test-ts-isolated>
+    <div class='code-preview' data-mode={{@mode}} data-test-ts-preview>
       {{#if this.hasContent}}
-        <pre class='ts-isolated__code'><code>{{this.highlightedContent}}</code></pre>
-      {{else}}
-        <header class='ts-isolated__title'>{{this.title}}</header>
-      {{/if}}
-    </article>
-    <style scoped>
-      .ts-isolated {
-        padding: var(--boxel-sp-lg);
-        max-width: 100%;
-      }
-
-      .ts-isolated__title {
-        color: var(--boxel-900);
-        font-weight: 600;
-        font-size: var(--boxel-font-size-lg);
-      }
-
-      .ts-isolated__code {
-        background: var(--boxel-dark);
-        color: var(--boxel-light);
-        font-family: var(--boxel-monospace-font-family);
-        font-size: var(--boxel-font-sm);
-        border-radius: var(--boxel-border-radius-xl);
-        padding: var(--boxel-sp-lg);
-        overflow-x: auto;
-        white-space: pre;
-        margin: 0;
-        line-height: 1.5;
-      }
-
-      .ts-isolated__code :deep(.ts-keyword) {
-        color: #569cd6;
-      }
-
-      .ts-isolated__code :deep(.ts-string) {
-        color: #ce9178;
-      }
-
-      .ts-isolated__code :deep(.ts-comment) {
-        color: #6a9955;
-        font-style: italic;
-      }
-
-      .ts-isolated__code :deep(.ts-decorator) {
-        color: #dcdcaa;
-      }
-
-      .ts-isolated__code :deep(.ts-number) {
-        color: #b5cea8;
-      }
-
-      .ts-isolated__code :deep(.ts-type) {
-        color: #4ec9b0;
-      }
-    </style>
-  </template>
-}
-
-class Embedded extends Component<typeof TsFileDef> {
-  get title() {
-    return tsTitle(this.args.model);
-  }
-
-  get hasContent() {
-    return Boolean(this.args.model?.content?.trim());
-  }
-
-  get codePreview() {
-    let content = this.args.model?.content ?? '';
-    if (!content.trim()) {
-      return htmlSafe('');
-    }
-    // `highlightTs()` owns the whole rendering pipeline for this preview: it
-    // escapes the TypeScript source first and only adds the syntax-highlight
-    // wrappers we control. A second sanitizer pass just reparses our own HTML
-    // during prerender/indexing and was showing up as avoidable DOMParser churn.
-    return htmlSafe(highlightTs(content));
-  }
-
-  <template>
-    <article class='ts-embedded' data-test-ts-embedded>
-      <header class='ts-embedded__title'>{{this.title}}</header>
-      {{#if this.hasContent}}
-        <div class='ts-embedded__preview'>
-          <pre class='ts-embedded__code'><code>{{this.codePreview}}</code></pre>
-        </div>
-      {{/if}}
-    </article>
-    <style scoped>
-      .ts-embedded {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-xs);
-        padding: var(--boxel-sp);
-      }
-
-      .ts-embedded__title {
-        color: var(--boxel-900);
-        font-weight: 600;
-      }
-
-      .ts-embedded__preview {
-        max-height: 200px;
-        overflow: hidden;
-        mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
-        -webkit-mask-image: linear-gradient(
-          to bottom,
-          black 60%,
-          transparent 100%
-        );
-      }
-
-      .ts-embedded__code {
-        background: var(--boxel-dark);
-        color: var(--boxel-light);
-        font-family: var(--boxel-monospace-font-family);
-        font-size: var(--boxel-font-xs);
-        border-radius: var(--boxel-border-radius-xl);
-        padding: var(--boxel-sp);
-        margin: 0;
-        white-space: pre;
-        line-height: 1.4;
-      }
-
-      .ts-embedded__code :deep(.ts-keyword) {
-        color: #569cd6;
-      }
-
-      .ts-embedded__code :deep(.ts-string) {
-        color: #ce9178;
-      }
-
-      .ts-embedded__code :deep(.ts-comment) {
-        color: #6a9955;
-        font-style: italic;
-      }
-
-      .ts-embedded__code :deep(.ts-decorator) {
-        color: #dcdcaa;
-      }
-
-      .ts-embedded__code :deep(.ts-number) {
-        color: #b5cea8;
-      }
-
-      .ts-embedded__code :deep(.ts-type) {
-        color: #4ec9b0;
-      }
-    </style>
-  </template>
-}
-
-class Fitted extends Component<typeof TsFileDef> {
-  get title() {
-    return tsTitle(this.args.model);
-  }
-
-  get excerpt() {
-    return this.args.model?.excerpt ?? '';
-  }
-
-  get hasExcerpt() {
-    return Boolean(this.excerpt);
-  }
-
-  <template>
-    <article class='ts-fitted' data-test-ts-fitted>
-      <div class='ts-fitted__icon'>
-        <FileCodeIcon width='100%' height='100%' />
-      </div>
-      <div class='ts-fitted__text'>
-        <header class='ts-fitted__title'>{{this.title}}</header>
-        {{#if this.hasExcerpt}}
-          <p class='ts-fitted__excerpt'>{{this.excerpt}}</p>
+        <pre class='code-preview__body'><code>{{this.highlighted}}</code></pre>
+        {{#if this.truncated}}
+          <div class='code-preview__more' aria-hidden='true'>…</div>
         {{/if}}
-      </div>
-    </article>
+      {{else}}
+        <p class='code-preview__empty'>No source content</p>
+      {{/if}}
+    </div>
     <style scoped>
-      .ts-fitted {
-        container-name: fitted-card;
-        container-type: size;
+      /* A code surface stays a dark editor panel in either theme: the syntax
+         palette is tuned for a dark background and reads as "this is code". */
+      .code-preview {
         width: 100%;
         height: 100%;
-        display: flex;
-        align-items: flex-start;
-        gap: var(--boxel-sp-xs);
-        padding: var(--boxel-sp-xs);
-        overflow: hidden;
+        min-height: 0;
+        overflow: auto;
+        background: var(--boxel-dark, #1e1e1e);
+        color: var(--boxel-light, #d4d4d4);
+        text-align: left;
       }
-
-      .ts-fitted__icon {
-        flex-shrink: 0;
-        width: 20px;
-        height: 20px;
-        color: var(--boxel-600);
-      }
-
-      .ts-fitted__text {
-        min-width: 0;
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-4xs);
-      }
-
-      .ts-fitted__title {
-        color: var(--boxel-900);
-        font-weight: 600;
-        font-size: var(--boxel-font-sm);
-        overflow: hidden;
-        display: -webkit-box;
-        -webkit-box-orient: vertical;
-        -webkit-line-clamp: 2;
-      }
-
-      .ts-fitted__excerpt {
-        color: var(--boxel-600);
-        font-size: var(--boxel-font-xs);
+      .code-preview__body {
         margin: 0;
+        padding: var(--boxel-sp-lg);
+        font-family: var(
+          --font-mono,
+          var(--boxel-monospace-font-family, monospace)
+        );
+        font-size: 0.8125rem;
+        line-height: 1.55;
+        white-space: pre;
+        overflow-wrap: normal;
+      }
+      /* Fitted cells get a smaller, denser head snippet capped by a fade so the
+         clip reads as "there is more" rather than an abrupt cut. */
+      .code-preview[data-mode='fitted'] {
         overflow: hidden;
-        display: -webkit-box;
-        -webkit-box-orient: vertical;
-        -webkit-line-clamp: 3;
-        font-family: var(--boxel-monospace-font-family);
+        position: relative;
+        -webkit-mask-image: linear-gradient(to bottom, black 72%, transparent);
+        mask-image: linear-gradient(to bottom, black 72%, transparent);
       }
-
-      /* Portrait tall: icon above text */
-      @container fitted-card (aspect-ratio <= 1.0) and (height >= 120px) {
-        .ts-fitted {
-          flex-direction: column;
-          align-items: center;
-          text-align: center;
-        }
-
-        .ts-fitted__icon {
-          width: 28px;
-          height: 28px;
-        }
-
-        .ts-fitted__title {
-          -webkit-line-clamp: 3;
-        }
+      .code-preview[data-mode='fitted'] .code-preview__body {
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        font-size: 0.6875rem;
+        line-height: 1.5;
       }
-
-      /* Portrait short: hide excerpt */
-      @container fitted-card (aspect-ratio <= 1.0) and (height < 120px) {
-        .ts-fitted__excerpt {
-          display: none;
-        }
+      .code-preview__more {
+        position: absolute;
+        bottom: 2px;
+        right: 8px;
+        color: var(--boxel-400, #808080);
+        font-size: 0.75rem;
       }
-
-      /* Portrait very short: hide icon too */
-      @container fitted-card (aspect-ratio <= 1.0) and (height < 80px) {
-        .ts-fitted__icon {
-          display: none;
-        }
-      }
-
-      /* Landscape: icon left of text */
-      @container fitted-card (1.0 < aspect-ratio) {
-        .ts-fitted {
-          align-items: flex-start;
-        }
-      }
-
-      /* Landscape short: hide excerpt */
-      @container fitted-card (1.0 < aspect-ratio) and (height < 80px) {
-        .ts-fitted__excerpt {
-          display: none;
-        }
-      }
-
-      /* Very small: title only, smaller font */
-      @container fitted-card (height <= 57px) {
-        .ts-fitted__icon {
-          display: none;
-        }
-
-        .ts-fitted__excerpt {
-          display: none;
-        }
-
-        .ts-fitted__title {
-          font-size: var(--boxel-font-xs);
-          -webkit-line-clamp: 1;
-        }
-      }
-    </style>
-  </template>
-}
-
-class Atom extends Component<typeof TsFileDef> {
-  get title() {
-    return tsTitle(this.args.model);
-  }
-
-  <template>
-    <span class='ts-atom' data-test-ts-atom>
-      <FileCodeIcon class='ts-atom__icon' width='16' height='16' />
-      <span class='ts-atom__title'>{{this.title}}</span>
-    </span>
-    <style scoped>
-      .ts-atom {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--boxel-sp-4xs);
-        min-width: 0;
-      }
-
-      .ts-atom__icon {
-        flex-shrink: 0;
-        color: var(--boxel-600);
-      }
-
-      .ts-atom__title {
-        color: var(--boxel-900);
+      .code-preview__empty {
+        margin: 0;
+        padding: var(--boxel-sp);
+        color: var(--boxel-400, #808080);
         font-size: var(--boxel-font-sm);
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+      }
+
+      /* VS Code Dark+ palette, shared by every code format. */
+      .code-preview :deep(.ts-keyword) {
+        color: #569cd6;
+      }
+      .code-preview :deep(.ts-string) {
+        color: #ce9178;
+      }
+      .code-preview :deep(.ts-comment) {
+        color: #6a9955;
+        font-style: italic;
+      }
+      .code-preview :deep(.ts-decorator) {
+        color: #dcdcaa;
+      }
+      .code-preview :deep(.ts-number) {
+        color: #b5cea8;
+      }
+      .code-preview :deep(.ts-type) {
+        color: #4ec9b0;
       }
     </style>
   </template>
@@ -400,7 +172,11 @@ class Atom extends Component<typeof TsFileDef> {
 
 class Head extends Component<typeof TsFileDef> {
   get title() {
-    return tsTitle(this.args.model);
+    return (
+      this.args.model?.title ??
+      this.args.model?.name ??
+      'Untitled TypeScript module'
+    );
   }
 
   get description() {
@@ -436,14 +212,29 @@ export class TsFileDef extends FileDef {
   // themselves to markdown renderers.
   static markdownLanguage = 'ts';
 
+  // A `.ts`/`.gts` served without (or with an uninformative) content type would
+  // route to a generic profile by extension alone, so pin the code axes the
+  // four shells present — the family, the labeled kind, and the text renderer —
+  // off the class rather than depending on every instance carrying
+  // `text/typescript`.
+  static fileFamily = 'code';
+  static fileKind = 'TypeScript';
+  static previewKind = 'code';
+  static previewAdapter = 'text';
+  static previewSource = 'extracted';
+
   @field title = contains(StringField);
   @field excerpt = contains(StringField);
   @field content = contains(StringField);
+  // Surfaced by the shells as the hero fact ("N lines") and an isolated
+  // inspector row, and cheap enough to read from the same decode.
+  @field lineCount = contains(NumberField);
 
-  static isolated: BaseDefComponent = Isolated;
-  static embedded: BaseDefComponent = Embedded;
-  static fitted: BaseDefComponent = Fitted;
-  static atom: BaseDefComponent = Atom;
+  // The bespoke isolated/embedded/fitted/atom are gone: TsFileDef (and every
+  // subclass, e.g. GtsFileDef) now inherits the four shared shells from FileDef
+  // and supplies only the renderer they mount, so identity, facts, budgets, and
+  // state handling stay in one place across every file family.
+  static previewComponent = CodePreview;
   static head: BaseDefComponent = Head;
 
   // CS-10787: emit the source as a fenced code block labeled with the
@@ -470,7 +261,12 @@ export class TsFileDef extends FileDef {
     getStream: () => Promise<ByteStream>,
     options: { contentHash?: string } = {},
   ): Promise<
-    SerializedFile<{ title: string; excerpt: string; content: string }>
+    SerializedFile<{
+      title: string;
+      excerpt: string;
+      content: string;
+      lineCount: number;
+    }>
   > {
     let extension = getExtension(url);
     if (!this.validExtensions.has(extension)) {
@@ -495,6 +291,15 @@ export class TsFileDef extends FileDef {
       title: fallbackTitle,
       excerpt: truncateExcerpt(source.replace(/\s+/g, ' ').trim()),
       content: source,
+      // Normalize CRLF/CR to LF first so the count is the same across newline
+      // styles (and matches the fitted projection); a trailing newline
+      // shouldn't inflate the count, and empty content is zero lines.
+      lineCount: source
+        ? source
+            .replace(/\r\n?/g, '\n')
+            .replace(/\n$/, '')
+            .split('\n').length
+        : 0,
     };
   }
 }

@@ -55,7 +55,12 @@ module('Integration | searchable search doc', function (hooks) {
     loader = getService('loader-service').loader;
   });
 
-  setupLocalIndexing(hooks);
+  // Every test in this module builds the same fixtures and only reads the
+  // search docs they produce, so the realm is indexed once and restored for
+  // each subsequent test.
+  setupLocalIndexing(hooks, {
+    reuseIndexAcrossTests: 'searchableSearchDoc',
+  });
   let mockMatrixUtils = setupMockMatrix(hooks);
   setupCardLogs(
     hooks,

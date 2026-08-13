@@ -36,8 +36,8 @@
         "../base/*.d.ts",
         "../base/*"
       ],
-      "@cardstack/boxel-ui": ["../boxel-ui/addon/declarations"],
-      "@cardstack/boxel-ui/*": ["../boxel-ui/addon/declarations/*"]
+      "@cardstack/boxel-ui": ["../boxel-ui/declarations"],
+      "@cardstack/boxel-ui/*": ["../boxel-ui/declarations/*"]
     },
     "types": ["@cardstack/local-types"]
   }

@@ -1,6 +1,8 @@
 import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
+import { scheduleOnce } from '@ember/runloop';
 
 import { service } from '@ember/service';
 
@@ -141,6 +143,36 @@ export default class SubmodeLayout extends Component<Signature> {
   @service declare private recentCardsService: RecentCardsService;
   @service('search-sheet-state')
   declare private searchSheetState: SearchSheetStateService;
+
+  // `?openProfileSettings` deep link. Consumed here, not in the
+  // index route, because this component exists only once logged in — a
+  // logged-out arrival renders <Auth /> after the model hook has returned.
+  // afterRender: both writes touch state this render pass already read.
+  constructor(owner: Owner, args: Signature['Args']) {
+    super(owner, args);
+
+    if (
+      this.operatorModeStateService.operatorModeController.openProfileSettings
+    )
+      scheduleOnce('afterRender', this, this.consumeProfileSettingsDeepLink);
+  }
+
+  // Nulled like `sid` in matrix/auth.gts, so the modal does not reopen on
+  // the model refresh every schedulePersist() triggers.
+  private consumeProfileSettingsDeepLink = () => {
+    let controller = this.operatorModeStateService.operatorModeController;
+    let requested = controller.openProfileSettings;
+    if (!requested) {
+      return;
+    }
+    controller.openProfileSettings = null;
+    // An unrecognized value still opens settings: this param is linked from
+    // external pages, so a stale or mistyped link degrades to the modal's
+    // default view rather than doing nothing.
+    this.operatorModeStateService.openProfileSettings(
+      requested === 'subscription' ? 'subscription' : undefined,
+    );
+  };
 
   private searchElement: HTMLElement | null = null;
   private suppressSearchClose = false;
@@ -676,10 +708,27 @@ export default class SubmodeLayout extends Component<Signature> {
       }
 
       .submode-layout-top-bar-center {
+        /* Narrow default: stay in flow as a flex child. `flex: 1` reserves the
+           middle track between the workspace button and the profile controls,
+           so the content can neither slide under those controls nor intercept
+           clicks meant for them — it just sits on the one line between them. */
         flex: 1;
         display: flex;
         justify-content: center;
         min-width: 0;
+      }
+      /* Wider top bars have room to center the content within the whole bar
+         rather than only within the asymmetric middle track (the 160px
+         workspace button makes the flex track off-centre). Take it out of flow
+         and pin it to the bar's centre; the breakpoint is high enough that the
+         centred content clears the workspace button on the left. */
+      @container (min-width: 60rem) {
+        .submode-layout-top-bar-center {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+        }
       }
 
       /* Slot for the expanded stack-item's CardHeader pill. When a
@@ -722,6 +771,10 @@ export default class SubmodeLayout extends Component<Signature> {
       .profile-icon-button {
         --boxel-icon-button-width: var(--container-button-size);
         --boxel-icon-button-height: var(--container-button-size);
+        /* Match the outline treatment used by the search and AI-assistant
+           icon buttons (see .ai-assistant-button/search-sheet), instead of
+           the Avatar component's default 2px solid white border. */
+        --profile-avatar-icon-border: var(--boxel-border-flexible);
 
         background: none;
 

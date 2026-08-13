@@ -46,6 +46,8 @@ export type ServeIndexDeps = {
   getIndexHTML: () => Promise<string>;
   cardSizeLimitBytes: number;
   fileSizeLimitBytes: number;
+  audioSizeLimitBytes: number;
+  videoSizeLimitBytes: number;
 };
 
 export type ServeIndexHandlers = {
@@ -71,6 +73,8 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     getIndexHTML,
     cardSizeLimitBytes,
     fileSizeLimitBytes,
+    audioSizeLimitBytes,
+    videoSizeLimitBytes,
   } = deps;
 
   let routingDeps: RealmRoutingDeps = {
@@ -155,6 +159,8 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
             defaultFieldSpecId: rewriteRealmURL(config.defaultFieldSpecId),
             cardSizeLimitBytes,
             fileSizeLimitBytes,
+            audioSizeLimitBytes,
+            videoSizeLimitBytes,
             publishedRealmDomainOverrides:
               process.env.PUBLISHED_REALM_DOMAIN_OVERRIDES ??
               config.publishedRealmDomainOverrides,

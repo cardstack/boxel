@@ -80,6 +80,18 @@ export function isCompleteSearchReplaceBlock(
   return !!input && findSearchReplaceBlock(input) !== null;
 }
 
+// True when any one of the three markers is present. A patch split across
+// continuation events leaves each half holding only part of the block, so
+// deciding whether an event is worth looking at cannot require a whole one.
+export function containsSearchReplaceMarker(input?: string | null): boolean {
+  return (
+    !!input &&
+    (SEARCH_MARKER_PATTERN.test(input) ||
+      SEPARATOR_MARKER_PATTERN.test(input) ||
+      REPLACE_MARKER_PATTERN.test(input))
+  );
+}
+
 // True for a line that has begun a SEARCH marker but may not have finished it,
 // which is how a patch looks while it is still streaming in.
 export function startsSearchMarker(line: string): boolean {
