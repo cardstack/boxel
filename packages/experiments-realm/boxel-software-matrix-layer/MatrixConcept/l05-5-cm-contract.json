@@ -25,7 +25,8 @@
         "notes": null,
         "cardThumbnailURL": null
       },
-      "specTarget": "shared block"
+      "specTarget": "shared block",
+      "consumers": "close-won, order, subscription"
     },
     "meta": {
       "adoptsFrom": {

@@ -25,7 +25,8 @@
         "notes": null,
         "cardThumbnailURL": null
       },
-      "specTarget": "shared block"
+      "specTarget": "shared block",
+      "consumers": "approval-step-field, approve-offer-command, candidate, create-onboarding-checklist-command, extend-offer-command, interview-feedback-field, meeting, onboarding-checklist, org-tree, performance-review, position, project, pto-request, schedule-interview-command, schedule-interview-dialog, screen-application-command, talent-resource-tracker, team"
     },
     "meta": {
       "adoptsFrom": {

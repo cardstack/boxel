@@ -25,7 +25,8 @@
         "notes": null,
         "cardThumbnailURL": null
       },
-      "specTarget": "shared block"
+      "specTarget": "shared block",
+      "consumers": "advance-to-offer-command, approve-offer-command, extend-offer-command, extract-resume-command, generate-interview-questions-command, meeting, offer, reject-candidate-command, schedule-interview-command, schedule-interview-dialog, screen-application-command, talent-resource-tracker"
     },
     "meta": {
       "adoptsFrom": {

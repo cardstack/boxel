@@ -25,7 +25,8 @@
         "notes": null,
         "cardThumbnailURL": null
       },
-      "specTarget": "shared block"
+      "specTarget": "shared block",
+      "consumers": "account-metrics, close-won, payment, record-payment, revenue-os, table-demo"
     },
     "meta": {
       "adoptsFrom": {

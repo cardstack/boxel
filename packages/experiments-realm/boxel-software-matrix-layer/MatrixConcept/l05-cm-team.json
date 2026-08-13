@@ -25,7 +25,8 @@
         "notes": null,
         "cardThumbnailURL": null
       },
-      "specTarget": "shared block"
+      "specTarget": "shared block",
+      "consumers": "project, talent-resource-tracker"
     },
     "meta": {
       "adoptsFrom": {
