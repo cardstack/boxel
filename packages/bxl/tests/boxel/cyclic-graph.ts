@@ -306,11 +306,15 @@ check('sort works on a wrapped linked-card array', () => {
     { id: 'clm-1', claimStatus: 'Open', paidAmount: 3200 },
   ]);
   const rawOrder = [...policy.claims];
-  const sorted = run('.claims | sort', policy) as unknown[];
-  strictEqual(sorted.length, 2);
-  // Sorted elements unwrap to the raw claim instances, and the card's
-  // own array keeps its order.
-  ok(sorted.every((entry) => policy.claims.includes(entry as ClaimStub)));
+  const sorted = run('.claims | sort', policy) as ClaimStub[];
+  // Cards compare by materialized fields in sorted-key order, so the
+  // claims order by id here; elements unwrap to the raw instances and
+  // the card's own array keeps its order.
+  deepStrictEqual(
+    sorted.map((entry) => entry.id),
+    ['clm-1', 'clm-2'],
+  );
+  ok(sorted.every((entry) => policy.claims.includes(entry)));
   deepStrictEqual([...policy.claims], rawOrder);
 });
 
@@ -461,6 +465,139 @@ check('values without field metadata pass through raw', () => {
   const when = new Date('2026-01-15T00:00:00Z');
   const holder = { when };
   ok(run('.when', holder) === when);
+});
+
+check('unset links read as null, keeping comparison semantics intact', () => {
+  // Card-api reads a non-present link as undefined — a value jq's data
+  // model has no place for. It must surface as null, or a card would
+  // compare unequal to itself and unique would never collapse.
+  const makeClaim = () =>
+    new ClaimStub({
+      id: 'clm-1',
+      claimStatus: 'Open',
+      paidAmount: 100,
+      policy: () => undefined,
+    });
+  const claim = makeClaim();
+  strictEqual(run('if . == . then 1 else 0 end', claim), 1);
+  strictEqual(run('.policy | type', claim), 'null');
+  const holder = new PolicyStub({
+    id: 'pol-1',
+    annualPremium: 1,
+    claims: [makeClaim(), makeClaim()],
+  });
+  strictEqual(run('[.claims[]] | unique | length', holder), 1);
+});
+
+check('a compute that structurally enumerates itself reads as blank', () => {
+  // `tojson` over `.` enumerates every field, including the one this
+  // compute produces — a spreadsheet circular reference. The in-flight
+  // field reads as null instead of recursing without bound.
+  const compute = (() => {
+    const strings = Object.assign(['. | tojson'], {
+      raw: ['. | tojson'],
+    }) as unknown as TemplateStringsArray;
+    return expression(jq(strings));
+  })();
+  class SelfStub extends StubBase {
+    get id() {
+      return 'self-1';
+    }
+    get name() {
+      return 'self';
+    }
+    get digest() {
+      return compute.call(this);
+    }
+  }
+  fieldMaps.set(SelfStub, {
+    id: { fieldType: 'contains' },
+    name: { fieldType: 'contains' },
+    digest: { fieldType: 'contains' },
+  });
+  const doc = JSON.parse(compute.call(new SelfStub()) as string) as {
+    name: string;
+    digest: unknown;
+  };
+  strictEqual(doc.name, 'self');
+  strictEqual(doc.digest, null);
+});
+
+check('mutually recursive computes across linked cards stay bounded', () => {
+  const mkCompute = () => {
+    const strings = Object.assign(['. | tojson'], {
+      raw: ['. | tojson'],
+    }) as unknown as TemplateStringsArray;
+    return expression(jq(strings));
+  };
+  const computeA = mkCompute();
+  const computeB = mkCompute();
+  interface PairState {
+    id: string;
+    other: () => unknown;
+    compute: (this: object) => unknown;
+  }
+  class PairStub extends StubBase {
+    #state: PairState;
+    constructor(state: PairState) {
+      super();
+      this.#state = state;
+    }
+    get id() {
+      return this.#state.id;
+    }
+    get other() {
+      return this.#state.other();
+    }
+    get digest() {
+      return this.#state.compute.call(this);
+    }
+  }
+  fieldMaps.set(PairStub, {
+    id: { fieldType: 'contains' },
+    other: { fieldType: 'linksTo' },
+    digest: { fieldType: 'contains' },
+  });
+  const stateA: PairState = {
+    id: 'pair-a',
+    other: () => b,
+    compute: computeA as (this: object) => unknown,
+  };
+  const a = new PairStub(stateA);
+  const b = new PairStub({
+    id: 'pair-b',
+    other: () => a,
+    compute: computeB as (this: object) => unknown,
+  });
+  const doc = JSON.parse(computeA.call(a) as string) as {
+    id: string;
+    other: { id: string };
+  };
+  strictEqual(doc.id, 'pair-a');
+  strictEqual(doc.other.id, 'pair-b');
+});
+
+check('a sentinel-named property cannot demote the depth-cap error', () => {
+  // Excel-error tolerance matches sentinel strings in messages; the
+  // depth-cap error embeds user property names in its path and must stay
+  // a loud failure even when one of them is literally "#N/A".
+  interface Deep {
+    ['#N/A']: Deep | null;
+  }
+  const root: Deep = { '#N/A': null };
+  let cursor = root;
+  for (let i = 0; i < 300; i++) {
+    const next: Deep = { '#N/A': null };
+    cursor['#N/A'] = next;
+    cursor = next;
+  }
+  throws(
+    () => run('tojson', root),
+    (error: Error) => {
+      match(error.message, /materialization exceeded/);
+      return true;
+    },
+  );
 });
 
 check('unsaved cards clip by identity only, never against each other', () => {

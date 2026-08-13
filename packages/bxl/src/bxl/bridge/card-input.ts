@@ -278,7 +278,13 @@ function commonTraps(
       if (typeof prop === 'symbol') {
         return raw;
       }
-      return wrapValue(raw, chain, prop);
+      // jq's data model has no `undefined`, and comparison treats it as
+      // an alien value — a card whose unset link read as `undefined`
+      // would compare unequal to itself and defeat `unique`. Card-api
+      // reads non-present values as `undefined`; surface them as `null`,
+      // exactly what these fields become in a serialized card.
+      const wrapped = wrapValue(raw, chain, prop);
+      return wrapped === undefined ? null : wrapped;
     },
     getPrototypeOf() {
       return Reflect.getPrototypeOf(target);

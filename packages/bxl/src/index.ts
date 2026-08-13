@@ -1026,6 +1026,7 @@ export function bxl(
     memoize === false
       ? undefined
       : new WeakMap<object, { cycle: number; value: unknown }>();
+  const inFlight = new WeakSet<object>();
 
   const computeViaBxl = function computeViaBxl(this: object) {
     const memoKey = objectMemoKey(this);
@@ -1035,6 +1036,20 @@ export function bxl(
       if (cached?.cycle === cycle) {
         return cached.value;
       }
+    }
+
+    // A structural operation over `.` enumerates every field of the card —
+    // including the one this very compute produces, re-entering it through
+    // the field's getter with no completed value to serve. That is a
+    // spreadsheet circular reference: the in-flight field reads as blank
+    // (the same surface as an Excel error) rather than recursing without
+    // bound. Mutual cycles across cards break the same way, since each
+    // card's compute is in flight while it enumerates the other.
+    if (memoKey) {
+      if (inFlight.has(memoKey)) {
+        return null;
+      }
+      inFlight.add(memoKey);
     }
 
     let raw: unknown;
@@ -1057,6 +1072,10 @@ export function bxl(
         return null;
       }
       throw error;
+    } finally {
+      if (memoKey) {
+        inFlight.delete(memoKey);
+      }
     }
     const value = materializeAs(raw, ShapeClass);
     if (memoCache && memoKey && cycle !== null) {
@@ -1095,6 +1114,12 @@ function isExcelErrorMessage(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
   const message = (error as { message?: unknown }).message;
   if (typeof message !== 'string') return false;
+  // The depth-cap error embeds user property names in its path, and a
+  // property named after a sentinel must not demote that fail-fast error
+  // to a blank field.
+  if (message.includes('BXL input materialization exceeded')) {
+    return false;
+  }
   // Native dialect errors wrap the Excel sentinel as their message; the
   // sentinel may appear alone or with surrounding context.
   return Array.from(EXCEL_ERROR_SENTINELS).some((sentinel) =>
