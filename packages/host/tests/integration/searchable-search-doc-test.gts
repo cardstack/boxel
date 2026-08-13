@@ -13,6 +13,8 @@ import CardStoreWithGarbageCollection from '@cardstack/host/lib/gc-card-store';
 import type StoreService from '@cardstack/host/services/store';
 
 import {
+  withCachedRealmSetup,
+  setupRealmCacheTeardown,
   testRealmURL,
   setupCardLogs,
   setupLocalIndexing,
@@ -55,12 +57,8 @@ module('Integration | searchable search doc', function (hooks) {
     loader = getService('loader-service').loader;
   });
 
-  // Every test in this module builds the same fixtures and only reads the
-  // search docs they produce, so the realm is indexed once and restored for
-  // each subsequent test.
-  setupLocalIndexing(hooks, {
-    reuseIndexAcrossTests: 'searchableSearchDoc',
-  });
+  setupLocalIndexing(hooks);
+  setupRealmCacheTeardown(hooks);
   let mockMatrixUtils = setupMockMatrix(hooks);
   setupCardLogs(
     hooks,
@@ -324,351 +322,359 @@ module('Integration | searchable search doc', function (hooks) {
 
     let agentRef = (id: string) => ({ links: { self: id } });
 
-    ({ realm } = await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'agent.gts': { Agent },
-        'headquarters.gts': { Headquarters },
-        'company.gts': { Company },
-        'author.gts': { Author },
-        'article.gts': {
-          ArticleSelf,
-          ArticleDeep,
-          ArticleShallow,
-          ArticleHop2,
-          ArticleHop3,
-          ArticleShared,
-          ArticleMulti,
-          ArticleEmptyPath,
-          ArticleEmptyArray,
-          ArticleNullSearchable,
-          ArticleArrayWithNull,
-          ArticleImpossiblePath,
-          ArticleFalse,
-        },
-        'person.gts': { Person },
-        'ring.gts': { Ring },
-        'ring-m.gts': { RingM },
-        'crew.gts': {
-          Crew,
-          ArticleContainsLead,
-          ArticleContainsRoster,
-          ArticleManyLead,
-          ArticleManyRoster,
-          ArticleLabels,
-        },
-        'team.gts': { Team, TeamShallow, TeamDeep, TeamSubtype },
-        'parity.gts': {
-          SimpleAuthor,
-          FancyAuthor,
-          ParityArticle,
-          ArticleSubtype,
-        },
-        'profile.gts': { Profile, FancyProfile, ArticleProfile },
-        'article-query.gts': { ArticleQuery },
-        'boom.gts': { Boom },
+    // Every test builds these fixtures identically, so the indexed result is
+    // cached for the module and restored rather than rebuilt.
+    await withCachedRealmSetup(async () => {
+      ({ realm } = await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'agent.gts': { Agent },
+          'headquarters.gts': { Headquarters },
+          'company.gts': { Company },
+          'author.gts': { Author },
+          'article.gts': {
+            ArticleSelf,
+            ArticleDeep,
+            ArticleShallow,
+            ArticleHop2,
+            ArticleHop3,
+            ArticleShared,
+            ArticleMulti,
+            ArticleEmptyPath,
+            ArticleEmptyArray,
+            ArticleNullSearchable,
+            ArticleArrayWithNull,
+            ArticleImpossiblePath,
+            ArticleFalse,
+          },
+          'person.gts': { Person },
+          'ring.gts': { Ring },
+          'ring-m.gts': { RingM },
+          'crew.gts': {
+            Crew,
+            ArticleContainsLead,
+            ArticleContainsRoster,
+            ArticleManyLead,
+            ArticleManyRoster,
+            ArticleLabels,
+          },
+          'team.gts': { Team, TeamShallow, TeamDeep, TeamSubtype },
+          'parity.gts': {
+            SimpleAuthor,
+            FancyAuthor,
+            ParityArticle,
+            ArticleSubtype,
+          },
+          'profile.gts': { Profile, FancyProfile, ArticleProfile },
+          'article-query.gts': { ArticleQuery },
+          'boom.gts': { Boom },
 
-        // --- leaves + chain ---
-        'Agent/a1.json': card('Agent Smith', 'agent', 'Agent'),
-        'Agent/a2.json': card('Agent Jones', 'agent', 'Agent'),
-        // Referenced only by Boom/b1, so its residency in a test's store is
-        // attributable to that card's walk alone.
-        'Agent/a3.json': card('Agent Braun', 'agent', 'Agent'),
-        'Headquarters/h1.json': card('HQ One', 'headquarters', 'Headquarters'),
-        'Company/co1.json': {
-          data: {
-            type: 'card',
-            id: `${testRealmURL}Company/co1`,
-            attributes: { name: 'Acme' },
-            relationships: {
-              ceo: agentRef(`${testRealmURL}Agent/a1`),
-              hq: agentRef(`${testRealmURL}Headquarters/h1`),
-            },
-            meta: adoptsFrom('company', 'Company'),
-          },
-        },
-        'Author/au1.json': {
-          data: {
-            type: 'card',
-            id: `${testRealmURL}Author/au1`,
-            attributes: { name: 'Jo' },
-            relationships: {
-              agent: agentRef(`${testRealmURL}Agent/a1`),
-              company: agentRef(`${testRealmURL}Company/co1`),
-            },
-            meta: adoptsFrom('author', 'Author'),
-          },
-        },
-        'Author/au2.json': {
-          data: {
-            type: 'card',
-            id: `${testRealmURL}Author/au2`,
-            attributes: { name: 'Mit' },
-            relationships: { agent: agentRef(`${testRealmURL}Agent/a2`) },
-            meta: adoptsFrom('author', 'Author'),
-          },
-        },
-
-        // --- linksTo route shapes (all → Author/au1) ---
-        'ArticleSelf/s1.json': article('Self', 'ArticleSelf', {
-          author: agentRef(`${testRealmURL}Author/au1`),
-        }),
-        // Relative `links.self` — must resolve before the targeted load.
-        'ArticleSelf/rel.json': article('Relative', 'ArticleSelf', {
-          author: agentRef('../Author/au1'),
-        }),
-        // Points at a card that does not exist (broken / 404 target).
-        'ArticleSelf/broken.json': article('Broken', 'ArticleSelf', {
-          author: agentRef(`${testRealmURL}Author/ghost`),
-        }),
-        // author = null (no link at all).
-        'ArticleSelf/nulllink.json': article('Null', 'ArticleSelf', {
-          author: { links: { self: null } },
-        }),
-        'ArticleDeep/d1.json': article('Deep', 'ArticleDeep', {
-          author: agentRef(`${testRealmURL}Author/au1`),
-        }),
-        'ArticleShallow/sh1.json': article('Shallow', 'ArticleShallow', {
-          author: agentRef(`${testRealmURL}Author/au1`),
-        }),
-        'ArticleHop2/h2.json': article('Hop2', 'ArticleHop2', {
-          author: agentRef(`${testRealmURL}Author/au1`),
-        }),
-        'ArticleHop3/h3.json': article('Hop3', 'ArticleHop3', {
-          author: agentRef(`${testRealmURL}Author/au1`),
-        }),
-        'ArticleShared/shr1.json': article('Shared', 'ArticleShared', {
-          author: agentRef(`${testRealmURL}Author/au1`),
-        }),
-        'ArticleMulti/m1.json': article('Multi', 'ArticleMulti', {
-          author: agentRef(`${testRealmURL}Author/au1`),
-        }),
-        'ArticleEmptyPath/ep1.json': article('Empty', 'ArticleEmptyPath', {
-          author: agentRef(`${testRealmURL}Author/au1`),
-        }),
-        'ArticleEmptyArray/ea1.json': article('EArr', 'ArticleEmptyArray', {
-          author: agentRef(`${testRealmURL}Author/au1`),
-        }),
-        'ArticleNullSearchable/ns1.json': article(
-          'Nul',
-          'ArticleNullSearchable',
-          { author: agentRef(`${testRealmURL}Author/au1`) },
-        ),
-        'ArticleArrayWithNull/awn1.json': article(
-          'AwN',
-          'ArticleArrayWithNull',
-          { author: agentRef(`${testRealmURL}Author/au1`) },
-        ),
-        'ArticleImpossiblePath/ip1.json': article(
-          'Imp',
-          'ArticleImpossiblePath',
-          { author: agentRef(`${testRealmURL}Author/au1`) },
-        ),
-        'ArticleFalse/f1.json': article('Fls', 'ArticleFalse', {
-          author: agentRef(`${testRealmURL}Author/au1`),
-        }),
-
-        // --- cycles ---
-        'Person/p1.json': {
-          data: {
-            type: 'card',
-            id: `${testRealmURL}Person/p1`,
-            attributes: { name: 'Solo' },
-            relationships: {
-              friend: agentRef(`${testRealmURL}Person/p1`),
-            },
-            meta: adoptsFrom('person', 'Person'),
-          },
-        },
-        'Ring/r1.json': ring('R1', `${testRealmURL}Ring/r2`),
-        'Ring/r2.json': ring('R2', `${testRealmURL}Ring/r3`),
-        'Ring/r3.json': ring('R3', `${testRealmURL}Ring/r1`),
-        'RingM/rm1.json': ringM('R1m', `${testRealmURL}RingM/rm2`),
-        'RingM/rm2.json': ringM('R2m', `${testRealmURL}RingM/rm3`),
-        'RingM/rm3.json': ringM('R3m', `${testRealmURL}RingM/rm1`),
-
-        // --- contained values holding links (4 combinations) ---
-        // A single contained Crew: label + lead(linksTo) + roster(linksToMany).
-        'ArticleContainsLead/cl1.json': {
-          data: {
-            type: 'card',
-            attributes: { title: 'CL', crew: { label: 'Alpha' } },
-            relationships: {
-              'crew.lead': agentRef(`${testRealmURL}Agent/a1`),
-              'crew.roster.0': agentRef(`${testRealmURL}Agent/a1`),
-              'crew.roster.1': agentRef(`${testRealmURL}Agent/a2`),
-            },
-            meta: adoptsFrom('crew', 'ArticleContainsLead'),
-          },
-        },
-        'ArticleContainsRoster/cr1.json': {
-          data: {
-            type: 'card',
-            attributes: { title: 'CR', crew: { label: 'Alpha' } },
-            relationships: {
-              'crew.lead': agentRef(`${testRealmURL}Agent/a1`),
-              'crew.roster.0': agentRef(`${testRealmURL}Agent/a1`),
-              'crew.roster.1': agentRef(`${testRealmURL}Agent/a2`),
-            },
-            meta: adoptsFrom('crew', 'ArticleContainsRoster'),
-          },
-        },
-        // Two contained Crews, each with its own label + lead + roster.
-        'ArticleManyLead/ml1.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'ML',
-              crews: [{ label: 'C0' }, { label: 'C1' }],
-            },
-            relationships: {
-              'crews.0.lead': agentRef(`${testRealmURL}Agent/a1`),
-              'crews.0.roster.0': agentRef(`${testRealmURL}Agent/a1`),
-              'crews.1.lead': agentRef(`${testRealmURL}Agent/a2`),
-              'crews.1.roster.0': agentRef(`${testRealmURL}Agent/a2`),
-            },
-            meta: adoptsFrom('crew', 'ArticleManyLead'),
-          },
-        },
-        'ArticleManyRoster/mr1.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'MR',
-              crews: [{ label: 'C0' }, { label: 'C1' }],
-            },
-            relationships: {
-              'crews.0.lead': agentRef(`${testRealmURL}Agent/a1`),
-              'crews.0.roster.0': agentRef(`${testRealmURL}Agent/a1`),
-              'crews.1.lead': agentRef(`${testRealmURL}Agent/a2`),
-              'crews.1.roster.0': agentRef(`${testRealmURL}Agent/a2`),
-            },
-            meta: adoptsFrom('crew', 'ArticleManyRoster'),
-          },
-        },
-        // --- containsMany of primitives ---
-        'ArticleLabels/l1.json': {
-          data: {
-            type: 'card',
-            id: `${testRealmURL}ArticleLabels/l1`,
-            attributes: { title: 'Labels', labels: ['red', 'blue'] },
-            meta: adoptsFrom('crew', 'ArticleLabels'),
-          },
-        },
-        'ArticleLabels/empty1.json': {
-          data: {
-            type: 'card',
-            id: `${testRealmURL}ArticleLabels/empty1`,
-            attributes: { title: 'Empty', labels: [] },
-            meta: adoptsFrom('crew', 'ArticleLabels'),
-          },
-        },
-
-        // --- linksToMany ---
-        'Team/valid.json': team('Valid', 'Team', [
-          `${testRealmURL}Author/au1`,
-          `${testRealmURL}Author/au2`,
-        ]),
-        'Team/missone.json': team('MissOne', 'Team', [
-          `${testRealmURL}Author/au1`,
-          `${testRealmURL}Author/ghost1`,
-        ]),
-        'Team/missall.json': team('MissAll', 'Team', [
-          `${testRealmURL}Author/ghost1`,
-          `${testRealmURL}Author/ghost2`,
-        ]),
-        'Team/empty.json': team('EmptyTeam', 'Team', []),
-        'TeamShallow/ts1.json': team('Shallow', 'TeamShallow', [
-          `${testRealmURL}Agent/a1`,
-        ]),
-        'TeamDeep/td1.json': team('Deep', 'TeamDeep', [
-          `${testRealmURL}Author/au1`,
-        ]),
-
-        // --- declared type / parity ---
-        'SimpleAuthor/sa1.json': card('Plain', 'parity', 'SimpleAuthor'),
-        'FancyAuthor/fa1.json': {
-          data: {
-            type: 'card',
-            id: `${testRealmURL}FancyAuthor/fa1`,
-            attributes: { name: 'Fancy', penName: 'Quill' },
-            meta: adoptsFrom('parity', 'FancyAuthor'),
-          },
-        },
-        'ParityArticle/pa1.json': {
-          data: {
-            type: 'card',
-            id: `${testRealmURL}ParityArticle/pa1`,
-            attributes: { title: 'Parity' },
-            relationships: {
-              'authors.0': agentRef(`${testRealmURL}SimpleAuthor/sa1`),
-            },
-            meta: adoptsFrom('parity', 'ParityArticle'),
-          },
-        },
-        'ArticleSubtype/sub1.json': {
-          data: {
-            type: 'card',
-            attributes: { title: 'Subtype' },
-            relationships: {
-              author: agentRef(`${testRealmURL}FancyAuthor/fa1`),
-            },
-            meta: adoptsFrom('parity', 'ArticleSubtype'),
-          },
-        },
-        'TeamSubtype/tsub1.json': team('SubtypeTeam', 'TeamSubtype', [
-          `${testRealmURL}FancyAuthor/fa1`,
-        ]),
-        'ArticleProfile/prof1.json': {
-          data: {
-            type: 'card',
-            id: `${testRealmURL}ArticleProfile/prof1`,
-            attributes: {
-              title: 'Profile',
-              profile: { bio: 'a bio', tagline: 'a tagline' },
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}profile`,
-                name: 'ArticleProfile',
+          // --- leaves + chain ---
+          'Agent/a1.json': card('Agent Smith', 'agent', 'Agent'),
+          'Agent/a2.json': card('Agent Jones', 'agent', 'Agent'),
+          // Referenced only by Boom/b1, so its residency in a test's store is
+          // attributable to that card's walk alone.
+          'Agent/a3.json': card('Agent Braun', 'agent', 'Agent'),
+          'Headquarters/h1.json': card(
+            'HQ One',
+            'headquarters',
+            'Headquarters',
+          ),
+          'Company/co1.json': {
+            data: {
+              type: 'card',
+              id: `${testRealmURL}Company/co1`,
+              attributes: { name: 'Acme' },
+              relationships: {
+                ceo: agentRef(`${testRealmURL}Agent/a1`),
+                hq: agentRef(`${testRealmURL}Headquarters/h1`),
               },
-              fields: {
-                profile: {
-                  adoptsFrom: {
-                    module: `${testRealmURL}profile`,
-                    name: 'FancyProfile',
+              meta: adoptsFrom('company', 'Company'),
+            },
+          },
+          'Author/au1.json': {
+            data: {
+              type: 'card',
+              id: `${testRealmURL}Author/au1`,
+              attributes: { name: 'Jo' },
+              relationships: {
+                agent: agentRef(`${testRealmURL}Agent/a1`),
+                company: agentRef(`${testRealmURL}Company/co1`),
+              },
+              meta: adoptsFrom('author', 'Author'),
+            },
+          },
+          'Author/au2.json': {
+            data: {
+              type: 'card',
+              id: `${testRealmURL}Author/au2`,
+              attributes: { name: 'Mit' },
+              relationships: { agent: agentRef(`${testRealmURL}Agent/a2`) },
+              meta: adoptsFrom('author', 'Author'),
+            },
+          },
+
+          // --- linksTo route shapes (all → Author/au1) ---
+          'ArticleSelf/s1.json': article('Self', 'ArticleSelf', {
+            author: agentRef(`${testRealmURL}Author/au1`),
+          }),
+          // Relative `links.self` — must resolve before the targeted load.
+          'ArticleSelf/rel.json': article('Relative', 'ArticleSelf', {
+            author: agentRef('../Author/au1'),
+          }),
+          // Points at a card that does not exist (broken / 404 target).
+          'ArticleSelf/broken.json': article('Broken', 'ArticleSelf', {
+            author: agentRef(`${testRealmURL}Author/ghost`),
+          }),
+          // author = null (no link at all).
+          'ArticleSelf/nulllink.json': article('Null', 'ArticleSelf', {
+            author: { links: { self: null } },
+          }),
+          'ArticleDeep/d1.json': article('Deep', 'ArticleDeep', {
+            author: agentRef(`${testRealmURL}Author/au1`),
+          }),
+          'ArticleShallow/sh1.json': article('Shallow', 'ArticleShallow', {
+            author: agentRef(`${testRealmURL}Author/au1`),
+          }),
+          'ArticleHop2/h2.json': article('Hop2', 'ArticleHop2', {
+            author: agentRef(`${testRealmURL}Author/au1`),
+          }),
+          'ArticleHop3/h3.json': article('Hop3', 'ArticleHop3', {
+            author: agentRef(`${testRealmURL}Author/au1`),
+          }),
+          'ArticleShared/shr1.json': article('Shared', 'ArticleShared', {
+            author: agentRef(`${testRealmURL}Author/au1`),
+          }),
+          'ArticleMulti/m1.json': article('Multi', 'ArticleMulti', {
+            author: agentRef(`${testRealmURL}Author/au1`),
+          }),
+          'ArticleEmptyPath/ep1.json': article('Empty', 'ArticleEmptyPath', {
+            author: agentRef(`${testRealmURL}Author/au1`),
+          }),
+          'ArticleEmptyArray/ea1.json': article('EArr', 'ArticleEmptyArray', {
+            author: agentRef(`${testRealmURL}Author/au1`),
+          }),
+          'ArticleNullSearchable/ns1.json': article(
+            'Nul',
+            'ArticleNullSearchable',
+            { author: agentRef(`${testRealmURL}Author/au1`) },
+          ),
+          'ArticleArrayWithNull/awn1.json': article(
+            'AwN',
+            'ArticleArrayWithNull',
+            { author: agentRef(`${testRealmURL}Author/au1`) },
+          ),
+          'ArticleImpossiblePath/ip1.json': article(
+            'Imp',
+            'ArticleImpossiblePath',
+            { author: agentRef(`${testRealmURL}Author/au1`) },
+          ),
+          'ArticleFalse/f1.json': article('Fls', 'ArticleFalse', {
+            author: agentRef(`${testRealmURL}Author/au1`),
+          }),
+
+          // --- cycles ---
+          'Person/p1.json': {
+            data: {
+              type: 'card',
+              id: `${testRealmURL}Person/p1`,
+              attributes: { name: 'Solo' },
+              relationships: {
+                friend: agentRef(`${testRealmURL}Person/p1`),
+              },
+              meta: adoptsFrom('person', 'Person'),
+            },
+          },
+          'Ring/r1.json': ring('R1', `${testRealmURL}Ring/r2`),
+          'Ring/r2.json': ring('R2', `${testRealmURL}Ring/r3`),
+          'Ring/r3.json': ring('R3', `${testRealmURL}Ring/r1`),
+          'RingM/rm1.json': ringM('R1m', `${testRealmURL}RingM/rm2`),
+          'RingM/rm2.json': ringM('R2m', `${testRealmURL}RingM/rm3`),
+          'RingM/rm3.json': ringM('R3m', `${testRealmURL}RingM/rm1`),
+
+          // --- contained values holding links (4 combinations) ---
+          // A single contained Crew: label + lead(linksTo) + roster(linksToMany).
+          'ArticleContainsLead/cl1.json': {
+            data: {
+              type: 'card',
+              attributes: { title: 'CL', crew: { label: 'Alpha' } },
+              relationships: {
+                'crew.lead': agentRef(`${testRealmURL}Agent/a1`),
+                'crew.roster.0': agentRef(`${testRealmURL}Agent/a1`),
+                'crew.roster.1': agentRef(`${testRealmURL}Agent/a2`),
+              },
+              meta: adoptsFrom('crew', 'ArticleContainsLead'),
+            },
+          },
+          'ArticleContainsRoster/cr1.json': {
+            data: {
+              type: 'card',
+              attributes: { title: 'CR', crew: { label: 'Alpha' } },
+              relationships: {
+                'crew.lead': agentRef(`${testRealmURL}Agent/a1`),
+                'crew.roster.0': agentRef(`${testRealmURL}Agent/a1`),
+                'crew.roster.1': agentRef(`${testRealmURL}Agent/a2`),
+              },
+              meta: adoptsFrom('crew', 'ArticleContainsRoster'),
+            },
+          },
+          // Two contained Crews, each with its own label + lead + roster.
+          'ArticleManyLead/ml1.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                title: 'ML',
+                crews: [{ label: 'C0' }, { label: 'C1' }],
+              },
+              relationships: {
+                'crews.0.lead': agentRef(`${testRealmURL}Agent/a1`),
+                'crews.0.roster.0': agentRef(`${testRealmURL}Agent/a1`),
+                'crews.1.lead': agentRef(`${testRealmURL}Agent/a2`),
+                'crews.1.roster.0': agentRef(`${testRealmURL}Agent/a2`),
+              },
+              meta: adoptsFrom('crew', 'ArticleManyLead'),
+            },
+          },
+          'ArticleManyRoster/mr1.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                title: 'MR',
+                crews: [{ label: 'C0' }, { label: 'C1' }],
+              },
+              relationships: {
+                'crews.0.lead': agentRef(`${testRealmURL}Agent/a1`),
+                'crews.0.roster.0': agentRef(`${testRealmURL}Agent/a1`),
+                'crews.1.lead': agentRef(`${testRealmURL}Agent/a2`),
+                'crews.1.roster.0': agentRef(`${testRealmURL}Agent/a2`),
+              },
+              meta: adoptsFrom('crew', 'ArticleManyRoster'),
+            },
+          },
+          // --- containsMany of primitives ---
+          'ArticleLabels/l1.json': {
+            data: {
+              type: 'card',
+              id: `${testRealmURL}ArticleLabels/l1`,
+              attributes: { title: 'Labels', labels: ['red', 'blue'] },
+              meta: adoptsFrom('crew', 'ArticleLabels'),
+            },
+          },
+          'ArticleLabels/empty1.json': {
+            data: {
+              type: 'card',
+              id: `${testRealmURL}ArticleLabels/empty1`,
+              attributes: { title: 'Empty', labels: [] },
+              meta: adoptsFrom('crew', 'ArticleLabels'),
+            },
+          },
+
+          // --- linksToMany ---
+          'Team/valid.json': team('Valid', 'Team', [
+            `${testRealmURL}Author/au1`,
+            `${testRealmURL}Author/au2`,
+          ]),
+          'Team/missone.json': team('MissOne', 'Team', [
+            `${testRealmURL}Author/au1`,
+            `${testRealmURL}Author/ghost1`,
+          ]),
+          'Team/missall.json': team('MissAll', 'Team', [
+            `${testRealmURL}Author/ghost1`,
+            `${testRealmURL}Author/ghost2`,
+          ]),
+          'Team/empty.json': team('EmptyTeam', 'Team', []),
+          'TeamShallow/ts1.json': team('Shallow', 'TeamShallow', [
+            `${testRealmURL}Agent/a1`,
+          ]),
+          'TeamDeep/td1.json': team('Deep', 'TeamDeep', [
+            `${testRealmURL}Author/au1`,
+          ]),
+
+          // --- declared type / parity ---
+          'SimpleAuthor/sa1.json': card('Plain', 'parity', 'SimpleAuthor'),
+          'FancyAuthor/fa1.json': {
+            data: {
+              type: 'card',
+              id: `${testRealmURL}FancyAuthor/fa1`,
+              attributes: { name: 'Fancy', penName: 'Quill' },
+              meta: adoptsFrom('parity', 'FancyAuthor'),
+            },
+          },
+          'ParityArticle/pa1.json': {
+            data: {
+              type: 'card',
+              id: `${testRealmURL}ParityArticle/pa1`,
+              attributes: { title: 'Parity' },
+              relationships: {
+                'authors.0': agentRef(`${testRealmURL}SimpleAuthor/sa1`),
+              },
+              meta: adoptsFrom('parity', 'ParityArticle'),
+            },
+          },
+          'ArticleSubtype/sub1.json': {
+            data: {
+              type: 'card',
+              attributes: { title: 'Subtype' },
+              relationships: {
+                author: agentRef(`${testRealmURL}FancyAuthor/fa1`),
+              },
+              meta: adoptsFrom('parity', 'ArticleSubtype'),
+            },
+          },
+          'TeamSubtype/tsub1.json': team('SubtypeTeam', 'TeamSubtype', [
+            `${testRealmURL}FancyAuthor/fa1`,
+          ]),
+          'ArticleProfile/prof1.json': {
+            data: {
+              type: 'card',
+              id: `${testRealmURL}ArticleProfile/prof1`,
+              attributes: {
+                title: 'Profile',
+                profile: { bio: 'a bio', tagline: 'a tagline' },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}profile`,
+                  name: 'ArticleProfile',
+                },
+                fields: {
+                  profile: {
+                    adoptsFrom: {
+                      module: `${testRealmURL}profile`,
+                      name: 'FancyProfile',
+                    },
                   },
                 },
               },
             },
           },
-        },
 
-        // --- query-backed field ---
-        'ArticleQuery/q1.json': {
-          data: {
-            type: 'card',
-            id: `${testRealmURL}ArticleQuery/q1`,
-            attributes: { title: 'Query' },
-            meta: adoptsFrom('article-query', 'ArticleQuery'),
-          },
-        },
-
-        // --- throwing branch beside a searchable link ---
-        'Boom/b1.json': {
-          data: {
-            type: 'card',
-            id: `${testRealmURL}Boom/b1`,
-            attributes: {},
-            relationships: {
-              other: agentRef(`${testRealmURL}Author/au1`),
-              agent: agentRef(`${testRealmURL}Agent/a3`),
+          // --- query-backed field ---
+          'ArticleQuery/q1.json': {
+            data: {
+              type: 'card',
+              id: `${testRealmURL}ArticleQuery/q1`,
+              attributes: { title: 'Query' },
+              meta: adoptsFrom('article-query', 'ArticleQuery'),
             },
-            meta: adoptsFrom('boom', 'Boom'),
+          },
+
+          // --- throwing branch beside a searchable link ---
+          'Boom/b1.json': {
+            data: {
+              type: 'card',
+              id: `${testRealmURL}Boom/b1`,
+              attributes: {},
+              relationships: {
+                other: agentRef(`${testRealmURL}Author/au1`),
+                agent: agentRef(`${testRealmURL}Agent/a3`),
+              },
+              meta: adoptsFrom('boom', 'Boom'),
+            },
           },
         },
-      },
-    }));
+      }));
+    });
   });
 
   // --- fixture builders -----------------------------------------------------
