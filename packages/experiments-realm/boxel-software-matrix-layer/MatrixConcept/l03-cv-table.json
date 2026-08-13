@@ -26,7 +26,8 @@
         "cardThumbnailURL": null
       },
       "specTarget": "shared block",
-      "consumers": "revenue-os, table-demo"
+      "consumers": "revenue-os, table-demo",
+      "consumerExamples": "{\"revenue-os\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/RevenueOs/main\", \"table-demo\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/InvoiceTableDemo/invoice-tracker\"}"
     },
     "meta": {
       "adoptsFrom": {

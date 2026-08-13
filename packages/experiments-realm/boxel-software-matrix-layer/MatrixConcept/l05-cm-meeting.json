@@ -26,7 +26,8 @@
         "cardThumbnailURL": null
       },
       "specTarget": "shared block",
-      "consumers": "calendar, schedule-interview-command, schedule-interview-dialog, talent-resource-tracker"
+      "consumers": "schedule-interview-command, calendar, schedule-interview-dialog, talent-resource-tracker",
+      "consumerExamples": "{\"talent-resource-tracker\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/talent-resource-tracker/TalentResourceTracker/tracker\"}"
     },
     "meta": {
       "adoptsFrom": {

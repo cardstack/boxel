@@ -26,7 +26,8 @@
         "cardThumbnailURL": null
       },
       "specTarget": "shared block",
-      "consumers": "account, activity, invoice, opportunity, teammate"
+      "consumers": "account, activity, invoice, opportunity, teammate",
+      "consumerExamples": "{\"account\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Account/acme-industries\", \"activity\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Activity/acme-renewal-call\", \"invoice\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Invoice/inv-2026-018\", \"opportunity\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Opportunity/acme-plant-expansion\", \"teammate\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Teammate/dana-whitfield\"}"
     },
     "meta": {
       "adoptsFrom": {
