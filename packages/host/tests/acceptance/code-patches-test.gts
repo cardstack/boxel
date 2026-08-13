@@ -25,6 +25,7 @@ import {
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
   APP_BOXEL_TOOL_REQUESTS_KEY,
+  APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
   APP_BOXEL_LLM_MODE,
   APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
   APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
@@ -2049,6 +2050,232 @@ ${REPLACE_MARKER}\n\`\`\``;
       codePatchResultEvents.length,
       1,
       'code patch result event is dispatched',
+    );
+  });
+
+  test("tools on a message auto-run only after that message's code patches settle", async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}hello.txt`,
+    });
+    await click('[data-test-open-ai-assistant]');
+    let roomId = getRoomIds().pop()!;
+
+    await click('[data-test-llm-mode-option="act"]');
+
+    // One message carrying both a code patch and a tool request — the
+    // shape that used to race: the tool executed while the patch was
+    // still being applied. The spy on store.patch records the patch's
+    // status at the exact moment the tool executes.
+    let store = getService('store');
+    let toolService = getService('tool-service');
+    let statusWhenToolRan: string | undefined;
+    let originalPatch = store.patch.bind(store);
+    let eventId: string;
+    store.patch = (...args: Parameters<typeof store.patch>) => {
+      statusWhenToolRan = toolService.getCodePatchStatus({
+        roomId,
+        eventId,
+        codeBlockIndex: 0,
+      });
+      return originalPatch(...args);
+    };
+
+    let codeBlock = `\`\`\`
+http://test-realm/test/hello.txt
+${SEARCH_MARKER}
+Hello, world!
+${SEPARATOR_MARKER}
+Sequenced, world!
+${REPLACE_MARKER}
+\`\`\``;
+
+    eventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: codeBlock,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+        {
+          id: 'tool-after-patches',
+          name: 'patchCardInstance',
+          arguments: JSON.stringify({
+            attributes: {
+              cardId: `${testRealmURL}index`,
+              patch: { attributes: {} },
+            },
+          }),
+        },
+      ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
+    });
+
+    await waitFor(
+      '[data-test-message-idx="0"] [data-test-apply-state="applied"]',
+    );
+    await waitUntil(
+      () =>
+        getRoomEvents(roomId).some(
+          (event) =>
+            event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+            event.content['m.relates_to']?.key === 'applied' &&
+            event.content.commandRequestId === 'tool-after-patches',
+        ),
+      { timeout: 5000 },
+    );
+
+    let events = getRoomEvents(roomId);
+    let patchResultIndex = events.findIndex(
+      (event) =>
+        event.type === APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE &&
+        event.content['m.relates_to']?.key === 'applied',
+    );
+    let toolResultIndex = events.findIndex(
+      (event) =>
+        event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+        event.content['m.relates_to']?.key === 'applied' &&
+        event.content.commandRequestId === 'tool-after-patches',
+    );
+    assert.true(patchResultIndex >= 0, 'code patch result event exists');
+    assert.true(toolResultIndex >= 0, 'tool result event exists');
+    assert.true(
+      patchResultIndex < toolResultIndex,
+      `code patch settles before the tool runs (patch result at ${patchResultIndex}, tool result at ${toolResultIndex})`,
+    );
+    assert.strictEqual(
+      statusWhenToolRan,
+      'applied',
+      'at the moment the tool executed, the patch had already settled',
+    );
+  });
+
+  test('a tool whose execution fails posts a failed tool result event', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}hello.txt`,
+    });
+    await click('[data-test-open-ai-assistant]');
+    let roomId = getRoomIds().pop()!;
+
+    // Deterministic execution failure, independent of how the store treats
+    // an unknown card id.
+    let store = getService('store');
+    store.patch = () => Promise.reject(new Error('patch exploded'));
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'Patching a card via a store that rejects',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+        {
+          id: 'tool-that-fails',
+          name: 'patchCardInstance',
+          arguments: JSON.stringify({
+            attributes: {
+              cardId: `${testRealmURL}index`,
+              patch: { attributes: { name: 'x' } },
+            },
+          }),
+        },
+      ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
+    });
+
+    await waitFor('[data-test-message-idx="0"] [data-test-tool-call-apply]');
+    await click('[data-test-message-idx="0"] [data-test-tool-call-apply]');
+
+    await waitUntil(
+      () =>
+        getRoomEvents(roomId).some(
+          (event) =>
+            event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+            event.content['m.relates_to']?.key === 'failed' &&
+            event.content.commandRequestId === 'tool-that-fails',
+        ),
+      { timeout: 5000 },
+    );
+
+    let failedEvent = getRoomEvents(roomId).find(
+      (event) =>
+        event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+        event.content['m.relates_to']?.key === 'failed',
+    );
+    assert.ok(
+      failedEvent?.content.failureReason,
+      'failed tool result event carries the failure reason',
+    );
+  });
+
+  test('a tool whose execution hangs times out and posts a failed tool result event', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}hello.txt`,
+    });
+    await click('[data-test-open-ai-assistant]');
+    let roomId = getRoomIds().pop()!;
+
+    // Simulate the hang observed in the field: an execute that never
+    // settles (e.g. loading a card that never becomes available).
+    let store = getService('store');
+    store.patch = () => new Promise(() => {});
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'Patching via a store that never answers',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+        {
+          id: 'tool-that-hangs',
+          name: 'patchCardInstance',
+          arguments: JSON.stringify({
+            attributes: {
+              cardId: `${testRealmURL}index`,
+              patch: { attributes: {} },
+            },
+          }),
+        },
+      ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
+    });
+
+    await waitFor('[data-test-message-idx="0"] [data-test-tool-call-apply]');
+    await click('[data-test-message-idx="0"] [data-test-tool-call-apply]');
+
+    // The test timeout for tool execution is 3s; the failed result must
+    // land on its own once it elapses.
+    await waitUntil(
+      () =>
+        getRoomEvents(roomId).some(
+          (event) =>
+            event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+            event.content['m.relates_to']?.key === 'failed' &&
+            event.content.commandRequestId === 'tool-that-hangs',
+        ),
+      { timeout: 10_000 },
+    );
+
+    let failedEvent = getRoomEvents(roomId).find(
+      (event) =>
+        event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+        event.content['m.relates_to']?.key === 'failed',
+    );
+    assert.ok(
+      failedEvent?.content.failureReason?.includes('did not complete'),
+      'failure reason reports the timeout',
     );
   });
 });

@@ -65,6 +65,39 @@ const STUCK_PROCESSING_TIMEOUT_MS = isTesting() ? 1000 : 60_000;
 // result either way). Requeues are ~100ms apart (the drain debounce), so
 // this allows well over the normal sub-second catch-up.
 const MAX_TOOL_FINALIZATION_RETRIES = isTesting() ? 10 : 100;
+// How many times drainToolProcessingQueue requeues a message's tools while
+// that same message still has code patches pending auto-apply. Tools
+// routinely target the very cards those patches create (a show-card for the
+// instance a patch writes), so running them concurrently races the realm
+// write/index. Requeues are ~100ms apart; on exhaustion the tools run
+// anyway and the execute timeout below is the backstop.
+const MAX_TOOL_PATCH_WAIT_RETRIES = isTesting() ? 20 : 600;
+// Upper bound on a single tool execution. A tool awaiting a card that never
+// becomes loadable would otherwise hang forever, and the result event —
+// which is what un-sticks both the UI spinner and the waiting ai-bot — is
+// only sent once execute settles.
+const TOOL_EXECUTE_TIMEOUT_MS = isTesting() ? 3_000 : 120_000;
+
+// Promise.race with a cleared timer: the losing execute keeps running (we
+// cannot cancel it), but the run task settles and reports.
+async function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  label: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  let timedOut = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`${label} did not complete within ${ms}ms`)),
+      ms,
+    );
+  });
+  try {
+    return await Promise.race([promise, timedOut]);
+  } finally {
+    clearTimeout(timer!);
+  }
+}
 
 type GenericCommand = Command<
   typeof CardDef | undefined,
@@ -115,6 +148,9 @@ export default class ToolService extends Service {
   // How many times each queued event has been requeued waiting for the room
   // resource to fold the event's finalized content into its Message.
   private toolFinalizationRetries = new Map<string, number>();
+  // How many times each queued event's tools have been requeued waiting for
+  // that message's own code patches to finish auto-applying.
+  private toolPatchWaitRetries = new Map<string, number>();
   private codePatchProcessingEventQueue: string[] = [];
   private flushToolProcessingQueue: Promise<void> | undefined;
   private flushCodePatchProcessingQueue: Promise<void> | undefined;
@@ -139,6 +175,7 @@ export default class ToolService extends Service {
     }
     this.toolProcessingEventQueue = [];
     this.toolFinalizationRetries.clear();
+    this.toolPatchWaitRetries.clear();
     this.codePatchProcessingEventQueue = [];
     this.flushToolProcessingQueue = undefined;
     this.flushCodePatchProcessingQueue = undefined;
@@ -423,6 +460,34 @@ export default class ToolService extends Service {
           // This command was sent by another agent, so we will not auto-execute it
           continue;
         }
+
+        // A message can carry both code patches and tool requests, and the
+        // tools routinely target the very cards those patches create (a
+        // show-card for the instance a patch writes). Running them while the
+        // patches are still applying races the realm write/index, so when
+        // this message still has patches the host is going to auto-apply
+        // ('act' mode), requeue the tools until those patches settle.
+        // Bounded: on exhaustion the tools run anyway and the execute
+        // timeout is the backstop.
+        if (
+          roomResource.getActiveLLMModeForMessage(message.eventId) === 'act' &&
+          this.messageHasUnsettledCodePatches(message)
+        ) {
+          let compoundKey = `${roomId}|${eventId}`;
+          let retries = this.toolPatchWaitRetries.get(compoundKey) ?? 0;
+          if (retries < MAX_TOOL_PATCH_WAIT_RETRIES) {
+            this.toolPatchWaitRetries.set(compoundKey, retries + 1);
+            if (!this.toolProcessingEventQueue.includes(compoundKey)) {
+              this.toolProcessingEventQueue.push(compoundKey);
+            }
+            debounce(this, this.drainToolProcessingQueue, 100);
+            continue;
+          }
+          console.error(
+            `Tools on event ${eventId} in room ${roomId} ran before its code patches settled (waited ${MAX_TOOL_PATCH_WAIT_RETRIES} rounds)`,
+          );
+        }
+        this.toolPatchWaitRetries.delete(`${roomId}|${eventId}`);
 
         // Collect all ready commands for this message
         let readyTools: any[] = [];
@@ -795,8 +860,12 @@ export default class ToolService extends Service {
         );
 
         [resultCard] = await all([
-          await toolToRun.execute(typedInput as any),
-          await timeout(DELAY_FOR_APPLYING_UI), // leave a beat for the "applying" state of the UI to be shown
+          withTimeout(
+            toolToRun.execute(typedInput as any),
+            TOOL_EXECUTE_TIMEOUT_MS,
+            `Tool "${command.name}"`,
+          ),
+          timeout(DELAY_FOR_APPLYING_UI), // leave a beat for the "applying" state of the UI to be shown
         ]);
       } else if (command.name === 'patchCardInstance') {
         if (!hasPatchData(payload)) {
@@ -812,13 +881,17 @@ export default class ToolService extends Service {
           fileUrl: `${cardId}.json`,
         });
 
-        await this.store.patch(
-          cardId,
-          {
-            attributes: payload?.attributes?.patch?.attributes,
-            relationships: payload?.attributes?.patch?.relationships,
-          },
-          { doNotWaitForPersist: true, clientRequestId },
+        await withTimeout(
+          this.store.patch(
+            cardId,
+            {
+              attributes: payload?.attributes?.patch?.attributes,
+              relationships: payload?.attributes?.patch?.relationships,
+            },
+            { doNotWaitForPersist: true, clientRequestId },
+          ),
+          TOOL_EXECUTE_TIMEOUT_MS,
+          `Tool "${command.name}"`,
         );
       } else {
         // Unrecognized tool. This can happen if a programmatically-provided
@@ -852,6 +925,24 @@ export default class ToolService extends Service {
       console.error(error);
       await timeout(DELAY_FOR_APPLYING_UI); // leave a beat for the "applying" state of the UI to be shown
       this.matrixService.failedToolState.set(commandRequestId!, error);
+      // Report the failure to the room: the result event is what clears the
+      // UI spinner in other sessions and lets ai-bot react to the failure
+      // instead of waiting forever. The local failedToolState above still
+      // drives this tab's immediate Retry affordance.
+      try {
+        await this.matrixService.sendToolResultEvent({
+          roomId: command.message.roomId,
+          invokedToolFromEventId: eventId,
+          toolCallId: commandRequestId!,
+          status: 'failed',
+          failureReason: error.message,
+        });
+      } catch (sendError) {
+        console.error(
+          'could not send failed tool result event to the room',
+          sendError,
+        );
+      }
     } finally {
       this.currentlyExecutingToolRequestIds.delete(commandRequestId!);
     }
@@ -1077,6 +1168,25 @@ export default class ToolService extends Service {
       }
     }
   };
+
+  // True while any code patch in the message has not reached a terminal
+  // state ('applied' or 'failed') — i.e. it is still 'ready' (queued for
+  // auto-apply) or 'applying'.
+  private messageHasUnsettledCodePatches(message: {
+    htmlParts?: Array<{ codeData: CodeData | null }> | null;
+  }): boolean {
+    if (!message.htmlParts) {
+      return false;
+    }
+    return message.htmlParts.some((part) => {
+      let codeData = part.codeData;
+      if (!codeData?.searchReplaceBlock) {
+        return false;
+      }
+      let status = this.getCodePatchStatus(codeData);
+      return status === 'ready' || status === 'applying';
+    });
+  }
 
   getReadyCodePatches = (
     htmlParts: Array<{ codeData: CodeData | null }>,
