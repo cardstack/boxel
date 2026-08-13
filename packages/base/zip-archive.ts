@@ -348,10 +348,15 @@ function readUint64(view: DataView, offset: number): number {
   return high * 0x1_0000_0000 + low;
 }
 
+// One decoder reused across every entry: a large archive's central directory
+// can hold thousands of headers, and allocating a `TextDecoder` per name is
+// measurable overhead for no benefit.
+const PATH_DECODER = new TextDecoder('utf-8');
+
 function decodePath(bytes: Uint8Array, _isUtf8: boolean): string {
   // A non-fatal UTF-8 decode handles the common (and flagged-UTF-8) case and
   // degrades legacy CP437 names to replacement characters rather than throwing.
-  return new TextDecoder('utf-8').decode(bytes);
+  return PATH_DECODER.decode(bytes);
 }
 
 function dosDateTimeToISO(

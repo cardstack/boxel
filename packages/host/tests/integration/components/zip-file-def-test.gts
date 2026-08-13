@@ -156,6 +156,18 @@ module('Integration | zip file def', function (hooks) {
       /Expected a \.zip file/,
     );
   });
+
+  test('extractAttributes rejects a .zip whose bytes are not a ZIP so the base falls back', async function (assert) {
+    // A file that ends in `.zip` but carries no central directory must fall back
+    // to the plain FileDef rather than be mislabeled as an empty archive.
+    await assert.rejects(
+      ZipDef.extractAttributes(
+        'http://example.com/archives/not-really.zip',
+        async () => new TextEncoder().encode('this is definitely not a zip'),
+      ),
+      /no readable ZIP central directory/,
+    );
+  });
 });
 
 // A tiny stored-ZIP builder for the extract test: local headers + central

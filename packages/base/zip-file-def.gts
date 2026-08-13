@@ -508,9 +508,15 @@ export class ZipDef extends FileDef {
     let base = await super.extractAttributes(url, getStream, options);
     let listing = await extractZipListing(await getStream());
     if (!listing) {
-      // A `.zip` that carries no readable central directory (empty or corrupt)
-      // still gets its identity; it simply lists nothing.
-      return base;
+      // No readable central directory means the bytes aren't a ZIP (or are
+      // corrupt beyond recognition) — a valid *empty* archive still carries an
+      // EOCD record and reads as an empty listing, so it doesn't land here. Fall
+      // back to the base FileDef rather than mislabeling a mis-extensioned file
+      // as an empty archive, matching how the other extractors (PNG, MP4, …)
+      // reject content that doesn't match the format.
+      throw new FileContentMismatchError(
+        `"${base.name ?? url}" has no readable ZIP central directory`,
+      );
     }
 
     return {
