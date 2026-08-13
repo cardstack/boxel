@@ -145,6 +145,13 @@ function sfntTableSource(bytes: Uint8Array, headerOffset = 0): TableSource {
 // compressed length equals its original length is stored raw; otherwise it is
 // zlib-compressed and inflated on demand.
 function woffTableSource(bytes: Uint8Array): TableSource {
+  // The 44-byte header carries the fields read below (flavor at 4, numTables at
+  // 12); a stream that starts `wOFF` but is shorter is truncated, and reading
+  // past its end would throw a RangeError that fails the whole extract. Reject
+  // it as a content mismatch instead, which degrades to the plain FileDef.
+  if (bytes.byteLength < 44) {
+    throw new FileContentMismatchError('WOFF header is truncated');
+  }
   let view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   let flavor = view.getUint32(4);
   let numTables = view.getUint16(12);
@@ -200,6 +207,22 @@ function woff2TableSource(bytes: Uint8Array): TableSource {
   };
 }
 
+// A TrueType Collection packs several faces behind a `ttcf` header, which is not
+// an sfnt table directory — its bytes after the tag are a version and a face
+// count, not `numTables` and table records. As the container comment says, this
+// pass reports a collection as a font (the flavor names it) but does not walk
+// into a face, so it exposes no tables rather than misreading the TTC header as
+// one.
+function collectionTableSource(bytes: Uint8Array): TableSource {
+  let view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  return {
+    flavor: view.getUint32(0),
+    container: 'sfnt',
+    hasTable: () => false,
+    getTable: async () => undefined,
+  };
+}
+
 function tableSourceFor(bytes: Uint8Array): TableSource {
   if (bytes.byteLength < 12) {
     throw new FileContentMismatchError('File is too small to be a font');
@@ -211,11 +234,12 @@ function tableSourceFor(bytes: Uint8Array): TableSource {
       return woffTableSource(bytes);
     case WOFF2_SIGNATURE:
       return woff2TableSource(bytes);
+    case SFNT_TTCF:
+      return collectionTableSource(bytes);
     case SFNT_TRUETYPE:
     case SFNT_TRUE:
     case SFNT_TYP1:
     case SFNT_OTTO:
-    case SFNT_TTCF:
       return sfntTableSource(bytes);
     default:
       throw new FileContentMismatchError(

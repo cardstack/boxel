@@ -409,4 +409,41 @@ module('Unit | font metadata extractor', function (hooks) {
     // Other tables still read; the extract survives.
     assert.strictEqual(metadata.outlineType, 'TrueType');
   });
+
+  test('rejects a truncated WOFF header instead of throwing a RangeError', async function (assert) {
+    // A stream that starts `wOFF` but is shorter than the 44-byte header would
+    // read past its end; it must surface as a content mismatch — degrading to
+    // the plain FileDef — rather than a RangeError that fails the whole extract.
+    let truncated = new Uint8Array(20);
+    new DataView(truncated.buffer).setUint32(0, 0x774f4646); // 'wOFF'
+    await assert.rejects(
+      extractFontMetadata(truncated),
+      /WOFF header is truncated/,
+    );
+  });
+
+  test('reports a TrueType Collection as a font without walking into a face', async function (assert) {
+    // A `ttcf` header is not an sfnt table directory, so the reader recognizes
+    // the collection from its flavor but exposes no tables rather than misreading
+    // the TTC version and face count as `numTables` and a table record.
+    let ttc = new Uint8Array(16);
+    let view = new DataView(ttc.buffer);
+    view.setUint32(0, 0x74746366); // 'ttcf'
+    view.setUint16(4, 1); // majorVersion
+    view.setUint16(6, 0); // minorVersion
+    view.setUint32(8, 1); // numFonts
+    view.setUint32(12, 16); // offset to the first face
+    let metadata = await extractFontMetadata(ttc);
+    assert.strictEqual(
+      metadata.outlineType,
+      'TrueType',
+      'recognized as a font',
+    );
+    assert.strictEqual(
+      metadata.familyName,
+      undefined,
+      'no table is walked, so no name is invented',
+    );
+    assert.strictEqual(metadata.glyphCount, undefined, 'no maxp is read');
+  });
 });
