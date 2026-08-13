@@ -6,7 +6,7 @@ import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 
-import { Alert } from '@cardstack/boxel-ui/components';
+import { Alert, LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { and, bool, eq } from '@cardstack/boxel-ui/helpers';
 
 import { markdownToHtml } from '@cardstack/runtime-common/marked-sync';
@@ -343,6 +343,27 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
                 @modifiedCode={{this.codeDiffResource.modifiedCode}}
               />
             </codeBlock.actions>
+          {{else}}
+            {{! The header needs only the file URL, which is known as soon as
+            the patch is parsed, so a diff still being fetched can name the file
+            it belongs to. Without this the whole block renders empty and an
+            unresolved patch is indistinguishable from nothing at all. }}
+            {{#if @codeData.fileUrl}}
+              <codeBlock.diffEditorHeader
+                @codeData={{@codeData}}
+                @diffEditorStats={{null}}
+                @originalUploadedFileUrl={{@codePatchResult.originalUploadedFileUrl}}
+                @codePatchStatus={{@codePatchStatus}}
+                @userMessageThisMessageIsRespondingTo={{@userMessageThisMessageIsRespondingTo}}
+                @codePatchErrorMessage={{this.codePatchErrorMessage}}
+              />
+            {{/if}}
+            {{#if this.codeDiffResource.isLoadingDiff}}
+              <div class='code-patch-loading' data-test-code-patch-loading>
+                <LoadingIndicator @color='var(--boxel-light)' />
+                <span>Loading diff…</span>
+              </div>
+            {{/if}}
           {{/if}}
 
           {{#if this.codePatchErrorMessage}}
@@ -374,5 +395,18 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
         </codeBlock.actions>
       {{/if}}
     </CodeBlock>
+
+    <style scoped>
+      .code-patch-loading {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-sm);
+        background-color: var(--boxel-dark);
+        color: var(--boxel-light);
+        font-size: var(--boxel-font-size-sm);
+        line-height: var(--boxel-line-height-sm);
+      }
+    </style>
   </template>
 }

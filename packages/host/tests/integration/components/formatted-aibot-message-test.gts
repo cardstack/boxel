@@ -370,6 +370,89 @@ let c = 3;
       );
   });
 
+  // The code block's arguments are recomputed on every invalidation of the room
+  // resource, which during streaming arrives continuously. Each of those used to
+  // restart the load, cancelling the request in flight and leaving the block
+  // with neither a diff nor an error to show — an empty box — while asking the
+  // realm for the file again every time.
+  test('re-rendering with unchanged inputs neither refetches the file nor blanks the diff', async function (assert) {
+    let getSourceCallCount = 0;
+    cardService.getSource = async () => {
+      getSourceCallCount++;
+      return Promise.resolve({
+        status: 200,
+        contentType: 'application/vnd.card+source',
+        content: 'let a = 1;\nlet b = 2;',
+      });
+    };
+
+    let monacoSDK = await monacoService.getMonacoContext();
+    let component: any = null;
+
+    class TestComponent extends Component {
+      @tracked htmlParts = [];
+
+      constructor(owner: Owner, args: any) {
+        super(owner, args);
+        component = this;
+      }
+
+      <template>
+        <FormattedAiBotMessage
+          @monacoSDK={{monacoSDK}}
+          @htmlParts={{this.htmlParts}}
+          @roomId='!abcd'
+          @eventId='1234'
+          @isStreaming={{false}}
+          @isLastAssistantMessage={{true}}
+        />
+      </template>
+    }
+
+    await renderComponent(TestComponent);
+    if (!component) {
+      throw new Error('Component not found');
+    }
+
+    let codeBlockHtml = `<pre data-code-language="typescript">
+https://example.com/file.ts
+${SEARCH_MARKER}
+let a = 1;
+${SEPARATOR_MARKER}
+let a = 2;
+${REPLACE_MARKER}
+</pre>`;
+
+    component.htmlParts = parseHtmlContent(codeBlockHtml, roomId, eventId);
+    await settled();
+    await waitFor('.code-block-diff');
+    assert.strictEqual(
+      getSourceCallCount,
+      1,
+      'the file is fetched once to build the diff',
+    );
+
+    // Fresh CodeData objects carrying identical values, which is what an
+    // invalidation of the room resource produces.
+    for (let i = 0; i < 5; i++) {
+      component.htmlParts = parseHtmlContent(codeBlockHtml, roomId, eventId);
+      await settled();
+    }
+
+    assert.strictEqual(
+      getSourceCallCount,
+      1,
+      'unchanged inputs do not send the realm another request',
+    );
+    assert.dom('.code-block-diff').exists('the diff survives re-rendering');
+    assert
+      .dom('[data-test-apply-code-button]')
+      .exists('the apply button survives re-rendering');
+    assert
+      .dom('[data-test-code-patch-loading]')
+      .doesNotExist('the block is not left in a loading state');
+  });
+
   test('it will render either standard code editor or diff editor during streaming depending on whether the individual search/replace blocks are complete', async function (assert) {
     let monacoSDK = await monacoService.getMonacoContext();
     let component: any = null;

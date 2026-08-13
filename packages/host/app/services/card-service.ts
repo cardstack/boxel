@@ -247,11 +247,15 @@ export default class CardService extends Service {
     return serialized;
   }
 
-  async getSource(url: RealmResourceIdentifier | URL) {
+  async getSource(
+    url: RealmResourceIdentifier | URL,
+    opts?: { signal?: AbortSignal },
+  ) {
     let response = await this.network.authedFetch(url, {
       headers: {
         Accept: 'application/vnd.card+source',
       },
+      signal: opts?.signal,
     });
     return {
       status: response.status,
