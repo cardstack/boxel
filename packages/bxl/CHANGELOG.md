@@ -12,6 +12,20 @@ versions may change syntax behavior until `1.0.0`.
 
 ### Added
 
+- **Cycle-guarded lazy card materialization in `expression()`.** The
+  computeVia factory hands the program a lazy view of the card graph:
+  path access materializes only the fields it names, structural
+  operations (`unique`, `==`, `tojson`, `keys`, …) enumerate a card's
+  real field map on demand, and re-entering a card already on the
+  traversal path — card graphs are legitimately cyclic, jq's data model
+  is not — reads as a bounded `{ id }` reference instead of recursing,
+  by object identity and by id (mirroring the platform's
+  `queryableValue`). A 256-hop depth cap fails fast on pathological
+  graphs, and materialization hops count toward the runtime step/time
+  budget. Program outputs are unwrapped back to raw values, so nothing
+  downstream ever holds the lazy view. See the README's "Linked cards,
+  cycles, and bounded references."
+
 - **`loadAllFormulaExtensions()`.** Loads every lazy formula chunk
   (statistical, Bessel, engineering/financial, validation) and folds it into
   `DEFAULT_BUILTIN_LIBRARIES`, so hosts can serve the module to authors whose

@@ -21,6 +21,7 @@ import {
   type ResolvedBuiltinRegistry,
 } from '../registry/index.ts';
 import { resolveLazyBuiltinLibrariesForAst } from './lazy-formulas.ts';
+import { unwrapMaterializedCardInput } from './card-input.ts';
 import type { NativeRuntimeLimits } from '../../jqtools/evaluate/runtimeState.ts';
 import {
   recordRuntimeOutput,
@@ -173,8 +174,12 @@ function runParsedNativeProgram(
         ? [compiledScalar(input)]
         : evaluateWithRegistry(parsed.ast, [input], registry);
       for (const value of values) {
-        recordRuntimeOutput(value);
-        outputs.push(value);
+        // Outputs shed the lazy card-input view before anything sees
+        // them — output accounting must cost what the caller receives,
+        // not a full materialization of every card the value touches.
+        const output = unwrapMaterializedCardInput(value);
+        recordRuntimeOutput(output);
+        outputs.push(output);
       }
     }, runtimeLimits);
 
