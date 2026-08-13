@@ -207,11 +207,16 @@ export default class CodeSubmode extends Component<Signature> {
         rightPanel: !this.codePath ? 0 : persistedDefaultPanelWidths.rightPanel,
       }) <= 100
         ? persistedDefaultPanelWidths
-        : defaultPanelWidths;
+        : // Copy rather than alias. The layout callbacks below mutate whichever
+          // object lands here, and `defaultPanelWidths` is module-level state
+          // shared by every instance that ever falls back to it — mutating it
+          // would make one instance's final layout the next one's starting
+          // point, with nothing but a page load to clear it.
+          { ...defaultPanelWidths };
     this.defaultPanelHeights =
       persistedDefaultPanelHeights && sum(persistedDefaultPanelHeights) <= 100
         ? persistedDefaultPanelHeights
-        : defaultPanelHeights;
+        : { ...defaultPanelHeights };
 
     registerDestructor(this, () => {
       this.operatorModeStateService.unsubscribeFromOpenFileStateChanges(this);

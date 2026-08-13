@@ -1620,6 +1620,34 @@ module('Acceptance | code submode tests', function (_hooks) {
       let previewResizeHandle = handles.at(-1);
       assert.ok(previewResizeHandle, 'preview panel resize handle exists');
 
+      // The panels either side of the handle, in group order.
+      let editorPanel = previewResizeHandle!
+        .previousElementSibling as HTMLElement;
+      let previewPanel = previewResizeHandle!.nextElementSibling as HTMLElement;
+      assert
+        .dom(editorPanel)
+        .hasAttribute(
+          'data-boxel-panel-id',
+          /.+/,
+          'the element before the handle is a resizable panel',
+        );
+      assert
+        .dom(previewPanel)
+        .hasAttribute(
+          'data-boxel-panel-id',
+          /.+/,
+          'the element after the handle is a resizable panel',
+        );
+
+      // Drag by a fraction of the preview panel's own width rather than a
+      // fixed pixel count. A drag wider than the panel is clamped where the
+      // panel runs out of room, so only part of it lands — and the reverse
+      // drag, which is not clamped, then gives back more than the first one
+      // took, leaving the group in a layout neither drag asked for.
+      let initialEditorWidth = editorPanel.getBoundingClientRect().width;
+      let initialPreviewWidth = previewPanel.getBoundingClientRect().width;
+      let dragDistance = Math.round(initialPreviewWidth * 0.75);
+
       let shrinkRect = previewResizeHandle!.getBoundingClientRect();
       await triggerEvent(previewResizeHandle!, 'pointerdown', {
         button: 0,
@@ -1630,12 +1658,12 @@ module('Acceptance | code submode tests', function (_hooks) {
       await triggerEvent(previewResizeHandle!, 'pointermove', {
         pointerId: 1,
         buttons: 1,
-        clientX: shrinkRect.x + shrinkRect.width / 2 + 320,
+        clientX: shrinkRect.x + shrinkRect.width / 2 + dragDistance,
         clientY: shrinkRect.y + shrinkRect.height / 2,
       });
       await triggerEvent(previewResizeHandle!, 'pointerup', {
         pointerId: 1,
-        clientX: shrinkRect.x + shrinkRect.width / 2 + 320,
+        clientX: shrinkRect.x + shrinkRect.width / 2 + dragDistance,
         clientY: shrinkRect.y + shrinkRect.height / 2,
       });
 
@@ -1680,12 +1708,12 @@ module('Acceptance | code submode tests', function (_hooks) {
       await triggerEvent(previewResizeHandle!, 'pointermove', {
         pointerId: 2,
         buttons: 1,
-        clientX: widenRect.x + widenRect.width / 2 - 320,
+        clientX: widenRect.x + widenRect.width / 2 - dragDistance,
         clientY: widenRect.y + widenRect.height / 2,
       });
       await triggerEvent(previewResizeHandle!, 'pointerup', {
         pointerId: 2,
-        clientX: widenRect.x + widenRect.width / 2 - 320,
+        clientX: widenRect.x + widenRect.width / 2 - dragDistance,
         clientY: widenRect.y + widenRect.height / 2,
       });
 
@@ -1707,6 +1735,23 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert
         .dom('[data-test-format-chooser-pill-label]')
         .hasText('isolated', 'full chooser label is restored');
+
+      // The chooser reports full mode for any width above its threshold, so
+      // it can read as restored while the panels sit somewhere else entirely.
+      // Check the widths themselves to hold the widen drag to giving back
+      // exactly what the shrink drag took.
+      assert.ok(
+        Math.abs(
+          previewPanel.getBoundingClientRect().width - initialPreviewWidth,
+        ) <= 1,
+        'preview panel is back to the width it started at',
+      );
+      assert.ok(
+        Math.abs(
+          editorPanel.getBoundingClientRect().width - initialEditorWidth,
+        ) <= 1,
+        'code editor panel is back to the width it started at',
+      );
     });
 
     test('displays clear message when a schema-editor incompatible item is selected within a valid file type', async function (assert) {
