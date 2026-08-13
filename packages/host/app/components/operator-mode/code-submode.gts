@@ -35,6 +35,8 @@ import {
   isCardErrorJSONAPI,
   rri,
   RealmPaths,
+  ri,
+  type RealmIdentifier,
   PermissionsContextName,
   GetCardContextName,
   type ResolvedCodeRef,
@@ -593,17 +595,16 @@ export default class CodeSubmode extends Component<Signature> {
 
   @action
   private triggerUploadFile() {
-    let realmURLString = this.operatorModeStateService.realmURL;
-    if (!realmURLString) {
+    let realm = this.operatorModeStateService.realmURL;
+    if (!realm) {
       throw new Error('No realm available for upload');
     }
-    let realmURL = new URL(realmURLString);
-    this.uploadFiles.perform(realmURL).catch((error) => {
+    this.uploadFiles.perform(ri(realm)).catch((error) => {
       console.error('Unexpected error during file upload', error);
     });
   }
 
-  private uploadFiles = dropTask(async (realmURL: URL) => {
+  private uploadFiles = dropTask(async (realm: RealmIdentifier) => {
     let files = await this.fileUpload.pickLocalFiles({});
     if (files.length === 0) {
       return;
@@ -615,7 +616,7 @@ export default class CodeSubmode extends Component<Signature> {
     // leave the tree stale until the user refreshes / toggles views)
     // is tracked in CS-11295.
     let tasks = files.map((file) =>
-      this.fileUpload.uploadProvidedFile({ realmURL, file }),
+      this.fileUpload.uploadProvidedFile({ realm, file }),
     );
     let results = await Promise.all(tasks.map((task) => task.result));
     let firstSuccess = results.find((fileDef) => fileDef?.url);

@@ -4,7 +4,12 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import type { CodeRef, LocalPath } from '@cardstack/runtime-common';
+import { ri } from '@cardstack/runtime-common';
+import type {
+  CodeRef,
+  LocalPath,
+  RealmIdentifier,
+} from '@cardstack/runtime-common';
 
 import type FileUploadService from '@cardstack/host/services/file-upload';
 import type { FileUploadTask } from '@cardstack/host/services/file-upload';
@@ -18,7 +23,11 @@ import type { FileDef } from '@cardstack/base/file-api';
 
 import type { WithBoundArgs } from '@glint/template';
 
-export type FileChooserRealm = { url: URL; info: EnhancedRealmInfo };
+// Carries the realm's identifier rather than a parsed URL: this is only ever
+// compared, keyed on, and handed to the upload/tree surfaces, none of which
+// need URL structure — and parsing would constrain the realm list to
+// URL-shaped identifiers.
+export type FileChooserRealm = { id: RealmIdentifier; info: EnhancedRealmInfo };
 
 interface Signature {
   Args: {
@@ -86,7 +95,7 @@ export default class FileChooser extends Component<Signature> {
 
   private get knownRealms(): FileChooserRealm[] {
     return Object.entries(this.realm.allRealmsInfo).map((entry) => ({
-      url: new URL(entry[0]),
+      id: ri(entry[0]),
       info: entry[1].info,
     }));
   }
@@ -94,17 +103,17 @@ export default class FileChooser extends Component<Signature> {
   private get initialRealm(): FileChooserRealm | undefined {
     let realms = this.knownRealms;
     let match = this.args.initialRealmURL
-      ? realms.find((r) => r.url.href === this.args.initialRealmURL)
+      ? realms.find((r) => r.id === this.args.initialRealmURL)
       : undefined;
     return match ?? realms[0];
   }
 
   private get selectedRealmURL(): string | undefined {
-    return this.selectedRealm?.url.href;
+    return this.selectedRealm?.id;
   }
 
   private get fileTreeKey(): string {
-    return `${this.fileTreeRenderNonce}:${this.selectedRealm?.url.href ?? ''}`;
+    return `${this.fileTreeRenderNonce}:${this.selectedRealm?.id ?? ''}`;
   }
 
   private get isUploadBusy(): boolean {
@@ -121,7 +130,7 @@ export default class FileChooser extends Component<Signature> {
 
   @action
   private selectRealm({ path }: RealmDropdownItem) {
-    let realm = this.knownRealms.find((r) => r.url.href === path);
+    let realm = this.knownRealms.find((r) => r.id === path);
     if (!realm) {
       return;
     }
@@ -146,7 +155,7 @@ export default class FileChooser extends Component<Signature> {
       return;
     }
     let task = this.fileUpload.uploadFile({
-      realmURL: this.selectedRealm.url,
+      realm: this.selectedRealm.id,
       acceptTypes: this.args.acceptTypes,
     });
     this.beginUpload(task);
@@ -210,7 +219,7 @@ export default class FileChooser extends Component<Signature> {
       return;
     }
     let task = this.fileUpload.uploadProvidedFile({
-      realmURL: this.selectedRealm.url,
+      realm: this.selectedRealm.id,
       file,
     });
     this.beginUpload(task);
