@@ -256,6 +256,11 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
     return Boolean(t?.trackTitle || t?.artist);
   }
 
+  get hasMidi() {
+    let m = this.args.model?.midi;
+    return Boolean(m?.trackCount || m?.noteCount || m?.durationSeconds);
+  }
+
   get hasDocInfo() {
     let d = this.args.model?.documentInfo;
     return Boolean(d?.author || d?.pageCount);
@@ -544,7 +549,11 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
           {{/if}}
           {{#if this.hasTags}}
             <h2 class='insp-group'>Tags</h2>
-            <div class='insp-family'><@fields.mediaTags /></div>
+            <div class='insp-family'><@fields.tags /></div>
+          {{/if}}
+          {{#if this.hasMidi}}
+            <h2 class='insp-group'>MIDI sequence</h2>
+            <div class='insp-family'><@fields.midi /></div>
           {{/if}}
           {{#if this.hasDocInfo}}
             <h2 class='insp-group'>Document</h2>

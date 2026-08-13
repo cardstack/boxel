@@ -149,6 +149,7 @@ export interface FileViewModel {
   encoding?: any;
   mediaTags?: any;
   waveform?: any;
+  midi?: any;
   documentInfo?: any;
   model3d?: any;
   fontMetadata?: any;
@@ -255,6 +256,14 @@ function heroFactFor(
     let clock = formatClock(durationOf(model));
     if (clock) {
       return clock;
+    }
+    // A MIDI file timed in SMPTE has no seconds to clock; its structure is the
+    // next most identifying fact.
+    if (kind === 'midi' && model.midi?.trackCount) {
+      return `${model.midi.trackCount} tracks`;
+    }
+    if (kind === 'midi' && model.midi?.noteCount) {
+      return `${model.midi.noteCount.toLocaleString()} notes`;
     }
   }
   if (model.documentInfo?.pageCount) {
@@ -526,8 +535,11 @@ export function fileViewModel(
     // authority, with the EXIF tag already folded in at extract time.
     colorProfile: file.colorProfile,
     encoding: file.encoding,
-    mediaTags: file.mediaTags,
+    // `AudioDef` declares this field as `tags`; the older `mediaTags` name is
+    // kept as a fallback so a future family may use either.
+    mediaTags: file.tags ?? file.mediaTags,
     waveform: file.waveform,
+    midi: file.midi,
     documentInfo: file.documentInfo,
     model3d: file.model3d,
     fontMetadata,
