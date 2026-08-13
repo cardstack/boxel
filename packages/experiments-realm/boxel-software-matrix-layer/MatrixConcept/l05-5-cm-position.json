@@ -10,7 +10,7 @@
       "implemented": false,
       "evidenceTier": "POC realm",
       "auditStatus": "POC only",
-      "whereImplemented": "experiments-realm/position.gts (Position CardDef) \u2014 linked from Candidate.position, Offer.position, JobRequisition",
+      "whereImplemented": "experiments-realm/position.gts (Position CardDef) — linked from Candidate.position, Offer.position, JobRequisition",
       "reference": null,
       "catalogMatch": null,
       "provenance": null,

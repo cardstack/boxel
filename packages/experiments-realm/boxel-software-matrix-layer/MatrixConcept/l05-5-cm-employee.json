@@ -10,7 +10,7 @@
       "implemented": false,
       "evidenceTier": "POC realm",
       "auditStatus": "POC only",
-      "whereImplemented": "experiments-realm/employee.gts (Employee CardDef) \u2014 org-tree hierarchy, Directory tab (live query)",
+      "whereImplemented": "experiments-realm/employee.gts (Employee CardDef) — org-tree hierarchy, Directory tab (live query)",
       "reference": "institutional-meerkat/legal + audited kit realms",
       "catalogMatch": null,
       "provenance": null,

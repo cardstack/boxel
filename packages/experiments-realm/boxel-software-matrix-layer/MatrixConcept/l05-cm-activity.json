@@ -17,7 +17,7 @@
       "domainKit": null,
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1 \u00b7 Built \u2014 experiments-realm/activity.gts, typed timeline entry, POC tier",
+      "notes": "v1 · Built — experiments-realm/activity.gts, typed timeline entry, POC tier",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/activity",
       "specTarget": "shared block",
       "consumers": "revenue-os",

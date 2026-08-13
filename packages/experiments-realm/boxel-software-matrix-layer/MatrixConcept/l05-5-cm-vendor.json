@@ -10,7 +10,7 @@
       "implemented": false,
       "evidenceTier": "POC realm",
       "auditStatus": "POC only",
-      "whereImplemented": "experiments-realm/vendor.gts (Vendor CardDef) \u2014 contractStart/contractLength via DurationField, Dashboard tab",
+      "whereImplemented": "experiments-realm/vendor.gts (Vendor CardDef) — contractStart/contractLength via DurationField, Dashboard tab",
       "reference": "institutional-meerkat/legal + audited kit realms",
       "catalogMatch": null,
       "provenance": "periodic:Vendor",

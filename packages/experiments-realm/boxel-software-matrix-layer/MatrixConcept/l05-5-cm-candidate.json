@@ -10,7 +10,7 @@
       "implemented": false,
       "evidenceTier": "POC realm",
       "auditStatus": "POC only",
-      "whereImplemented": "experiments-realm/candidate.gts (Candidate CardDef) \u2014 ATS pipeline card, drives Pipeline/Dashboard/Calendar tabs",
+      "whereImplemented": "experiments-realm/candidate.gts (Candidate CardDef) — ATS pipeline card, drives Pipeline/Dashboard/Calendar tabs",
       "reference": "institutional-meerkat/legal + audited kit realms",
       "catalogMatch": null,
       "provenance": null,

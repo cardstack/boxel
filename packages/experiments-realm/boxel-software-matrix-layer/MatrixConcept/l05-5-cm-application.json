@@ -10,7 +10,7 @@
       "implemented": false,
       "evidenceTier": "POC realm",
       "auditStatus": "POC only",
-      "whereImplemented": "experiments-realm/candidate.gts \u2014 modeled as Candidate.appliedRole/appliedDate/status/decisionDate; no separate Application CardDef",
+      "whereImplemented": "experiments-realm/candidate.gts — modeled as Candidate.appliedRole/appliedDate/status/decisionDate; no separate Application CardDef",
       "reference": null,
       "catalogMatch": null,
       "provenance": null,
