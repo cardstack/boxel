@@ -26,7 +26,8 @@
         "cardThumbnailURL": null
       },
       "specTarget": "shared block",
-      "consumers": "talent-resource-tracker"
+      "consumers": "talent-resource-tracker",
+      "consumerExamples": "{\"talent-resource-tracker\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/talent-resource-tracker/TalentResourceTracker/tracker\"}"
     },
     "meta": {
       "adoptsFrom": {

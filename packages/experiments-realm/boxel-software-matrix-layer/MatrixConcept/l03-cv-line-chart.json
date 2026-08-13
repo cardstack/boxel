@@ -26,7 +26,8 @@
         "cardThumbnailURL": null
       },
       "specTarget": "shared block",
-      "consumers": "metrics-demo, revenue-os"
+      "consumers": "metrics-demo, revenue-os",
+      "consumerExamples": "{\"metrics-demo\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/AccountMetricsDemo/acme\", \"revenue-os\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/RevenueOs/main\"}"
     },
     "meta": {
       "adoptsFrom": {

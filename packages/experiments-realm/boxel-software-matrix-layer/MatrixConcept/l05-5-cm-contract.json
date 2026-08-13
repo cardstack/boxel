@@ -26,7 +26,8 @@
         "cardThumbnailURL": null
       },
       "specTarget": "shared block",
-      "consumers": "close-won, order, subscription"
+      "consumers": "close-won, order, subscription",
+      "consumerExamples": "{\"order\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Order/ord-2026-107\", \"subscription\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Subscription/acme-data-addon\"}"
     },
     "meta": {
       "adoptsFrom": {

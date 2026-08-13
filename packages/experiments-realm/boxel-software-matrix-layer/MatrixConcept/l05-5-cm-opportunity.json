@@ -26,7 +26,8 @@
         "cardThumbnailURL": null
       },
       "specTarget": "shared block",
-      "consumers": "board-demo, close-won, contract, convert-lead, deal, revenue-os"
+      "consumers": "board-demo, close-won, contract, convert-lead, deal, revenue-os",
+      "consumerExamples": "{\"board-demo\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/PipelineBoardDemo/q3-pipeline\", \"contract\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Contract/acme-msa-2026\", \"deal\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Deal/acme-enterprise-renewal\", \"revenue-os\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/RevenueOs/main\"}"
     },
     "meta": {
       "adoptsFrom": {

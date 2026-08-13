@@ -26,7 +26,8 @@
         "cardThumbnailURL": null
       },
       "specTarget": "shared block",
-      "consumers": "account-metrics, close-won, payment, record-payment, revenue-os, table-demo"
+      "consumers": "account-metrics, close-won, payment, record-payment, revenue-os, table-demo",
+      "consumerExamples": "{\"payment\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Payment/272f6cbf-4eb6-475c-9f4f-02ac98046a24\", \"revenue-os\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/RevenueOs/main\", \"table-demo\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/InvoiceTableDemo/invoice-tracker\"}"
     },
     "meta": {
       "adoptsFrom": {

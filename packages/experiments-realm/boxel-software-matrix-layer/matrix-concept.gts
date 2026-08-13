@@ -127,8 +127,10 @@ export class MatrixConcept extends CardDef {
   @field sharedSpec = contains(StringField);
   @field specTarget = contains(SpecTargetField);
   // Verifier-owned: shared-realm modules that import this concept's block —
-  // proof of consumption, not a claim.
+  // proof of consumption, not a claim. consumerExamples maps each consumer
+  // to a representative instance (JSON string) so the chip can open it live.
   @field consumers = contains(StringField);
+  @field consumerExamples = contains(StringField);
   // Human-set during review, only meaningful on catalog-matched rows: a pure
   // listing can be spec'd as-is; otherwise a block must be built here first.
   @field catalogDisposition = contains(CatalogDispositionField);
@@ -488,6 +490,7 @@ export class MatrixConcept extends CardDef {
     private reviewList: ReturnType<getCards> | undefined;
     private teammateList: ReturnType<getCards> | undefined;
     private specResource: any;
+    private consumerResources = new Map<string, any>();
 
     constructor(owner: Owner, args: any) {
       super(owner, args);
@@ -503,6 +506,12 @@ export class MatrixConcept extends CardDef {
         this,
         () => (this.args.model as MatrixConcept)?.sharedSpec ?? undefined,
       );
+      for (let [name, id] of Object.entries(this.consumerExampleIds)) {
+        this.consumerResources.set(
+          name,
+          (ctx as any)?.getCard?.(this, () => id),
+        );
+      }
       this.reviewList = ctx?.getCards(
         this,
         () => {
@@ -609,6 +618,27 @@ export class MatrixConcept extends CardDef {
         .split(',')
         .map((s) => s.trim())
         .filter(Boolean);
+    }
+
+    private get consumerExampleIds(): Record<string, string> {
+      try {
+        let raw = (this.args.model as MatrixConcept)?.consumerExamples;
+        let parsed = raw ? JSON.parse(raw) : {};
+        return parsed && typeof parsed === 'object' ? parsed : {};
+      } catch {
+        return {};
+      }
+    }
+
+    get consumerEntries(): { name: string; card?: CardDef }[] {
+      return this.consumerList.map((name) => ({
+        name,
+        card: this.consumerResources.get(name)?.card,
+      }));
+    }
+
+    @action openConsumer(card: CardDef) {
+      (this.args as any).viewCard?.(card, 'isolated');
     }
 
     @action setVerdict(e: Event) {
@@ -796,8 +826,17 @@ export class MatrixConcept extends CardDef {
                 {{#if this.consumerList.length}}
                   <dt>Used by</dt>
                   <dd class='consumers'>
-                    {{#each this.consumerList as |m|}}
-                      <span class='consumer-chip'>{{m}}</span>
+                    {{#each this.consumerEntries as |entry|}}
+                      {{#if entry.card}}
+                        <button
+                          type='button'
+                          class='consumer-chip consumer-link'
+                          title='Open {{entry.name}} to see this in use'
+                          {{on 'click' (fn this.openConsumer entry.card)}}
+                        >{{entry.name}} →</button>
+                      {{else}}
+                        <span class='consumer-chip'>{{entry.name}}</span>
+                      {{/if}}
                     {{/each}}
                   </dd>
                 {{/if}}
@@ -1149,6 +1188,16 @@ export class MatrixConcept extends CardDef {
           border-radius: 0.375rem;
           background: var(--muted, #f3f4f6);
           color: var(--foreground, #374151);
+        }
+        button.consumer-link {
+          border: 1px solid var(--tier-shared-fg, #1e40af);
+          background: transparent;
+          color: var(--tier-shared-fg, #1e40af);
+          font-weight: 600;
+          cursor: pointer;
+        }
+        button.consumer-link:hover {
+          background: var(--tier-shared-bg, #dbeafe);
         }
         .notes {
           margin: 0;

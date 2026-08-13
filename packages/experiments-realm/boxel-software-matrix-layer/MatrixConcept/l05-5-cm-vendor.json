@@ -26,7 +26,8 @@
         "cardThumbnailURL": null
       },
       "specTarget": "shared block",
-      "consumers": "contractor, project, talent-resource-tracker"
+      "consumers": "contractor, project, talent-resource-tracker",
+      "consumerExamples": "{\"contractor\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Contractor/marcus-rodriguez\", \"project\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Project/benefits-migration\", \"talent-resource-tracker\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/talent-resource-tracker/TalentResourceTracker/tracker\"}"
     },
     "meta": {
       "adoptsFrom": {

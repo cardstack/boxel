@@ -26,7 +26,8 @@
         "cardThumbnailURL": null
       },
       "specTarget": "shared block",
-      "consumers": "account-metrics, close-won, invoice, revenue-os"
+      "consumers": "account-metrics, close-won, invoice, revenue-os",
+      "consumerExamples": "{\"invoice\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Invoice/inv-2026-018\", \"revenue-os\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/RevenueOs/main\"}"
     },
     "meta": {
       "adoptsFrom": {

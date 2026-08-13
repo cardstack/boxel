@@ -26,7 +26,8 @@
         "cardThumbnailURL": null
       },
       "specTarget": "shared block",
-      "consumers": "convert-lead, deal, revenue-os"
+      "consumers": "convert-lead, deal, revenue-os",
+      "consumerExamples": "{\"deal\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Deal/acme-enterprise-renewal\", \"revenue-os\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/RevenueOs/main\"}"
     },
     "meta": {
       "adoptsFrom": {

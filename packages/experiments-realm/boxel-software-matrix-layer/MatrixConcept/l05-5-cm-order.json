@@ -26,7 +26,8 @@
         "cardThumbnailURL": null
       },
       "specTarget": "shared block",
-      "consumers": "invoice"
+      "consumers": "invoice",
+      "consumerExamples": "{\"invoice\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Invoice/inv-2026-018\"}"
     },
     "meta": {
       "adoptsFrom": {

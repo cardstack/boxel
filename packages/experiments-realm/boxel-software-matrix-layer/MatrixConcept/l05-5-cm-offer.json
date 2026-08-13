@@ -26,7 +26,8 @@
         "cardThumbnailURL": null
       },
       "specTarget": "shared block",
-      "consumers": "advance-to-offer-command, candidate, extend-offer-command, generate-offer-letter-command, talent-resource-tracker"
+      "consumers": "candidate, advance-to-offer-command, extend-offer-command, generate-offer-letter-command, talent-resource-tracker",
+      "consumerExamples": "{\"candidate\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Candidate/26b5aae6-a62f-4e2d-85d3-bbecf8d43298\", \"talent-resource-tracker\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/talent-resource-tracker/TalentResourceTracker/tracker\"}"
     },
     "meta": {
       "adoptsFrom": {
