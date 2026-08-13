@@ -36,7 +36,6 @@ function extractArrayLiteral(filePath: string, declaration: string): unknown {
       `could not find "const ${declaration} = [...]" in ${filePath}`,
     );
   }
-  // eslint-disable-next-line @typescript-eslint/no-implied-eval
   return new Function(`return ${match[1]};`)();
 }
 
