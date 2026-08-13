@@ -1,0 +1,26 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Outage",
+      "defaultPriority": "P1",
+      "cardInfo": {
+        "name": "Outage",
+        "summary": "New tickets here start at P1 and land in l3-engineering."
+      }
+    },
+    "relationships": {
+      "defaultQueue": {
+        "links": {
+          "self": "../Queue/l3-engineering"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../ticket-category",
+        "name": "TicketCategory"
+      }
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Priority",
+      "cardDescription": "How urgent, carrying its own sort order and a multiplier for scaled targets.",
+      "specType": "field",
+      "ref": {
+        "module": "../priority-field",
+        "name": "PriorityField"
+      },
+      "readMe": "## What it is\nAn urgency scale that carries two things a plain enum does not: `rank`, because a string sort puts P1 next to P4 and Critical after Low, and `factor`, which scales a base duration so a policy states one target per metric instead of four.\n\n## Three usages\n1. **ServiceDesk** uses P1\u2013P4 with factors 0.25/0.5/1/2 \u2014 the SLA policy stores one number and the four targets derive from it.\n2. **A bug tracker** uses Blocker/Major/Minor/Trivial, where rank drives the default board ordering.\n3. **A maintenance app** uses the same factors against a base response window per asset class.\n\n## The linked example\n`Incident/1301-mail-outage` is P1 with factor 0.25 \u2014 the policy's 8-hour base becomes a 2-hour resolution target. The example shows the multiplier producing the number, not just labelling it.\n\n## Boundary \u2014 what this is NOT for\nNot a severity and not an impact score. Priority is the decision about what to do next; ITIL impact \u00d7 urgency is an *input* to that decision, and lives on Incident.\n\n## Why the example is a linked card\nSame reason as Status: a factory over a primitive. A bare 'P1' string demonstrates nothing; the incident shows the factor turning a base target into an actual deadline.\n\n## Open questions\nPriority carries an SLA `factor`. Is that leaking one domain into a generic block, or is a multiplier general enough?\n"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Incident/1301-mail-outage"
+        }
+      }
+    }
+  }
+}

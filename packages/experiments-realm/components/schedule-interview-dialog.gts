@@ -160,7 +160,8 @@ export class ScheduleInterviewDialog extends GlimmerComponent<ScheduleInterviewD
     }
     return (this.args.meetings ?? []).filter(
       (m) =>
-        m.date && (m.interviewers ?? []).some((i) => i?.id && ids.includes(i.id)),
+        m.date &&
+        (m.interviewers ?? []).some((i) => i?.id && ids.includes(i.id)),
     );
   }
 
@@ -219,9 +220,9 @@ export class ScheduleInterviewDialog extends GlimmerComponent<ScheduleInterviewD
     let slot = this.selectedSlotState;
     return Boolean(
       !this.args.isRunning &&
-        this.selectedInterviewers.length &&
-        slot &&
-        slot.reason !== 'In the past',
+      this.selectedInterviewers.length &&
+      slot &&
+      slot.reason !== 'In the past',
     );
   }
 
@@ -287,84 +288,111 @@ export class ScheduleInterviewDialog extends GlimmerComponent<ScheduleInterviewD
             >✕</button>
           </div>
           <div class='sd-body'>
-        <p class='sd-sub'>Pick interviewers, a day, and a free slot — slots
-          already booked for the chosen interviewers are disabled.</p>
+            <p class='sd-sub'>Pick interviewers, a day, and a free slot — slots
+              already booked for the chosen interviewers are disabled.</p>
 
-        <div class='sd-field'>
-          <span class='sd-label' id='sd-interviewers-label'>Interviewers</span>
-          <div
-            class='sd-toggle-row'
-            role='group'
-            aria-labelledby='sd-interviewers-label'
-          >
-            {{#each this.availableEmployees key='id' as |employee|}}
-              <Button
-                type='button'
-                @kind='default'
-                @size='auto'
-                class='sd-toggle-btn'
-                aria-pressed={{if (this.isInterviewerSelected employee) 'true' 'false'}}
-                {{on 'click' (fn this.toggleInterviewer employee)}}
-              >{{employee.name}}</Button>
-            {{/each}}
-          </div>
-        </div>
+            <div class='sd-field'>
+              <span
+                class='sd-label'
+                id='sd-interviewers-label'
+              >Interviewers</span>
+              <div
+                class='sd-toggle-row'
+                role='group'
+                aria-labelledby='sd-interviewers-label'
+              >
+                {{#each this.availableEmployees key='id' as |employee|}}
+                  <Button
+                    type='button'
+                    @kind='default'
+                    @size='auto'
+                    class='sd-toggle-btn'
+                    aria-pressed={{if
+                      (this.isInterviewerSelected employee)
+                      'true'
+                      'false'
+                    }}
+                    {{on 'click' (fn this.toggleInterviewer employee)}}
+                  >{{employee.name}}</Button>
+                {{/each}}
+              </div>
+            </div>
 
-        <div class='sd-field'>
-          <span class='sd-label' id='sd-round-label'>Round</span>
-          <div class='sd-toggle-row' role='group' aria-labelledby='sd-round-label'>
-            {{#each this.roundTypeOptions as |option|}}
-              <Button
-                type='button'
-                @kind='default'
-                @size='auto'
-                class='sd-toggle-btn'
-                aria-pressed={{if (eq this.roundType option.value) 'true' 'false'}}
-                {{on 'click' (fn this.setRoundType option.value)}}
-              >{{option.label}}</Button>
-            {{/each}}
-          </div>
-        </div>
+            <div class='sd-field'>
+              <span class='sd-label' id='sd-round-label'>Round</span>
+              <div
+                class='sd-toggle-row'
+                role='group'
+                aria-labelledby='sd-round-label'
+              >
+                {{#each this.roundTypeOptions as |option|}}
+                  <Button
+                    type='button'
+                    @kind='default'
+                    @size='auto'
+                    class='sd-toggle-btn'
+                    aria-pressed={{if
+                      (eq this.roundType option.value)
+                      'true'
+                      'false'
+                    }}
+                    {{on 'click' (fn this.setRoundType option.value)}}
+                  >{{option.label}}</Button>
+                {{/each}}
+              </div>
+            </div>
 
-        <div class='sd-field'>
-          <label class='sd-label' for='sd-date'>Date</label>
-          <BoxelInput
-            id='sd-date'
-            class='sd-date'
-            @type='date'
-            @value={{this.dateStr}}
-            @onInput={{this.setDate}}
-          />
-        </div>
+            <div class='sd-field'>
+              <label class='sd-label' for='sd-date'>Date</label>
+              <BoxelInput
+                id='sd-date'
+                class='sd-date'
+                @type='date'
+                @value={{this.dateStr}}
+                @onInput={{this.setDate}}
+              />
+            </div>
 
-        <div class='sd-field'>
-          <span class='sd-label' id='sd-slots-label'>
-            Time
-            {{#if this.selectedInterviewers.length}}
-              · {{this.freeSlotCount}} of {{this.slots.length}} slots free
-            {{else}}
-              · pick interviewers to see availability
+            <div class='sd-field'>
+              <span class='sd-label' id='sd-slots-label'>
+                Time
+                {{#if this.selectedInterviewers.length}}
+                  ·
+                  {{this.freeSlotCount}}
+                  of
+                  {{this.slots.length}}
+                  slots free
+                {{else}}
+                  · pick interviewers to see availability
+                {{/if}}
+              </span>
+              <div
+                class='sd-slot-row'
+                role='group'
+                aria-labelledby='sd-slots-label'
+              >
+                {{#each this.slots key='hour' as |slot|}}
+                  <Button
+                    type='button'
+                    @kind='default'
+                    @size='auto'
+                    class='sd-slot-btn {{unless slot.free "busy"}}'
+                    aria-pressed={{if
+                      (eq this.selectedHour slot.hour)
+                      'true'
+                      'false'
+                    }}
+                    @disabled={{eq slot.reason 'In the past'}}
+                    title={{slot.reason}}
+                    {{on 'click' (fn this.setSlot slot.hour)}}
+                  >{{slot.label}}</Button>
+                {{/each}}
+              </div>
+            </div>
+
+            {{#if @error}}
+              <p class='sd-error' role='alert'>{{@error}}</p>
             {{/if}}
-          </span>
-          <div class='sd-slot-row' role='group' aria-labelledby='sd-slots-label'>
-            {{#each this.slots key='hour' as |slot|}}
-              <Button
-                type='button'
-                @kind='default'
-                @size='auto'
-                class='sd-slot-btn {{unless slot.free "busy"}}'
-                aria-pressed={{if (eq this.selectedHour slot.hour) 'true' 'false'}}
-                @disabled={{eq slot.reason 'In the past'}}
-                title={{slot.reason}}
-                {{on 'click' (fn this.setSlot slot.hour)}}
-              >{{slot.label}}</Button>
-            {{/each}}
-          </div>
-        </div>
-
-        {{#if @error}}
-          <p class='sd-error' role='alert'>{{@error}}</p>
-        {{/if}}
           </div>
           <div class='sd-actions'>
             <Button
@@ -434,14 +462,17 @@ export class ScheduleInterviewDialog extends GlimmerComponent<ScheduleInterviewD
         font-size: 0.75rem;
         line-height: 1;
         cursor: pointer;
-        transition: border-color 0.15s ease-out, color 0.15s ease-out;
+        transition:
+          border-color 0.15s ease-out,
+          color 0.15s ease-out;
       }
       .sd-close:hover {
         border-color: var(--accent-c, var(--primary, var(--boxel-highlight)));
         color: var(--accent-c, var(--primary, var(--boxel-highlight)));
       }
       .sd-close:focus-visible {
-        outline: 2px solid var(--accent-c, var(--primary, var(--boxel-highlight)));
+        outline: 2px solid
+          var(--accent-c, var(--primary, var(--boxel-highlight)));
         outline-offset: 2px;
       }
       .sd-body {

@@ -1,0 +1,76 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Conversation Entry",
+      "cardDescription": "One entry in a thread: outward reply, internal note, or system event — with the separation that matters.",
+      "specType": "field",
+      "ref": {
+        "module": "../ticket-message-field",
+        "name": "TicketMessageField"
+      },
+      "readMe": "## What it is\nA single conversation entry carrying author, role, visibility, body and time. `visibility` is the whole design: an internal note is rendered full-width on a tinted ground so it can never be skimmed as one more reply.\n\n## Three usages\n1. **ServiceDesk** builds a ticket's whole thread from these, mixing customer replies, agent replies and internal notes in one time order.\n2. **A CRM** uses it for account activity, where 'what we told the customer' and 'what we actually think' must not blur.\n3. **An approval flow** uses it for reviewer comments, with `isSlaEvent` rendering 'moved to second stage' as a rule across the thread rather than a bubble.\n\n## The linked example\n`Ticket/1288-invoice-download` holds a customer message, an agent reply and an internal note that says the customer is on a trial and cannot see internal notes — the exact confusion this field's design prevents.\n\n## Boundary — what this is NOT for\nNot a chat message and not a comment thread on a document. It assumes one host record owning the conversation, and it is deliberately not independently addressable — it has no id, no permalink and no own lifecycle.\n\n## Why BOTH an inline example and a linked card\nThe three inline `containedExamples` are the field on its own, and they are\nchosen to sit next to each other: a public reply, the internal note that follows\nit, and the system event the status change wrote. Read together they show the\none thing a single entry cannot — that visibility is a rendering decision, not\njust a stored string, and that a system event is drawn differently from a person\nspeaking.\n\nThe linked ticket is still here because ordering and threading only exist on a\nhost: a feed is what makes \"the note that follows the reply\" legible. The inline\nset proves the SHAPE and the contrast; the ticket proves the SEQUENCE.\n\n## Open questions\nVisibility is Public/Internal. A third audience (partner, vendor) would change the enum — additive, but who decides the vocabulary?\n",
+      "containedExamples": [
+        {
+          "author": "Mike Tan",
+          "authorRole": "Agent",
+          "visibility": "Public",
+          "body": "Thanks for flagging this — I can see the failed logins on our side and I'm resetting the SSO session now. Could you try again in about ten minutes?",
+          "sentAt": "2026-08-12T09:41:00.000Z",
+          "isSlaEvent": false
+        },
+        {
+          "author": "Mike Tan",
+          "authorRole": "Agent",
+          "visibility": "Internal",
+          "body": "Identity provider certificate rotated overnight. Escalating to L2 if the reset does not hold.",
+          "sentAt": "2026-08-12T09:44:00.000Z",
+          "isSlaEvent": false
+        },
+        {
+          "author": "System",
+          "authorRole": "System",
+          "visibility": "Public",
+          "body": "Status changed from Open to Pending — the clock is stopped.",
+          "sentAt": "2026-08-12T09:45:00.000Z",
+          "isSlaEvent": true
+        }
+      ]
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      },
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "../ticket-message-field",
+              "name": "TicketMessageField"
+            }
+          },
+          {
+            "adoptsFrom": {
+              "module": "../ticket-message-field",
+              "name": "TicketMessageField"
+            }
+          },
+          {
+            "adoptsFrom": {
+              "module": "../ticket-message-field",
+              "name": "TicketMessageField"
+            }
+          }
+        ]
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Ticket/1288-invoice-download"
+        }
+      }
+    }
+  }
+}

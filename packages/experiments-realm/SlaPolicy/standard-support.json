@@ -1,0 +1,48 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Standard Support",
+      "conditions": [
+        {
+          "attribute": "customerTier",
+          "operator": "is not",
+          "value": "VIP"
+        }
+      ],
+      "targets": [
+        {
+          "metric": "First response",
+          "baseMinutes": 480
+        },
+        {
+          "metric": "Resolution",
+          "baseMinutes": 1440
+        },
+        {
+          "metric": "Next response",
+          "baseMinutes": 480
+        }
+      ],
+      "breachActions": ["Notify the assignee", "Notify the team lead"],
+      "isDefault": true,
+      "cardInfo": {
+        "name": "Standard Support",
+        "summary": "The fallback policy. P3 gets 8h first response and 24h to resolve; other priorities scale."
+      }
+    },
+    "relationships": {
+      "businessHours": {
+        "links": {
+          "self": "../Schedule/standard-business-hours"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sla-policy",
+        "name": "SlaPolicy"
+      }
+    }
+  }
+}

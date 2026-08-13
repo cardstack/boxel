@@ -7,7 +7,7 @@ import { cn } from '@cardstack/boxel-ui/helpers';
 interface PageLayoutArgs {
   Args: {
     format?: Format;
-  }
+  };
   Blocks: {
     header: [];
     summary: [];

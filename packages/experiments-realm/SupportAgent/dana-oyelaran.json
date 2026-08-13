@@ -1,0 +1,21 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Dana Oyelaran",
+      "email": "dana.oyelaran@northwind-support.example.com",
+      "tier": "L2",
+      "skills": ["billing", "invoicing", "reporting"],
+      "cardInfo": {
+        "name": "Dana Oyelaran",
+        "summary": "L2 support agent."
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../support-agent",
+        "name": "SupportAgent"
+      }
+    }
+  }
+}

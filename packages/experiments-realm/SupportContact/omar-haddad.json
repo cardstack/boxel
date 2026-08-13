@@ -1,0 +1,22 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Omar Haddad",
+      "email": "omar.haddad@nordlicht-logistik.example.com",
+      "phone": "+49 30 1234567",
+      "company": "Nordlicht Logistik",
+      "tier": "Standard",
+      "cardInfo": {
+        "name": "Omar Haddad",
+        "summary": "Standard customer at Nordlicht Logistik."
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../support-contact",
+        "name": "SupportContact"
+      }
+    }
+  }
+}

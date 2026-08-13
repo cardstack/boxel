@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "reference": null,
+      "subject": null,
+      "details": null,
+      "status": null,
+      "priority": null,
+      "channel": null,
+      "ticketType": null,
+      "timers": [],
+      "messages": [],
+      "tags": [],
+      "openedAt": null,
+      "firstRespondedAt": null,
+      "resolvedAt": null,
+      "closedAt": null,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../ticket",
+        "name": "Ticket"
+      }
+    }
+  }
+}

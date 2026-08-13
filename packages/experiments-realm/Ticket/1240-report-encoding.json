@@ -1,0 +1,104 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "reference": "#1240",
+      "subject": "Exported report shows garbled characters",
+      "ticketType": "Incident",
+      "details": "CSV export renders accented characters incorrectly when opened in Excel.",
+      "status": "Pending",
+      "priority": "P3",
+      "channel": "Email",
+      "openedAt": "2026-08-11T01:15:00.000Z",
+      "firstRespondedAt": "2026-08-11T02:05:00.000Z",
+      "tags": ["export", "encoding"],
+      "timers": [
+        {
+          "kind": "First response",
+          "targetMinutes": 480,
+          "startedAt": "2026-08-11T01:15:00.000Z",
+          "deadlineAt": "2026-08-11T09:15:00.000Z",
+          "satisfiedAt": "2026-08-11T02:05:00.000Z",
+          "pausedSince": null,
+          "breachedAt": null
+        },
+        {
+          "kind": "Resolution",
+          "targetMinutes": 1440,
+          "startedAt": "2026-08-11T01:15:00.000Z",
+          "deadlineAt": "2026-08-12T01:15:00.000Z",
+          "satisfiedAt": null,
+          "pausedSince": "2026-08-11T09:00:00.000Z",
+          "breachedAt": null
+        }
+      ],
+      "messages": [
+        {
+          "author": "Omar Haddad",
+          "authorRole": "Customer",
+          "visibility": "Public",
+          "body": "Our German place names come out as mojibake when we open the export in Excel.",
+          "sentAt": "2026-08-11T01:15:00.000Z",
+          "isSlaEvent": false
+        },
+        {
+          "author": "Priya Raman",
+          "authorRole": "Agent",
+          "visibility": "Public",
+          "body": "That is Excel guessing the encoding. Could you tell me which Excel version you are on, and try opening the same file in Google Sheets so we can confirm?",
+          "sentAt": "2026-08-11T02:05:00.000Z",
+          "isSlaEvent": false
+        },
+        {
+          "author": "System",
+          "authorRole": "System",
+          "visibility": "Public",
+          "body": "Clock paused — waiting on the customer.",
+          "sentAt": "2026-08-11T09:00:00.000Z",
+          "isSlaEvent": true
+        }
+      ],
+      "cardInfo": {
+        "name": "#1240 Garbled export",
+        "summary": "Waiting on the customer, so the clock is stopped — the paused state.",
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "resolvedAt": null,
+      "closedAt": null
+    },
+    "relationships": {
+      "customer": {
+        "links": {
+          "self": "../SupportContact/omar-haddad"
+        }
+      },
+      "assignee": {
+        "links": {
+          "self": "../SupportAgent/priya-raman"
+        }
+      },
+      "queue": {
+        "links": {
+          "self": null
+        }
+      },
+      "category": {
+        "links": {
+          "self": "../TicketCategory/how-do-i"
+        }
+      },
+      "slaPolicy": {
+        "links": {
+          "self": "../SlaPolicy/standard-support"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../ticket",
+        "name": "Ticket"
+      }
+    }
+  }
+}

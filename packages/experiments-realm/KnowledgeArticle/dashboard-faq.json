@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "headline": "Dashboard Access FAQ",
+      "body": "**Why can I see the dashboard but no data?**\nYour account has view access but has not been added to a workspace yet. Your administrator can add you.\n\n**Why did the dashboard stop loading after I changed browsers?**\nThe session is tied to the browser. Sign in again on the new one.\n\n**Can I share a dashboard link?**\nYes, but the person opening it needs access to the same workspace.",
+      "visibility": "Public",
+      "status": "Published",
+      "keywords": ["dashboard", "access", "permission", "role", "view"],
+      "cardInfo": {
+        "name": "Dashboard Access FAQ",
+        "summary": "Public article in access-issues.",
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "category": {
+        "links": {
+          "self": "../TicketCategory/access-issues"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../knowledge-article",
+        "name": "KnowledgeArticle"
+      }
+    }
+  }
+}

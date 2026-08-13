@@ -1,0 +1,21 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Mike Tan",
+      "email": "mike.tan@northwind-support.example.com",
+      "tier": "L1",
+      "skills": ["password reset", "SSO", "onboarding"],
+      "cardInfo": {
+        "name": "Mike Tan",
+        "summary": "L1 support agent."
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../support-agent",
+        "name": "SupportAgent"
+      }
+    }
+  }
+}

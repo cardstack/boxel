@@ -70,11 +70,15 @@ export class BarChart extends GlimmerComponent<BarChartSignature> {
             role='img'
             aria-label='{{row.label}}: {{this.formatted row.value row.label}}'
           >
-            <div class='bar-chart-fill' style={{this.fillStyle row.value}}></div>
+            <div
+              class='bar-chart-fill'
+              style={{this.fillStyle row.value}}
+            ></div>
           </div>
-          <span
-            class='bar-chart-value'
-          >{{this.formatted row.value row.label}}</span>
+          <span class='bar-chart-value'>{{this.formatted
+              row.value
+              row.label
+            }}</span>
         </li>
       {{/each}}
     </ul>

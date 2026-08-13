@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Authentication",
+      "defaultPriority": "P2",
+      "cardInfo": {
+        "name": "Authentication",
+        "summary": "New tickets here start at P2 and land in l2-technical.",
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "defaultQueue": {
+        "links": {
+          "self": "../Queue/l2-technical"
+        }
+      },
+      "parent": {
+        "links": {
+          "self": "./access-issues"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../ticket-category",
+        "name": "TicketCategory"
+      }
+    }
+  }
+}

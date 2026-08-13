@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Knowledge Article",
+      "cardDescription": "A written answer, with deterministic relevance scoring against a question.",
+      "specType": "card",
+      "ref": {
+        "module": "../knowledge-article",
+        "name": "KnowledgeArticle"
+      },
+      "readMe": "## What it is\nAn article with a category, a visibility, keywords, and a `relevanceTo(text)` method that scores it against a question using weighted keyword overlap.\n\n## Three usages\n1. **ServiceDesk** \u2014 the workspace's suggestion panel scores the library against the ticket while the agent types.\n2. **An internal SOP library** \u2014 same card, visibility becomes all-staff vs management.\n3. **Product documentation** \u2014 versioned help pages where 'helped resolve N tickets' becomes 'N found this useful'.\n\n## The linked example\n`KnowledgeArticle/sso-troubleshooting` \u2014 internal-only, keyworded for sso/saml/session, and it is what scores highest against ticket #1234's SSO symptoms. It demonstrates the scoring and the internal/public distinction together.\n\n## Boundary \u2014 what this is NOT for\nNot a wiki and not a CMS. There is no page tree, no draft/publish workflow beyond a status field, and no rich block editor.\n\n## Deterministic on purpose\nScoring is weighted keyword overlap (keyword 9, title 3, body 1, normalised by question length), not a model call. Agents judge these suggestions dozens of times a day; a wrong-but-explainable score survives that scrutiny, and a panel that goes blank when AI credits run out does not.\n\n## Open questions\nRelevance is keyword overlap. Anything better needs embeddings; who owns a scoring block?\n"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../KnowledgeArticle/sso-troubleshooting"
+        }
+      }
+    }
+  }
+}

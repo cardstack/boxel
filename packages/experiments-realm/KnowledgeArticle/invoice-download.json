@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "headline": "Downloading Invoices",
+      "body": "Invoices are available under **Billing \u2192 History** for the last 24 months.\n\nChoose the invoice and select Download to get a PDF. If the download fails, it is usually a browser blocking the pop-up \u2014 allow pop-ups for our site and try once more.\n\nIf an invoice is missing entirely, it has not been issued yet; invoices are generated on the first working day of the month.",
+      "visibility": "Public",
+      "status": "Published",
+      "keywords": ["invoice", "billing", "download", "receipt", "pdf"],
+      "cardInfo": {
+        "name": "Downloading Invoices",
+        "summary": "Public article in billing."
+      }
+    },
+    "relationships": {
+      "category": {
+        "links": {
+          "self": "../TicketCategory/billing"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../knowledge-article",
+        "name": "KnowledgeArticle"
+      }
+    }
+  }
+}

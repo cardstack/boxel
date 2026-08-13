@@ -30,10 +30,7 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
       data-test-cards-grid-cards
       ...attributes
     >
-      {{#let
-        (component @context.searchResultsComponent)
-        as |SearchResults|
-      }}
+      {{#let (component @context.searchResultsComponent) as |SearchResults|}}
         <SearchResults @query={{this.searchResultsQuery}} as |results|>
           {{#if results.isLoading}}
             Loading...

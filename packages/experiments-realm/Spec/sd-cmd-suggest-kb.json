@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Suggest Articles",
+      "cardDescription": "Score the library against a record and link the best public matches.",
+      "specType": "command",
+      "ref": {
+        "module": "../commands/suggest-kb-articles-command.gts",
+        "name": "SuggestKbArticlesCommand"
+      },
+      "readMe": "## What it is\nDeterministic weighted keyword overlap. Anything under the floor is dropped rather than padded to three, and only **public** articles get linked, because a linked article is one an agent may paste to a customer.\n\n## Three usages\n1. **ServiceDesk** \u2014 the workspace suggestion panel.\n2. **A self-service portal** \u2014 same scoring, run against the submitted description before the form is sent.\n3. **An internal SOP finder** \u2014 scoring a runbook library against an alert description.\n\n## The linked example\n`../Incident/1234-dashboard-access` links the two articles this command scored highest against its SSO symptoms.\n\n## Boundary \u2014 what this is NOT for\nNot semantic search. It is keyword overlap; a question phrased with entirely different vocabulary will not match, and that gap is reported rather than hidden.\n\n## Why the example is a linked card\nA command has no renderable instance, so `containedExamples` cannot hold one. The linked card is the command's natural target \u2014 open it and the effects described above are visible in its state and its conversation.\n\n## Why not an LLM\nSupport teams judge these suggestions dozens of times a day. A wrong-but-explainable score survives that scrutiny; a black box does not \u2014 and a panel that goes blank when credits run out is worse than an approximate one.\n\n## Open questions\nScoring is keyword overlap; see the article Spec. Same open question, same missing block.\n"
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Incident/1234-dashboard-access"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

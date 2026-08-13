@@ -1,0 +1,21 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Priya Raman",
+      "email": "priya.raman@northwind-support.example.com",
+      "tier": "L2",
+      "skills": ["SSO", "identity", "API"],
+      "cardInfo": {
+        "name": "Priya Raman",
+        "summary": "L2 support agent."
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../support-agent",
+        "name": "SupportAgent"
+      }
+    }
+  }
+}

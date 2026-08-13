@@ -38,10 +38,7 @@ export class CardList extends GlimmerComponent<CardListSignature> {
   }
   <template>
     <ul class='card-list' ...attributes>
-      {{#let
-        (component @context.searchResultsComponent)
-        as |SearchResults|
-      }}
+      {{#let (component @context.searchResultsComponent) as |SearchResults|}}
         <SearchResults @query={{this.searchResultsQuery}} as |results|>
           {{#if results.isLoading}}
             Loading...

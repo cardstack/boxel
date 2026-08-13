@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Northwind ServiceDesk",
+      "cardInfo": {
+        "name": "Northwind ServiceDesk",
+        "summary": "The support console: front line, queues, commitments, business hours, knowledge, customers and agents — every tab a live query.",
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../service-desk",
+        "name": "ServiceDesk"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

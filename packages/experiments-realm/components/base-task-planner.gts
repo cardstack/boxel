@@ -1,8 +1,4 @@
-import {
-  CardContext,
-  CardDef,
-  BaseDef,
-} from '@cardstack/base/card-api';
+import { CardContext, CardDef, BaseDef } from '@cardstack/base/card-api';
 import { tracked } from '@glimmer/tracking';
 import { TrackedMap } from 'tracked-built-ins';
 import GlimmerComponent from '@glimmer/component';

@@ -13,17 +13,24 @@
       "ptoBalance": 12,
       "salary": 195000,
       "cardInfo": {
-        "name": "Marcus Webb"
+        "name": "Marcus Webb",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
       },
       "photo": {
         "url": "https://images.pexels.com/photos/2379004/pexels-photo-2379004.jpeg",
         "sourceMode": "url"
-      }
+      },
+      "terminationDate": null,
+      "ptoAllowanceDays": null,
+      "onboardingStatus": null,
+      "weeklyInterviewCapacityHours": null
     },
     "relationships": {
       "manager": {
         "links": {
-          "self": "../Employee/sofia-reyes"
+          "self": "./sofia-reyes"
         }
       }
     },

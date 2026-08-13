@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Contact",
+      "cardDescription": "Someone who asks for help \u2014 PersonBase plus the two facts support reasons about.",
+      "specType": "card",
+      "ref": {
+        "module": "../support-contact",
+        "name": "SupportContact"
+      },
+      "readMe": "## What it is\nA person who raises requests, extending the shared `PersonBase` rather than restating name/email/photo. It adds only company and tier.\n\n## Three usages\n1. **ServiceDesk** \u2014 the customer on a ticket; their history is a live query, not a maintained link list.\n2. **A clinic** \u2014 the patient, where tier becomes the care plan.\n3. **A membership org** \u2014 the member, where tier drives entitlements.\n\n## The linked example\n`SupportContact/jane-smith` \u2014 VIP at Acme, with a deliberately long corporate email that proves the facts grid wraps instead of colliding with the next column.\n\n## Boundary \u2014 what this is NOT for\nNot a user account and not a CRM contact record. It carries no credentials, no permissions, and no sales pipeline state.\n\n## Second-consumer proof\nPersonBase was built for the talent tracker. Consuming it here unchanged is what turns it from 'works' into 'reusable' \u2014 one consumer proves it functions, two different domains prove it generalises.\n\n## Open questions\nContact extends PersonBase from the talent tracker. If PersonBase changes for hiring, does support get a say?\n"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../SupportContact/jane-smith"
+        }
+      }
+    }
+  }
+}

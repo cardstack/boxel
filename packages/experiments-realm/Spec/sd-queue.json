@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Queue",
+      "cardDescription": "A basket of work with a team attached, found by live query rather than a maintained list.",
+      "specType": "card",
+      "ref": {
+        "module": "../queue",
+        "name": "Queue"
+      },
+      "readMe": "## What it is\nA named work basket with a tier and a set of agents. Its membership is a live query \u2014 nothing maintains a list of what belongs in it.\n\n## Three usages\n1. **ServiceDesk** \u2014 tiered support baskets that escalation moves tickets between.\n2. **An approvals centre** \u2014 'waiting on me', ordered by which will miss its deadline first.\n3. **Content moderation** \u2014 a review basket ordered by report severity and time waiting.\n\n## The linked example\n`Queue/l1-general` \u2014 front line, one agent, standard policy. Opening it shows the live query and the nearest-breach ordering with the demo tickets already in it.\n\n## Boundary \u2014 what this is NOT for\nNot a project and not a folder. A queue has no membership of its own; if you need curated, ordered membership, that is a `linksToMany` on some other card.\n\n## Why live query\nA maintained list drifts the moment a ticket is escalated, merged or closed \u2014 and it drifts silently, showing work that is not there and hiding work that is.\n\n## Open questions\nQueue membership is a linksToMany of agents. If a desk grows past a few dozen agents this becomes the wrong shape \u2014 who owns the switch to a query?\n"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Queue/l1-general"
+        }
+      }
+    }
+  }
+}

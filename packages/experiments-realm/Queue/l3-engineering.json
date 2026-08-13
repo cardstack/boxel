@@ -1,0 +1,32 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "L3 Engineering",
+      "description": "Bugs, infrastructure and root-cause work.",
+      "tier": "L3",
+      "cardInfo": {
+        "name": "L3 Engineering",
+        "summary": "Last stop. Tickets here usually become problem records too."
+      }
+    },
+    "relationships": {
+      "agents.0": {
+        "links": {
+          "self": "../SupportAgent/sam-whitfield"
+        }
+      },
+      "defaultPolicy": {
+        "links": {
+          "self": "../SlaPolicy/standard-support"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../queue",
+        "name": "Queue"
+      }
+    }
+  }
+}

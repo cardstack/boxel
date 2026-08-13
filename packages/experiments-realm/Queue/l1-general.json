@@ -1,0 +1,32 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "L1 General",
+      "description": "Front line \u2014 password resets, access, how-do-I questions.",
+      "tier": "L1",
+      "cardInfo": {
+        "name": "L1 General",
+        "summary": "Where everything lands first. Goal is to resolve 70\u201380% here."
+      }
+    },
+    "relationships": {
+      "agents.0": {
+        "links": {
+          "self": "../SupportAgent/mike-tan"
+        }
+      },
+      "defaultPolicy": {
+        "links": {
+          "self": "../SlaPolicy/standard-support"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../queue",
+        "name": "Queue"
+      }
+    }
+  }
+}

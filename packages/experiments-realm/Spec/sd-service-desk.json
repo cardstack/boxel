@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "ServiceDesk App",
+      "cardDescription": "The console: three sections, every list a live query, master\u2013detail on a wide canvas.",
+      "specType": "card",
+      "ref": {
+        "module": "../service-desk",
+        "name": "ServiceDesk"
+      },
+      "readMe": "## What it is\nThe application shell. Three sections \u2014 Work, Knowledge, Setup \u2014 organised by the job somebody is doing rather than by card type.\n\n## Three usages\n1. **As shipped** \u2014 the support console.\n2. **A facilities desk** \u2014 same shell, Queue/Category/Policy instances swapped.\n3. **An approvals centre** \u2014 the queue view and its lens strip work unchanged over any card with a deadline.\n\n## The linked example\n`ServiceDesk/console` \u2014 the Northwind demo world: six tickets across every SLA state, three queues, two policies, two schedules, four articles.\n\n## Boundary \u2014 what this is NOT for\nNot a dashboard and not a report. It is a work surface; aggregate reporting is a separate card.\n\n## prefersWideFormat\nThe host caps a stacked card at 50rem unless the def asks for the full canvas. Without it the master\u2013detail layout collapses to one column and selecting a ticket costs the reader their place in the queue.\n\n## Open questions\nOne realm is one desk; nothing in the schema says so. If two desks ever share a realm, the discriminator belongs on Queue as a scalar, not as a link to this card.\n"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../ServiceDesk/console"
+        }
+      }
+    }
+  }
+}

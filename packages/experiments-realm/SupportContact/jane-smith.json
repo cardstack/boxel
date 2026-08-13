@@ -1,0 +1,22 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Jane Smith",
+      "email": "jane.smith@acme-corporation.example.com",
+      "phone": "+60 12-345 6789",
+      "company": "Acme Corporation",
+      "tier": "VIP",
+      "cardInfo": {
+        "name": "Jane Smith",
+        "summary": "VIP customer at Acme Corporation."
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../support-contact",
+        "name": "SupportContact"
+      }
+    }
+  }
+}

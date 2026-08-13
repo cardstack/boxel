@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Approve Request",
+      "cardDescription": "Record the decision a request is waiting on.",
+      "specType": "command",
+      "ref": {
+        "module": "../commands/approve-service-request-command.gts",
+        "name": "ApproveServiceRequestCommand"
+      },
+      "readMe": "## What it is\nSets the approval state, stamps who and when, and writes the decision to the **customer-visible** thread. A decline must carry a reason.\n\n## Three usages\n1. **ServiceDesk** \u2014 service requests above an auto-approve threshold.\n2. **Procurement** \u2014 purchase requests.\n3. **Leave requests** \u2014 same shape: a decision somebody is waiting on, owed an explanation.\n\n## The linked example\n`../ServiceRequest/1256-laptop-request` is pending approval \u2014 the state this command resolves.\n\n## Boundary \u2014 what this is NOT for\nNot a multi-stage approval chain. One decision, one approver. For sequential sign-off use an approval-chain field.\n\n## Why the example is a linked card\nA command has no renderable instance, so `containedExamples` cannot hold one. The linked card is the command's natural target \u2014 open it and the effects described above are visible in its state and its conversation.\n\n## Why a decline needs a reason\nA request that comes back 'no' with no explanation just gets raised again next week.\n\n## Open questions\nOne approver, one decision. Multi-stage sign-off is explicitly out of scope \u2014 is the approval-chain field the right sibling to point at?\n"
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../ServiceRequest/1256-laptop-request"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Standard Business Hours",
+      "timeZone": "Asia/Kuala_Lumpur",
+      "windows": [
+        {
+          "day": "Monday",
+          "opensAt": {
+            "value": "09:00"
+          },
+          "closesAt": {
+            "value": "18:00"
+          }
+        },
+        {
+          "day": "Tuesday",
+          "opensAt": {
+            "value": "09:00"
+          },
+          "closesAt": {
+            "value": "18:00"
+          }
+        },
+        {
+          "day": "Wednesday",
+          "opensAt": {
+            "value": "09:00"
+          },
+          "closesAt": {
+            "value": "18:00"
+          }
+        },
+        {
+          "day": "Thursday",
+          "opensAt": {
+            "value": "09:00"
+          },
+          "closesAt": {
+            "value": "18:00"
+          }
+        },
+        {
+          "day": "Friday",
+          "opensAt": {
+            "value": "09:00"
+          },
+          "closesAt": {
+            "value": "18:00"
+          }
+        },
+        {
+          "day": "Saturday",
+          "opensAt": {
+            "value": "09:00"
+          },
+          "closesAt": {
+            "value": "13:00"
+          }
+        }
+      ],
+      "holidays": ["2026-08-31", "2026-09-16", "2026-12-25"],
+      "isDefault": true,
+      "cardInfo": {
+        "name": "Standard Business Hours",
+        "summary": "Mon\u2013Fri 09:00\u201318:00, Sat half day, KL time."
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../schedule",
+        "name": "Schedule"
+      }
+    }
+  }
+}

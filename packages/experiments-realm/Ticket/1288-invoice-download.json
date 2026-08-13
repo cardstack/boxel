@@ -1,0 +1,117 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "reference": "#1288",
+      "subject": "Invoice download fails silently",
+      "ticketType": "Incident",
+      "details": "Clicking Download on any invoice does nothing. No error, no file.",
+      "status": "Pending",
+      "priority": "P2",
+      "channel": "Portal",
+      "openedAt": "2026-08-12T03:00:00.000Z",
+      "firstRespondedAt": "2026-08-12T03:40:00.000Z",
+      "tags": ["billing", "invoice", "download"],
+      "timers": [
+        {
+          "kind": "First response",
+          "targetMinutes": 480,
+          "startedAt": "2026-08-12T03:00:00.000Z",
+          "deadlineAt": "2026-08-12T11:00:00.000Z",
+          "satisfiedAt": "2026-08-12T03:40:00.000Z",
+          "pausedSince": null,
+          "breachedAt": null
+        },
+        {
+          "kind": "Resolution",
+          "targetMinutes": 480,
+          "startedAt": "2026-08-12T03:00:00.000Z",
+          "deadlineAt": "2026-08-12T11:00:00.000Z",
+          "satisfiedAt": null,
+          "pausedSince": "2026-08-12T14:50:09.523Z",
+          "breachedAt": null
+        }
+      ],
+      "messages": [
+        {
+          "author": "Lena Fischer",
+          "authorRole": "Customer",
+          "visibility": "Public",
+          "body": "I need last month's invoice for our accountant and the download button does nothing at all.",
+          "sentAt": "2026-08-12T03:00:00.000Z",
+          "isSlaEvent": false
+        },
+        {
+          "author": "Dana Oyelaran",
+          "authorRole": "Agent",
+          "visibility": "Public",
+          "body": "Thanks Lena — I can reproduce it on a trial account. Looking into it now.",
+          "sentAt": "2026-08-12T03:40:00.000Z",
+          "isSlaEvent": false
+        },
+        {
+          "author": "Dana Oyelaran",
+          "authorRole": "Agent",
+          "visibility": "Internal",
+          "body": "Pop-up blocker swallows it on Safari. Article covers it but she is on trial and cannot see internal notes — send the public one.",
+          "sentAt": "2026-08-12T03:45:00.000Z",
+          "isSlaEvent": false
+        },
+        {
+          "author": "System",
+          "authorRole": "System",
+          "visibility": "Public",
+          "body": "Status changed from Open to Pending — the clock is stopped.",
+          "sentAt": "2026-08-12T14:50:09.523Z",
+          "isSlaEvent": true
+        }
+      ],
+      "cardInfo": {
+        "name": "#1288 Invoice download fails",
+        "summary": "Close to breaching — the urgent state on the timer.",
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "resolvedAt": null,
+      "closedAt": null
+    },
+    "relationships": {
+      "customer": {
+        "links": {
+          "self": "../SupportContact/lena-fischer"
+        }
+      },
+      "assignee": {
+        "links": {
+          "self": "../SupportAgent/dana-oyelaran"
+        }
+      },
+      "queue": {
+        "links": {
+          "self": "../Queue/l2-technical"
+        }
+      },
+      "category": {
+        "links": {
+          "self": "../TicketCategory/billing"
+        }
+      },
+      "slaPolicy": {
+        "links": {
+          "self": "../SlaPolicy/standard-support"
+        }
+      },
+      "linkedArticles.0": {
+        "links": {
+          "self": "../KnowledgeArticle/invoice-download"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../ticket",
+        "name": "Ticket"
+      }
+    }
+  }
+}
