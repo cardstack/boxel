@@ -113,6 +113,20 @@ export const MAX_CARD_INPUT_DEPTH = 256;
 /** Hands the lazy view's raw target back; see the get trap below. */
 const MATERIALIZED_TARGET = Symbol('bxl.materializedCardInputTarget');
 
+/**
+ * Whether a value is the lazy view over a card graph. Lazy views only
+ * ever descend from a wrapped run input, so a run whose input is not a
+ * view cannot produce one in its outputs — callers use this to skip
+ * output unwrapping entirely on plain-JSON evaluations.
+ */
+export function isMaterializedCardInput(value: unknown): boolean {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    (value as Record<symbol, unknown>)[MATERIALIZED_TARGET] !== undefined
+  );
+}
+
 interface AncestorEntry {
   target: object;
   /**
@@ -144,8 +158,28 @@ function cardIdOf(value: object): unknown {
   return isCard(value) ? idOf(value) : undefined;
 }
 
+function formatPathSegment(via: string): string {
+  return /^\d+$/.test(via) ? `[${via}]` : `.${via}`;
+}
+
 function describePath(ancestors: AncestorEntry[]): string {
-  return ancestors.map((entry) => entry.via).join('.');
+  const segments = ancestors.map((entry) => entry.via);
+  // Deep-graph errors would otherwise embed hundreds of segments; the
+  // ends are what identify the offending fields.
+  const shown =
+    segments.length > 12
+      ? [...segments.slice(0, 6), '…', ...segments.slice(-5)]
+      : segments;
+  return shown
+    .map((via, index) => (index === 0 ? via : formatPathSegment(via)))
+    .join('');
+}
+
+function readOnlyViolation(action: string, prop: string | symbol): never {
+  throw new TypeError(
+    `BXL materialized card inputs are read-only: cannot ${action} ` +
+      `property ${String(prop)}`,
+  );
 }
 
 /**
@@ -189,8 +223,8 @@ function wrapValue(
   if (ancestors.length >= MAX_CARD_INPUT_DEPTH) {
     throw new Error(
       `BXL input materialization exceeded ${MAX_CARD_INPUT_DEPTH} nested ` +
-        `hops at ${describePath(ancestors)}.${via} — the graph is deeper ` +
-        `than any cycle-clipped card graph should be`,
+        `hops at ${describePath(ancestors)}${formatPathSegment(via)} — the ` +
+        `graph is deeper than any cycle-clipped card graph should be`,
     );
   }
 
@@ -229,7 +263,11 @@ function commonTraps(
   chain: AncestorEntry[],
 ): Pick<
   ProxyHandler<object>,
-  'getPrototypeOf' | 'set' | 'defineProperty' | 'deleteProperty'
+  | 'getPrototypeOf'
+  | 'set'
+  | 'defineProperty'
+  | 'deleteProperty'
+  | 'preventExtensions'
 > & { readChild(prop: string | symbol): unknown } {
   return {
     readChild(prop: string | symbol) {
@@ -245,13 +283,20 @@ function commonTraps(
     getPrototypeOf() {
       return Reflect.getPrototypeOf(target);
     },
-    set() {
-      return false;
+    // Writes fail with a branded error naming the view, not the bare
+    // "trap returned falsish" TypeError a false return would produce.
+    set(_facade, prop) {
+      readOnlyViolation('set', prop);
     },
-    defineProperty() {
-      return false;
+    defineProperty(_facade, prop) {
+      readOnlyViolation('define', prop);
     },
-    deleteProperty() {
+    deleteProperty(_facade, prop) {
+      readOnlyViolation('delete', prop);
+    },
+    // A frozen facade would violate the ownKeys invariant on every later
+    // read; refuse loudly instead of being silently poisoned.
+    preventExtensions() {
       return false;
     },
   };
@@ -432,9 +477,8 @@ function unwrap(value: unknown, memo: Map<object, unknown>): unknown {
   // Aliasing: a container jq binds once and embeds several times must
   // resolve to ONE unwrapped result, or later occurrences would keep
   // their lazy views.
-  const existing = memo.get(value);
-  if (existing !== undefined) {
-    return existing;
+  if (memo.has(value)) {
+    return memo.get(value);
   }
   // Pre-register the identity mapping so a cycle in a raw (never-wrapped)
   // graph — reachable through the general-purpose entry points — resolves

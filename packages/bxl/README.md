@@ -375,18 +375,24 @@ program a **lazy, cycle-guarded view** of the card:
 - **Path access is lazy.** `.claims[0].paidAmount` reads the fields it
   names, plus each traversed card's `id` — the cycle guard consults it —
   and nothing else on the graph is touched or computed.
-- **Re-entry clips to a bounded reference.** When a walk reaches a card
-  already on its own traversal path — by object identity _or_ by id, since
-  query resolution can hand back a fresh instance of a visited card — the
-  value reads as `{ id }` instead of recursing. This is the same clip the
-  platform's `queryableValue` applies when it builds search docs. So from a
-  Policy, `.claims[0].policy` is `{ id: <the policy's own id> }`: its `.id`
-  is reachable, every other field on it reads as `null`.
+- **Re-entry clips to a bounded reference.** When a walk reaches a value
+  already on its own traversal path, it reads as `{ id }` instead of
+  recursing — the same clip the platform's `queryableValue` applies when
+  it builds search docs. Cards clip by object identity _and_ by id, since
+  query resolution can hand back a fresh instance of a visited card;
+  ordinary JSON clips by identity alone, so an `id` value that happens to
+  equal a card's never masks data. So from a Policy, `.claims[0].policy`
+  is `{ id: <the policy's own id> }`: its `.id` is reachable, every other
+  field on it reads as `null`.
 - **Structural operations see fields.** `unique`, `group_by`, `==`, `keys`,
-  `to_entries`, `tojson` enumerate a card's field map (computeds included)
-  on demand, with cycles clipped as above — two distinct claims stay
-  distinct, and serializing across a cycle terminates with the bounded
-  reference embedded where the walk looped.
+  `to_entries`, `tojson` enumerate a card's field map on demand, with
+  cycles clipped as above — two distinct claims stay distinct, and
+  serializing across a cycle terminates with the bounded reference
+  embedded where the walk looped. This enumeration is deliberately
+  broader than `queryableValue`'s search-doc walk (which skips
+  query-backed fields): it reads every field — computeds and query-backed
+  inverses included, through live field reads — because those are exactly
+  what BXL aggregation formulas consume.
 - **Sibling references materialize fully.** The clip applies only to true
   re-entry along one path. Two claims sharing a customer each read that
   customer in full — a diamond is not a cycle.

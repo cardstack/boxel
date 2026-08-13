@@ -16,13 +16,14 @@ versions may change syntax behavior until `1.0.0`.
   computeVia factory hands the program a lazy view of the card graph:
   path access materializes only the fields it names, structural
   operations (`unique`, `==`, `tojson`, `keys`, …) enumerate a card's
-  real field map on demand, and re-entering a card already on the
+  real field map on demand, and re-entering a value already on the
   traversal path — card graphs are legitimately cyclic, jq's data model
-  is not — reads as a bounded `{ id }` reference instead of recursing,
-  by object identity and by id (mirroring the platform's
-  `queryableValue`). A 256-hop depth cap fails fast on pathological
-  graphs, and materialization hops count toward the runtime step/time
-  budget. Program outputs are unwrapped back to raw values, so nothing
+  is not — reads as a bounded `{ id }` reference instead of recursing.
+  Cards clip by object identity and by id (mirroring the platform's
+  `queryableValue` clip); ordinary JSON clips by identity alone. A
+  256-hop depth cap fails fast on pathological graphs, and
+  materialization hops count toward the runtime step/time budget.
+  Program outputs are unwrapped back to raw values, so nothing
   downstream ever holds the lazy view. See the README's "Linked cards,
   cycles, and bounded references."
 
@@ -34,6 +35,12 @@ versions may change syntax behavior until `1.0.0`.
   next call retries.
 
 ### Changed
+
+- **`sort` no longer mutates its input.** The builtin sorts a copy;
+  sorting in place mutated the caller's array — on a live card array,
+  its change subscribers fired as a side effect of evaluating an
+  expression. Non-array inputs are rejected with a clear error instead
+  of failing on a missing `sort` method.
 
 - **`{ as: FieldDef }` field-metadata resolution is instance-carried
   first.** Materialization reads the value's own bridge — card-api stamps

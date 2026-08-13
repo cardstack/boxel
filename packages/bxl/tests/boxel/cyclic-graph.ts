@@ -19,6 +19,7 @@
 
 import { deepStrictEqual, match, ok, strictEqual, throws } from 'node:assert';
 import { expression, jq, fx } from '../../src/index.ts';
+import { materializeCardInput } from '../../src/bxl/bridge/card-input.ts';
 
 let pass = 0;
 let fail = 0;
@@ -299,6 +300,75 @@ check('sort works on a wrapped array and never mutates the original', () => {
   deepStrictEqual(nums, [3, 1, 2]);
 });
 
+check('sort works on a wrapped linked-card array', () => {
+  const policy = makeCyclicPolicy([
+    { id: 'clm-2', claimStatus: 'Open', paidAmount: 780 },
+    { id: 'clm-1', claimStatus: 'Open', paidAmount: 3200 },
+  ]);
+  const rawOrder = [...policy.claims];
+  const sorted = run('.claims | sort', policy) as unknown[];
+  strictEqual(sorted.length, 2);
+  // Sorted elements unwrap to the raw claim instances, and the card's
+  // own array keeps its order.
+  ok(sorted.every((entry) => policy.claims.includes(entry as ClaimStub)));
+  deepStrictEqual([...policy.claims], rawOrder);
+});
+
+check(
+  'a live tracked-array shape (guarded writes, hidden slots) reads cleanly',
+  () => {
+    // linksToMany hands over a proxy whose writes are managed and whose
+    // sentinel slots are masked from reads — sorting and aggregating over
+    // it must neither write through it nor trip on a masked slot.
+    const claims = [
+      new ClaimStub({
+        id: 'clm-1',
+        claimStatus: 'Open',
+        paidAmount: 3200,
+        policy: () => null,
+      }),
+      new ClaimStub({
+        id: 'clm-2',
+        claimStatus: 'Open',
+        paidAmount: 780,
+        policy: () => null,
+      }),
+    ];
+    const tracked = new Proxy(claims, {
+      get(target, prop, receiver) {
+        if (prop === '1') {
+          return undefined; // a masked sentinel slot
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+      set() {
+        throw new Error('tracked arrays reject direct writes');
+      },
+    });
+    const holder = new PolicyStub({
+      id: 'pol-t',
+      annualPremium: 1,
+      claims: tracked as unknown as ClaimStub[],
+    });
+    strictEqual(run('.claims | length', holder), 2);
+    strictEqual(run('.claims[0].paidAmount', holder), 3200);
+    strictEqual(run('.claims[1]', holder), null);
+    // Sorting must copy — the tracked array's write guard would throw on
+    // any in-place swap.
+    const unmasked = new Proxy(claims, {
+      set() {
+        throw new Error('tracked arrays reject direct writes');
+      },
+    });
+    const holder2 = new PolicyStub({
+      id: 'pol-u',
+      annualPremium: 1,
+      claims: unmasked as unknown as ClaimStub[],
+    });
+    strictEqual((run('.claims | sort', holder2) as unknown[]).length, 2);
+  },
+);
+
 check('an aliased jq container unwraps at every occurrence', () => {
   const policy = makeCyclicPolicy([
     { id: 'clm-1', claimStatus: 'Open', paidAmount: 3200 },
@@ -391,6 +461,63 @@ check('values without field metadata pass through raw', () => {
   const when = new Date('2026-01-15T00:00:00Z');
   const holder = { when };
   ok(run('.when', holder) === when);
+});
+
+check('unsaved cards clip by identity only, never against each other', () => {
+  // Two distinct cards without ids are distinct values; a self-cycle on
+  // an unsaved card still clips, reading as an empty bounded reference.
+  const inner = new PolicyStub({
+    id: undefined as unknown as string,
+    annualPremium: 7,
+    claims: [],
+  });
+  const state = {
+    id: undefined as unknown as string,
+    claimStatus: 'Open',
+    paidAmount: 1,
+    policy: () => inner,
+  };
+  const outer = new ClaimStub(state);
+  strictEqual(run('.policy.annualPremium', outer), 7);
+  state.policy = () => outer as unknown as PolicyStub;
+  const clipped = run('.policy | tojson', outer);
+  strictEqual(clipped, '{}');
+});
+
+check('{ as: Cls } materializes from unwrapped output over a cycle', () => {
+  class Band {
+    label: string = '';
+    total: number = 0;
+  }
+  const policy = makeCyclicPolicy([
+    { id: 'clm-1', claimStatus: 'Open', paidAmount: 3200 },
+  ]);
+  const strings = Object.assign(
+    [
+      '{ label: .claims[0].claimStatus, total: [.claims[] | .paidAmount] | add }',
+    ],
+    {
+      raw: [
+        '{ label: .claims[0].claimStatus, total: [.claims[] | .paidAmount] | add }',
+      ],
+    },
+  ) as unknown as TemplateStringsArray;
+  const out = expression(jq(strings), { as: Band }).call(policy) as Band;
+  ok(out instanceof Band);
+  strictEqual(out.label, 'Open');
+  strictEqual(out.total, 3200);
+});
+
+check('the view is read-only and refuses to be frozen', () => {
+  const view = materializeCardInput({ n: 1 }) as Record<string, unknown>;
+  throws(
+    () => {
+      view.n = 2;
+    },
+    (error: Error) => /read-only/.test(error.message),
+  );
+  throws(() => Object.freeze(view));
+  strictEqual(view.n, 1);
 });
 
 console.log(
