@@ -63,6 +63,26 @@ module('Integration | tools | validate-realm', function (hooks) {
     assert.strictEqual(result.realmIdentifier, testRealmURL);
   });
 
+  test('normalizes an equivalent URL spelling of a valid realm', async function (assert) {
+    // The input is model-authored, so it can name the right realm in a
+    // non-canonical spelling. Parsing canonicalizes those away; without it the
+    // membership check compares literally and rejects a realm that exists.
+    let toolService = getService('tool-service');
+    let command = new ValidateRealmTool(toolService.toolContext);
+    let { host, pathname } = new URL(testRealmURL);
+    for (let spelling of [
+      `http://${host.toUpperCase()}${pathname}`,
+      `http://${host}${pathname}sub/../`,
+    ]) {
+      let result = await command.execute({ realmIdentifier: spelling });
+      assert.strictEqual(
+        result.realmIdentifier,
+        testRealmURL,
+        `${spelling} normalizes to the realm it names`,
+      );
+    }
+  });
+
   test('throws error for an invalid realm URL', async function (assert) {
     let toolService = getService('tool-service');
     let command = new ValidateRealmTool(toolService.toolContext);
