@@ -257,8 +257,24 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
   }
 
   get hasMidi() {
+    // Any extracted sequence fact is worth the group — a file may carry tempo,
+    // key/meter, programs, or a pitch range while reporting zero notes/tracks or
+    // no computed duration (e.g. a SMPTE-timed conductor track).
     let m = this.args.model?.midi;
-    return Boolean(m?.trackCount || m?.noteCount || m?.durationSeconds);
+    return Boolean(
+      m?.trackCount ||
+        m?.noteCount ||
+        m?.durationSeconds ||
+        m?.format != null ||
+        m?.ppq ||
+        m?.pitchRange ||
+        m?.hasPercussion ||
+        m?.keySignatures?.length ||
+        m?.timeSignatures?.length ||
+        m?.tempoMap?.length ||
+        m?.programs?.length ||
+        m?.channels?.length,
+    );
   }
 
   get hasDocInfo() {

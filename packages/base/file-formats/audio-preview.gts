@@ -152,15 +152,17 @@ export class AudioPreview extends GlimmerComponent<FilePreviewSignature> {
         </div>
 
         {{#if this.mediaUrl}}
+          {{! An arbitrary audio file ships no caption track, so an empty
+          <track> would only mislead (and warn); omit it. The a11y rule that
+          wants one doesn't apply when no captions exist. }}
+          {{! template-lint-disable require-media-caption }}
           <audio
             class='audio-player'
             src={{this.mediaUrl}}
             controls
             preload='metadata'
             data-test-audio-player
-          >
-            <track kind='captions' />
-          </audio>
+          ></audio>
         {{else}}
           <p class='audio-empty'>No audio source</p>
         {{/if}}
