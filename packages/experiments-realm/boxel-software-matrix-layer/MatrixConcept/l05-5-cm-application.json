@@ -8,9 +8,9 @@
       "concept": "Application",
       "symbol": "Ap",
       "implemented": false,
-      "evidenceTier": null,
-      "auditStatus": "Missing",
-      "whereImplemented": null,
+      "evidenceTier": "POC realm",
+      "auditStatus": "POC only",
+      "whereImplemented": "experiments-realm/candidate.gts \u2014 modeled as Candidate.appliedRole/appliedDate/status/decisionDate; no separate Application CardDef",
       "reference": null,
       "catalogMatch": null,
       "provenance": null,
@@ -19,15 +19,16 @@
       "workState": "In Progress",
       "notes": "App 2: Talent & Resource Tracker",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/7dca4371-cc4e-4ac8-aba6-36bc2ca4bd22",
+      "specTarget": "shared block",
+      "consumers": "screen-application-command, talent-resource-tracker",
+      "consumerExamples": "{\"talent-resource-tracker\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/talent-resource-tracker/TalentResourceTracker/tracker\"}",
+      "catalogDisposition": null,
       "cardInfo": {
         "name": null,
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      },
-      "specTarget": "shared block",
-      "consumers": "screen-application-command, talent-resource-tracker",
-      "consumerExamples": "{\"talent-resource-tracker\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/talent-resource-tracker/TalentResourceTracker/tracker\"}"
+      }
     },
     "meta": {
       "adoptsFrom": {

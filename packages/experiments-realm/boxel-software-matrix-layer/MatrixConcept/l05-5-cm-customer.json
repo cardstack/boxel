@@ -8,26 +8,27 @@
       "concept": "Customer",
       "symbol": "Cu",
       "implemented": false,
-      "evidenceTier": null,
-      "auditStatus": "Missing",
-      "whereImplemented": null,
+      "evidenceTier": "POC realm",
+      "auditStatus": "POC only",
+      "whereImplemented": "experiments-realm/account.gts | experiments-realm/boxel-software-matrix-layer/account.gts | experiments-realm/crm/account.gts",
       "reference": null,
       "catalogMatch": null,
       "provenance": null,
       "domainKit": "Commerce",
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1 · Built as ACCOUNT — experiments-realm/account.gts, POC tier. Concept should be renamed Account per the spec Data Architecture",
+      "notes": "v1 \u00b7 Built as ACCOUNT \u2014 experiments-realm/account.gts, POC tier. Concept should be renamed Account per the spec Data Architecture",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/account",
+      "specTarget": "shared block",
+      "consumers": "account-metrics, contact, contract, convert-lead, invoice, metrics-demo, opportunity, order, revenue-os, subscription",
+      "consumerExamples": "{\"contact\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Contact/farah-zulkifli\", \"contract\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Contract/acme-msa-2026\", \"invoice\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Invoice/inv-2026-018\", \"metrics-demo\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/AccountMetricsDemo/acme\", \"opportunity\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Opportunity/acme-plant-expansion\", \"order\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Order/ord-2026-107\", \"revenue-os\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/RevenueOs/main\", \"subscription\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Subscription/acme-data-addon\"}",
+      "catalogDisposition": null,
       "cardInfo": {
         "name": null,
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      },
-      "specTarget": "shared block",
-      "consumers": "account-metrics, contact, contract, convert-lead, invoice, metrics-demo, opportunity, order, revenue-os, subscription",
-      "consumerExamples": "{\"contact\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Contact/farah-zulkifli\", \"contract\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Contract/acme-msa-2026\", \"invoice\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Invoice/inv-2026-018\", \"metrics-demo\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/AccountMetricsDemo/acme\", \"opportunity\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Opportunity/acme-plant-expansion\", \"order\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Order/ord-2026-107\", \"revenue-os\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/RevenueOs/main\", \"subscription\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Subscription/acme-data-addon\"}"
+      }
     },
     "meta": {
       "adoptsFrom": {

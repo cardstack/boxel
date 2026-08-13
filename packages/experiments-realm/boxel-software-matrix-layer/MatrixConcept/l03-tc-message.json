@@ -19,6 +19,10 @@
       "workState": null,
       "notes": null,
       "sharedSpec": null,
+      "specTarget": null,
+      "consumers": null,
+      "consumerExamples": null,
+      "catalogDisposition": null,
       "cardInfo": {
         "name": null,
         "summary": null,

@@ -8,9 +8,9 @@
       "concept": "Position",
       "symbol": "Po",
       "implemented": false,
-      "evidenceTier": null,
-      "auditStatus": "Missing",
-      "whereImplemented": null,
+      "evidenceTier": "POC realm",
+      "auditStatus": "POC only",
+      "whereImplemented": "experiments-realm/position.gts (Position CardDef) \u2014 linked from Candidate.position, Offer.position, JobRequisition",
       "reference": null,
       "catalogMatch": null,
       "provenance": null,
@@ -19,15 +19,16 @@
       "workState": "In Progress",
       "notes": "App 2: Talent & Resource Tracker",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/0e80d79f-27ee-441f-8f79-439798466e4d",
+      "specTarget": "shared block",
+      "consumers": "application, candidate, interview-plan, job-requisition, offer, talent-resource-tracker",
+      "consumerExamples": "{\"application\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Application/casey-brooks\", \"candidate\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Candidate/26b5aae6-a62f-4e2d-85d3-bbecf8d43298\", \"interview-plan\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/InterviewPlan/178f4bd9-d637-4c5a-aae2-96eec26fbbd0\", \"job-requisition\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/JobRequisition/product-manager\", \"offer\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Offer/df5b8208-9ecc-4132-b595-700dd0a73d77\", \"talent-resource-tracker\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/talent-resource-tracker/TalentResourceTracker/tracker\"}",
+      "catalogDisposition": null,
       "cardInfo": {
         "name": null,
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      },
-      "specTarget": "shared block",
-      "consumers": "application, candidate, interview-plan, job-requisition, offer, talent-resource-tracker",
-      "consumerExamples": "{\"application\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Application/casey-brooks\", \"candidate\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Candidate/26b5aae6-a62f-4e2d-85d3-bbecf8d43298\", \"interview-plan\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/InterviewPlan/178f4bd9-d637-4c5a-aae2-96eec26fbbd0\", \"job-requisition\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/JobRequisition/product-manager\", \"offer\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Offer/df5b8208-9ecc-4132-b595-700dd0a73d77\", \"talent-resource-tracker\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/talent-resource-tracker/TalentResourceTracker/tracker\"}"
+      }
     },
     "meta": {
       "adoptsFrom": {

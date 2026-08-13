@@ -19,15 +19,16 @@
       "workState": "In Progress",
       "notes": "App 2: Talent & Resource Tracker",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/5b61f129-899f-444a-9694-e0685f35bf86",
+      "specTarget": "shared block",
+      "consumers": "contractor, talent-resource-tracker",
+      "consumerExamples": "{\"contractor\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Contractor/marcus-rodriguez\", \"talent-resource-tracker\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/talent-resource-tracker/TalentResourceTracker/tracker\"}",
+      "catalogDisposition": null,
       "cardInfo": {
         "name": null,
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      },
-      "specTarget": "shared block",
-      "consumers": "contractor, talent-resource-tracker",
-      "consumerExamples": "{\"contractor\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Contractor/marcus-rodriguez\", \"talent-resource-tracker\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/talent-resource-tracker/TalentResourceTracker/tracker\"}"
+      }
     },
     "meta": {
       "adoptsFrom": {

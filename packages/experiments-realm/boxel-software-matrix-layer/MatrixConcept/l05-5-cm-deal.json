@@ -17,17 +17,18 @@
       "domainKit": "Sales & Marketing",
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1 · Built — experiments-realm/deal.gts, literal adoption of Opportunity. POC tier",
+      "notes": "v1 \u00b7 Built \u2014 experiments-realm/deal.gts, literal adoption of Opportunity. POC tier",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/deal",
+      "specTarget": "shared block",
+      "consumers": "revenue-os",
+      "consumerExamples": "{\"revenue-os\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/RevenueOs/main\"}",
+      "catalogDisposition": null,
       "cardInfo": {
         "name": null,
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      },
-      "specTarget": "shared block",
-      "consumers": "revenue-os",
-      "consumerExamples": "{\"revenue-os\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/RevenueOs/main\"}"
+      }
     },
     "meta": {
       "adoptsFrom": {

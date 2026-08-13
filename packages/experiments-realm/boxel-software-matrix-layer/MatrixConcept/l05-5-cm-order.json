@@ -8,26 +8,27 @@
       "concept": "Order",
       "symbol": "Or",
       "implemented": false,
-      "evidenceTier": null,
-      "auditStatus": "Missing",
-      "whereImplemented": null,
+      "evidenceTier": "POC realm",
+      "auditStatus": "POC only",
+      "whereImplemented": "experiments-realm/boxel-software-matrix-layer/order.gts | experiments-realm/order.gts",
       "reference": null,
       "catalogMatch": null,
       "provenance": null,
       "domainKit": "Commerce",
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1 · Built — experiments-realm/order.gts, POC tier",
+      "notes": "v1 \u00b7 Built \u2014 experiments-realm/order.gts, POC tier",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/order",
+      "specTarget": "shared block",
+      "consumers": "invoice",
+      "consumerExamples": "{\"invoice\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Invoice/inv-2026-018\"}",
+      "catalogDisposition": null,
       "cardInfo": {
         "name": null,
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      },
-      "specTarget": "shared block",
-      "consumers": "invoice",
-      "consumerExamples": "{\"invoice\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Invoice/inv-2026-018\"}"
+      }
     },
     "meta": {
       "adoptsFrom": {

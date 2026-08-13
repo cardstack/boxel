@@ -8,26 +8,27 @@
       "concept": "Board",
       "symbol": "Bo",
       "implemented": false,
-      "evidenceTier": null,
-      "auditStatus": "Missing",
-      "whereImplemented": null,
+      "evidenceTier": "POC realm",
+      "auditStatus": "POC only",
+      "whereImplemented": "experiments-realm/board.gts | experiments-realm/boxel-software-matrix-layer/board.gts",
       "reference": null,
       "catalogMatch": null,
       "provenance": "periodic:Board | BSL",
       "domainKit": null,
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1 · Built — experiments-realm/board.gts on boxel-ui KanbanPlane, POC tier",
+      "notes": "v1 \u00b7 Built \u2014 experiments-realm/board.gts on boxel-ui KanbanPlane, POC tier",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/board",
+      "specTarget": "shared block",
+      "consumers": "board-demo, revenue-os",
+      "consumerExamples": "{\"board-demo\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/PipelineBoardDemo/q3-pipeline\", \"revenue-os\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/RevenueOs/main\"}",
+      "catalogDisposition": null,
       "cardInfo": {
         "name": null,
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      },
-      "specTarget": "shared block",
-      "consumers": "board-demo, revenue-os",
-      "consumerExamples": "{\"board-demo\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/PipelineBoardDemo/q3-pipeline\", \"revenue-os\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/RevenueOs/main\"}"
+      }
     },
     "meta": {
       "adoptsFrom": {

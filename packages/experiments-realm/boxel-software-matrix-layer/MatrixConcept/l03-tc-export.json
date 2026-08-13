@@ -17,17 +17,18 @@
       "domainKit": null,
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1 · Built — experiments-realm/export.gts, POC tier. Consumes the same column definitions the Table block takes, so the CSV cannot drift from the table; neither block imports the other",
+      "notes": "v1 \u00b7 Built \u2014 experiments-realm/export.gts, POC tier. Consumes the same column definitions the Table block takes, so the CSV cannot drift from the table; neither block imports the other",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/export",
+      "specTarget": "shared block",
+      "consumers": "revenue-os, table-demo",
+      "consumerExamples": "{\"revenue-os\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/RevenueOs/main\", \"table-demo\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/InvoiceTableDemo/invoice-tracker\"}",
+      "catalogDisposition": null,
       "cardInfo": {
         "name": null,
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      },
-      "specTarget": "shared block",
-      "consumers": "revenue-os, table-demo",
-      "consumerExamples": "{\"revenue-os\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/RevenueOs/main\", \"table-demo\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/InvoiceTableDemo/invoice-tracker\"}"
+      }
     },
     "meta": {
       "adoptsFrom": {

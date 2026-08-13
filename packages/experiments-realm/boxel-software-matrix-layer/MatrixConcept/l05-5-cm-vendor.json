@@ -10,7 +10,7 @@
       "implemented": false,
       "evidenceTier": "POC realm",
       "auditStatus": "POC only",
-      "whereImplemented": null,
+      "whereImplemented": "experiments-realm/vendor.gts (Vendor CardDef) \u2014 contractStart/contractLength via DurationField, Dashboard tab",
       "reference": "institutional-meerkat/legal + audited kit realms",
       "catalogMatch": null,
       "provenance": "periodic:Vendor",
@@ -19,15 +19,16 @@
       "workState": "In Progress",
       "notes": "App 2: Talent & Resource Tracker",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/90918085-f099-482e-967c-cc7c890e5c64",
+      "specTarget": "shared block",
+      "consumers": "contractor, project, talent-resource-tracker",
+      "consumerExamples": "{\"contractor\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Contractor/marcus-rodriguez\", \"project\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Project/benefits-migration\", \"talent-resource-tracker\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/talent-resource-tracker/TalentResourceTracker/tracker\"}",
+      "catalogDisposition": null,
       "cardInfo": {
         "name": null,
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      },
-      "specTarget": "shared block",
-      "consumers": "contractor, project, talent-resource-tracker",
-      "consumerExamples": "{\"contractor\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Contractor/marcus-rodriguez\", \"project\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Project/benefits-migration\", \"talent-resource-tracker\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/talent-resource-tracker/TalentResourceTracker/tracker\"}"
+      }
     },
     "meta": {
       "adoptsFrom": {

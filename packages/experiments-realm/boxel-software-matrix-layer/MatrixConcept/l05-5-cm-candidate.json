@@ -10,7 +10,7 @@
       "implemented": false,
       "evidenceTier": "POC realm",
       "auditStatus": "POC only",
-      "whereImplemented": null,
+      "whereImplemented": "experiments-realm/candidate.gts (Candidate CardDef) \u2014 ATS pipeline card, drives Pipeline/Dashboard/Calendar tabs",
       "reference": "institutional-meerkat/legal + audited kit realms",
       "catalogMatch": null,
       "provenance": null,
@@ -19,15 +19,16 @@
       "workState": "In Progress",
       "notes": "App 2: Talent & Resource Tracker",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/3729e1f8-cf6d-45e5-af11-77219d6ed4cb",
+      "specTarget": "shared block",
+      "consumers": "advance-to-offer-command, approve-offer-command, extend-offer-command, extract-resume-command, generate-interview-questions-command, reject-candidate-command, schedule-interview-command, screen-application-command, schedule-interview-dialog, meeting, offer, talent-resource-tracker",
+      "consumerExamples": "{\"meeting\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Meeting/eng-standup\", \"offer\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Offer/df5b8208-9ecc-4132-b595-700dd0a73d77\", \"talent-resource-tracker\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/talent-resource-tracker/TalentResourceTracker/tracker\"}",
+      "catalogDisposition": null,
       "cardInfo": {
         "name": null,
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      },
-      "specTarget": "shared block",
-      "consumers": "advance-to-offer-command, approve-offer-command, extend-offer-command, extract-resume-command, generate-interview-questions-command, reject-candidate-command, schedule-interview-command, screen-application-command, schedule-interview-dialog, meeting, offer, talent-resource-tracker",
-      "consumerExamples": "{\"meeting\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Meeting/eng-standup\", \"offer\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Offer/df5b8208-9ecc-4132-b595-700dd0a73d77\", \"talent-resource-tracker\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/talent-resource-tracker/TalentResourceTracker/tracker\"}"
+      }
     },
     "meta": {
       "adoptsFrom": {

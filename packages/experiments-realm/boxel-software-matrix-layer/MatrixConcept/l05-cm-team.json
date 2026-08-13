@@ -19,15 +19,16 @@
       "workState": "In Progress",
       "notes": "App 2: Talent & Resource Tracker",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/28afaac4-44e5-4121-b168-2ce3a00b6cff",
+      "specTarget": "shared block",
+      "consumers": "project, talent-resource-tracker",
+      "consumerExamples": "{\"project\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Project/benefits-migration\", \"talent-resource-tracker\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/talent-resource-tracker/TalentResourceTracker/tracker\"}",
+      "catalogDisposition": null,
       "cardInfo": {
         "name": null,
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      },
-      "specTarget": "shared block",
-      "consumers": "project, talent-resource-tracker",
-      "consumerExamples": "{\"project\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Project/benefits-migration\", \"talent-resource-tracker\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/talent-resource-tracker/TalentResourceTracker/tracker\"}"
+      }
     },
     "meta": {
       "adoptsFrom": {

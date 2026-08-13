@@ -17,17 +17,18 @@
       "domainKit": "Sales & Marketing",
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1 · Built — experiments-realm/opportunity.gts, owns stage enum + default probability. POC tier",
+      "notes": "v1 \u00b7 Built \u2014 experiments-realm/opportunity.gts, owns stage enum + default probability. POC tier",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/opportunity",
+      "specTarget": "shared block",
+      "consumers": "board-demo, close-won, contract, convert-lead, deal, revenue-os",
+      "consumerExamples": "{\"board-demo\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/PipelineBoardDemo/q3-pipeline\", \"contract\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Contract/acme-msa-2026\", \"deal\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Deal/acme-enterprise-renewal\", \"revenue-os\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/RevenueOs/main\"}",
+      "catalogDisposition": null,
       "cardInfo": {
         "name": null,
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      },
-      "specTarget": "shared block",
-      "consumers": "board-demo, close-won, contract, convert-lead, deal, revenue-os",
-      "consumerExamples": "{\"board-demo\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/PipelineBoardDemo/q3-pipeline\", \"contract\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Contract/acme-msa-2026\", \"deal\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Deal/acme-enterprise-renewal\", \"revenue-os\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/RevenueOs/main\"}"
+      }
     },
     "meta": {
       "adoptsFrom": {

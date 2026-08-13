@@ -8,9 +8,9 @@
       "concept": "Performance Review",
       "symbol": "PR",
       "implemented": false,
-      "evidenceTier": null,
-      "auditStatus": "Missing",
-      "whereImplemented": null,
+      "evidenceTier": "POC realm",
+      "auditStatus": "POC only",
+      "whereImplemented": "experiments-realm/boxel-software-matrix-layer/performance-review.gts",
       "reference": null,
       "catalogMatch": null,
       "provenance": null,
@@ -19,15 +19,16 @@
       "workState": null,
       "notes": null,
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/performance-review-spec",
+      "specTarget": "shared block",
+      "consumers": "talent-resource-tracker",
+      "consumerExamples": "{\"talent-resource-tracker\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/talent-resource-tracker/TalentResourceTracker/tracker\"}",
+      "catalogDisposition": null,
       "cardInfo": {
         "name": null,
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      },
-      "specTarget": "shared block",
-      "consumers": "talent-resource-tracker",
-      "consumerExamples": "{\"talent-resource-tracker\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/talent-resource-tracker/TalentResourceTracker/tracker\"}"
+      }
     },
     "meta": {
       "adoptsFrom": {
