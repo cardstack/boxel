@@ -120,12 +120,15 @@ module('Integration | bxl platform module', function (hooks) {
     await renderCard(loader, instance, 'embedded');
 
     // Query-backed links resolve asynchronously during render; the computed
-    // spans settle once the claims are resident.
+    // spans settle once the claims are resident. This wait covers a live
+    // search round trip plus a re-render, not just a DOM settle, so it gets
+    // a generous timeout.
     await waitUntil(
       () =>
         document
           .querySelector('[data-test-paid-claims-total]')
           ?.textContent?.trim() === '3980.75',
+      { timeout: 5000 },
     );
 
     assert.dom('[data-test-policy="POL-100"]').exists();

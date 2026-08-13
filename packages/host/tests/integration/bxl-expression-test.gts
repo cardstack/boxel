@@ -288,7 +288,7 @@ module('Integration | bxl expressions on real cards', function (hooks) {
     >;
     let totalMeta = (fields.total.computeVia as any).bxl;
     assert.strictEqual(totalMeta.source, '.subtotal * (1 + .taxRate)');
-    assert.deepEqual(totalMeta.deps.sort(), ['subtotal', 'taxRate']);
+    assert.deepEqual([...totalMeta.deps].sort(), ['subtotal', 'taxRate']);
     assert.strictEqual(totalMeta.memoize, 'microtask');
 
     let roundedMeta = (fields.rounded.computeVia as any).bxl;

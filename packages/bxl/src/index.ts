@@ -838,9 +838,12 @@ function makeTagged(
 //    by any card-api copy resolves the copy that created it — correct even
 //    when several loader universes are alive at once.
 // 2. `globalThis.__cardstackGetFields`: the ambient fallback a host
-//    registers, for values that carry no stamp. Falling back here is
+//    registers, for values that carry no stamp. For a card-api instance
+//    (marked with the registered `isBaseInstance` symbol) this fallback is
 //    ambiguous — the ambient copy may not be the one that created the
-//    value — so it logs a one-time warning.
+//    value — so that case logs a one-time warning. Plain classes resolve
+//    through the ambient copy silently: their field map is empty either
+//    way, and the plain-copy fallback is their intended behavior.
 //
 // Absent both, the field-aware paths degrade rather than throw.
 type GetFieldsFn = (
@@ -857,6 +860,7 @@ type GetFieldsFn = (
 
 const GET_FIELDS_KEY = '__cardstackGetFields' as const;
 const GET_FIELDS_BRIDGE = Symbol.for('cardstack.getFields');
+const IS_BASE_INSTANCE = Symbol.for('isBaseInstance');
 
 function getCardstackGetFields(): GetFieldsFn | undefined {
   const fn = (globalThis as unknown as Record<string, unknown>)[GET_FIELDS_KEY];
@@ -871,14 +875,15 @@ function getFieldsFor(value: object): GetFieldsFn | undefined {
     return fn as GetFieldsFn;
   }
   const ambient = getCardstackGetFields();
-  if (ambient && !warnedAmbientGetFields) {
+  if (ambient && !warnedAmbientGetFields && IS_BASE_INSTANCE in value) {
     warnedAmbientGetFields = true;
     console.warn(
-      '@cardstack/bxl: resolving field metadata through the ambient ' +
-        '__cardstackGetFields global because the value carries no ' +
-        'instance-scoped bridge. When more than one card-api copy is ' +
-        'loaded, the ambient copy may not be the one that created this ' +
-        'value, and field-aware materialization can silently degrade.',
+      '@cardstack/bxl: resolving field metadata for a card-api value ' +
+        'through the ambient __cardstackGetFields global because the ' +
+        'value carries no instance-scoped bridge. When more than one ' +
+        'card-api copy is loaded, the ambient copy may not be the one ' +
+        'that created this value, and field-aware materialization can ' +
+        'silently degrade.',
     );
   }
   return ambient;
