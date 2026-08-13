@@ -23,14 +23,16 @@ module('Integration | zip file def', function (hooks) {
 
   let loader: Loader;
   let ZipDef: typeof ZipFileDefModule.ZipDef;
+  let ArchiveEntryField: typeof ZipFileDefModule.ArchiveEntryField;
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;
-    ZipDef = (
-      await loader.import<typeof ZipFileDefModule>(
-        `${baseRealm.url}zip-file-def`,
-      )
-    ).ZipDef;
+    // Both classes must come from the same loader-sourced module: containsMany
+    // validates entries with instanceof against the loader's copy, so a
+    // statically imported ArchiveEntryField would fail validation.
+    ({ ZipDef, ArchiveEntryField } = await loader.import<
+      typeof ZipFileDefModule
+    >(`${baseRealm.url}zip-file-def`));
   });
 
   function zipFile() {
@@ -42,9 +44,9 @@ module('Integration | zip file def', function (hooks) {
       contentType: 'application/zip',
       contentSize: 2048,
       archiveContents: [
-        { path: 'README.md', size: 120 },
-        { path: 'src/index.ts', size: 340 },
-        { path: 'src/util/helpers.ts', size: 88 },
+        new ArchiveEntryField({ path: 'README.md', size: 120 }),
+        new ArchiveEntryField({ path: 'src/index.ts', size: 340 }),
+        new ArchiveEntryField({ path: 'src/util/helpers.ts', size: 88 }),
       ],
       uncompressedSize: 548,
     });
