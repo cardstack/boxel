@@ -2215,6 +2215,69 @@ ${REPLACE_MARKER}
     );
   });
 
+  test('a tool whose validation throws posts a failed tool result event instead of killing the drain', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}hello.txt`,
+    });
+    await click('[data-test-open-ai-assistant]');
+    let roomId = getRoomIds().pop()!;
+
+    await click('[data-test-llm-mode-option="act"]');
+
+    // Simulate the field failure: validate() loads the tool's module and
+    // input schema over the loader, which can throw against a busy realm.
+    let toolService = getService('tool-service');
+    toolService.validate = () => {
+      throw new Error('loader exploded');
+    };
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'Running a tool whose validation throws',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+        {
+          id: 'tool-validate-throws',
+          name: 'patchCardInstance',
+          arguments: JSON.stringify({
+            attributes: {
+              cardId: `${testRealmURL}index`,
+              patch: { attributes: {} },
+            },
+          }),
+        },
+      ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
+    });
+
+    await waitUntil(
+      () =>
+        getRoomEvents(roomId).some(
+          (event) =>
+            event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+            event.content['m.relates_to']?.key === 'failed' &&
+            event.content.commandRequestId === 'tool-validate-throws',
+        ),
+      { timeout: 5000 },
+    );
+
+    let failedEvent = getRoomEvents(roomId).find(
+      (event) =>
+        event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+        event.content['m.relates_to']?.key === 'failed',
+    );
+    assert.ok(
+      failedEvent?.content.failureReason?.includes('loader exploded'),
+      'failure reason carries the thrown error',
+    );
+  });
+
   test('a tool whose execution hangs times out and posts a failed tool result event', async function (assert) {
     await visitOperatorMode({
       submode: 'code',

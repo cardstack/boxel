@@ -525,7 +525,41 @@ export default class ToolService extends Service {
             this.claimedToolRequestIds.add(messageTool.id);
           }
 
-          let isValid = await this.validate(messageTool);
+          // validate() loads the tool's module and input schema over the
+          // loader; against a realm that is busy (e.g. indexing files this
+          // same message just created) that can throw. Without this catch a
+          // single throw killed the whole drain pass silently: the request
+          // stayed claimed forever, its spinner never cleared, and the bot
+          // waited forever. Report it as a failed result instead.
+          let isValid = false;
+          try {
+            isValid = await this.validate(messageTool);
+          } catch (e) {
+            let reason = e instanceof Error ? e.message : String(e);
+            console.error(
+              `Tool processing failed for "${messageTool.name}" (${messageTool.id}):`,
+              e,
+            );
+            try {
+              await this.matrixService.sendToolResultEvent({
+                roomId: roomId!,
+                invokedToolFromEventId:
+                  this.getCurrentEventIdForCommandRequest(
+                    roomId!,
+                    messageTool.id,
+                  ) ?? messageTool.eventId,
+                toolCallId: messageTool.id!,
+                status: 'failed',
+                failureReason: reason,
+              });
+            } catch (sendError) {
+              console.error(
+                'could not send failed tool result event to the room',
+                sendError,
+              );
+            }
+            continue;
+          }
           if (!isValid) {
             continue;
           }
