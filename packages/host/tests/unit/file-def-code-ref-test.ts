@@ -59,6 +59,13 @@ module('Unit | isFileDefCodeRef', function (hooks) {
       ),
       'PngDef',
     );
+    assert.true(
+      isFileDefCodeRef(
+        { module: baseRRI('pdf-file-def'), name: 'PdfDef' },
+        virtualNetwork,
+      ),
+      'PdfDef',
+    );
   });
 
   test('rejects a non-FileDef card ref', function (assert) {

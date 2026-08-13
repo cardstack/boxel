@@ -66,6 +66,11 @@ export class FileEmbeddedShell extends GlimmerComponent<FileEmbeddedShellSignatu
     if (kind === 'html') {
       return 'html-document';
     }
+    // A paged document renders in a native viewer that needs real reading height
+    // inline, not the default bounded box.
+    if (kind === 'pdf') {
+      return 'document-page';
+    }
     if (kind === 'svg' || kind === 'gif') {
       return 'square-visual';
     }
@@ -260,6 +265,11 @@ export class FileEmbeddedShell extends GlimmerComponent<FileEmbeddedShellSignatu
       .emb[data-embed-shape='html-document'] .emb-body {
         height: clamp(320px, 56vw, 520px);
         background: var(--card);
+      }
+      .emb[data-embed-shape='document-page'] .emb-body {
+        /* Tall enough to read a page; the native viewer scrolls within it. */
+        height: clamp(360px, 60vw, 560px);
+        background: var(--fd-stage, var(--muted, #eceef1));
       }
       @container embedded-card (max-width: 360px) {
         .emb[data-embed-shape='bounded-content'] .emb-body {
