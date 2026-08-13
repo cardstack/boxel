@@ -3664,8 +3664,4 @@ module('Integration | Store', function (hooks) {
       `reference count for ${jade} is 1`,
     );
   });
-
-  // Count full rebuilds by the loader flush each one performs: the coalesced
-  // rebuild calls resetLoader exactly once, and nothing else flushes the loader
-  // in these tests, so resetLoader-call-count == rebuild-count.
 });

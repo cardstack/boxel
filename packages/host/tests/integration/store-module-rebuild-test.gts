@@ -103,6 +103,9 @@ module('Integration | Store | module rebuild', function (hooks) {
     await realmService.login(testRealmURL);
   });
 
+  // Count full rebuilds by the loader flush each one performs: the coalesced
+  // rebuild calls resetLoader exactly once, and nothing else flushes the loader
+  // in these tests, so resetLoader-call-count == rebuild-count.
   function countRebuilds() {
     let count = 0;
     let original = loaderService.resetLoader;
