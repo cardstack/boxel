@@ -7,6 +7,7 @@ import {
   SEPARATOR_MARKER,
 } from '@cardstack/runtime-common';
 
+import { extractCodeData } from '@cardstack/host/lib/formatted-message/utils';
 import {
   isCompleteSearchReplaceBlock,
   parseSearchReplace,
@@ -221,6 +222,38 @@ ${REPLACE_MARKER}`;
       assert.strictEqual(result.replaceContent, `{ "new": true }`);
     });
 
+    // A separator is only a run of ═ between two brackets, a shape that can
+    // occur inside the code being patched. The marker is written on a line of
+    // its own, so requiring that keeps content from being read as the divider.
+    test('a divider-shaped run inside content is not the divider', async function (assert) {
+      let block = `example-card.json
+${SEARCH_MARKER}
+let box = '{a ╠═╣ b}';
+${SEPARATOR_MARKER}
+let box = '{a b}';
+${REPLACE_MARKER}`;
+
+      let result = parseSearchReplace(block);
+      assert.strictEqual(
+        result.searchContent,
+        `let box = '{a ╠═╣ b}';`,
+        'the inline run stays in the search half',
+      );
+      assert.strictEqual(result.replaceContent, `let box = '{a b}';`);
+    });
+
+    test('a separator indented on its own line is still the divider', async function (assert) {
+      let block = `example-card.json
+${SEARCH_MARKER}
+  let a = 1;
+    ${SEPARATOR_MARKER}
+  let a = 2;
+${REPLACE_MARKER}`;
+      let result = parseSearchReplace(block);
+      assert.strictEqual(result.searchContent, '  let a = 1;');
+      assert.strictEqual(result.replaceContent, '  let a = 2;');
+    });
+
     test('does not treat out-of-order markers as a complete block', async function (assert) {
       let block = `game-1.json
 ${REPLACE_MARKER}
@@ -266,3 +299,57 @@ ${REPLACE_MARKER}`;
     });
   },
 );
+
+module('Unit | code patching | malformed patch detection', function () {
+  function codeDataFor(preContents: string) {
+    return extractCodeData(
+      `<pre data-code-language="typescript">${preContents}</pre>`,
+      '!room',
+      '$event',
+      0,
+    );
+  }
+
+  // `malformedPatch` drives the warning shown once streaming has finished, so
+  // it has to separate a patch whose markers came through wrong from content
+  // that was never a patch at all.
+  test('is true for a block that opens a SEARCH marker but never completes', function (assert) {
+    let codeData = codeDataFor(`https://example.com/file.ts
+${SEARCH_MARKER}
+let a = 1;`);
+
+    assert.true(codeData.malformedPatch);
+    assert.strictEqual(codeData.searchReplaceBlock, null);
+  });
+
+  test('is false for a well-formed block', function (assert) {
+    let codeData = codeDataFor(`https://example.com/file.ts
+${SEARCH_MARKER}
+let a = 1;
+${SEPARATOR_MARKER}
+let a = 2;
+${REPLACE_MARKER}`);
+
+    assert.false(codeData.malformedPatch);
+    assert.notStrictEqual(codeData.searchReplaceBlock, null);
+  });
+
+  test('is false for a block whose separator drifted, since that still parses', function (assert) {
+    let codeData = codeDataFor(`https://example.com/file.ts
+${SEARCH_MARKER}
+let a = 1;
+╠${'═'.repeat(19)}╣
+let a = 2;
+${REPLACE_MARKER}`);
+
+    assert.false(codeData.malformedPatch);
+  });
+
+  test('is false for ordinary code carrying no marker', function (assert) {
+    let codeData = codeDataFor(`let a = 1;
+let b = 2;`);
+
+    assert.false(codeData.malformedPatch);
+    assert.strictEqual(codeData.fileUrl, null);
+  });
+});

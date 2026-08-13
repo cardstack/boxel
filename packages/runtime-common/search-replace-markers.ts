@@ -11,7 +11,13 @@
 // descriptions); these patterns are the tolerant form to *recognize*.
 
 export const SEARCH_MARKER_PATTERN = /╔═+ SEARCH ═+╗/;
-export const SEPARATOR_MARKER_PATTERN = /╠═+╣/;
+// Anchored to its own line, unlike the other two. They carry a word that no
+// real content is going to contain, but a separator is only a run of ═ between
+// two brackets — a shape that can plausibly occur inside the code being
+// patched. Since the model writes each marker on a line of its own, requiring
+// that keeps a divider-shaped run sitting mid-line in search or replace content
+// from being mistaken for the divider itself.
+export const SEPARATOR_MARKER_PATTERN = /^[ \t]*╠═+╣[ \t]*\r?$/m;
 export const REPLACE_MARKER_PATTERN = /╚═+ REPLACE ═+╝/;
 
 export interface MarkerMatch {
