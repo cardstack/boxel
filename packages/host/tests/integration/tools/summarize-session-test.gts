@@ -49,6 +49,22 @@ module('Integration | tools | summarize-session', function (hooks) {
       getResponse: async (req: Request) => {
         const body = await req.json();
 
+        // Message content arrives as a plain string or as a parts array (the
+        // prompt serializes history messages in the parts form); read the
+        // text out of either shape, the way the real endpoint would.
+        const contentText = (content: any): string => {
+          if (typeof content === 'string') {
+            return content;
+          }
+          if (Array.isArray(content)) {
+            return content
+              .filter((part: any) => part.type === 'text')
+              .map((part: any) => part.text ?? '')
+              .join('');
+          }
+          return '';
+        };
+
         // Handle summarization requests
         if (body.url.includes('openrouter.ai/api/v1/chat/completions')) {
           const requestBody = JSON.parse(body.requestBody);
@@ -56,10 +72,10 @@ module('Integration | tools | summarize-session', function (hooks) {
           // Check if this is a summarization request
           if (
             requestBody.messages &&
-            requestBody.messages.some(
-              (msg: any) =>
-                msg.content &&
-                msg.content.includes('Please provide a concise summary'),
+            requestBody.messages.some((msg: any) =>
+              contentText(msg.content).includes(
+                'Please provide a concise summary',
+              ),
             )
           ) {
             // Return a mock summary based on the conversation content
@@ -67,9 +83,11 @@ module('Integration | tools | summarize-session', function (hooks) {
               .filter(
                 (msg: any) =>
                   msg.role === 'user' &&
-                  !msg.content.includes('Please provide a concise summary'),
+                  !contentText(msg.content).includes(
+                    'Please provide a concise summary',
+                  ),
               )
-              .map((msg: any) => msg.content)
+              .map((msg: any) => contentText(msg.content))
               .join(' ');
 
             let summary = 'This conversation focused on general discussion.';
