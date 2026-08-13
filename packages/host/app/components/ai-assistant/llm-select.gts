@@ -14,6 +14,8 @@ export interface LLMOption {
   id: string;
   modelId: string;
   name: string;
+  // Glanceable cost tier ('Free' | '$' … '$$$$'); omitted when unknown.
+  costTierLabel?: string;
 }
 
 interface Signature {
@@ -47,6 +49,14 @@ export default class LLMSelect extends Component<Signature> {
           >
             {{this.displayName}}
           </span>
+          {{#if this.selectedCostTierLabel}}
+            <span
+              class='llm-cost'
+              data-test-llm-cost-selected={{this.selectedCostTierLabel}}
+            >
+              {{this.selectedCostTierLabel}}
+            </span>
+          {{/if}}
         </div>
       </:headerDetail>
       <:content>
@@ -66,10 +76,20 @@ export default class LLMSelect extends Component<Signature> {
                 class='llm-button'
                 {{on 'click' (fn this.handleOptionClick option.id)}}
               >
-                {{option.name}}
-                {{#if (eq @selected option.id)}}
-                  <Check class='selected-icon' />
-                {{/if}}
+                <span class='llm-name'>{{option.name}}</span>
+                <span class='llm-meta'>
+                  {{#if option.costTierLabel}}
+                    <span
+                      class='llm-cost'
+                      data-test-llm-cost={{option.costTierLabel}}
+                    >
+                      {{option.costTierLabel}}
+                    </span>
+                  {{/if}}
+                  {{#if (eq @selected option.id)}}
+                    <Check class='selected-icon' />
+                  {{/if}}
+                </span>
               </button>
             </li>
           {{/each}}
@@ -84,15 +104,29 @@ export default class LLMSelect extends Component<Signature> {
       }
 
       .selected-llm-wrapper {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxxs);
         overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
         min-width: 0;
       }
 
       .selected-llm {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        min-width: 0;
         color: var(--boxel-dark);
         font: 700 var(--boxel-font-xs);
+      }
+
+      /* Cost tier chip ($…$$$$ / Free). Deliberately muted and distinct from
+         the green per-token prices shown on the model cards. */
+      .llm-cost {
+        flex-shrink: 0;
+        color: var(--boxel-450);
+        font: 600 var(--boxel-font-xs);
+        letter-spacing: 0.03em;
       }
 
       .llm-list {
@@ -139,6 +173,22 @@ export default class LLMSelect extends Component<Signature> {
         display: flex;
         justify-content: space-between;
         align-items: center;
+        gap: var(--boxel-sp-xs);
+      }
+
+      .llm-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        min-width: 0;
+        text-align: left;
+      }
+
+      .llm-meta {
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxxs);
       }
 
       .llm-option.selected .llm-button {
@@ -147,8 +197,16 @@ export default class LLMSelect extends Component<Signature> {
     </style>
   </template>
 
+  private get selectedOption() {
+    return this.args.options.find((o) => o.id === this.args.selected);
+  }
+
   private get displayName() {
-    return this.args.options.find((o) => o.id === this.args.selected)?.name;
+    return this.selectedOption?.name;
+  }
+
+  private get selectedCostTierLabel() {
+    return this.selectedOption?.costTierLabel;
   }
 
   @action

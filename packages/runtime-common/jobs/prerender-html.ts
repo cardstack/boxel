@@ -66,31 +66,35 @@ export function prerenderHtmlConcurrencyGroup(realmURL: string): string {
   return `prerender-html:${realmURL}`;
 }
 
-// Await the prerender-html channel having caught up to a realm's current
-// index generation. The index pass spawns the prerender-html job
-// fire-and-forget and completes without it, so "indexed" does not imply
-// "viewable" — a freshly published realm can be reachable and searchable
-// while still serving a shell without card markup. Publishing awaits this so a
-// published realm reports ready only once its current generation has been
-// rendered.
+// Await the prerender-html channel having caught up to a realm's index. The
+// index pass spawns the prerender-html job fire-and-forget and completes
+// without it, so "indexed" does not imply "viewable" — a freshly published
+// realm can be reachable and searchable while still serving a shell without
+// card markup. Publishing awaits this so a published realm reports ready only
+// once its content has been rendered.
 //
-// Signal: `prerendered_html` carrying any row at >= the realm's current
-// generation. `batch.done()` swaps a generation's rendered rows into the
-// production table atomically, so a row at the current generation means that
-// generation's render batch has landed (a successful render leaves the
-// isolated HTML on those rows; a failed one leaves error rows — either way the
-// async render work for this publish is done, and a genuine render failure
-// surfaces downstream as missing markup rather than hanging readiness). Gating
-// on `generation` (not job status) sidesteps the fire-and-forget enqueue race
-// and never settles on a prior publish's stale (lower-generation) rows.
+// Signal: every live, non-errored `boxel_index` row has HTML at or beyond its
+// OWN generation — the per-row predicate the read path
+// (`index-query-engine`'s RENDER_ERROR_IS_CURRENT) and the catch-up sweep
+// (`findStalePrerenderedHtmlRows`) also use. A row the latest pass did not
+// revisit keeps its own generation, and its HTML at that generation is fresh
+// for it.
+//
+// A realm-wide watermark (`realm_generations.current_generation`) is the wrong
+// signal here and must not be reintroduced: an index batch advances it
+// unconditionally, a prerender batch never does, and the prerender job writes
+// rows only for the URLs it was handed, at the generation its spawning pass
+// anticipated. A pass that advances the watermark without a matching render
+// therefore leaves it unreachable on a realm that is in fact fully rendered.
+//
 // Resolves true when caught up, false on timeout.
 //
 // Woken by NOTIFY rather than tight-polling: pg-queue emits `NOTIFY
-// jobs_finished` when a job's finalize transaction commits, and the
-// prerender-html batch's swap is already durable by then, so re-checking on
-// that signal catches the current generation landing near-instantly. The
-// periodic poll is a safety net for a missed notification and for adapters
-// without pub/sub (SQLite has no LISTEN), so it stays coarse.
+// jobs_finished` when a job's finalize transaction commits, by which point the
+// prerender-html batch's swap is durable, so re-checking on that signal catches
+// the render landing near-instantly. The periodic poll is a safety net for a
+// missed notification and for adapters without pub/sub (SQLite has no LISTEN),
+// so it stays coarse.
 export async function awaitPublishedHtmlReady(
   dbAdapter: DBAdapter,
   realmURL: string,
@@ -98,18 +102,7 @@ export async function awaitPublishedHtmlReady(
 ): Promise<boolean> {
   let timeoutMs = opts?.timeoutMs ?? 60_000;
   let pollIntervalMs = opts?.pollIntervalMs ?? 1000;
-  // `const`, and read once: this wait is for the generation that was current
-  // when it began. A later pass bumping the generation must not move the target
-  // out from under a caller already waiting on an earlier one — so only the
-  // landed-HTML predicate re-runs below, never the generation read.
-  const currentGeneration = await currentRealmGeneration(dbAdapter, realmURL);
-  if (currentGeneration == null) {
-    // The realm has never been indexed — there is no generation to await.
-    return true;
-  }
-
-  let hasCaughtUp = () =>
-    prerenderedHtmlHasLanded(dbAdapter, realmURL, currentGeneration);
+  let hasCaughtUp = () => publishedHtmlHasCaughtUp(dbAdapter, realmURL);
 
   if (await hasCaughtUp()) {
     return true;
@@ -178,61 +171,40 @@ export async function awaitPublishedHtmlReady(
   }
 }
 
-// The realm's current index generation, or undefined when it has never been
-// indexed.
-async function currentRealmGeneration(
-  dbAdapter: DBAdapter,
-  realmURL: string,
-): Promise<number | undefined> {
-  let [row] = (await query(dbAdapter, [
-    'SELECT current_generation FROM realm_generations WHERE realm_url =',
-    param(realmURL),
-  ])) as { current_generation: number }[];
-  return row?.current_generation ?? undefined;
-}
-
-// Whether the prerender channel has produced HTML for `generation` or later.
-// `batch.done()` swaps a generation's rendered rows into the production table
-// atomically, so one row at or beyond the generation means that generation's
-// render batch has landed.
+// Whether every live, non-errored index row has HTML at or beyond its own
+// generation.
 //
-// This comparison is the whole definition of "the realm's HTML is live", and it
+// This predicate is the whole definition of "the realm's HTML is live", and it
 // has exactly one home on purpose: `awaitPublishedHtmlReady` gates a publish's
-// readiness on it and `publishedHtmlHasCaughtUp` reports progress against it,
-// so a change to the semantics here can't leave the two disagreeing about
+// readiness on it and the publish-progress endpoint reports progress against
+// it, so a change to the semantics here can't leave the two disagreeing about
 // whether a publish has finished.
-async function prerenderedHtmlHasLanded(
-  dbAdapter: DBAdapter,
-  realmURL: string,
-  generation: number,
-): Promise<boolean> {
-  let rows = await query(dbAdapter, [
-    'SELECT 1 FROM prerendered_html WHERE realm_url =',
-    param(realmURL),
-    'AND generation >=',
-    param(generation),
-    'LIMIT 1',
-  ]);
-  return rows.length > 0;
-}
-
-// A point-in-time read of the same signal `awaitPublishedHtmlReady` waits on:
-// is the realm's published HTML live for the generation that is current *now*?
-// Unlike the wait, this pins nothing — a caller sampling it repeatedly (the
-// publish-progress endpoint) wants the latest generation on every read, not the
-// one that was current when it started sampling.
 //
-// A realm with no generation has never been indexed and has no render to wait
-// on, which reads as caught up.
+// A failed render still writes an error row at its generation, so readiness
+// settles instead of hanging on content that will never render. Likewise, a
+// prerender tombstone at the row's generation is a completed render outcome,
+// matching the existing published-realm readiness behavior.
 export async function publishedHtmlHasCaughtUp(
   dbAdapter: DBAdapter,
   realmURL: string,
 ): Promise<boolean> {
-  let currentGeneration = await currentRealmGeneration(dbAdapter, realmURL);
-  if (currentGeneration == null) {
-    return true;
-  }
-  return prerenderedHtmlHasLanded(dbAdapter, realmURL, currentGeneration);
+  let rows = await query(dbAdapter, [
+    `SELECT 1
+       FROM boxel_index i
+       LEFT JOIN prerendered_html ph
+         ON ph.url = i.url AND ph.realm_url = i.realm_url AND ph.type = i.type
+      WHERE i.realm_url =`,
+    param(realmURL),
+    `  AND (i.is_deleted = false OR i.is_deleted IS NULL)
+        AND i.has_error = false
+        AND i.error_doc IS NULL
+        AND (ph.url IS NULL
+          OR ph.generation < i.generation)
+      LIMIT 1`,
+  ]);
+  // No row behind its own generation — every live row is rendered. A realm
+  // with no index rows at all (never indexed) reads as caught up.
+  return rows.length === 0;
 }
 
 // Publish a `prerender_html` job through the normal queue-publish path. The

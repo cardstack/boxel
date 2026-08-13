@@ -435,7 +435,23 @@ const data = {
       'Monaco content should exactly match the HTML code block',
     );
 
-    await waitUntil(() => document.getElementsByClassName('view-lines')[1]);
+    // Monaco paints its virtualized `view-lines` asynchronously and outside
+    // Ember's settledness tracking, so the second editor's container can be in
+    // the DOM while only its first line ("// existing code ... ") has rendered.
+    // Wait for that container to exist, then best-effort for all of its lines
+    // to paint; if painting stalls, fall through so the assertion below reports
+    // whatever did render instead of throwing on a missing element.
+    await waitUntil(
+      () => document.getElementsByClassName('view-lines').length > 1,
+    );
+    try {
+      await waitUntil(() => {
+        let secondEditor = document.getElementsByClassName('view-lines')[1];
+        return secondEditor.querySelectorAll('.view-line').length > 4;
+      });
+    } catch {
+      // best-effort — the assertion below surfaces a partial render
+    }
     assert.strictEqual(
       (document.getElementsByClassName('view-lines')[1] as HTMLElement)
         .innerText,

@@ -8,6 +8,9 @@
     "@cardstack/boxel-ui": "workspace:*",
     "@cardstack/local-types": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
+    "@ember/test-helpers": "catalog:",
+    "@types/qunit": "catalog:",
+    "@universal-ember/test-support": "catalog:",
     "concurrently": "catalog:",
     "ember-template-lint": "catalog:"
   },

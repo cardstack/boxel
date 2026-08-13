@@ -20,7 +20,15 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const SAMPLES_WINDOW = 5;
+// The retained window does double duty: the check script anchors its soft
+// (warning) gate to the window mean and sizes its hard (build-blocking) gate
+// from the window's extremes — the ceiling and the demonstrated noise band.
+// High-variance modules oscillate between large negative and large positive
+// boundary deltas over a horizon of many builds, so the window must be long
+// enough to span that oscillation: a short window can catch a single-sign
+// stretch of it and forget the other half of the module's demonstrated range,
+// leaving the hard gate sized to noise.
+const SAMPLES_WINDOW = 20;
 
 const [reportsDir, baselinePath] = process.argv.slice(2);
 

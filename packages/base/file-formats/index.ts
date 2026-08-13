@@ -65,6 +65,7 @@ export {
   ColorProfileField,
   ExifMetadataField,
   GeoLocationField,
+  HtmlMetadataField,
   METADATA_VOCABULARIES,
   QuantityField,
   labelForCode,
