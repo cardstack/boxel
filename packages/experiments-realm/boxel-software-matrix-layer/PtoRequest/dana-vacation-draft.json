@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ptoType": "vacation",
+      "startDate": "2026-12-21",
+      "endDate": "2026-12-31",
+      "reason": "End-of-year break — still checking the December payroll close schedule before submitting.",
+      "requestedDate": "2026-08-10",
+      "approvalChain": {
+        "startedAt": null,
+        "steps": []
+      },
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "employee": {
+        "links": {
+          "self": "../Employee/dana-kim"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../pto-request",
+        "name": "PtoRequest"
+      }
+    }
+  }
+}

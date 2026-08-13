@@ -1,0 +1,36 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Platform Rebuild",
+      "description": "Re-architect the core platform for multi-region deployments.",
+      "status": "active",
+      "startDate": "2026-05-01",
+      "estimatedEffort": {
+        "value": 12,
+        "unit": "weeks"
+      },
+      "cardInfo": {
+        "name": "Platform Rebuild"
+      }
+    },
+    "relationships": {
+      "lead": {
+        "links": {
+          "self": "../Employee/marcus-webb"
+        }
+      },
+      "team": {
+        "links": {
+          "self": "../Team/engineering"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../project",
+        "name": "Project"
+      }
+    }
+  }
+}

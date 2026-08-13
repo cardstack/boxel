@@ -1,0 +1,97 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Amara Okafor",
+      "email": "amara.okafor@example.com",
+      "phone": "+1 555 0141",
+      "status": "screening",
+      "boardOrder": 1,
+      "appliedRole": "Senior Backend Engineer",
+      "appliedDate": "2026-07-10",
+      "overallScore": 4,
+      "cardInfo": {
+        "name": "Amara Okafor",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "decisionDate": "2026-08-10",
+      "resumeText": null,
+      "rejectionReason": "Not a fit at this time",
+      "linkedInUrl": "https://linkedin.com/in/amara-okafor",
+      "portfolioUrl": "https://amaraokafor.dev",
+      "noticePeriodDays": 21,
+      "interviewFeedback": [
+        {
+          "interviewDate": "2026-07-22",
+          "rating": 4,
+          "notes": "Strong distributed-systems fundamentals; clear on gRPC schema evolution tradeoffs."
+        }
+      ],
+      "photo": {
+        "url": "https://images.pexels.com/photos/1373736/pexels-photo-1373736.jpeg",
+        "sourceMode": "url"
+      },
+      "workHistory": [],
+      "education": [],
+      "rejectionNote": null,
+      "offerState": "",
+      "backgroundCheck": {
+        "status": "pending",
+        "provider": "Checkr",
+        "requestedDate": "2026-08-08",
+        "completedDate": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../candidate",
+        "name": "Candidate"
+      }
+    },
+    "relationships": {
+      "position": {
+        "links": {
+          "self": "../Position/senior-backend-engineer"
+        }
+      },
+      "referredBy": {
+        "links": {
+          "self": "../Employee/sofia-reyes"
+        }
+      },
+      "skills.0": {
+        "links": {
+          "self": "../Skill/go"
+        }
+      },
+      "skills.1": {
+        "links": {
+          "self": "../Skill/postgresql"
+        }
+      },
+      "skills.2": {
+        "links": {
+          "self": "../Skill/kubernetes"
+        }
+      },
+      "skills.3": {
+        "links": {
+          "self": "../Skill/grpc"
+        }
+      },
+      "skills.4": {
+        "links": {
+          "self": "../Skill/terraform"
+        }
+      },
+      "offer": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

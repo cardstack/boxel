@@ -1,0 +1,94 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Engineering Onboarding",
+      "description": "Standard onboarding template for new engineering hires",
+      "tasks": [
+        {
+          "title": "Laptop & equipment setup",
+          "description": "Deliver hardware, set up accounts, access to repositories",
+          "dueDate": {
+            "value": 1,
+            "unit": "days"
+          },
+          "assigneeRole": "IT Manager",
+          "notes": null
+        },
+        {
+          "title": "Code repository access",
+          "description": "Ensure access to all necessary repos, CI/CD systems, and documentation",
+          "dueDate": {
+            "value": 1,
+            "unit": "days"
+          },
+          "assigneeRole": "Engineering Manager",
+          "notes": "Verify GitHub/GitLab access is enabled"
+        },
+        {
+          "title": "Team introduction & codebase walkthrough",
+          "description": "Introduce to team members, architecture overview, key systems",
+          "dueDate": {
+            "value": 2,
+            "unit": "days"
+          },
+          "assigneeRole": "Engineering Manager",
+          "notes": "Schedule 1:1 with each team member"
+        },
+        {
+          "title": "First sprint planning",
+          "description": "Assign initial tasks, set expectations for first week",
+          "dueDate": {
+            "value": 5,
+            "unit": "days"
+          },
+          "assigneeRole": "Engineering Manager",
+          "notes": "Start with documentation or small bug fixes"
+        },
+        {
+          "title": "Pair programming session",
+          "description": "Pair with senior engineer on a real task",
+          "dueDate": {
+            "value": 7,
+            "unit": "days"
+          },
+          "assigneeRole": "Engineering Manager",
+          "notes": "Good introduction to development workflow"
+        },
+        {
+          "title": "First PR review",
+          "description": "Submit first pull request and receive feedback",
+          "dueDate": {
+            "value": 10,
+            "unit": "days"
+          },
+          "assigneeRole": "Engineering Manager",
+          "notes": null
+        },
+        {
+          "title": "30-day check-in",
+          "description": "Review progress, address any challenges or questions",
+          "dueDate": {
+            "value": 30,
+            "unit": "days"
+          },
+          "assigneeRole": "Engineering Manager",
+          "notes": "Formal feedback session"
+        }
+      ],
+      "cardInfo": {
+        "name": "Engineering Onboarding",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../onboarding-template",
+        "name": "OnboardingTemplate"
+      }
+    }
+  }
+}

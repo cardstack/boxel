@@ -1,0 +1,43 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "Campaign",
+        "module": "../campaign"
+      },
+      "specType": "card",
+      "readMe": "## Campaign\n\nA marketing activity that produces leads: `name`, `campaignType` enum (webinar / ad / event / email / content / other), `status` enum (planned → running → completed, plus canceled), term dates, and `budget` / `spend` as base `AmountWithCurrency`.\n\n```ts\nimport { Campaign } from '../campaign';\n@field campaign = linksTo(Campaign);\n```\n\n`budgetUsedPercent` and `isOverBudget` compute from budget and spend, so isolated can show a spend bar that turns red past 100% without storing a ratio that would drift.\n\n**The lead points at the campaign, never the reverse.** Attribution lives on `Lead.campaign`, and a campaign's lead count, deals influenced and ROI are queries rather than stored lists — the decision-B rule for unbounded reporting aggregates. A `linksToMany` here would be the hot parent card accumulating every lead it ever produced.\n\n`Lead.source` names the channel and `Campaign.campaignType` names the activity, so the two agree by construction: a lead sourced `webinar` belongs to a webinar campaign. A lead can also have no campaign at all, which is the honest state for inbound website traffic.\n\nExamples cover a completed webinar series under budget, an always-on ad campaign that has overspent, and a planned event with no leads yet.\n\n**Non-goals:** multi-touch attribution (the spec cuts it explicitly — one campaign per lead is enough), channel spend syncing from ad platforms, audience or segment definitions, and holding the lead list.",
+      "cardInfo": {
+        "name": "Campaign",
+        "summary": "A marketing activity with budget and spend, computed budget utilisation, and leads that point back at it rather than a stored list.",
+        "notes": null,
+        "cardThumbnailURL": null
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Campaign/q3-webinar-series"
+        }
+      },
+      "linkedExamples.1": {
+        "links": {
+          "self": "../Campaign/always-on-search-ads"
+        }
+      },
+      "linkedExamples.2": {
+        "links": {
+          "self": "../Campaign/logistics-expo-2026"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

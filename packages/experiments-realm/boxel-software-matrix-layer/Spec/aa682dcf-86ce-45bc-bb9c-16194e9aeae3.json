@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Reject Candidate Command",
+      "cardDescription": "Rejects a candidate with a reason and records the decision date",
+      "specType": "command",
+      "ref": {
+        "module": "../commands/reject-candidate-command",
+        "name": "RejectCandidateCommand"
+      },
+      "readMe": "# Reject Candidate Command\n\n## Summary\nSets the candidate's status to `rejected`, stores the rejection reason and decision date, and saves the card. Refuses to reject a candidate who is already hired.\n\n## Import\n```ts\nimport { RejectCandidateCommand } from './commands/reject-candidate-command';\n```\n\n## Usage — three or more ways this is used\n\n**1. From the pipeline board's Reject button**, available at every stage except\n`hired`.\n\n**2. By dragging a card into the `rejected` column** — same command, so the\ngesture and the button cannot diverge.\n\n**3. As an AI-assistant tool**, with an optional `reason` input.\n\n**What it does:** sets `status: 'rejected'`, records the reason and a\n`decisionDate`, and **cascades to the linked Offer**, setting it to `declined`\nwith its own decision date. Without that cascade the two surfaces contradict\neach other — the candidate reading rejected while the offer still reads as\nsent-and-awaiting-reply — and `declined`, a value that exists in\n`OFFER_STATUSES` and has its own timeline rendering, would stay unreachable\nthrough the UI.\n\n**A required reason is the point.** A default reason string collects no\nreasons, and rejection-reason distribution is a report the Offers view is meant\nto answer.\n\n**Non-goals:** rejection notification email; blocklist handling.\n"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Candidate/rejected-quinn"
+        }
+      }
+    }
+  }
+}

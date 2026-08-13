@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "Board",
+        "module": "../board"
+      },
+      "specType": "component",
+      "readMe": "## Board\n\nThe layer-matrix **Board** presentation element: a generic kanban over any cards, consuming `KanbanPlane` from boxel-ui (drag engine, columns and WIP limits come free — consume, don't rebuild). The block adds the card-level contract: `@items` (CardDef[]), `@columns` ({key,label,color?}[]), `@columnKeyFor(item)`, and `@onMove(item, columnKey)` fired when a drag crosses columns — the consumer persists the result (e.g. sets `stage` and saves).\n\n```gts\nimport { Board } from '../board';\n<Board\n  @items={{this.opps}}\n  @columns={{this.stages}}\n  @columnKeyFor={{this.stageOf}}\n  @onMove={{this.setStage}}\n/>\n```\n\n`KanbanPlane` already tells a click apart from a drag, so the block hands that through in card terms rather than making a consumer reason about placements: `@onOpen(item)` fires on a tap, `@onSelect(item)` on pointer-down and on keyboard navigation, and `@onAddCard(columnKey)` renders a per-column add affordance the plane draws itself. Passing `@onAddCard` is all it takes to get \"add one here\" on every column.\n\nA tap therefore both selects and opens. That is usable rather than conflicting, because the board stays on screen when a card opens — so consumer actions belong beside the board keyed to the selection, not on the card face, which is the drag handle.\n\nCards render in their own fitted format by default — `KanbanPlane` supplies the sized container, so wrapping cards again produces dead space. Pass a `<:card as |item|>` block to customize. Column `color` tints the column header, which is how a consumer expresses stage semantics without forking the block.\n\nThe linked example mounts the board over the pipeline instances, with Opportunity and Deal on one board via adoption.\n\n**Non-goals:** persisting column order or per-card sort order (in-memory only), query-driven item loading (the consumer's job), interactive controls inside cards — the drag engine claims `pointerdown`, so a child that needs its own clicks must stop propagation.",
+      "cardInfo": {
+        "name": "Board",
+        "summary": "Generic kanban block over any cards on boxel-ui KanbanPlane: columnKeyFor maps card→column, onMove persists drags, fitted renders by default.",
+        "notes": null,
+        "cardThumbnailURL": null
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../PipelineBoardDemo/q3-pipeline"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

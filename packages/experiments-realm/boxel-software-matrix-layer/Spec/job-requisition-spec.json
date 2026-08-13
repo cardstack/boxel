@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Job Requisition",
+      "cardDescription": "Request to hire one or more people for a role: tracks approval chain, status, salary range, and linked positions",
+      "specType": "card",
+      "ref": {
+        "module": "../job-requisition",
+        "name": "JobRequisition"
+      },
+      "readMe": "# Job Requisition\n\n## Summary\nA formal request to hire one or more people for a specific role. Captures job metadata (title, department, description, salary range, headcount), tracks the approval chain (reuses ApprovalChainField from Phase A), and maintains a denormalized backlink to Positions created from this requisition.\n\n## Fields\n- `title` (StringField) — job title (e.g., \"Senior Backend Engineer\").\n- `department` (StringField) — department or team (e.g., \"Engineering\").\n- `description` (TextAreaField) — full job description.\n- `headcount` (NumberField) — how many roles to fill (usually 1).\n- `salaryRangeMin`, `salaryRangeMax` (NumberField) — salary in dollars.\n- `approvalChain` (contains ApprovalChainField) — reuses Phase A's approval chain block unchanged. Tracks who approved, when, and any comments.\n- `targetFillDate` (DateField) — target date to have the role filled.\n- `createdDate` (DateField) — when the requisition was created.\n- `filledDate` (DateField, optional) — when the role was filled.\n- `positions` (linksToMany Position) — read-only denormalized backlink. Positions created from this requisition link back here.\n- `displayTitle` (computed) — just the title, trimmed.\n- `positionTally` (computed StringField) — DENORMALIZED count of linked positions. Why it exists: the fitted format is served as prerendered HTML by the index, and prerendered fitted does not resolve linksToMany — so the fitted template reads this own-attribute instead of `positions.length`. computeVia runs at index time, when the links ARE loaded. Empty string when there are no positions, so the fitted row hides cleanly.\n- `status` (contains RequisitionStatusField) — reuses Phase A's enum: draft|approved|posted|filled|closed.\n\n## Import\n```ts\nimport { JobRequisition } from './job-requisition';\n```\n\n## Formats\n\n**Isolated:** Header with title + department + salary range card. Main panel shows the full approval chain (embedded format from ApprovalChainField — read-only stepper). Secondary section lists requisition metadata (headcount, target fill date, filled date). Optional linked positions list at bottom.\n\n**Embedded:** Title + status pill + linked positions count (e.g., \"2 positions\"). Used in search results and inline references.\n\n**Fitted:** Responsive 4-tier card, each tier ADDING fields. The requisition's own lifecycle `status` renders as a colored pill next to the title (top right) — this is the req's status, not the approval chain's. Tiers add department + salary range, then a detail list: target fill date, approval chain status, and the positions tally (read from the denormalized `positionTally`, since prerendered fitted cannot resolve the linksToMany).\n\n**Atom:** Title + status. Used in inline references (e.g., \"Position references req-123\").\n\n## Usage — three or more ways this is used\n\n**1. As the hiring pipeline entry point.** Recruiting team creates a requisition (\"Senior Backend Engineer\", $150-$190k, posted status) to formalize a headcount request. The approval chain documents who signed off and when, creating an audit trail for finance and HR.\n\n**2. As the backfill process gateway.** Manager discovers an unexpected resignation and creates a new requisition (\"Product Manager replacement\") to formally request budget and hiring authority. Status flows: draft → approved → posted → filled → closed.\n\n**3. As the contractor hiring artifact.** Same requisition for a contract role (same title, salary range, approval chain), but the resulting Positions link to contractors instead of employee candidates.\n\n**4. As the compensation baseline.** When a Position's candidate reaches offer stage, the requisition's salary range provides the bounds for negotiation and approval.\n\n**5. As the Talent & Resource Tracker's Requisitions tab.** The tracker does NOT hold requisitions in a linksToMany — it lists them via a live `getCards` query rendered through `@context.searchResultsComponent` (prerendered fitted grid), so newly created requisitions appear immediately.\n\n## Validation & Constraints\n- ApprovalChainField is reused unchanged — no customization needed for requisition approval.\n- RequisitionStatusField is reused unchanged — enum is draft|approved|posted|filled|closed. It is a primitive enumField (requisition-field.gts) with no Spec of its own: a bare enum has no compound structure for containedExamples to show, so this Spec is its documentation and `JobRequisition/senior-backend-engineer` (status `posted`) is its in-use example.\n- Positions are read-only backlinks (denormalized for fitted display); they are managed by the Position creation workflow in Phase C.\n- If no Position instances exist in the realm yet, `positions` field will be empty — that's expected; Phase C will wire this up.\n\n## Reuse notes\n- Reuses ApprovalChainField (approval-chain-field.gts) — same rendering, same step/decision model.\n- Reuses RequisitionStatusField (requisition-field.gts) — same status enum.\n- Integrates with Position (phase C) — Positions created by hiring workflow link back via requisitionId or similar.\n- Salary range formatting reuses `formatMoney` helper from utils.\n\n## Examples\n- `JobRequisition/senior-backend-engineer` — a `posted` req ($150k–$190k, headcount 1) with a two-step approval chain; demonstrates the posted status pill and the RequisitionStatusField enum in use.\n- `JobRequisition/product-manager` — an `approved` backfill req with a single-step chain; demonstrates the draft→approved flow before posting.\n\n**Non-goals:** Skill requirements, experience level tiers, location/remote eligibility, interview plan linkage — these are Position attributes (phase A/C), not Requisition attributes. A requisition is the hiring request; a position is the specific manifestation of that request (one req = N positions for headcount > 1, or one req = one position for 1 person).\n"
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../JobRequisition/senior-backend-engineer"
+        }
+      },
+      "linkedExamples.1": {
+        "links": {
+          "self": "../JobRequisition/product-manager"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

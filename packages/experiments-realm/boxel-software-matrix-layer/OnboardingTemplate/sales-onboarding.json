@@ -1,0 +1,84 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Sales Onboarding",
+      "description": "Standard onboarding template for new sales hires",
+      "tasks": [
+        {
+          "title": "Equipment & CRM setup",
+          "description": "Deliver laptop, phone, set up Salesforce/CRM access",
+          "dueDate": {
+            "value": 1,
+            "unit": "days"
+          },
+          "assigneeRole": "Sales Operations Manager",
+          "notes": "Verify CRM permissions and data access"
+        },
+        {
+          "title": "Company & product training",
+          "description": "Overview of company mission, product features, competitive landscape",
+          "dueDate": {
+            "value": 2,
+            "unit": "days"
+          },
+          "assigneeRole": "Sales Manager",
+          "notes": "Include pricing and positioning training"
+        },
+        {
+          "title": "Sales process & playbook review",
+          "description": "Learn deal stages, qualification process, negotiation strategies",
+          "dueDate": {
+            "value": 3,
+            "unit": "days"
+          },
+          "assigneeRole": "Sales Manager",
+          "notes": "Review case studies of closed deals"
+        },
+        {
+          "title": "Customer shadowing",
+          "description": "Shadow senior sales rep on calls and meetings",
+          "dueDate": {
+            "value": 7,
+            "unit": "days"
+          },
+          "assigneeRole": "Sales Manager",
+          "notes": "Multiple calls with different customer profiles"
+        },
+        {
+          "title": "Territory & lead assignment",
+          "description": "Assign territory, warm leads, initial pipeline",
+          "dueDate": {
+            "value": 10,
+            "unit": "days"
+          },
+          "assigneeRole": "Sales Manager",
+          "notes": "Start with inbound leads if new to market"
+        },
+        {
+          "title": "First client meeting",
+          "description": "Make first independent client call with manager support",
+          "dueDate": {
+            "value": 14,
+            "unit": "days"
+          },
+          "assigneeRole": "Sales Manager",
+          "notes": "Manager available for backup"
+        }
+      ],
+      "cardInfo": {
+        "name": "Sales Onboarding",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../onboarding-template",
+        "name": "OnboardingTemplate"
+      }
+    }
+  }
+}

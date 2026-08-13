@@ -1,0 +1,58 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "Invoice",
+        "module": "../invoice"
+      },
+      "specType": "card",
+      "readMe": "## Invoice\n\nBilling document: `invoiceNumber`, linked Account, issue/sent/due dates, `status` enum (draft → sent → viewed → partial → paid, plus void), `owner = linksTo(User)`, and `containsMany(LineItem)`. The total is computed from line items and never stored.\n\n**Overdue is derived, not stored.** `daysOverdue` reads 0 when the invoice is paid, void, or not yet due; `isOverdue` follows from it; and `displayStatus` returns the stored status except when the calendar overrides it. Consumers render and filter on `displayStatus` — that is what keeps an aging report and a status pill from disagreeing about the same invoice, and it means nothing has to run on a schedule to move an invoice into overdue.\n\n```ts\nimport { Invoice } from '../invoice';\n@field invoice = linksTo(Invoice);\n```\n\nSource links point *from* the invoice at what produced it — `order` and `subscription`, never the reverse — so an invoice is readable without loading its source. `payments = linksToMany(Payment)` is maintained solely by the Record Payment command, and the isolated view derives Paid and Balance-due from it, which is what lets the block carry its own balance into any consuming app.\n\nExamples cover paid, partly paid with a balance outstanding, overdue and unpaid, void with no line items, a two-payment invoice that settled in full, and a 13-line freelancer invoice to a person account with no source link.\n\n**Non-goals:** tax computation, PDF rendering, reminder scheduling, and reconciliation across accounts (the AccountMetrics block answers portfolio-level questions).",
+      "cardInfo": {
+        "name": "Invoice",
+        "summary": "Billing document with linked customer, dates, status lifecycle, and computed totals from shared LineItems.",
+        "notes": null,
+        "cardThumbnailURL": null
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Invoice/inv-2026-041"
+        }
+      },
+      "linkedExamples.1": {
+        "links": {
+          "self": "../Invoice/inv-2026-070"
+        }
+      },
+      "linkedExamples.2": {
+        "links": {
+          "self": "../Invoice/inv-2026-061"
+        }
+      },
+      "linkedExamples.3": {
+        "links": {
+          "self": "../Invoice/inv-2026-018"
+        }
+      },
+      "linkedExamples.4": {
+        "links": {
+          "self": "../Invoice/inv-f-007"
+        }
+      },
+      "linkedExamples.5": {
+        "links": {
+          "self": "../Invoice/inv-2026-052"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

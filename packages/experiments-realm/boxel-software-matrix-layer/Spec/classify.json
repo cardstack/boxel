@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "default",
+        "module": "../classify"
+      },
+      "specType": "command",
+      "readMe": "## Classify\n\nStructured LLM classification: give it `criteria` (the domain rules — allowed labels, scoring scale, which signals matter) and `facts` (a JSON object describing one item), and it returns a parsed `{ label, score, rationale }` instead of raw model text.\n\n```ts\nimport ClassifyCommand from '../classify';\nlet result = await new ClassifyCommand(commandContext).execute({\n  criteria: LEAD_SCORING_CRITERIA,\n  facts: JSON.stringify({ source, status, campaign }),\n});\nlead.score = result.score;\n```\n\n**The block does not know what a lead is.** The classifier contract — apply the caller's criteria to the caller's facts, answer in one JSON shape — is all it carries. Revenue OS supplies lead-scoring criteria (status progression, source/campaign agreement, campaign health, firmographics) and writes the returned score back onto the Lead; a different consumer could triage support tickets or grade invoice risk with the same command.\n\nThe command parses defensively: it extracts the outermost JSON object from the model output, throws with the raw text when parsing fails, and returns only typed fields — so the consumer never string-matches model prose. `llmModel` is overridable and defaults to the platform's coding model.\n\nThe facts payload is built by the consumer from what it has actually loaded — the command never fetches links itself, so the caller decides which related facts (here, the lead's campaign) are in evidence.\n\nThe linked example is the command's natural target: a qualified webinar lead attributed to a webinar campaign, where source and campaign agree and the score should come out hot.\n\n**Non-goals:** deciding the criteria (the consumer's domain knowledge), writing the result anywhere (the consumer patches its own card), batch classification, and confidence calibration across runs — one item in, one judgment out.",
+      "cardInfo": {
+        "name": "Classify",
+        "summary": "Structured LLM classification: caller's criteria plus a JSON facts payload in, a parsed label/score/rationale out. The consumer owns the rules and writes the result.",
+        "notes": null,
+        "cardThumbnailURL": null
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Lead/imani-adeyemi"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

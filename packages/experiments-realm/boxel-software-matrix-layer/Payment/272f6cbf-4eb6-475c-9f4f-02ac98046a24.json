@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "amount": {
+        "amount": 2400,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "method": "bank transfer",
+      "paidAt": "2026-08-10T00:53:15.609Z",
+      "reference": "APP-1786323195590",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "invoice": {
+        "links": {
+          "self": "../Invoice/inv-2026-052"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../payment",
+        "name": "Payment"
+      }
+    }
+  }
+}

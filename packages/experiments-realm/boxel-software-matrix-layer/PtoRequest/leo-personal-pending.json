@@ -1,0 +1,56 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ptoType": "personal",
+      "startDate": "2026-09-02",
+      "endDate": "2026-09-04",
+      "reason": "Moving apartments — need the midweek slot for the movers and utility handover.",
+      "requestedDate": "2026-08-05",
+      "approvalChain": {
+        "startedAt": "2026-08-05T10:30:00.000Z",
+        "steps": [
+          {
+            "decision": "approved",
+            "decidedAt": "2026-08-06T09:10:00.000Z",
+            "comment": "Fine by me — sprint scope already accounts for it."
+          },
+          {
+            "decision": "approved",
+            "decidedAt": "2026-08-12T04:23:24.664Z",
+            "comment": null
+          }
+        ]
+      },
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "employee": {
+        "links": {
+          "self": "../Employee/leo-park"
+        }
+      },
+      "approvalChain.steps.0.approver": {
+        "links": {
+          "self": "../Employee/marcus-webb"
+        }
+      },
+      "approvalChain.steps.1.approver": {
+        "links": {
+          "self": "../Employee/dana-kim"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../pto-request",
+        "name": "PtoRequest"
+      }
+    }
+  }
+}

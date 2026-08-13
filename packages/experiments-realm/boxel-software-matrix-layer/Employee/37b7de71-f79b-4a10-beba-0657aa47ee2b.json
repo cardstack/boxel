@@ -1,0 +1,36 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "role": "Frontend Engineer",
+      "department": null,
+      "startDate": "2026-08-10",
+      "status": "onboarding",
+      "employmentType": null,
+      "terminationDate": null,
+      "ptoBalance": null,
+      "onboardingStatus": null,
+      "salary": null,
+      "weeklyInterviewCapacityHours": null,
+      "name": "Riley Chen",
+      "email": "riley.chen@example.com",
+      "phone": null,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "photo": {
+        "url": "https://images.pexels.com/photos/1058277/pexels-photo-1058277.jpeg",
+        "sourceMode": "url"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../employee",
+        "name": "Employee"
+      }
+    }
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "Order",
+        "module": "../order"
+      },
+      "specType": "card",
+      "readMe": "## Order\n\nFulfilment document: `orderNumber`, linked Account, order date, shipping address (base `AddressField`, a second consumer alongside Account's billing address), `status` enum (pending / paid / shipped / delivered / canceled), `taxRate` (base `PercentageField`), and `containsMany(LineItem)` shared with Invoice.\n\n```ts\nimport { Order } from '../order';\n@field order = linksTo(Order);\n```\n\nSubtotal, tax and total are derived via `orderTotals()` from `../money`, and the tax-inclusive total flows through embedded and fitted as well as isolated. An Order does not point at its Invoice — the Invoice points at its Order — so fulfilment state and billing state stay independently readable. The isolated view shows a pending → paid → shipped → delivered stepper, hidden on canceled orders where it would imply progress that never happens.\n\n**Non-goals:** shipment tracking (a Logistics-kit record), inventory reservation, returns.",
+      "cardInfo": {
+        "name": "Order",
+        "summary": "Fulfilment document: customer, invoice link, shipping address, status lifecycle, shared LineItems with computed total.",
+        "notes": null,
+        "cardThumbnailURL": null
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Order/ord-2026-107"
+        }
+      },
+      "linkedExamples.1": {
+        "links": {
+          "self": "../Order/ord-2026-112"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

@@ -17,7 +17,7 @@
       "domainKit": null,
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1 \u00b7 Built as linksTo(User) on Account/Opportunity/Deal/Invoice \u2014 experiments-realm, POC tier",
+      "notes": "v1 · Built as linksTo(User) on Account/Opportunity/Deal/Invoice — experiments-realm, POC tier",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/user",
       "cardInfo": {
         "name": null,

@@ -1,0 +1,45 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Engineering Standup",
+      "meetingType": "standup",
+      "date": "2026-08-03T09:30:00.000Z",
+      "duration": {
+        "value": 15,
+        "unit": "minutes"
+      },
+      "cardInfo": {
+        "name": "Engineering Standup",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "interviewScore": null,
+      "notes": null
+    },
+    "relationships": {
+      "interviewers.0": {
+        "links": {
+          "self": "../Employee/marcus-webb"
+        }
+      },
+      "interviewers.1": {
+        "links": {
+          "self": "../Employee/priya-nair"
+        }
+      },
+      "interviewers.2": {
+        "links": {
+          "self": "../Employee/leo-park"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../meeting",
+        "name": "Meeting"
+      }
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "AngularJS",
+      "category": "framework",
+      "cardInfo": {
+        "name": "AngularJS"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../skill",
+        "name": "Skill"
+      }
+    }
+  }
+}

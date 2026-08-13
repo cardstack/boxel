@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Sofia Reyes",
+      "email": "sofia.reyes@example.com",
+      "phone": "+1 555 0101",
+      "role": "Chief Executive Officer",
+      "department": "Executive",
+      "startDate": "2022-03-01",
+      "status": "active",
+      "salary": 240000,
+      "cardInfo": {
+        "name": "Sofia Reyes"
+      },
+      "photo": {
+        "url": "https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg",
+        "sourceMode": "url"
+      }
+    },
+    "relationships": {
+      "manager": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../employee",
+        "name": "Employee"
+      }
+    }
+  }
+}

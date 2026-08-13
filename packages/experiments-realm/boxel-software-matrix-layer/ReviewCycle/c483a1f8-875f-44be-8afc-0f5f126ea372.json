@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": null,
+      "periodStart": null,
+      "periodEnd": null,
+      "status": null,
+      "description": null,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../performance-review",
+        "name": "ReviewCycle"
+      }
+    }
+  }
+}

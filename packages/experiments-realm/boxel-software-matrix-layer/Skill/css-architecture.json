@@ -1,0 +1,18 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "CSS architecture",
+      "category": "practice",
+      "cardInfo": {
+        "name": "CSS architecture"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../skill",
+        "name": "Skill"
+      }
+    }
+  }
+}

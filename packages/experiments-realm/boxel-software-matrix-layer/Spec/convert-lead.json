@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "default",
+        "module": "../convert-lead"
+      },
+      "specType": "command",
+      "readMe": "## Convert Lead\n\nThe first handoff in the revenue lifecycle: takes a Lead and creates **Account + Contact + qualified Opportunity** in one step, then marks the lead `converted` — a lead is consumed by conversion, never linked into the pipeline. The account domain is derived from the lead's email domain and the contact name is split from the lead name. Refuses disqualified and already-converted leads.\n\n```ts\nimport ConvertLeadCommand from '../convert-lead';\nlet { account, contact, opportunity } = await new ConvertLeadCommand(\n  commandContext,\n).execute({ lead });\n```\n\nThe linked example is the command's natural target: a qualified lead that has not been converted yet.\n\n**Non-goals:** lead scoring (the Classify tool's job), dedupe or merge against existing Accounts — conversion always creates fresh records, so a consumer that cares about duplicates must check before calling.",
+      "cardInfo": {
+        "name": "Convert Lead",
+        "summary": "Lead → Account + Contact + qualified Opportunity in one command; lead becomes status=converted.",
+        "notes": null,
+        "cardThumbnailURL": null
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Lead/imani-adeyemi"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

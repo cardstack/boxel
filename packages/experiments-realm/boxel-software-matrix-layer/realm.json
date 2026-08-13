@@ -1,0 +1,16 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": { "name": "Boxel Software Matrix Layer" },
+      "iconURL": "https://boxel-images.boxel.ai/icons/Letter-b.png",
+      "backgroundURL": "https://boxel-images.boxel.ai/background-images/4k-techno-floor.jpg"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "@cardstack/base/realm-config",
+        "name": "RealmConfig"
+      }
+    }
+  }
+}

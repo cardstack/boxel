@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Marcus Webb",
+      "email": "marcus.webb@example.com",
+      "phone": "+1 555 0102",
+      "role": "VP of Engineering",
+      "department": "Engineering",
+      "startDate": "2023-01-16",
+      "status": "active",
+      "employmentType": "full-time",
+      "ptoBalance": 12,
+      "salary": 195000,
+      "cardInfo": {
+        "name": "Marcus Webb"
+      },
+      "photo": {
+        "url": "https://images.pexels.com/photos/2379004/pexels-photo-2379004.jpeg",
+        "sourceMode": "url"
+      }
+    },
+    "relationships": {
+      "manager": {
+        "links": {
+          "self": "./sofia-reyes"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../employee",
+        "name": "Employee"
+      }
+    }
+  }
+}

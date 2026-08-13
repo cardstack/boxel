@@ -1,0 +1,73 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "invoiceNumber": "INV-2026-052",
+      "issueDate": "2026-07-20",
+      "sentDate": "2026-07-21",
+      "dueDate": "2026-08-19",
+      "status": "paid",
+      "lineItems": [
+        {
+          "description": "Implementation services (July)",
+          "quantity": 32,
+          "unitPrice": {
+            "amount": 120,
+            "currency": {
+              "code": "USD"
+            }
+          }
+        },
+        {
+          "description": "Priority support retainer",
+          "quantity": 1,
+          "unitPrice": {
+            "amount": 960,
+            "currency": {
+              "code": "USD"
+            }
+          }
+        }
+      ],
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../invoice",
+        "name": "Invoice"
+      }
+    },
+    "relationships": {
+      "account": {
+        "links": {
+          "self": "../Account/acme-industries"
+        }
+      },
+      "owner": {
+        "links": {
+          "self": "../Teammate/marcus-osei"
+        }
+      },
+      "payments.0": {
+        "links": {
+          "self": "../Payment/pay-inv-2026-052-1"
+        }
+      },
+      "payments.1": {
+        "links": {
+          "self": "../Payment/272f6cbf-4eb6-475c-9f4f-02ac98046a24"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/ledger"
+        }
+      }
+    }
+  }
+}

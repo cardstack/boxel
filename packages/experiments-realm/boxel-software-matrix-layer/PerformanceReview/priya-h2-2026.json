@@ -1,0 +1,84 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "scorecard": {
+        "criteria": [
+          {
+            "name": "Delivery",
+            "score": 5,
+            "notes": "Shipped the payments migration two weeks early and picked up the on-call refactor unprompted."
+          },
+          {
+            "name": "Collaboration",
+            "score": 4,
+            "notes": "Strong pairing culture with the frontend team; design reviews are consistently well prepared."
+          },
+          {
+            "name": "Technical Depth",
+            "score": 4,
+            "notes": "Owns the service architecture end-to-end; growing edge is distributed-tracing expertise."
+          }
+        ],
+        "recommendation": null,
+        "overallNotes": "Consistently the person the team routes hard backend problems to. Promotion-track trajectory if H1 2027 keeps this pace."
+      },
+      "selfAssessment": "Proudest of landing the payments migration without downtime. Next half I want to spend more time mentoring and less time as the single point of contact for the billing service.",
+      "managerSummary": "Priya exceeded delivery expectations this half and stepped up as de-facto tech lead during the migration. Agreed growth focus for H1 2027: delegate billing ownership and lead the tracing initiative.",
+      "signOff": {
+        "startedAt": "2026-08-03T09:00:00.000Z",
+        "steps": [
+          {
+            "decision": "approved",
+            "decidedAt": "2026-08-04T10:15:00.000Z",
+            "comment": "Acknowledged — matches what we discussed in the review conversation."
+          },
+          {
+            "decision": "approved",
+            "decidedAt": "2026-08-05T16:30:00.000Z",
+            "comment": "HR approved and filed for the H2 2026 cycle."
+          }
+        ]
+      },
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "employee": {
+        "links": {
+          "self": "../Employee/priya-nair"
+        }
+      },
+      "reviewer": {
+        "links": {
+          "self": "../Employee/marcus-webb"
+        }
+      },
+      "cycle": {
+        "links": {
+          "self": "../ReviewCycle/h2-2026"
+        }
+      },
+      "signOff.steps.0.approver": {
+        "links": {
+          "self": "../Employee/priya-nair"
+        }
+      },
+      "signOff.steps.1.approver": {
+        "links": {
+          "self": "../Employee/dana-kim"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../performance-review",
+        "name": "PerformanceReview"
+      }
+    }
+  }
+}

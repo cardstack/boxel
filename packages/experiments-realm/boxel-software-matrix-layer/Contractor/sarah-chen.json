@@ -1,0 +1,44 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Sarah Chen",
+      "email": "sarah.chen@contractor.com",
+      "phone": "+1 555 0201",
+      "billableRate": 95,
+      "vatId": "VAT-2024-001",
+      "invoiceFrequency": "monthly",
+      "contractStartDate": "2026-02-01",
+      "contractEndDate": "2026-09-01",
+      "photo": {
+        "url": "https://images.pexels.com/photos/1181690/pexels-photo-1181690.jpeg",
+        "sourceMode": "url"
+      },
+      "cardInfo": {
+        "name": "Sarah Chen",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "status": "active"
+    },
+    "relationships": {
+      "vendor": {
+        "links": {
+          "self": "../Vendor/talentbridge-agency"
+        }
+      },
+      "project": {
+        "links": {
+          "self": "../Project/platform-rebuild"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../contractor",
+        "name": "Contractor"
+      }
+    }
+  }
+}

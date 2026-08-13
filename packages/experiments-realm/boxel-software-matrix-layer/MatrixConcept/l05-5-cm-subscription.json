@@ -17,7 +17,7 @@
       "domainKit": "Commerce",
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1 \u00b7 Built \u2014 experiments-realm/subscription.gts, computed renewalDate, POC tier",
+      "notes": "v1 · Built — experiments-realm/subscription.gts, computed renewalDate, POC tier",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/subscription",
       "cardInfo": {
         "name": null,

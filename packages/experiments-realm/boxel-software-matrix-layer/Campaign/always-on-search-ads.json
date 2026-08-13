@@ -1,0 +1,42 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Always-on Search Ads",
+      "campaignType": "ad",
+      "status": "running",
+      "startDate": "2026-01-15",
+      "budget": {
+        "amount": 24000,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "spend": {
+        "amount": 26800,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../campaign",
+        "name": "Campaign"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/ledger"
+        }
+      }
+    }
+  }
+}

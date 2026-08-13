@@ -1,0 +1,22 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Generate Offer Letter Command",
+      "cardDescription": "Merges an Offer's real values into an OfferLetterTemplate's placeholders and writes the result to Offer.letter — deterministic string interpolation, no LLM",
+      "specType": "command",
+      "ref": {
+        "module": "../commands/generate-offer-letter-command",
+        "name": "GenerateOfferLetterCommand"
+      },
+      "readMe": "# Generate Offer Letter Command\n\n## Summary\nGiven an Offer (and optionally an OfferLetterTemplate), replaces the template body's merge placeholders with the offer's stored values and saves the merged markdown to the new `Offer.letter` field. Deliberately NOT an LLM call: an offer letter is a quasi-legal document, so the salary, dates, and title in it must be exactly the stored values, never a paraphrase.\n\n## Input Fields\n- **offer**: the Offer to generate for (linksTo, required)\n- **template**: the OfferLetterTemplate to merge (linksTo, optional — when omitted the command queries the realm for the first OfferLetterTemplate, so a one-template realm needs no picker)\n- **companyName**: replaces `{{companyName}}` (StringField, defaults to \"the Company\")\n\n## Output Fields\n- **message**: what was generated, from which template, for whom (StringField)\n- **offer**: the updated Offer (linksTo)\n\n## Merge mapping\n- `{{candidateName}}` ← offer.candidate.name\n- `{{jobTitle}}` ← offer.offeredTitle, falling back to the linked position's jobTitle\n- `{{salary}}` ← offer.salary as `$178,000`\n- `{{startDate}}` / `{{expiresDate}}` ← offer.startDate / offer.expirationDate as \"September 1, 2026\"\n- `{{companyName}}` ← input.companyName\n\nUnknown tokens are left in place (visible and greppable); a known token whose offer value is missing renders an explicit `[token not set]` gap the reviewer cannot miss.\n\n## Usage — three or more ways this is used\n1. From the Offer isolated view's \"Generate letter\" button — the panel renders `Offer.letter` and the button re-runs the merge after compensation edits (the label flips to \"Regenerate letter\").\n2. As an AI-assistant tool: attach an Offer and say \"generate the offer letter\" — the command is the mutation path, the assistant never writes the letter text itself.\n3. From offer-stage automations: after ApproveChainStepCommand completes a chain, a workflow can call this to have the letter ready the moment the offer is approved for sending.\n\n## Guards\n- offer is required\n- offer must have a linked candidate (the letter must be addressed to someone)\n- a template must exist (linked or found by realm query) and have a non-empty body\n\n## Example\nA command is not a card instance, so linkedExamples cannot hold one. The in-use stand-in is the Offer isolated view's \"Generate letter\" panel run against `OfferLetterTemplate/standard-offer`: attach any draft or extended Offer (the seed offer on disk is `Offer/df5b8208-9ecc-4132-b595-700dd0a73d77`, Morgan Lee's) and the merged markdown lands in its `letter` field, rendered in that same panel.\n\n**Non-goals:** e-signature; real PDF file generation (the Offer view's print stylesheet is the export path — browser print-to-PDF); sending the letter (no email side-effect); template editing (that is the OfferLetterTemplate card's job).\n"
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "Lead",
+        "module": "../lead"
+      },
+      "specType": "card",
+      "readMe": "## Lead\n\nAn unqualified person or company who showed interest: `name`, `company`, base email/phone, `source` enum (website/referral/webinar/ad/event/cold outreach/other), `status` enum (new → contacted → qualified | disqualified | converted), and `score` 0–100 rendered as a `ProgressBar` in isolated — written by the Classify tool or by hand.\n\n```ts\nimport { Lead } from '../lead';\n@field lead = linksTo(Lead);\n```\n\nA qualified Lead is CONVERTED rather than promoted: the Convert Lead command creates Contact + Account + Opportunity from it, and the Lead remains a capture record, not a pipeline record. Examples span the status enum: new, qualified and ready to convert, disqualified, and already converted.\n\n**Non-goals:** pipeline stages or deal value (Opportunity's job), account linkage (a Lead pre-dates the Account existing), nurture sequences.",
+      "cardInfo": {
+        "name": "Lead",
+        "summary": "Capture record before qualification: source, status (new/contacted/qualified/disqualified), 0-100 score bar. Converts to Contact+Account+Opportunity.",
+        "notes": null,
+        "cardThumbnailURL": null
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Lead/kenji-tanaka"
+        }
+      },
+      "linkedExamples.1": {
+        "links": {
+          "self": "../Lead/imani-adeyemi"
+        }
+      },
+      "linkedExamples.2": {
+        "links": {
+          "self": "../Lead/pavel-novak"
+        }
+      },
+      "linkedExamples.3": {
+        "links": {
+          "self": "../Lead/sara-okafor"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

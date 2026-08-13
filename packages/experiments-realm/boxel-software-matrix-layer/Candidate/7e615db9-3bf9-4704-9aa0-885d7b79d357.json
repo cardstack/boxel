@@ -1,0 +1,59 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "appliedRole": "Platform Engineer",
+      "appliedDate": "2026-08-06",
+      "decisionDate": "2026-08-10",
+      "status": "hired",
+      "resumeText": null,
+      "linkedInUrl": null,
+      "portfolioUrl": null,
+      "noticePeriodDays": null,
+      "interviewFeedback": [],
+      "overallScore": null,
+      "rejectionReason": null,
+      "boardOrder": 1,
+      "name": "Morgan Lee",
+      "email": "morgan.lee@example.com",
+      "phone": "+14155550188",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "offerState": "accepted",
+      "photo": {
+        "url": "https://images.pexels.com/photos/762020/pexels-photo-762020.jpeg",
+        "sourceMode": "url"
+      },
+      "workHistory": [],
+      "education": [],
+      "rejectionNote": null
+    },
+    "relationships": {
+      "position": {
+        "links": {
+          "self": "../Position/platform-engineer"
+        }
+      },
+      "offer": {
+        "links": {
+          "self": "../Offer/df5b8208-9ecc-4132-b595-700dd0a73d77"
+        }
+      },
+      "hiredAs": {
+        "links": {
+          "self": "../Employee/020c9b64-ed2c-42bc-903b-23726fbd145d"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../candidate",
+        "name": "Candidate"
+      }
+    }
+  }
+}

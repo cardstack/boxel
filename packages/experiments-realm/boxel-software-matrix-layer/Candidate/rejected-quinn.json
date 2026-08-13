@@ -1,0 +1,66 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Quinn Harper",
+      "email": "quinn.harper@example.com",
+      "status": "applied",
+      "boardOrder": 1,
+      "appliedRole": "Frontend Engineer",
+      "appliedDate": "2026-06-01",
+      "decisionDate": "2026-06-25",
+      "overallScore": 2,
+      "rejectionReason": "experience-gap",
+      "rejectionNote": "Skills did not match the current stack — no production React experience.",
+      "cardInfo": {
+        "name": "Quinn Harper (rejected)",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "resumeText": null,
+      "linkedInUrl": null,
+      "portfolioUrl": null,
+      "noticePeriodDays": null,
+      "interviewFeedback": [],
+      "phone": null,
+      "photo": {
+        "url": "https://images.pexels.com/photos/1170986/pexels-photo-1170986.jpeg",
+        "sourceMode": "url"
+      },
+      "workHistory": [],
+      "education": [],
+      "offerState": null,
+      "backgroundCheck": {
+        "status": null,
+        "provider": null,
+        "requestedDate": null,
+        "completedDate": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "position": {
+        "links": {
+          "self": "../Position/frontend-engineer"
+        }
+      },
+      "skills.0": {
+        "links": {
+          "self": "../Skill/jquery"
+        }
+      },
+      "skills.1": {
+        "links": {
+          "self": "../Skill/php"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../candidate",
+        "name": "Candidate"
+      }
+    }
+  }
+}

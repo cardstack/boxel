@@ -1,0 +1,59 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "jobTitle": "Frontend Engineer",
+      "department": "Engineering",
+      "status": "open",
+      "postedDate": "2026-06-15",
+      "targetStartDate": "2026-08-15",
+      "headcount": 2,
+      "salaryMin": 120000,
+      "salaryMax": 155000,
+      "jobDescription": "Build and maintain our design-system-driven Ember frontend. Comfortable owning features end to end.",
+      "cardInfo": {
+        "name": "Frontend Engineer",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "workLocation": "Remote (US)",
+      "employmentType": "full-time",
+      "experienceLevel": "mid",
+      "requisitionCode": null,
+      "remoteEligible": false,
+      "approvalChain": {
+        "steps": [],
+        "startedAt": null
+      }
+    },
+    "relationships": {
+      "hiringManager": {
+        "links": {
+          "self": "../Employee/marcus-webb"
+        }
+      },
+      "requiredSkills.0": {
+        "links": {
+          "self": "../Skill/typescript"
+        }
+      },
+      "requiredSkills.1": {
+        "links": {
+          "self": "../Skill/ember"
+        }
+      },
+      "requiredSkills.2": {
+        "links": {
+          "self": "../Skill/react"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../position",
+        "name": "Position"
+      }
+    }
+  }
+}

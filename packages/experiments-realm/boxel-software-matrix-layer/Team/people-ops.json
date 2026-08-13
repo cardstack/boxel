@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "People Ops",
+      "mission": "Hire, onboard, and support the team.",
+      "cardInfo": {
+        "name": "People Ops Team",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "lead": {
+        "links": {
+          "self": "../Employee/dana-kim"
+        }
+      },
+      "members.0": {
+        "links": {
+          "self": "../Employee/dana-kim"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../team",
+        "name": "Team"
+      }
+    }
+  }
+}

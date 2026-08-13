@@ -1,0 +1,22 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Standard Offer",
+      "body": "Dear {{candidateName}},\n\nOn behalf of {{companyName}}, I am delighted to offer you the position of **{{jobTitle}}**.\n\n## Compensation\n\nYour annualized base salary will be **{{salary}}**, paid in accordance with our standard payroll schedule, subject to applicable withholdings. You will also be eligible for our standard benefits program from your first day.\n\n## Start date\n\nYour anticipated start date is **{{startDate}}**. If you need to adjust this date, let us know and we will do our best to accommodate.\n\n## Accepting this offer\n\nThis offer remains open until **{{expiresDate}}**. To accept, reply to this letter in writing before that date. This offer is contingent on satisfactory completion of your background check and proof of eligibility to work.\n\nWe are excited about what you will bring to the team, and we hope you will join us.\n\nSincerely,\n\nThe {{companyName}} Talent Team",
+      "cardInfo": {
+        "name": "Standard Offer",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../offer-letter-template",
+        "name": "OfferLetterTemplate"
+      }
+    }
+  }
+}

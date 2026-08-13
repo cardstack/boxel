@@ -1,0 +1,40 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "activityType": "call",
+      "summary": "Renewal pricing call with Farah",
+      "body": "Walked through the 24-month proposal. Farah pushed back on the support retainer line; agreed to send a revised breakdown by Friday. She confirmed budget sign-off is hers alone.",
+      "occurredAt": "2026-08-06T10:30:00.000Z",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../activity",
+        "name": "Activity"
+      }
+    },
+    "relationships": {
+      "author": {
+        "links": {
+          "self": "../Teammate/dana-whitfield"
+        }
+      },
+      "about": {
+        "links": {
+          "self": "../Deal/acme-enterprise-renewal"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/ledger"
+        }
+      }
+    }
+  }
+}

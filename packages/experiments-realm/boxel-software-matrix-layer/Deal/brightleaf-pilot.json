@@ -1,0 +1,54 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Brightleaf Design Pilot",
+      "value": {
+        "amount": 4000,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "stage": "closed lost",
+      "closeDate": "2026-07-31",
+      "competitors": ["FigJam workaround"],
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      },
+      "terms": null,
+      "probability": null,
+      "lastStageChangedAt": "2026-07-20"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../deal",
+        "name": "Deal"
+      }
+    },
+    "relationships": {
+      "account": {
+        "links": {
+          "self": "../Account/brightleaf-studio"
+        }
+      },
+      "owner": {
+        "links": {
+          "self": "../Teammate/dana-whitfield"
+        }
+      },
+      "decisionMakers.0": {
+        "links": {
+          "self": "../Contact/mei-fong"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/ledger"
+        }
+      }
+    }
+  }
+}

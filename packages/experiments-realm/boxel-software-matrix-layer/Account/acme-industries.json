@@ -1,0 +1,48 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Acme Industries Sdn Bhd",
+      "email": "accounts@acme-industries.example",
+      "phone": "+60322821888",
+      "billingAddress": {
+        "addressLine1": "Level 12, Menara Acme",
+        "addressLine2": "Jalan Sultan Ismail",
+        "city": "Kuala Lumpur",
+        "state": "Wilayah Persekutuan",
+        "postalCode": "50250",
+        "country": {
+          "name": "Malaysia",
+          "code": "MY"
+        }
+      },
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      },
+      "domain": "acme-industries.example",
+      "industry": "Industrial Manufacturing",
+      "firstPaidAt": "2026-07-28"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../account",
+        "name": "Account"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/ledger"
+        }
+      },
+      "owner": {
+        "links": {
+          "self": "../Teammate/dana-whitfield"
+        }
+      }
+    }
+  }
+}

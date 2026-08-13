@@ -1,0 +1,56 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ptoType": "vacation",
+      "startDate": "2026-08-17",
+      "endDate": "2026-08-21",
+      "reason": "Family trip to the coast — booked before the H2 planning crunch starts.",
+      "requestedDate": "2026-07-28",
+      "approvalChain": {
+        "startedAt": "2026-07-28T09:00:00.000Z",
+        "steps": [
+          {
+            "decision": "approved",
+            "decidedAt": "2026-07-29T11:20:00.000Z",
+            "comment": "Coverage confirmed with the platform team."
+          },
+          {
+            "decision": "approved",
+            "decidedAt": "2026-07-30T15:45:00.000Z",
+            "comment": "Balance checked — 5 days against a 25-day annual allowance."
+          }
+        ]
+      },
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "employee": {
+        "links": {
+          "self": "../Employee/priya-nair"
+        }
+      },
+      "approvalChain.steps.0.approver": {
+        "links": {
+          "self": "../Employee/marcus-webb"
+        }
+      },
+      "approvalChain.steps.1.approver": {
+        "links": {
+          "self": "../Employee/dana-kim"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../pto-request",
+        "name": "PtoRequest"
+      }
+    }
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Acme Enterprise Renewal",
+      "value": {
+        "amount": 58000,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "stage": "negotiation",
+      "closeDate": "2026-08-25",
+      "competitors": ["LegacySoft", "StayPut Inc"],
+      "terms": "- 24-month term, annual billing\n- 8% multi-year discount contingent on signature before **Aug 25**\n- Includes priority support retainer and two on-site training days",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      },
+      "probability": null,
+      "lastStageChangedAt": "2026-08-08"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../deal",
+        "name": "Deal"
+      }
+    },
+    "relationships": {
+      "account": {
+        "links": {
+          "self": "../Account/acme-industries"
+        }
+      },
+      "owner": {
+        "links": {
+          "self": "../Teammate/dana-whitfield"
+        }
+      },
+      "decisionMakers.0": {
+        "links": {
+          "self": "../Contact/farah-zulkifli"
+        }
+      },
+      "decisionMakers.1": {
+        "links": {
+          "self": "../Contact/jason-lim"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/ledger"
+        }
+      }
+    }
+  }
+}
