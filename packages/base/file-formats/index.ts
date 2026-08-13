@@ -67,6 +67,7 @@ export {
   GeoLocationField,
   HtmlMetadataField,
   METADATA_VOCABULARIES,
+  OfficeMetadataField,
   QuantityField,
   labelForCode,
 } from './metadata-fields';

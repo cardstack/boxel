@@ -27,6 +27,7 @@ import TagsIcon from '@cardstack/boxel-icons/tags';
 
 import FileCodeIcon from '@cardstack/boxel-icons/file-code';
 import FileInfoIcon from '@cardstack/boxel-icons/file-info';
+import FileTextIcon from '@cardstack/boxel-icons/file-text';
 
 import {
   Component,
@@ -1016,6 +1017,142 @@ export class HtmlMetadataField extends FieldDef {
         dd {
           margin: 0;
           min-width: 0;
+        }
+      </style>
+    </template>
+  };
+}
+
+// What an Office document says about itself. One shape across Word, PowerPoint,
+// and Excel — they share the same core/extended properties block — with the one
+// structural count that matters to each format (`pageCount` for a document,
+// `slideCount` for a deck, `sheetCount` for a workbook) left unset for the
+// others. `previewJson` carries the bounded structural preview the family
+// renderer draws; it is a serialized string rather than nested fields for the
+// same reason `WaveformMetadataField.barsJson` is — nothing queries an
+// individual paragraph, slide, or cell, and one short string costs far less to
+// index and rehydrate than hundreds of field instances.
+export class OfficeMetadataField extends FieldDef {
+  static displayName = 'Office Metadata';
+  static icon = FileTextIcon;
+
+  // 'word' | 'presentation' | 'spreadsheet' — which Office format this is, so
+  // the renderer and the count label match without sniffing the extension.
+  @field kind = contains(StringField);
+  @field title = contains(StringField);
+  // The `dc:creator`. Named to match the serialized property; labeled "Author"
+  // where it shows, which is how the format presents it.
+  @field creator = contains(StringField);
+  @field subject = contains(StringField);
+  @field keywords = contains(StringField);
+  @field description = contains(StringField);
+  @field lastModifiedBy = contains(StringField);
+  @field application = contains(StringField);
+  @field company = contains(StringField);
+  @field created = contains(DateTimeField);
+  @field modified = contains(DateTimeField);
+  @field pageCount = contains(NumberField);
+  @field wordCount = contains(NumberField);
+  @field slideCount = contains(NumberField);
+  @field sheetCount = contains(NumberField);
+  @field sheetNames = containsMany(StringField);
+  @field previewJson = contains(TextAreaField);
+
+  static embedded = class Embedded extends Component<
+    typeof OfficeMetadataField
+  > {
+    // The structural count that matters to this format, phrased for it.
+    get structure() {
+      let m = this.args.model;
+      if (m?.kind === 'presentation' && m?.slideCount != null) {
+        return `${m.slideCount} ${m.slideCount === 1 ? 'slide' : 'slides'}`;
+      }
+      if (m?.kind === 'spreadsheet' && m?.sheetCount != null) {
+        return `${m.sheetCount} ${m.sheetCount === 1 ? 'sheet' : 'sheets'}`;
+      }
+      if (m?.pageCount != null) {
+        let pages = `${m.pageCount} ${m.pageCount === 1 ? 'page' : 'pages'}`;
+        return m.wordCount != null
+          ? `${pages} · ${m.wordCount.toLocaleString()} words`
+          : pages;
+      }
+      return '';
+    }
+
+    // The authoring application and the company the template carried, read as
+    // one provenance line rather than two near-duplicate rows.
+    get madeWith() {
+      return [this.args.model?.application, this.args.model?.company]
+        .filter(Boolean)
+        .join(' · ');
+    }
+
+    <template>
+      <dl class='metadata-rows'>
+        {{#if this.structure}}
+          <div class='row'><dt>Structure</dt><dd>{{this.structure}}</dd></div>
+        {{/if}}
+        {{#if @model.title}}
+          <div class='row'><dt>Title</dt><dd>{{@model.title}}</dd></div>
+        {{/if}}
+        {{#if @model.creator}}
+          <div class='row'><dt>Author</dt><dd>{{@model.creator}}</dd></div>
+        {{/if}}
+        {{#if @model.subject}}
+          <div class='row'><dt>Subject</dt><dd>{{@model.subject}}</dd></div>
+        {{/if}}
+        {{#if @model.keywords}}
+          <div class='row'><dt>Keywords</dt><dd>{{@model.keywords}}</dd></div>
+        {{/if}}
+        {{#if @model.sheetNames.length}}
+          <div class='row'><dt>Sheets</dt><dd class='list'>{{#each
+                @model.sheetNames as |sheet|
+              }}<span>{{sheet}}</span>{{/each}}</dd></div>
+        {{/if}}
+        {{#if @model.lastModifiedBy}}
+          <div class='row'><dt>Last edited by</dt><dd
+            >{{@model.lastModifiedBy}}</dd></div>
+        {{/if}}
+        {{#if @model.created}}
+          <div class='row'><dt>Created</dt><dd><@fields.created /></dd></div>
+        {{/if}}
+        {{#if @model.modified}}
+          <div class='row'><dt>Modified</dt><dd><@fields.modified /></dd></div>
+        {{/if}}
+        {{#if this.madeWith}}
+          <div class='row'><dt>Made with</dt><dd>{{this.madeWith}}</dd></div>
+        {{/if}}
+      </dl>
+      <style scoped>
+        .metadata-rows {
+          margin: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 0.3125rem;
+          font-size: 0.75rem;
+        }
+        .row {
+          display: flex;
+          gap: 0.625rem;
+          align-items: baseline;
+        }
+        dt {
+          flex: 0 0 5.75rem;
+          font-family: var(--font-mono);
+          font-size: 0.5625rem;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          color: var(--muted-foreground);
+        }
+        dd {
+          margin: 0;
+          min-width: 0;
+          overflow-wrap: anywhere;
+        }
+        .list {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.125rem 0.5rem;
         }
       </style>
     </template>
