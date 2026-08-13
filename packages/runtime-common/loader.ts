@@ -429,12 +429,10 @@ export class Loader {
     let resolvedModule = new URL(moduleIdentifier);
     let resolvedModuleIdentifier = resolvedModule.href;
     if (!this.moduleShims.has(resolvedModuleIdentifier)) {
-      // Tracked under the module cache's key, so a module reached by any of
-      // its spellings — virtual alias, resolved real URL, RRI prefix — is one
-      // node rather than several. Sharing the key with the cache means a
-      // module's dependency identity and its class identity can't diverge.
+      // Tracked under the form the index names this module's realm by, so a
+      // module reached by any of its spellings is one node rather than several.
       trackRuntimeModuleDependency(
-        this.moduleCacheKey(resolvedModuleIdentifier),
+        this.trackingKey(resolvedModuleIdentifier),
         dependencyTrackingContext,
       );
     }
@@ -566,7 +564,7 @@ export class Loader {
     )) {
       if (!this.moduleShims.has(moduleIdentifier)) {
         trackRuntimeModuleDependency(
-          this.moduleCacheKey(moduleIdentifier),
+          this.trackingKey(moduleIdentifier),
           dependencyTrackingContext,
         );
       }
@@ -902,6 +900,35 @@ export class Loader {
     return this.virtualNetwork
       ? this.virtualNetwork.unresolveURL(trimmed)
       : trimmed;
+  }
+
+  // The key a module is recorded under with the dependency tracker: the form
+  // the index carries for that module's realm, so a dep here matches the rows
+  // invalidation searches.
+  //
+  // A realm reached through a registered prefix is named by its RRI. A realm
+  // that has only a URL mapping — the alias a test or deployment serves it
+  // under — is named by that alias, not by the host actually serving it.
+  // `unresolveURL` covers the first and leaves the second alone (it maps an
+  // alias *to* the real URL, never back), so the alias case needs its own fold.
+  private trackingKey(moduleIdentifier: string): string {
+    let trimmed = trimModuleIdentifier(moduleIdentifier);
+    if (!this.virtualNetwork) {
+      return trimmed;
+    }
+    let unresolved = this.virtualNetwork.unresolveURL(trimmed);
+    if (unresolved !== trimmed) {
+      return unresolved;
+    }
+    try {
+      let virtual = this.virtualNetwork.mapURL(trimmed, 'real-to-virtual');
+      if (virtual) {
+        return virtual.href;
+      }
+    } catch {
+      // Not a parseable URL — a prefix-form identifier, already canonical.
+    }
+    return trimmed;
   }
 
   private getModule(moduleIdentifier: string): Module | undefined {
