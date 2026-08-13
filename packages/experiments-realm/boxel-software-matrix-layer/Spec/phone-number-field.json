@@ -10,7 +10,13 @@
       },
       "readMe": "# Phone Number\n\n## Summary\nBase-realm phone number field (primitive string with phone-aware edit UI).\nLives at `https://cardstack.com/base/phone-number` (default export\n`PhoneNumberField`).\n\n## API\nPrimitive string \u2014 store the number as entered, country code included.\n\nThe module also exports `PhoneNumberType` (an indexed label such as\nmobile/home/work) and `ContactPhoneNumber` (a compound of number + type)\nfor contact-book use cases.\n\n## Usage\n```ts\nimport PhoneNumberField from 'https://cardstack.com/base/phone-number';\n\n@field phone = contains(PhoneNumberField);\n```",
       "containedExamples": [
-        "+60 12-345 6789"
+        {
+          "phoneNumber": "+60 12-345 6789",
+          "type": {
+            "index": 0,
+            "label": "Mobile"
+          }
+        }
       ],
       "cardInfo": {
         "name": "Phone Number",
@@ -25,7 +31,7 @@
           {
             "adoptsFrom": {
               "module": "https://cardstack.com/base/phone-number",
-              "name": "default"
+              "name": "ContactPhoneNumber"
             }
           }
         ]
