@@ -7712,6 +7712,8 @@ function isGloballyPublicDependency(resourceUrl: string): boolean {
     resourceUrl.startsWith('@cardstack/boxel-icons') ||
     resourceUrl.startsWith('@cardstack/boxel-ui') ||
     resourceUrl.startsWith('@cardstack/boxel-host/commands') ||
+    resourceUrl === '@cardstack/bxl' ||
+    resourceUrl.startsWith('@cardstack/bxl/') ||
     resourceUrl.startsWith(PACKAGES_FAKE_ORIGIN)
   ) {
     return true;
@@ -7726,7 +7728,9 @@ function isGloballyPublicDependency(resourceUrl: string): boolean {
   if (
     parsed.hostname === 'packages' &&
     (parsed.pathname.startsWith('/@cardstack/boxel-ui') ||
-      parsed.pathname.startsWith('/@cardstack/boxel-host/commands'))
+      parsed.pathname.startsWith('/@cardstack/boxel-host/commands') ||
+      parsed.pathname === '/@cardstack/bxl' ||
+      parsed.pathname.startsWith('/@cardstack/bxl/'))
   ) {
     return true;
   }

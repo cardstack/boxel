@@ -186,6 +186,22 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('rsvp', rsvp);
   virtualNetwork.shimModule('super-fast-md5', superFastMD5);
   virtualNetwork.shimModule('tracked-built-ins', tracked);
+  // BXL is card-facing: any card module may `import { expression, fx, jq }
+  // from '@cardstack/bxl'` for computeVia formulas. The async shim keeps the
+  // library out of the host's initial chunk graph — it loads only when a card
+  // that uses it loads. `expression()` evaluates synchronously (computeVia
+  // cannot await), so the resolver folds in the lazy formula families
+  // (statistical, Bessel, engineering/financial, validation) before serving
+  // the module: cards get the full Excel-function surface without knowing
+  // about chunking.
+  virtualNetwork.shimAsyncModule({
+    id: '@cardstack/bxl',
+    resolve: async () => {
+      let bxl = await import('@cardstack/bxl');
+      await bxl.loadAllFormulaExtensions();
+      return bxl;
+    },
+  });
   virtualNetwork.shimAsyncModule({
     id: 'ethers',
     resolve: () => import('ethers'),
