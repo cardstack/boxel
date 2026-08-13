@@ -151,6 +151,19 @@ export const bxlTrackingCardSource = `
       ),
     });
 
+    // The claims inverse and each claim's policy link form a true cycle.
+    // Walking the back-edge re-enters this policy, which BXL clips to a
+    // bounded { id } reference — so this reads as one own-id per claim.
+    @field claimPolicyIds = containsMany(StringField, {
+      computeVia: expression(jq\`[.claims[] | .policy.id]\`),
+    });
+    // A structural operation across the cycle: unique compares the claims
+    // by their materialized field values (their back-edges clip), so
+    // distinct claims stay distinct and the comparison terminates.
+    @field distinctClaimCount = contains(NumberField, {
+      computeVia: expression(jq\`[.claims[]] | unique | length\`),
+    });
+
     // Excel error sentinels are first-class spreadsheet values; the factory
     // catches them at the boundary and surfaces null so the indexer never
     // tears down the card.
