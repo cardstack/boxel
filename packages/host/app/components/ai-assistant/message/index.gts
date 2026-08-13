@@ -6,6 +6,7 @@ import { scheduleOnce } from '@ember/runloop';
 import { service } from '@ember/service';
 import type { SafeString } from '@ember/template';
 import Component from '@glimmer/component';
+import { cached } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
@@ -636,6 +637,7 @@ export default class AiAssistantMessage extends Component<Signature> {
   // The provider's token counts for the turn that produced this message.
   // Shown only behind the `showTokens` query param: it is a diagnostic for
   // measuring prompt cost, not something every reader needs to see.
+  @cached
   private get tokenUsage() {
     if (!this.operatorModeStateService.operatorModeController.showTokens) {
       return undefined;

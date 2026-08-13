@@ -1139,6 +1139,7 @@ export default class Room extends Component<Signature> {
   // summed rather than read off the last turn because each turn re-sends the
   // whole conversation — the sum is what the provider actually billed. Shown
   // only behind the `showTokens` query param.
+  @cached
   private get conversationTokenUsage() {
     if (!this.operatorModeStateService.operatorModeController.showTokens) {
       return undefined;
@@ -1152,7 +1153,12 @@ export default class Room extends Component<Signature> {
     let turnsWithUsage = 0;
     for (let message of this.messages) {
       let usage = message.usage;
-      if (!usage) {
+      // Same gate as the per-message line: a usage object without token
+      // counts must not add a turn to the total that line never shows.
+      if (
+        !usage ||
+        (usage.promptTokens == null && usage.completionTokens == null)
+      ) {
         continue;
       }
       turnsWithUsage++;
