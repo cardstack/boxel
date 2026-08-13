@@ -15,7 +15,10 @@ import {
   setupIntegrationTestRealm,
 } from '../helpers';
 import { setupBaseRealm } from '../helpers/base-realm';
-import { bxlTrackingRealmContents } from '../helpers/cards/bxl-tracking';
+import {
+  bxlTrackingPol100Renewal,
+  bxlTrackingRealmContents,
+} from '../helpers/cards/bxl-tracking';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { renderCard } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
@@ -37,9 +40,7 @@ module('Integration | bxl platform module', function (hooks) {
   let loader: Loader;
   let realm: Realm;
 
-  setupLocalIndexing(hooks, {
-    reuseIndexAcrossTests: 'bxlPlatformModule',
-  });
+  setupLocalIndexing(hooks);
   setupCardLogs(
     hooks,
     async () => await loader.import('@cardstack/base/card-api'),
@@ -77,11 +78,25 @@ module('Integration | bxl platform module', function (hooks) {
     // fx mode; PMT comes from the lazily-loaded financial formula chunk, so
     // this value also proves chunk loading works inside the indexing path
     assert.strictEqual(searchDoc.monthlyPayment, 1032.8);
-    // jq mode over the query-backed claims
+    // linksTo traversal — link targets load from source, so this is correct
+    // on the very first pass
+    assert.strictEqual(searchDoc.customerName, 'Acme Freight');
+
+    // Query-backed inverses resolve against the LIVE index at visit time,
+    // and a realm's first-ever index pass runs with an empty live index —
+    // so the claims aggregations bake in their empty-set values…
+    assert.strictEqual(searchDoc.paidClaimsTotal, 0);
+    assert.strictEqual(searchDoc.openClaimCount, 0);
+
+    // …and the next visit of the policy converges them, now that the
+    // claims are live.
+    await realm.write(
+      'Policy/pol-100.json',
+      JSON.stringify(bxlTrackingPol100Renewal),
+    );
+    searchDoc = await indexedSearchDoc(`${testRealmURL}Policy/pol-100`);
     assert.strictEqual(searchDoc.paidClaimsTotal, 3980.75);
     assert.strictEqual(searchDoc.openClaimCount, 1);
-    // linksTo traversal
-    assert.strictEqual(searchDoc.customerName, 'Acme Freight');
     // chained computeds
     assert.strictEqual(searchDoc.lossRatio, 0.4567);
   });

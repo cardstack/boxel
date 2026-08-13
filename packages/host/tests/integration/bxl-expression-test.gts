@@ -22,7 +22,10 @@ import {
   getFields,
   setupBaseRealm,
 } from '../helpers/base-realm';
-import { bxlTrackingRealmContents } from '../helpers/cards/bxl-tracking';
+import {
+  bxlTrackingPol100Renewal,
+  bxlTrackingRealmContents,
+} from '../helpers/cards/bxl-tracking';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
 
@@ -44,9 +47,7 @@ module('Integration | bxl expressions on real cards', function (hooks) {
   let loader: Loader;
   let realm: Realm;
 
-  setupLocalIndexing(hooks, {
-    reuseIndexAcrossTests: 'bxlExpressionCore',
-  });
+  setupLocalIndexing(hooks);
   setupCardLogs(
     hooks,
     async () => await loader.import('@cardstack/base/card-api'),
@@ -64,6 +65,16 @@ module('Integration | bxl expressions on real cards', function (hooks) {
       mockMatrixUtils,
       contents: bxlTrackingRealmContents,
     }));
+    // Query-backed inverses resolve against the live index at visit time, and
+    // the from-scratch pass above ran with an empty live index — POL-100's
+    // claims aggregations baked in their empty-set values (that first-pass
+    // contract is pinned by the platform-module suite). Re-visiting the
+    // policy now that the claims are live converges them; the assertions in
+    // this suite are all against the converged state.
+    await realm.write(
+      'Policy/pol-100.json',
+      JSON.stringify(bxlTrackingPol100Renewal),
+    );
   });
 
   async function indexedSearchDoc(id: string) {

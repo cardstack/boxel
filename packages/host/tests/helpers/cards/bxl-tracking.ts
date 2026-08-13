@@ -200,6 +200,36 @@ export const bxlTrackingCardSource = `
 // has neither amounts nor a policy: its own computeds fall back to Excel
 // blank semantics, its two-hop path yields null, and it stays out of both
 // policies' query-backed claims.
+//
+// Query-backed inverses (Policy.claims) resolve against the LIVE index at
+// visit time, while linksTo traversal loads targets from source. On a
+// realm's first-ever index pass the live index is empty, so POL-100's
+// claims aggregations bake in their empty-set values; the next visit of
+// the policy converges them. Tests that assert converged aggregations
+// re-write POL-100 with `bxlTrackingPol100Renewal` to trigger that visit.
+function pol100Doc(policyStatus: string) {
+  return {
+    data: {
+      type: 'card',
+      attributes: {
+        policyId: 'POL-100',
+        policyStatus,
+        annualPremium: 12000,
+        financingApr: 0.06,
+      },
+      relationships: {
+        customer: { links: { self: '../Customer/acme' } },
+        underwriter: { links: { self: '../Underwriter/dana' } },
+      },
+      meta: {
+        adoptsFrom: { module: '../tracking', name: 'Policy' },
+      },
+    },
+  };
+}
+
+export const bxlTrackingPol100Renewal = pol100Doc('Renewed');
+
 export const bxlTrackingRealmContents: Record<string, unknown> = {
   'tracking.gts': bxlTrackingCardSource,
   'Customer/acme.json': {
@@ -217,38 +247,6 @@ export const bxlTrackingRealmContents: Record<string, unknown> = {
       attributes: { name: 'Dana Reeve' },
       meta: {
         adoptsFrom: { module: '../tracking', name: 'Underwriter' },
-      },
-    },
-  },
-  'Policy/pol-100.json': {
-    data: {
-      type: 'card',
-      attributes: {
-        policyId: 'POL-100',
-        policyStatus: 'Active',
-        annualPremium: 12000,
-        financingApr: 0.06,
-      },
-      relationships: {
-        customer: { links: { self: '../Customer/acme' } },
-        underwriter: { links: { self: '../Underwriter/dana' } },
-      },
-      meta: {
-        adoptsFrom: { module: '../tracking', name: 'Policy' },
-      },
-    },
-  },
-  'Policy/pol-200.json': {
-    data: {
-      type: 'card',
-      attributes: {
-        policyId: 'POL-200',
-        policyStatus: 'Lapsed',
-        annualPremium: 8000,
-        financingApr: 0.05,
-      },
-      meta: {
-        adoptsFrom: { module: '../tracking', name: 'Policy' },
       },
     },
   },
@@ -295,6 +293,21 @@ export const bxlTrackingRealmContents: Record<string, unknown> = {
       },
       meta: {
         adoptsFrom: { module: '../tracking', name: 'Claim' },
+      },
+    },
+  },
+  'Policy/pol-100.json': pol100Doc('Active'),
+  'Policy/pol-200.json': {
+    data: {
+      type: 'card',
+      attributes: {
+        policyId: 'POL-200',
+        policyStatus: 'Lapsed',
+        annualPremium: 8000,
+        financingApr: 0.05,
+      },
+      meta: {
+        adoptsFrom: { module: '../tracking', name: 'Policy' },
       },
     },
   },
