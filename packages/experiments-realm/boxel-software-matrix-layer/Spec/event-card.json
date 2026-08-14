@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Event card",
+      "specType": "card",
+      "ref": {
+        "module": "../event",
+        "name": "Event"
+      },
+      "readMe": "# Event\n\n## Summary\nSomething that happens at a time, usually at a place, usually with an\naudience. Shared-realm block at `event.gts`. What KIND of happening (a\nmatch, a gig, an open day) is the consumer's `kind` label; the domain's\nextras (opponent, headliner, home/away) live on the consumer's extending\ncard.\n\n## API\n- `title`, `kind`, `description`\n- `startsAt` / `endsAt` — DateTimeFields (instants; an all-day event is one whose consumer chose not to render the times)\n- `venue` — linksTo Location\n- `capacity` — the Capacity field: the configured ceiling and named slices\n- `status` — Draft / Scheduled / Live / Completed / Cancelled (`EventStatusField`, also exported; Cancelled can be reinstated — postponements do exactly this)\n\nEmbedded and fitted lead with a date block — events are found by date\nfirst, name second.\n\n## Usage\n```ts\nimport { Event, EventStatusField } from '../event';\n\nclass Match extends Event { /* opponent, homeAway, competition */ }\n```\n\n## Non-goals\nHow much is booked against the capacity is live Booking data the consumer\nqueries — never stored here. Recurrence (weekly classes) is a schedule\nconcern, one level up: a recurring thing GENERATES events, it is not an\nevent with a repeat flag. Ticket pricing tiers and sales windows are\nselling concerns for the consumer.",
+      "cardInfo": {
+        "name": "Event",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Event/northbridge-v-riverton"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Check In Booking command",
+      "specType": "command",
+      "ref": {
+        "module": "../check-in-booking",
+        "name": "default"
+      },
+      "readMe": "# Check In Booking\n\n## Summary\nRecords that the holder actually arrived. Shared-realm command at\n`check-in-booking.gts`. Writes the booking's `checkedInAt` exactly once —\na second scan is refused with the original time, which is what makes a\nticket one-time-use — and flips `rsvp` to Going, because turning up\noutranks whatever the RSVP said.\n\n## API\nInput: `booking` (linksTo Booking), `realm`. Result: the booking, the\n`checkedInAt` instant, a message. A Declined booking is refused: the\nrecord says they cancelled, so the front desk gets an error to resolve,\nnot a silent re-admission.\n\n## Usage\nThe scan handler's single call. Whatever should FOLLOW arrival —\nattendance points (Credit Points), a survey trigger — is the consumer's\nmove, chained after this command's result.\n\n## Example\nThe linked Booking is the natural target — Going, paid, not yet checked\nin: exactly what a turnstile sees.\n\n## Non-goals\nNo QR validation or hardware protocol — decoding a pass and finding the\nbooking it names is the integration's job; this command is the state\nchange behind it. No occupancy math: live headcounts are queries over\n`checkedInAt`.",
+      "cardInfo": {
+        "name": "Check In Booking",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Booking/bk-20260912-00417"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
