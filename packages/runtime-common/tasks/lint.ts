@@ -155,7 +155,24 @@ async function initTemplateLinter(): Promise<any> {
   const hostRequire = Module.createRequire(resolve(HOST_PKG, 'package.json'));
   const tlModule = hostRequire('ember-template-lint');
   const TemplateLinter = (tlModule as any).default ?? tlModule;
-  return new TemplateLinter({ workingDir: HOST_PKG });
+  // Host's config, minus rules the rest of this pipeline contradicts.
+  // Prettier (the pass right before template-lint) wraps text nodes longer
+  // than its print width across indented lines; no-whitespace-for-layout
+  // flags exactly that wrap and has no autofix, so for any over-width text
+  // node the pipeline would report an error that no edit can clear — the
+  // formatter reverts every attempted whitespace fix. The wrapped whitespace
+  // collapses at render, so nothing is lost by not flagging it.
+  const hostTemplateLintConfig = hostRequire('./.template-lintrc.js');
+  return new TemplateLinter({
+    workingDir: HOST_PKG,
+    config: {
+      ...hostTemplateLintConfig,
+      rules: {
+        ...hostTemplateLintConfig.rules,
+        'no-whitespace-for-layout': false,
+      },
+    },
+  });
 }
 
 // ---------------------------------------------------------------------------
