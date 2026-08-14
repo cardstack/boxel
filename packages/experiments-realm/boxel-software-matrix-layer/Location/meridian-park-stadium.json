@@ -1,0 +1,40 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Meridian Park Stadium",
+      "kind": "Stadium",
+      "address": {
+        "addressLine1": "1 Meridian Way",
+        "addressLine2": null,
+        "city": "Northbridge",
+        "state": "Greater Manchester",
+        "postalCode": "M40 7XB",
+        "country": {
+          "name": "United Kingdom",
+          "code": "GB"
+        },
+        "poBoxNumber": null
+      },
+      "geo": {
+        "lat": 53.4831,
+        "lon": -2.2004
+      },
+      "phone": "+441612345678",
+      "website": "https://meridianparkstadium.example",
+      "description": "Home ground of Northbridge FC since 1996. Four covered stands, step-free access on all levels, and rail links from Northbridge Central every ten minutes on match days.",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../location",
+        "name": "Location"
+      }
+    }
+  }
+}
