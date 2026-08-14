@@ -1,0 +1,26 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Loyalty Dashboard",
+      "specType": "component",
+      "ref": {
+        "module": "../components/loyalty-dashboard",
+        "name": "LoyaltyDashboard"
+      },
+      "readMe": "# Loyalty Dashboard\n\n## Summary\nThe member's home view of their standing: who they are to the program,\nthe numbers that matter (balance, lifetime), what just happened, and what\nis about to expire. Shared-realm component at\n`components/loyalty-dashboard.gts`. One component so every loyalty app's\nhome screen carries the same reading order — identity, standing,\nmovement, urgency, actions.\n\n## API\n- `@account` — a Loyalty Account card\n- `@tier` — the account's resolved rung; the consumer owns its ladder, so it resolves once: `tierOption(MyTierField, account.tier)`\n- `@transactions` — recent ledger rows, newest first, already queried and sliced by the consumer\n- `@expiringPoints` / `@expiringOn` — the expiry callout, precomputed by the consumer (FIFO expiry math is the program's business)\n- `:actions` block — the consumer's calls to action (view rewards, upgrade, renew)\n\n## Example\nMounted by the Club Membership app's member home (Wave D) — linked once\nthat lands.\n\n## Non-goals\nThe dashboard renders what it is handed and never counts, sums or expires\nanything itself — the ledger query, the balance and the expiry math all\nbelong to the program (see the Credit Points spec). Rewards browsing is a\ncatalog surface, not a dashboard panel; it hangs off the `:actions`\nblock.",
+      "cardInfo": {
+        "name": "Loyalty Dashboard",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

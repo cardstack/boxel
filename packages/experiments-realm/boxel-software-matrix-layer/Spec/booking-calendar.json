@@ -1,0 +1,26 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Booking Calendar",
+      "specType": "component",
+      "ref": {
+        "module": "../components/booking-calendar",
+        "name": "BookingCalendar"
+      },
+      "readMe": "# Booking Calendar\n\n## Summary\nThe month grid read as a booking surface: every chip answers \"can I still\nget in?\" at a glance — a five-dot availability meter while places remain,\nan explicit SOLD OUT once none do. Shared-realm component at\n`components/booking-calendar.gts`, composing the generic Calendar's chip\nblock rather than drawing its own grid.\n\n## API\n- `@events` — `BookingCalendarEvent[]`: CalendarEvent plus optional `capacity` (the ceiling from the consumer's event card) and `booked` (the live claim count the consumer computed from its bookings). Events without them render as plain chips\n- `@kindColors` — kind → color map, same contract as Calendar's\n- `@onSelectEvent` — click-through to the fixture\n- `@limitedThreshold` — remaining share at or below which a meter reads amber (default 0.15)\n\nDeliberately no drag-reschedule and no add button: an audience browses\nfixtures, it does not move them. Admin scheduling mounts the generic\nCalendar instead.\n\n## Example\nMounted by the Club Membership app's fixtures view (Wave D) — linked once\nthat lands.\n\n## Non-goals\nAvailability is presentation only — this component never counts bookings\nor reads sales windows; both arrive precomputed. Per-tier on-sale\ncountdowns are the consumer's chrome around the grid.",
+      "cardInfo": {
+        "name": "Booking Calendar",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
