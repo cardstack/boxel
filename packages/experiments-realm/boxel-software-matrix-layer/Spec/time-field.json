@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Time field",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/time",
+        "name": "default"
+      },
+      "readMe": "# Time\n\n## Summary\nBase-realm field. Lives at `https://cardstack.com/base/time` (default export). Time of day as `{ value: 'HH:MM' }` (24h) with hour-cycle/time-style display configuration and a time-slots presentation mode. Composed by Time Range.\n\n## Usage\n```ts\nimport TimeField from 'https://cardstack.com/base/time';\n```\n\nThe contained example shows the serialized shape.",
+      "containedExamples": [
+        {
+          "value": "14:30"
+        }
+      ],
+      "cardInfo": {
+        "name": "Time",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      },
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "https://cardstack.com/base/time",
+              "name": "default"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

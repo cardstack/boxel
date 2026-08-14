@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Enum field",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/enum",
+        "name": "default"
+      },
+      "readMe": "# Enum\n\n## Summary\nBase-realm field. Lives at `https://cardstack.com/base/enum` (default export). Field factory, not a FieldDef: `enumField(StringField, { options })` returns a constrained subclass with a dropdown edit UI. The module also exports `enumConfig`/`normalizeEnumOptions`/`enumAllowedValues`. This realm's MatrixConcept lane/state fields are built with it.\n\n## Usage\n```ts\nimport enumField from 'https://cardstack.com/base/enum';\n```\n\nExample: `const LaneField = enumField(StringField, { options: ['Fields & Types', …] })`",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Enum",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

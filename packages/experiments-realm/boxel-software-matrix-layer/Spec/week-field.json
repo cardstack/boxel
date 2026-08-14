@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Week field",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/date/week",
+        "name": "default"
+      },
+      "readMe": "# Week\n\n## Summary\nBase-realm field. Lives at `https://cardstack.com/base/date/week` (default export). ISO week as `{ value: 'YYYY-Www' }`.\n\n## Usage\n```ts\nimport WeekField from 'https://cardstack.com/base/date/week';\n```\n\nThe contained example shows the serialized shape.",
+      "containedExamples": [
+        {
+          "value": "2026-W33"
+        }
+      ],
+      "cardInfo": {
+        "name": "Week",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      },
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "https://cardstack.com/base/date/week",
+              "name": "default"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

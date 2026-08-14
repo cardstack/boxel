@@ -1,0 +1,44 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Card Info field",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/card-api",
+        "name": "CardInfoField"
+      },
+      "readMe": "# Card Info\n\n## Summary\nBase-realm field. Lives at `https://cardstack.com/base/card-api` (named export `CardInfoField`). The compound identity field every CardDef carries as `cardInfo`: name, summary, notes, thumbnail, plus theme selection. Hand-authored instance JSON should always include it in full.\n\n## Usage\n```ts\nimport { CardInfoField } from 'https://cardstack.com/base/card-api';\n```\n\nThe contained example shows the serialized shape.",
+      "containedExamples": [
+        {
+          "name": "Quarterly Report",
+          "summary": "Q3 revenue rollup",
+          "notes": null,
+          "cardThumbnailURL": null
+        }
+      ],
+      "cardInfo": {
+        "name": "Card Info",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      },
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "https://cardstack.com/base/card-api",
+              "name": "CardInfoField"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Month Year field",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/date/month-year",
+        "name": "default"
+      },
+      "readMe": "# Month Year\n\n## Summary\nBase-realm field. Lives at `https://cardstack.com/base/date/month-year` (default export). A month in a specific year as `{ value: 'YYYY-MM' }` (statements, billing periods).\n\n## Usage\n```ts\nimport MonthYearField from 'https://cardstack.com/base/date/month-year';\n```\n\nThe contained example shows the serialized shape.",
+      "containedExamples": [
+        {
+          "value": "2026-08"
+        }
+      ],
+      "cardInfo": {
+        "name": "Month Year",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      },
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "https://cardstack.com/base/date/month-year",
+              "name": "default"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

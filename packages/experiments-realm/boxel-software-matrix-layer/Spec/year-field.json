@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Year field",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/date/year",
+        "name": "default"
+      },
+      "readMe": "# Year\n\n## Summary\nBase-realm field. Lives at `https://cardstack.com/base/date/year` (default export). Calendar year as `{ value }`.\n\n## Usage\n```ts\nimport YearField from 'https://cardstack.com/base/date/year';\n```\n\nThe contained example shows the serialized shape.",
+      "containedExamples": [
+        {
+          "value": 2026
+        }
+      ],
+      "cardInfo": {
+        "name": "Year",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      },
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "https://cardstack.com/base/date/year",
+              "name": "default"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

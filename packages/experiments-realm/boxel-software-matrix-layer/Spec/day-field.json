@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Day field",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/date/day",
+        "name": "default"
+      },
+      "readMe": "# Day\n\n## Summary\nBase-realm field. Lives at `https://cardstack.com/base/date/day` (default export). Day-of-month value (1–31) as `{ value }`, for recurring-schedule shapes where the month is not fixed.\n\n## Usage\n```ts\nimport DayField from 'https://cardstack.com/base/date/day';\n```\n\nThe contained example shows the serialized shape.",
+      "containedExamples": [
+        {
+          "value": 14
+        }
+      ],
+      "cardInfo": {
+        "name": "Day",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      },
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "https://cardstack.com/base/date/day",
+              "name": "default"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Rich Markdown field",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/rich-markdown",
+        "name": "default"
+      },
+      "readMe": "# Rich Markdown\n\n## Summary\nBase-realm field. Lives at `https://cardstack.com/base/rich-markdown` (default export). Compound markdown with card/file reference tracking: `body` plus resolved `cardReferenceUrls`/`fileReferenceUrls`, so embedded links survive as real references.\n\n## Usage\n```ts\nimport RichMarkdownField from 'https://cardstack.com/base/rich-markdown';\n```\n\nExample: compound — `body` holds the markdown; reference URL arrays are maintained by the editor",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Rich Markdown",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

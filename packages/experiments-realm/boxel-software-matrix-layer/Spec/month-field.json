@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Month field",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/date/month",
+        "name": "default"
+      },
+      "readMe": "# Month\n\n## Summary\nBase-realm field. Lives at `https://cardstack.com/base/date/month` (default export). Month value (1–12) as `{ value }`.\n\n## Usage\n```ts\nimport MonthField from 'https://cardstack.com/base/date/month';\n```\n\nThe contained example shows the serialized shape.",
+      "containedExamples": [
+        {
+          "value": 8
+        }
+      ],
+      "cardInfo": {
+        "name": "Month",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      },
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "https://cardstack.com/base/date/month",
+              "name": "default"
+            }
+          }
+        ]
+      }
+    }
+  }
+}
