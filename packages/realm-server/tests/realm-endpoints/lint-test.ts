@@ -621,6 +621,46 @@ export class MyCard extends CardDef {
       );
     });
 
+    test('does not flag the whitespace prettier introduces by wrapping long text', async function (assert) {
+      // Prettier wraps text nodes longer than its print width across
+      // indented lines; no-whitespace-for-layout flags exactly that wrap and
+      // has no autofix, so reporting it would hand back an issue no edit can
+      // clear — the formatter reverts every attempted whitespace fix.
+      let longText =
+        'WELCOME TO MY HOMEPAGE &nbsp;&nbsp;&nbsp; HOT SITE AWARD WINNER &nbsp;&nbsp;&nbsp; BEST VIEWED IN 800x600 &nbsp;&nbsp;&nbsp;';
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .send(`import { CardDef } from '@cardstack/base/card-api';
+export class MyCard extends CardDef {
+}
+<template>
+  <div class='marquee'>
+    <span>${longText}</span>
+  </div>
+</template>
+`);
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let responseJson = JSON.parse(response.text);
+      assert.ok(
+        /<span>[^<]*\n[^<]*<\/span>/.test(responseJson.output),
+        'prettier wrapped the long text node across lines',
+      );
+      let whitespaceMessage = responseJson.messages.find(
+        (m: any) => m.ruleId === 'no-whitespace-for-layout',
+      );
+      assert.notOk(
+        whitespaceMessage,
+        'no-whitespace-for-layout is not reported for formatter-introduced wrapping',
+      );
+    });
+
     test('handles nested template structures correctly', async function (assert) {
       let response = await request
         .post('/_lint')
