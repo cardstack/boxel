@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Loyalty Account card",
+      "specType": "card",
+      "ref": {
+        "module": "../loyalty-account",
+        "name": "LoyaltyAccount"
+      },
+      "readMe": "# Loyalty Account\n\n## Summary\nA membership in a loyalty program — the account that accumulates standing,\nnot the person. Shared-realm block at `loyalty-account.gts`. The person is a\nlinked Contact; one person can hold accounts in many programs, and the\nprogram's history belongs to the account so it survives the person's details\nchanging.\n\n## API\n- `memberNumber` — MemberNumberField\n- `holder` — linksTo Contact\n- `tier` — the neutral default LoyaltyTierField ladder; a program with its own ladder redeclares `tier` with `loyaltyTierField(...)` in its extending card\n- `tierSince`, `memberSince` — DateFields (event facts)\n- `status` — Active / Lapsed / Closed (statusField; Lapsed is recoverable, Closed reopens only by re-enrolment)\n- `pointsBalance`, `lifetimePoints` — PointsBalanceFields **maintained solely by the Credit Points command** against the PointsTransaction ledger; nothing else assigns them\n- `PointsTransaction` (same module) — the ledger row: signed `amount`, `reason`, `source` label, `occurredAt`, optional `expiresAt`, linksTo account\n\n## Usage\n```ts\nimport { LoyaltyAccount } from '../loyalty-account';\n\nclass Member extends LoyaltyAccount { /* program specifics */ }\n```\n\n## Non-goals\nAn account's transaction history is a query for its PointsTransactions,\nnever a link array here — it grows without bound. Earning rules,\nmultipliers and tier thresholds are the program's arithmetic, done by\nwhatever calls Credit Points. Rewards catalogs and redemption fulfilment\nare their own blocks.",
+      "cardInfo": {
+        "name": "Loyalty Account",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../LoyaltyAccount/jason-lim"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

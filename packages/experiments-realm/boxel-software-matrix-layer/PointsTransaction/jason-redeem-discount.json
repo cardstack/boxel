@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "amount": -500,
+      "reason": "Redeemed merchandise discount",
+      "source": "Redemption",
+      "occurredAt": "2026-08-05T14:30:00.000Z",
+      "expiresAt": null,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "account": {
+        "links": {
+          "self": "../LoyaltyAccount/jason-lim"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../loyalty-account",
+        "name": "PointsTransaction"
+      }
+    }
+  }
+}

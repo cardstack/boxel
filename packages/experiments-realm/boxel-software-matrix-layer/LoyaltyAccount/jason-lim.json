@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "memberNumber": "NBF-2019-00004821",
+      "tier": "Gold",
+      "tierSince": "2023-07-01",
+      "memberSince": "2019-08-10",
+      "status": "Active",
+      "pointsBalance": 3450,
+      "lifetimePoints": 12800,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "holder": {
+        "links": {
+          "self": "../Contact/jason-lim"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../loyalty-account",
+        "name": "LoyaltyAccount"
+      }
+    }
+  }
+}

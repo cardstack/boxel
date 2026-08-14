@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Credit Points command",
+      "specType": "command",
+      "ref": {
+        "module": "../credit-points",
+        "name": "default"
+      },
+      "readMe": "# Credit Points\n\n## Summary\nThe single writer for a loyalty account's points. Shared-realm command at\n`credit-points.gts`. Appends one PointsTransaction to the ledger and moves\nthe account's maintained numbers (`pointsBalance`, and `lifetimePoints` for\nearns) in the same run — which is exactly why nothing else may assign them.\n\n## API\nInput: `account` (linksTo Loyalty Account), `amount` (signed integer — earn\npositive, redeem/expire negative), `reason`, `source` (program vocabulary:\nAttendance, Purchase, Survey, Manual…), optional `expiresAt`, `realm`.\nResult: the created `transaction`, `newBalance`, `message`.\n\nGuards: rejects zero/non-integer amounts, deductions past zero, and any\nmovement on a Closed account. Re-fetches the account before reading it —\nnever trusts the caller's load state.\n\n## Usage\nThe command takes the FINAL signed amount. Tier multipliers, promo doublings\nand rounding are program arithmetic the caller does first —\n`tierMultiplier(MemberTierField, account.tier)` from the tier field helps.\nBaking one program's rules in here would make every other program's wrong.\n\n## Example\nThe linked Loyalty Account is the command's natural target — its ledger\n(three PointsTransactions: +150 attendance, +25 survey, −500 redemption)\nwas shaped by exactly the moves this command makes.\n\n## Non-goals\nNo earning-rule engine: triggers ('50 points per attendance') live with the\nconsumer that observes the event. No expiry sweep: expiring points is a\nseparate deliberate move (a negative transaction with reason Expiry) by\nwhatever scheduler the program runs.",
+      "cardInfo": {
+        "name": "Credit Points",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../LoyaltyAccount/jason-lim"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
