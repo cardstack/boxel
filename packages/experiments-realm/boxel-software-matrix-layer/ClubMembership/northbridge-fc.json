@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "clubName": "Northbridge FC",
+      "cardInfo": {
+        "name": null,
+        "summary": "Membership, loyalty points and match-day ticketing for Northbridge FC.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../club-membership/club-membership",
+        "name": "ClubMembership"
+      }
+    }
+  }
+}

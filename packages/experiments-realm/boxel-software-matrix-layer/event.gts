@@ -109,11 +109,7 @@ export class Event extends CardDef {
     <template>
       <span class='ev-atom'>
         <CalendarEventIcon class='ev-icon' />
-        <span class='ev-name'>{{if
-            @model.title
-            @model.title
-            'Untitled Event'
-          }}</span>
+        <span class='ev-name'>{{@model.cardTitle}}</span>
       </span>
       <style scoped>
         .ev-atom {
@@ -154,11 +150,7 @@ export class Event extends CardDef {
           {{/if}}
         </div>
         <div class='ev-info'>
-          <span class='ev-title'>{{if
-              @model.title
-              @model.title
-              'Untitled Event'
-            }}</span>
+          <span class='ev-title'>{{@model.cardTitle}}</span>
           <span class='ev-meta'>
             {{#if @model.startsAt}}<@fields.startsAt />{{/if}}
             {{#if @model.venue.name}}· {{@model.venue.name}}{{/if}}
@@ -254,11 +246,7 @@ export class Event extends CardDef {
           {{/if}}
         </div>
         <div class='info'>
-          <span class='title'>{{if
-              @model.title
-              @model.title
-              'Untitled Event'
-            }}</span>
+          <span class='title'>{{@model.cardTitle}}</span>
           {{#if @model.kind}}
             <span class='meta line-kind'>{{@model.kind}}</span>
           {{/if}}
@@ -365,7 +353,7 @@ export class Event extends CardDef {
         <header class='eh'>
           <div class='eh-id'>
             <p class='doc-kind'>{{if @model.kind @model.kind 'Event'}}</p>
-            <h1>{{if @model.title @model.title 'Untitled Event'}}</h1>
+            <h1>{{@model.cardTitle}}</h1>
             <p class='eh-when'>
               {{#if @model.startsAt}}
                 <@fields.startsAt />

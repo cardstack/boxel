@@ -1,0 +1,58 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "How was your match day?",
+      "description": "Two minutes, 25 points. Tell us what worked and what queued.",
+      "questions": [
+        {
+          "prompt": "Overall experience",
+          "helpText": "1 = poor, 5 = excellent",
+          "kind": "rating",
+          "options": [],
+          "required": true
+        },
+        {
+          "prompt": "Ease of entry",
+          "helpText": "Turnstiles, stewarding, queues",
+          "kind": "rating",
+          "options": [],
+          "required": true
+        },
+        {
+          "prompt": "Food & beverage",
+          "helpText": null,
+          "kind": "rating",
+          "options": [],
+          "required": false
+        },
+        {
+          "prompt": "Would you recommend attending to a friend?",
+          "helpText": null,
+          "kind": "single-choice",
+          "options": ["Definitely", "Probably", "Maybe", "No"],
+          "required": true
+        },
+        {
+          "prompt": "Any comments?",
+          "helpText": null,
+          "kind": "long-text",
+          "options": [],
+          "required": false
+        }
+      ],
+      "cardInfo": {
+        "name": "Match-day Feedback",
+        "summary": "Post-match fan survey — completing it earns 25 points.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../survey",
+        "name": "Survey"
+      }
+    }
+  }
+}

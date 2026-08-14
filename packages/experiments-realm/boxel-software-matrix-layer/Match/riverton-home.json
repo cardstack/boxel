@@ -1,0 +1,46 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": null,
+      "opponent": "Riverton Rovers",
+      "homeAway": "Home",
+      "competition": "League",
+      "kind": "Match",
+      "startsAt": "2026-09-12T14:00:00.000Z",
+      "endsAt": "2026-09-12T16:00:00.000Z",
+      "status": "Scheduled",
+      "ticketsSold": 20000,
+      "capacity": {
+        "total": 52000,
+        "unit": "seats",
+        "allocations": [
+          { "name": "Season tickets", "quantity": 28000 },
+          { "name": "Members", "quantity": 15000 },
+          { "name": "Away supporters", "quantity": 3000 },
+          { "name": "Hospitality", "quantity": 2500 }
+        ]
+      },
+      "description": "League fixture, matchweek 4. Gates open two hours before kick-off.",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "venue": {
+        "links": {
+          "self": "../Location/meridian-park-stadium"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../club-membership/match",
+        "name": "Match"
+      }
+    }
+  }
+}
