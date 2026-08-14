@@ -86,7 +86,8 @@ export function loyaltyTierField(config: LoyaltyTierConfig) {
         return rankOf(options, this.args.model as unknown as string);
       }
       get rungs() {
-        return options.map((_, i) => i <= this.rank);
+        let rank = this.rank;
+        return options.map((_, i) => rank >= i);
       }
       <template>
         {{#if this.option}}
