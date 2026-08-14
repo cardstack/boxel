@@ -30,7 +30,12 @@
           "prompt": "Would you recommend attending to a friend?",
           "helpText": null,
           "kind": "single-choice",
-          "options": ["Definitely", "Probably", "Maybe", "No"],
+          "options": [
+            "Definitely",
+            "Probably",
+            "Maybe",
+            "No"
+          ],
           "required": true
         },
         {
