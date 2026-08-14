@@ -182,6 +182,41 @@ module('Integration | RichMarkdownField', function (hooks) {
       );
   });
 
+  test('the Add-embed dropdown opens inside the clipping wrapper (it is intentionally clipped to the editor)', async function (assert) {
+    class TestCard extends CardDef {
+      @field body = contains(RichMarkdownField);
+      static edit = class Edit extends Component<typeof this> {
+        <template><@fields.body /></template>
+      };
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-card.gts': { TestCard },
+      },
+    });
+
+    let card = new TestCard({
+      body: new RichMarkdownField({ content: 'Edit me' }),
+    });
+    let root = await renderCard(loader, card, 'edit');
+    await waitFor('[data-test-codemirror-body]', { timeout: 5000 });
+
+    let wrapper = root.querySelector(
+      '[data-test-codemirror-body]',
+    ) as HTMLElement;
+
+    // No embed is referenced yet, so the toolbar shows the Add-embed trigger.
+    await click('[data-test-toolbar="add-embed"]');
+    assert
+      .dom('[data-test-toolbar-embed-popover]', wrapper)
+      .exists(
+        'the Add-embed dropdown lives inside the clipping wrapper — it drops ' +
+          'into the tall editor mount so the clip is invisible in practice',
+      );
+  });
+
   test('renders with null content without error', async function (assert) {
     class TestCard extends CardDef {
       @field body = contains(RichMarkdownField);

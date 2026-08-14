@@ -1176,10 +1176,11 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
            corners clip the toolbar's square bottom corners when it docks at
            the bottom on scroll. `overflow: clip` (not `hidden`) does this
            without establishing a scroll container, so the toolbar keeps
-           sticking to the outer scroll panel. The card-search / format-picker
-           popovers stay outside this wrapper so they can still overflow the
-           editor box. The radius is inset by the 1px border so it hugs the
-           border's inner curve. */
+           sticking to the outer scroll panel. The Add-embed dropdown lives
+           inside this wrapper with the toolbar and is intentionally clipped
+           to it: it drops down into the tall editor mount, so the clip is
+           invisible in practice. The radius is inset by the 1px border so it
+           hugs the border's inner curve. */
         .codemirror-body {
           display: flex;
           flex-direction: column;
