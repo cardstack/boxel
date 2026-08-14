@@ -424,6 +424,176 @@ module('Responding', (hooks) => {
     }
   });
 
+  test('a trailing usage-only chunk cannot flip a finished stream back to streaming, and its counts land on the final room event', async () => {
+    process.env.AI_BOT_STREAMING_MODE = 'to-device';
+    try {
+      responder = new Responder(fakeMatrixClient, 'room-id', 'agent-id', {
+        userId: '@alice:example.com',
+        deviceId: 'DEVICEALICE',
+      });
+      await responder.ensureThinkingMessageSent();
+
+      for (let i = 0; i < 3; i++) {
+        await responder.onChunk({} as any, snapshotWithContent('content ' + i));
+        await clock.tickAsync(300);
+      }
+
+      // The provider ends the answer...
+      await responder.onChunk(
+        {
+          choices: [{ delta: {}, finish_reason: 'stop', index: 0 }],
+        } as any,
+        snapshotWithContent('content 2'),
+      );
+      // ...and the throttled final room edit goes out before the usage
+      // arrives.
+      await clock.tickAsync(300);
+
+      let sentEvents = fakeMatrixClient.getSentEvents();
+      let finalEdit = sentEvents[sentEvents.length - 1];
+      assert.equal(
+        finalEdit.content.isStreamingFinished,
+        true,
+        'the stop chunk finished the stream',
+      );
+      assert.notOk(
+        JSON.parse(finalEdit.content.data as string).usage,
+        'the final edit went out before the usage chunk, so it carries no usage',
+      );
+
+      let roomEventsBeforeUsage = sentEvents.length;
+      let toDeviceEventsBeforeUsage =
+        fakeMatrixClient.getSentToDeviceEvents().length;
+
+      // The usage report trails the stop chunk on a chunk with no choices.
+      // It carries OpenRouter's extensions too: the prompt-cache split and
+      // the inline cost.
+      await responder.onChunk(
+        {
+          choices: [],
+          usage: {
+            prompt_tokens: 321,
+            completion_tokens: 45,
+            prompt_tokens_details: { cached_tokens: 300 },
+            cost: 0.0123,
+          },
+        } as any,
+        snapshotWithContent('content 2'),
+      );
+      // Give the throttle time to fire, as it would in production between the
+      // usage chunk and finalize. The trailing chunk changes nothing, so
+      // nothing may go out here: a send in this window is the regression —
+      // it re-marks the finished answer as streaming, and the client sticks
+      // on it.
+      await clock.tickAsync(300);
+      assert.equal(
+        fakeMatrixClient.getSentEvents().length,
+        roomEventsBeforeUsage,
+        'the trailing usage chunk triggers no room event of its own',
+      );
+      assert.equal(
+        fakeMatrixClient.getSentToDeviceEvents().length,
+        toDeviceEventsBeforeUsage,
+        'the trailing usage chunk triggers no to-device preview',
+      );
+
+      await responder.finalize();
+
+      sentEvents = fakeMatrixClient.getSentEvents();
+      let last = sentEvents[sentEvents.length - 1];
+      assert.equal(
+        last.content.isStreamingFinished,
+        true,
+        'the trailing usage chunk did not un-finish the stream',
+      );
+      assert.equal(
+        last.content.body,
+        'content 2',
+        'the usage edit re-sends the complete answer',
+      );
+      assert.deepEqual(
+        JSON.parse(last.content.data as string).usage,
+        {
+          promptTokens: 321,
+          completionTokens: 45,
+          cachedTokens: 300,
+          costUsd: 0.0123,
+        },
+        'the token counts, cache split, and cost ride the final room event',
+      );
+      assert.deepEqual(
+        last.content['m.relates_to'],
+        { rel_type: 'm.replace', event_id: '0' },
+        'the usage edit replaces the same message, not a new one',
+      );
+      assert.equal(
+        responder.turnTelemetry.promptTokens,
+        321,
+        'telemetry captured the prompt tokens',
+      );
+    } finally {
+      delete process.env.AI_BOT_STREAMING_MODE;
+    }
+  });
+
+  test('a trailing usage chunk that still carries an unfinished choice cannot flip a finished stream back to streaming', async () => {
+    // Same trap as the usage-only chunk above, but in the other shape
+    // providers use: the usage rides a chunk whose choice has no
+    // finish_reason. Deriving the finished flag from that chunk alone would
+    // flip it back off.
+    process.env.AI_BOT_STREAMING_MODE = 'to-device';
+    try {
+      responder = new Responder(fakeMatrixClient, 'room-id', 'agent-id', {
+        userId: '@alice:example.com',
+        deviceId: 'DEVICEALICE',
+      });
+      await responder.ensureThinkingMessageSent();
+
+      await responder.onChunk({} as any, snapshotWithContent('the answer'));
+      await clock.tickAsync(300);
+      await responder.onChunk(
+        {
+          choices: [{ delta: {}, finish_reason: 'stop', index: 0 }],
+        } as any,
+        snapshotWithContent('the answer'),
+      );
+      await clock.tickAsync(300);
+
+      let toDeviceEventsBeforeUsage =
+        fakeMatrixClient.getSentToDeviceEvents().length;
+      await responder.onChunk(
+        {
+          choices: [{ delta: {}, finish_reason: null, index: 0 }],
+          usage: { prompt_tokens: 100, completion_tokens: 10 },
+        } as any,
+        snapshotWithContent('the answer'),
+      );
+      await clock.tickAsync(300);
+      assert.equal(
+        fakeMatrixClient.getSentToDeviceEvents().length,
+        toDeviceEventsBeforeUsage,
+        'the trailing usage chunk triggers no to-device preview',
+      );
+
+      await responder.finalize();
+
+      let sentEvents = fakeMatrixClient.getSentEvents();
+      let last = sentEvents[sentEvents.length - 1];
+      assert.equal(
+        last.content.isStreamingFinished,
+        true,
+        'the trailing usage chunk did not un-finish the stream',
+      );
+      assert.deepEqual(
+        JSON.parse(last.content.data as string).usage,
+        { promptTokens: 100, completionTokens: 10 },
+        'the token counts ride the final room event',
+      );
+    } finally {
+      delete process.env.AI_BOT_STREAMING_MODE;
+    }
+  });
+
   test('per-turn telemetry counts room-edits mid-turn events (the comparison baseline)', async () => {
     // The module baseline is room-edits (set in beforeEach) — the "before" side
     // of the streaming-mode comparison, where each mid-turn edit is its own room
