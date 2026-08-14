@@ -20,7 +20,7 @@
       "notes": "App 4: Club Membership & Ticketing — in-use example wired via LoyaltyAccount/jason-lim",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/loyalty-tier-field",
       "specTarget": "shared block",
-      "consumers": "loyalty-account",
+      "consumers": "loyalty-dashboard, loyalty-account",
       "consumerExamples": "{\"loyalty-account\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/LoyaltyAccount/jason-lim\"}",
       "catalogDisposition": null,
       "cardInfo": {

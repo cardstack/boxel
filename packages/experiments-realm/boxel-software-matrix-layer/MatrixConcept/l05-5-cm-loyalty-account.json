@@ -20,7 +20,7 @@
       "notes": "App 4: Club Membership & Ticketing",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/loyalty-account",
       "specTarget": "shared block",
-      "consumers": "credit-points",
+      "consumers": "loyalty-dashboard, credit-points",
       "consumerExamples": null,
       "catalogDisposition": null,
       "cardInfo": {
