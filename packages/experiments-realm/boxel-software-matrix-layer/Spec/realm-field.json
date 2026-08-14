@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Realm field",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/realm",
+        "name": "default"
+      },
+      "readMe": "# Realm\n\n## Summary\nBase-realm field. Lives at `https://cardstack.com/base/realm` (default export). Realm reference field: points at a realm by URL with realm-aware display (name, icon).\n\n## Usage\n```ts\nimport RealmField from 'https://cardstack.com/base/realm';\n```\n\nExample: value — a realm URL such as this shared workspace",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Realm",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "DateTime field",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/datetime",
+        "name": "default"
+      },
+      "readMe": "# DateTime\n\n## Summary\nBase-realm field. Lives at `https://cardstack.com/base/datetime` (default export). Primitive instant, serialized ISO 8601 with timezone; renders localized date + time. Used by review threads and activity logs.\n\n## Usage\n```ts\nimport DateTimeField from 'https://cardstack.com/base/datetime';\n```\n\nExample: value `\"2026-08-14T09:30:00.000Z\"`",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "DateTime",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

@@ -20,8 +20,8 @@
       "notes": "v1 · Consumed from base — Opportunity.probability, Order.taxRate",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/percentage-field",
       "specTarget": "base realm",
-      "consumers": null,
-      "consumerExamples": null,
+      "consumers": "opportunity, order",
+      "consumerExamples": "{\"opportunity\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Opportunity/acme-plant-expansion\", \"order\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Order/ord-2026-107\"}",
       "catalogDisposition": null,
       "cardInfo": {
         "name": null,

@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "JSON field",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/json-field",
+        "name": "JsonField"
+      },
+      "readMe": "# JSON\n\n## Summary\nBase-realm field. Lives at `https://cardstack.com/base/json-field` (named export `JsonField`). Primitive arbitrary-JSON field for structured payloads that don't warrant their own FieldDef (webhook payloads, config blobs).\n\n## Usage\n```ts\nimport { JsonField } from 'https://cardstack.com/base/json-field';\n```\n\nExample: value `{\"retries\": 3, \"active\": true}`",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "JSON",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

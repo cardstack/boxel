@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Color field",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/color",
+        "name": "default"
+      },
+      "readMe": "# Color\n\n## Summary\nBase-realm field. Lives at `https://cardstack.com/base/color` (default export). Color value with a swatch + picker edit UI. Consumed by Tag and the Brand Guide building blocks.\n\n## Usage\n```ts\nimport ColorField from 'https://cardstack.com/base/color';\n```\n\nExample: value `\"#16a34a\"`",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Color",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

@@ -20,8 +20,8 @@
       "notes": null,
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/image-carousel",
       "specTarget": "catalog",
-      "consumers": null,
-      "consumerExamples": null,
+      "consumers": "image-carousel-demo",
+      "consumerExamples": "{\"image-carousel-demo\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/ImageCarouselDemo/gallery\"}",
       "catalogDisposition": null,
       "cardInfo": {
         "name": null,

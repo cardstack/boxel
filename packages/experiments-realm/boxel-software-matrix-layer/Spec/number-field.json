@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Number field",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/number",
+        "name": "default"
+      },
+      "readMe": "# Number\n\n## Summary\nBase-realm field. Lives at `https://cardstack.com/base/number` (default export). Primitive numeric field (float). For percentages use Percentage; for money use Amount with Currency; for counts the catalog Quantity.\n\n## Usage\n```ts\nimport NumberField from 'https://cardstack.com/base/number';\n```\n\nExample: value `42` or `3.14`",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Number",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Markdown field",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/markdown",
+        "name": "default"
+      },
+      "readMe": "# Markdown\n\n## Summary\nBase-realm field. Lives at `https://cardstack.com/base/markdown` (default export). Primitive markdown text rendered to HTML in read formats (re-exported from card-api). Review bodies in this realm use it.\n\n## Usage\n```ts\nimport MarkdownField from 'https://cardstack.com/base/markdown';\n```\n\nExample: value `\"**State:** Next → Done — spec verified\"`",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Markdown",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

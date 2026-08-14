@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "URL field",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/url",
+        "name": "default"
+      },
+      "readMe": "# URL\n\n## Summary\nBase-realm field. Lives at `https://cardstack.com/base/url` (default export). String subclass validating absolute URLs; renders as a link. The module also exports `isValidUrl` and a `CardWithURL` helper card.\n\n## Usage\n```ts\nimport URLField from 'https://cardstack.com/base/url';\n```\n\nExample: value `\"https://boxel.ai\"`",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "URL",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

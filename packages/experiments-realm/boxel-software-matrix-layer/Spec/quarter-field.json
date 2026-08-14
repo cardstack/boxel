@@ -1,0 +1,42 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Quarter field",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/date/quarter",
+        "name": "default"
+      },
+      "readMe": "# Quarter\n\n## Summary\nBase-realm field. Lives at `https://cardstack.com/base/date/quarter` (default export). Fiscal/calendar quarter as `{ quarter, year }`.\n\n## Usage\n```ts\nimport QuarterField from 'https://cardstack.com/base/date/quarter';\n```\n\nThe contained example shows the serialized shape.",
+      "containedExamples": [
+        {
+          "quarter": 3,
+          "year": 2026
+        }
+      ],
+      "cardInfo": {
+        "name": "Quarter",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      },
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "https://cardstack.com/base/date/quarter",
+              "name": "default"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

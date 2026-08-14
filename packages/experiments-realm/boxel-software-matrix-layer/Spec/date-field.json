@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Date field",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/date",
+        "name": "default"
+      },
+      "readMe": "# Date\n\n## Summary\nBase-realm field. Lives at `https://cardstack.com/base/date` (default export). Primitive calendar date, serialized `YYYY-MM-DD`; renders localized. For date pairs use Date Range.\n\n## Usage\n```ts\nimport DateField from 'https://cardstack.com/base/date';\n```\n\nExample: value `\"2026-08-14\"`",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Date",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Big Integer field",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/big-integer",
+        "name": "default"
+      },
+      "readMe": "# Big Integer\n\n## Summary\nBase-realm field. Lives at `https://cardstack.com/base/big-integer` (default export). Primitive arbitrary-precision integer (serialized as a string so no precision is lost beyond Number.MAX_SAFE_INTEGER).\n\n## Usage\n```ts\nimport BigIntegerField from 'https://cardstack.com/base/big-integer';\n```\n\nExample: value `\"9007199254740993\"`",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Big Integer",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

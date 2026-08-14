@@ -1,0 +1,42 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Month Day field",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/date/month-day",
+        "name": "default"
+      },
+      "readMe": "# Month Day\n\n## Summary\nBase-realm field. Lives at `https://cardstack.com/base/date/month-day` (default export). A recurring calendar date — `{ month, day }` with no year (birthdays, anniversaries).\n\n## Usage\n```ts\nimport MonthDayField from 'https://cardstack.com/base/date/month-day';\n```\n\nThe contained example shows the serialized shape.",
+      "containedExamples": [
+        {
+          "month": 8,
+          "day": 14
+        }
+      ],
+      "cardInfo": {
+        "name": "Month Day",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      },
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "https://cardstack.com/base/date/month-day",
+              "name": "default"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

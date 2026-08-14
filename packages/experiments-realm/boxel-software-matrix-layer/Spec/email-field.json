@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Email field",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/email",
+        "name": "default"
+      },
+      "readMe": "# Email\n\n## Summary\nBase-realm field. Lives at `https://cardstack.com/base/email` (default export). String subclass with email validation and mailto affordances.\n\n## Usage\n```ts\nimport EmailField from 'https://cardstack.com/base/email';\n```\n\nExample: value `\"sales@acme.example\"`",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Email",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

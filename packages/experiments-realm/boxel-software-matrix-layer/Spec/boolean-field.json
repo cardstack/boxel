@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Boolean field",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/boolean",
+        "name": "default"
+      },
+      "readMe": "# Boolean\n\n## Summary\nBase-realm field. Lives at `https://cardstack.com/base/boolean` (default export). Primitive true/false with a toggle edit UI. Unset is distinct from false — guard `undefined` in computeds.\n\n## Usage\n```ts\nimport BooleanField from 'https://cardstack.com/base/boolean';\n```\n\nExample: value `true`",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Boolean",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

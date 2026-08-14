@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "String field",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/string",
+        "name": "default"
+      },
+      "readMe": "# String\n\n## Summary\nBase-realm field. Lives at `https://cardstack.com/base/string` (default export). The primitive text field every other field builds on. Renders plain text; edit is a single-line input.\n\n## Usage\n```ts\nimport StringField from 'https://cardstack.com/base/string';\n```\n\nExample: `@field name = contains(StringField)` — value `\"Acme Industries\"`",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "String",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

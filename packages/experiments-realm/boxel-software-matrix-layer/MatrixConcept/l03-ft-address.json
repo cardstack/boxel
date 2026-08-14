@@ -20,8 +20,8 @@
       "notes": "v1 · Consumed from base — Account billing+shipping, Order shipping",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/address-field",
       "specTarget": "base realm",
-      "consumers": null,
-      "consumerExamples": null,
+      "consumers": "account, order",
+      "consumerExamples": "{\"account\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Account/acme-industries\", \"order\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Order/ord-2026-107\"}",
       "catalogDisposition": null,
       "cardInfo": {
         "name": null,

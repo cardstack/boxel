@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Text Area field",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/text-area",
+        "name": "default"
+      },
+      "readMe": "# Text Area\n\n## Summary\nBase-realm field. Lives at `https://cardstack.com/base/text-area` (default export). String subclass whose edit format is a multi-line textarea; read formats render with preserved line breaks.\n\n## Usage\n```ts\nimport TextAreaField from 'https://cardstack.com/base/text-area';\n```\n\nExample: multi-line note text",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Text Area",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
