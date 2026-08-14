@@ -8,7 +8,7 @@
         "module": "https://cardstack.com/base/time/time-range",
         "name": "default"
       },
-      "readMe": "# Time Range\n\n## Summary\nBase-realm start/end time-of-day pair. Lives at\n`https://cardstack.com/base/time/time-range` (default export\n`TimeRangeField`).\n\n## API\n- `start`, `end` \u2014 TimeFields, each `{ value: 'HH:MM' }` (24h). TimeField\n  supports hour-cycle/time-style display configuration and a time-slots\n  presentation mode.\n\n## Usage\n```ts\nimport TimeRangeField from 'https://cardstack.com/base/time/time-range';\n\n@field officeHours = contains(TimeRangeField);\n```\nFor a range of calendar dates use Date Range; this field is for\nwithin-a-day windows (opening hours, meeting slots).",
+      "readMe": "# Time Range\n\n## Summary\nBase-realm start/end time-of-day pair. Lives at\n`https://cardstack.com/base/time/time-range` (default export\n`TimeRangeField`).\n\n## API\n- `start`, `end` — TimeFields, each `{ value: 'HH:MM' }` (24h). TimeField\n  supports hour-cycle/time-style display configuration and a time-slots\n  presentation mode.\n\n## Usage\n```ts\nimport TimeRangeField from 'https://cardstack.com/base/time/time-range';\n\n@field officeHours = contains(TimeRangeField);\n```\nFor a range of calendar dates use Date Range; this field is for\nwithin-a-day windows (opening hours, meeting slots).",
       "containedExamples": [
         {
           "start": {

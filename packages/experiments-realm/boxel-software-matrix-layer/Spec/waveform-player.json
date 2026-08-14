@@ -8,7 +8,7 @@
         "module": "https://realms-staging.stack.cards/catalog/fields/audio/components/waveform-player",
         "name": "WaveformPlayer"
       },
-      "readMe": "# Waveform Player\n\n## Summary\nCatalog audio player component with a waveform visualization, part of the\ncatalog audio field family. Lives in the catalog realm at\n`fields/audio/components/waveform-player` (named export `WaveformPlayer`).\n\n## API\n- `@model` \u2014 an `AudioFieldModel` (exposes the audio `url`)\n- `@player` \u2014 a `BaseAudioPlayer` that owns playback state and wires the\n  underlying `<audio>` element via `{{@player.setupAudio}}`\n\n## Usage\nConsumed by the catalog audio field's formats; reuse it by constructing the\nfield's player primitives rather than instantiating standalone. Live\nexamples ship with the catalog audio field listing.",
+      "readMe": "# Waveform Player\n\n## Summary\nCatalog audio player component with a waveform visualization, part of the\ncatalog audio field family. Lives in the catalog realm at\n`fields/audio/components/waveform-player` (named export `WaveformPlayer`).\n\n## API\n- `@model` — an `AudioFieldModel` (exposes the audio `url`)\n- `@player` — a `BaseAudioPlayer` that owns playback state and wires the\n  underlying `<audio>` element via `{{@player.setupAudio}}`\n\n## Usage\nConsumed by the catalog audio field's formats; reuse it by constructing the\nfield's player primitives rather than instantiating standalone. Live\nexamples ship with the catalog audio field listing.",
       "containedExamples": [],
       "cardInfo": {
         "name": "Waveform Player",

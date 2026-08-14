@@ -8,7 +8,7 @@
         "module": "https://cardstack.com/base/amount-with-currency",
         "name": "default"
       },
-      "readMe": "# Amount with Currency\n\n## Summary\nBase-realm money field pairing a numeric amount with an ISO currency. Lives\nat `https://cardstack.com/base/amount-with-currency` (default export\n`AmountWithCurrency`).\n\n## API\n- `amount` \u2014 NumberField\n- `currency` \u2014 a `CurrencyField` (`{ code }`, e.g. USD, MYR) with a picker\n\n## Usage\n```ts\nimport AmountWithCurrency from 'https://cardstack.com/base/amount-with-currency';\n\n@field dealValue = contains(AmountWithCurrency);\n```\nRenders the amount formatted with its currency. For plain unitless numbers\nuse NumberField; for percentages use the Percentage field.",
+      "readMe": "# Amount with Currency\n\n## Summary\nBase-realm money field pairing a numeric amount with an ISO currency. Lives\nat `https://cardstack.com/base/amount-with-currency` (default export\n`AmountWithCurrency`).\n\n## API\n- `amount` — NumberField\n- `currency` — a `CurrencyField` (`{ code }`, e.g. USD, MYR) with a picker\n\n## Usage\n```ts\nimport AmountWithCurrency from 'https://cardstack.com/base/amount-with-currency';\n\n@field dealValue = contains(AmountWithCurrency);\n```\nRenders the amount formatted with its currency. For plain unitless numbers\nuse NumberField; for percentages use the Percentage field.",
       "containedExamples": [
         {
           "amount": 24000,

@@ -8,7 +8,7 @@
         "module": "https://cardstack.com/base/date-range-field",
         "name": "default"
       },
-      "readMe": "# Date Range\n\n## Summary\nBase-realm start/end date pair. Lives at\n`https://cardstack.com/base/date-range-field` (default export\n`DateRangeField`).\n\n## API\n- `start`, `end` \u2014 DateFields (serialized `YYYY-MM-DD`)\n\n## Usage\n```ts\nimport DateRangeField from 'https://cardstack.com/base/date-range-field';\n\n@field bookingWindow = contains(DateRangeField);\n```\nRenders the two dates as a range. For a time-of-day range within a single\nday, use the Time Range field instead.",
+      "readMe": "# Date Range\n\n## Summary\nBase-realm start/end date pair. Lives at\n`https://cardstack.com/base/date-range-field` (default export\n`DateRangeField`).\n\n## API\n- `start`, `end` — DateFields (serialized `YYYY-MM-DD`)\n\n## Usage\n```ts\nimport DateRangeField from 'https://cardstack.com/base/date-range-field';\n\n@field bookingWindow = contains(DateRangeField);\n```\nRenders the two dates as a range. For a time-of-day range within a single\nday, use the Time Range field instead.",
       "containedExamples": [
         {
           "start": "2026-08-01",
