@@ -20,7 +20,7 @@
       "notes": "App 4: Club Membership & Ticketing",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/location-card",
       "specTarget": "shared block",
-      "consumers": "event",
+      "consumers": "event; App 4: Club Membership & Ticketing",
       "consumerExamples": "{\"event\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Event/northbridge-v-riverton\"}",
       "catalogDisposition": null,
       "cardInfo": {
