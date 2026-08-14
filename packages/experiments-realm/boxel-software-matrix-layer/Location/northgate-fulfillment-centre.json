@@ -1,0 +1,40 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Northgate Fulfillment Centre",
+      "kind": "Warehouse",
+      "address": {
+        "addressLine1": "Unit 4, Northgate Industrial Estate",
+        "addressLine2": "Chadwell Road",
+        "city": "Leeds",
+        "state": "West Yorkshire",
+        "postalCode": "LS9 8QT",
+        "country": {
+          "name": "United Kingdom",
+          "code": "GB"
+        },
+        "poBoxNumber": null
+      },
+      "geo": {
+        "lat": 53.7997,
+        "lon": -1.5153
+      },
+      "phone": "+441132456789",
+      "website": null,
+      "description": "Primary dispatch site for northern orders. Goods-in closes 16:00; collections need a booked slot.",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../location",
+        "name": "Location"
+      }
+    }
+  }
+}
