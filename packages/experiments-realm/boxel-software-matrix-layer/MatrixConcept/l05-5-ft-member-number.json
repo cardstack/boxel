@@ -19,9 +19,9 @@
       "workState": "Done",
       "notes": "App 4: Club Membership & Ticketing",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/member-number-field",
-      "specTarget": "shared realm",
-      "consumers": null,
-      "consumerExamples": null,
+      "specTarget": "shared block",
+      "consumers": "loyalty-account",
+      "consumerExamples": "{\"loyalty-account\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/LoyaltyAccount/jason-lim\"}",
       "catalogDisposition": null,
       "cardInfo": {
         "name": null,

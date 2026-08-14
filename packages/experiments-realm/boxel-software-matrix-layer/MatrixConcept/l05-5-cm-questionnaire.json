@@ -19,7 +19,7 @@
       "workState": "Done",
       "notes": "App 4: Club Membership & Ticketing — extracted from catalog listing b6ac3a-survey",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/questionnaire",
-      "specTarget": "shared realm",
+      "specTarget": "shared block",
       "consumers": null,
       "consumerExamples": null,
       "catalogDisposition": null,

@@ -20,8 +20,8 @@
       "notes": null,
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/markdown-field",
       "specTarget": "base realm",
-      "consumers": "activity, concept-review, contract, deal",
-      "consumerExamples": "{\"activity\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Activity/acme-renewal-call\", \"contract\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Contract/acme-msa-2026\", \"deal\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Deal/acme-enterprise-renewal\"}",
+      "consumers": "activity, concept-review, contract, deal, survey",
+      "consumerExamples": "{\"activity\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Activity/acme-renewal-call\", \"contract\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Contract/acme-msa-2026\", \"deal\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Deal/acme-enterprise-renewal\", \"survey\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Survey/event-feedback\"}",
       "catalogDisposition": null,
       "cardInfo": {
         "name": null,
