@@ -110,7 +110,10 @@ if (cmd === 'rooms') {
     if (c['m.relates_to']?.rel_type) parts.push(c['m.relates_to'].rel_type);
     if (c.isStreamingFinished !== undefined)
       parts.push(`fin=${c.isStreamingFinished}`);
-    let tools = c['app.boxel.toolRequests'];
+    // Rooms from before the command→tool rename carry requests under the
+    // legacy key; read both, like runtime-common's getToolRequests().
+    let tools =
+      c['app.boxel.toolRequests'] ?? c['app.boxel.commandRequests'];
     if (tools?.length)
       parts.push('tools=' + tools.map((t) => t.name).join(','));
     let agent = eventData(c)?.context?.agentId;

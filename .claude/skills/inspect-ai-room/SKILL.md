@@ -30,9 +30,14 @@ node scripts/inspect-room.mjs raw <roomId> [str]  # full event JSON, filtered by
   trailing usage-only edit when the provider reports late). `cachedTokens`
   climbing turn over turn = prompt caching works; a reset to ~0 or a flat
   low value = something rewrote conversation history and invalidated the cache.
-- Tool requests appear under `app.boxel.toolRequests` on the bot's message;
-  the host answers with an `app.boxel.toolResult` event. Code patches get
-  `app.boxel.codePatchResult` events plus a `codePatchCorrectness` follow-up.
+  The bot records `data.usage` since the show-token-usage change landed;
+  sessions older than that (and hosts without it) legitimately report
+  `0 turns` — that is missing data, not a caching regression.
+- Tool requests appear under `app.boxel.toolRequests` on the bot's message
+  (`app.boxel.commandRequests` in rooms from before the command→tool rename);
+  the host answers with an `app.boxel.toolResult` event (legacy:
+  `app.boxel.commandResult`). Code patches get `app.boxel.codePatchResult`
+  events plus a `codePatchCorrectness` follow-up.
 
 ## Why didn't a tool auto-run?
 
