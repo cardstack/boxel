@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Member Number field",
+      "specType": "field",
+      "ref": {
+        "module": "../member-number-field",
+        "name": "default"
+      },
+      "readMe": "# Member Number\n\n## Summary\nThe identifier a membership program prints on the card — stable,\nhuman-readable, quoted over the phone. Shared-realm block at\n`member-number-field.gts`. It is a label, not a key: the card's id is what\nother cards link by; the member number is what the member sees. Renders\nmonospaced so digit groups line up in lists.\n\n## API\n- `MemberNumberField` (default export) — StringField subclass with mono embedded/atom formats\n- `formatMemberNumber(prefix, year, sequence, width = 8)` — the common `PREFIX-YYYY-SEQUENCE` shape\n\n## Usage\n```ts\nimport MemberNumberField from '../member-number-field';\n\n@field memberNumber = contains(MemberNumberField);\n```\n\n## Example\nSerializes as a plain string, so `containedExamples` cannot hold one — the\nlinked Loyalty Account carries `NBF-2019-00004821` in use.\n\n## Non-goals\nSequencing is the enrolling command's problem: a realm has no global\ncounter, so where the next number comes from (a count query, an imported\nroll, a random block) is decided there — this block only formats and\nrenders consistently. Uniqueness is likewise not enforced here.",
+      "cardInfo": {
+        "name": "Member Number",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../LoyaltyAccount/jason-lim"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

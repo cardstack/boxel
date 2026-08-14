@@ -19,7 +19,7 @@
       "workState": "Done",
       "notes": "App 4: Club Membership & Ticketing",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/capacity-field",
-      "specTarget": "shared realm",
+      "specTarget": "shared block",
       "consumers": null,
       "consumerExamples": null,
       "catalogDisposition": null,

@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Points Balance field",
+      "specType": "field",
+      "ref": {
+        "module": "../points-balance-field",
+        "name": "default"
+      },
+      "readMe": "# Points Balance\n\n## Summary\nA quantity of loyalty points — a count, not money. Shared-realm block at\n`points-balance-field.gts` (NumberField subclass). It never carries a\ncurrency and never converts; what a point is worth is the program's\nbusiness, decided wherever points are earned or redeemed.\n\n## API\n- `PointsBalanceField` (default export) — embedded renders `3,450 pts` with the unit de-emphasised; atom is the compact form\n\n## Usage\n```ts\nimport PointsBalanceField from '../points-balance-field';\n\n@field pointsBalance = contains(PointsBalanceField);\n```\nOn Loyalty Account the stored number is maintained by the Credit Points\ncommand against the transaction ledger; nothing else should assign it.\n\n## Example\nSerializes as a plain number, so `containedExamples` cannot hold one — the\nlinked Loyalty Account carries balance 3,450 / lifetime 12,800 in use.\n\n## Non-goals\nNo expiry math and no formatting knobs: points expiry is ledger data\n(`expiresAt` on PointsTransaction) that a program sums itself, and a\nconsumer needing a different rendering owns that rendering.",
+      "cardInfo": {
+        "name": "Points Balance",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../LoyaltyAccount/jason-lim"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

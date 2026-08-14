@@ -19,9 +19,9 @@
       "workState": "Done",
       "notes": "App 4: Club Membership & Ticketing — pre-existing App 3 component; stamped with Spec, consumed by ticket-workspace",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/feed",
-      "specTarget": "shared realm",
-      "consumers": null,
-      "consumerExamples": null,
+      "specTarget": "shared block",
+      "consumers": "ticket-workspace, ticket, ticket-message-field",
+      "consumerExamples": "{\"ticket\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Ticket/1240-report-encoding\"}",
       "catalogDisposition": null,
       "cardInfo": {
         "name": null,
