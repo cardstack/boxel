@@ -17,10 +17,10 @@
       "domainKit": null,
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1 · Built — experiments-realm/contact.gts, POC tier. Existing POC-tier evidence is the old crm/ demo card, not this block",
+      "notes": "v1 · Built — experiments-realm/contact.gts, POC tier. Existing POC-tier evidence is the old crm/ demo card, not this block | App 4 stage-2 finding: role enum (decision maker/champion/…) and account link are CRM-specific; fans consumed Contact with those fields empty. Consider extracting the CRM specifics to an extending card so the base Contact is a plain person.",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/contact",
       "specTarget": "shared block",
-      "consumers": "booking, convert-lead, deal, loyalty-account, revenue-os, subscriber",
+      "consumers": "booking, convert-lead, deal, loyalty-account, revenue-os, subscriber; App 4: Club Membership & Ticketing",
       "consumerExamples": "{\"booking\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Booking/bk-20260802-00101\", \"deal\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Deal/acme-enterprise-renewal\", \"loyalty-account\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/LoyaltyAccount/jason-lim\", \"revenue-os\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/RevenueOs/main\", \"subscriber\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Subscriber/acme-industries\"}",
       "catalogDisposition": null,
       "cardInfo": {

@@ -409,6 +409,13 @@ class ClubConsole extends GlimmerComponent<ConsoleSignature> {
                       <span class='booking-state'>
                         {{#if booking.checkedInAt}}
                           <span class='checked-in'>✓ attended</span>
+                        {{else if (this.needsConfirm booking)}}
+                          <Button
+                            @kind='secondary-light'
+                            @size='extra-small'
+                            @loading={{eq this.confirmingId booking.id}}
+                            {{on 'click' (fn this.confirm booking)}}
+                          >Confirm</Button>
                         {{else if (this.canCheckIn booking)}}
                           <Button
                             @kind='primary'

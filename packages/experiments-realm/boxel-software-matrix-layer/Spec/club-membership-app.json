@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Club Membership app",
+      "specType": "card",
+      "ref": {
+        "module": "../club-membership/club-membership",
+        "name": "ClubMembership"
+      },
+      "readMe": "# Event Booking App\n\n## Summary\nA club's front office in one card — membership tiers, loyalty points,\nfixture ticketing, match-day check-in and post-match surveys. Realized as\nthe App 4 stage-2 POC at `club-membership/club-membership.gts`; it exists\nto prove the loyalty + event/booking clusters compose, and everything on\nscreen is a consumed block.\n\n## Composition\n- **Cards**: Member extends Loyalty Account (own ladder via `loyaltyTierField`); Match extends Event (opponent/home-away/competition/ticketsSold); Booking, Contact, Location, Survey consumed unchanged\n- **Components**: Loyalty Dashboard (member home), Booking Calendar (fixtures with live availability)\n- **Commands**: its RecordAttendance composes Check In Booking + Credit Points and owns the club arithmetic (50 home / 150 away × tier multiplier); Confirm Booking wired to un-confirmed bookings\n- **Theming**: club identity enters via tokens only — the tier metals are `--tier-<slug>-bg/-fg/-ring` values the Tier Badge consumes; no block internals overridden\n\n## Example\nThe linked Northbridge FC instance runs on a seeded world of members,\nfixtures (all three availability states), bookings and a match-day survey.\n\n## Non-goals\nPayment processing, QR hardware, mobile wallets and virtual queues are\nintegrations the real product would add; here payment is a status and the\nturnstile is a button, which is exactly enough to prove the blocks.\nSeason tickets (Subscriber/Subscription) and a rewards catalog are the\nspec'd v1.1 features — the blocks exist; the app hasn't mounted them yet.",
+      "cardInfo": {
+        "name": "Event Booking App",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../ClubMembership/northbridge-fc"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
