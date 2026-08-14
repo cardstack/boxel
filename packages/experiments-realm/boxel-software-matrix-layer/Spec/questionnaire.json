@@ -21,7 +21,11 @@
           "prompt": "Did the event meet your expectations?",
           "helpText": null,
           "kind": "single-choice",
-          "options": ["Exceeded them", "Met them", "Fell short"],
+          "options": [
+            "Exceeded them",
+            "Met them",
+            "Fell short"
+          ],
           "required": true
         }
       ],
