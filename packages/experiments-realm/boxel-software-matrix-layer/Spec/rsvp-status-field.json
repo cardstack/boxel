@@ -1,0 +1,26 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "RSVP Status field",
+      "specType": "field",
+      "ref": {
+        "module": "../rsvp-status-field",
+        "name": "default"
+      },
+      "readMe": "# RSVP Status\n\n## Summary\nWhere someone stands on attending something — the answer to an invitation,\nnot the payment for it and not the turnstile scan. Shared-realm block at\n`rsvp-status-field.gts`, built on the `statusField` factory, so consumers get\nconstrained dropdowns, state pills and the `nextStatuses`/`canTransition`\nhelpers for free.\n\n## Vocabulary\nInvited → Going / Maybe / Waitlisted / Declined, with every answer allowed to\nchange (people change their minds up to the doors opening) except returning\nto Invited — an answer, once given, can change but not un-happen. Nothing is\nterminal.\n\n## Usage\n```ts\nimport RsvpStatusField from '../rsvp-status-field';\n\n@field rsvp = contains(RsvpStatusField);\n```\nConsumers with a different vocabulary (a wedding's \"Attending with guest\")\nbuild their own via `statusField`; this export is the common five-answer\nform.\n\n## Example\nSerializes as a plain string, so `containedExamples` cannot hold one — the\nin-use example is the Booking card's `rsvp` field in this realm (linked once\nthat block lands; see its Spec).\n\n## Non-goals\nPayment state and attendance are different facts: a booking can be Going and\nunpaid, or Going and never checked in. Those live as their own fields\n(payment status, `checkedInAt`) on the consumer.",
+      "cardInfo": {
+        "name": "RSVP Status",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

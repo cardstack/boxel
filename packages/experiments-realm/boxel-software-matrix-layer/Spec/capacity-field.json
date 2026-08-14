@@ -1,0 +1,48 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Capacity field",
+      "specType": "field",
+      "ref": {
+        "module": "../capacity-field",
+        "name": "default"
+      },
+      "readMe": "# Capacity\n\n## Summary\nHow much of something a place or offer can hold, and how that total is\ncarved up before anything is sold or assigned. Shared-realm block at\n`capacity-field.gts` (default export `CapacityField`).\n\n## API\n- `total` — NumberField, the ceiling\n- `unit` — StringField, what one unit is in the consumer's words (seats, rooms, places)\n- `allocations` — containsMany `CapacityAllocationField` (`{ name, quantity }`); slice names are the consumer's vocabulary\n- `allocated`, `unallocated` — computed, never stored\n\n## Usage\n```ts\nimport CapacityField from '../capacity-field';\n\n@field capacity = contains(CapacityField);\n```\nEmbedded renders the total, a proportional split bar and a legend, with an\nover-allocation warning when the slices exceed the total; atom renders\n`52,000 seats`.\n\n## Non-goals\nCapacity is configuration, not live state. What has been used against the\nceiling is booking/assignment data that lives on other cards and changes by\nthe minute — a consumer joins the two at render time (an availability meter\nbelongs to the consumer that holds the bookings, e.g. an Event's booking\nquery). Storing `remaining` here would store a derived value that goes stale\non the first booking. Per-section seat maps are a seating-plan concern, not a\ncapacity concern.",
+      "containedExamples": [
+        {
+          "total": 52000,
+          "unit": "seats",
+          "allocations": [
+            { "name": "Season tickets", "quantity": 28000 },
+            { "name": "Members", "quantity": 15000 },
+            { "name": "Away supporters", "quantity": 3000 },
+            { "name": "Hospitality", "quantity": 2500 }
+          ]
+        }
+      ],
+      "cardInfo": {
+        "name": "Capacity",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "../capacity-field",
+              "name": "default"
+            }
+          }
+        ]
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

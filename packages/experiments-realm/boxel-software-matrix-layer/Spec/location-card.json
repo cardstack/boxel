@@ -1,0 +1,38 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Location card",
+      "specType": "card",
+      "ref": {
+        "module": "../location",
+        "name": "Location"
+      },
+      "readMe": "# Location\n\n## Summary\nA named physical place — somewhere things happen, ship to, or are held at.\nShared-realm block at `location.gts`.\n\n## API\n- `name` — StringField (drives `cardTitle`)\n- `kind` — StringField label in the consumer's vocabulary (Stadium, Office, Warehouse); deliberately free text and never a lifecycle, so it is not colour-coded\n- `address` — base `AddressField`\n- `geo` — catalog `GeoPointField` (`{ lat, lon }`); isolated renders it as a map when set\n- `phone` — base `PhoneNumberField`; `website` — base `WebsiteField`\n- `description` — MarkdownField\n\n## Usage\n```ts\nimport { Location } from '../location';\n\n@field venue = linksTo(Location);\n```\nEmbedded is a pin row (name, city/country, kind pill); fitted adds place,\nkind and street progressively across the size tiers; isolated is the place's\npage with map, address, reach and about panels.\n\n## Non-goals\nEverything a place means to one domain stays on the consumer: a stadium's\ncapacity (see the Capacity field), a warehouse's racking, an office's desks.\nThat split is what lets one Location serve an event's venue and an order's\npickup point without either seeing the other's baggage. Rooms/areas within a\nplace are a consumer concern until a real second consumer demands a shared\nsub-location shape.",
+      "cardInfo": {
+        "name": "Location",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Location/meridian-park-stadium"
+        }
+      },
+      "linkedExamples.1": {
+        "links": {
+          "self": "../Location/northgate-fulfillment-centre"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

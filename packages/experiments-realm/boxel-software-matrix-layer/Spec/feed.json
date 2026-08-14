@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Feed",
+      "specType": "component",
+      "ref": {
+        "module": "../components/feed",
+        "name": "Feed"
+      },
+      "readMe": "# Feed\n\n## Summary\nA chronological record of what happened to something — entries with an\nactor, a time, a body and a kind. Shared-realm component at\n`components/feed.gts`.\n\n## API\n- `@entries` — `FeedEntry[]`: `{ id?, actor?, initials?, avatarUrl?, meta?, body?, at?, kind?, hue? }`. Deliberately flat strings rather than card references: a feed is read far more often than it is edited and is frequently rendered where links cannot resolve\n- `kind` — `outward` (visible to the other party) / `inward` (our side) / `private` (internal only) / `system` (rendered as a rule across the thread, not a bubble)\n- `@newestFirst` — defaults to oldest-first, which is how a thread reads\n- `@emptyMessage`, `@onSelect`; `:entry` block replaces body rendering while keeping the chrome\n\nThe one rule that matters: a private entry must be impossible to mistake for\na public one — it renders full-width on a coloured ground with an explicit\n\"Internal — not sent to the customer\" tagline.\n\n## Usage\n```gts\nimport { Feed, type FeedEntry } from '../components/feed';\n\n<Feed @entries={{this.entries}} @newestFirst={{true}} />\n```\n\n## Example\nIn use by ServiceDesk's ticket workspace (`components/ticket-workspace.gts`),\nwhich renders each ticket's message thread through it — the linked Ticket is\nthe live example.\n\n## Non-goals\nThe feed renders history; it does not collect it. Composers, reply boxes and\nthe rules for who may post are the consumer's. It also does not paginate —\na consumer with thousands of entries slices before passing.",
+      "cardInfo": {
+        "name": "Feed",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Ticket/1240-report-encoding"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

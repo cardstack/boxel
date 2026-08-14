@@ -1,3 +1,4 @@
+import { htmlSafe } from '@ember/template';
 import { Component, StringField } from '@cardstack/base/card-api';
 import enumField from '@cardstack/base/enum';
 import AwardIcon from '@cardstack/boxel-icons/award';
@@ -217,18 +218,17 @@ export class TierBadge extends Component<TierBadgeSignature> {
     let { bg, fg, ring } = stateColor(this.args.hue ?? 'slate');
     let slug = slugOf(this.args.value);
     if (!slug) {
-      return `background: ${bg}; color: ${fg}; --tier-ring: ${ring};`;
+      return htmlSafe(`background: ${bg}; color: ${fg}; --tier-ring: ${ring};`);
     }
-    return (
+    return htmlSafe(
       `background: var(--tier-${slug}-bg, ${bg});` +
-      ` color: var(--tier-${slug}-fg, ${fg});` +
-      ` --tier-ring: var(--tier-${slug}-ring, ${ring});`
+        ` color: var(--tier-${slug}-fg, ${fg});` +
+        ` --tier-ring: var(--tier-${slug}-ring, ${ring});`,
     );
   }
 
   <template>
-    {{! template-lint-disable no-inline-styles style-concatenation }}
-    <span class='tier-badge' style='{{this.style}}' ...attributes>
+    <span class='tier-badge' style={{this.style}} ...attributes>
       <span class='tier-label'>{{@label}}</span>
       {{yield}}
     </span>
