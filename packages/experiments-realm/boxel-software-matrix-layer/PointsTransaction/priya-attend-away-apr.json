@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "amount": 300,
+      "reason": "Attended at Milton Town",
+      "source": "Attendance",
+      "occurredAt": "2026-04-18T16:50:00.000Z",
+      "expiresAt": null,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "account": {
+        "links": {
+          "self": "../Member/priya-shah"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../loyalty-account",
+        "name": "PointsTransaction"
+      }
+    }
+  }
+}

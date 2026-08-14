@@ -1,0 +1,36 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": null,
+      "opponent": "Ashworth United",
+      "homeAway": "Away",
+      "competition": "League",
+      "kind": "Match",
+      "startsAt": "2026-09-26T14:00:00.000Z",
+      "endsAt": "2026-09-26T16:00:00.000Z",
+      "status": "Scheduled",
+      "ticketsSold": 2760,
+      "capacity": {
+        "total": 3000,
+        "unit": "seats",
+        "allocations": [
+          { "name": "Away allocation", "quantity": 3000 }
+        ]
+      },
+      "description": "Away allocation only — 3,000 seats in the North Terrace.",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../club-membership/match",
+        "name": "Match"
+      }
+    }
+  }
+}

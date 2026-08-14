@@ -1,0 +1,46 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": null,
+      "opponent": "Harrow Vale",
+      "homeAway": "Home",
+      "competition": "League",
+      "kind": "Match",
+      "startsAt": "2026-08-02T14:00:00.000Z",
+      "endsAt": "2026-08-02T16:00:00.000Z",
+      "status": "Completed",
+      "ticketsSold": 47200,
+      "capacity": {
+        "total": 52000,
+        "unit": "seats",
+        "allocations": [
+          { "name": "Season tickets", "quantity": 28000 },
+          { "name": "Members", "quantity": 15000 },
+          { "name": "Away supporters", "quantity": 3000 },
+          { "name": "Hospitality", "quantity": 2500 }
+        ]
+      },
+      "description": "Opening home fixture of the season.",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "venue": {
+        "links": {
+          "self": "../Location/meridian-park-stadium"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../club-membership/match",
+        "name": "Match"
+      }
+    }
+  }
+}

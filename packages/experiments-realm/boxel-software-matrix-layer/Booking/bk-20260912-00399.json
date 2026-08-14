@@ -1,0 +1,42 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "reference": "BK-20260912-00399",
+      "quantity": 1,
+      "rsvp": "Invited",
+      "paymentStatus": "Unpaid",
+      "totalPrice": {
+        "amount": 38,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "checkedInAt": null,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "event": {
+        "links": {
+          "self": "../Match/riverton-home"
+        }
+      },
+      "holder": {
+        "links": {
+          "self": "../Contact/marcus-obi"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../booking",
+        "name": "Booking"
+      }
+    }
+  }
+}

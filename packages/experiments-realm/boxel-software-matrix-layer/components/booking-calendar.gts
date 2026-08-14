@@ -188,3 +188,4 @@ export class BookingCalendar extends GlimmerComponent<Signature> {
 }
 
 export default BookingCalendar;
+// touched for re-index

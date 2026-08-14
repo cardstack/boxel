@@ -1,0 +1,46 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": null,
+      "opponent": "Kingsbridge City",
+      "homeAway": "Home",
+      "competition": "Cup",
+      "kind": "Match",
+      "startsAt": "2026-10-03T16:30:00.000Z",
+      "endsAt": "2026-10-03T18:30:00.000Z",
+      "status": "Scheduled",
+      "ticketsSold": 52000,
+      "capacity": {
+        "total": 52000,
+        "unit": "seats",
+        "allocations": [
+          { "name": "Season tickets", "quantity": 28000 },
+          { "name": "Members", "quantity": 15000 },
+          { "name": "Away supporters", "quantity": 3000 },
+          { "name": "Hospitality", "quantity": 2500 }
+        ]
+      },
+      "description": "Cup quarter-final. Sold out in the Gold window.",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "venue": {
+        "links": {
+          "self": "../Location/meridian-park-stadium"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../club-membership/match",
+        "name": "Match"
+      }
+    }
+  }
+}

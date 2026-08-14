@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "memberNumber": "NBF-2026-00048112",
+      "tier": "Bronze",
+      "tierSince": "2026-07-20",
+      "memberSince": "2026-07-20",
+      "status": "Active",
+      "pointsBalance": 100,
+      "lifetimePoints": 100,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "holder": {
+        "links": {
+          "self": "../Contact/marcus-obi"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../club-membership/member",
+        "name": "Member"
+      }
+    }
+  }
+}

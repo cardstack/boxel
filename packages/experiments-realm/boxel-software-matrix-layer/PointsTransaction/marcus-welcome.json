@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "amount": 100,
+      "reason": "Welcome to Northbridge FC",
+      "source": "Registration",
+      "occurredAt": "2026-07-20T10:00:00.000Z",
+      "expiresAt": null,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "account": {
+        "links": {
+          "self": "../Member/marcus-obi"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../loyalty-account",
+        "name": "PointsTransaction"
+      }
+    }
+  }
+}

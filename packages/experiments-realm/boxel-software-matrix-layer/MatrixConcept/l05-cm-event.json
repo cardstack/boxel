@@ -21,7 +21,7 @@
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/event-card",
       "specTarget": "shared block",
       "consumers": "booking",
-      "consumerExamples": "{\"booking\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Booking/bk-20260912-00417\"}",
+      "consumerExamples": "{\"booking\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Booking/bk-20260802-00101\"}",
       "catalogDisposition": null,
       "cardInfo": {
         "name": null,

@@ -1,0 +1,42 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "reference": "BK-20260912-00214",
+      "quantity": 2,
+      "rsvp": "Going",
+      "paymentStatus": "Paid",
+      "totalPrice": {
+        "amount": 90,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "checkedInAt": null,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "event": {
+        "links": {
+          "self": "../Match/riverton-home"
+        }
+      },
+      "holder": {
+        "links": {
+          "self": "../Contact/priya-shah"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../booking",
+        "name": "Booking"
+      }
+    }
+  }
+}

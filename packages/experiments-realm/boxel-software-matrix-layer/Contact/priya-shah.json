@@ -1,0 +1,25 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "firstName": "Priya",
+      "lastName": "Shah",
+      "email": "priya.shah@example.com",
+      "phone": "+447700900123",
+      "jobTitle": null,
+      "role": null,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../contact",
+        "name": "Contact"
+      }
+    }
+  }
+}
