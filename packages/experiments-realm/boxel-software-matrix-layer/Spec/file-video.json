@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "File Video",
+      "specType": "component",
+      "ref": {
+        "module": "https://cardstack.com/base/file-formats/file-resources",
+        "name": "FileVideo"
+      },
+      "readMe": "# File Video\n\n## Summary\nBase-realm video file renderer. Lives at\n`https://cardstack.com/base/file-formats/file-resources` (named export\n`FileVideo`).\n\n## Usage\n```gts\nimport { FileVideo } from 'https://cardstack.com/base/file-formats/file-resources';\n\n<FileVideo @model={{this.videoFile}} />\n```\nFile renderers take a FileDef-backed model (an uploaded realm file) \u2014 an\nexample instance requires an actual uploaded file, so these specs document\nthe contract and defer live examples to a file-fixtures pass (flagged for\nreview).",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "File Video",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

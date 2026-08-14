@@ -1,0 +1,86 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Around the Clock",
+      "timeZone": "UTC",
+      "windows": [
+        {
+          "day": "Sunday",
+          "opensAt": {
+            "value": "00:00"
+          },
+          "closesAt": {
+            "value": "24:00"
+          }
+        },
+        {
+          "day": "Monday",
+          "opensAt": {
+            "value": "00:00"
+          },
+          "closesAt": {
+            "value": "24:00"
+          }
+        },
+        {
+          "day": "Tuesday",
+          "opensAt": {
+            "value": "00:00"
+          },
+          "closesAt": {
+            "value": "24:00"
+          }
+        },
+        {
+          "day": "Wednesday",
+          "opensAt": {
+            "value": "00:00"
+          },
+          "closesAt": {
+            "value": "24:00"
+          }
+        },
+        {
+          "day": "Thursday",
+          "opensAt": {
+            "value": "00:00"
+          },
+          "closesAt": {
+            "value": "24:00"
+          }
+        },
+        {
+          "day": "Friday",
+          "opensAt": {
+            "value": "00:00"
+          },
+          "closesAt": {
+            "value": "24:00"
+          }
+        },
+        {
+          "day": "Saturday",
+          "opensAt": {
+            "value": "00:00"
+          },
+          "closesAt": {
+            "value": "24:00"
+          }
+        }
+      ],
+      "holidays": [],
+      "isDefault": false,
+      "cardInfo": {
+        "name": "Around the Clock",
+        "summary": "24/7 — the clock never stops. Used by the VIP policy."
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../schedule",
+        "name": "Schedule"
+      }
+    }
+  }
+}

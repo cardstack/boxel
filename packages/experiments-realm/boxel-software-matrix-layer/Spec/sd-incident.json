@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Incident",
+      "cardDescription": "Something is broken and service needs restoring — a Ticket subclass carrying impact, urgency and the ITIL priority grid.",
+      "specType": "card",
+      "ref": {
+        "module": "../incident",
+        "name": "Incident"
+      },
+      "readMe": "## What it is\nThe half of the ITIL split that means *something that used to work has stopped*. It is a real subclass of Ticket, not a `type` string, so it adds impact and urgency without pushing those fields onto every service request.\n\n## Three usages\n1. **ServiceDesk** — the outage and access-failure half of the queue; `Incident/1301-mail-outage` is the P1 that drives the whole overdue lane.\n2. **Facilities / maintenance** — \"the third-floor AC is out\". Impact (how much of the site) × urgency (how fast it degrades) is exactly the same grid, with a reporter instead of a customer.\n3. **Manufacturing or field ops** — a line stoppage or a downed unit, where the suggested-vs-actual priority split is what lets a supervisor overrule the grid for a customer-visible job.\n\n## The linked example\n`Incident/1234-dashboard-access` — a VIP locked out by suspected SSO clock skew. It has impact and urgency set, so `suggestedPriority` computes from the grid, and its actual priority matches it. `Incident/1301-mail-outage` is the contrasting case: a full outage whose clock has already breached.\n\n## Why the priority grid is suggested, not applied\n`suggestedPriority` is computed alongside the real `priority` rather than into it, and `priorityIsOverridden` renders \"Grid says P2\" when they disagree. An agent who knows the customer is on a call with the CEO has to be able to overrule the grid — and seeing both values is what makes that an explicit decision instead of a silent inconsistency.\n\n## Non-goals\nNot a request for something new — that is `ServiceRequest`, which is measured by whether it was fulfilled correctly rather than how fast service returned, and which usually needs approval first. Not a bug report either: a bug belongs to a backlog and is prioritised against a roadmap; an incident is measured against a clock.\n\n**Open question.** Impact and urgency are ITIL's grid. Should the grid itself be configurable per desk (some organisations use a 3×3, some a 5×5), or is a fixed 4×4 with an overridable result the right level of opinion for a block?\n"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Incident/1234-dashboard-access"
+        }
+      },
+      "linkedExamples.1": {
+        "links": {
+          "self": "../Incident/1301-mail-outage"
+        }
+      }
+    }
+  }
+}

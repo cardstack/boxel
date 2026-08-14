@@ -1,0 +1,64 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "SLA Timer",
+      "cardDescription": "One commitment on one record, and the clock running against it — six states, business-hours aware.",
+      "specType": "field",
+      "ref": {
+        "module": "../sla-timer-field",
+        "name": "SlaTimerField"
+      },
+      "readMe": "## What it is\nA promise with a deadline attached, and the arithmetic to say how much of it is left. `deadlineAt` is the load-bearing field: it is a plain wall-clock instant that already has business hours, holidays and every pause folded into it, written only by commands. Everything downstream just subtracts two numbers.\n\n## Three usages\n1. **ServiceDesk** puts two on every ticket — first response and resolution — and the queue sorts by whichever is nearest to breaching.\n2. **A recruiting pipeline** uses one for an offer's acceptance deadline: five working days, pausing while the candidate has a question outstanding.\n3. **An e-commerce fulfilment app** uses one for \"order before 3pm ships today\" — warehouse holidays are the schedule, and the breach action is a credit rather than an escalation.\n\n## The linked example\n`Ticket/1288-invoice-download` carries two timers: a first-response timer already satisfied (green, `Met in 40m`) and a resolution timer that is paused because the ticket is waiting on the customer. It demonstrates the two states hardest to get right — a met clock that must stay met, and a stopped clock that must not accrue.\n\n## Non-goals\nNot a countdown widget and not a reminder. It measures a commitment that somebody made; if nothing was promised, there is no timer. It also does not compute business hours itself — that is `utils/sla` called from a command, because the arithmetic needs the policy and its Schedule.\n\n**Open question.** A paused timer records `pausedSince` but not the accumulated pause. Is that a gap for reporting, or does the event log carry it?\n\n## Why BOTH an inline example and a linked card\nThe two inline `containedExamples` are the field standing on its own: one clock\nthat was answered inside its window (`satisfiedAt` set — renders \"Met in 36m\")\nand one that is running but stopped (`pausedSince` set — renders \"Paused\"). They\nare what lets a reader open this Spec and see the three states the badge draws\nwithout loading a ticket.\n\nThey cannot show everything, which is why the linked ticket is here too: a timer\ngets its target from a policy, its working hours from a schedule and its pause\nfrom a status change, and none of those exist on an inline value. The inline\npair proves the SHAPE; the linked ticket proves the MEANING.\n",
+      "containedExamples": [
+        {
+          "kind": "First response",
+          "targetMinutes": 120,
+          "startedAt": "2026-08-12T09:05:00.000Z",
+          "deadlineAt": "2026-08-12T11:05:00.000Z",
+          "satisfiedAt": "2026-08-12T09:41:00.000Z",
+          "pausedSince": null,
+          "breachedAt": null
+        },
+        {
+          "kind": "Resolution",
+          "targetMinutes": 480,
+          "startedAt": "2026-08-12T09:05:00.000Z",
+          "deadlineAt": "2026-08-12T17:05:00.000Z",
+          "satisfiedAt": null,
+          "pausedSince": "2026-08-12T14:20:00.000Z",
+          "breachedAt": null
+        }
+      ]
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      },
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "../sla-timer-field",
+              "name": "SlaTimerField"
+            }
+          },
+          {
+            "adoptsFrom": {
+              "module": "../sla-timer-field",
+              "name": "SlaTimerField"
+            }
+          }
+        ]
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Ticket/1288-invoice-download"
+        }
+      }
+    }
+  }
+}

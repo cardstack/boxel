@@ -1,0 +1,26 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "How do I…",
+      "defaultPriority": "P4",
+      "cardInfo": {
+        "name": "How do I…",
+        "summary": "New tickets here start at P4 and land in l1-general."
+      }
+    },
+    "relationships": {
+      "defaultQueue": {
+        "links": {
+          "self": "../Queue/l1-general"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../ticket-category",
+        "name": "TicketCategory"
+      }
+    }
+  }
+}

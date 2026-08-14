@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Grid",
+      "specType": "component",
+      "ref": {
+        "module": "https://realms-staging.stack.cards/catalog/components/grid",
+        "name": "CardsGrid"
+      },
+      "readMe": "# Grid\n\n## Summary\nCatalog shared grid component: renders the results of a card query as a\ngrid with view switching \u2014 the browsing surface the catalog app itself is\nbuilt on. Lives in the catalog realm at `components/grid` (named export\n`CardsGrid`; a sibling copy powers `catalog-app/components/grid`).\n\n## API\n- `@query` \u2014 card Query; `@realms` \u2014 realm URLs to search\n- `@selectedView` \u2014 grid presentation variant\n- `@context` \u2014 CardContext for live queries and card opening\n\n## Usage\n```gts\nimport { CardsGrid } from 'https://realms-staging.stack.cards/catalog/components/grid';\n\n<CardsGrid @query={{this.query}} @realms={{this.realms}}\n  @selectedView='grid' @context={{@context}} />\n```\nFor a zero-config realm index card, see the base Cards Grid spec \u2014 this\ncomponent is the lower-level building block.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Grid",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

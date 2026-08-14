@@ -1,0 +1,34 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Image Carousel",
+      "specType": "component",
+      "ref": {
+        "module": "https://realms-staging.stack.cards/catalog/catalog-app/components/image-carousel",
+        "name": "default"
+      },
+      "readMe": "# Image Carousel\n\n## Summary\nCatalog image carousel: cycles a list of image URLs with arrows and dot\nnavigation \u2014 the component behind catalog listing screenshot heroes. Lives\nin the catalog realm at `catalog-app/components/image-carousel` (default\nexport).\n\n## API\n- `@items` \u2014 `string[]` of image URLs\n- Blocks: `icon` (badge over the image), optional `overlay`\n\n## Usage\n```gts\nimport ImageCarousel from 'https://realms-staging.stack.cards/catalog/catalog-app/components/image-carousel';\n\n<ImageCarousel @items={{this.imageUrls}}>\n  <:icon></:icon>\n</ImageCarousel>\n```\nThe linked example is a live shared-realm demo over three images.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Image Carousel",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../ImageCarouselDemo/gallery"
+        }
+      }
+    }
+  }
+}

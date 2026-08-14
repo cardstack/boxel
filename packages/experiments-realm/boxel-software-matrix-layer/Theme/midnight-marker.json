@@ -1,0 +1,21 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "Midnight Marker",
+        "summary": "Dark navy paper, ice-blue ink, coral marker",
+        "notes": null,
+        "cardThumbnailURL": null
+      },
+      "cssImports": [],
+      "cssVariables": ":root {\n  --background: #10141c;\n  --card: #1a2029;\n  --primary: #7ea8ff;\n  --accent: #ff6a55;\n  --foreground: #e6e2d6;\n  --muted-foreground: #97917f;\n  --border: #4a4436;\n}"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/card-api",
+        "name": "Theme"
+      }
+    }
+  }
+}

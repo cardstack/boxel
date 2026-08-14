@@ -1,0 +1,26 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Access Issues",
+      "defaultPriority": "P2",
+      "cardInfo": {
+        "name": "Access Issues",
+        "summary": "New tickets here start at P2 and land in l1-general."
+      }
+    },
+    "relationships": {
+      "defaultQueue": {
+        "links": {
+          "self": "../Queue/l1-general"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../ticket-category",
+        "name": "TicketCategory"
+      }
+    }
+  }
+}
