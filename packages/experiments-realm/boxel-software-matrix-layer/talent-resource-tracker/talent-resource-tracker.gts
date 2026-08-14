@@ -55,7 +55,7 @@ import {
   CANDIDATE_STAGES,
   CANDIDATE_STAGE_COLORS,
 } from '../candidate';
-import { Meeting } from '../meeting';
+import { Meeting, MEETING_TYPE_COLORS } from '../meeting';
 import { Team } from '../team';
 import { Project, PROJECT_STATUS_COLORS } from '../project';
 import { Vendor } from '../vendor';
@@ -4468,9 +4468,10 @@ class Isolated extends Component<typeof TalentResourceTracker> {
               {{/if}}
               <Calendar
                 @events={{this.calendarEvents}}
+                @kindColors={{MEETING_TYPE_COLORS}}
                 @onSelectEvent={{this.openEvent}}
                 @onRescheduleEvent={{this.rescheduleEvent}}
-                @onAddMeeting={{this.addMeeting}}
+                @onAddEvent={{this.addMeeting}}
                 @addingDate={{this.addingMeetingOn}}
               />
             </section>
