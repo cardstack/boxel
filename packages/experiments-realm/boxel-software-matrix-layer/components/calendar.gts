@@ -11,8 +11,8 @@ import {
   sameDay,
   stateColorOf,
   type CalendarDay,
+  type StateColor,
 } from '../utils/index';
-import { MEETING_TYPE_COLORS } from '../meeting';
 
 export interface CalendarEvent {
   id?: string;
@@ -24,14 +24,22 @@ export interface CalendarEvent {
 interface CalendarSignature {
   Args: {
     events: CalendarEvent[];
+    // kind → color pair for the event chips. The map lives with the module
+    // that owns the kind enum (meeting.gts exports MEETING_TYPE_COLORS), not
+    // here — the calendar has no opinion on any domain's vocabulary.
+    kindColors?: Record<string, StateColor>;
     onSelectEvent?: (event: CalendarEvent) => void;
     onRescheduleEvent?: (event: CalendarEvent, newDate: Date) => void;
-    onAddMeeting?: (date: Date) => void;
+    onAddEvent?: (date: Date) => void;
     // The day currently being created, if any. Drives the spinner and the
     // disabled state on that day's + button, so a slow create cannot be
     // clicked three more times — which is exactly how a calendar ends up with
     // four cards all called "New Meeting".
     addingDate?: Date;
+  };
+  Blocks: {
+    /** Replace the chip's content while keeping the chip chrome. */
+    chip?: [CalendarEvent];
   };
   Element: HTMLElement;
 }
@@ -91,9 +99,13 @@ export class Calendar extends GlimmerComponent<CalendarSignature> {
   };
 
   chipStyle = (event: CalendarEvent) => {
-    let color = stateColorOf(MEETING_TYPE_COLORS, event.kind);
+    let color = stateColorOf(this.args.kindColors ?? {}, event.kind);
     return htmlSafe(`background: ${color.bg}; color: ${color.fg};`);
   };
+
+  get isDraggable(): string {
+    return this.args.onRescheduleEvent ? 'true' : 'false';
+  }
 
   private animateTransition() {
     this.isTransitioning = true;
@@ -157,11 +169,11 @@ export class Calendar extends GlimmerComponent<CalendarSignature> {
     this.args.onRescheduleEvent?.(event, day.date);
   };
 
-  addMeetingOn = (day: CalendarDay) => {
+  addEventOn = (day: CalendarDay) => {
     if (this.args.addingDate) {
       return;
     }
-    this.args.onAddMeeting?.(day.date);
+    this.args.onAddEvent?.(day.date);
   };
 
   isAdding = (day: CalendarDay) => {
@@ -209,13 +221,15 @@ export class Calendar extends GlimmerComponent<CalendarSignature> {
                 >
                   <div class='day-head'>
                     <span class='day-number'>{{day.dayNumber}}</span>
-                    <button
-                      type='button'
-                      class='add-meeting'
-                      aria-label='Add meeting'
-                      title='Add meeting'
-                      {{on 'click' (fn this.addMeetingOn day)}}
-                    >+</button>
+                    {{#if @onAddEvent}}
+                      <button
+                        type='button'
+                        class='add-meeting'
+                        aria-label='Add event'
+                        title='Add event'
+                        {{on 'click' (fn this.addEventOn day)}}
+                      >+</button>
+                    {{/if}}
                   </div>
                   <div class='day-events'>
                     {{! Keyed by id — chipsFor/eventsOn mint a brand-new
@@ -230,11 +244,14 @@ export class Calendar extends GlimmerComponent<CalendarSignature> {
                         class='event-chip'
                         style={{this.chipStyle event}}
                         title={{event.title}}
-                        draggable='true'
+                        draggable={{this.isDraggable}}
                         {{on 'click' (fn this.selectEvent event)}}
                         {{on 'dragstart' (fn this.startDrag event)}}
                         {{on 'dragend' this.endDrag}}
-                      >{{event.title}}</button>
+                      >{{#if (has-block 'chip')}}{{yield
+                          event
+                          to='chip'
+                        }}{{else}}{{event.title}}{{/if}}</button>
                     {{/each}}
                     {{#if (gt (this.overflowCount day) 0)}}
                       <button
@@ -379,34 +396,32 @@ export class Calendar extends GlimmerComponent<CalendarSignature> {
       .add-meeting:hover {
         color: var(--cal-brand-text);
       }
+      /* Spinner rather than a text swap: the + occupies a fixed 1rem box, so
+         swapping in a glyph would jitter the day cell. */
+      .spinner {
+        display: block;
+        width: 0.7rem;
+        height: 0.7rem;
+        border-radius: 50%;
+        border: 2px solid currentColor;
+        border-top-color: transparent;
+        animation: cal-spin 0.6s linear infinite;
+      }
+      @keyframes cal-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .add-meeting.is-adding {
+        opacity: 1;
+        cursor: progress;
+      }
+      .add-meeting:disabled {
+        pointer-events: none;
+      }
       @media (prefers-reduced-motion: reduce) {
-        /* Spinner rather than a text swap: the + occupies a fixed 1rem box, so
-           swapping in a glyph would jitter the day cell. */
         .spinner {
-          display: block;
-          width: 0.7rem;
-          height: 0.7rem;
-          border-radius: 50%;
-          border: 2px solid currentColor;
-          border-top-color: transparent;
-          animation: cal-spin 0.6s linear infinite;
-        }
-        @keyframes cal-spin {
-          to {
-            transform: rotate(360deg);
-          }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .spinner {
-            animation-duration: 2s;
-          }
-        }
-        .add-meeting.is-adding {
-          opacity: 1;
-          cursor: progress;
-        }
-        .add-meeting:disabled {
-          pointer-events: none;
+          animation-duration: 2s;
         }
         .add-meeting {
           transition: none;
