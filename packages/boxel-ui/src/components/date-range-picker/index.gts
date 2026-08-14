@@ -213,6 +213,14 @@ export default class DateRangePicker extends Component<Signature> {
         .ember-power-calendar-weekday {
           padding: var(--boxel-sp-4xs);
         }
+
+        /* The vendor sheet sets this on <button> day cells, where the reset
+           layer's `button { font: inherit }` outranks it; restated here so
+           it survives. */
+        .ember-power-calendar-day--selected,
+        .ember-power-calendar-day--selected:not([disabled]):hover {
+          font-weight: bold;
+        }
       }
     </style>
   </template>

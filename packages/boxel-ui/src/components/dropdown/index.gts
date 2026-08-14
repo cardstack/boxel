@@ -308,10 +308,16 @@ class BoxelDropdown extends Component<Signature> {
           ) !important;
         }
 
+        /* Dangerous items keep their own destructive hover color, and
+           header items keep their own inert header colors. */
         .boxel-dropdown__content
           :deep(
             .boxel-menu:not(.themeless)
-              .boxel-menu__item:not(.boxel-menu__item--disabled):hover
+              .boxel-menu__item:not(
+                .boxel-menu__item--disabled,
+                .boxel-menu__item--dangerous,
+                .boxel-menu__item--header
+              ):hover
           ) {
           color: var(--dropdown-selected-text-color);
         }
