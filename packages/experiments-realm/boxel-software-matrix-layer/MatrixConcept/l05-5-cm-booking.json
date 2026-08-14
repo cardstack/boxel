@@ -20,8 +20,8 @@
       "notes": "App 4: Club Membership & Ticketing",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/booking-card",
       "specTarget": "shared block",
-      "consumers": "check-in-booking, confirm-booking; App 4: Club Membership & Ticketing",
-      "consumerExamples": null,
+      "consumers": "check-in-booking, club-membership, record-attendance, confirm-booking",
+      "consumerExamples": "{\"club-membership\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/ClubMembership/northbridge-fc\"}",
       "catalogDisposition": null,
       "cardInfo": {
         "name": null,

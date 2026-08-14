@@ -20,7 +20,7 @@
       "notes": "App 4: Club Membership & Ticketing — Spec live; in-use example wired when Booking lands",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/rsvp-status-field",
       "specTarget": "shared block",
-      "consumers": "booking, confirm-booking; App 4: Club Membership & Ticketing",
+      "consumers": "booking, confirm-booking",
       "consumerExamples": "{\"booking\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Booking/bk-20260802-00101\"}",
       "catalogDisposition": null,
       "cardInfo": {

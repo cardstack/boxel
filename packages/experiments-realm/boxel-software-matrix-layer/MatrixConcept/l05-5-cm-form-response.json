@@ -20,7 +20,7 @@
       "notes": "App 4: Club Membership & Ticketing — extracted from catalog listing b6ac3a-survey",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/form-response",
       "specTarget": "shared block",
-      "consumers": "isolated-template; App 4: Club Membership & Ticketing",
+      "consumers": "isolated-template",
       "consumerExamples": null,
       "catalogDisposition": null,
       "cardInfo": {

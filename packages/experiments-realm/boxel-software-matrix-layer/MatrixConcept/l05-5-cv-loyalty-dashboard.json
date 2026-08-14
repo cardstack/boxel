@@ -20,8 +20,8 @@
       "notes": "App 4: Club Membership & Ticketing — mounted by the app member home; live ledger updates verified",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/loyalty-dashboard",
       "specTarget": "shared block",
-      "consumers": "App 4: Club Membership & Ticketing",
-      "consumerExamples": null,
+      "consumers": "club-membership",
+      "consumerExamples": "{\"club-membership\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/ClubMembership/northbridge-fc\"}",
       "catalogDisposition": null,
       "cardInfo": {
         "name": null,

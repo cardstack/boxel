@@ -18,9 +18,9 @@
       "owner": "richard",
       "workState": "Done",
       "notes": "App 4: Club Membership & Ticketing — stage-2 POC live as club-membership/ in the shared realm; Spec: club-membership-app",
-      "sharedSpec": null,
-      "specTarget": null,
-      "consumers": "App 4: Club Membership & Ticketing",
+      "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/club-membership-app",
+      "specTarget": "shared block",
+      "consumers": null,
       "consumerExamples": null,
       "catalogDisposition": null,
       "cardInfo": {
