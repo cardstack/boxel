@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Resolve Relationship",
+      "specType": "command",
+      "ref": {
+        "module": "https://cardstack.com/base/card-api",
+        "name": "linksTo"
+      },
+      "readMe": "# Resolve Relationship\n\n## Contract\nThe mechanism that turns relationship links into live card instances:\n`linksTo(() => Type)` / `linksToMany(() => Type)` declare the edge; the\nstore loads the target lazily when the field is read.\n\nInvariants:\n- Thunk form (`linksTo(() => X)`) keeps module import cycles inert — two\n  cards may link each other if at least one side is thunked.\n- Reading an unloaded link in a compute can return undefined mid-load;\n  guard computeds.\n- Prerender does not resolve linked images/cards — live queries only need\n  instance rows.\n\n## Captured example\n`ConceptReview.concept = linksTo(() => MatrixConcept)` in this realm — the\nreview thread resolves its concept lazily, breaking the module cycle with\n`matrix-concept.gts`.\n\n## Source\n`https://cardstack.com/base/card-api` (`linksTo`, `linksToMany`); loading\nin the host store.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Resolve Relationship",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

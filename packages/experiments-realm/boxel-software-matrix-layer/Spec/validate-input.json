@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Validate Input",
+      "specType": "command",
+      "ref": {
+        "module": "https://cardstack.com/base/card-api",
+        "name": "field"
+      },
+      "readMe": "# Validate Input\n\n## Contract\nField-level input validation as enforced on write: the `@field` declaration\nis the validation boundary — type coercion, enum membership, and per-field\nrules run when a value is deserialized into the instance.\n\nInvariants:\n- Enum fields reject values outside `options` (see the Enum spec).\n- Polymorphic containers validate each entry against its declared\n  `meta.fields` type; a bare primitive where a FieldDef is expected is a\n  field validation error surfaced at indexing (observed live in this realm\n  and fixed in the wave-1 field specs).\n- Validation failures on save surface as indexing errors — the realm\n  serves the error state rather than silently accepting bad data.\n\n## Captured example\nThis realm's indexing rejected `containedExamples: [12.5]` with \"tried set\ninstance of Array at index 0 of field 'containedExamples'\" until the entry\nbecame a typed FieldDef value.\n\n## Source\n`https://cardstack.com/base/card-api` (`field` decorator) +\n`field-support.ts`.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Validate Input",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Card Resource",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/card-api",
+        "name": "serializeForUI"
+      },
+      "readMe": "# Card Resource\n\n## Contract\nThe wire shape of a card instance — a JSON:API resource:\n\n```json\n{\n  \"data\": {\n    \"type\": \"card\",\n    \"attributes\": { \"…field values…\": \"…\" },\n    \"relationships\": { \"…linksTo fields…\": {} },\n    \"meta\": { \"adoptsFrom\": { \"module\": \"…\", \"name\": \"…\" } }\n  }\n}\n```\n\nInvariants:\n- `type` is always `\"card\"`.\n- Contained field values live in `attributes`; linked cards ONLY in\n  `relationships`.\n- `meta.adoptsFrom` is required and must resolve (see Adopts From Metadata).\n- Realms re-serialize on save: UTF-8 (no unicode escapes), no trailing\n  newline — byte-identical round-trips are not guaranteed, semantic\n  round-trips are.\n\n## Captured example\n`Account/acme-industries.json` in this realm: attributes carry\nname/email/billingAddress…, meta.adoptsFrom points at `../account`.\n\n## Source\nShape: `runtime-common/card-document-shape.ts`. Serialization entry point\nin base: `https://cardstack.com/base/card-api` (`serializeForUI`).",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Card Resource",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

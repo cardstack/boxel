@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Realm Identifier",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/realm",
+        "name": "default"
+      },
+      "readMe": "# Realm Identifier\n\n## Contract\nA realm's identity is its URL with a trailing slash — the prefix of every\ncard, module, and file it holds. `RealmField` carries realm references with\nrealm-aware display (name, icon).\n\nInvariants:\n- Always trailing-slash terminated\n  (`https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/`).\n- Permissions (read/write/realm-owner) attach at this granularity; a JWT is\n  scoped to one realm identifier.\n- Card URLs are realm identifier + realm-relative path.\n\n## Captured example\nThis realm's identifier is the URL prefix shared by every id in it.\n\n## Source\n`https://cardstack.com/base/realm` (`RealmField`); addressing in\n`runtime-common`.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Realm Identifier",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "String Editor",
+      "specType": "component",
+      "ref": {
+        "module": "https://cardstack.com/base/string",
+        "name": "default"
+      },
+      "readMe": "# String Editor\n\n## Contract\nThe edit-format component of `StringField` — the single-line text input\nevery string-valued field inherits. Subclasses (Email, URL, Phone Number)\nkeep the editor and add validation/affordances.\n\nInvariants:\n- Edit format binds `value` attribute + input event (element-content\n  binding does not clear programmatically; bind the attribute).\n- Read formats render the raw string; no markdown interpretation (that is\n  Markdown's job).\n\n## Usage\nComes free with `contains(StringField)` in edit format; embedded custom\neditors follow the same value+event pattern.\n\n## Source\n`https://cardstack.com/base/string` (default `StringField`, editor\nincluded).",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "String Editor",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

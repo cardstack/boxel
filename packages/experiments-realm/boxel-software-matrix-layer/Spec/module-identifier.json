@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Module Identifier",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/code-ref",
+        "name": "default"
+      },
+      "readMe": "# Module Identifier\n\n## Contract\nThe `module` half of a code ref: the URL (or realm-relative path) of a\n`.gts`/`.ts` module. Together with an export `name` it addresses one\ndefinition — the shape carried by `CodeRefField`.\n\nInvariants:\n- Realm modules are addressed WITHOUT extension; the realm serves source at\n  the same URL with the extension.\n- `https://cardstack.com/base/…` is a virtual alias the runtime resolves —\n  it is not directly fetchable over HTTP; realm servers serve base source\n  under `/base/`.\n- Relative module identifiers resolve against the referencing document.\n\n## Captured example\n`\"module\": \"../matrix-concept\"` (relative, from this realm's concept\ninstances); `\"module\": \"https://cardstack.com/base/spec\"` (absolute alias).\n\n## Source\n`runtime-common/code-ref.ts`; realm-facing carrier:\n`https://cardstack.com/base/code-ref` (`CodeRefField`).",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Module Identifier",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
