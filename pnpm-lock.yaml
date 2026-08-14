@@ -937,6 +937,9 @@ importers:
       ember-template-lint:
         specifier: 'catalog:'
         version: 7.9.3
+      fflate:
+        specifier: ^0.8.2
+        version: 0.8.3
       matrix-js-sdk:
         specifier: 'catalog:'
         version: 38.3.0(patch_hash=cee0baf579283943dc5a6b48977e8ed40a13fc111b5de9c91814893f9a4989fb)
@@ -2354,6 +2357,9 @@ importers:
       fast-json-stable-stringify:
         specifier: 'catalog:'
         version: 2.1.0
+      fflate:
+        specifier: ^0.8.2
+        version: 0.8.3
       filesize:
         specifier: 'catalog:'
         version: 10.1.6
@@ -10515,6 +10521,9 @@ packages:
     peerDependenciesMeta:
       picomatch:
         optional: true
+
+  fflate@0.8.3:
+    resolution: {integrity: sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA==}
 
   figures@2.0.0:
     resolution: {integrity: sha512-Oa2M9atig69ZkfwiApY8F2Yy+tzMbazyvqv21R0NsSC8floSOC09BbT1ITWAdoMGQvJ/aZnR1KMwdx9tvHnTNA==}
@@ -18949,13 +18958,19 @@ snapshots:
       '@percy/cli-command': 1.31.14(typescript@5.9.3)
       '@percy/cli-exec': 1.31.14(typescript@5.9.3)
     transitivePeerDependencies:
+      - bufferutil
+      - supports-color
       - typescript
+      - utf-8-validate
 
   '@percy/cli-build@1.31.14(typescript@5.9.3)':
     dependencies:
       '@percy/cli-command': 1.31.14(typescript@5.9.3)
     transitivePeerDependencies:
+      - bufferutil
+      - supports-color
       - typescript
+      - utf-8-validate
 
   '@percy/cli-command@1.31.14(typescript@5.9.3)':
     dependencies:
@@ -18972,7 +18987,10 @@ snapshots:
     dependencies:
       '@percy/cli-command': 1.31.14(typescript@5.9.3)
     transitivePeerDependencies:
+      - bufferutil
+      - supports-color
       - typescript
+      - utf-8-validate
 
   '@percy/cli-doctor@1.31.14(typescript@5.9.3)':
     dependencies:
@@ -18998,14 +19016,20 @@ snapshots:
       cross-spawn: 7.0.6
       which: 2.0.2
     transitivePeerDependencies:
+      - bufferutil
+      - supports-color
       - typescript
+      - utf-8-validate
 
   '@percy/cli-snapshot@1.31.14(typescript@5.9.3)':
     dependencies:
       '@percy/cli-command': 1.31.14(typescript@5.9.3)
       yaml: 2.9.0
     transitivePeerDependencies:
+      - bufferutil
+      - supports-color
       - typescript
+      - utf-8-validate
 
   '@percy/cli-upload@1.31.14(typescript@5.9.3)':
     dependencies:
@@ -19013,7 +19037,10 @@ snapshots:
       fast-glob: 3.3.3
       image-size: 1.2.1
     transitivePeerDependencies:
+      - bufferutil
+      - supports-color
       - typescript
+      - utf-8-validate
 
   '@percy/cli@1.31.14(typescript@5.9.3)':
     dependencies:
@@ -25211,6 +25238,8 @@ snapshots:
   fdir@6.5.0(picomatch@4.0.4):
     optionalDependencies:
       picomatch: 4.0.4
+
+  fflate@0.8.3: {}
 
   figures@2.0.0:
     dependencies:

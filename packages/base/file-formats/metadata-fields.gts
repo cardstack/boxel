@@ -27,6 +27,7 @@ import TagsIcon from '@cardstack/boxel-icons/tags';
 
 import FileCodeIcon from '@cardstack/boxel-icons/file-code';
 import FileInfoIcon from '@cardstack/boxel-icons/file-info';
+import CubeIcon from '@cardstack/boxel-icons/cube';
 
 import {
   Component,
@@ -534,7 +535,9 @@ export class MediaEncodingField extends FieldDef {
             >{{@model.container}}</dd></div>
         {{/if}}
         {{#if @model.videoCodec}}
-          <div class='row'><dt>Video</dt><dd class='mono'>{{@model.videoCodec}}</dd></div>
+          <div class='row'><dt>Video</dt><dd
+              class='mono'
+            >{{@model.videoCodec}}</dd></div>
         {{/if}}
         {{#if @model.audioCodec}}
           <div class='row'><dt>{{if @model.videoCodec 'Audio' 'Codec'}}</dt><dd
@@ -542,7 +545,8 @@ export class MediaEncodingField extends FieldDef {
             >{{@model.audioCodec}}</dd></div>
         {{/if}}
         {{#if @model.frameRate.display}}
-          <div class='row'><dt>Frame rate</dt><dd><@fields.frameRate /></dd></div>
+          <div class='row'><dt>Frame rate</dt><dd><@fields.frameRate
+              /></dd></div>
         {{/if}}
         {{#if @model.sampleRate.display}}
           <div class='row'><dt>Sample rate</dt><dd><@fields.sampleRate
@@ -1016,6 +1020,134 @@ export class HtmlMetadataField extends FieldDef {
         dd {
           margin: 0;
           min-width: 0;
+        }
+      </style>
+    </template>
+  };
+}
+
+// The 3D model family's metadata shape (STL, 3MF, and — once their leaves land —
+// glTF/GLB). One field for the whole family, projected onto the isolated shell's
+// `3D model` inspector section, the same way `encoding` serves audio and video.
+//
+// Every fact here is read from the file's HEAD at index time (see the
+// `*-meta-extractor` modules). The true geometry — transform-correct dimensions,
+// full triangle counts — is deliberately left to the live client-side viewer
+// (`Model3DPreview`), which already loads and measures the mesh; paying for a
+// full geometry scan at index time would duplicate that for no gain. So a value
+// is present here only when it sits cheaply in the header: a binary STL's facet
+// count, a slicer 3MF's configured face/part counts, the package's materials and
+// provenance.
+export class Model3dMetadataField extends FieldDef {
+  static displayName = '3D Model Metadata';
+  static icon = CubeIcon;
+
+  // Human label for the concrete format, e.g. `Binary STL` / `3MF package`.
+  @field format = contains(StringField);
+  // Mesh/object count. An STL is exactly one solid, so it reports 1; a slicer
+  // 3MF reports its configured print-part count. Read by the isolated shell's
+  // `hasModel3d` gate together with `triangles`.
+  @field meshes = contains(NumberField);
+  // Triangle/facet count where the header carries it (a binary STL's facet
+  // count, a slicer 3MF's summed configured face count); absent otherwise.
+  @field triangles = contains(NumberField);
+  @field materials = contains(NumberField);
+  @field materialNames = containsMany(StringField);
+  @field unit = contains(StringField);
+  // Authoring/slicer application (3MF) or the binary STL header string.
+  @field generator = contains(StringField);
+  @field solidName = contains(StringField);
+  @field designer = contains(StringField);
+  @field license = contains(StringField);
+  @field plateCount = contains(NumberField);
+  @field printPartCount = contains(NumberField);
+  @field extruderCount = contains(NumberField);
+  @field hasColorData = contains(BooleanField);
+
+  static embedded = class Embedded extends Component<
+    typeof Model3dMetadataField
+  > {
+    get materialList() {
+      return (this.args.model?.materialNames ?? []).join(', ');
+    }
+
+    <template>
+      <dl class='metadata-rows'>
+        {{#if @model.format}}
+          <div class='row'><dt>Format</dt><dd>{{@model.format}}</dd></div>
+        {{/if}}
+        {{#if @model.solidName}}
+          <div class='row'><dt>Solid</dt><dd>{{@model.solidName}}</dd></div>
+        {{/if}}
+        {{#if @model.meshes}}
+          <div class='row'><dt>Meshes</dt><dd>{{@model.meshes}}</dd></div>
+        {{/if}}
+        {{#if @model.triangles}}
+          <div class='row'><dt>Triangles</dt><dd>{{@model.triangles}}</dd></div>
+        {{/if}}
+        {{#if @model.unit}}
+          <div class='row'><dt>Units</dt><dd>{{@model.unit}}</dd></div>
+        {{/if}}
+        {{#if @model.materialNames.length}}
+          <div class='row'><dt>Materials</dt><dd
+            >{{this.materialList}}</dd></div>
+        {{else if @model.materials}}
+          <div class='row'><dt>Materials</dt><dd>{{@model.materials}}</dd></div>
+        {{/if}}
+        {{#if @model.plateCount}}
+          <div class='row'><dt>Plates</dt><dd>{{@model.plateCount}}</dd></div>
+        {{/if}}
+        {{#if @model.printPartCount}}
+          <div class='row'><dt>Print parts</dt><dd
+            >{{@model.printPartCount}}</dd></div>
+        {{/if}}
+        {{#if @model.extruderCount}}
+          <div class='row'><dt>Extruders</dt><dd
+            >{{@model.extruderCount}}</dd></div>
+        {{/if}}
+        {{#if @model.designer}}
+          <div class='row'><dt>Designer</dt><dd>{{@model.designer}}</dd></div>
+        {{/if}}
+        {{#if @model.generator}}
+          <div class='row'><dt>Generator</dt><dd
+              class='mono'
+            >{{@model.generator}}</dd></div>
+        {{/if}}
+        {{#if @model.license}}
+          <div class='row'><dt>License</dt><dd>{{@model.license}}</dd></div>
+        {{/if}}
+        {{#if @model.hasColorData}}
+          <div class='row'><dt>Vertex colors</dt><dd>Present</dd></div>
+        {{/if}}
+      </dl>
+      <style scoped>
+        .metadata-rows {
+          margin: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 0.3125rem;
+          font-size: 0.75rem;
+        }
+        .row {
+          display: flex;
+          gap: 0.625rem;
+          align-items: baseline;
+        }
+        dt {
+          flex: 0 0 5.75rem;
+          font-family: var(--font-mono);
+          font-size: 0.5625rem;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          color: var(--muted-foreground);
+        }
+        dd {
+          margin: 0;
+          min-width: 0;
+          overflow-wrap: anywhere;
+        }
+        .mono {
+          font-family: var(--font-mono);
         }
       </style>
     </template>
