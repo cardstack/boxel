@@ -1148,7 +1148,11 @@ async function toResultMessages(
     (getToolRequests<Partial<EncodedToolRequest>>(messageContent) ?? []).map(
       async (toolRequest: Partial<EncodedToolRequest>) => {
         let decodedToolRequest = decodeToolRequestSafe(toolRequest);
-        let toolResult = toolResults.find(
+        // A request can accumulate several result events — a 'failed' from a
+        // first attempt and an 'applied' from a later retry — and the latest
+        // one is the call's actual outcome.
+        let toolResult = findLast(
+          toolResults,
           (toolResult) =>
             (isToolResultWithOutputMsgtype(toolResult.content.msgtype) ||
               isToolResultWithNoOutputMsgtype(toolResult.content.msgtype)) &&
@@ -2078,7 +2082,10 @@ function gatherPatchedCards(
   let cards: CodePatchCorrectnessCard[] = [];
   let seen = new Set<string>();
   for (let request of toolRequests) {
-    let result = toolResults.find(
+    // Latest result wins: a retry that succeeds supersedes an earlier
+    // 'failed' event for the same request.
+    let result = findLast(
+      toolResults,
       (toolResult) => toolResult.content.commandRequestId === request.id,
     );
     if (!result) {

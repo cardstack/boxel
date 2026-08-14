@@ -244,7 +244,11 @@ export default class RoomMessageTool extends Component<Signature> {
   }
 
   private get hasFailedState() {
-    return !!(this.failedToolState || this.didFailCorrectnessCheck);
+    return !!(
+      this.failedToolState ||
+      this.failedToolCallState ||
+      this.didFailCorrectnessCheck
+    );
   }
 
   <template>
