@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Card Definition",
+      "specType": "card",
+      "ref": {
+        "module": "https://cardstack.com/base/card-api",
+        "name": "CardDef"
+      },
+      "readMe": "# Card Definition\n\n## Contract\n`CardDef` is the base class of every card: a named schema of `@field`\ndeclarations plus up to four format components (isolated, embedded, fitted,\natom). Instances are addressable JSON documents in a realm; definitions are\nexported classes in a module.\n\nInvariants:\n- A card instance's `meta.adoptsFrom` must resolve to an exported CardDef.\n- Subclassing (adoption) inherits fields and formats; type queries match the\n  whole adoption chain.\n- `cardInfo` (name/summary/notes/thumbnail/theme) exists on every CardDef.\n\n## Captured example\n`MatrixConcept/l03-cv-table` in this realm is an instance of the\n`MatrixConcept` CardDef exported from `../matrix-concept`.\n\n## Source\n`https://cardstack.com/base/card-api` (`CardDef`). Every module in this\nrealm imports it — see Used by.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Card Definition",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Field Definition",
+      "specType": "card",
+      "ref": {
+        "module": "https://cardstack.com/base/card-api",
+        "name": "FieldDef"
+      },
+      "readMe": "# Field Definition\n\n## Contract\n`FieldDef` is the base class of embedded values — data that lives inside a\ncard rather than as its own addressable instance. Fields declare their own\n`@field`s (compound) or a primitive serialization, and render via the same\nformat components as cards.\n\nInvariants:\n- Contained values serialize inline in the enclosing instance's\n  `attributes`; they have no id and no independent lifecycle.\n- Polymorphic containers (`containsMany(FieldDef)`) record each entry's\n  concrete type under `meta.fields`.\n- Primitive FieldDefs (marked with `[primitive]`) serialize as bare JSON\n  values and cannot appear in polymorphic containers.\n\n## Captured example\n`Spec/address-field` in this realm holds a contained `AddressField` example\nwhose entry type is recorded in `meta.fields.containedExamples`.\n\n## Source\n`https://cardstack.com/base/card-api` (`FieldDef`).",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Field Definition",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Resolved Code Ref",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/code-ref",
+        "name": "AbsoluteCodeRefField"
+      },
+      "readMe": "# Resolved Code Ref\n\n## Contract\nA code ref whose `module` has been resolved to an absolute URL — the form\nthe index reports and cross-realm consumers require. `AbsoluteCodeRefField`\ncarries exactly this.\n\nInvariants:\n- Search-result `ref.module` values are ALWAYS absolute, even when the\n  underlying Spec stored a relative ref — resolution happens at indexing.\n- Comparing refs across realms must compare resolved forms; relative forms\n  are only meaningful with their base document.\n\n## Captured example\nThis realm's `Spec/table` stores `ref.module: \"../table\"`; the search index\nreports it as\n`https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/table`.\n\n## Source\n`runtime-common/code-ref.ts`;\n`https://cardstack.com/base/code-ref` (`AbsoluteCodeRefField`).",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Resolved Code Ref",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

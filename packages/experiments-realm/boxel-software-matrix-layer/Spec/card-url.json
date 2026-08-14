@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Card URL",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/card-api",
+        "name": "resolveInstanceURL"
+      },
+      "readMe": "# Card URL\n\n## Contract\nA card instance's identity IS its URL: `<realm URL><path>` with no `.json`\nextension. `resolveInstanceURL` is the canonical resolver from a possibly\nrelative reference to that absolute identity.\n\nInvariants:\n- The same path with `.json` addresses the SOURCE file; without it, the\n  instance. Search results and links always use the extensionless form.\n- Identity, not page position or file layout, decides card uniqueness —\n  deduplicate by id.\n- Relative references inside a realm resolve against the referencing\n  document's location.\n\n## Captured example\n`https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Invoice/inv-2026-018`\nis a card URL in this realm; its source lives at the same URL + `.json`.\n\n## Source\n`https://cardstack.com/base/card-api` (`resolveInstanceURL`); addressing\nrules in `runtime-common`.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Card URL",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
