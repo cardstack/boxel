@@ -99,14 +99,14 @@ function getLog() {
  * When building prompts for the model, file attachments are handled
  * according to the following rules:
  *
- * 1. **Content inclusion**: Only the most recent user message's attached
- *    files have their content downloaded and included in the prompt.
- *    Older messages show file metadata (name, type) only. This keeps
- *    the prompt focused on fresh data and avoids redundant downloads.
- *
- * 2. **Supersession**: Within the current message, if a file (by
- *    sourceUrl) is re-attached in a later event, the earlier version
- *    is shown as metadata only (the later version wins).
+ * 1. **Byte-stable rendering**: A message's attachments are rendered from
+ *    that message's own snapshot alone — content included at every age,
+ *    never re-rendered because a newer version was attached later. Prompt
+ *    caching is an exact prefix match, so rewriting an already-sent
+ *    message re-bills the whole rest of the prompt at full input price on
+ *    every later turn; carrying the superseded content forward costs only
+ *    cached-read tokens. The model is told that a later attachment of the
+ *    same card/file supersedes earlier ones.
  *
  * 3. **MIME type handling** (see `modality.ts` for classification):
  *    - Text-based types (text/*, application/vnd.card+json,
@@ -727,43 +727,35 @@ export function hasSomeAttachedCards(
   return false;
 }
 
+// A message's rendering must depend only on the message itself, never on
+// later history. Prompt caching is an exact prefix match: re-rendering an
+// already-sent message (e.g. dropping an attachment's content because a
+// newer version was attached later) changes bytes mid-history and re-bills
+// everything after them at the full input price on every subsequent turn.
+// Carrying the superseded content forward instead costs only cached-read
+// tokens — a fraction of that.
 export async function getAttachedCards(
   client: MatrixClient,
   matrixEvent: MatrixEventWithBoxelContext,
-  history: DiscreteMatrixEvent[],
 ) {
   let attachedCards = matrixEvent.content?.data?.attachedCards ?? [];
   let results = await Promise.all(
     attachedCards.map(async (attachedCard: SerializedFileDef) => {
-      // If the file is attached later in the history, we should not include the content here
-      let shouldIncludeContent = !history
-        .slice(history.indexOf(matrixEvent) + 1)
-        .some((event) => {
-          // event is not always MatrixEventWithBoxelContext but casting lets us safely check attachedCards
-          return (
-            event as MatrixEventWithBoxelContext
-          ).content?.data?.attachedCards?.some(
-            (cardAttachment: SerializedFileDef) =>
-              cardAttachment.sourceUrl === attachedCard.sourceUrl,
-          );
-        });
       let result: SerializedFileDef = {
         url: attachedCard.url,
         sourceUrl: attachedCard.sourceUrl ?? '',
         name: attachedCard.name,
         contentType: attachedCard.contentType,
       };
-      if (shouldIncludeContent) {
-        if (attachedCard.content) {
-          result.content = JSON.parse(attachedCard.content);
-        } else {
-          try {
-            result.content = await downloadFile(client, attachedCard);
-          } catch (error) {
-            getLog().error(`Failed to fetch file ${attachedCard.url}:`, error);
-            result.error = `Error loading attached card: ${(error as Error).message}`;
-            result.content = undefined;
-          }
+      if (attachedCard.content) {
+        result.content = JSON.parse(attachedCard.content);
+      } else {
+        try {
+          result.content = await downloadFile(client, attachedCard);
+        } catch (error) {
+          getLog().error(`Failed to fetch file ${attachedCard.url}:`, error);
+          result.error = `Error loading attached card: ${(error as Error).message}`;
+          result.content = undefined;
         }
       }
       return result;
@@ -776,30 +768,17 @@ export async function getAttachedCards(
   return results;
 }
 
+// Byte-stable for the same reason as getAttachedCards above: each message
+// keeps its own snapshot's content forever, so history bytes never change
+// after they are first sent.
 export async function getAttachedFiles(
   client: MatrixClient,
   matrixEvent: MatrixEventWithBoxelContext,
-  history: DiscreteMatrixEvent[],
-  isCurrentMessage: boolean = false,
 ): Promise<SerializedFileDef[]> {
   let attachedFiles = matrixEvent.content?.data?.attachedFiles ?? [];
   return Promise.all(
     attachedFiles.map(async (file: SerializedFileDef) => {
-      let isSuperseded = history
-        .slice(history.indexOf(matrixEvent) + 1)
-        .some((event) =>
-          (
-            event as MatrixEventWithBoxelContext
-          ).content?.data?.attachedFiles?.some(
-            (f: SerializedFileDef) => f.sourceUrl === file.sourceUrl,
-          ),
-        );
-
-      if (
-        isCurrentMessage &&
-        !isSuperseded &&
-        isTextBasedContentType(file.contentType)
-      ) {
+      if (isTextBasedContentType(file.contentType)) {
         return downloadTextContent(client, file);
       }
       return toFileDefMetadata(file);
@@ -808,7 +787,6 @@ export async function getAttachedFiles(
 }
 
 export async function loadCurrentlySerializedFileDefs(
-  client: MatrixClient,
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
 ): Promise<SerializedFileDef[]> {
@@ -832,14 +810,9 @@ export async function loadCurrentlySerializedFileDefs(
     return [];
   }
 
-  // Reuse getAttachedFiles with isCurrentMessage=true — this is always the
-  // most recent user event, so supersession can't apply (no later events).
-  return getAttachedFiles(
-    client,
-    lastMessageEventByUser as MatrixEventWithBoxelContext,
-    history,
-    true,
-  );
+  // The only consumer checks presence, so metadata is enough — downloading
+  // content here would be a per-turn fetch whose bytes are never sent.
+  return attachedFiles.map(toFileDefMetadata);
 }
 
 export function attachedFilesToMessage(
@@ -1202,8 +1175,6 @@ async function toResultMessages(
         let attachmentResult = await buildAttachmentsMessagePart(
           client,
           toolResult,
-          history,
-          true,
         );
         content = [content, attachmentResult.text].filter(Boolean).join('\n\n');
         let toolMessage: OpenAIPromptMessage = {
@@ -1582,13 +1553,6 @@ export async function buildPromptForModel(
     throw new Error("Username must be a full id, e.g. '@aibot:localhost'");
   }
   let historicalMessages: OpenAIPromptMessage[] = [];
-  let lastUserMessageEvent = findLast(
-    history,
-    (event) =>
-      event.sender !== aiBotUserId &&
-      event.type === 'm.room.message' &&
-      !isToolOrCodePatchResult(event),
-  );
   for (let event of history) {
     if (event.type !== 'm.room.message') {
       continue;
@@ -1632,12 +1596,9 @@ export async function buildPromptForModel(
       ).forEach((message) => historicalMessages.push(message));
     }
     if (event.sender !== aiBotUserId) {
-      let isCurrentMessage = event === lastUserMessageEvent;
       let attachmentResult = await buildAttachmentsMessagePart(
         client,
         event as CardMessageEvent,
-        history,
-        isCurrentMessage,
         inputModalities,
       );
       if (attachmentResult.mediaParts.length > 0) {
@@ -1699,7 +1660,6 @@ export async function buildPromptForModel(
   ];
   messages = messages.concat(historicalMessages);
   let contextContent = await buildContextMessage(
-    client,
     history,
     aiBotUserId,
     tools,
@@ -2213,102 +2173,97 @@ function hasAppliedChanges(
   );
 }
 
+// Renders a message's attachments from that message's own snapshot alone.
+// Nothing here may depend on later history or on whether the message is the
+// current one: the rendering becomes part of the cached prompt prefix, and
+// any retroactive change re-bills everything after it (see getAttachedCards).
 export const buildAttachmentsMessagePart = async (
   client: MatrixClient,
   matrixEvent: MatrixEventWithBoxelContext,
-  history: DiscreteMatrixEvent[],
-  isCurrentMessage: boolean = false,
   inputModalities?: string[],
 ): Promise<{ text: string; mediaParts: ContentPart[] }> => {
-  let attachedCards = await getAttachedCards(client, matrixEvent, history);
+  let attachedCards = await getAttachedCards(client, matrixEvent);
   let text = '';
   if (attachedCards.length > 0) {
-    text += `Attached Cards (cards with newer versions don't show their content):\n${JSON.stringify(attachedCards, null, 2)}\n`;
+    text += `Attached Cards (each shows its content as of this message; a later attachment of the same card supersedes it):\n${JSON.stringify(attachedCards, null, 2)}\n`;
   }
-  let attachedFiles = await getAttachedFiles(
-    client,
-    matrixEvent,
-    history,
-    isCurrentMessage,
-  );
+  let attachedFiles = await getAttachedFiles(client, matrixEvent);
   let mediaParts: ContentPart[] = [];
   let mediaSourceUrls = new Set<string>();
   let unsupportedFiles: { name: string; contentType: string }[] = [];
-  if (isCurrentMessage) {
-    for (let f of attachedFiles) {
-      if (!f.url) {
-        continue;
-      }
-      // Check model capability before downloading
-      let modality = requiredModality(f.contentType);
-      if (!modality) {
-        continue; // not a multimodal type — handled as text metadata below
-      }
-      if (inputModalities && !inputModalities.includes(modality)) {
-        unsupportedFiles.push({
-          name: f.name ?? 'unknown',
-          contentType: f.contentType ?? 'unknown',
+  for (let f of attachedFiles) {
+    if (!f.url) {
+      continue;
+    }
+    // Check model capability before downloading
+    let modality = requiredModality(f.contentType);
+    if (!modality) {
+      continue; // not a multimodal type — handled as text metadata below
+    }
+    if (inputModalities && !inputModalities.includes(modality)) {
+      unsupportedFiles.push({
+        name: f.name ?? 'unknown',
+        contentType: f.contentType ?? 'unknown',
+      });
+      continue;
+    }
+    try {
+      if (isImageContentType(f.contentType)) {
+        let dataUrl = await downloadFileAsBase64DataUrl(
+          client,
+          f.url,
+          f.contentType!,
+        );
+        mediaParts.push({
+          type: 'image_url',
+          image_url: { url: dataUrl },
         });
-        continue;
-      }
-      try {
-        if (isImageContentType(f.contentType)) {
-          let dataUrl = await downloadFileAsBase64DataUrl(
-            client,
-            f.url,
-            f.contentType!,
-          );
-          mediaParts.push({
-            type: 'image_url',
-            image_url: { url: dataUrl },
-          });
-        } else if (isPdfContentType(f.contentType)) {
-          let dataUrl = await downloadFileAsBase64DataUrl(
-            client,
-            f.url,
-            f.contentType!,
-          );
-          mediaParts.push({
-            type: 'file',
-            file: {
-              filename: f.name ?? 'document.pdf',
-              file_data: dataUrl,
-            },
-          });
-        } else if (isAudioContentType(f.contentType)) {
-          let format = audioFormatFromMime(f.contentType!);
-          if (!format) {
-            getLog().error(`Unsupported audio format: ${f.contentType}`);
-            continue;
-          }
-          let dataUrl = await downloadFileAsBase64DataUrl(
-            client,
-            f.url,
-            f.contentType!,
-          );
-          // Strip data URL prefix — OpenRouter expects raw base64 for audio
-          let base64 = dataUrl.replace(/^data:[^;]+;base64,/, '');
-          mediaParts.push({
-            type: 'input_audio',
-            input_audio: { data: base64, format },
-          });
-        } else if (isVideoContentType(f.contentType)) {
-          let dataUrl = await downloadFileAsBase64DataUrl(
-            client,
-            f.url,
-            f.contentType!,
-          );
-          mediaParts.push({
-            type: 'video_url',
-            video_url: { url: dataUrl },
-          });
+      } else if (isPdfContentType(f.contentType)) {
+        let dataUrl = await downloadFileAsBase64DataUrl(
+          client,
+          f.url,
+          f.contentType!,
+        );
+        mediaParts.push({
+          type: 'file',
+          file: {
+            filename: f.name ?? 'document.pdf',
+            file_data: dataUrl,
+          },
+        });
+      } else if (isAudioContentType(f.contentType)) {
+        let format = audioFormatFromMime(f.contentType!);
+        if (!format) {
+          getLog().error(`Unsupported audio format: ${f.contentType}`);
+          continue;
         }
-        if (f.sourceUrl) {
-          mediaSourceUrls.add(f.sourceUrl);
-        }
-      } catch (e) {
-        getLog().error(`Failed to download media file ${f.url}:`, e);
+        let dataUrl = await downloadFileAsBase64DataUrl(
+          client,
+          f.url,
+          f.contentType!,
+        );
+        // Strip data URL prefix — OpenRouter expects raw base64 for audio
+        let base64 = dataUrl.replace(/^data:[^;]+;base64,/, '');
+        mediaParts.push({
+          type: 'input_audio',
+          input_audio: { data: base64, format },
+        });
+      } else if (isVideoContentType(f.contentType)) {
+        let dataUrl = await downloadFileAsBase64DataUrl(
+          client,
+          f.url,
+          f.contentType!,
+        );
+        mediaParts.push({
+          type: 'video_url',
+          video_url: { url: dataUrl },
+        });
       }
+      if (f.sourceUrl) {
+        mediaSourceUrls.add(f.sourceUrl);
+      }
+    } catch (e) {
+      getLog().error(`Failed to download media file ${f.url}:`, e);
     }
   }
   if (unsupportedFiles.length > 0) {
@@ -2318,7 +2273,7 @@ export const buildAttachmentsMessagePart = async (
     text += `Note: The following files were not sent to the model because it does not support their input type: ${fileList}\n`;
   }
   if (attachedFiles.length > 0) {
-    text += `Attached Files (files with newer versions don't show their content):\n${attachedFilesToMessage(
+    text += `Attached Files (each shows its content as of this message; a later attachment of the same file supersedes it):\n${attachedFilesToMessage(
       attachedFiles,
       {
         omitSourceUrls: mediaSourceUrls,
@@ -2329,7 +2284,6 @@ export const buildAttachmentsMessagePart = async (
 };
 
 export const buildContextMessage = async (
-  client: MatrixClient,
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
   tools: Tool[],
@@ -2338,7 +2292,6 @@ export const buildContextMessage = async (
   let result = '';
 
   let attachedFiles = await loadCurrentlySerializedFileDefs(
-    client,
     history,
     aiBotUserId,
   );
