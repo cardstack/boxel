@@ -1,0 +1,34 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Kanban",
+      "specType": "component",
+      "ref": {
+        "module": "../board",
+        "name": "Board"
+      },
+      "readMe": "# Kanban\n\n## Summary\nKanban column-board interaction. The platform kit lives in\n`@cardstack/boxel-ui` (`KanbanPlane`, `KanbanCard`, `KanbanColumnHeader`,\n`KanbanDragManager`, sidebar config components) \u2014 an npm package, not a\nrealm module, so this spec's ref points at the shared-realm **Board**\nblock, which is the realm-consumable realization built directly on\n`KanbanPlane`.\n\n## API (Board block)\n- `@items` \u2014 cards to lay out; `@columns` \u2014 `KanbanColumnConfig[]`\n- placement callbacks map drops back onto card fields\n\n## Usage\n```gts\nimport { Board } from './board';\n\n<Board @items={{this.deals}} @columns={{this.stageColumns}} />\n```\nThe linked example is the Revenue OS app, whose Pipeline tab is this board\nover Opportunity stages (drag between columns patches the card).",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Kanban",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../RevenueOs/main"
+        }
+      }
+    }
+  }
+}

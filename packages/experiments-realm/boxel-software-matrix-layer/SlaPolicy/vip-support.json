@@ -1,0 +1,55 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "VIP Support",
+      "conditions": [
+        {
+          "attribute": "customerTier",
+          "operator": "is",
+          "value": "VIP"
+        }
+      ],
+      "targets": [
+        {
+          "metric": "First response",
+          "baseMinutes": 60
+        },
+        {
+          "metric": "Resolution",
+          "baseMinutes": 480
+        },
+        {
+          "metric": "Next response",
+          "baseMinutes": 120
+        }
+      ],
+      "breachActions": [
+        "Escalate to L2",
+        "Notify the customer success manager",
+        "Page the duty lead"
+      ],
+      "isDefault": false,
+      "cardInfo": {
+        "name": "VIP Support",
+        "summary": "Applies to VIP customers, on a 24/7 clock. A P1 gets 15 minutes to first response.",
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "samplePriority": null
+    },
+    "relationships": {
+      "businessHours": {
+        "links": {
+          "self": "../Schedule/around-the-clock"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sla-policy",
+        "name": "SlaPolicy"
+      }
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "company": null,
+      "tier": null,
+      "name": "Kai Tan",
+      "email": null,
+      "phone": null,
+      "photo": {
+        "url": null,
+        "sourceMode": null
+      },
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../support-contact",
+        "name": "SupportContact"
+      }
+    }
+  }
+}

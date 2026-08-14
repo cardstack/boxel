@@ -1,0 +1,36 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "headline": "SSO Troubleshooting",
+      "body": "When a customer reports a repeating **Session Expired** error, check the identity provider's clock skew before anything else.\n\nMost of the time this is not an account problem at all — it is a SAML assertion that expired in transit because the IdP and our service disagree about the time by more than five minutes.\n\n1. Confirm the customer is on SSO rather than a local password.\n2. Ask which identity provider they use and when it was last reconfigured.\n3. Check the assertion timestamps in the auth log.\n4. If skew is over five minutes, hand to L2 — the fix is on the IdP side and the customer's admin has to make it.",
+      "visibility": "Internal",
+      "status": "Published",
+      "keywords": [
+        "sso",
+        "saml",
+        "session",
+        "expired",
+        "login",
+        "identity"
+      ],
+      "cardInfo": {
+        "name": "SSO Troubleshooting",
+        "summary": "Internal article in authentication."
+      }
+    },
+    "relationships": {
+      "category": {
+        "links": {
+          "self": "../TicketCategory/authentication"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../knowledge-article",
+        "name": "KnowledgeArticle"
+      }
+    }
+  }
+}

@@ -1,0 +1,117 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "reference": "#1256",
+      "subject": "New laptop for incoming analyst",
+      "details": "Starter joins on the 24th and needs a standard-issue laptop and a monitor.",
+      "status": "Pending",
+      "priority": "P4",
+      "channel": "Portal",
+      "approvalState": "Pending",
+      "openedAt": "2026-08-12T04:00:00.000Z",
+      "firstRespondedAt": "2026-08-12T04:30:00.000Z",
+      "fulfilmentNotes": "Standard analyst build: 14\" laptop, dock, one external monitor.",
+      "tags": [
+        "hardware",
+        "onboarding"
+      ],
+      "timers": [
+        {
+          "kind": "First response",
+          "targetMinutes": 960,
+          "startedAt": "2026-08-12T04:00:00.000Z",
+          "deadlineAt": "2026-08-12T20:00:00.000Z",
+          "satisfiedAt": "2026-08-12T04:30:00.000Z",
+          "pausedSince": null,
+          "breachedAt": null
+        },
+        {
+          "kind": "Resolution",
+          "targetMinutes": 720,
+          "startedAt": "2026-08-12T04:00:00.000Z",
+          "deadlineAt": "2026-08-12T16:00:00.000Z",
+          "satisfiedAt": null,
+          "pausedSince": "2026-08-13T09:03:47.112Z",
+          "breachedAt": null
+        }
+      ],
+      "messages": [
+        {
+          "author": "Jane Smith",
+          "authorRole": "Customer",
+          "visibility": "Public",
+          "body": "We have an analyst starting on the 24th — could we get the standard laptop and a monitor ready before then?",
+          "sentAt": "2026-08-12T04:00:00.000Z",
+          "isSlaEvent": false
+        },
+        {
+          "author": "Mike Tan",
+          "authorRole": "Agent",
+          "visibility": "Public",
+          "body": "Of course. I have raised it for approval — once your manager signs off, procurement takes about five working days.",
+          "sentAt": "2026-08-12T04:30:00.000Z",
+          "isSlaEvent": false
+        },
+        {
+          "author": "Mike Tan",
+          "authorRole": "Agent",
+          "visibility": "Internal",
+          "body": "Above the auto-approve threshold because of the monitor. Waiting on the department head.",
+          "sentAt": "2026-08-12T04:32:00.000Z",
+          "isSlaEvent": false
+        },
+        {
+          "author": "System",
+          "authorRole": "System",
+          "visibility": "Public",
+          "body": "Status changed from Open to Pending — the clock is stopped.",
+          "sentAt": "2026-08-13T09:03:47.112Z",
+          "isSlaEvent": true
+        }
+      ],
+      "cardInfo": {
+        "name": "#1256 New laptop request",
+        "summary": "A service request, not an incident — it needs approval before fulfilment starts.",
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "approvedAt": null,
+      "resolvedAt": null,
+      "closedAt": null
+    },
+    "relationships": {
+      "customer": {
+        "links": {
+          "self": "../SupportContact/jane-smith"
+        }
+      },
+      "assignee": {
+        "links": {
+          "self": "../SupportAgent/mike-tan"
+        }
+      },
+      "queue": {
+        "links": {
+          "self": "../Queue/l1-general"
+        }
+      },
+      "category": {
+        "links": {
+          "self": "../TicketCategory/how-do-i"
+        }
+      },
+      "slaPolicy": {
+        "links": {
+          "self": "../SlaPolicy/vip-support"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../service-request",
+        "name": "ServiceRequest"
+      }
+    }
+  }
+}

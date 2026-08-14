@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Business Hours",
+      "cardDescription": "When the clock is allowed to run: weekly windows, a real timezone, and holidays.",
+      "specType": "card",
+      "ref": {
+        "module": "../schedule",
+        "name": "Schedule"
+      },
+      "readMe": "## What it is\nA recurring definition of open hours plus the exceptions. It is what makes 'four hours' mean four *working* hours — a ticket raised at 4:55pm Friday is not late on Saturday morning.\n\n## Three usages\n1. **ServiceDesk** — every SLA deadline is computed against one of these.\n2. **A clinic or salon** — the same weekly windows generate bookable slots, and holidays simply produce no slots.\n3. **A factory delivery promise** — 'three working days' has to skip shifts and shutdowns; `addBusinessMinutes` is unchanged.\n\n## The linked example\n`Schedule/standard-business-hours` — Mon–Fri 09:00–18:00 with a Saturday half day, in Asia/Kuala_Lumpur, plus three holidays. The Saturday window is deliberately different so the week strip shows a partial day rather than a uniform block.\n\n## Non-goals\nNot a calendar and not an availability booking system. It holds no events. If you need to plot dated occurrences, that is a Calendar component; this answers only 'are we open at instant X'.\n\n**Open question.** Holidays are a flat date list per schedule. Shared national-holiday calendars would belong somewhere reusable — which layer?\n\n## Timezone is read, not assumed\nWall-clock parts come from `Intl` with the schedule's IANA zone. A fixed UTC offset would be wrong twice a year in every DST-observing zone, and an SLA that silently shifts an hour each spring is worse than one with no business hours at all.\n"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Schedule/standard-business-hours"
+        }
+      }
+    }
+  }
+}

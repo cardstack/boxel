@@ -1,0 +1,34 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Tag",
+      "specType": "card",
+      "ref": {
+        "module": "https://cardstack.com/base/tag",
+        "name": "default"
+      },
+      "readMe": "# Tag\n\n## Summary\nBase-realm label card for tagging and grouping other cards. Lives at\n`https://cardstack.com/base/tag` (default export `Tag`, a CardDef).\n\n## API\n- `name` \u2014 the label text\n- `color`, `fontColor`, `borderColor` \u2014 ColorFields for pill styling\n- `ellipsize` \u2014 BooleanField, truncate long names in tight layouts\n\n## Usage\n```ts\nimport Tag from 'https://cardstack.com/base/tag';\n\n@field tags = linksToMany(Tag);\n```\nAtom format renders the classic tag pill; instances are shared across cards\nso renaming a tag updates everywhere it is linked.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Tag",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Tag/design-review"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Sam Whitfield",
+      "email": "sam.whitfield@northwind-support.example.com",
+      "tier": "L3",
+      "skills": [
+        "infrastructure",
+        "mail",
+        "database"
+      ],
+      "cardInfo": {
+        "name": "Sam Whitfield",
+        "summary": "L3 support agent."
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../support-agent",
+        "name": "SupportAgent"
+      }
+    }
+  }
+}

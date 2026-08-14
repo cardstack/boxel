@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "L2 Technical",
+      "description": "Specialists — identity, API, data and anything L1 could not close.",
+      "tier": "L2",
+      "cardInfo": {
+        "name": "L2 Technical",
+        "summary": "Second line. Tickets arrive here by escalation, not by triage."
+      }
+    },
+    "relationships": {
+      "agents.0": {
+        "links": {
+          "self": "../SupportAgent/priya-raman"
+        }
+      },
+      "agents.1": {
+        "links": {
+          "self": "../SupportAgent/dana-oyelaran"
+        }
+      },
+      "defaultPolicy": {
+        "links": {
+          "self": "../SlaPolicy/standard-support"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../queue",
+        "name": "Queue"
+      }
+    }
+  }
+}

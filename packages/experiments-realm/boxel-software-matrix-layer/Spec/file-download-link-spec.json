@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "File Download Link",
+      "cardDescription": "An attachment row that looks and behaves like a downloadable file, instead of a bare icon and filename.",
+      "specType": "component",
+      "ref": {
+        "module": "../components/file-download-link",
+        "name": "default"
+      },
+      "readMe": "## What it is\nA one-line control for a `FileDef` attachment: filename, type and a visible download affordance, rendered as a real `<a download>` rather than something that only looks clickable.\n\n## Three usages\n1. **Candidate — resume**: `Candidate.resumeFile`, the attachment a screener opens first.\n2. **Application — resume and cover letter**: two on one card, which is where the label argument earns its place; without it both rows read identically.\n3. **Any card carrying a document** — an Offer letter, a signed contract, a submitted invoice. Anywhere a `FileDef` is currently rendered in its atom format and users are not realising it is downloadable.\n\n## The linked example\n`Application/riley-chen.json` — the only instance in this realm that declares `resumeFile` at all.\n\n**Be aware: it is wired but EMPTY.** No demo instance here currently carries an uploaded `FileDef`, so this example demonstrates the field being present and the component's no-file branch (it renders nothing), not a working download. Attaching a real file to a demo Application is what would make this a properly populated example — until then this Spec documents the component honestly but does not prove it end to end.\n\n## Why this exists instead of FileDef's own atom format\nFileDef's atom renders a bare icon plus a name with no download affordance — the \"Cover letter\" panel it replaced read as inert text, and users did not click it. This is the same data with the affordance made explicit; it is a presentation fix, not a data model.\n\n## Non-goals\nNot an uploader and not a file picker — it only renders a file that is already attached. Not a preview either: it hands the file to the browser, it does not render PDFs or images inline. And it renders nothing at all when there is no file, so a caller that needs an explicit \"no resume attached\" empty state has to supply that itself.\n\n**Open question.** No demo instance in this realm carries a real uploaded FileDef, so this block has never been proven end to end. Who owns creating that fixture — this block, or the Application/Candidate cards that declare the field?\n"
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Application/riley-chen"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

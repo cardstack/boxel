@@ -1,0 +1,175 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "reference": "#1234",
+      "subject": "Can't access dashboard",
+      "details": "Customer cannot sign in to the dashboard; sees a Session Expired error on every attempt. Clearing cookies did not help.",
+      "status": "Open",
+      "priority": "P2",
+      "channel": "Chat",
+      "impact": "Team",
+      "urgency": "High",
+      "openedAt": "2026-08-12T02:32:00.000Z",
+      "firstRespondedAt": "2026-08-12T02:47:00.000Z",
+      "tags": [
+        "sso",
+        "login",
+        "access"
+      ],
+      "timers": [
+        {
+          "kind": "First response",
+          "targetMinutes": 120,
+          "startedAt": "2026-08-12T02:32:00.000Z",
+          "deadlineAt": "2026-08-12T04:32:00.000Z",
+          "satisfiedAt": "2026-08-12T02:47:00.000Z",
+          "pausedSince": null,
+          "breachedAt": null
+        },
+        {
+          "kind": "Resolution",
+          "targetMinutes": 1440,
+          "startedAt": "2026-08-12T02:32:00.000Z",
+          "deadlineAt": "2026-08-14T01:18:00.000Z",
+          "satisfiedAt": null,
+          "pausedSince": null,
+          "breachedAt": null
+        }
+      ],
+      "messages": [
+        {
+          "author": "Jane Smith",
+          "authorRole": "Customer",
+          "visibility": "Public",
+          "body": "Hi, I can't access the dashboard since this morning. I get a \"Session Expired\" error every time I try to log in. I've tried clearing cookies but it didn't help.",
+          "sentAt": "2026-08-12T02:32:00.000Z",
+          "isSlaEvent": false
+        },
+        {
+          "author": "Mike Tan",
+          "authorRole": "Agent",
+          "visibility": "Public",
+          "body": "Hi Jane, thanks for reaching out. Let me check your account status and get back to you shortly.",
+          "sentAt": "2026-08-12T02:47:00.000Z",
+          "isSlaEvent": false
+        },
+        {
+          "author": "System",
+          "authorRole": "System",
+          "visibility": "Public",
+          "body": "First response met — 15m of a 2h target.",
+          "sentAt": "2026-08-12T02:47:00.000Z",
+          "isSlaEvent": true
+        },
+        {
+          "author": "Mike Tan",
+          "authorRole": "Agent",
+          "visibility": "Internal",
+          "body": "Checked the auth logs — no failed logins at all, which points at SSO rather than the password. Escalating to L2 if she confirms she is on SSO.",
+          "sentAt": "2026-08-12T02:50:00.000Z",
+          "isSlaEvent": false
+        },
+        {
+          "author": "Jane Smith",
+          "authorRole": "Customer",
+          "visibility": "Public",
+          "body": "Yes, we use Okta for sign-in. Nothing changed on our side as far as I know.",
+          "sentAt": "2026-08-12T05:10:00.000Z",
+          "isSlaEvent": false
+        },
+        {
+          "author": "Mike Tan",
+          "authorRole": "Agent",
+          "visibility": "Public",
+          "body": "Thanks Jane — that confirms it. Okta's clock is drifting past the five-minute tolerance, which expires the SSO assertion in transit. I'm passing this to our identity specialists now; they'll contact your Okta admin with the exact setting to change.",
+          "sentAt": "2026-08-12T12:34:47.970Z",
+          "isSlaEvent": false
+        },
+        {
+          "author": "System",
+          "authorRole": "System",
+          "visibility": "Public",
+          "body": "Status changed from Pending to On Hold.",
+          "sentAt": "2026-08-13T11:20:30.812Z",
+          "isSlaEvent": true
+        },
+        {
+          "author": "System",
+          "authorRole": "System",
+          "visibility": "Public",
+          "body": "Status changed from On Hold to Open — the clock is running again.",
+          "sentAt": "2026-08-13T11:20:43.844Z",
+          "isSlaEvent": true
+        },
+        {
+          "author": "System",
+          "authorRole": "System",
+          "visibility": "Public",
+          "body": "Status changed from Open to Cancelled — the clock is stopped.",
+          "sentAt": "2026-08-13T11:49:03.283Z",
+          "isSlaEvent": true
+        },
+        {
+          "author": "System",
+          "authorRole": "System",
+          "visibility": "Public",
+          "body": "Status changed from Cancelled to Open — the clock is running again.",
+          "sentAt": "2026-08-13T11:49:22.956Z",
+          "isSlaEvent": true
+        }
+      ],
+      "cardInfo": {
+        "name": "#1234 Can't access dashboard",
+        "summary": "VIP customer locked out of the dashboard; suspected SSO clock skew.",
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "resolvedAt": null,
+      "closedAt": null
+    },
+    "relationships": {
+      "customer": {
+        "links": {
+          "self": "../SupportContact/jane-smith"
+        }
+      },
+      "assignee": {
+        "links": {
+          "self": "../SupportAgent/mike-tan"
+        }
+      },
+      "queue": {
+        "links": {
+          "self": "../Queue/l1-general"
+        }
+      },
+      "category": {
+        "links": {
+          "self": "../TicketCategory/authentication"
+        }
+      },
+      "slaPolicy": {
+        "links": {
+          "self": "../SlaPolicy/vip-support"
+        }
+      },
+      "linkedArticles.0": {
+        "links": {
+          "self": "../KnowledgeArticle/dashboard-faq"
+        }
+      },
+      "relatedTickets.0": {
+        "links": {
+          "self": "../Ticket/1198-login-issues"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../incident",
+        "name": "Incident"
+      }
+    }
+  }
+}

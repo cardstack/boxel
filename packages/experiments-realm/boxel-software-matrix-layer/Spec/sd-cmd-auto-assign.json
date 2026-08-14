@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Auto-assign",
+      "cardDescription": "Route by category, then choose a person by skill.",
+      "specType": "command",
+      "ref": {
+        "module": "../commands/auto-assign-ticket-command",
+        "name": "AutoAssignTicketCommand"
+      },
+      "readMe": "## What it is\nFills queue and priority from the category when unset, then picks among that queue's agents by **skill match first**, load only as tie-break.\n\n## Three usages\n1. **ServiceDesk** — routing on intake.\n2. **Field service dispatch** — skills are certifications; the same match applies.\n3. **Task distribution** — any pool where 'who can actually do this' beats 'who is free'.\n\n## The linked example\n`../Ticket/1288-invoice-download` is assigned to the L2 agent whose skills include billing.\n\n## Non-goals\nNot a load balancer. If you genuinely want round-robin regardless of skill, this is the wrong command — it will always prefer a match.\n\n**Open question.** Load is counted from open tickets only. Should availability (shift, PTO) be part of the input, and whose block owns that?\n\n## Why the example is a linked card\nA command has no renderable instance, so `containedExamples` cannot hold one. The linked card is the command's natural target — open it and the effects described above are visible in its state and its conversation.\n\n## Honest about weak routing\nWhen nothing matches, the result message says so rather than reporting a confident assignment. A silent fallback to 'least busy' is how SSO questions reach people who have never seen one.\n"
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Ticket/1288-invoice-download"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

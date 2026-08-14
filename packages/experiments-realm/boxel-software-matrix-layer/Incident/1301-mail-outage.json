@@ -1,0 +1,133 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "reference": "#1301",
+      "subject": "Email delivery down for all users",
+      "details": "No outbound mail since roughly 11:00. Affects every user in the tenant.",
+      "status": "Pending",
+      "priority": "P1",
+      "channel": "Phone",
+      "impact": "Organization",
+      "urgency": "Critical",
+      "openedAt": "2026-08-12T05:05:00.000Z",
+      "firstRespondedAt": "2026-08-12T05:12:00.000Z",
+      "tags": [
+        "outage",
+        "mail",
+        "p1"
+      ],
+      "timers": [
+        {
+          "kind": "First response",
+          "targetMinutes": 15,
+          "startedAt": "2026-08-12T05:05:00.000Z",
+          "deadlineAt": "2026-08-12T05:20:00.000Z",
+          "satisfiedAt": "2026-08-12T05:12:00.000Z",
+          "pausedSince": null,
+          "breachedAt": null
+        },
+        {
+          "kind": "Resolution",
+          "targetMinutes": 120,
+          "startedAt": "2026-08-12T05:05:00.000Z",
+          "deadlineAt": "2026-08-12T07:05:00.000Z",
+          "satisfiedAt": null,
+          "pausedSince": "2026-08-13T10:40:19.501Z",
+          "breachedAt": "2026-08-12T07:05:00.000Z"
+        }
+      ],
+      "messages": [
+        {
+          "author": "Omar Haddad",
+          "authorRole": "Customer",
+          "visibility": "Public",
+          "body": "Nothing is going out. Our dispatch team cannot send anything to drivers. This is stopping work.",
+          "sentAt": "2026-08-12T05:05:00.000Z",
+          "isSlaEvent": false
+        },
+        {
+          "author": "Sam Whitfield",
+          "authorRole": "Agent",
+          "visibility": "Public",
+          "body": "We can see it too and are on it. I will update you every twenty minutes until it is fixed.",
+          "sentAt": "2026-08-12T05:12:00.000Z",
+          "isSlaEvent": false
+        },
+        {
+          "author": "System",
+          "authorRole": "System",
+          "visibility": "Public",
+          "body": "First response met — 7m of a 15m target.",
+          "sentAt": "2026-08-12T05:12:00.000Z",
+          "isSlaEvent": true
+        },
+        {
+          "author": "Sam Whitfield",
+          "authorRole": "Agent",
+          "visibility": "Internal",
+          "body": "Relay queue is backed up behind a stuck TLS handshake to the upstream provider. Draining manually; root cause looks like their certificate rotation.",
+          "sentAt": "2026-08-12T06:40:00.000Z",
+          "isSlaEvent": false
+        },
+        {
+          "author": "System",
+          "authorRole": "System",
+          "visibility": "Public",
+          "body": "Resolution target breached — 2h target missed.",
+          "sentAt": "2026-08-12T07:20:00.000Z",
+          "isSlaEvent": true
+        },
+        {
+          "author": "System",
+          "authorRole": "System",
+          "visibility": "Public",
+          "body": "Status changed from Open to Pending — the clock is stopped.",
+          "sentAt": "2026-08-13T10:40:19.501Z",
+          "isSlaEvent": true
+        }
+      ],
+      "cardInfo": {
+        "name": "#1301 Email delivery down",
+        "summary": "P1 outage. Resolution target already missed — this is what a breach looks like.",
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "resolvedAt": null,
+      "closedAt": null
+    },
+    "relationships": {
+      "customer": {
+        "links": {
+          "self": "../SupportContact/jane-smith"
+        }
+      },
+      "assignee": {
+        "links": {
+          "self": "../SupportAgent/priya-raman"
+        }
+      },
+      "queue": {
+        "links": {
+          "self": "../Queue/l3-engineering"
+        }
+      },
+      "category": {
+        "links": {
+          "self": "../TicketCategory/outage"
+        }
+      },
+      "slaPolicy": {
+        "links": {
+          "self": "../SlaPolicy/standard-support"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../incident",
+        "name": "Incident"
+      }
+    }
+  }
+}

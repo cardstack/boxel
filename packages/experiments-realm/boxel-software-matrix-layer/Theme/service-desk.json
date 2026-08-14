@@ -1,0 +1,21 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cssVariables": ":root {\n  /* ServiceDesk \u2014 the quiet palette.\n     Warm neutrals, not cool: this surface is stared at for a whole shift, and a\n     cool ramp both reads clinical and fights the amber/red that carry meaning.\n     One accent, used for selection / focus / primary action only \u2014 never\n     decoration, because green and red are already spoken for by SLA state. */\n  --background: #faf9f8;\n  --foreground: #1c1b19;\n  --card: #ffffff;\n  --card-foreground: #1c1b19;\n  --popover: #ffffff;\n  --popover-foreground: #1c1b19;\n  --primary: #5a53c9;\n  --primary-foreground: #ffffff;\n  --secondary: #f3f2f0;\n  --secondary-foreground: #1c1b19;\n  --muted: #f3f2f0;\n  --muted-foreground: #6b6863;\n  --accent: #efeefb;\n  --accent-foreground: #1c1b19;\n  --destructive: #a8291d;\n  --destructive-foreground: #ffffff;\n  /* Deliberately faint. \"Structure should be felt not seen\" \u2014 the previous\n     value made every row read as a competing rectangle. */\n  --border: #e7e5e1;\n  --input: #ffffff;\n  --ring: #5a53c9;\n  --radius: 0.375rem;\n  --font-sans: system-ui, -apple-system, 'Segoe UI', sans-serif;\n  --font-serif: ui-serif, Georgia, serif;\n  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;\n  --font-heading: system-ui, -apple-system, 'Segoe UI', sans-serif;\n\n  /* The catalog popover's `edit` kind paints a sticky-note yellow as a\n     semantic \"unsaved\" signal, and it exposes these two vars so a theme can\n     say otherwise. Here nothing is ever unsaved: every choice in a link\n     picker commits the moment it is made, so a \"you have not saved this\"\n     colour would be telling the reader something untrue. Neutral card\n     surface instead \u2014 the popover keeps its own shadow, radius and\n     positioning. */\n  --bx-popover-edit-bg: #ffffff;\n  --bx-popover-edit-border: #e7e5e1;\n}",
+      "cssImports": null,
+      "cardInfo": {
+        "name": "ServiceDesk \u2014 Quiet",
+        "summary": "Warm neutral ground, one functional accent. Saturation is reserved for SLA state and priority, which are the only signals on the surface.",
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "@cardstack/base/card-api",
+        "name": "Theme"
+      }
+    }
+  }
+}

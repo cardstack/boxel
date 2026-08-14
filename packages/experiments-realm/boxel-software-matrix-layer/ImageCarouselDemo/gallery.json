@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "images": [
+        "https://picsum.photos/id/1015/960/540",
+        "https://picsum.photos/id/1025/960/540",
+        "https://picsum.photos/id/1039/960/540"
+      ],
+      "cardInfo": {
+        "name": "Carousel gallery",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../image-carousel-demo",
+        "name": "ImageCarouselDemo"
+      }
+    }
+  }
+}

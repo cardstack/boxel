@@ -1,0 +1,22 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Lena Fischer",
+      "email": "lena@kitecrest.example.com",
+      "phone": "+44 20 7946 0958",
+      "company": "Kitecrest Studio",
+      "tier": "Trial",
+      "cardInfo": {
+        "name": "Lena Fischer",
+        "summary": "Trial customer at Kitecrest Studio."
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../support-contact",
+        "name": "SupportContact"
+      }
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Bar Chart",
+      "cardDescription": "A horizontal bar chart for hand-rolled dashboard panels — a semantic list with a filled track per row, no charting library.",
+      "specType": "component",
+      "ref": {
+        "module": "../components/bar-chart",
+        "name": "BarChart"
+      },
+      "readMe": "## What it is\nA comparison chart for one series of labelled numbers, drawn as a list with a filled track per row. No charting library: it is markup and CSS, so it costs nothing to load and inherits the host card's theme tokens directly.\n\n## Three usages\n1. **Talent & Resource Tracker — Dashboard funnel**: applied → screened → interviewed → offered → hired, replacing what used to be bespoke CSS-bar markup inline in the app shell.\n2. **Talent & Resource Tracker — Source Effectiveness**: conversion rate per hiring source, where two rows can legitimately share a value (two sources both at 0%), which is why the formatter is given the row's label as well as its number.\n3. **Any single-series dashboard panel** — tickets per queue, spend per vendor, votes per option. If a card is about to hand-roll a fourth set of `<div>` bars, this is the thing to reach for instead.\n\n## The linked example\n`talent-resource-tracker/TalentResourceTracker/tracker.json` — the app shell that mounts it twice on one screen, which is what makes it a proven reusable component rather than a one-off: the two call sites pass different data shapes, different maxima and different value formatters.\n\n## Why `maxValue` is an argument and not always derived\nBars scale to `maxValue`, defaulting to the largest value in the data so a lone series always fills its widest row. A caller comparing two panels side by side needs to pin the same maximum across both, or the reader will compare bar lengths that were never on the same scale.\n\n## Non-goals\nNot time series — that is a line chart, and a bar per day is the wrong encoding. Not part-to-whole either; a donut or stacked bar says \"these sum to 100%\" and this one deliberately does not. And not a large dataset: it renders every row, so a hundred bars is a scrolling wall, not a chart.\n\n**Open question.** There is no axis, no gridline and no tick labels — deliberate for a dashboard panel, wrong for anything analytical. Is a second, heavier chart block the answer, or should this grow an optional axis?\n"
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../talent-resource-tracker/TalentResourceTracker/tracker"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

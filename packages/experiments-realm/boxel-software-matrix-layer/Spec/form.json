@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Form",
+      "specType": "component",
+      "ref": {
+        "module": "https://realms-staging.stack.cards/catalog/boxel-surface/src/components/form",
+        "name": "default"
+      },
+      "readMe": "# Form\n\n## Summary\nCatalog (boxel-surface) form layout component: renders a model's fields as\na structured form with layout, density, and column control. Lives in the\ncatalog realm at `boxel-surface/src/components/form` (default export\n`Form`).\n\n## API\n- `@model` / `@resolvedFields` / `@fields` \u2014 what to render (a resolved form\n  model, pre-resolved field inputs, or named field components)\n- `@layout` \u2014 `vertical | horizontal`; `@density` \u2014 `comfortable | compact`\n- `@columns` \u2014 column spec; `@mode` \u2014 form mode; `@errors` \u2014 error strings\n- `@heading`, `@description` \u2014 form chrome\n\n## Usage\n```gts\nimport Form from 'https://realms-staging.stack.cards/catalog/boxel-surface/src/components/form';\n\n<Form @model={{this.formModel}} @layout='vertical' @density='comfortable' />\n```\nPairs with Form Wizard for multi-step flows.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Form",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

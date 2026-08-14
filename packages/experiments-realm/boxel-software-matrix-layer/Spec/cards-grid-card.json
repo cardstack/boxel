@@ -1,0 +1,34 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Cards Grid",
+      "specType": "card",
+      "ref": {
+        "module": "https://cardstack.com/base/cards-grid",
+        "name": "CardsGrid"
+      },
+      "readMe": "# Cards Grid\n\n## Summary\nBase-realm grid-of-cards card: an instance renders the realm's cards as a\nfilterable fitted-card grid \u2014 the classic workspace index experience. Lives\nat `https://cardstack.com/base/cards-grid` (named export `CardsGrid`).\n\n## Usage\nCreate a `CardsGrid` instance anywhere in a realm; it queries and renders\nthe realm's card instances with type filtering, no configuration required.\n\nThe linked example is a live grid over this very realm.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Cards Grid",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../CardsGrid/demo"
+        }
+      }
+    }
+  }
+}
