@@ -287,19 +287,15 @@ export class LoyaltyAccount extends CardDef {
           </div>
           <div class='stat'>
             <span class='stat-label'>Member since</span>
-            <span class='stat-value stat-date'>{{if
-                @model.memberSince
-                @model.memberSince
-                '—'
-              }}</span>
+            <span class='stat-value stat-date'>
+              {{#if @model.memberSince}}<@fields.memberSince />{{else}}—{{/if}}
+            </span>
           </div>
           <div class='stat'>
             <span class='stat-label'>Tier since</span>
-            <span class='stat-value stat-date'>{{if
-                @model.tierSince
-                @model.tierSince
-                '—'
-              }}</span>
+            <span class='stat-value stat-date'>
+              {{#if @model.tierSince}}<@fields.tierSince />{{else}}—{{/if}}
+            </span>
           </div>
         </section>
         {{#if @model.holder}}

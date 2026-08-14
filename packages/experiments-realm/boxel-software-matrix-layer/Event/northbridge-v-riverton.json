@@ -11,10 +11,22 @@
         "total": 52000,
         "unit": "seats",
         "allocations": [
-          { "name": "Season tickets", "quantity": 28000 },
-          { "name": "Members", "quantity": 15000 },
-          { "name": "Away supporters", "quantity": 3000 },
-          { "name": "Hospitality", "quantity": 2500 }
+          {
+            "name": "Season tickets",
+            "quantity": 28000
+          },
+          {
+            "name": "Members",
+            "quantity": 15000
+          },
+          {
+            "name": "Away supporters",
+            "quantity": 3000
+          },
+          {
+            "name": "Hospitality",
+            "quantity": 2500
+          }
         ]
       },
       "description": "League fixture, matchweek 4. Gates open two hours before kick-off; the North Stand rail link runs every ten minutes from midday.",

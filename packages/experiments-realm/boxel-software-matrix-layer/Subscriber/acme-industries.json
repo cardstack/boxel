@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "since": "2024-03-01",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "holder": {
+        "links": {
+          "self": "../Contact/farah-zulkifli"
+        }
+      },
+      "subscriptions.0": {
+        "links": {
+          "self": "../Subscription/acme-workspace-pro"
+        }
+      },
+      "subscriptions.1": {
+        "links": {
+          "self": "../Subscription/acme-data-addon"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../subscriber",
+        "name": "Subscriber"
+      }
+    }
+  }
+}
