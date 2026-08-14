@@ -15,7 +15,10 @@
         "total": 3000,
         "unit": "seats",
         "allocations": [
-          { "name": "Away allocation", "quantity": 3000 }
+          {
+            "name": "Away allocation",
+            "quantity": 3000
+          }
         ]
       },
       "description": "Away allocation only — 3,000 seats in the North Terrace.",

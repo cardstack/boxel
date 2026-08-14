@@ -15,10 +15,22 @@
         "total": 52000,
         "unit": "seats",
         "allocations": [
-          { "name": "Season tickets", "quantity": 28000 },
-          { "name": "Members", "quantity": 15000 },
-          { "name": "Away supporters", "quantity": 3000 },
-          { "name": "Hospitality", "quantity": 2500 }
+          {
+            "name": "Season tickets",
+            "quantity": 28000
+          },
+          {
+            "name": "Members",
+            "quantity": 15000
+          },
+          {
+            "name": "Away supporters",
+            "quantity": 3000
+          },
+          {
+            "name": "Hospitality",
+            "quantity": 2500
+          }
         ]
       },
       "description": "Cup quarter-final. Sold out in the Gold window.",
