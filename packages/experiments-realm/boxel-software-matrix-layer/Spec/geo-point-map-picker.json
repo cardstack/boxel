@@ -8,7 +8,7 @@
         "module": "https://realms-staging.stack.cards/catalog/fields/geo-point/components/geo-point-map-picker",
         "name": "default"
       },
-      "readMe": "# Geo Point Map Picker\n\n## Summary\nCatalog map-based coordinate picker, part of the geo-point field family:\nrenders the point on a map and (in edit) lets the user pick by clicking.\nLives in the catalog realm at\n`fields/geo-point/components/geo-point-map-picker` (default export).\n\n## API\n- `@model` \u2014 a `GeoModel` (lat/lon holder from the geo-point field)\n- `@options` \u2014 `GeoPointMapOptions` (tiles, zoom)\n- `@canEdit` \u2014 enables pick-on-click\n\n## Usage\nConsumed by the catalog geo-point field's edit and isolated formats. Live\nexamples ship with the geo-point field listing in the catalog.",
+      "readMe": "# Geo Point Map Picker\n\n## Summary\nCatalog map-based coordinate picker, part of the geo-point field family:\nrenders the point on a map and (in edit) lets the user pick by clicking.\nLives in the catalog realm at\n`fields/geo-point/components/geo-point-map-picker` (default export).\n\n## API\n- `@model` — a `GeoModel` (lat/lon holder from the geo-point field)\n- `@options` — `GeoPointMapOptions` (tiles, zoom)\n- `@canEdit` — enables pick-on-click\n\n## Usage\nConsumed by the catalog geo-point field's edit and isolated formats. Live\nexamples ship with the geo-point field listing in the catalog.",
       "containedExamples": [],
       "cardInfo": {
         "name": "Geo Point Map Picker",

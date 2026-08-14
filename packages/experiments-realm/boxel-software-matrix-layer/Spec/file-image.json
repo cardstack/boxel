@@ -8,7 +8,7 @@
         "module": "https://cardstack.com/base/file-formats/file-image",
         "name": "FileImage"
       },
-      "readMe": "# File Image\n\n## Summary\nBase-realm renderer for image files. Lives at\n`https://cardstack.com/base/file-formats/file-image` (named export\n`FileImage`).\n\n## Usage\n```gts\nimport { FileImage } from 'https://cardstack.com/base/file-formats/file-image';\n\n<FileImage @model={{this.imageFile}} />\n```\nRenders the image from the file's URL with the file-formats sizing\nbehavior.\nFile renderers take a FileDef-backed model (an uploaded realm file) \u2014 an\nexample instance requires an actual uploaded file, so these specs document\nthe contract and defer live examples to a file-fixtures pass (flagged for\nreview).",
+      "readMe": "# File Image\n\n## Summary\nBase-realm renderer for image files. Lives at\n`https://cardstack.com/base/file-formats/file-image` (named export\n`FileImage`).\n\n## Usage\n```gts\nimport { FileImage } from 'https://cardstack.com/base/file-formats/file-image';\n\n<FileImage @model={{this.imageFile}} />\n```\nRenders the image from the file's URL with the file-formats sizing\nbehavior.\nFile renderers take a FileDef-backed model (an uploaded realm file) — an\nexample instance requires an actual uploaded file, so these specs document\nthe contract and defer live examples to a file-fixtures pass (flagged for\nreview).",
       "containedExamples": [],
       "cardInfo": {
         "name": "File Image",

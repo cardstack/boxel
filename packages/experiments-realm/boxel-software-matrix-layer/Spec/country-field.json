@@ -8,7 +8,7 @@
         "module": "https://cardstack.com/base/country",
         "name": "default"
       },
-      "readMe": "# Country\n\n## Summary\nBase-realm country field with a searchable picker edit UI. Lives at\n`https://cardstack.com/base/country` (default export `CountryField`).\n\n## API\n- `name` \u2014 country display name (StringField)\n- `code` \u2014 ISO 3166-1 alpha-2 code (StringField)\n\nThe module also exports a `Country` CardDef for realms that want countries\nas linkable card instances rather than inline values.\n\n## Usage\n```ts\nimport CountryField from 'https://cardstack.com/base/country';\n\n@field country = contains(CountryField);\n```\nUsed by the base Address field for its country segment.",
+      "readMe": "# Country\n\n## Summary\nBase-realm country field with a searchable picker edit UI. Lives at\n`https://cardstack.com/base/country` (default export `CountryField`).\n\n## API\n- `name` — country display name (StringField)\n- `code` — ISO 3166-1 alpha-2 code (StringField)\n\nThe module also exports a `Country` CardDef for realms that want countries\nas linkable card instances rather than inline values.\n\n## Usage\n```ts\nimport CountryField from 'https://cardstack.com/base/country';\n\n@field country = contains(CountryField);\n```\nUsed by the base Address field for its country segment.",
       "containedExamples": [
         {
           "name": "Malaysia",

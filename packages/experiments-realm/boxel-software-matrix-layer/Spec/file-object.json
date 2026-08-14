@@ -8,7 +8,7 @@
         "module": "https://cardstack.com/base/file-formats/file-resources",
         "name": "FileObject"
       },
-      "readMe": "# File Object\n\n## Summary\nBase-realm embedded-object file renderer (PDFs and other browser-embeddable\ndocuments). Lives at\n`https://cardstack.com/base/file-formats/file-resources` (named export\n`FileObject`).\n\n## Usage\n```gts\nimport { FileObject } from 'https://cardstack.com/base/file-formats/file-resources';\n\n<FileObject @model={{this.documentFile}} />\n```\nFile renderers take a FileDef-backed model (an uploaded realm file) \u2014 an\nexample instance requires an actual uploaded file, so these specs document\nthe contract and defer live examples to a file-fixtures pass (flagged for\nreview).",
+      "readMe": "# File Object\n\n## Summary\nBase-realm embedded-object file renderer (PDFs and other browser-embeddable\ndocuments). Lives at\n`https://cardstack.com/base/file-formats/file-resources` (named export\n`FileObject`).\n\n## Usage\n```gts\nimport { FileObject } from 'https://cardstack.com/base/file-formats/file-resources';\n\n<FileObject @model={{this.documentFile}} />\n```\nFile renderers take a FileDef-backed model (an uploaded realm file) — an\nexample instance requires an actual uploaded file, so these specs document\nthe contract and defer live examples to a file-fixtures pass (flagged for\nreview).",
       "containedExamples": [],
       "cardInfo": {
         "name": "File Object",

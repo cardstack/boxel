@@ -8,7 +8,7 @@
         "module": "https://cardstack.com/base/file-formats/file-resources",
         "name": "FileResource"
       },
-      "readMe": "# File Resource\n\n## Summary\nBase-realm generic file renderer \u2014 the catch-all presentation for any\nFileDef-backed file. Lives at\n`https://cardstack.com/base/file-formats/file-resources` (named export\n`FileResource`, alongside `FileAudio`, `FileVideo`, and `FileObject`).\n\n## Usage\n```gts\nimport { FileResource } from 'https://cardstack.com/base/file-formats/file-resources';\n\n<FileResource @model={{this.file}} />\n```\nFile renderers take a FileDef-backed model (an uploaded realm file) \u2014 an\nexample instance requires an actual uploaded file, so these specs document\nthe contract and defer live examples to a file-fixtures pass (flagged for\nreview).",
+      "readMe": "# File Resource\n\n## Summary\nBase-realm generic file renderer — the catch-all presentation for any\nFileDef-backed file. Lives at\n`https://cardstack.com/base/file-formats/file-resources` (named export\n`FileResource`, alongside `FileAudio`, `FileVideo`, and `FileObject`).\n\n## Usage\n```gts\nimport { FileResource } from 'https://cardstack.com/base/file-formats/file-resources';\n\n<FileResource @model={{this.file}} />\n```\nFile renderers take a FileDef-backed model (an uploaded realm file) — an\nexample instance requires an actual uploaded file, so these specs document\nthe contract and defer live examples to a file-fixtures pass (flagged for\nreview).",
       "containedExamples": [],
       "cardInfo": {
         "name": "File Resource",

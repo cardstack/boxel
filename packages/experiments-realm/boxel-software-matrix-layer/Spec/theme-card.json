@@ -8,7 +8,7 @@
         "module": "https://cardstack.com/base/card-api",
         "name": "Theme"
       },
-      "readMe": "# Theme\n\n## Summary\nBase-realm theme card: a set of CSS custom properties (and optional CSS\nimports) applied to cards that select it via `cardInfo.theme`. Exported from\n`https://cardstack.com/base/card-api` as `Theme`.\n\n## API\n- `cssVariables` \u2014 a `:root { --token: value; }` block; cards read tokens\n  like `--background`, `--card`, `--primary`, `--foreground`, `--border`\n- `cssImports` \u2014 optional list of stylesheet URLs\n\n## Usage\nCreate a Theme instance, then pick it in any card's edit view under\nCard Info \u2192 Theme. Hand-authored instances must include full `cardInfo`\nand `cssImports` (even empty) or they will not index.\n\nThe linked example (Midnight Marker) is a working dark palette.",
+      "readMe": "# Theme\n\n## Summary\nBase-realm theme card: a set of CSS custom properties (and optional CSS\nimports) applied to cards that select it via `cardInfo.theme`. Exported from\n`https://cardstack.com/base/card-api` as `Theme`.\n\n## API\n- `cssVariables` — a `:root { --token: value; }` block; cards read tokens\n  like `--background`, `--card`, `--primary`, `--foreground`, `--border`\n- `cssImports` — optional list of stylesheet URLs\n\n## Usage\nCreate a Theme instance, then pick it in any card's edit view under\nCard Info → Theme. Hand-authored instances must include full `cardInfo`\nand `cssImports` (even empty) or they will not index.\n\nThe linked example (Midnight Marker) is a working dark palette.",
       "containedExamples": [],
       "cardInfo": {
         "name": "Theme",

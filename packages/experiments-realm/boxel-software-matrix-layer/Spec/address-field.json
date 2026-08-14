@@ -8,7 +8,7 @@
         "module": "https://cardstack.com/base/address",
         "name": "default"
       },
-      "readMe": "# Address\n\n## Summary\nBase-realm compound field for a postal address. Lives at\n`https://cardstack.com/base/address` (default export `AddressField`).\n\n## API\n- `addressLine1`, `addressLine2` \u2014 street lines (StringField)\n- `city`, `state`, `postalCode`, `poBoxNumber` \u2014 StringFields\n- `country` \u2014 a `CountryField` (`{ name, code }`) with a picker edit UI\n- `fullAddress` \u2014 computed one-line rendering of the whole address\n\n## Usage\n```ts\nimport AddressField from 'https://cardstack.com/base/address';\n\n@field shippingAddress = contains(AddressField);\n```\nEmbedded format renders the composed address; edit format is a full form\nincluding the country picker.",
+      "readMe": "# Address\n\n## Summary\nBase-realm compound field for a postal address. Lives at\n`https://cardstack.com/base/address` (default export `AddressField`).\n\n## API\n- `addressLine1`, `addressLine2` — street lines (StringField)\n- `city`, `state`, `postalCode`, `poBoxNumber` — StringFields\n- `country` — a `CountryField` (`{ name, code }`) with a picker edit UI\n- `fullAddress` — computed one-line rendering of the whole address\n\n## Usage\n```ts\nimport AddressField from 'https://cardstack.com/base/address';\n\n@field shippingAddress = contains(AddressField);\n```\nEmbedded format renders the composed address; edit format is a full form\nincluding the country picker.",
       "containedExamples": [
         {
           "addressLine1": "12 Jalan Bukit Bintang",
