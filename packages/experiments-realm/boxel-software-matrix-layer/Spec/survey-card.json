@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Survey card",
+      "specType": "card",
+      "ref": {
+        "module": "../survey",
+        "name": "Survey"
+      },
+      "readMe": "# Survey\n\n## Summary\nA set of questions put to an audience, and the card people answer.\nExtracted from the catalog's survey listing into the shared realm\n(`survey.gts` + `components/survey/`): the isolated view is the live\nfill-in flow (question wizard, validation, submit) plus an aggregated\nresults view; fitted advertises the survey with its question count.\n\n## API\n- `title`, `description` (markdown)\n- `questions` — containsMany SurveyQuestion (see the Questionnaire spec for kinds/options/required)\n- `questionCount` — computed\n- Submitting creates a SurveyResponse (see the Form Response spec) linked back to this card\n\n## Usage\n```ts\nimport { Survey } from '../survey';\n\n@field feedbackSurvey = linksTo(Survey);\n```\nA consumer that triggers surveys (post-event feedback, support CSAT)\nlinks to one Survey and points respondents at it; responses accumulate\nas their own cards, queryable by `surveyId`.\n\n## Non-goals\nNo audience targeting, scheduling or reminders — when a survey goes out\nis the consumer's workflow. Response incentives (points for completing)\nbelong to the consumer wiring its own commands. Aggregation beyond the\nbuilt-in results view (cross-survey reporting) is a query the consumer\nowns.",
+      "cardInfo": {
+        "name": "Survey",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Survey/event-feedback"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

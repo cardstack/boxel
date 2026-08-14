@@ -72,7 +72,7 @@ export default class QuestionInput extends GlimmerComponent<QuestionInputSignatu
           type='text'
           value={{this.textValue}}
           placeholder='Your answer'
-          autofocus={{@autofocus}}
+          aria-label={{if @question.prompt @question.prompt 'Your answer'}}
           {{on 'input' this.updateText}}
         />
 
@@ -81,7 +81,7 @@ export default class QuestionInput extends GlimmerComponent<QuestionInputSignatu
           class='qi-input qi-textarea'
           rows='4'
           placeholder='Your answer'
-          autofocus={{@autofocus}}
+          aria-label={{if @question.prompt @question.prompt 'Your answer'}}
           {{on 'input' this.updateText}}
         >{{this.textValue}}</textarea>
 
@@ -148,6 +148,7 @@ export default class QuestionInput extends GlimmerComponent<QuestionInputSignatu
           type='text'
           value={{this.textValue}}
           placeholder='Your answer'
+          aria-label={{if @question.prompt @question.prompt 'Your answer'}}
           {{on 'input' this.updateText}}
         />
       {{/if}}

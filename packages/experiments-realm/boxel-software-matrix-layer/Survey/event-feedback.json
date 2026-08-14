@@ -1,0 +1,69 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Conference Feedback",
+      "description": "Thanks for attending! Let us know how it went so we can make next year even better.",
+      "questions": [
+        {
+          "prompt": "How would you rate the event overall?",
+          "helpText": "1 = poor, 5 = excellent",
+          "kind": "rating",
+          "options": [],
+          "required": true
+        },
+        {
+          "prompt": "Which sessions did you attend?",
+          "helpText": "Select all that apply.",
+          "kind": "multi-choice",
+          "options": [
+            "Opening keynote",
+            "Workshops",
+            "Lightning talks",
+            "Panel discussion",
+            "Closing party"
+          ],
+          "required": false
+        },
+        {
+          "prompt": "What was your favorite session?",
+          "helpText": null,
+          "kind": "short-text",
+          "options": [],
+          "required": false
+        },
+        {
+          "prompt": "Did the event meet your expectations?",
+          "helpText": null,
+          "kind": "single-choice",
+          "options": ["Exceeded them", "Met them", "Fell short"],
+          "required": true
+        },
+        {
+          "prompt": "Would you attend again next year?",
+          "helpText": null,
+          "kind": "yes-no",
+          "options": [],
+          "required": false
+        },
+        {
+          "prompt": "Any other comments for the organizers?",
+          "helpText": null,
+          "kind": "long-text",
+          "options": [],
+          "required": false
+        }
+      ],
+      "cardInfo": {
+        "name": "Conference Feedback",
+        "summary": "Post-event feedback survey covering ratings, session attendance, and open comments."
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../survey",
+        "name": "Survey"
+      }
+    }
+  }
+}

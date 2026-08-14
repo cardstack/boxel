@@ -372,6 +372,10 @@ export class SurveyIsolated extends Component<typeof Survey> {
               {{/each}}
             </div>
           {{else}}
+            {{! Delegated keydown: the handler only reads Enter bubbling up
+                from the focusable inputs inside; the div itself is never a
+                tab stop. }}
+            {{! template-lint-disable no-invalid-interactive }}
             <div class='survey-questions' {{on 'keydown' this.onKeydown}}>
               {{#each this.activePageItems as |item idx|}}
                 <fieldset class='survey-question'>
