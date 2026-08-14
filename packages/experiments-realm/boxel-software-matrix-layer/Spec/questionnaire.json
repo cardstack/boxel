@@ -1,0 +1,65 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Questionnaire field",
+      "specType": "field",
+      "ref": {
+        "module": "../survey-question",
+        "name": "SurveyQuestion"
+      },
+      "readMe": "# Questionnaire\n\n## Summary\nThe question-definition layer of the survey family: `SurveyQuestion`\n(`survey-question.gts`), the compound field a Survey composes into its\nquestionnaire. In this implementation the questionnaire is not a separate\ncard — a Survey IS its definition (`questions` containsMany this field),\nwhich keeps one link between what was asked and what respondents saw.\n\n## API\n- `prompt`, `helpText` — StringFields\n- `kind` — enum: short-text / long-text / single-choice / multi-choice / rating (1–5) / yes-no\n- `options` — containsMany StringField, used by the choice kinds\n- `required` — BooleanField, enforced by the fill-in flow's validation\n\n## Usage\n```ts\nimport { SurveyQuestion } from '../survey-question';\n\n@field questions = containsMany(SurveyQuestion);\n```\nThe linked example Survey composes all six kinds.\n\n## Non-goals\nNo branching or skip logic — a questionnaire with conditional paths is a\ndifferent, heavier block; this one is a flat ordered list, which covers\nfeedback, pulse and intake forms. No per-question scoring weights.",
+      "containedExamples": [
+        {
+          "prompt": "How would you rate the event overall?",
+          "helpText": "1 = poor, 5 = excellent",
+          "kind": "rating",
+          "options": [],
+          "required": true
+        },
+        {
+          "prompt": "Did the event meet your expectations?",
+          "helpText": null,
+          "kind": "single-choice",
+          "options": ["Exceeded them", "Met them", "Fell short"],
+          "required": true
+        }
+      ],
+      "cardInfo": {
+        "name": "Questionnaire",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Survey/event-feedback"
+        }
+      }
+    },
+    "meta": {
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "../survey-question",
+              "name": "SurveyQuestion"
+            }
+          },
+          {
+            "adoptsFrom": {
+              "module": "../survey-question",
+              "name": "SurveyQuestion"
+            }
+          }
+        ]
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

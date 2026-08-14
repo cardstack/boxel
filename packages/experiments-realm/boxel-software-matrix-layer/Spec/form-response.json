@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Form Response card",
+      "specType": "card",
+      "ref": {
+        "module": "../survey-response",
+        "name": "SurveyResponse"
+      },
+      "readMe": "# Form Response\n\n## Summary\nOne person's completed answers to a form — here realized as\n`SurveyResponse` (`survey-response.gts`), the card the Survey fill-in\nflow creates on submit.\n\n## API\n- `survey` — linksTo Survey (live link; reflects later title changes)\n- `surveyId` — denormalized copy of the survey's id, for reliable querying when the link can't be loaded\n- `surveyTitle` — display snapshot fallback\n- `answers` — containsMany `SurveyAnswer` (`{ prompt, response }`): the prompt is snapshotted with the answer so a response stays readable after the survey's questions change\n- `completedAt` semantics ride on the card's own timestamps\n\n## Usage\nResponses are created by the Survey isolated flow, not by hand. Consumers\nquery them by `surveyId` and read `answers`; the built-in results view on\nthe Survey card aggregates them.\n\n## Non-goals\nNo respondent identity field by default — anonymous collection is the\ncommon case, and a consumer that wants attribution adds its own link in an\nextending card. No scoring: interpreting answers (NPS math, pass/fail) is\nthe consumer's.",
+      "cardInfo": {
+        "name": "Form Response",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../SurveyResponse/event-feedback-jason"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
