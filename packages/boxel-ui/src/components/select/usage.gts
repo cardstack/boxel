@@ -26,15 +26,6 @@ interface SortOption {
 }
 
 export default class BoxelSelectUsage extends Component {
-  selectVariants = ['default', 'primary', 'secondary', 'muted', 'destructive'];
-  selectVariantDefault:
-    | undefined
-    | 'primary'
-    | 'secondary'
-    | 'muted'
-    | 'destructive'
-    | 'default' = undefined;
-
   @tracked items = [
     { name: 'United States' },
     { name: 'Spain' },
@@ -58,14 +49,6 @@ export default class BoxelSelectUsage extends Component {
   @tracked selectedItem2: SortOption | null = this.items2[0] ?? null;
   @tracked placeholder = 'Select Item';
   @tracked verticalPosition = 'auto' as const;
-  @tracked variant:
-    | undefined
-    | 'primary'
-    | 'secondary'
-    | 'muted'
-    | 'destructive'
-    | 'default' = undefined;
-
   @tracked renderInPlace = false;
   @tracked disabled = false;
   @tracked searchField = '';
@@ -97,6 +80,10 @@ export default class BoxelSelectUsage extends Component {
   @cssVariable({ cssClassName: 'header-freestyle-container' })
   declare boxelDropdownHighlightHoverColor: CSSVariableInfo;
   @cssVariable({ cssClassName: 'header-freestyle-container' })
+  declare boxelDropdownSelectedHighlightedColor: CSSVariableInfo;
+  @cssVariable({ cssClassName: 'header-freestyle-container' })
+  declare boxelDropdownSelectedHoverColor: CSSVariableInfo;
+  @cssVariable({ cssClassName: 'header-freestyle-container' })
   declare boxelDropdownHoverColor: CSSVariableInfo;
   @cssVariable({ cssClassName: 'header-freestyle-container' })
   declare boxelDropdownFocusBorderColor: CSSVariableInfo;
@@ -125,6 +112,8 @@ export default class BoxelSelectUsage extends Component {
         boxel-dropdown-text-color=this.boxelDropdownTextColor.value
         boxel-dropdown-highlight-color=this.boxelDropdownHighlightColor.value
         boxel-dropdown-highlight-hover-color=this.boxelDropdownHighlightHoverColor.value
+        boxel-dropdown-selected-highlighted-color=this.boxelDropdownSelectedHighlightedColor.value
+        boxel-dropdown-selected-hover-color=this.boxelDropdownSelectedHoverColor.value
         boxel-dropdown-hover-color=this.boxelDropdownHoverColor.value
         boxel-dropdown-focus-border-color=this.boxelDropdownFocusBorderColor.value
       }}
@@ -132,8 +121,7 @@ export default class BoxelSelectUsage extends Component {
       <FreestyleUsage @name='Select'>
         <:description>
           Select components allow users to choose from a list of options. They
-          support theme variants and customizable styling with search
-          functionality.
+          support customizable styling with search functionality.
         </:description>
         <:example>
           <BoxelSelect
@@ -146,7 +134,6 @@ export default class BoxelSelectUsage extends Component {
             @verticalPosition={{this.verticalPosition}}
             @renderInPlace={{this.renderInPlace}}
             @disabled={{this.disabled}}
-            @variant={{this.variant}}
             @dropdownClass='boxel-select-usage'
             @matchTriggerWidth={{this.matchTriggerWidth}}
             aria-label={{this.placeholder}}
@@ -182,15 +169,6 @@ export default class BoxelSelectUsage extends Component {
             @description='Placeholder for trigger component'
             @value={{this.placeholder}}
             @onInput={{fn (mut this.placeholder)}}
-          />
-          <Args.String
-            @name='variant'
-            @optional={{true}}
-            @description='Theme-based variant for consistent styling'
-            @defaultValue={{this.selectVariantDefault}}
-            @options={{this.selectVariants}}
-            @onInput={{fn (mut this.variant)}}
-            @value={{this.variant}}
           />
           <Args.String
             @name='verticalPosition'
@@ -313,6 +291,20 @@ export default class BoxelSelectUsage extends Component {
             @onInput={{this.boxelDropdownHighlightHoverColor.update}}
           />
           <Css.Basic
+            @name='boxel-dropdown-selected-highlighted-color'
+            @type='color'
+            @description='Background of the selected option while it is keyboard-highlighted'
+            @value={{this.boxelDropdownSelectedHighlightedColor.value}}
+            @onInput={{this.boxelDropdownSelectedHighlightedColor.update}}
+          />
+          <Css.Basic
+            @name='boxel-dropdown-selected-hover-color'
+            @type='color'
+            @description='Background of the selected option on pointer hover'
+            @value={{this.boxelDropdownSelectedHoverColor.value}}
+            @onInput={{this.boxelDropdownSelectedHoverColor.update}}
+          />
+          <Css.Basic
             @name='boxel-dropdown-hover-color'
             @type='color'
             @description='Global override for dropdown hover color (highest priority)'
@@ -343,7 +335,6 @@ export default class BoxelSelectUsage extends Component {
             @verticalPosition={{this.verticalPosition}}
             @renderInPlace={{this.renderInPlace}}
             @disabled={{this.disabled}}
-            @variant={{this.variant}}
             @dropdownClass='boxel-select-usage'
             @matchTriggerWidth={{this.matchTriggerWidth}}
             aria-label={{this.placeholder}}

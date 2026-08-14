@@ -9,6 +9,7 @@ import { tracked } from '@glimmer/tracking';
 import ExternalLink from '@cardstack/boxel-icons/external-link';
 
 import { format as formatDate, isSameDay, isSameYear } from 'date-fns';
+import { restartableTask, timeout } from 'ember-concurrency';
 import { modifier } from 'ember-modifier';
 
 import {
@@ -47,14 +48,16 @@ interface Signature {
 export default class PastSessionItem extends Component<Signature> {
   @tracked private preventMenuClose = false;
   private closeDropdownAction: (() => void) | null = null;
-  private closeDropdownTimer: ReturnType<typeof setTimeout> | null = null;
   private triggerElement: HTMLElement | null = null;
+  private menuElement: HTMLElement | null = null;
 
   private registerCloseAction = modifier(
-    (_element: HTMLElement, [closeFn]: [() => void]) => {
+    (element: HTMLElement, [closeFn]: [() => void]) => {
       this.closeDropdownAction = closeFn;
+      this.menuElement = element;
       return () => {
         this.closeDropdownAction = null;
+        this.menuElement = null;
       };
     },
   );
@@ -66,21 +69,35 @@ export default class PastSessionItem extends Component<Signature> {
     };
   });
 
+  private closeDropdownTask = restartableTask(async () => {
+    await timeout(200);
+    // Hover-close is a pointer affordance: a keyboard user's menu must not
+    // vanish (nor their focus drop to <body>) because the pointer happened
+    // to pass over the row. Keyboard use shows as :focus-visible on the
+    // trigger or as focus inside the menu itself.
+    if (
+      this.triggerElement?.matches(':focus-visible') ||
+      this.menuElement?.contains(document.activeElement)
+    ) {
+      return;
+    }
+    this.closeDropdownAction?.();
+    // A pointer-click leaves non-visible focus on the trigger, which would
+    // hold the row's :focus-within and keep the hidden-until-hover button
+    // visible after the pointer leaves.
+    if (document.activeElement === this.triggerElement) {
+      this.triggerElement?.blur();
+    }
+  });
+
   @action
   private scheduleCloseDropdown() {
-    this.cancelCloseDropdown();
-    this.closeDropdownTimer = setTimeout(() => {
-      this.closeDropdownAction?.();
-      this.triggerElement?.blur();
-    }, 200);
+    this.closeDropdownTask.perform();
   }
 
   @action
   private cancelCloseDropdown() {
-    if (this.closeDropdownTimer) {
-      clearTimeout(this.closeDropdownTimer);
-      this.closeDropdownTimer = null;
-    }
+    this.closeDropdownTask.cancelAll();
   }
 
   <template>
@@ -147,10 +164,11 @@ export default class PastSessionItem extends Component<Signature> {
         </:trigger>
         <:content as |dd|>
           <Menu
-            class='menu past-session-menu themeless'
+            class='menu past-session-menu'
             {{this.registerCloseAction dd.close}}
             {{on 'mouseenter' this.cancelCloseDropdown}}
             {{on 'mouseleave' this.scheduleCloseDropdown}}
+            @isRounded={{false}}
             @closeMenu={{fn this.handleCloseMenu dd.close}}
             @items={{array
               (menuItem
@@ -199,7 +217,7 @@ export default class PastSessionItem extends Component<Signature> {
         left: 0;
         right: 0;
         height: 1px;
-        background: #4f4b57;
+        background-color: var(--ai-assistant-menu-divider);
       }
 
       .session:first-child::before {
@@ -209,7 +227,7 @@ export default class PastSessionItem extends Component<Signature> {
       .session:hover,
       .session:has(.menu-button[aria-expanded='true']) {
         background-color: var(--ai-assistant-menu-hover-background);
-        border-radius: calc(var(--boxel-border-radius-xs) + 2px);
+        border-radius: var(--boxel-border-radius-sm);
         cursor: pointer;
       }
       .session:hover::before,
@@ -218,13 +236,21 @@ export default class PastSessionItem extends Component<Signature> {
       .session:has(.menu-button[aria-expanded='true']) + .session::before {
         background: transparent;
       }
+      .session[data-is-current-room] {
+        background-color: var(--ai-assistant-menu-hover-background);
+        border-radius: var(--boxel-border-radius-sm);
+      }
+      .session[data-is-current-room]::before,
+      .session[data-is-current-room] + .session::before {
+        background: transparent;
+      }
       .name {
         font-weight: 600;
       }
       .date {
-        margin-top: calc(var(--boxel-sp-xxs) - 5px);
+        margin-top: var(--boxel-sp-6xs);
         color: var(--boxel-400);
-        font-size: 12px;
+        font-size: var(--boxel-font-size-xs);
       }
       .view-session-button {
         color: var(--boxel-light);
@@ -240,6 +266,7 @@ export default class PastSessionItem extends Component<Signature> {
       }
 
       .menu-button {
+        --host-outline-offset: 2px;
         visibility: hidden;
       }
       .session:hover .menu-button,
@@ -251,35 +278,30 @@ export default class PastSessionItem extends Component<Signature> {
       }
 
       :global(.past-session-menu-dropdown) {
-        border: none;
-        box-shadow: none;
+        --boxel-dropdown-background-color: var(--ai-assistant-menu-background);
+        --boxel-dropdown-border-color: var(--ai-assistant-menu-border);
+        --boxel-dropdown-text-color: var(--ai-assistant-menu-foreground);
+        --boxel-dropdown-hover-color: var(--ai-assistant-menu-hover-background);
+        --boxel-dropdown-box-shadow: var(--boxel-deep-box-shadow);
+        --boxel-menu-item-border-radius: var(--boxel-border-radius-xs);
+        overflow: hidden;
       }
 
       .menu {
-        --boxel-menu-item-content-padding: var(--boxel-sp-xxs)
+        --boxel-menu-item-content-padding: var(--boxel-sp-2xs)
           var(--boxel-sp-sm);
-
-        background: #3b394b;
-        border: 1px solid rgba(255, 255, 255, 0.25);
-        color: var(--boxel-light);
         padding: var(--boxel-sp-xs);
-        box-shadow: var(--boxel-deep-box-shadow);
       }
 
       .menu :deep(svg) {
         --icon-stroke-width: 1.5px;
-        --icon-color: var(--boxel-light);
+        --icon-color: currentColor;
 
         margin-right: var(--boxel-sp-xs);
       }
 
       .menu :deep(.boxel-menu__item:nth-child(2) svg) {
         --icon-stroke-width: 0.5px;
-      }
-
-      .menu :deep(.boxel-menu__item:hover) {
-        background-color: #272330;
-        border-radius: var(--boxel-border-radius-xs);
       }
 
       .icon-recency-indicator {
@@ -325,11 +347,14 @@ export default class PastSessionItem extends Component<Signature> {
   private handleCopyRoomId(roomId: string) {
     this.preventMenuClose = true;
     this.args.actions.copyRoomId(roomId);
-    // Reset the flag after a short delay to allow normal closing for other actions
-    setTimeout(() => {
-      this.preventMenuClose = false;
-    }, 200);
+    this.resetPreventMenuCloseTask.perform();
   }
+
+  // Reset the flag after a short delay to allow normal closing for other actions
+  private resetPreventMenuCloseTask = restartableTask(async () => {
+    await timeout(200);
+    this.preventMenuClose = false;
+  });
 
   @action
   private handleCloseMenu(originalClose: () => void) {

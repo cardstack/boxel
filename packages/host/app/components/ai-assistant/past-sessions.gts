@@ -13,6 +13,18 @@ import type { SessionRoomData } from '../../services/ai-assistant-panel-service'
 
 import type MatrixService from '../../services/matrix-service';
 
+function findScrollContainer(element: HTMLElement): HTMLElement {
+  let candidate: HTMLElement | null = element;
+  while (candidate) {
+    let { overflowY } = getComputedStyle(candidate);
+    if (overflowY === 'auto' || overflowY === 'scroll') {
+      return candidate;
+    }
+    candidate = candidate.parentElement;
+  }
+  return element;
+}
+
 interface Signature {
   Args: {
     sessions: SessionRoomData[];
@@ -27,8 +39,12 @@ export default class AiAssistantPastSessionsList extends Component<Signature> {
   @service declare matrixService: MatrixService;
 
   checkScroll = modifier((element: HTMLElement) => {
+    // The list itself does not scroll — the popover's body clips it, and
+    // scroll events do not bubble, so listen on whichever element actually
+    // scrolls.
+    let scroller = findScrollContainer(element);
     let checkScrollPosition = () => {
-      let { scrollHeight, scrollTop, clientHeight } = element;
+      let { scrollHeight, scrollTop, clientHeight } = scroller;
       let isAtBottom = Math.abs(scrollHeight - scrollTop - clientHeight) <= 1;
       let hasNoScroll = scrollHeight <= clientHeight;
 
@@ -39,74 +55,53 @@ export default class AiAssistantPastSessionsList extends Component<Signature> {
 
     checkScrollPosition();
 
-    element.addEventListener('scroll', checkScrollPosition);
+    scroller.addEventListener('scroll', checkScrollPosition);
 
     return () => {
-      element.removeEventListener('scroll', checkScrollPosition);
+      scroller.removeEventListener('scroll', checkScrollPosition);
     };
   });
 
   <template>
-    <div class='past-sessions-menu'>
-      <AiAssistantPanelPopover
-        @onClose={{@onClose}}
-        data-test-past-sessions
-        ...attributes
-      >
-        <:header>
-          Past Sessions
-        </:header>
-        <:body>
-          {{#if @sessions}}
-            <ul class='past-sessions' {{this.checkScroll}}>
-              {{#each @sessions key='roomId' as |session|}}
-                <PastSessionItem
-                  @session={{session}}
-                  @isCurrentRoom={{eq session.roomId @currentRoomId}}
-                  @actions={{@roomActions}}
+    <AiAssistantPanelPopover
+      @onClose={{@onClose}}
+      data-test-past-sessions
+      ...attributes
+    >
+      <:header>
+        Past Sessions
+      </:header>
+      <:body>
+        {{#if @sessions}}
+          <ul class='past-sessions' {{this.checkScroll}}>
+            {{#each @sessions key='roomId' as |session|}}
+              <PastSessionItem
+                @session={{session}}
+                @isCurrentRoom={{eq session.roomId @currentRoomId}}
+                @actions={{@roomActions}}
+              />
+            {{/each}}
+            {{#if this.matrixService.isLoadingMoreAIRooms}}
+              <li
+                class='loading-indicator-container'
+                data-test-loading-more-rooms
+              >
+                <LoadingIndicator
+                  @color='var(--boxel-dark)'
+                  class='loading-indicator'
                 />
-              {{/each}}
-              {{#if this.matrixService.isLoadingMoreAIRooms}}
-                <li
-                  class='loading-indicator-container'
-                  data-test-loading-more-rooms
-                >
-                  <LoadingIndicator
-                    @color='var(--boxel-dark)'
-                    class='loading-indicator'
-                  />
-                </li>
-              {{/if}}
-            </ul>
-          {{else}}
-            <div class='empty-collection'>
-              No past sessions to show.
-            </div>
-          {{/if}}
-        </:body>
-      </AiAssistantPanelPopover>
-    </div>
+              </li>
+            {{/if}}
+          </ul>
+        {{else}}
+          <div class='empty-collection'>
+            No past sessions to show.
+          </div>
+        {{/if}}
+      </:body>
+    </AiAssistantPanelPopover>
 
     <style scoped>
-      .past-sessions-menu :deep(.panel-popover) {
-        left: 30px;
-        right: 30px;
-        max-width: none;
-        background: #3b394b;
-        border: 1px solid rgba(255, 255, 255, 0.25);
-      }
-      .past-sessions-menu :deep(.header) {
-        font: 700 var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp-sm);
-      }
-      .past-sessions-menu :deep(.session:hover),
-      .past-sessions-menu
-        :deep(.session:has(.menu-button[aria-expanded='true'])) {
-        background-color: #272330;
-      }
-      .past-sessions-menu :deep(.body) {
-        scroll-timeline: --past-sessions-scroll-timeline block;
-      }
       .past-sessions {
         list-style-type: none;
         padding: 0;

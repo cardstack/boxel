@@ -18,6 +18,7 @@ interface Signature {
 const UserMessage: TemplateOnlyComponent<Signature> = <template>
   <Message
     class={{cn 'user-message-bubble' is-pending=@isPending}}
+    data-theme='light'
     data-test-user-message
     ...attributes
   >
