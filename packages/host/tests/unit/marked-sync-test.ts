@@ -344,6 +344,45 @@ module('Unit | marked-sync', function () {
     );
   });
 
+  test('markdownToHtml prefixes decorative bullets with a list marker', function (assert) {
+    const markdown = '🌟 First point\n🌟 Second point';
+    const result = markdownToHtml(markdown);
+
+    assert.true(
+      result.includes('<li>🌟 First point</li>'),
+      'emoji-led lines become list items',
+    );
+    assert.true(
+      result.includes('<li>🌟 Second point</li>'),
+      'each emoji-led line is its own list item',
+    );
+  });
+
+  test('markdownToHtml leaves fenced code block content verbatim when lines start with decorative bullets', function (assert) {
+    const markdown = [
+      '🌟 A real list item',
+      '```gts',
+      "  <span class='marquee-text'>",
+      '    🚧 SITE UNDER CONSTRUCTION 🚧',
+      '  </span>',
+      '```',
+    ].join('\n');
+    const result = markdownToHtml(markdown, { sanitize: false });
+
+    assert.true(
+      result.includes('<li>🌟 A real list item</li>'),
+      'bullet normalization still applies outside the fence',
+    );
+    assert.true(
+      result.includes('    🚧 SITE UNDER CONSTRUCTION 🚧'),
+      'emoji-led line inside the fence is unchanged',
+    );
+    assert.false(
+      result.includes('* 🚧'),
+      'no list marker is inserted inside the fence',
+    );
+  });
+
   test('markdownToHtml preserves heading IDs through sanitization', function (assert) {
     const markdown = '## Test Heading';
     const result = markdownToHtml(markdown);

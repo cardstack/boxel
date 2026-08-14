@@ -72,7 +72,49 @@ bfmMarked.use({
 
 const DECORATIVE_BULLET_PATTERN =
   // eslint-disable-next-line no-misleading-character-class -- match pictographic symbols plus a few geometric glyphs not covered by the Unicode class
-  /(^|\n)(\s*)([\p{Extended_Pictographic}★•▪●❖✦✧◉◦◾◽⬢⬡☑✔☑️➤➔➜➡→])(\s+)/gu;
+  /^(\s*)([\p{Extended_Pictographic}★•▪●❖✦✧◉◦◾◽⬢⬡☑✔☑️➤➔➜➡→])(\s+)/u;
+
+const CODE_FENCE_PATTERN = /^(\s*)(`{3,}|~{3,})(.*)$/;
+
+// Prefix decorative bullets with a standard list marker so marked treats them
+// as list items — but never inside fenced code blocks. Code-block content must
+// survive rendering verbatim: search/replace patches are extracted back out of
+// the rendered HTML, and an inserted marker makes the patch text no longer
+// match the file it targets.
+function normalizeDecorativeBullets(markdown: string): string {
+  let inFence = false;
+  let fenceChar = '';
+  let fenceLength = 0;
+  return markdown
+    .split('\n')
+    .map((line) => {
+      let fenceMatch = line.match(CODE_FENCE_PATTERN);
+      if (fenceMatch) {
+        let marker = fenceMatch[2];
+        if (!inFence) {
+          inFence = true;
+          fenceChar = marker[0];
+          fenceLength = marker.length;
+        } else if (
+          marker[0] === fenceChar &&
+          marker.length >= fenceLength &&
+          fenceMatch[3].trim() === ''
+        ) {
+          inFence = false;
+        }
+        return line;
+      }
+      if (inFence) {
+        return line;
+      }
+      return line.replace(
+        DECORATIVE_BULLET_PATTERN,
+        (_match, indentation, bullet, whitespace) =>
+          `${indentation}* ${bullet}${whitespace}`,
+      );
+    })
+    .join('\n');
+}
 
 const DEFAULT_MARKED_SYNC_OPTIONS = {
   escapeHtmlInCodeBlocks: true,
@@ -187,11 +229,7 @@ export function markdownToHtml(
     return '';
   }
   // Marked only treats ASCII list markers, so prefix decorative bullets with a standard marker.
-  let normalizedMarkdown = markdown.replace(
-    DECORATIVE_BULLET_PATTERN,
-    (_match, boundary, indentation, bullet, whitespace) =>
-      `${boundary}${indentation}* ${bullet}${whitespace}`,
-  );
+  let normalizedMarkdown = normalizeDecorativeBullets(markdown);
   let html = markedSync(normalizedMarkdown, {
     escapeHtmlInCodeBlocks: opts.escapeHtmlInCodeBlocks,
     enableMonacoSyntaxHighlighting: opts.enableMonacoSyntaxHighlighting,
