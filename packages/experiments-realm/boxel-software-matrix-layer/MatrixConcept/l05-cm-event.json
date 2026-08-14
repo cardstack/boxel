@@ -20,8 +20,8 @@
       "notes": "App 4: Club Membership & Ticketing",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/event-card",
       "specTarget": "shared block",
-      "consumers": "booking; App 4: Club Membership & Ticketing",
-      "consumerExamples": "{\"booking\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Booking/bk-20260802-00101\"}",
+      "consumers": "booking, match",
+      "consumerExamples": "{\"booking\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Booking/bk-20260802-00101\", \"match\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Match/ashworth-away\"}",
       "catalogDisposition": null,
       "cardInfo": {
         "name": null,

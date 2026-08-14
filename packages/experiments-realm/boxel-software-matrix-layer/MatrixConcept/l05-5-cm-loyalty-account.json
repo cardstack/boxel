@@ -20,8 +20,8 @@
       "notes": "App 4: Club Membership & Ticketing",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/loyalty-account",
       "specTarget": "shared block",
-      "consumers": "loyalty-dashboard, credit-points; App 4: Club Membership & Ticketing",
-      "consumerExamples": null,
+      "consumers": "club-membership, member, record-attendance, loyalty-dashboard, credit-points",
+      "consumerExamples": "{\"club-membership\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/ClubMembership/northbridge-fc\", \"member\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Member/marcus-obi\"}",
       "catalogDisposition": null,
       "cardInfo": {
         "name": null,

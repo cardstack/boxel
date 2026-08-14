@@ -20,8 +20,8 @@
       "notes": "App 4: Club Membership & Ticketing — in-use example wired via LoyaltyAccount/jason-lim",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/loyalty-tier-field",
       "specTarget": "shared block",
-      "consumers": "loyalty-dashboard, loyalty-account; App 4: Club Membership & Ticketing",
-      "consumerExamples": "{\"loyalty-account\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/LoyaltyAccount/jason-lim\"}",
+      "consumers": "club-membership, member, record-attendance, loyalty-dashboard, loyalty-account",
+      "consumerExamples": "{\"club-membership\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/ClubMembership/northbridge-fc\", \"loyalty-account\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/LoyaltyAccount/jason-lim\", \"member\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Member/marcus-obi\"}",
       "catalogDisposition": null,
       "cardInfo": {
         "name": null,
