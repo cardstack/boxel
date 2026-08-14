@@ -289,6 +289,14 @@ module('Acceptance | midi audio def', function (hooks) {
       '0:02',
       'duration is formatted as m:ss',
     );
+    let voices = document.querySelector(
+      '[data-prerender] [data-test-midi-voices]',
+    );
+    assert.ok(voices, 'voices list is rendered');
+    assert.true(
+      voices?.textContent?.includes('Violin'),
+      'program 40 resolves to its General MIDI voice name',
+    );
   });
 
   test('indexing stores MIDI metadata and file meta uses it', async function (assert) {

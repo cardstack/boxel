@@ -157,7 +157,9 @@ export class MidiPreview extends GlimmerComponent<FilePreviewSignature> {
     if (!range) {
       return undefined;
     }
-    let parts = String(range).split(/\s*[–—-]\s*/);
+    // Split only on the en/em dash the extractor joins with — an ASCII hyphen
+    // is part of negative-octave note names like C-1.
+    let parts = String(range).split(/\s*[–—]\s*/);
     if (parts.length !== 2) {
       return undefined;
     }
@@ -237,7 +239,7 @@ export class MidiPreview extends GlimmerComponent<FilePreviewSignature> {
         {{/if}}
 
         {{#if this.instruments.length}}
-          <div class='voices'>
+          <div class='voices' data-test-midi-voices>
             <span class='voices-label'>Voices</span>
             <ul class='voices-list'>
               {{#each this.instruments as |name|}}
@@ -346,8 +348,8 @@ export class MidiPreview extends GlimmerComponent<FilePreviewSignature> {
         background-color: var(--fd-stage, var(--muted, #eceef1));
         background-image: repeating-linear-gradient(
           90deg,
-          transparent 0 calc(100% / 88 * 7 - 1px),
-          var(--border) calc(100% / 88 * 7 - 1px) calc(100% / 88 * 7)
+          transparent 0 calc(100% / 88 * 12 - 1px),
+          var(--border) calc(100% / 88 * 12 - 1px) calc(100% / 88 * 12)
         );
       }
       .pitch-range {

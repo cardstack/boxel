@@ -535,9 +535,9 @@ export function fileViewModel(
     // authority, with the EXIF tag already folded in at extract time.
     colorProfile: file.colorProfile,
     encoding: file.encoding,
-    // `AudioDef` declares this field as `tags`; the older `mediaTags` name is
-    // kept as a fallback so a future family may use either.
-    mediaTags: file.tags ?? file.mediaTags,
+    // The isolated shell renders this group via `<@fields.tags />`, so the
+    // projection must come from the same `tags` field the shell reaches for.
+    mediaTags: file.tags,
     waveform: file.waveform,
     midi: file.midi,
     documentInfo: file.documentInfo,
