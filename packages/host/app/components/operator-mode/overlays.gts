@@ -52,13 +52,28 @@ interface OverlaySignature {
 // far the overlay's top has slid under the header. Negative side/bottom insets
 // keep the adorn box-shadow ring (≤0.25rem spread) visible on the un-clipped
 // edges; '' fully restores the overlay (and its top-overhanging type-label) when
-// nothing occludes it. Exported for unit testing. See CS-11699.
+// nothing occludes it. Exported for unit testing.
 export function stickyHeaderClipPath(
   refTop: number,
   headerBottom: number,
 ): string {
   let clipTop = Math.max(0, headerBottom - refTop);
   return clipTop > 0 ? `inset(${clipTop}px -0.5rem -0.5rem -0.5rem)` : '';
+}
+
+// Finds the sticky header an overlay should clip against: the nearest
+// `[data-overlay-clip-header]` inside the reference card's enclosing
+// `[data-overlay-clip-container]` (the rich-markdown editor). Returns null for
+// cards outside a marked container — so the clip is a no-op for non-editor
+// overlay consumers (spec-preview, playground) and the `querySelector` never
+// runs for them. Scoped to the nearest container, so nested editors clip
+// against their own toolbar. Exported for unit testing.
+export function stickyClipHeaderFor(reference: Element): HTMLElement | null {
+  return (
+    reference
+      .closest('[data-overlay-clip-container]')
+      ?.querySelector<HTMLElement>('[data-overlay-clip-header]') ?? null
+  );
 }
 
 export default class Overlays extends Component<OverlaySignature> {
@@ -155,16 +170,21 @@ export default class Overlays extends Component<OverlaySignature> {
       // (the rich-markdown compose toolbar) — otherwise the adorn outline paints
       // on top of the toolbar, because the overlay is a positioned sibling above
       // the card's stacking-context-sealed subtree and z-index can't arbitrate
-      // it (CS-11699). Mirrors the overflow-occlusion the stack-item header
-      // already relies on, but at the toolbar's dynamic bottom edge. A no-op for
-      // cards outside a marked clip container (the `closest` returns null), so
-      // the `querySelector` never runs for non-editor overlay consumers. Always
-      // assigned so the clip clears as the card scrolls back into the clear.
+      // it. Mirrors the overflow-occlusion the stack-item header
+      // already relies on, but at the toolbar's dynamic bottom edge. `stickyClipHeaderFor`
+      // is a no-op outside a marked clip container, so this stays inert for
+      // non-editor overlay consumers. Always assigned so the clip clears as the
+      // card scrolls back into the clear.
+      //
+      // The inset is measured in viewport px and applied to the floating
+      // element's own (pre-transform) box. In production the offset parent is
+      // unscaled, so the clip lands exactly at the header's bottom edge. Unlike
+      // the x/y offsets below we deliberately don't divide `clipTop` by the
+      // parent scale — under the test runner's #ember-testing scale the clip
+      // line is therefore only approximate, which doesn't affect real users.
       let clipPath = '';
       if (reference instanceof HTMLElement) {
-        let header = reference
-          .closest('[data-overlay-clip-container]')
-          ?.querySelector<HTMLElement>('[data-overlay-clip-header]');
+        let header = stickyClipHeaderFor(reference);
         if (header) {
           clipPath = stickyHeaderClipPath(
             refRect.top,

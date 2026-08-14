@@ -929,7 +929,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
           boundary the operator-mode overlay layer clips against: adorn overlays
           drawn over embedded compose-preview cards are cut off where a card
           scrolls behind the sticky toolbar, so the outline no longer paints on
-          top of it (CS-11699). Consumed by the `offset` middleware in
+          top of it. Consumed by the `offset` middleware in
           operator-mode/overlays.gts. }}
       <div
         class='codemirror-editor'
