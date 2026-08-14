@@ -860,7 +860,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.equal(attachedCards.length, 0);
   });
 
-  test('downloads and includes most recent version of attached files', async () => {
+  test('each message keeps its own attached-file snapshot content', async () => {
     const history: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
@@ -1042,7 +1042,24 @@ Current date and time: 2025-06-11T11:43:00.533Z
       },
     ];
 
-    // Set up mock responses for file downloads
+    // Set up mock responses for file downloads — every message's snapshot
+    // is downloaded now, so each version needs a response.
+    mockResponses.set('http://test.com/spaghetti-recipe-a.gts', {
+      ok: true,
+      text: 'spaghetti content version a',
+    });
+    mockResponses.set('http://test.com/best-friends-a.txt', {
+      ok: true,
+      text: 'best friends version a',
+    });
+    mockResponses.set('http://test.com/spaghetti-recipe-b.gts', {
+      ok: true,
+      text: 'spaghetti content version b',
+    });
+    mockResponses.set('http://test.com/best-friends-b.txt', {
+      ok: true,
+      text: 'best friends version b',
+    });
     mockResponses.set('http://test.com/spaghetti-recipe-c.gts', {
       ok: true,
       text: 'this is the content of the spaghetti-recipe.gts file',
@@ -1071,33 +1088,35 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.ok(
       messageText(userMessages[0]).includes(
         `
-Attached Files (files with newer versions don't show their content):
-[spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts)
-[best-friends.txt](http://test-realm-server/my-realm/best-friends.txt)
+[spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts):
+  1: spaghetti content version a
+[best-friends.txt](http://test-realm-server/my-realm/best-friends.txt):
+  1: best friends version a
       `.trim(),
       ),
+      'first message keeps its own snapshot content',
     );
     assert.ok(
       messageText(userMessages[1]).includes(
         `
-Attached Files (files with newer versions don't show their content):
-[spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts)
-[best-friends.txt](http://test-realm-server/my-realm/best-friends.txt)
-[file-that-does-not-exist.txt](http://test.com/my-realm/file-that-does-not-exist.txt)
-[example.pdf](http://test.com/my-realm/example.pdf): [application/pdf]
+[spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts):
+  1: spaghetti content version b
+[best-friends.txt](http://test-realm-server/my-realm/best-friends.txt):
+  1: best friends version b
       `.trim(),
       ),
+      'second message keeps its own snapshot content',
     );
     assert.ok(
       messageText(userMessages[2]).includes(
         `
-Attached Files (files with newer versions don't show their content):
 [spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts):
   1: this is the content of the spaghetti-recipe.gts file
 [best-friends.txt](http://test-realm-server/my-realm/best-friends.txt):
   1: this is the content of the best-friends.txt file
       `.trim(),
       ),
+      'latest message includes its content with line numbers',
     );
 
     assert.ok(
@@ -1408,9 +1427,9 @@ Attached Files (files with newer versions don't show their content):
         'http://localhost:4201/experiments/Author/1',
       ),
     );
-    assert.false(
+    assert.true(
       messageText(userMessages[0]).includes('"firstName": "Terry"'),
-      'should not include the contents of the first version of the card in the first user message',
+      'each message keeps its own snapshot of the card content',
     );
     assert.true(
       messageText(userMessages[1]).includes(
@@ -4145,7 +4164,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.true(
       messageText(toolCallMessage!).includes(
         `
-Attached Files (files with newer versions don't show their content):
+Attached Files (each shows its content as of this message; a later attachment of the same file supersedes it):
 [postcard.gts](http://test-realm-server/user/test-realm/postcard.gts):
   1: export default Postcard extends CardDef {}
       `.trim(),
@@ -4183,7 +4202,7 @@ Attached Files (files with newer versions don't show their content):
     assert.true(
       messageText(toolCallMessage!).includes(
         `
-Attached Cards (cards with newer versions don't show their content):
+Attached Cards (each shows its content as of this message; a later attachment of the same card supersedes it):
 [
   {
     "url": "mxc://mock-server/nashville",
@@ -5941,7 +5960,7 @@ new
       'the surviving user message keeps its body',
     );
   });
-  test('only the most recent message attachments include file content in the prompt', async () => {
+  test('every message keeps its attached file content in the prompt', async () => {
     // Policy: files attached to older messages should show metadata only,
     // even if they are NOT re-attached in later messages.
     // Only the most recent user message's attachments should include content.
@@ -6041,14 +6060,15 @@ new
 
     let userMessages = prompt.filter((m) => m.role === 'user');
 
-    // Older message's unique file (config.json) should show metadata only, not content
+    // The older message keeps its own snapshot's content — re-rendering it
+    // later would change already-sent history bytes and break prompt caching.
     assert.ok(
       messageText(userMessages[0]).includes('[config.json]'),
       'First message mentions config.json',
     );
-    assert.notOk(
+    assert.ok(
       messageText(userMessages[0]).includes('"key": "value"'),
-      'First message should NOT include config.json content (not the current message)',
+      'First message keeps its config.json snapshot content',
     );
 
     // Most recent message's file (utils.ts) should include content
