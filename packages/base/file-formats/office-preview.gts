@@ -13,6 +13,7 @@
 // prefers the real poster over the typed placeholder automatically, with no
 // change to this component.
 import GlimmerComponent from '@glimmer/component';
+import { cached } from '@glimmer/tracking';
 
 import { eq } from '@cardstack/boxel-ui/helpers';
 
@@ -105,6 +106,7 @@ export class OfficePreview extends GlimmerComponent<FilePreviewSignature> {
   // The bounded preview payload, parsed once. Typed loosely because the shape
   // is `DocumentPreview | DeckPreview | GridPreview` depending on the format;
   // each accessor below narrows it to the shape its `kind` guarantees.
+  @cached
   get parsedPreview(): any {
     let raw = this.meta?.previewJson;
     if (!raw) {

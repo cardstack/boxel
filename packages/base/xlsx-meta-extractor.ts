@@ -118,9 +118,9 @@ function readSheetGrid(
 }
 
 function sheetNames(workbookXml: string): string[] {
-  return [...workbookXml.matchAll(/<sheet\b[^>]*\bname="([^"]*)"/g)]
-    .map((m) => decodeXmlEntities(m[1]!))
-    .slice(0, MAX_SHEET_NAMES);
+  return [...workbookXml.matchAll(/<sheet\b[^>]*\bname="([^"]*)"/g)].map((m) =>
+    decodeXmlEntities(m[1]!),
+  );
 }
 
 // The first worksheet part in numeric order — the sheet a preview samples.
@@ -145,7 +145,10 @@ export async function extractXlsxMetadata(
   let pkg = await OoxmlPackage.open(bytes);
   let core = await readCoreProperties(pkg);
   let workbookXml = (await pkg.readText('xl/workbook.xml')) ?? '';
-  let names = sheetNames(workbookXml);
+  // The count reflects the whole workbook; only the attached name list is
+  // bounded.
+  let allNames = sheetNames(workbookXml);
+  let names = allNames.slice(0, MAX_SHEET_NAMES);
   let sharedStrings = readSharedStrings(
     await pkg.readText('xl/sharedStrings.xml'),
   );
@@ -163,7 +166,7 @@ export async function extractXlsxMetadata(
   return pruneUndefined({
     ...core,
     kind: 'spreadsheet',
-    sheetCount: names.length || undefined,
+    sheetCount: allNames.length || undefined,
     sheetNames: names.length ? names : undefined,
     previewJson: preview ? JSON.stringify(preview) : undefined,
   }) as OfficeMetadata;

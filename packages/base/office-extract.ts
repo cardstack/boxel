@@ -39,13 +39,14 @@ export async function extractOfficeMetadata(
   }
 
   // A non-OOXML file throws `FileContentMismatchError` here, which propagates so
-  // the extract framework falls back to a plain FileDef. A real package with no
-  // readable properties or body returns a partial result, which adds no
-  // attribute when empty.
+  // the extract framework falls back to a plain FileDef. Every parser stamps
+  // `kind`, and the family already knows its format statically, so the metadata
+  // only earns its attribute when it carries a fact beyond that.
   let parsed = await parse(bytes);
+  let hasFacts = Object.keys(parsed).some((key) => key !== 'kind');
 
   return {
     ...base,
-    ...(Object.keys(parsed).length > 0 ? { officeMetadata: parsed } : {}),
+    ...(hasFacts ? { officeMetadata: parsed } : {}),
   };
 }

@@ -306,21 +306,26 @@ export function tagText(xml: string, tag: string): string | undefined {
   return decodeXmlEntities(xml.slice(close + 1, end)).trim();
 }
 
-// A W3CDTF/ISO date as an Office property carries it, normalized to a plain
-// ISO-8601 string. These are already ISO in practice, so this mostly guards
-// against an unparseable value by leaving it out.
+// A W3CDTF/ISO date as an Office property carries it, normalized to a UTC
+// ISO-8601 string. A value with an explicit offset (`Z` or `±hh:mm`) is
+// converted to the instant it names; an offset-less value is treated as UTC.
+// An unparseable value is left out rather than guessed at.
 export function isoDate(raw: string | undefined): string | undefined {
   if (!raw) {
     return undefined;
   }
   let match = raw.match(
-    /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}):(\d{2}))?/,
+    /^(\d{4}-\d{2}-\d{2})(?:T(\d{2}:\d{2}:\d{2})(?:\.\d+)?(Z|[+-]\d{2}:\d{2})?)?/,
   );
   if (!match) {
     return undefined;
   }
-  let [, y, mo, d, h, mi, s] = match;
-  return `${y}-${mo}-${d}T${h ?? '00'}:${mi ?? '00'}:${s ?? '00'}Z`;
+  let [, date, time, offset] = match;
+  let parsed = new Date(`${date}T${time ?? '00:00:00'}${offset ?? 'Z'}`);
+  if (Number.isNaN(parsed.getTime())) {
+    return undefined;
+  }
+  return parsed.toISOString().replace(/\.\d{3}Z$/, 'Z');
 }
 
 function numberOr(value: string | undefined): number | undefined {

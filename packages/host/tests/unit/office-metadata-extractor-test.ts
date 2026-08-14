@@ -1,7 +1,7 @@
 // Byte-level tests for the Office (OOXML) metadata readers. Each runs inside the
 // index pass against whatever bytes a realm holds, so the contract is as much
 // about degrading on unreadable input as about parsing a well-formed package: a
-// non-OOXML file must throw `FileContentMismatch` so the extract falls back to a
+// non-OOXML file must throw `FileContentMismatchError` so the extract falls back to a
 // plain FileDef, and a package missing its properties or body must still return
 // whatever structure it does carry.
 //
@@ -149,6 +149,7 @@ module('Unit | office metadata extractor', function (hooks) {
           '<cp:coreProperties><dc:title>Quarterly Report</dc:title>' +
           '<dc:creator>Jane Doe</dc:creator>' +
           '<dcterms:created>2023-01-15T09:30:00Z</dcterms:created>' +
+          '<dcterms:modified>2023-06-01T10:00:00-05:00</dcterms:modified>' +
           '</cp:coreProperties>',
       },
       {
@@ -176,6 +177,11 @@ module('Unit | office metadata extractor', function (hooks) {
     assert.strictEqual(info.pageCount, 3);
     assert.strictEqual(info.wordCount, 512);
     assert.strictEqual(info.created, '2023-01-15T09:30:00Z');
+    assert.strictEqual(
+      info.modified,
+      '2023-06-01T15:00:00Z',
+      'an offset-carrying date is converted to the UTC instant it names',
+    );
 
     let preview = JSON.parse(info.previewJson!);
     assert.deepEqual(
