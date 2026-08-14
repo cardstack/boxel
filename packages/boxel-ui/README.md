@@ -4,7 +4,7 @@ Run these from `packages/boxel-ui`.
 
 ### `pnpm build`
 
-Runs the rollup build that produces the consumable v2 addon format in `dist/`.
+Runs the rollup build that produces the consumable v2 addon format in `dist/`. Only publishing uses it (`prepack` runs this build); in-repo consumers such as the host resolve to `src/` directly via the package exports.
 
 ### Or... `pnpm start`
 
@@ -12,7 +12,7 @@ Serves the QUnit suite in `tests/` — there is no app entry at `/`, so go to `/
 
 For a headless run instead, `pnpm test` builds and drives the same suite via testem on a free port.
 
-To browse components, run the ember-freestyle explorer: `cd docs-app && pnpm start`, then visit http://localhost:4220/. Note its `/tests` is a single acceptance test for the explorer itself — the 38 integration and unit files live in this package's `tests/`.
+To browse components, run the ember-freestyle explorer: `cd docs-app && pnpm start`, then visit http://localhost:4220/. Note its `/tests` covers the explorer itself — the integration and unit files live in this package's `tests/`.
 
 ## CSS layers
 
@@ -25,7 +25,28 @@ To browse components, run the ember-freestyle explorer: `cd docs-app && pnpm sta
 
 The contract is **consumer > boxel-ui > vendor**. A consuming app's own
 unlayered CSS beats every layer here, so apps override boxel-ui without
-fighting specificity.
+fighting specificity. A consumer's own *named* layers land above boxel-ui's
+too: a layer name absent from the order statement joins the order at its
+first appearance, which is after every declared layer — that is how
+`packages/base`'s `baseComponent` layer outranks all four component tiers.
+
+**The copy in `global.css` is not the one that takes effect.** Every app entry
+repeats the same statement in an inline `<style>` at the top of `<head>`, and
+that is the copy that decides the order — `packages/host/index.html`,
+`packages/host/tests/index.html`, `tests/index.html`,
+`docs-app/index.html`, and `docs-app/tests/index.html`. Change the order in one
+place and you have to change it in all of them.
+
+The duplication is not decorative. A layer's precedence is fixed by where its
+name *first* appears, and in a bundled build that is not the order the source
+files are written in: component `<style>` blocks are extracted into the CSS
+bundle in JS module-graph order, which routinely puts them ahead of
+`global.css`. esbuild then prunes any layer name from an order statement it has
+already seen declared earlier in the bundle, so a statement that lands
+mid-bundle is reduced to nothing and the layers keep whatever order they
+happened to fall into. That is how `vendor` ended up outranking all four
+component tiers. A statement in the document `<head>`, ahead of every
+stylesheet link, is outside the bundle and cannot be reordered or pruned.
 
 Three things to know when adding or editing component CSS:
 

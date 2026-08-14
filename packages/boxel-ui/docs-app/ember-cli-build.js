@@ -7,8 +7,8 @@ module.exports = async function (defaults) {
 
   const app = new EmberApp(defaults, {
     // Its `included` hook imports the CSS unlayered, which would outrank every
-    // boxel-ui layer (and redefine `--radius` inside usage blocks). Opted out
-    // here; app/vendor.css imports it into the `vendor` layer instead.
+    // boxel-ui layer. Opted out here; app/vendor.css imports it into the
+    // `vendor` layer instead.
     'ember-freestyle': {
       includeStyles: false,
     },
