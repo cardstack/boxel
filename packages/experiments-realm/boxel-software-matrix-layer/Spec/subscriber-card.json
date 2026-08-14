@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Subscriber card",
+      "specType": "card",
+      "ref": {
+        "module": "../subscriber",
+        "name": "Subscriber"
+      },
+      "readMe": "# Subscriber\n\n## Summary\nThe party on the receiving end of subscriptions — who holds them, since\nwhen, and which ones. Shared-realm block at `subscriber.gts`. The\nSubscription card owns each plan's own life (price, billing cycle,\nstatus); this card is the holder-side grouping that renewals, upgrade\nprompts and \"your plans\" pages address.\n\n## API\n- `holder` — linksTo Contact\n- `since` — DateField\n- `subscriptions` — linksToMany Subscription (a small bounded set maintained by whatever command starts or stops one — the rollup rule's link-array case)\n- `activeCount` — computed from the linked subscriptions' status\n\n## Usage\n```ts\nimport { Subscriber } from '../subscriber';\n\nclass SeasonTicketHolder extends Subscriber { /* seat, stand */ }\n```\n\n## Non-goals\nBilling and plan lifecycle stay on Subscription; payment method and\ninvoicing are their own blocks. A subscriber is not a Loyalty Account —\nholding a plan and accumulating standing are different relationships one\nperson can have separately, so an app that wants both links both to the\nsame Contact.",
+      "cardInfo": {
+        "name": "Subscriber",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Subscriber/acme-industries"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

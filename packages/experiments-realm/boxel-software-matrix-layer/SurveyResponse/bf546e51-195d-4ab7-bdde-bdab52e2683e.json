@@ -1,0 +1,54 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "surveyId": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Survey/event-feedback",
+      "surveyTitle": "Conference Feedback",
+      "answers": [
+        {
+          "prompt": "How would you rate the event overall?",
+          "response": "4 / 5"
+        },
+        {
+          "prompt": "Which sessions did you attend?",
+          "response": "—"
+        },
+        {
+          "prompt": "What was your favorite session?",
+          "response": "—"
+        },
+        {
+          "prompt": "Did the event meet your expectations?",
+          "response": "Met them"
+        },
+        {
+          "prompt": "Would you attend again next year?",
+          "response": "Yes"
+        },
+        {
+          "prompt": "Any other comments for the organizers?",
+          "response": "—"
+        }
+      ],
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "survey": {
+        "links": {
+          "self": "../Survey/event-feedback"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../survey-response",
+        "name": "SurveyResponse"
+      }
+    }
+  }
+}
