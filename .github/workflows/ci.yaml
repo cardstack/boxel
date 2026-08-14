@@ -38,6 +38,7 @@ jobs:
       realm-server: ${{ steps.filter.outputs.realm-server }}
       vscode-boxel-tools: ${{ steps.filter.outputs.vscode-boxel-tools }}
       boxel-cli: ${{ steps.filter.outputs.boxel-cli }}
+      bxl: ${{ steps.filter.outputs.bxl }}
       bench-amd: ${{ steps.filter.outputs.bench-amd }}
       bench-realm: ${{ steps.filter.outputs.bench-realm }}
       # Force all tests to run when on ci-bisect* branches
@@ -129,6 +130,12 @@ jobs:
             boxel-cli:
               - *shared
               - 'packages/boxel-cli/**'
+            bxl:
+              # The suite is self-contained — plain objects under Node, no
+              # stack and no browser — so it stays cheap even when the
+              # shared CI-boot paths trigger it.
+              - *shared
+              - 'packages/bxl/**'
             bench-amd:
               # The AMD transpiler is a runtime-common module with no
               # cross-workspace deps that affect its wall-time, so the
@@ -218,6 +225,21 @@ jobs:
       - name: Bot Runner test suite
         run: pnpm test
         working-directory: packages/bot-runner
+
+  bxl-test:
+    name: BXL Tests
+    needs: change-check
+    if: needs.change-check.outputs.bxl == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: bxl-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      - name: BXL test suite
+        run: pnpm test
+        working-directory: packages/bxl
 
   eslint-plugin-boxel-test:
     name: ESLint Plugin Boxel Tests

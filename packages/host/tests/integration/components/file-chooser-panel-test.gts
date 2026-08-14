@@ -153,7 +153,7 @@ module('Integration | file-chooser/panel', function (hooks) {
         'the panel switches to the chosen workspace',
       );
     assert.strictEqual(
-      harness.lastRealmChange?.url.href,
+      harness.lastRealmChange?.id,
       testRealmURL,
       'onRealmChange fires with the newly selected realm so the host can clear stale picks',
     );

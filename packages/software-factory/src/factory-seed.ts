@@ -725,7 +725,7 @@ function adjustSeedInstructions(brief: FactoryBrief): {
     `   It copies the card's module, every same-realm module it imports`,
     `   (transitively, including type-only imports), its sample instances,`,
     `   and its card-level Catalog Spec — preserving realm-relative paths.`,
-    `   Cross-realm imports (\`https://cardstack.com/base/...\`) and`,
+    `   Cross-realm imports (\`@cardstack/base/...\`) and`,
     `   component/function Specs are intentionally left out.`,
     `   - **If the source card has no co-located test** (common for catalog`,
     `     cards), write **characterization tests** that capture its current`,

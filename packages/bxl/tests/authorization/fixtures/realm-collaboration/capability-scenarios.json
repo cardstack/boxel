@@ -1,0 +1,243 @@
+{
+  "provenance": {
+    "generalized": true,
+    "source": "Generalized from realm coordination command and mutation patterns",
+    "boundary": "Authorization answers only whether a party may invoke a capability on an resource"
+  },
+  "document": {
+    "schema": "bxl-authorization/1",
+    "id": "coordination-capabilities",
+    "scopes": [
+      {
+        "name": "InventoryLedger",
+        "seats": [
+          { "name": "Scanner" },
+          { "name": "Admin" }
+        ],
+        "capabilities": [
+          { "name": "RecordScan", "where": "Seat.Scanner" },
+          { "name": "AmendEntry", "where": "Seat.Admin" },
+          { "name": "RecordOfflineBatch", "where": "Seat.Admin" },
+          { "name": "RevokePolicy", "where": "Seat.Admin" }
+        ]
+      },
+      {
+        "name": "TurnGame",
+        "seats": [
+          { "name": "Player" },
+          { "name": "RealmOwner" }
+        ],
+        "capabilities": [
+          { "name": "MakeMove", "where": "Seat.Player" },
+          { "name": "Resign", "where": "Seat.Player" },
+          { "name": "AdminPause", "where": "Seat.RealmOwner" }
+        ]
+      },
+      {
+        "name": "ConnectedApp",
+        "seats": [
+          { "name": "Owner", "from": "Resource.Owner" },
+          { "name": "App", "from": "Resource.AppPrincipal" }
+        ],
+        "capabilities": [
+          { "name": "GrantApp", "where": "Seat.Owner" },
+          { "name": "RevokeApp", "where": "Seat.Owner" },
+          { "name": "PerformAppAction", "where": "Seat.App" }
+        ]
+      },
+      {
+        "name": "JudgingContest",
+        "seats": [
+          { "name": "Judge" },
+          { "name": "Chair" }
+        ],
+        "capabilities": [
+          { "name": "SubmitScore", "where": "Seat.Judge" },
+          { "name": "DeclareWinner", "where": "Seat.Chair" },
+          { "name": "EditCitation", "where": "Seat.Chair" }
+        ]
+      }
+    ]
+  },
+  "snapshot": {
+    "policy": {
+      "id": "coordination-capabilities",
+      "data": { "name": "Coordination capability policy" }
+    },
+    "resources": [
+      {
+        "resource": "../InventoryLedger/main",
+        "type": "InventoryLedger",
+        "data": { "name": "Main inventory ledger" }
+      },
+      {
+        "resource": "../InventoryLedger/satellite",
+        "type": "InventoryLedger",
+        "data": { "name": "Satellite inventory ledger" }
+      },
+      {
+        "resource": "../TurnGame/match-1",
+        "type": "TurnGame",
+        "data": { "name": "Match 1" }
+      },
+      {
+        "resource": "../TurnGame/match-2",
+        "type": "TurnGame",
+        "data": { "name": "Match 2" }
+      },
+      {
+        "resource": "../ConnectedApp/fulfillment-bot",
+        "type": "ConnectedApp",
+        "data": { "name": "Fulfillment bot" },
+        "links": {
+          "owner": "../Person/store-owner",
+          "appPrincipal": "../Service/fulfillment-bot"
+        }
+      },
+      {
+        "resource": "../ConnectedApp/analytics-bot",
+        "type": "ConnectedApp",
+        "data": { "name": "Analytics bot" },
+        "links": {
+          "owner": "../Person/analytics-owner",
+          "appPrincipal": "../Service/analytics-bot"
+        }
+      },
+      {
+        "resource": "../JudgingContest/spring-2026",
+        "type": "JudgingContest",
+        "data": { "name": "Spring 2026 judging" }
+      },
+      {
+        "resource": "../JudgingContest/fall-2026",
+        "type": "JudgingContest",
+        "data": { "name": "Fall 2026 judging" }
+      }
+    ],
+    "parties": [
+      { "party": "../Device/loading-dock-scanner", "data": { "name": "Loading dock scanner" } },
+      { "party": "../Person/inventory-supervisor", "data": { "name": "Inventory supervisor" } },
+      { "party": "../Person/player-x", "data": { "name": "Player X" } },
+      { "party": "../Person/player-o", "data": { "name": "Player O" } },
+      { "party": "../Person/player-two", "data": { "name": "Match 2 player" } },
+      { "party": "../Person/spectator", "data": { "name": "Spectator" } },
+      { "party": "../Person/realm-owner", "data": { "name": "Realm owner" } },
+      { "party": "../Person/store-owner", "data": { "name": "Store owner" } },
+      { "party": "../Person/analytics-owner", "data": { "name": "Analytics owner" } },
+      { "party": "../Service/fulfillment-bot", "data": { "name": "Fulfillment bot" } },
+      { "party": "../Service/analytics-bot", "data": { "name": "Analytics bot" } },
+      { "party": "../Person/judge-a", "data": { "name": "Judge A" } },
+      { "party": "../Person/judge-b", "data": { "name": "Judge B" } },
+      { "party": "../Person/fall-judge", "data": { "name": "Fall judge" } },
+      { "party": "../Person/judging-chair", "data": { "name": "Judging chair" } },
+      {
+        "party": "../Team/spring-judges",
+        "data": { "name": "Spring judges" },
+        "members": ["../Person/judge-a", "../Person/judge-b"]
+      }
+    ],
+    "members": [
+      "../Person/inventory-supervisor",
+      "../Person/player-x",
+      "../Person/player-o",
+      "../Person/player-two",
+      "../Person/spectator",
+      "../Person/realm-owner",
+      "../Person/store-owner",
+      "../Person/analytics-owner",
+      "../Person/judge-a",
+      "../Person/judge-b",
+      "../Person/fall-judge",
+      "../Person/judging-chair"
+    ],
+    "seats": [
+      {
+        "resource": "../InventoryLedger/main",
+        "seat": "Scanner",
+        "holders": ["../Device/loading-dock-scanner"]
+      },
+      {
+        "resource": "../InventoryLedger/main",
+        "seat": "Admin",
+        "holders": ["../Person/inventory-supervisor"]
+      },
+      {
+        "resource": "../TurnGame/match-1",
+        "seat": "Player",
+        "holders": ["../Person/player-x", "../Person/player-o"]
+      },
+      {
+        "resource": "../TurnGame/match-1",
+        "seat": "RealmOwner",
+        "holders": ["../Person/realm-owner"]
+      },
+      {
+        "resource": "../TurnGame/match-2",
+        "seat": "Player",
+        "holders": ["../Person/player-two"]
+      },
+      {
+        "resource": "../JudgingContest/spring-2026",
+        "seat": "Judge",
+        "holders": ["../Team/spring-judges"]
+      },
+      {
+        "resource": "../JudgingContest/spring-2026",
+        "seat": "Chair",
+        "holders": ["../Person/judging-chair"]
+      },
+      {
+        "resource": "../JudgingContest/fall-2026",
+        "seat": "Judge",
+        "holders": ["../Person/fall-judge"]
+      }
+    ]
+  },
+  "checks": [
+    { "domain": "inventory", "party": "../Device/loading-dock-scanner", "capability": "RecordScan", "resource": "../InventoryLedger/main", "allowed": true },
+    { "domain": "inventory", "party": "../Device/loading-dock-scanner", "capability": "AmendEntry", "resource": "../InventoryLedger/main", "allowed": false },
+    { "domain": "inventory", "party": "../Person/inventory-supervisor", "capability": "AmendEntry", "resource": "../InventoryLedger/main", "allowed": true },
+    { "domain": "inventory", "party": "../Person/inventory-supervisor", "capability": "RecordOfflineBatch", "resource": "../InventoryLedger/main", "allowed": true },
+    { "domain": "inventory", "party": "../Person/inventory-supervisor", "capability": "RevokePolicy", "resource": "../InventoryLedger/main", "allowed": true },
+    { "domain": "inventory", "party": "../Person/inventory-supervisor", "capability": "RecordScan", "resource": "../InventoryLedger/main", "allowed": false },
+    { "domain": "inventory", "party": "../Person/spectator", "capability": "RecordScan", "resource": "../InventoryLedger/main", "allowed": false },
+    { "domain": "inventory", "party": "../Person/inventory-supervisor", "capability": "AmendEntry", "resource": "../InventoryLedger/satellite", "allowed": false },
+
+    { "domain": "turn-game", "party": "../Person/player-x", "capability": "MakeMove", "resource": "../TurnGame/match-1", "allowed": true },
+    { "domain": "turn-game", "party": "../Person/player-o", "capability": "MakeMove", "resource": "../TurnGame/match-1", "allowed": true },
+    { "domain": "turn-game", "party": "../Person/spectator", "capability": "MakeMove", "resource": "../TurnGame/match-1", "allowed": false },
+    { "domain": "turn-game", "party": "../Person/player-x", "capability": "Resign", "resource": "../TurnGame/match-1", "allowed": true },
+    { "domain": "turn-game", "party": "../Person/player-x", "capability": "AdminPause", "resource": "../TurnGame/match-1", "allowed": false },
+    { "domain": "turn-game", "party": "../Person/realm-owner", "capability": "AdminPause", "resource": "../TurnGame/match-1", "allowed": true },
+    { "domain": "turn-game", "party": "../Person/player-x", "capability": "MakeMove", "resource": "../TurnGame/match-2", "allowed": false },
+    { "domain": "turn-game", "party": "../Person/player-two", "capability": "MakeMove", "resource": "../TurnGame/match-2", "allowed": true },
+
+    { "domain": "connected-app", "party": "../Person/store-owner", "capability": "GrantApp", "resource": "../ConnectedApp/fulfillment-bot", "allowed": true },
+    { "domain": "connected-app", "party": "../Person/store-owner", "capability": "RevokeApp", "resource": "../ConnectedApp/fulfillment-bot", "allowed": true },
+    { "domain": "connected-app", "party": "../Person/store-owner", "capability": "PerformAppAction", "resource": "../ConnectedApp/fulfillment-bot", "allowed": false },
+    { "domain": "connected-app", "party": "../Service/fulfillment-bot", "capability": "PerformAppAction", "resource": "../ConnectedApp/fulfillment-bot", "allowed": true },
+    { "domain": "connected-app", "party": "../Service/fulfillment-bot", "capability": "GrantApp", "resource": "../ConnectedApp/fulfillment-bot", "allowed": false },
+    { "domain": "connected-app", "party": "../Service/fulfillment-bot", "capability": "PerformAppAction", "resource": "../ConnectedApp/analytics-bot", "allowed": false },
+    { "domain": "connected-app", "party": "../Person/analytics-owner", "capability": "GrantApp", "resource": "../ConnectedApp/analytics-bot", "allowed": true },
+    { "domain": "connected-app", "party": "../Service/analytics-bot", "capability": "PerformAppAction", "resource": "../ConnectedApp/analytics-bot", "allowed": true },
+
+    { "domain": "judging", "party": "../Person/judge-a", "capability": "SubmitScore", "resource": "../JudgingContest/spring-2026", "allowed": true },
+    { "domain": "judging", "party": "../Person/judge-b", "capability": "SubmitScore", "resource": "../JudgingContest/spring-2026", "allowed": true },
+    { "domain": "judging", "party": "../Person/judging-chair", "capability": "SubmitScore", "resource": "../JudgingContest/spring-2026", "allowed": false },
+    { "domain": "judging", "party": "../Person/judging-chair", "capability": "DeclareWinner", "resource": "../JudgingContest/spring-2026", "allowed": true },
+    { "domain": "judging", "party": "../Person/judging-chair", "capability": "EditCitation", "resource": "../JudgingContest/spring-2026", "allowed": true },
+    { "domain": "judging", "party": "../Person/judge-a", "capability": "DeclareWinner", "resource": "../JudgingContest/spring-2026", "allowed": false },
+    { "domain": "judging", "party": "../Person/judge-a", "capability": "SubmitScore", "resource": "../JudgingContest/fall-2026", "allowed": false },
+    { "domain": "judging", "party": "../Person/fall-judge", "capability": "SubmitScore", "resource": "../JudgingContest/fall-2026", "allowed": true }
+  ],
+  "capabilityLists": [
+    { "domain": "inventory", "party": "../Device/loading-dock-scanner", "resource": "../InventoryLedger/main", "capabilities": ["RecordScan"] },
+    { "domain": "inventory", "party": "../Person/inventory-supervisor", "resource": "../InventoryLedger/main", "capabilities": ["AmendEntry", "RecordOfflineBatch", "RevokePolicy"] },
+    { "domain": "turn-game", "party": "../Person/player-x", "resource": "../TurnGame/match-1", "capabilities": ["MakeMove", "Resign"] },
+    { "domain": "turn-game", "party": "../Person/spectator", "resource": "../TurnGame/match-1", "capabilities": [] },
+    { "domain": "connected-app", "party": "../Person/store-owner", "resource": "../ConnectedApp/fulfillment-bot", "capabilities": ["GrantApp", "RevokeApp"] },
+    { "domain": "connected-app", "party": "../Service/fulfillment-bot", "resource": "../ConnectedApp/fulfillment-bot", "capabilities": ["PerformAppAction"] },
+    { "domain": "judging", "party": "../Person/judge-a", "resource": "../JudgingContest/spring-2026", "capabilities": ["SubmitScore"] },
+    { "domain": "judging", "party": "../Person/judging-chair", "resource": "../JudgingContest/spring-2026", "capabilities": ["DeclareWinner", "EditCitation"] }
+  ]
+}

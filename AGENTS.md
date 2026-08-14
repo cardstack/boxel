@@ -232,7 +232,7 @@ Symptom differs from triggers 1–2: the template body is silently dropped, so t
 
 ## Base realm imports
 
-- Only card definitions (files run through the card loader) can use static ESM imports from `https://cardstack.com/base/*`. Host-side modules must load the module at runtime via `loader.import(`${baseRealm.url}...`)`. Static value imports from the HTTPS specifier inside host code trigger build-time `webpackMissingModule` failures. Type imports are OK using static ESM syntax.
+- Only card definitions (files run through the card loader) can use static ESM imports from `@cardstack/base/*`. Host-side modules must load the module at runtime via `loader.import(`${baseRealm.url}...`)`. Static value imports from the HTTPS specifier inside host code trigger build-time `webpackMissingModule` failures. Type imports are OK using static ESM syntax.
 
 ## Linear Ticket Process (Reusable)
 

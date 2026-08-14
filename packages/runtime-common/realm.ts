@@ -7712,6 +7712,14 @@ function isGloballyPublicDependency(resourceUrl: string): boolean {
     resourceUrl.startsWith('@cardstack/boxel-icons') ||
     resourceUrl.startsWith('@cardstack/boxel-ui') ||
     resourceUrl.startsWith('@cardstack/boxel-host/commands') ||
+    // The bare-specifier spelling of the BXL platform module (e.g. a code
+    // ref naming it directly). Deps the loader records for the shim take
+    // the packages-fake-origin form and are admitted by the prefix check
+    // below. Only the package root is card-facing — its entry re-exports
+    // BXL's entire public API, and the host's VirtualNetwork shim serves
+    // exactly that specifier; sub-entries exist for size-constrained
+    // embeds outside the host and don't load through the shim at all.
+    resourceUrl === '@cardstack/bxl' ||
     resourceUrl.startsWith(PACKAGES_FAKE_ORIGIN)
   ) {
     return true;

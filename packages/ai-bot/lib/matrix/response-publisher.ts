@@ -12,7 +12,10 @@ import {
   APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
 } from '@cardstack/runtime-common';
 import { sendErrorEvent, sendMessageEvent } from '@cardstack/runtime-common/ai';
-import type { CardMessageContent } from '@cardstack/base/matrix-event';
+import type {
+  CardMessageContent,
+  TokenUsage,
+} from '@cardstack/base/matrix-event';
 import ResponseEventData from './response-event-data.ts';
 import { logger } from '@cardstack/runtime-common';
 import type { MatrixClient } from 'matrix-js-sdk';
@@ -68,6 +71,12 @@ export default class MatrixResponsePublisher {
   // Read by the Responder's per-turn telemetry line to compare room-event
   // volume across streaming modes.
   roomEventsEmitted = 0;
+  // The provider's token counts for this turn, set by the Responder when the
+  // stream reports them. Carried on the final (non-split) part of the
+  // message; `usageSent` records that a sent event actually included them,
+  // so the Responder knows whether a follow-up edit is needed.
+  usage: TokenUsage | undefined;
+  usageSent = false;
   private sendingMessage = Promise.resolve(); // track pending send operation
 
   get currentResponseEvent() {
@@ -169,6 +178,11 @@ export default class MatrixResponsePublisher {
         );
       log.debug('matrix/reponse-publisher', contentAndReasoning);
 
+      // Only the last part of a split answer carries the usage, the same way
+      // it carries the tool calls: the counts describe the whole turn, not
+      // the piece it was cut into. (The split branch above builds its own
+      // extraData without it.)
+      let usageIncluded = this.usage;
       let extraData: any = {
         isStreamingFinished: responseStateSnapshot.isStreamingFinished,
         isCanceled: responseStateSnapshot.isCanceled,
@@ -176,6 +190,7 @@ export default class MatrixResponsePublisher {
           context: {
             agentId: this.agentId,
           },
+          ...(usageIncluded ? { usage: usageIncluded } : {}),
         },
       };
       if (this.currentResponseEvent.needsContinuation) {
@@ -200,6 +215,9 @@ export default class MatrixResponsePublisher {
         contentAndReasoning.reasoning,
       );
       this.roomEventsEmitted++;
+      if (usageIncluded) {
+        this.usageSent = true;
+      }
       if (!this.currentResponseEvent.eventId) {
         this.currentResponseEvent.eventId = messageEvent.event_id;
       }
