@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Booking card",
+      "specType": "card",
+      "ref": {
+        "module": "../booking",
+        "name": "Booking"
+      },
+      "readMe": "# Booking\n\n## Summary\nA claim on places at an Event — who is coming, how many places, where the\nmoney stands, and whether they actually showed up. Shared-realm block at\n`booking.gts`. Four facts kept as four fields, deliberately not collapsed\ninto one \"status\": `rsvp` is intent, `paymentStatus` is money,\n`checkedInAt` is what happened, `quantity` is how much capacity the claim\nconsumes.\n\n## API\n- `reference` — the human-quoted booking code (mono-rendered)\n- `event` — linksTo Event; `holder` — linksTo Contact\n- `quantity` — NumberField (places)\n- `rsvp` — RsvpStatusField\n- `paymentStatus` — Unpaid / Paid / Waived / Refunded (`BookingPaymentStatusField`, exported; Waived covers comps so \"everything not Paid owes money\" stays a safe query)\n- `totalPrice` — base AmountWithCurrency\n- `checkedInAt` — event fact, written once by the Check In Booking command\n\n## Usage\n```ts\nimport { Booking } from '../booking';\n\nclass TicketBooking extends Booking { /* seats, sections */ }\n```\nLifecycle moves go through the commands (Confirm Booking, Check In\nBooking), not hand-edits — that is what keeps `checkedInAt` one-time-use.\n\n## Non-goals\nSeat-level assignment (section, row, seat) is a seating-plan concern for\nthe consumer's extending card. Payment processing is an integration; this\ncard only records where the money stands. Attendance rates and no-show\nlists are computed from `checkedInAt` by queries, never stored.",
+      "cardInfo": {
+        "name": "Booking",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Booking/bk-20260912-00417"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

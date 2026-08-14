@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Confirm Booking command",
+      "specType": "command",
+      "ref": {
+        "module": "../confirm-booking",
+        "name": "default"
+      },
+      "readMe": "# Confirm Booking\n\n## Summary\nMoves a booking's attendance intent to Going — the purchase-complete /\n\"see you there\" transition. Shared-realm command at `confirm-booking.gts`.\n\n## API\nInput: `booking` (linksTo Booking), `realm`. Result: the booking and a\nmessage. An already-Going booking is reported, not re-written; transitions\nthe RSVP graph refuses are errors, not forced writes. Re-fetches the\nbooking before reading it.\n\n## Usage\nCall after whatever your domain counts as commitment: payment cleared, a\nseat picked, a guest list approved. Chain your own moves (points, emails)\nafter the result.\n\n## Example\nThe linked Booking is the natural target — a paid, Going booking shaped by\nthis command.\n\n## Non-goals\nDeliberately does not touch `paymentStatus`: money is a different fact\nwith its own writer, and coupling them would make every free event wrong.\nNot the check-in — arrival is the Check In Booking command's fact.",
+      "cardInfo": {
+        "name": "Confirm Booking",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Booking/bk-20260912-00417"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
