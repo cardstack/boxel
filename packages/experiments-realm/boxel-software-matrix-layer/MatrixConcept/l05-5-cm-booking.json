@@ -18,9 +18,9 @@
       "owner": "richard",
       "workState": "Done",
       "notes": "App 4: Club Membership & Ticketing",
-      "sharedSpec": null,
-      "specTarget": null,
-      "consumers": null,
+      "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/booking-card",
+      "specTarget": "shared block",
+      "consumers": "check-in-booking, confirm-booking",
       "consumerExamples": null,
       "catalogDisposition": null,
       "cardInfo": {

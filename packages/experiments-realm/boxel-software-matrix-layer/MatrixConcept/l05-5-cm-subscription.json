@@ -20,8 +20,8 @@
       "notes": "v1 · Built — experiments-realm/subscription.gts, computed renewalDate, POC tier",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/subscription",
       "specTarget": "shared block",
-      "consumers": "account-metrics, close-won, invoice, revenue-os",
-      "consumerExamples": "{\"invoice\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Invoice/inv-2026-018\", \"revenue-os\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/RevenueOs/main\"}",
+      "consumers": "account-metrics, close-won, invoice, revenue-os, subscriber",
+      "consumerExamples": "{\"invoice\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Invoice/inv-2026-018\", \"revenue-os\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/RevenueOs/main\", \"subscriber\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Subscriber/acme-industries\"}",
       "catalogDisposition": null,
       "cardInfo": {
         "name": null,

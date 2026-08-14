@@ -20,8 +20,8 @@
       "notes": "v1 · Built — experiments-realm/contact.gts, POC tier. Existing POC-tier evidence is the old crm/ demo card, not this block",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/contact",
       "specTarget": "shared block",
-      "consumers": "convert-lead, deal, loyalty-account, revenue-os",
-      "consumerExamples": "{\"deal\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Deal/acme-enterprise-renewal\", \"loyalty-account\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/LoyaltyAccount/jason-lim\", \"revenue-os\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/RevenueOs/main\"}",
+      "consumers": "booking, convert-lead, deal, loyalty-account, revenue-os, subscriber",
+      "consumerExamples": "{\"booking\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Booking/bk-20260912-00417\", \"deal\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Deal/acme-enterprise-renewal\", \"loyalty-account\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/LoyaltyAccount/jason-lim\", \"revenue-os\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/RevenueOs/main\", \"subscriber\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Subscriber/acme-industries\"}",
       "catalogDisposition": null,
       "cardInfo": {
         "name": null,
