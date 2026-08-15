@@ -291,14 +291,25 @@ export const coreMathCases: CoverageCase[] = jqCases([
     expected: 3.1780538,
     tolerance: 1e-7,
   },
-  // Yields only the scalar ln|Γ(x)| — Γ(-2.5) is negative and its sign is
-  // dropped. Real jq returns the [ln|Γ|, sign] pair instead.
+  // lgamma_r exists to report the sign that lgamma discards: Γ(-2.5) is
+  // negative, so the answer is the pair [ln|Γ(x)|, -1].
   {
     covers: 'lgamma_r/0',
     source: 'lgamma_r',
     input: -2.5,
-    expected: -0.0562437,
-    tolerance: 1e-7,
+    check: (outputs) => {
+      const [pair] = outputs as number[][];
+      ok(
+        Array.isArray(pair) && pair.length === 2,
+        `expected a [ln|gamma|, sign] pair, got ${JSON.stringify(pair)}`,
+      );
+      ok(Math.abs(pair[0] - -0.0562437) <= 1e-7, `ln|gamma| was ${pair[0]}`);
+      strictEqual(pair[1], -1, 'sign of gamma(-2.5)');
+    },
+    knownDefect:
+      'only the scalar ln|gamma(x)| is returned, so the sign the function ' +
+      'exists to report is dropped. jq returns it as element 1 of a pair',
+    produces: { expected: -0.056243716497675456, tolerance: 1e-12 },
   },
   // The erf implementation is a rational approximation good to ~1.5e-7.
   {

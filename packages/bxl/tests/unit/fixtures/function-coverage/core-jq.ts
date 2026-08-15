@@ -34,8 +34,16 @@ export const coreJqCases: CoverageCase[] = jqCases([
   },
   {
     covers: 'scalars_or_empty/0',
-    source: '[(1, [2]) | scalars_or_empty]',
-    expected: [1],
+    // The name is the contract: scalars, or an EMPTY collection. That is the
+    // only thing separating it from `scalars`, so the input has to contain an
+    // empty array and object as well as a populated one.
+    source: '[(1, [2], [], {}) | scalars_or_empty]',
+    expected: [1, [], {}],
+    knownDefect:
+      'the implementation is `if (isScalar(input)) yield input`, making it a ' +
+      'byte-identical copy of scalars/0 — empty collections are dropped ' +
+      'rather than kept',
+    produces: { expected: [1] },
   },
   { covers: 'finites/0', source: '[(1, infinite) | finites]', expected: [1] },
   // Zero is finite but subnormal-or-zero, so it is not "normal".
@@ -412,6 +420,18 @@ export const coreJqCases: CoverageCase[] = jqCases([
     source: '"abc" | match("b")',
     expected: { offset: 1, length: 1, string: 'b', captures: [] },
   },
+  // The capture name on a match is the root the capture/sub/gsub defects all
+  // grow from, so it is pinned here rather than only through them — patching
+  // `capture` alone would promote those cases and leave this one failing.
+  {
+    covers: 'match/1',
+    source: '"abc123" | match("(?<num>[0-9]+)") | .captures[0].name',
+    expected: 'num',
+    knownDefect:
+      'transformRegExpMatch hardcodes name: null on every capture and never ' +
+      "reads the match's groups",
+    produces: { expected: null },
+  },
   {
     covers: 'match/2',
     source: '"aA" | [match("a"; "gi") | .offset]',
@@ -693,8 +713,16 @@ export const coreJqCases: CoverageCase[] = jqCases([
   },
   {
     covers: 'inputs/0',
+    // jq defines inputs as repeat(input) with the end-of-input break caught,
+    // so a runtime with no further inputs yields an empty stream rather than
+    // raising. That input/0 itself is unimplemented is documented; inputs
+    // failing hard is a downstream consequence that is not.
     source: '[inputs]',
-    throws: /Feature 'input\/0' is not implemented/,
+    expected: [],
+    knownDefect:
+      'the unimplemented input/0 raises instead of signalling break, so the ' +
+      'catch in the jq definition never runs and the error escapes',
+    produces: { throws: /Feature 'input\/0' is not implemented/ },
   },
   {
     covers: 'input_filename/0',
