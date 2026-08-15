@@ -2,9 +2,12 @@ import { parseExcelNumber } from './common.ts';
 import { EXCEL_ERROR, throwExcelError } from './errors.ts';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
-// A trailing `Z`/offset, or a GMT/UTC token, means the string fixes its own
-// zone; anything else leaves the zone to the host.
-const HAS_EXPLICIT_ZONE = /(?:[zZ]|[+-]\d{2}:?\d{2})\s*$|\b(?:GMT|UTC)\b/;
+// A trailing `Z`, a GMT/UTC token, or a numeric offset means the string fixes
+// its own zone; anything else leaves the zone to the host. The offset has to
+// follow a time of day, because a bare trailing `-2026` — as in the
+// `DD-Mon-YYYY` form `30-Apr-2026` — is a year, not a -20:26 offset.
+const HAS_EXPLICIT_ZONE =
+  /[zZ]\s*$|\b(?:GMT|UTC)\b|\d:\d{2}(?::\d{2})?(?:\.\d+)?\s*[+-]\d{2}:?\d{2}\s*$/;
 const WEEKEND_TYPES: Record<number, number[]> = {
   1: [0, 6],
   2: [0, 1],
