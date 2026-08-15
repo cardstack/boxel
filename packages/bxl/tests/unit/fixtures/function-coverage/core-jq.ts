@@ -447,6 +447,25 @@ export const coreJqCases: CoverageCase[] = jqCases([
   { covers: 'sub/2', source: '"aaa" | sub("a"; "b")', expected: 'baa' },
   { covers: 'sub/3', source: '"Aaa" | sub("a"; "b"; "i")', expected: 'baa' },
   { covers: 'gsub/2', source: '"aBa" | gsub("a"; "-")', expected: '-B-' },
+  // A replacement can read the named captures of the match it is replacing,
+  // which is the same capture plumbing `capture` reads.
+  {
+    covers: 'sub/2',
+    source: '"abc" | sub("(?<x>b)"; "[" + .x + "]")',
+    expected: 'a[b]c',
+    knownDefect:
+      'the replacement sees no named captures, for the same reason capture/1 ' +
+      'yields {} — transformRegExpMatch never reads the match groups — so the ' +
+      'interpolation substitutes nothing',
+    produces: { expected: 'a[]c' },
+  },
+  {
+    covers: 'gsub/2',
+    source: '"abc" | gsub("(?<x>b)"; "<" + .x + ">")',
+    expected: 'a<b>c',
+    knownDefect: 'named captures are discarded, as for sub/2',
+    produces: { expected: 'a<>c' },
+  },
   { covers: 'gsub/3', source: '"aBa" | gsub("b"; "-"; "i")', expected: 'a-a' },
   {
     covers: 'split/2',

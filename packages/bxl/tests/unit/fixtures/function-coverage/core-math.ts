@@ -254,6 +254,18 @@ export const coreMathCases: CoverageCase[] = jqCases([
     produces: { expected: true },
   },
   { covers: 'isfinite/0', source: 'infinite | isfinite', expected: false },
+  // isfinite is defined in jq source as type == "number" and (isinfinite |
+  // not), so it inherits whatever isinfinite decides about NaN. NaN is a
+  // number and is not an infinity, so it is finite.
+  {
+    covers: 'isfinite/0',
+    source: 'nan | isfinite',
+    expected: true,
+    knownDefect:
+      'isinfinite/0 reports NaN as infinite and this definition negates it, ' +
+      'so NaN comes back non-finite. Fixing isinfinite fixes this too',
+    produces: { expected: false },
+  },
   // 1e-320 is subnormal: finite and nonzero, but below the normal threshold.
   { covers: 'isnormal/0', source: 'isnormal', input: 1e-320, expected: false },
   // Gamma and error functions
