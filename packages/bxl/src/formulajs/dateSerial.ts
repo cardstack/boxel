@@ -35,8 +35,11 @@ function utcDate(
   hours = 0,
   minutes = 0,
   seconds = 0,
+  milliseconds = 0,
 ) {
-  return new Date(Date.UTC(year, month, day, hours, minutes, seconds));
+  return new Date(
+    Date.UTC(year, month, day, hours, minutes, seconds, milliseconds),
+  );
 }
 
 export function serialToExcelDate(serial: number): Date {
@@ -122,6 +125,7 @@ export function parseExcelDate(value: unknown): Date {
               parsed.getHours(),
               parsed.getMinutes(),
               parsed.getSeconds(),
+              parsed.getMilliseconds(),
             )
           : parsed;
       }
