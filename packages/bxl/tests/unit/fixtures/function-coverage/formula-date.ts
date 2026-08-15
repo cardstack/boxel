@@ -63,6 +63,20 @@ export const formulaDateCases: CoverageCase[] = dateCases([
     source: 'DATEVALUE("April 30, 2026 23:30")',
     expected: 46142,
   },
+  // A 12-hour clock names no zone either, and late evening is where reading
+  // it against the host would push the date onto the next day.
+  {
+    covers: 'DATEVALUE/1',
+    source: 'DATEVALUE("Dec 31, 2026 11:30 PM")',
+    expected: 46387,
+  },
+  // Nor does a leading weekday, which is how Date.prototype.toString and a
+  // good deal of pasted text render a date.
+  {
+    covers: 'DATEVALUE/1',
+    source: 'DATEVALUE("Thu Apr 30 2026")',
+    expected: 46142,
+  },
   // Month arithmetic. EDATE clamps the day of month to the target month's
   // last day rather than letting it overflow, so one month past January 31
   // is February 28, not March 3.

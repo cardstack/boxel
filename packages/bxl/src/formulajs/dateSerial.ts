@@ -10,7 +10,7 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 // instant the parser produced. Covers `4/30/2026`, `2026/04/30`,
 // `30-Apr-2026`, `April 30, 2026`, each with an optional time of day.
 const ZONELESS_CIVIL_DATE =
-  /^\s*(?:\d{1,4}[/-]\d{1,2}[/-]\d{1,4}|\d{1,2}[ -][A-Za-z]{3,}\.?[ -]\d{2,4}|[A-Za-z]{3,}\.? ?\d{1,2},? ?\d{2,4})(?:[T ]\d{1,2}:\d{2}(?::\d{2})?(?:\.\d+)?)?\s*$/;
+  /^\s*(?:[A-Za-z]{3,},? )?(?:\d{1,4}[/-]\d{1,2}[/-]\d{1,4}|\d{1,2}[ -][A-Za-z]{3,}\.?[ -]\d{2,4}|[A-Za-z]{3,}\.? ?\d{1,2},? ?\d{2,4})(?:[T ]\d{1,2}:\d{2}(?::\d{2})?(?:\.\d+)?(?: ?[AaPp]\.?[Mm]\.?)?)?\s*$/;
 const WEEKEND_TYPES: Record<number, number[]> = {
   1: [0, 6],
   2: [0, 1],
