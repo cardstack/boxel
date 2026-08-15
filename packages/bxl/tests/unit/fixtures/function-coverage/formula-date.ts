@@ -50,6 +50,19 @@ export const formulaDateCases: CoverageCase[] = dateCases([
     source: 'DATEVALUE("2026-04-30T23:30:00-07:00")',
     expected: 46143,
   },
+  // A named zone counts as naming one just as much as a numeric offset does,
+  // even though it can appear in an otherwise plain-English date.
+  {
+    covers: 'DATEVALUE/1',
+    source: 'DATEVALUE("April 30, 2026 23:30 EST")',
+    expected: 46143,
+  },
+  // The same text without the zone is a calendar day, so it stays on the 30th.
+  {
+    covers: 'DATEVALUE/1',
+    source: 'DATEVALUE("April 30, 2026 23:30")',
+    expected: 46142,
+  },
   // Month arithmetic. EDATE clamps the day of month to the target month's
   // last day rather than letting it overflow, so one month past January 31
   // is February 28, not March 3.
