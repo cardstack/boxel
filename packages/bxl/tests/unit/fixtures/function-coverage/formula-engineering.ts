@@ -19,6 +19,7 @@ export const formulaEngineeringCases: CoverageCase[] = [
       'family is affected — BIN2HEX, DEC2HEX, OCT2HEX, BASE. The input side ' +
       'already accepts either casing, so uppercasing output breaks no ' +
       'round trip',
+    produces: { expected: 'ff' },
   },
   // The third argument is a minimum length, zero-padded.
   { covers: 'BASE/3', source: 'BASE(15, 2, 10)', expected: '0000001111' },
@@ -38,6 +39,7 @@ export const formulaEngineeringCases: CoverageCase[] = [
     source: 'DEC2HEX(255)',
     expected: 'FF',
     knownDefect: 'lowercase hex digits, as for BASE/2',
+    produces: { expected: 'ff' },
   },
   { covers: 'DEC2HEX/2', source: 'DEC2HEX(100, 4)', expected: '0064' },
   { covers: 'DEC2OCT/1', source: 'DEC2OCT(58)', expected: '72' },
@@ -76,6 +78,7 @@ export const formulaEngineeringCases: CoverageCase[] = [
       'coefficient but has no mirror for -1, so it emits "-1i". The library ' +
       'parses "-i" perfectly well — it just cannot write it — and every ' +
       'IM* function formats through here',
+    produces: { expected: '-1i' },
   },
   { covers: 'COMPLEX/3', source: 'COMPLEX(3, 4, "j")', expected: '3+4j' },
   { covers: 'IMREAL/1', source: 'IMREAL("6-9i")', expected: 6 },

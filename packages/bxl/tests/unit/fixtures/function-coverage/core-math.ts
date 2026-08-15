@@ -169,6 +169,7 @@ export const coreMathCases: CoverageCase[] = jqCases([
       'the implementation is a bare Math.round, which ties toward +Infinity, ' +
       'so every negative half goes the wrong way. C round, jq and Excel all ' +
       'tie away from zero; positive halves agree by coincidence',
+    produces: { expected: -2 },
   },
   { covers: 'floor/0', source: 'floor', input: -1.5, expected: -2 },
   { covers: 'ceil/0', source: 'ceil', input: 1.2, expected: 2 },
@@ -250,6 +251,7 @@ export const coreMathCases: CoverageCase[] = jqCases([
       'cascades into isfinite/0, defined in jq source as ' +
       'type == "number" and (isinfinite | not), so nan | isfinite is false ' +
       'here where jq gives true',
+    produces: { expected: true },
   },
   { covers: 'isfinite/0', source: 'infinite | isfinite', expected: false },
   // 1e-320 is subnormal: finite and nonzero, but below the normal threshold.

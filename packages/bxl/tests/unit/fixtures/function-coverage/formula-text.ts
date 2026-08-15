@@ -34,6 +34,7 @@ export const formulaTextCases: CoverageCase[] = [
     knownDefect:
       'the /\\w\\S*/g tokenizer treats "2-way" as one word and uppercases ' +
       'only its first character, so letters after a non-letter stay lower',
+    produces: { expected: '2-way Street' },
   },
   // TRIM collapses runs of spaces between words as well as stripping the
   // ends, which a plain JavaScript trim does not do.
@@ -52,6 +53,7 @@ export const formulaTextCases: CoverageCase[] = [
     knownDefect:
       'the implementation collapses /\\s+/, whose character class includes ' +
       'U+00A0 as well as tabs and newlines that Excel leaves for CLEAN',
+    produces: { expected: 'Acme Legal' },
   },
   { covers: 'LEN/1', source: 'LEN("Phoenix, AZ")', expected: 11 },
   { covers: 'REPT/2', source: 'REPT("*-", 3)', expected: '*-*-*-' },
@@ -85,6 +87,7 @@ export const formulaTextCases: CoverageCase[] = [
       'SEARCH is a lowercased indexOf, so only the case-insensitivity half ' +
       'of the FIND/SEARCH distinction exists; wildcards match literally and ' +
       'this raises #VALUE!. SEARCH/3 shares the code path',
+    produces: { throws: /#VALUE!/ },
   },
   { covers: 'EXACT/2', source: 'EXACT("Word", "word")', expected: false },
   // Substitution. SUBSTITUTE matches text, REPLACE matches a position span,
@@ -109,6 +112,7 @@ export const formulaTextCases: CoverageCase[] = [
       'replaceNth searches from index + 1 starting at index 0, so a match at ' +
       'position 0 is never counted and every instance number shifts by one ' +
       'whenever the string opens with old_text',
+    produces: { expected: 'a-b-a' },
   },
   {
     covers: 'REPLACE/4',
@@ -149,6 +153,7 @@ export const formulaTextCases: CoverageCase[] = [
       'only numeric format codes are implemented; a date code falls through ' +
       'and TEXT returns the bare serial as a string ("46142"), so a card ' +
       'formatting a date this way shows a five-digit number',
+    produces: { expected: '46142' },
   },
   { covers: 'FIXED/1', source: 'FIXED(1234.567)', expected: '1,234.57' },
   // Negative decimals round to the left of the point.
@@ -169,6 +174,7 @@ export const formulaTextCases: CoverageCase[] = [
     knownDefect:
       'only separators are stripped before Number(), so a percent sign — and ' +
       'likewise the embedded spaces Excel ignores — yields NaN and #VALUE!',
+    produces: { throws: /#VALUE!/ },
   },
   {
     covers: 'NUMBERVALUE/2',

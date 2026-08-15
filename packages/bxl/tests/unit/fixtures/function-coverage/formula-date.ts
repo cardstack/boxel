@@ -121,6 +121,7 @@ export const formulaDateCases: CoverageCase[] = dateCases([
     knownDefect:
       'only return types 1, 2 and 3 are branched on, so 11 through 17 fall ' +
       'through to the Sunday = 1 default',
+    produces: { expected: 5 },
   },
   // 2026-04-26 is a Sunday, which is exactly where the two start-of-week
   // conventions disagree: it opens week 18 counting weeks from Sunday and
@@ -139,6 +140,7 @@ export const formulaDateCases: CoverageCase[] = dateCases([
     knownDefect:
       'return type 2 is the only one branched on, so 11 through 17 and the ' +
       'ISO 21 all fall through to the Sunday-start week',
+    produces: { expected: 18 },
   },
   // 2026-06-15 is the Monday that opens ISO week 25 of 2026.
   {
@@ -156,6 +158,7 @@ export const formulaDateCases: CoverageCase[] = dateCases([
       'the week arithmetic has no year-boundary branch, so an early-January ' +
       'date belonging to the previous ISO year reports week 0 instead of that ' +
       "year's 52nd or 53rd week",
+    produces: { expected: 0 },
   },
   // Working days. April 2026 runs Wednesday the 1st to Thursday the 30th and
   // holds eight weekend days, leaving 22 of its 30 days.
@@ -241,6 +244,7 @@ export const formulaDateCases: CoverageCase[] = dateCases([
     knownDefect:
       'the parse reads only the digit groups of `h:mm:ss` and drops the AM/PM ' +
       'suffix, so every afternoon time comes back twelve hours early',
+    produces: { expected: 0.1 },
   },
   // The clock functions have no fixed answer, so they assert what holds
   // whenever they run. TODAY is a whole serial at or after 2026-01-01; NOW

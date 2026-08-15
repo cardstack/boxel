@@ -251,10 +251,15 @@ export const coreJqCases: CoverageCase[] = jqCases([
       { n: 'b', v: 1 },
       { n: 'a', v: 2 },
     ],
-    knownDefect:
-      '_sort_by_impl compares the whole {item, ref} envelope instead of ' +
-      'ref alone, so the key expression only ever breaks ties — the sibling ' +
-      '_group_by_impl gets this right',
+  },
+  // Ordering by a key that disagrees with the items' own order: sorting these
+  // strings by their own value gives a, bbb, cc, so only a key-driven
+  // comparison puts them in length order.
+  {
+    covers: 'sort_by/1',
+    source: 'sort_by(length)',
+    input: ['bbb', 'a', 'cc'],
+    expected: ['a', 'cc', 'bbb'],
   },
   {
     covers: 'group_by/1',
@@ -423,12 +428,14 @@ export const coreJqCases: CoverageCase[] = jqCases([
       "reads the match's groups, so capture's select(.name != null) rejects " +
       'everything and yields {}. sub/gsub replacement captures are empty for ' +
       'the same reason',
+    produces: { expected: {} },
   },
   {
     covers: 'capture/2',
     source: '"XYZ" | capture("(?<low>xyz)"; "i")',
     expected: { low: 'XYZ' },
     knownDefect: 'named captures are discarded, as for capture/1',
+    produces: { expected: {} },
   },
   {
     covers: 'scan/1',

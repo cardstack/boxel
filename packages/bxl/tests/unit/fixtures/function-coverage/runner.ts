@@ -25,7 +25,7 @@ import {
   type BareNativeFilter,
   type NativeFilter,
 } from '../../../../src/jqtools/evaluate/filters/lib/nativeFilter.ts';
-import type { CoverageCase } from './case.ts';
+import type { CoverageCase, Expectation } from './case.ts';
 
 const invoked = new Set<string>();
 
@@ -158,18 +158,28 @@ function runInAmbientZone(
   const reached = new Set(invoked);
 
   // A case documenting a known defect has to still reach its function — the
-  // defect is in the answer, not the dispatch — and has to still get the
-  // wrong answer. When it starts producing the right one the defect is
-  // fixed, and the case should go back to being an ordinary assertion.
+  // defect is in the answer, not the dispatch — has to still miss the correct
+  // answer, and has to still produce the specific wrong one it records.
+  // Accepting any failure would let the defect change shape unnoticed.
   if (testCase.knownDefect) {
     if (!reached.has(testCase.covers)) {
       return `the program never invoked ${testCase.covers}`;
     }
-    return checkExpectation(testCase, outputs, thrown)
-      ? undefined
-      : `this case documents a known defect but now produces the expected ` +
-          `result. If ${testCase.covers} was fixed, drop its knownDefect note ` +
-          `so the case asserts normally.`;
+    if (!testCase.produces) {
+      return 'a knownDefect case must record what it produces today';
+    }
+    if (!checkExpectation(testCase, outputs, thrown)) {
+      return (
+        'this case documents a known defect but now produces the expected ' +
+        `result. If ${testCase.covers} was fixed, drop its knownDefect and ` +
+        'produces so the case asserts normally.'
+      );
+    }
+    const drifted = checkExpectation(testCase.produces, outputs, thrown);
+    return drifted
+      ? `the defect changed shape — this case still fails, but no longer the ` +
+          `documented way, so its knownDefect note is now wrong: ${drifted}`
+      : undefined;
   }
 
   return (
@@ -181,9 +191,9 @@ function runInAmbientZone(
   );
 }
 
-/** The failure message, or `undefined` when the case produced what it claims. */
+/** The failure message, or `undefined` when the run matched the expectation. */
 function checkExpectation(
-  testCase: CoverageCase,
+  testCase: Expectation,
   outputs: unknown[] | undefined,
   thrown: unknown,
 ): string | undefined {

@@ -2,6 +2,25 @@ import type { ReadableSchema } from '../../../../src/index.ts';
 import type { BuiltinLibraryName } from '../../../../src/bxl/registry/index.ts';
 
 /**
+ * What a program is expected to produce. Exactly one field must be set.
+ */
+export interface Expectation {
+  /** Expected normalized output: the lone value, or `null` for an empty stream. */
+  expected?: unknown;
+  /** Absolute tolerance for a numeric `expected`. */
+  tolerance?: number;
+  /** Expected output stream, for programs that emit no values or several. */
+  outputs?: unknown[];
+  /** Expected failure, matched against the thrown message. */
+  throws?: RegExp;
+  /**
+   * Assertion for results that are not fixed values — anything reading the
+   * clock, the host time zone, or build configuration.
+   */
+  check?: (outputs: unknown[]) => void;
+}
+
+/**
  * One function-coverage case: a program that reaches a single registry entry,
  * plus an assertion about what that program produced.
  *
@@ -12,7 +31,7 @@ import type { BuiltinLibraryName } from '../../../../src/bxl/registry/index.ts';
  *
  * Exactly one of `expected`, `outputs`, `throws`, or `check` must be set.
  */
-export interface CoverageCase {
+export interface CoverageCase extends Expectation {
   /** Registry key this case covers, e.g. `ROUND/2`. */
   covers: string;
   /** Program source. */
@@ -34,19 +53,6 @@ export interface CoverageCase {
    * jq's own builtins have no readable form and set it to `false`.
    */
   readableSyntax?: boolean;
-  /** Expected normalized output: the lone value, or `null` for an empty stream. */
-  expected?: unknown;
-  /** Absolute tolerance for a numeric `expected`. */
-  tolerance?: number;
-  /** Expected output stream, for programs that emit no values or several. */
-  outputs?: unknown[];
-  /** Expected failure, matched against the thrown message. */
-  throws?: RegExp;
-  /**
-   * Assertion for results that are not fixed values — anything reading the
-   * clock, the host time zone, or build configuration.
-   */
-  check?: (outputs: unknown[]) => void;
   /**
    * States that this function is known not to behave as the case asserts,
    * and why. The assertion stays as the correct answer — Excel's, jq's, or
@@ -57,8 +63,17 @@ export interface CoverageCase {
    * Reach for this only for a divergence from the function's specification.
    * A divergence this codebase deliberately documents is not a defect: assert
    * the documented behavior and note it in a comment.
+   *
+   * Requires {@link produces}.
    */
   knownDefect?: string;
+  /**
+   * What the function returns today, required alongside {@link knownDefect}.
+   * Tolerating "any wrong answer" would let a defect change shape unnoticed —
+   * a different wrong value, or a throw where there was a value — so the
+   * current behavior is pinned as tightly as the correct one.
+   */
+  produces?: Expectation;
   /**
    * Time zones to evaluate under, each of which must satisfy the same
    * expectation. Defaults to the ambient zone only. Anything reading a date

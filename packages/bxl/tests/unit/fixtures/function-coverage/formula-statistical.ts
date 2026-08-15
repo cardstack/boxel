@@ -326,6 +326,7 @@ export const formulaStatisticalCases: CoverageCase[] = [
       'makes alpha the shape. The returned 1 - e^-1 is the transposed ' +
       'evaluation. On realistic parameters it saturates to 0 or 1 rather ' +
       'than merely being off',
+    produces: { expected: 0.6321205588285577, tolerance: 1e-15 },
   },
   // One-tailed upper-tail test against the hypothesized mean. With x equal
   // to the sample mean, z = 0 and p is exactly 1/2; giving sigma = 2 with
