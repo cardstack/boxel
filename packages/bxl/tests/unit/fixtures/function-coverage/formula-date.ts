@@ -247,18 +247,33 @@ export const formulaDateCases: CoverageCase[] = dateCases([
     produces: { expected: 0.1 },
   },
   // The clock functions have no fixed answer, so they assert what holds
-  // whenever they run. TODAY is a whole serial at or after 2026-01-01; NOW
-  // carries the same day plus a time fraction, so flooring it lands on TODAY.
+  // whenever they run: TODAY is the serial of the current UTC date, computed
+  // here from Date.UTC so the expectation is derived rather than restated
+  // from the implementation. Reading the calendar day off the host zone
+  // instead would put a card's indexed value a day away from the viewer's.
+  //
+  // A clock reading cannot be pinned absolutely. An implementation that
+  // resolves "today" against the host zone still agrees with UTC whenever no
+  // day boundary falls between them, which over the zones below is 8 hours of
+  // each day, so this catches such a regression 16 hours in 24 rather than
+  // always. Closing that last window would take an injectable clock. The
+  // epoch arithmetic TODAY shares with EDATE, EOMONTH and WEEKDAY is pinned
+  // exactly by those cases, so what rides on this one is narrow.
   {
     covers: 'TODAY/0',
     source: 'TODAY()',
     check: (outputs) => {
       strictEqual(outputs.length, 1);
       const [today] = outputs as number[];
-      ok(Number.isInteger(today), `expected a whole serial, got ${today}`);
-      ok(
-        today >= 46023,
-        `expected a serial at or after 2026-01-01, got ${today}`,
+      const now = new Date();
+      const expected =
+        (Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) -
+          Date.UTC(1899, 11, 30)) /
+        86400000;
+      strictEqual(
+        today,
+        expected,
+        `expected the serial of the current UTC date, ${expected}`,
       );
     },
   },
