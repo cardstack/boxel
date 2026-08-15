@@ -2,6 +2,9 @@ import { parseExcelNumber } from './common.ts';
 import { EXCEL_ERROR, throwExcelError } from './errors.ts';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
+// A trailing `Z`/offset, or a GMT/UTC token, means the string fixes its own
+// zone; anything else leaves the zone to the host.
+const HAS_EXPLICIT_ZONE = /(?:[zZ]|[+-]\d{2}:?\d{2})\s*$|\b(?:GMT|UTC)\b/;
 const WEEKEND_TYPES: Record<number, number[]> = {
   1: [0, 6],
   2: [0, 1],
@@ -93,12 +96,29 @@ export function parseExcelDate(value: unknown): Date {
       return parseExcelDate(numeric);
     }
 
-    const parsed = /^\d{4}-\d\d?-\d\d?$/.test(value)
-      ? new Date(`${value}T00:00:00.000Z`)
-      : new Date(value);
-
-    if (!Number.isNaN(parsed.getTime())) {
-      return parsed;
+    if (/^\d{4}-\d\d?-\d\d?$/.test(value)) {
+      const parsed = new Date(`${value}T00:00:00.000Z`);
+      if (!Number.isNaN(parsed.getTime())) {
+        return parsed;
+      }
+    } else {
+      const parsed = new Date(value);
+      if (!Number.isNaN(parsed.getTime())) {
+        // A date string naming no zone denotes a calendar day, not an
+        // instant, but the runtime resolves it against the host zone. Read
+        // back the civil fields it produced and re-anchor them to UTC, so
+        // the serial names the same day wherever the expression runs.
+        return HAS_EXPLICIT_ZONE.test(value)
+          ? parsed
+          : utcDate(
+              parsed.getFullYear(),
+              parsed.getMonth(),
+              parsed.getDate(),
+              parsed.getHours(),
+              parsed.getMinutes(),
+              parsed.getSeconds(),
+            );
+      }
     }
   }
 

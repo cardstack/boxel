@@ -71,6 +71,34 @@ preamble.
 Count: BXL's native formula-filter registry exposes **280** Excel functions
 (plus 7 jq-defined helpers like `IF`, `IFERROR`, `IFNA`), drawn from upstream's 397. See [`docs/formulas.md`](../../docs/formulas.md) for the authoritative list.
 
+### 5. Dates are anchored to UTC, not the host time zone
+
+An Excel serial names a calendar day, not an instant, so the same expression
+has to give the same answer wherever it runs. That is not a preference here:
+BXL evaluates a card's computeds server-side during indexing, in UTC, and again
+in the viewer's browser, in their own zone — a serial that shifted with the host
+would make the indexed search doc and the prerendered HTML disagree with what
+the viewer sees.
+
+Upstream builds and reads dates in local time: `serialToDate` ends
+`new Date(y, month, days, …)`, `EOMONTH` uses `new Date(getFullYear(),
+getMonth() + months + 1, 0)`, `WEEKDAY` uses `.getDay()`, and the string branch
+parses `date + 'T00:00:00.000'` with no zone. BXL constructs with `Date.UTC` and
+reads with `getUTC*` throughout, and a date string that names no zone has its
+civil fields re-anchored to UTC rather than resolved against the host. Strings
+carrying an explicit offset still resolve as instants.
+
+The local-time form is not merely zone-sensitive but self-inconsistent, because
+the serial epoch materializes at a zone's 1899 offset while results are read at
+its modern one — the two differ by 8 minutes in Kolkata and by nearly a day at
++14, which is how a month-end could land 30 days off.
+
+Two other divergences ride along, both restoring upstream behavior BXL had lost:
+`EDATE` clamps day-of-month to the target month's last day (upstream clamps;
+BXL let the day overflow, so a January 31st plus one month gave March 3rd), and
+`TODAY` reads the same UTC clock `NOW` reads, so `FLOOR(NOW()) = TODAY()` holds
+in every zone.
+
 ## Bringing in new upstream functions
 
 When upstream adds a function we want:
