@@ -70,17 +70,36 @@ bfmMarked.use({
   },
 });
 
+// The trailing `\s+|\r?$` alternation keeps a bullet that ends its line —
+// with or without trailing text — normalizable; split('\n') has already
+// consumed the newline the old whole-string pattern used to match.
 const DECORATIVE_BULLET_PATTERN =
   // eslint-disable-next-line no-misleading-character-class -- match pictographic symbols plus a few geometric glyphs not covered by the Unicode class
-  /^(\s*)([\p{Extended_Pictographic}★•▪●❖✦✧◉◦◾◽⬢⬡☑✔☑️➤➔➜➡→])(\s+)/u;
+  /^(\s*)([\p{Extended_Pictographic}★•▪●❖✦✧◉◦◾◽⬢⬡☑✔☑️➤➔➜➡→])(\s+|\r?$)/u;
 
-const CODE_FENCE_PATTERN = /^(\s*)(`{3,}|~{3,})(.*)$/;
+// `.` never matches `\r`, so on CRLF input the greedy group stops before a
+// trailing `\r`; the explicit `\r?` lets `$` still anchor. Without it no
+// fence line would ever match CRLF content and the tracker would rewrite
+// fenced code.
+const CODE_FENCE_PATTERN = /^(\s*)(`{3,}|~{3,})(.*)\r?$/;
+// Markdown can open a fence on the same line as a list marker (`- ```gts`);
+// marked treats that as fenced code, so the tracker must too. Only openers
+// take this form — a closing fence cannot carry an info string, let alone a
+// list marker.
+const LIST_PREFIXED_CODE_FENCE_PATTERN =
+  /^(\s*)(?:[-*+]|\d{1,9}[.)])\s+(`{3,}|~{3,})(.*)\r?$/;
+// A 4-space (or tab) indented line outside a fence is an indented code block
+// to marked, and the extraction side treats its <pre> exactly like a fenced
+// one — so rewriting it corrupts code the same way. The rewrite is cosmetic
+// when skipped wrongly and destructive when applied wrongly, so indented
+// lines are left alone.
+const INDENTED_CODE_PATTERN = /^(?: {4}|\t)/;
 
 // Prefix decorative bullets with a standard list marker so marked treats them
-// as list items — but never inside fenced code blocks. Code-block content must
-// survive rendering verbatim: search/replace patches are extracted back out of
-// the rendered HTML, and an inserted marker makes the patch text no longer
-// match the file it targets.
+// as list items — but never inside code blocks (fenced or indented). Code
+// content must survive rendering verbatim: search/replace patches are
+// extracted back out of the rendered HTML, and an inserted marker makes the
+// patch text no longer match the file it targets.
 function normalizeDecorativeBullets(markdown: string): string {
   let inFence = false;
   let fenceChar = '';
@@ -88,23 +107,28 @@ function normalizeDecorativeBullets(markdown: string): string {
   return markdown
     .split('\n')
     .map((line) => {
-      let fenceMatch = line.match(CODE_FENCE_PATTERN);
-      if (fenceMatch) {
-        let marker = fenceMatch[2];
-        if (!inFence) {
-          inFence = true;
-          fenceChar = marker[0];
-          fenceLength = marker.length;
-        } else if (
-          marker[0] === fenceChar &&
-          marker.length >= fenceLength &&
-          fenceMatch[3].trim() === ''
+      if (inFence) {
+        let closeMatch = line.match(CODE_FENCE_PATTERN);
+        if (
+          closeMatch &&
+          closeMatch[2][0] === fenceChar &&
+          closeMatch[2].length >= fenceLength &&
+          closeMatch[3].trim() === ''
         ) {
           inFence = false;
         }
         return line;
       }
-      if (inFence) {
+      let openMatch =
+        line.match(CODE_FENCE_PATTERN) ??
+        line.match(LIST_PREFIXED_CODE_FENCE_PATTERN);
+      if (openMatch) {
+        inFence = true;
+        fenceChar = openMatch[2][0];
+        fenceLength = openMatch[2].length;
+        return line;
+      }
+      if (INDENTED_CODE_PATTERN.test(line)) {
         return line;
       }
       return line.replace(
