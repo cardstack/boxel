@@ -91,10 +91,10 @@ There exists a "dev" mode in which we can use ember-cli to host the card runtime
 
 ### With staging or production
 
-You can develop the host application locally backed by the staging or production infrastructure by running `scripts/start-host [environment]`.
+You can develop the host application locally backed by the staging or production infrastructure by running `scripts/start-host.sh [environment]`.
 
 ```
-scripts/start-host production
+scripts/start-host.sh production
 …
 Build successful (27238ms) – Serving on https://localhost:4200/
 …
