@@ -30,69 +30,75 @@ import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupApplicationTest } from '../../helpers/setup';
 import { setupTestRealmServiceWorker } from '../../helpers/test-realm-service-worker';
 
-// Build a minimal valid MP4/M4A container: an ftyp box advertising the M4A
-// brand, then a moov box whose single mvhd child sets timescale=1000 and
-// duration=2000 (so playback duration = 2.0 seconds).
-function makeMinimalM4a(): Uint8Array {
-  // ---- ftyp box (16 bytes) ----
-  let ftyp = new Uint8Array(16);
-  let ftypView = new DataView(ftyp.buffer);
-  ftypView.setUint32(0, 16); // box size
-  ftyp.set([0x66, 0x74, 0x79, 0x70], 4); // "ftyp"
-  ftyp.set([0x4d, 0x34, 0x41, 0x20], 8); // major brand "M4A "
-  ftypView.setUint32(12, 0); // minor version
-
-  // ---- mvhd box (108 bytes) ----
-  let mvhd = new Uint8Array(108);
-  let mvhdView = new DataView(mvhd.buffer);
-  mvhdView.setUint32(0, 108); // box size
-  mvhd.set([0x6d, 0x76, 0x68, 0x64], 4); // "mvhd"
-  // byte 8 = version 0; bytes 9..11 = flags 0; bytes 12..15 = creation time;
-  // 16..19 = modification time. All zero.
-  mvhdView.setUint32(20, 1000); // timescale
-  mvhdView.setUint32(24, 2000); // duration (in timescale units)
-  // bytes 28..31 rate (0x00010000), 32..33 volume (0x0100), 34..43 reserved,
-  // 44..79 matrix, 80..103 predefined, 104..107 next track ID — all zero is
-  // acceptable for our extractor, which only reads version + timescale +
-  // duration.
-
-  // ---- moov box wraps mvhd (8-byte header + 108-byte mvhd = 116 bytes) ----
-  let moov = new Uint8Array(8 + mvhd.length);
-  let moovView = new DataView(moov.buffer);
-  moovView.setUint32(0, moov.length);
-  moov.set([0x6d, 0x6f, 0x6f, 0x76], 4); // "moov"
-  moov.set(mvhd, 8);
-
-  let out = new Uint8Array(ftyp.length + moov.length);
-  out.set(ftyp, 0);
-  out.set(moov, ftyp.length);
+// A Standard MIDI File is chunks of big-endian data, so the fixture is built by
+// hand rather than with any encoder.
+function ascii(text: string): number[] {
+  return [...text].map((char) => char.charCodeAt(0));
+}
+function be32(value: number): number[] {
+  return [
+    (value >>> 24) & 0xff,
+    (value >>> 16) & 0xff,
+    (value >>> 8) & 0xff,
+    value & 0xff,
+  ];
+}
+function be16(value: number): number[] {
+  return [(value >>> 8) & 0xff, value & 0xff];
+}
+// MIDI's variable-length quantity: seven bits per byte, high bit set on all but
+// the last.
+function vlq(value: number): number[] {
+  let out = [value & 0x7f];
+  let rest = value >>> 7;
+  while (rest > 0) {
+    out.unshift((rest & 0x7f) | 0x80);
+    rest >>>= 7;
+  }
   return out;
 }
 
-// iPhone / Apple Voice Memos layout: the moov box trails a large mdat media
-// payload, so the duration is only reachable after streaming past (and
-// discarding) mdat. Reuses makeMinimalM4a's ftyp + moov and splices a chunky
-// mdat box between them.
-function makeM4aMoovAtEnd(): Uint8Array {
-  let fastStart = makeMinimalM4a(); // ftyp (16 bytes) + moov
-  let ftyp = fastStart.subarray(0, 16);
-  let moov = fastStart.subarray(16);
-
-  let mdatPayload = new Uint8Array(4096).fill(0xab);
-  let mdat = new Uint8Array(8 + mdatPayload.length);
-  let mdatView = new DataView(mdat.buffer);
-  mdatView.setUint32(0, mdat.length); // box size
-  mdat.set([0x6d, 0x64, 0x61, 0x74], 4); // "mdat"
-  mdat.set(mdatPayload, 8);
-
-  let out = new Uint8Array(ftyp.length + mdat.length + moov.length);
-  out.set(ftyp, 0);
-  out.set(mdat, ftyp.length);
-  out.set(moov, ftyp.length + mdat.length);
-  return out;
+// A format-0 file: one 120 BPM quarter-note tempo, a program change to General
+// MIDI voice 40 (Violin), and a single middle-C note held four beats. At 480
+// ticks per quarter that is 1920 ticks = 2.0 seconds.
+function makeMinimalMidi(): Uint8Array {
+  let microsPerQuarter = 500_000; // 120 BPM
+  let events = [
+    ...vlq(0),
+    0xff,
+    0x51,
+    0x03,
+    (microsPerQuarter >>> 16) & 0xff,
+    (microsPerQuarter >>> 8) & 0xff,
+    microsPerQuarter & 0xff,
+    ...vlq(0),
+    0xc0,
+    40, // program change, channel 0 → Violin
+    ...vlq(0),
+    0x90,
+    60,
+    64, // note on, middle C
+    ...vlq(1920),
+    0x80,
+    60,
+    0, // note off, four beats later
+    ...vlq(0),
+    0xff,
+    0x2f,
+    0x00, // end of track
+  ];
+  let track = [...ascii('MTrk'), ...be32(events.length), ...events];
+  let header = [
+    ...ascii('MThd'),
+    ...be32(6),
+    ...be16(0), // format 0
+    ...be16(1), // one track
+    ...be16(480), // 480 ticks per quarter note
+  ];
+  return new Uint8Array([...header, ...track]);
 }
 
-module('Acceptance | m4a audio def', function (hooks) {
+module('Acceptance | midi audio def', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
@@ -126,9 +132,9 @@ module('Acceptance | m4a audio def', function (hooks) {
 
   const makeFileURL = (path: string) => new URL(path, testRealmURL).href;
 
-  const m4aDefCodeRef = (): ResolvedCodeRef => ({
-    module: `${baseRealmRRI}m4a-audio-def` as RealmResourceIdentifier,
-    name: 'M4aDef',
+  const midiDefCodeRef = (): ResolvedCodeRef => ({
+    module: `${baseRealmRRI}midi-audio-def` as RealmResourceIdentifier,
+    name: 'MidiDef',
   });
 
   async function captureFileExtractResult(
@@ -170,15 +176,14 @@ module('Acceptance | m4a audio def', function (hooks) {
   }
 
   hooks.beforeEach(async function () {
-    let m4aBytes = makeMinimalM4a();
+    let midiBytes = makeMinimalMidi();
     ({ realm } = await withCachedRealmSetup(async () =>
       setupAcceptanceTestRealm({
         mockMatrixUtils,
         contents: {
           ...SYSTEM_CARD_FIXTURE_CONTENTS,
-          'sample.m4a': m4aBytes,
-          'sample-moov-at-end.m4a': makeM4aMoovAtEnd(),
-          'not-an-m4a.m4a': 'This is plain text, not an M4A file.',
+          'sample.mid': midiBytes,
+          'not-a-midi.mid': 'This is plain text, not a MIDI file.',
         },
       }),
     ));
@@ -189,52 +194,45 @@ module('Acceptance | m4a audio def', function (hooks) {
     delete (globalThis as any).__boxelFileRenderData;
   });
 
-  test('extracts duration from M4A', async function (assert) {
-    let url = makeFileURL('sample.m4a');
+  test('extracts the sequence metadata from a MIDI file', async function (assert) {
+    let url = makeFileURL('sample.mid');
     await visit(
       fileExtractPath(url, {
         fileExtract: true,
-        fileDefCodeRef: m4aDefCodeRef(),
+        fileDefCodeRef: midiDefCodeRef(),
       }),
     );
 
     let result = await captureFileExtractResult('ready');
     assert.strictEqual(result.status, 'ready');
-    assert.strictEqual(result.searchDoc?.duration, 2, 'extracts M4A duration');
-    assert.strictEqual(result.searchDoc?.name, 'sample.m4a');
-    let contentType = String(result.searchDoc?.contentType);
-    let isM4aCompatibleType =
-      contentType.includes('mp4') || contentType.includes('m4a');
-    assert.true(isM4aCompatibleType, 'sets m4a-compatible content type');
-  });
-
-  test('extracts duration from M4A with a trailing moov box', async function (assert) {
-    // Exercises the streaming walk's mdat-skipping: the moov box only appears
-    // after the media payload, as in iPhone / Voice Memo recordings.
-    let url = makeFileURL('sample-moov-at-end.m4a');
-    await visit(
-      fileExtractPath(url, {
-        fileExtract: true,
-        fileDefCodeRef: m4aDefCodeRef(),
-      }),
-    );
-
-    let result = await captureFileExtractResult('ready');
-    assert.strictEqual(result.status, 'ready');
+    assert.strictEqual(result.searchDoc?.name, 'sample.mid');
     assert.strictEqual(
       result.searchDoc?.duration,
       2,
-      'extracts duration after skipping past mdat',
+      'walks the tempo map to the last event for duration',
     );
-    assert.strictEqual(result.searchDoc?.name, 'sample-moov-at-end.m4a');
+    assert.strictEqual(
+      result.searchDoc?.midi?.noteCount,
+      1,
+      'counts the one sounding note',
+    );
+    assert.strictEqual(
+      result.searchDoc?.midi?.trackCount,
+      1,
+      'counts the one sounding track',
+    );
+    assert.ok(
+      String(result.searchDoc?.contentType).includes('midi'),
+      'sets midi content type',
+    );
   });
 
-  test('falls back when M4aDef is used for non-M4A content', async function (assert) {
-    let url = makeFileURL('not-an-m4a.m4a');
+  test('falls back when MidiDef is used for non-MIDI content', async function (assert) {
+    let url = makeFileURL('not-a-midi.mid');
     await visit(
       fileExtractPath(url, {
         fileExtract: true,
-        fileDefCodeRef: m4aDefCodeRef(),
+        fileDefCodeRef: midiDefCodeRef(),
       }),
     );
 
@@ -242,18 +240,18 @@ module('Acceptance | m4a audio def', function (hooks) {
     assert.strictEqual(result.status, 'ready');
     assert.true(
       result.mismatch,
-      'marks mismatch when content is not valid M4A',
+      'marks mismatch when content is not a Standard MIDI File',
     );
-    assert.strictEqual(result.searchDoc?.name, 'not-an-m4a.m4a');
+    assert.strictEqual(result.searchDoc?.name, 'not-a-midi.mid');
   });
 
-  test('isolated preview renders the player and formatted duration', async function (assert) {
-    let url = makeFileURL('sample.m4a');
+  test('isolated preview renders the sequence and formatted duration', async function (assert) {
+    let url = makeFileURL('sample.mid');
 
     await visit(
       fileExtractPath(url, {
         fileExtract: true,
-        fileDefCodeRef: m4aDefCodeRef(),
+        fileDefCodeRef: midiDefCodeRef(),
       }),
     );
     let result = await captureFileExtractResult('ready');
@@ -261,13 +259,13 @@ module('Acceptance | m4a audio def', function (hooks) {
 
     (globalThis as any).__boxelFileRenderData = {
       resource: result.resource,
-      fileDefCodeRef: m4aDefCodeRef(),
+      fileDefCodeRef: midiDefCodeRef(),
     };
 
     await visit(
       fileRenderPath(url, {
         fileRender: true,
-        fileDefCodeRef: m4aDefCodeRef(),
+        fileDefCodeRef: midiDefCodeRef(),
       }),
     );
 
@@ -275,15 +273,15 @@ module('Acceptance | m4a audio def', function (hooks) {
     assert.strictEqual(status, 'ready', 'render completed');
 
     let preview = document.querySelector(
-      '[data-prerender] [data-test-audio-preview]',
+      '[data-prerender] [data-test-midi-preview]',
     );
-    assert.ok(preview, 'audio preview renders in the shared shell');
+    assert.ok(preview, 'midi preview renders in the shared shell');
     let player = document.querySelector(
       '[data-prerender] [data-test-audio-player]',
     );
-    assert.ok(player, 'native audio player is mounted');
+    assert.notOk(player, 'a symbolic MIDI file mounts no audio player');
     let duration = document.querySelector(
-      '[data-prerender] [data-test-audio-duration]',
+      '[data-prerender] [data-test-midi-duration]',
     );
     assert.ok(duration, 'duration element is rendered');
     assert.strictEqual(
@@ -291,17 +289,25 @@ module('Acceptance | m4a audio def', function (hooks) {
       '0:02',
       'duration is formatted as m:ss',
     );
+    let voices = document.querySelector(
+      '[data-prerender] [data-test-midi-voices]',
+    );
+    assert.ok(voices, 'voices list is rendered');
+    assert.true(
+      voices?.textContent?.includes('Violin'),
+      'program 40 resolves to its General MIDI voice name',
+    );
   });
 
-  test('indexing stores M4A metadata and file meta uses it', async function (assert) {
-    let fileURL = new URL('sample.m4a', testRealmURL);
+  test('indexing stores MIDI metadata and file meta uses it', async function (assert) {
+    let fileURL = new URL('sample.mid', testRealmURL);
     let fileEntry = await realm.realmIndexQueryEngine.file(fileURL);
 
     assert.ok(fileEntry, 'file entry exists');
     assert.strictEqual(
       fileEntry?.searchDoc?.duration,
       2,
-      'index stores M4A duration',
+      'index stores MIDI duration',
     );
 
     let network = getService('network') as NetworkService;
@@ -313,15 +319,14 @@ module('Acceptance | m4a audio def', function (hooks) {
 
     let body = await response.json();
     assert.strictEqual(body?.data?.type, 'file-meta');
-    assert.strictEqual(
-      body?.data?.attributes?.duration,
-      2,
-      'file meta includes M4A duration',
+    assert.ok(
+      String(body?.data?.attributes?.contentType).includes('midi'),
+      'file meta uses midi content type',
     );
     assert.deepEqual(
       body?.data?.meta?.adoptsFrom,
-      m4aDefCodeRef(),
-      'file meta uses M4A def',
+      midiDefCodeRef(),
+      'file meta uses MIDI def',
     );
   });
 });

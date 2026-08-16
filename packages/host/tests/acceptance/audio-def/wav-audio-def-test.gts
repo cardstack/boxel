@@ -199,7 +199,7 @@ module('Acceptance | wav audio def', function (hooks) {
     assert.strictEqual(result.searchDoc?.name, 'not-a-wav.wav');
   });
 
-  test('isolated template renders the formatted duration', async function (assert) {
+  test('isolated preview renders the player and formatted duration', async function (assert) {
     let url = makeFileURL('sample.wav');
 
     await visit(
@@ -226,8 +226,16 @@ module('Acceptance | wav audio def', function (hooks) {
     let { status } = await capturePrerenderResult('innerHTML');
     assert.strictEqual(status, 'ready', 'render completed');
 
+    let preview = document.querySelector(
+      '[data-prerender] [data-test-audio-preview]',
+    );
+    assert.ok(preview, 'audio preview renders in the shared shell');
+    let player = document.querySelector(
+      '[data-prerender] [data-test-audio-player]',
+    );
+    assert.ok(player, 'native audio player is mounted');
     let duration = document.querySelector(
-      '[data-prerender] .audio-isolated__duration',
+      '[data-prerender] [data-test-audio-duration]',
     );
     assert.ok(duration, 'duration element is rendered');
     assert.strictEqual(
