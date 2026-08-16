@@ -104,6 +104,81 @@ function bytes(length: number): Uint8Array {
   return new Uint8Array(length);
 }
 
+// Little-endian 64-bit write, matching the reader's `readUint64`
+// (`high * 2^32 + low`).
+function setUint64(view: DataView, offset: number, value: number): void {
+  view.setUint32(offset, value % 0x1_0000_0000, true);
+  view.setUint32(offset + 4, Math.floor(value / 0x1_0000_0000), true);
+}
+
+// A minimal ZIP64 archive with a single entry whose 32-bit size fields are the
+// all-ones sentinel and whose real 64-bit size lives in the entry's `0x0001`
+// extra block, behind an EOCD64 record + locator and a sentinel-bearing EOCD.
+// The reader never touches local-header data, so the "large" file needs no real
+// bytes — the fixture stays tiny while exercising the full ZIP64 offset walk.
+function buildZip64(name: string, size: number): Uint8Array {
+  let enc = new TextEncoder().encode(name);
+  const U32 = 0xffffffff;
+  const U16 = 0xffff;
+
+  let local = new Uint8Array(30 + enc.length);
+  let lv = new DataView(local.buffer);
+  lv.setUint32(0, 0x0403_4b50, true);
+  lv.setUint16(26, enc.length, true);
+  local.set(enc, 30);
+  let centralOffset = local.length;
+
+  // Central header + a 20-byte ZIP64 extra block: id 0x0001, 16-byte payload of
+  // (uncompressed, compressed) 64-bit sizes.
+  let central = new Uint8Array(46 + enc.length + 20);
+  let cv = new DataView(central.buffer);
+  cv.setUint32(0, 0x0201_4b50, true);
+  cv.setUint32(20, U32, true); // compressed size → sentinel
+  cv.setUint32(24, U32, true); // uncompressed size → sentinel
+  cv.setUint16(28, enc.length, true);
+  cv.setUint16(30, 20, true); // extra field length
+  cv.setUint32(42, 0, true); // local header offset
+  central.set(enc, 46);
+  let ex = 46 + enc.length;
+  cv.setUint16(ex, 0x0001, true);
+  cv.setUint16(ex + 2, 16, true);
+  setUint64(cv, ex + 4, size); // uncompressed
+  setUint64(cv, ex + 12, size); // compressed
+  let centralSize = central.length;
+  let recordOffset = centralOffset + centralSize;
+
+  let rec = new Uint8Array(56); // EOCD64 record
+  let rv = new DataView(rec.buffer);
+  rv.setUint32(0, 0x0606_4b50, true);
+  setUint64(rv, 24, 1); // entries on this disk
+  setUint64(rv, 32, 1); // total entries
+  setUint64(rv, 40, centralSize);
+  setUint64(rv, 48, centralOffset);
+
+  let loc = new Uint8Array(20); // EOCD64 locator
+  let lov = new DataView(loc.buffer);
+  lov.setUint32(0, 0x0706_4b50, true);
+  setUint64(lov, 8, recordOffset);
+  lov.setUint32(16, 1, true);
+
+  let eocd = new Uint8Array(22);
+  let ev = new DataView(eocd.buffer);
+  ev.setUint32(0, 0x0605_4b50, true);
+  ev.setUint16(8, U16, true); // entries this disk → sentinel
+  ev.setUint16(10, U16, true); // total entries → sentinel
+  ev.setUint32(12, U32, true); // central size → sentinel
+  ev.setUint32(16, U32, true); // central offset → sentinel
+
+  let chunks = [local, central, rec, loc, eocd];
+  let out = new Uint8Array(chunks.reduce((s, c) => s + c.length, 0));
+  let cursor = 0;
+  for (let c of chunks) {
+    out.set(c, cursor);
+    cursor += c.length;
+  }
+  return out;
+}
+
 module('Unit | zip-archive', function (hooks) {
   setupRenderingTest(hooks);
 
@@ -236,6 +311,55 @@ module('Unit | zip-archive', function (hooks) {
       tail[tail.length - 1],
       source[source.length - 1],
       'the retained bytes are the file tail',
+    );
+  });
+
+  test('reads a 64-bit size from a ZIP64 archive', async function (assert) {
+    // The entry's 32-bit size fields are the sentinel; the true size is in the
+    // 0x0001 extra block, reached only after the EOCD64 locator → record walk.
+    let fiveGb = 5_000_000_000;
+    let listing = await parseZipListing(buildZip64('huge.bin', fiveGb));
+    assert.ok(listing, 'ZIP64 archive parses');
+    assert.strictEqual(listing!.entries.length, 1);
+    assert.strictEqual(listing!.entries[0]!.path, 'huge.bin');
+    assert.strictEqual(
+      listing!.entries[0]!.uncompressedSize,
+      fiveGb,
+      'reads the 64-bit uncompressed size past the 4 GB limit',
+    );
+    assert.strictEqual(listing!.uncompressedSize, fiveGb, 'total reflects it');
+    assert.false(
+      listing!.truncated,
+      'a complete ZIP64 directory is not truncated',
+    );
+  });
+
+  test('recovers a partial listing when the tail cuts into the central directory', async function (assert) {
+    let files = Array.from({ length: 5 }, (_, i) => ({
+      name: `file-${i}.txt`,
+      data: bytes(120),
+    }));
+    let full = buildZip(files);
+    // The central directory begins right after the last local header.
+    let encoder = new TextEncoder();
+    let centralOffset = files.reduce(
+      (sum, f) => sum + 30 + encoder.encode(f.name).length + f.data.length,
+      0,
+    );
+    // A window that starts a few bytes into the first central header: the
+    // directory begins before the retained tail, so only its later entries are
+    // recoverable and the listing must say so.
+    let tail = full.subarray(centralOffset + 10);
+    let listing = await parseZipListing(tail, full.length);
+    assert.ok(listing, 'a windowed tail still parses');
+    assert.true(listing!.truncated, 'reports the directory as truncated');
+    assert.true(
+      listing!.entries.length > 0,
+      'recovers the entries that fell inside the window',
+    );
+    assert.true(
+      listing!.entries.length < files.length,
+      'but not the whole directory',
     );
   });
 });

@@ -42,6 +42,15 @@ function getExtension(url: string): string {
 // bytes are inflated to produce this: the sizes and timestamp come straight from
 // the directory. It is a real persisted field, so the same component serves the
 // isolated inspector and the default editor.
+// The last path segment of an archive entry — the file's own name, without its
+// folders. A trailing slash (a directory marker) resolves to its own last
+// segment rather than an empty string. Shared by the entry field and both
+// listings below so the three can't drift to different names for one entry.
+function basename(path: string): string {
+  let segments = String(path).split('/').filter(Boolean);
+  return segments[segments.length - 1] ?? String(path);
+}
+
 export class ArchiveEntryField extends FieldDef {
   static displayName = 'Archive Entry';
   static icon = FileIcon;
@@ -59,9 +68,7 @@ export class ArchiveEntryField extends FieldDef {
   // segment rather than an empty string.
   @field name = contains(StringField, {
     computeVia: function (this: ArchiveEntryField) {
-      let path = this.path ?? '';
-      let segments = path.split('/').filter(Boolean);
-      return segments[segments.length - 1] ?? path;
+      return basename(this.path ?? '');
     },
   });
 
@@ -159,10 +166,7 @@ class ArchivePreview extends GlimmerComponent<FilePreviewSignature> {
   // their basenames for a compact cell.
   get fittedNames(): string[] {
     let entries = this.args.model?.archiveEntries ?? [];
-    return entries.map((path) => {
-      let segments = String(path).split('/').filter(Boolean);
-      return segments[segments.length - 1] ?? String(path);
-    });
+    return entries.map((path) => basename(String(path)));
   }
 
   get fittedOverflow(): number {
@@ -190,7 +194,8 @@ class ArchivePreview extends GlimmerComponent<FilePreviewSignature> {
         break;
       }
       let segments = path.split('/').filter(Boolean);
-      let fileName = segments.pop() ?? path;
+      segments.pop(); // drop the filename; the folders drive the tree indent
+      let fileName = basename(path);
       let prefix = '';
       segments.forEach((segment, depth) => {
         prefix = prefix ? `${prefix}/${segment}` : segment;
