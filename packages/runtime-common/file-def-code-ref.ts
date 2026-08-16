@@ -51,6 +51,7 @@ const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
   '.m4v': { module: baseModule('mp4-video-def'), name: 'Mp4Def' },
   '.mov': { module: baseModule('mov-video-def'), name: 'MovDef' },
   '.webm': { module: baseModule('webm-video-def'), name: 'WebmDef' },
+  '.zip': { module: baseModule('zip-file-def'), name: 'ZipDef' },
   '.woff2': { module: baseModule('woff2-font-def'), name: 'Woff2Def' },
   '.woff': { module: baseModule('woff-font-def'), name: 'WoffDef' },
   '.ttf': { module: baseModule('ttf-font-def'), name: 'TtfDef' },
