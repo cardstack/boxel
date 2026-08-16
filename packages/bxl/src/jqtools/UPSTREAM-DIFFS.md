@@ -8,28 +8,28 @@ Maps every file in `src/jqtools/` to its upstream source at
 
 ## Verbatim (differ only in import-path `.js` suffixes for ESM resolution)
 
-| File | Upstream path | Status |
-| --- | --- | --- |
-| `parser/AST.ts`        | `parser/AST.ts`        | ✓ verbatim |
-| `parser/InputStream.ts`| `parser/InputStream.ts`| ✓ verbatim |
-| `parser/Parser.ts`     | `parser/Parser.ts`     | ✓ verbatim |
-| `parser/Tokenizer.ts`  | `parser/Tokenizer.ts`  | ✓ verbatim (+2 LOC extension fix) |
-| `evaluate/applyBinary.ts`             | `evaluate/applyBinary.ts`             | ✓ near-verbatim |
-| `evaluate/applyFormat.ts`             | `evaluate/applyFormat.ts`             | ✓ near-verbatim |
-| `evaluate/compare.ts`                 | `evaluate/compare.ts`                 | ✓ near-verbatim |
-| `evaluate/evaluateErrors.ts`          | `evaluate/evaluateErrors.ts`          | ✓ near-verbatim |
-| `evaluate/generateCombinations.ts`    | `evaluate/generateCombinations.ts`    | ✓ near-verbatim |
-| `evaluate/generateObjects.ts`         | `evaluate/generateObjects.ts`         | ✓ near-verbatim |
-| `evaluate/utils/binaryOperator.ts`    | `evaluate/utils/binaryOperator.ts`    | ✓ near-verbatim |
-| `evaluate/utils/getPath.ts`           | `evaluate/utils/getPath.ts`           | ✓ near-verbatim |
-| `evaluate/utils/nestedIterators.ts`   | `evaluate/utils/nestedIterators.ts`   | ✓ near-verbatim |
-| `evaluate/utils/setPath.ts`           | `evaluate/utils/setPath.ts`           | ✓ near-verbatim |
-| `evaluate/utils/utils.ts`             | `evaluate/utils/utils.ts`             | ✓ near-verbatim |
-| `evaluate/filters/builtinJqFilters.ts`    | `evaluate/filters/builtinJqFilters.ts`    | ✓ near-verbatim |
-| `evaluate/filters/builtinNativeFilters.ts`| `evaluate/filters/builtinNativeFilters.ts`| ✓ near-verbatim |
-| `evaluate/filters/lib/nativeFilter.ts`       | `evaluate/filters/lib/nativeFilter.ts`       | ✓ verbatim |
-| `evaluate/filters/lib/parseBuiltinJqFilters.ts`| `evaluate/filters/lib/parseBuiltinJqFilters.ts`| ✓ verbatim |
-| `errors.ts` | `errors.ts` | ✓ verbatim |
+| File                                            | Upstream path                                   | Status                            |
+| ----------------------------------------------- | ----------------------------------------------- | --------------------------------- |
+| `parser/AST.ts`                                 | `parser/AST.ts`                                 | ✓ verbatim                        |
+| `parser/InputStream.ts`                         | `parser/InputStream.ts`                         | ✓ verbatim                        |
+| `parser/Parser.ts`                              | `parser/Parser.ts`                              | ✓ verbatim                        |
+| `parser/Tokenizer.ts`                           | `parser/Tokenizer.ts`                           | ✓ verbatim (+2 LOC extension fix) |
+| `evaluate/applyBinary.ts`                       | `evaluate/applyBinary.ts`                       | ✓ near-verbatim                   |
+| `evaluate/applyFormat.ts`                       | `evaluate/applyFormat.ts`                       | ✓ near-verbatim                   |
+| `evaluate/compare.ts`                           | `evaluate/compare.ts`                           | ✓ near-verbatim                   |
+| `evaluate/evaluateErrors.ts`                    | `evaluate/evaluateErrors.ts`                    | ✓ near-verbatim                   |
+| `evaluate/generateCombinations.ts`              | `evaluate/generateCombinations.ts`              | ✓ near-verbatim                   |
+| `evaluate/generateObjects.ts`                   | `evaluate/generateObjects.ts`                   | ✓ near-verbatim                   |
+| `evaluate/utils/binaryOperator.ts`              | `evaluate/utils/binaryOperator.ts`              | ✓ near-verbatim                   |
+| `evaluate/utils/getPath.ts`                     | `evaluate/utils/getPath.ts`                     | ✓ near-verbatim                   |
+| `evaluate/utils/nestedIterators.ts`             | `evaluate/utils/nestedIterators.ts`             | ✓ near-verbatim                   |
+| `evaluate/utils/setPath.ts`                     | `evaluate/utils/setPath.ts`                     | ✓ near-verbatim                   |
+| `evaluate/utils/utils.ts`                       | `evaluate/utils/utils.ts`                       | ✓ near-verbatim                   |
+| `evaluate/filters/builtinJqFilters.ts`          | `evaluate/filters/builtinJqFilters.ts`          | ✓ near-verbatim                   |
+| `evaluate/filters/builtinNativeFilters.ts`      | `evaluate/filters/builtinNativeFilters.ts`      | ✓ near-verbatim                   |
+| `evaluate/filters/lib/nativeFilter.ts`          | `evaluate/filters/lib/nativeFilter.ts`          | ✓ verbatim                        |
+| `evaluate/filters/lib/parseBuiltinJqFilters.ts` | `evaluate/filters/lib/parseBuiltinJqFilters.ts` | ✓ verbatim                        |
+| `errors.ts`                                     | `errors.ts`                                     | ✓ verbatim                        |
 
 ## Materially modified
 
@@ -61,6 +61,9 @@ contributed upstream:
 - `tonumber/0`, `startswith/1`, `endswith/1` — already merged in recent
   upstream versions; our fork predates them.
 - Nil-safe path resolution fixes.
+- `sort/0` sorts a copy instead of calling `input.sort()` in place —
+  upstream mutates the caller's array, which corrupts live inputs (card
+  arrays with change subscribers, read-only lazy views).
 
 ## Additions (new files, no upstream equivalent)
 
@@ -69,7 +72,7 @@ contributed upstream:
 Sandbox-layer utilities. Exports:
 
 - `NativeRuntimeLimits` — public shape of `{ maxSteps, maxOutputs,
-  maxOutputBytes, maxWallClockMs, signal }`.
+maxOutputBytes, maxWallClockMs, signal }`.
 - `withRuntimeDiagnostics(fn, limits)` — runs `fn` within a budgeted
   context, captures diagnostics and halt conditions.
 - `checkRuntimeBudget()` — called from `evaluate.ts` at iterator boundaries
@@ -127,26 +130,26 @@ adds the binary entries:
 
 ### 33 stubs filled with libm-equivalent implementations
 
-| Filter | Backing impl | Notes |
-| --- | --- | --- |
-| `drem/2`, `remainder/2` | `ieeeRemainder` | x - n·y, n = round-half-to-even(x/y). |
-| `nextafter/2`, `nexttoward/2` | `ieeeNextafter` | IEEE 754 step via DataView bits. |
-| `ldexp/2`, `scalb/2`, `scalbln/2` | `x * 2^trunc(n)` | All three identical in IEEE 754. |
-| `fmod/2` | JS `%` | Dividend-signed (matches C, NOT Excel `MOD`). |
-| `fma/3` | `a*b + c` | Best-effort; JS lacks a single-rounded FMA. |
-| `frexp/0` | DataView unpack | Yields `[mantissa, exponent]` array. |
-| `modf/0` | `Math.trunc` split | Yields `[fracPart, intPart]` array. |
-| `logb/0` | `Math.floor(Math.log2(|x|))` | With `0`, `±Inf`, `NaN` special cases. |
-| `significand/0` | `x / 2^logb(x)` | ∈ [1, 2) for normal x. |
-| `nearbyint/0`, `rint/0` | `roundHalfToEven` | Banker's rounding. |
-| `pow10/0` | `Math.pow(10, x)` | |
-| `expm1/0` | `Math.expm1` | |
-| `scalars_or_empty/0` | yield-or-empty | Trivial. |
-| `erf/0`, `erfc/0` | Abramowitz & Stegun 7.1.26 | ~1.5e-7 max error. |
-| `gamma/0`, `tgamma/0` | Lanczos g=7, n=9 | **True Γ** (Excel-canonical). POSIX `gamma()` was historically log-Γ on Linux, true Γ on BSD — BXL picks the modern interpretation. Use `lgamma`/`GAMMALN` for log-Γ. |
-| `lgamma/0`, `lgamma_r/0` | Lanczos log form | `lgamma_r` returns just the log magnitude (jq has no pointer args for the sign). |
-| `j0/0`, `j1/0`, `y0/0`, `y1/0` | Numerical Recipes polynomial+asymptotic | Bessel functions of integer orders 0 and 1; J/Y. |
-| `jn/2`, `yn/2` | Recurrence on top of `j0`/`j1`, `y0`/`y1` | C/POSIX argument order: `jn(n; x)`. Excel's `BESSELJ(x, n)` (different name, swapped order) lives in the formula bridge. |
+| Filter                            | Backing impl                              | Notes                                                                                                                                                                 |
+| --------------------------------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `drem/2`, `remainder/2`           | `ieeeRemainder`                           | x - n·y, n = round-half-to-even(x/y).                                                                                                                                 |
+| `nextafter/2`, `nexttoward/2`     | `ieeeNextafter`                           | IEEE 754 step via DataView bits.                                                                                                                                      |
+| `ldexp/2`, `scalb/2`, `scalbln/2` | `x * 2^trunc(n)`                          | All three identical in IEEE 754.                                                                                                                                      |
+| `fmod/2`                          | JS `%`                                    | Dividend-signed (matches C, NOT Excel `MOD`).                                                                                                                         |
+| `fma/3`                           | `a*b + c`                                 | Best-effort; JS lacks a single-rounded FMA.                                                                                                                           |
+| `frexp/0`                         | DataView unpack                           | Yields `[mantissa, exponent]` array.                                                                                                                                  |
+| `modf/0`                          | `Math.trunc` split                        | Yields `[fracPart, intPart]` array.                                                                                                                                   |
+| `logb/0`                          | `Math.floor(Math.log2(\|x\|))`            | With `0`, `±Inf`, `NaN` special cases.                                                                                                                                |
+| `significand/0`                   | `x / 2^logb(x)`                           | ∈ [1, 2) for normal x.                                                                                                                                                |
+| `nearbyint/0`, `rint/0`           | `roundHalfToEven`                         | Banker's rounding.                                                                                                                                                    |
+| `pow10/0`                         | `Math.pow(10, x)`                         |                                                                                                                                                                       |
+| `expm1/0`                         | `Math.expm1`                              |                                                                                                                                                                       |
+| `scalars_or_empty/0`              | yield-or-empty                            | Trivial.                                                                                                                                                              |
+| `erf/0`, `erfc/0`                 | Abramowitz & Stegun 7.1.26                | ~1.5e-7 max error.                                                                                                                                                    |
+| `gamma/0`, `tgamma/0`             | Lanczos g=7, n=9                          | **True Γ** (Excel-canonical). POSIX `gamma()` was historically log-Γ on Linux, true Γ on BSD — BXL picks the modern interpretation. Use `lgamma`/`GAMMALN` for log-Γ. |
+| `lgamma/0`, `lgamma_r/0`          | Lanczos log form                          | `lgamma_r` returns just the log magnitude (jq has no pointer args for the sign).                                                                                      |
+| `j0/0`, `j1/0`, `y0/0`, `y1/0`    | Numerical Recipes polynomial+asymptotic   | Bessel functions of integer orders 0 and 1; J/Y.                                                                                                                      |
+| `jn/2`, `yn/2`                    | Recurrence on top of `j0`/`j1`, `y0`/`y1` | C/POSIX argument order: `jn(n; x)`. Excel's `BESSELJ(x, n)` (different name, swapped order) lives in the formula bridge.                                              |
 
 ### 4 sandbox-only stubs intentionally kept
 

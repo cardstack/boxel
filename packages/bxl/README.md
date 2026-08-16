@@ -365,6 +365,45 @@ metadata helpers are rejected before the field can run. `evaluateBxl` remains
 the full compute surface for ad-hoc tooling unless you explicitly ask for a
 profile.
 
+### Linked cards, cycles, and bounded references
+
+A card graph is legitimately cyclic — a Claim links to a Policy whose
+query-backed `claims` contains that same Claim — while jq's data model is
+JSON: acyclic by construction. `expression()` bridges the two by handing the
+program a **lazy, cycle-guarded view** of the card:
+
+- **Path access is lazy.** `.claims[0].paidAmount` reads the fields it
+  names, plus each traversed card's `id` — the cycle guard consults it —
+  and nothing else on the graph is touched or computed.
+- **Re-entry clips to a bounded reference.** When a walk reaches a value
+  already on its own traversal path, it reads as `{ id }` instead of
+  recursing — the same clip the platform's `queryableValue` applies when
+  it builds search docs. Cards clip by object identity _and_ by id, since
+  query resolution can hand back a fresh instance of a visited card;
+  ordinary JSON clips by identity alone, so an `id` value that happens to
+  equal a card's never masks data. So from a Policy, `.claims[0].policy`
+  is `{ id: <the policy's own id> }`: its `.id` is reachable, every other
+  field on it reads as `null`.
+- **Structural operations see fields.** `unique`, `group_by`, `==`, `keys`,
+  `to_entries`, `tojson` enumerate a card's field map on demand, with
+  cycles clipped as above — two distinct claims stay distinct, and
+  serializing across a cycle terminates with the bounded reference
+  embedded where the walk looped. This enumeration is deliberately
+  broader than `queryableValue`'s search-doc walk (which skips
+  query-backed fields): it reads every field — computeds and query-backed
+  inverses included, through live field reads — because those are exactly
+  what BXL aggregation formulas consume.
+- **Sibling references materialize fully.** The clip applies only to true
+  re-entry along one path. Two claims sharing a customer each read that
+  customer in full — a diamond is not a cycle.
+- **Backstops.** Graphs nested deeper than 256 hops fail fast with a clear
+  error, and materialization hops count toward the runtime step/time
+  budget, so no expression can churn unboundedly no matter the shape of
+  the graph.
+
+Program outputs are plain values from the raw graph — an expression that
+returns `.claims` hands back the real linked instances, not the lazy view.
+
 ---
 
 ## Comparisons & inspirations

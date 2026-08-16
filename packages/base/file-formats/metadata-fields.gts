@@ -24,6 +24,7 @@ import RulerIcon from '@cardstack/boxel-icons/ruler';
 import TagIcon from '@cardstack/boxel-icons/tag';
 import KeyboardMusicIcon from '@cardstack/boxel-icons/keyboard-music';
 import TagsIcon from '@cardstack/boxel-icons/tags';
+import TypographyIcon from '@cardstack/boxel-icons/typography';
 
 import FileCodeIcon from '@cardstack/boxel-icons/file-code';
 import FileInfoIcon from '@cardstack/boxel-icons/file-info';
@@ -901,6 +902,138 @@ export class MidiMetadataField extends FieldDef {
           overflow-wrap: anywhere;
         }
         /* Several values on one row read as a list, not a run-on string. */
+        .list {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.125rem 0.5rem;
+        }
+      </style>
+    </template>
+  };
+}
+
+// What a font file says about itself, read from its own sfnt tables — the name
+// table's identity strings, OS/2's weight/width/vendor, head's em grid, maxp's
+// glyph count, and fvar's variation axes. Shared across every font family
+// (WOFF2/WOFF/TTF/OTF) because the tables read identically regardless of how the
+// bytes were wrapped. Absent for a WOFF2, whose tables are Brotli-compressed and
+// unreadable in the browser extract pass; the live specimen renders anyway.
+export class FontMetadataField extends FieldDef {
+  static displayName = 'Font Metadata';
+  static icon = TypographyIcon;
+
+  @field familyName = contains(StringField);
+  // The named style within the family, e.g. "Bold Italic".
+  @field subfamilyName = contains(StringField);
+  @field fullName = contains(StringField);
+  @field postscriptName = contains(StringField);
+  @field versionName = contains(StringField);
+  // Manufacturer from the name table; `vendorId` is the OS/2 four-character
+  // fallback shown when the name table names no foundry.
+  @field foundry = contains(StringField);
+  @field vendorId = contains(StringField);
+  // OS/2 usWeightClass (100–900).
+  @field weightClass = contains(NumberField);
+  // Label derived from usWidthClass, set only when the face isn't normal width.
+  @field widthName = contains(StringField);
+  @field glyphCount = contains(NumberField);
+  @field unitsPerEm = contains(NumberField);
+  // 'TrueType' or 'PostScript/CFF'.
+  @field outlineType = contains(StringField);
+  @field isVariable = contains(BooleanField);
+  // Query-only style facets: persisted so a search can filter for italic or bold
+  // faces, but deliberately not rendered — the specimen and the isolated
+  // inspector already convey style through `subfamilyName · weightClass`, so
+  // surfacing the raw booleans too would only duplicate it.
+  @field isItalic = contains(BooleanField);
+  @field isBold = contains(BooleanField);
+  // Variation axes as display labels, e.g. "Weight (wght) 100–900".
+  @field axes = containsMany(StringField);
+
+  static embedded = class Embedded extends Component<typeof FontMetadataField> {
+    // The em grid and the outline flavor read as one line — "TrueType ·
+    // variable · 2048 upm" — rather than three near-empty rows.
+    get technicalSummary() {
+      let parts: string[] = [];
+      if (this.args.model?.outlineType) {
+        parts.push(this.args.model.outlineType);
+      }
+      if (this.args.model?.isVariable) {
+        parts.push('variable');
+      }
+      if (this.args.model?.unitsPerEm) {
+        parts.push(`${this.args.model.unitsPerEm} upm`);
+      }
+      return parts.join(' · ');
+    }
+
+    // The name-table foundry is the better label; the OS/2 vendor tag is the
+    // honest fallback that at least identifies who stamped the file.
+    get vendor() {
+      return this.args.model?.foundry || this.args.model?.vendorId;
+    }
+
+    <template>
+      <dl class='metadata-rows'>
+        {{#if @model.familyName}}
+          <div class='row'><dt>Family</dt><dd>{{@model.familyName}}</dd></div>
+        {{/if}}
+        {{#if @model.subfamilyName}}
+          <div class='row'><dt>Style</dt><dd>{{@model.subfamilyName}}</dd></div>
+        {{/if}}
+        {{#if @model.weightClass}}
+          <div class='row'><dt>Weight</dt><dd>{{@model.weightClass}}</dd></div>
+        {{/if}}
+        {{#if @model.widthName}}
+          <div class='row'><dt>Width</dt><dd>{{@model.widthName}}</dd></div>
+        {{/if}}
+        {{#if @model.glyphCount}}
+          <div class='row'><dt>Glyphs</dt><dd>{{@model.glyphCount}}</dd></div>
+        {{/if}}
+        {{#if this.technicalSummary}}
+          <div class='row'><dt>Outline</dt><dd>{{this.technicalSummary}}</dd></div>
+        {{/if}}
+        {{#if @model.axes.length}}
+          <div class='row'><dt>Axes</dt><dd class='list'>{{#each
+                @model.axes as |axis|
+              }}<span>{{axis}}</span>{{/each}}</dd></div>
+        {{/if}}
+        {{#if @model.postscriptName}}
+          <div class='row'><dt>PostScript</dt><dd>{{@model.postscriptName}}</dd></div>
+        {{/if}}
+        {{#if this.vendor}}
+          <div class='row'><dt>Vendor</dt><dd>{{this.vendor}}</dd></div>
+        {{/if}}
+        {{#if @model.versionName}}
+          <div class='row'><dt>Version</dt><dd>{{@model.versionName}}</dd></div>
+        {{/if}}
+      </dl>
+      <style scoped>
+        .metadata-rows {
+          margin: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 0.3125rem;
+          font-size: 0.75rem;
+        }
+        .row {
+          display: flex;
+          gap: 0.625rem;
+          align-items: baseline;
+        }
+        dt {
+          flex: 0 0 5.75rem;
+          font-family: var(--font-mono);
+          font-size: 0.5625rem;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          color: var(--muted-foreground);
+        }
+        dd {
+          margin: 0;
+          min-width: 0;
+          overflow-wrap: anywhere;
+        }
         .list {
           display: flex;
           flex-wrap: wrap;

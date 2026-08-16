@@ -89,6 +89,16 @@ export function humanSize(bytes?: number | null): string {
   return `${i === 0 ? value : value.toFixed(1)} ${units[i]}`;
 }
 
+// The filename a download should be saved as, or `undefined` when the file has
+// no name — the distinction is load-bearing, since `download=""` and an absent
+// `download` attribute are not the same to a browser. Shared so the isolated
+// shell's header link and the generic fallback pane can't drift on it.
+export function downloadNameFor(
+  model?: { name?: string } | null,
+): string | undefined {
+  return model?.name || undefined;
+}
+
 export function shortDate(value?: Date | string | null): string {
   if (!value) {
     return '';

@@ -6,6 +6,7 @@ import { scheduleOnce } from '@ember/runloop';
 import { service } from '@ember/service';
 import type { SafeString } from '@ember/template';
 import Component from '@glimmer/component';
+import { cached } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
@@ -21,6 +22,7 @@ import {
   type getCardCollection,
 } from '@cardstack/runtime-common';
 
+import { formatTokenUsage } from '@cardstack/host/lib/format-token-usage';
 import type { HtmlTagGroup } from '@cardstack/host/lib/formatted-message/utils';
 import type { Message } from '@cardstack/host/lib/matrix-classes/message';
 import type MessageTool from '@cardstack/host/lib/matrix-classes/message-tool';
@@ -35,6 +37,7 @@ import Meta from './meta';
 import UserMessage from './user-message';
 
 import type { FileDef } from '@cardstack/base/file-api';
+import type { TokenUsage } from '@cardstack/base/matrix-event';
 
 import type { ComponentLike } from '@glint/template';
 
@@ -76,6 +79,7 @@ interface Signature {
     hideMeta?: boolean;
     isCodePatchCorrectness?: boolean;
     commands?: MessageTool[];
+    usage?: TokenUsage;
   };
   Blocks: { default: [] };
 }
@@ -534,6 +538,12 @@ export default class AiAssistantMessage extends Component<Signature> {
             </Alert>
           {{/if}}
         {{/if}}
+
+        {{#if this.tokenUsage}}
+          <div class='token-usage' data-test-token-usage>
+            {{this.tokenUsage}}
+          </div>
+        {{/if}}
       </div>
     </section>
 
@@ -600,11 +610,40 @@ export default class AiAssistantMessage extends Component<Signature> {
         font-size: var(--boxel-font-size-xs);
         font-weight: bold;
       }
+      .token-usage {
+        width: fit-content;
+        margin-left: auto;
+        /* Bare muted text, no surface: it should read like the timestamp
+           meta above the message, not like content — but one step brighter
+           and heavier than the meta, since the counts are what a reader in
+           debug mode came for. The assistant panel is a fixed dark surface,
+           so this follows its local palette rather than the light-themed
+           semantic role tokens. */
+        color: var(--boxel-400);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
+      }
     </style>
   </template>
 
   private get hasBotMessage() {
     return this.args.messageHTMLParts?.length || this.args.reasoningContent;
+  }
+
+  // The provider's token counts for the turn that produced this message.
+  // Shown only behind the `showTokens` query param: it is a diagnostic for
+  // measuring prompt cost, not something every reader needs to see.
+  @cached
+  private get tokenUsage() {
+    if (!this.operatorModeStateService.operatorModeController.showTokens) {
+      return undefined;
+    }
+    let { usage } = this.args;
+    if (usage?.promptTokens == null && usage?.completionTokens == null) {
+      return undefined;
+    }
+    return formatTokenUsage(usage);
   }
 
   private get isAvatarAnimated() {

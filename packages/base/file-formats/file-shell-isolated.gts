@@ -24,6 +24,7 @@ import { isSampledContentHash } from '@cardstack/runtime-common';
 
 import {
   boundedVideoFrameAspectRatio,
+  downloadNameFor,
   fileIconFor,
   humanSize,
   shortDate,
@@ -58,10 +59,6 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
 
   get icon() {
     return fileIconFor(this.args.model);
-  }
-
-  get downloadName() {
-    return this.args.model?.name || undefined;
   }
 
   // Keep the clipboard write inside the browser gesture that asked for it.
@@ -256,6 +253,27 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
     return Boolean(t?.trackTitle || t?.artist);
   }
 
+  get hasMidi() {
+    // Any extracted sequence fact is worth the group — a file may carry tempo,
+    // key/meter, programs, or a pitch range while reporting zero notes/tracks or
+    // no computed duration (e.g. a SMPTE-timed conductor track).
+    let m = this.args.model?.midi;
+    return Boolean(
+      m?.trackCount ||
+        m?.noteCount ||
+        m?.durationSeconds ||
+        m?.format != null ||
+        m?.ppq ||
+        m?.pitchRange ||
+        m?.hasPercussion ||
+        m?.keySignatures?.length ||
+        m?.timeSignatures?.length ||
+        m?.tempoMap?.length ||
+        m?.programs?.length ||
+        m?.channels?.length,
+    );
+  }
+
   get hasDocInfo() {
     let d = this.args.model?.documentInfo;
     return Boolean(d?.author || d?.pageCount);
@@ -344,7 +362,7 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
             <a
               class='act primary'
               href={{@model.url}}
-              download={{this.downloadName}}
+              download={{downloadNameFor @model}}
               data-test-file-download
             >Download</a>
             {{! The pressed control announces its own success without extra
@@ -544,7 +562,11 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
           {{/if}}
           {{#if this.hasTags}}
             <h2 class='insp-group'>Tags</h2>
-            <div class='insp-family'><@fields.mediaTags /></div>
+            <div class='insp-family'><@fields.tags /></div>
+          {{/if}}
+          {{#if this.hasMidi}}
+            <h2 class='insp-group'>MIDI sequence</h2>
+            <div class='insp-family'><@fields.midi /></div>
           {{/if}}
           {{#if this.hasDocInfo}}
             <h2 class='insp-group'>Document</h2>

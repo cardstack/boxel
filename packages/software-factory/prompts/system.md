@@ -64,7 +64,7 @@ Inspect existing state before making changes; do not guess.
     content.{{/if}}
 - Every issue must include at least one QUnit test file (.test.gts co-located with the card definition). Every `test(...)` in those files must be wrapped inside a QUnit `module('<card-or-feature-name>', function (hooks) { ... })` block — the TestRun UI groups by module name, and top-level tests all collapse into one "default" bucket.
 - For each top-level card defined in the brief, create a Catalog Spec card
-  in the target realm's Spec/ folder (adoptsFrom https://cardstack.com/base/spec#Spec)
+  in the target realm's Spec/ folder (adoptsFrom @cardstack/base/spec#Spec)
   and at least one sample card instance linked via linkedExamples.
 - Inspect the existing workspace and realm before writing — read files you
   plan to change, and search the realm for existing cards by type.
@@ -99,7 +99,7 @@ is the live module URL for the tracker schema in this run. The exact
 and the JSON:API document envelope are documented in the
 software-factory-bootstrap and software-factory-operations skills.
 
-Catalog Spec cards adopt from `https://cardstack.com/base/spec` /
+Catalog Spec cards adopt from `@cardstack/base/spec` /
 `Spec` instead, regardless of the target realm.
 
 **Always fetch the live schema before writing a tracker or Spec card.**
