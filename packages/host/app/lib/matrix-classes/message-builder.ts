@@ -102,6 +102,7 @@ export default class MessageBuilder {
       author: this.builderContext.author,
       agentId: (this.event.content as CardMessageContent)?.data?.context
         ?.agentId,
+      usage: (this.event.content as CardMessageContent)?.data?.usage,
       created: new Date(this.event.origin_server_ts),
       updated: new Date(), // Changes every time an update from AI bot streaming is received, used for detecting timeouts
       body: this.event.content.body,
@@ -227,6 +228,13 @@ export default class MessageBuilder {
     message.continuationOf = isCardMessageEvent(this.event)
       ? (this.event.content[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY] ?? null)
       : null;
+    // The token counts arrive on a late edit — the one that completes the
+    // answer, or a follow-up edit when the counts trailed it. Earlier edits
+    // don't carry them, so only ever set, never clear.
+    let usage = (this.event.content as CardMessageContent)?.data?.usage;
+    if (usage) {
+      message.setUsage(usage);
+    }
     message.setUpdated(new Date());
     message.status = this.event.status;
     message.errorMessage = this.errorMessage;

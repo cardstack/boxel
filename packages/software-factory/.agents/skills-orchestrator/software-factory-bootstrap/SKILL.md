@@ -43,7 +43,7 @@ Issues per entry-point card.
    same-realm module it imports transitively (**including type-only imports**,
    which a runtime dep graph would miss but `boxel parse` needs), its sample
    instances, and its **card-level** Catalog Spec. Cross-realm imports
-   (`https://cardstack.com/base/...`) and component/function Specs are left out
+   (`@cardstack/base/...`) and component/function Specs are left out
    on purpose. Pass `--realm <url>` only if the source realm can't be
    auto-detected.
    - **If the source card has no co-located test** — common for catalog
@@ -145,8 +145,8 @@ enums it returns verbatim. Schemas are cached per-process, so repeated
 calls are cheap.
 
 Catalog Spec cards (`Spec/<slug>.json`) are different — they adopt from
-`https://cardstack.com/base/spec` / `Spec`. Fetch their schema the same
-way: `get_card_schema({ module: "https://cardstack.com/base/spec",
+`@cardstack/base/spec` / `Spec`. Fetch their schema the same
+way: `get_card_schema({ module: "@cardstack/base/spec",
 name: "Spec" })`. The catalog spec workflow is documented in the
 software-factory-operations skill.
 

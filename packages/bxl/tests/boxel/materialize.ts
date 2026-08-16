@@ -164,6 +164,85 @@ check(
   },
 );
 
+// ---------------------------------------------------------------- Instance-carried getFields bridge
+
+// Boxel's card-api stamps its own `getFields` onto its base prototype under
+// this cross-realm symbol, so materialization resolves the card-api copy
+// that created the shape it was handed — the ambient global is only the
+// fallback. These cases pin that resolution order with a stand-in card-api:
+// a base class carrying the stamp and a field map that declares one nested
+// `contains` shape.
+
+const GET_FIELDS_BRIDGE = Symbol.for('cardstack.getFields');
+const GET_FIELDS_GLOBAL = '__cardstackGetFields';
+
+class StampedBase {}
+class StampedBadge extends StampedBase {
+  text: string = '';
+}
+class StampedPanel extends StampedBase {
+  label: string = '';
+  badge: StampedBadge | null = null;
+}
+const stampedFieldMaps = new Map<unknown, Record<string, unknown>>([
+  [
+    StampedPanel,
+    {
+      label: { fieldType: 'contains' },
+      badge: { fieldType: 'contains', card: StampedBadge },
+    },
+  ],
+  [StampedBadge, { text: { fieldType: 'contains' } }],
+]);
+Object.defineProperty(StampedBase.prototype, GET_FIELDS_BRIDGE, {
+  value: (instance: object) => stampedFieldMaps.get(instance.constructor) ?? {},
+  enumerable: false,
+});
+
+function withGlobalGetFields(fn: unknown, body: () => void) {
+  const holder = globalThis as Record<string, unknown>;
+  const prior = holder[GET_FIELDS_GLOBAL];
+  holder[GET_FIELDS_GLOBAL] = fn;
+  try {
+    body();
+  } finally {
+    if (prior === undefined) {
+      delete holder[GET_FIELDS_GLOBAL];
+    } else {
+      holder[GET_FIELDS_GLOBAL] = prior;
+    }
+  }
+}
+
+check('the instance-carried stamp wins over the ambient global', () => {
+  withGlobalGetFields(
+    () => {
+      throw new Error('the ambient global must not be consulted');
+    },
+    () => {
+      const compute = expression(jq`{ label: "ok", badge: { text: "hot" } }`, {
+        as: StampedPanel,
+      });
+      const out = compute.call(baselinePatient) as StampedPanel;
+      ok(out instanceof StampedPanel);
+      ok(out.badge instanceof StampedBadge);
+      strictEqual(out.badge!.text, 'hot');
+    },
+  );
+});
+
+check('the stamp alone materializes nested contains shapes', () => {
+  // No global registered at all: the stamped prototype is sufficient.
+  const compute = expression(jq`{ label: "solo", badge: { text: "warm" } }`, {
+    as: StampedPanel,
+  });
+  const out = compute.call(baselinePatient) as StampedPanel;
+  ok(out instanceof StampedPanel);
+  strictEqual(out.label, 'solo');
+  ok(out.badge instanceof StampedBadge);
+  strictEqual(out.badge!.text, 'warm');
+});
+
 console.log(
   `BXL Boxel materialize-as fallback: ${pass}/${pass + fail} cases passed`,
 );

@@ -271,8 +271,17 @@ export class Responder {
     // the mid-turn send would be gated off, and `finalize()` would see no
     // transition and skip the final send too, leaving only the thinking
     // placeholder in the room.
+    //
+    // Once true the flag must stay true for the rest of the turn: the
+    // provider's usage report arrives on a chunk AFTER the one carrying
+    // finish_reason 'stop' (with empty choices, or a choice with no
+    // finish_reason — the shape varies by provider). Recomputing from that
+    // chunk alone would flip the flag back off and mark the already-complete
+    // answer as still streaming, and nothing would ever finish it.
     const isStreamingFinished =
-      this.shouldStreamMidTurn && chunk.choices?.[0]?.finish_reason === 'stop';
+      this.responseState.isStreamingFinished ||
+      (this.shouldStreamMidTurn &&
+        chunk.choices?.[0]?.finish_reason === 'stop');
     const responseStateChanged = this.responseState.update(
       newReasoningContent,
       snapshot.choices?.[0]?.message?.content,
@@ -295,8 +304,25 @@ export class Responder {
     if (chunk.usage) {
       this.promptTokens = chunk.usage.prompt_tokens;
       this.completionTokens = chunk.usage.completion_tokens;
+      // OpenRouter extensions on the same payload: the prompt-cache split and
+      // the inline cost (see the `usage: { include: true }` request option).
+      let cachedTokens = (chunk.usage as any).prompt_tokens_details
+        ?.cached_tokens;
+      let costUsd = (chunk.usage as any).cost;
+      // Hand the counts to the publisher so they ride on the final room
+      // event. When the final edit has already gone out (the usage chunk
+      // trails the finish chunk), finalize() sends one more edit to carry
+      // them.
+      this.matrixResponsePublisher.usage = {
+        promptTokens: chunk.usage.prompt_tokens,
+        completionTokens: chunk.usage.completion_tokens,
+        ...(typeof cachedTokens === 'number' ? { cachedTokens } : {}),
+        ...(typeof costUsd === 'number' ? { costUsd } : {}),
+      };
       log.info(
-        `Request used ${chunk.usage.prompt_tokens} prompt tokens and ${chunk.usage.completion_tokens} completion tokens`,
+        `Request used ${chunk.usage.prompt_tokens} prompt tokens (${
+          typeof cachedTokens === 'number' ? cachedTokens : 'unknown'
+        } cached) and ${chunk.usage.completion_tokens} completion tokens`,
       );
     }
 
@@ -372,6 +398,23 @@ export class Responder {
       await this.sendMessageEventWithThrottling();
     }
     await this.flush();
+    // The usage chunk trails the finish chunk, so in mid-turn-streaming modes
+    // the final consolidated edit can go out before the counts exist. Send
+    // one more edit of the same content to carry them. Never for canceled
+    // turns, and never as a first event — and a failure here only loses the
+    // counts, not the answer, so it must not fail the turn.
+    if (
+      !opts?.isCanceled &&
+      this.matrixResponsePublisher.usage &&
+      !this.matrixResponsePublisher.usageSent &&
+      this.matrixResponsePublisher.initialMessageSent
+    ) {
+      try {
+        await this.matrixResponsePublisher.sendMessage();
+      } catch (e) {
+        log.error('Failed to send the token-usage edit', e);
+      }
+    }
     this.logTurnTelemetry();
   }
 
