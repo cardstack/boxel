@@ -3,6 +3,7 @@ import {
   SupportedMimeType,
   systemInitiatedPriority,
 } from '@cardstack/runtime-common';
+import { FULL_REINDEX_JOB_TIMEOUT_SEC } from '@cardstack/runtime-common/tasks/full-reindex';
 import {
   sendResponseForUnauthorizedRequest,
   setContextResponse,
@@ -47,7 +48,7 @@ export default function handlePostDeployment({
       await queue.publish<void>({
         jobType: `full-reindex`,
         concurrencyGroup: `full-reindex-group`,
-        timeout: 6 * 60,
+        timeout: FULL_REINDEX_JOB_TIMEOUT_SEC,
         priority: systemInitiatedPriority,
         args: {
           realmUrls,

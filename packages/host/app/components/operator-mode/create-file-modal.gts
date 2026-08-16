@@ -41,6 +41,7 @@ import {
   isCardInstance,
   maybeRelativeReference,
   RealmPaths,
+  ri,
   specRef,
   SupportedMimeType,
   type CardErrorJSONAPI,
@@ -881,7 +882,7 @@ export default class CreateFileModal extends Component<Signature> {
     let isField = this.fileType.id === 'field-definition';
     let isFileDef = this.fileType.id === 'file-definition';
 
-    let realmPath = new RealmPaths(new URL(this.selectedRealmURL));
+    let realmPath = new RealmPaths(ri(this.selectedRealmURL));
     // assert that filename is a GTS file and is a LocalPath
     let fileName: LocalPath = `${this.fileName.replace(
       /\.[^.].+$/,
@@ -1100,7 +1101,7 @@ export class ${className} extends ${exportName} {
       return;
     }
 
-    let realmPath = new RealmPaths(new URL(this.selectedRealmURL));
+    let realmPath = new RealmPaths(ri(this.selectedRealmURL));
     let filePath: LocalPath = fileName as LocalPath;
     let url = realmPath.fileURL(filePath);
 
@@ -1145,7 +1146,7 @@ export class ${className} extends ${exportName} {
       return;
     }
 
-    let realmPath = new RealmPaths(new URL(this.selectedRealmURL));
+    let realmPath = new RealmPaths(ri(this.selectedRealmURL));
     let url = realmPath.fileURL(`skills/${slug}/SKILL.md` as LocalPath);
 
     try {

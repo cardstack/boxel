@@ -24,7 +24,9 @@ import RulerIcon from '@cardstack/boxel-icons/ruler';
 import TagIcon from '@cardstack/boxel-icons/tag';
 import KeyboardMusicIcon from '@cardstack/boxel-icons/keyboard-music';
 import TagsIcon from '@cardstack/boxel-icons/tags';
+import TypographyIcon from '@cardstack/boxel-icons/typography';
 
+import FileCodeIcon from '@cardstack/boxel-icons/file-code';
 import FileInfoIcon from '@cardstack/boxel-icons/file-info';
 
 import {
@@ -228,7 +230,9 @@ export class CameraCaptureField extends FieldDef {
     },
   });
 
-  static embedded = class Embedded extends Component<typeof CameraCaptureField> {
+  static embedded = class Embedded extends Component<
+    typeof CameraCaptureField
+  > {
     <template>
       <dl class='metadata-rows'>
         {{#if @model.cameraName}}
@@ -416,7 +420,8 @@ export class ColorProfileField extends FieldDef {
               /></dd></div>
         {{/if}}
         {{#if @model.bitDepth}}
-          <div class='row'><dt>Bit depth</dt><dd>{{@model.bitDepth}}-bit</dd></div>
+          <div class='row'><dt>Bit depth</dt><dd
+            >{{@model.bitDepth}}-bit</dd></div>
         {{/if}}
         {{#if @model.channels}}
           <div class='row'><dt>Channels</dt><dd>{{@model.channels}}</dd></div>
@@ -425,7 +430,8 @@ export class ColorProfileField extends FieldDef {
           <div class='row'><dt>Alpha</dt><dd>{{@model.hasAlphaLabel}}</dd></div>
         {{/if}}
         {{#if @model.iccProfile}}
-          <div class='row'><dt>ICC profile</dt><dd>{{@model.iccProfile}}</dd></div>
+          <div class='row'><dt>ICC profile</dt><dd
+            >{{@model.iccProfile}}</dd></div>
         {{/if}}
       </dl>
       <style scoped>
@@ -549,13 +555,14 @@ export class MediaEncodingField extends FieldDef {
               }}<span class='qualifier'>VBR</span>{{/if}}</dd></div>
         {{/if}}
         {{#if @model.bitDepth}}
-          <div class='row'><dt>Bit depth</dt><dd>{{@model.bitDepth}}-bit</dd></div>
+          <div class='row'><dt>Bit depth</dt><dd
+            >{{@model.bitDepth}}-bit</dd></div>
         {{/if}}
         {{#if @model.channels}}
           <div class='row'><dt>Channels</dt><dd>{{@model.channels}}{{#if
                 @model.channelMode.label
               }}<span class='qualifier'><@fields.channelMode
-                /></span>{{/if}}</dd></div>
+                  /></span>{{/if}}</dd></div>
         {{/if}}
       </dl>
       <style scoped>
@@ -633,7 +640,8 @@ export class MediaTagsField extends FieldDef {
           <div class='row'><dt>Album</dt><dd>{{@model.album}}</dd></div>
         {{/if}}
         {{#if @model.albumArtist}}
-          <div class='row'><dt>Album artist</dt><dd>{{@model.albumArtist}}</dd></div>
+          <div class='row'><dt>Album artist</dt><dd
+            >{{@model.albumArtist}}</dd></div>
         {{/if}}
         {{#if @model.composer}}
           <div class='row'><dt>Composer</dt><dd>{{@model.composer}}</dd></div>
@@ -725,17 +733,21 @@ export class WaveformMetadataField extends FieldDef {
           <div class='row'><dt>Status</dt><dd>{{@model.decodeStatus}}</dd></div>
         {{/if}}
         {{#if @model.barCount}}
-          <div class='row'><dt>Envelope</dt><dd>{{@model.barCount}} bars ·
+          <div class='row'><dt>Envelope</dt><dd>{{@model.barCount}}
+              bars ·
               {{@model.algorithm}}</dd></div>
         {{/if}}
         {{#if @model.durationSeconds}}
-          <div class='row'><dt>Duration</dt><dd>{{@model.durationSeconds}} s</dd></div>
+          <div class='row'><dt>Duration</dt><dd>{{@model.durationSeconds}}
+              s</dd></div>
         {{/if}}
         {{#if @model.sampleRateHz}}
-          <div class='row'><dt>Sample rate</dt><dd>{{@model.sampleRateHz}} Hz</dd></div>
+          <div class='row'><dt>Sample rate</dt><dd>{{@model.sampleRateHz}}
+              Hz</dd></div>
         {{/if}}
         {{#if @model.channelCount}}
-          <div class='row'><dt>Channels</dt><dd>{{@model.channelCount}}</dd></div>
+          <div class='row'><dt>Channels</dt><dd
+            >{{@model.channelCount}}</dd></div>
         {{/if}}
         {{#if @model.peakAmplitude}}
           <div class='row'><dt>Peak</dt><dd>{{@model.peakAmplitude}}</dd></div>
@@ -744,7 +756,9 @@ export class WaveformMetadataField extends FieldDef {
           <div class='row'><dt>RMS</dt><dd>{{@model.rmsAmplitude}}</dd></div>
         {{/if}}
         {{#if @model.decodeError}}
-          <div class='row'><dt>Decode</dt><dd class='decode-error'>{{@model.decodeError}}</dd></div>
+          <div class='row'><dt>Decode</dt><dd
+              class='decode-error'
+            >{{@model.decodeError}}</dd></div>
         {{/if}}
       </dl>
       <style scoped>
@@ -810,9 +824,7 @@ export class MidiMetadataField extends FieldDef {
   @field pitchRange = contains(StringField);
   @field hasPercussion = contains(BooleanField);
 
-  static embedded = class Embedded extends Component<
-    typeof MidiMetadataField
-  > {
+  static embedded = class Embedded extends Component<typeof MidiMetadataField> {
     <template>
       <dl class='metadata-rows'>
         {{#if @model.trackCount}}
@@ -826,16 +838,19 @@ export class MidiMetadataField extends FieldDef {
           <div class='row'><dt>Notes</dt><dd>{{@model.noteCount}}</dd></div>
         {{/if}}
         {{#if @model.durationSeconds}}
-          <div class='row'><dt>Duration</dt><dd>{{@model.durationSeconds}} s</dd></div>
+          <div class='row'><dt>Duration</dt><dd>{{@model.durationSeconds}}
+              s</dd></div>
         {{/if}}
         {{#if @model.keySignatures.length}}
           <div class='row'><dt>Key</dt><dd class='list'>{{#each
-                @model.keySignatures as |key|
+                @model.keySignatures
+                as |key|
               }}<span>{{key}}</span>{{/each}}</dd></div>
         {{/if}}
         {{#if @model.timeSignatures.length}}
           <div class='row'><dt>Meter</dt><dd class='list'>{{#each
-                @model.timeSignatures as |meter|
+                @model.timeSignatures
+                as |meter|
               }}<span>{{meter}}</span>{{/each}}</dd></div>
         {{/if}}
         {{#if @model.pitchRange}}
@@ -843,12 +858,14 @@ export class MidiMetadataField extends FieldDef {
         {{/if}}
         {{#if @model.tempoMap.length}}
           <div class='row'><dt>Tempo</dt><dd class='list'>{{#each
-                @model.tempoMap as |tempo|
+                @model.tempoMap
+                as |tempo|
               }}<span>{{tempo}}</span>{{/each}}</dd></div>
         {{/if}}
         {{#if @model.channels.length}}
           <div class='row'><dt>Channels</dt><dd class='list'>{{#each
-                @model.channels as |channel|
+                @model.channels
+                as |channel|
               }}<span>{{channel}}</span>{{/each}}</dd></div>
         {{/if}}
         <div class='row'><dt>Percussion</dt><dd>{{if
@@ -888,6 +905,250 @@ export class MidiMetadataField extends FieldDef {
           display: flex;
           flex-wrap: wrap;
           gap: 0.125rem 0.5rem;
+        }
+      </style>
+    </template>
+  };
+}
+
+// What a font file says about itself, read from its own sfnt tables — the name
+// table's identity strings, OS/2's weight/width/vendor, head's em grid, maxp's
+// glyph count, and fvar's variation axes. Shared across every font family
+// (WOFF2/WOFF/TTF/OTF) because the tables read identically regardless of how the
+// bytes were wrapped. Absent for a WOFF2, whose tables are Brotli-compressed and
+// unreadable in the browser extract pass; the live specimen renders anyway.
+export class FontMetadataField extends FieldDef {
+  static displayName = 'Font Metadata';
+  static icon = TypographyIcon;
+
+  @field familyName = contains(StringField);
+  // The named style within the family, e.g. "Bold Italic".
+  @field subfamilyName = contains(StringField);
+  @field fullName = contains(StringField);
+  @field postscriptName = contains(StringField);
+  @field versionName = contains(StringField);
+  // Manufacturer from the name table; `vendorId` is the OS/2 four-character
+  // fallback shown when the name table names no foundry.
+  @field foundry = contains(StringField);
+  @field vendorId = contains(StringField);
+  // OS/2 usWeightClass (100–900).
+  @field weightClass = contains(NumberField);
+  // Label derived from usWidthClass, set only when the face isn't normal width.
+  @field widthName = contains(StringField);
+  @field glyphCount = contains(NumberField);
+  @field unitsPerEm = contains(NumberField);
+  // 'TrueType' or 'PostScript/CFF'.
+  @field outlineType = contains(StringField);
+  @field isVariable = contains(BooleanField);
+  // Query-only style facets: persisted so a search can filter for italic or bold
+  // faces, but deliberately not rendered — the specimen and the isolated
+  // inspector already convey style through `subfamilyName · weightClass`, so
+  // surfacing the raw booleans too would only duplicate it.
+  @field isItalic = contains(BooleanField);
+  @field isBold = contains(BooleanField);
+  // Variation axes as display labels, e.g. "Weight (wght) 100–900".
+  @field axes = containsMany(StringField);
+
+  static embedded = class Embedded extends Component<typeof FontMetadataField> {
+    // The em grid and the outline flavor read as one line — "TrueType ·
+    // variable · 2048 upm" — rather than three near-empty rows.
+    get technicalSummary() {
+      let parts: string[] = [];
+      if (this.args.model?.outlineType) {
+        parts.push(this.args.model.outlineType);
+      }
+      if (this.args.model?.isVariable) {
+        parts.push('variable');
+      }
+      if (this.args.model?.unitsPerEm) {
+        parts.push(`${this.args.model.unitsPerEm} upm`);
+      }
+      return parts.join(' · ');
+    }
+
+    // The name-table foundry is the better label; the OS/2 vendor tag is the
+    // honest fallback that at least identifies who stamped the file.
+    get vendor() {
+      return this.args.model?.foundry || this.args.model?.vendorId;
+    }
+
+    <template>
+      <dl class='metadata-rows'>
+        {{#if @model.familyName}}
+          <div class='row'><dt>Family</dt><dd>{{@model.familyName}}</dd></div>
+        {{/if}}
+        {{#if @model.subfamilyName}}
+          <div class='row'><dt>Style</dt><dd>{{@model.subfamilyName}}</dd></div>
+        {{/if}}
+        {{#if @model.weightClass}}
+          <div class='row'><dt>Weight</dt><dd>{{@model.weightClass}}</dd></div>
+        {{/if}}
+        {{#if @model.widthName}}
+          <div class='row'><dt>Width</dt><dd>{{@model.widthName}}</dd></div>
+        {{/if}}
+        {{#if @model.glyphCount}}
+          <div class='row'><dt>Glyphs</dt><dd>{{@model.glyphCount}}</dd></div>
+        {{/if}}
+        {{#if this.technicalSummary}}
+          <div class='row'><dt>Outline</dt><dd>{{this.technicalSummary}}</dd></div>
+        {{/if}}
+        {{#if @model.axes.length}}
+          <div class='row'><dt>Axes</dt><dd class='list'>{{#each
+                @model.axes as |axis|
+              }}<span>{{axis}}</span>{{/each}}</dd></div>
+        {{/if}}
+        {{#if @model.postscriptName}}
+          <div class='row'><dt>PostScript</dt><dd>{{@model.postscriptName}}</dd></div>
+        {{/if}}
+        {{#if this.vendor}}
+          <div class='row'><dt>Vendor</dt><dd>{{this.vendor}}</dd></div>
+        {{/if}}
+        {{#if @model.versionName}}
+          <div class='row'><dt>Version</dt><dd>{{@model.versionName}}</dd></div>
+        {{/if}}
+      </dl>
+      <style scoped>
+        .metadata-rows {
+          margin: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 0.3125rem;
+          font-size: 0.75rem;
+        }
+        .row {
+          display: flex;
+          gap: 0.625rem;
+          align-items: baseline;
+        }
+        dt {
+          flex: 0 0 5.75rem;
+          font-family: var(--font-mono);
+          font-size: 0.5625rem;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          color: var(--muted-foreground);
+        }
+        dd {
+          margin: 0;
+          min-width: 0;
+          overflow-wrap: anywhere;
+        }
+        .list {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.125rem 0.5rem;
+        }
+      </style>
+    </template>
+  };
+}
+
+// The structural shape of an HTML document: what the markup contains, not what
+// the browser would paint. `isInteractive` is the one derived member —
+// authored scripts or form controls make a document interactive — and it is
+// persisted rather than recomputed so a query can ask for interactive
+// documents without re-reading every file.
+export class HtmlMetadataField extends FieldDef {
+  static displayName = 'HTML Metadata';
+  static icon = FileCodeIcon;
+
+  @field documentTitle = contains(StringField);
+  @field documentLanguage = contains(StringField);
+  @field elementCount = contains(NumberField);
+  @field wordCount = contains(NumberField);
+  @field headingCount = contains(NumberField);
+  @field linkCount = contains(NumberField);
+  @field imageCount = contains(NumberField);
+  @field formControlCount = contains(NumberField);
+  @field scriptCount = contains(NumberField);
+  @field styleSheetCount = contains(NumberField);
+  @field externalResourceCount = contains(NumberField);
+  @field hasDoctype = contains(BooleanField);
+  @field hasViewportMeta = contains(BooleanField);
+  @field hasInlineScript = contains(BooleanField);
+  @field hasModuleScript = contains(BooleanField);
+  @field isInteractive = contains(BooleanField);
+
+  // A genuine `false` ("static document") must render, while a never-extracted
+  // value must not — the same distinction `ColorProfileField.hasAlphaLabel`
+  // preserves for alpha channels.
+  @field interactivityLabel = contains(StringField, {
+    computeVia: function (this: HtmlMetadataField) {
+      if (this.isInteractive == null) {
+        return '';
+      }
+      return this.isInteractive ? 'Interactive' : 'Static document';
+    },
+  });
+
+  static embedded = class Embedded extends Component<typeof HtmlMetadataField> {
+    <template>
+      <dl class='metadata-rows'>
+        {{#if @model.documentLanguage}}
+          <div class='row'><dt>Language</dt><dd
+            >{{@model.documentLanguage}}</dd></div>
+        {{/if}}
+        {{#if @model.elementCount}}
+          <div class='row'><dt>Elements</dt><dd
+            >{{@model.elementCount}}</dd></div>
+        {{/if}}
+        {{#if @model.wordCount}}
+          <div class='row'><dt>Words</dt><dd>{{@model.wordCount}}</dd></div>
+        {{/if}}
+        {{#if @model.headingCount}}
+          <div class='row'><dt>Headings</dt><dd
+            >{{@model.headingCount}}</dd></div>
+        {{/if}}
+        {{#if @model.linkCount}}
+          <div class='row'><dt>Links</dt><dd>{{@model.linkCount}}</dd></div>
+        {{/if}}
+        {{#if @model.imageCount}}
+          <div class='row'><dt>Images</dt><dd>{{@model.imageCount}}</dd></div>
+        {{/if}}
+        {{#if @model.formControlCount}}
+          <div class='row'><dt>Form controls</dt><dd
+            >{{@model.formControlCount}}</dd></div>
+        {{/if}}
+        {{#if @model.scriptCount}}
+          <div class='row'><dt>Scripts</dt><dd>{{@model.scriptCount}}</dd></div>
+        {{/if}}
+        {{#if @model.styleSheetCount}}
+          <div class='row'><dt>Style sheets</dt><dd
+            >{{@model.styleSheetCount}}</dd></div>
+        {{/if}}
+        {{#if @model.externalResourceCount}}
+          <div class='row'><dt>External refs</dt><dd
+            >{{@model.externalResourceCount}}</dd></div>
+        {{/if}}
+        {{#if @model.interactivityLabel}}
+          <div class='row'><dt>Behavior</dt><dd
+            >{{@model.interactivityLabel}}</dd></div>
+        {{/if}}
+      </dl>
+      <style scoped>
+        .metadata-rows {
+          margin: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 0.3125rem;
+          font-size: 0.75rem;
+        }
+        .row {
+          display: flex;
+          gap: 0.625rem;
+          align-items: baseline;
+        }
+        dt {
+          flex: 0 0 5.75rem;
+          font-family: var(--font-mono);
+          font-size: 0.5625rem;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          color: var(--muted-foreground);
+        }
+        dd {
+          margin: 0;
+          min-width: 0;
         }
       </style>
     </template>

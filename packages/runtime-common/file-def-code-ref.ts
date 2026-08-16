@@ -19,6 +19,8 @@ const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
   // TODO: Replace with realm metadata configuration.
   '.markdown': { module: baseModule('markdown-file-def'), name: 'MarkdownDef' },
   '.md': { module: baseModule('markdown-file-def'), name: 'MarkdownDef' },
+  '.html': { module: baseModule('html-file-def'), name: 'HtmlDef' },
+  '.htm': { module: baseModule('html-file-def'), name: 'HtmlDef' },
   '.png': { module: baseModule('png-image-def'), name: 'PngDef' },
   '.jpg': { module: baseModule('jpg-image-def'), name: 'JpgDef' },
   '.jpeg': { module: baseModule('jpg-image-def'), name: 'JpgDef' },
@@ -50,6 +52,10 @@ const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
   '.mov': { module: baseModule('mov-video-def'), name: 'MovDef' },
   '.webm': { module: baseModule('webm-video-def'), name: 'WebmDef' },
   '.zip': { module: baseModule('zip-file-def'), name: 'ZipDef' },
+  '.woff2': { module: baseModule('woff2-font-def'), name: 'Woff2Def' },
+  '.woff': { module: baseModule('woff-font-def'), name: 'WoffDef' },
+  '.ttf': { module: baseModule('ttf-font-def'), name: 'TtfDef' },
+  '.otf': { module: baseModule('otf-font-def'), name: 'OtfDef' },
   '.mismatch': {
     module: './filedef-mismatch' as RealmResourceIdentifier,
     name: 'FileDef',

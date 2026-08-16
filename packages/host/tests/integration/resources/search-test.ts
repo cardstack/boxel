@@ -27,6 +27,8 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 import type StoreService from '@cardstack/host/services/store';
 
 import {
+  withCachedRealmSetup,
+  setupRealmCacheTeardown,
   setupIntegrationTestRealm,
   setupLocalIndexing,
   testRealmURL,
@@ -75,6 +77,7 @@ module(`Integration | search resource`, function (hooks) {
   });
 
   setupLocalIndexing(hooks);
+  setupRealmCacheTeardown(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
@@ -295,23 +298,27 @@ module(`Integration | search resource`, function (hooks) {
       },
     };
 
-    ({ realm } = await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        // PersonField is referenced as the `author` type by Article and
-        // Book; expose it in its own module shim so lookupDefinition
-        // can resolve nested paths like `author.firstName` when
-        // traversing the new top-level-only Definition.fields shape.
-        'person-field.gts': { PersonField },
-        'article.gts': { Article },
-        'blog-post.gts': { BlogPost },
-        'book.gts': { Book },
-        'post.gts': { Post },
-        ...sampleCards,
-        'files/hello.txt': 'Hello world',
-        'files/notes.txt': 'Some notes',
-      },
-    }));
+    // Every test builds these fixtures identically, so the indexed result is
+    // cached for the module and restored rather than rebuilt.
+    await withCachedRealmSetup(async () => {
+      ({ realm } = await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          // PersonField is referenced as the `author` type by Article and
+          // Book; expose it in its own module shim so lookupDefinition
+          // can resolve nested paths like `author.firstName` when
+          // traversing the new top-level-only Definition.fields shape.
+          'person-field.gts': { PersonField },
+          'article.gts': { Article },
+          'blog-post.gts': { BlogPost },
+          'book.gts': { Book },
+          'post.gts': { Post },
+          ...sampleCards,
+          'files/hello.txt': 'Hello world',
+          'files/notes.txt': 'Some notes',
+        },
+      }));
+    });
   });
 
   test(`can search for card instances by using the 'eq' filter`, async function (assert) {
