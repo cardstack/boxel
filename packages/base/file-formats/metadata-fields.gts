@@ -940,6 +940,10 @@ export class FontMetadataField extends FieldDef {
   // 'TrueType' or 'PostScript/CFF'.
   @field outlineType = contains(StringField);
   @field isVariable = contains(BooleanField);
+  // Query-only style facets: persisted so a search can filter for italic or bold
+  // faces, but deliberately not rendered — the specimen and the isolated
+  // inspector already convey style through `subfamilyName · weightClass`, so
+  // surfacing the raw booleans too would only duplicate it.
   @field isItalic = contains(BooleanField);
   @field isBold = contains(BooleanField);
   // Variation axes as display labels, e.g. "Weight (wght) 100–900".

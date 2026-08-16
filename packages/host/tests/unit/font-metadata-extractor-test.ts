@@ -422,22 +422,30 @@ module('Unit | font metadata extractor', function (hooks) {
     );
   });
 
-  test('reports a TrueType Collection as a font without walking into a face', async function (assert) {
-    // A `ttcf` header is not an sfnt table directory, so the reader recognizes
-    // the collection from its flavor but exposes no tables rather than misreading
-    // the TTC version and face count as `numTables` and a table record.
-    let ttc = new Uint8Array(16);
+  // A `ttcf` header whose byte-12 offset points to a first face carrying the
+  // given sfnt version — enough to name the collection's outline flavor without
+  // any face's table directory.
+  function ttcFixture(faceVersion: number): Uint8Array {
+    let ttc = new Uint8Array(28);
     let view = new DataView(ttc.buffer);
     view.setUint32(0, 0x74746366); // 'ttcf'
     view.setUint16(4, 1); // majorVersion
     view.setUint16(6, 0); // minorVersion
     view.setUint32(8, 1); // numFonts
-    view.setUint32(12, 16); // offset to the first face
-    let metadata = await extractFontMetadata(ttc);
+    view.setUint32(12, 16); // offset to the first face's sfnt header
+    view.setUint32(16, faceVersion); // that face's sfnt version
+    return ttc;
+  }
+
+  test('reports a TrueType Collection as a font without walking into a face', async function (assert) {
+    // A `ttcf` header is not an sfnt table directory, so the reader recognizes
+    // the collection but exposes no tables rather than misreading the TTC version
+    // and face count as `numTables` and a table record.
+    let metadata = await extractFontMetadata(ttcFixture(SFNT_TRUETYPE));
     assert.strictEqual(
       metadata.outlineType,
       'TrueType',
-      'recognized as a font',
+      'flavor read from the first face',
     );
     assert.strictEqual(
       metadata.familyName,
@@ -445,5 +453,13 @@ module('Unit | font metadata extractor', function (hooks) {
       'no table is walked, so no name is invented',
     );
     assert.strictEqual(metadata.glyphCount, undefined, 'no maxp is read');
+  });
+
+  test('names an OpenType Collection by its first face rather than defaulting to TrueType', async function (assert) {
+    // The `ttcf` signature carries no outline flavor, so a collection of CFF
+    // faces must be read from the first face's `OTTO` version, not reported as
+    // TrueType by default.
+    let metadata = await extractFontMetadata(ttcFixture(SFNT_OTTO));
+    assert.strictEqual(metadata.outlineType, 'PostScript/CFF');
   });
 });

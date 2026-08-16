@@ -107,11 +107,13 @@ async function inflateZlib(bytes: Uint8Array): Promise<Uint8Array | undefined> {
   }
 }
 
-function sfntTableSource(bytes: Uint8Array, headerOffset = 0): TableSource {
+function sfntTableSource(bytes: Uint8Array): TableSource {
   let view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  let flavor = view.getUint32(headerOffset);
-  let numTables = view.getUint16(headerOffset + 4);
-  let directory = headerOffset + 12;
+  // A bare sfnt begins with a 12-byte offset table (version, table count, and
+  // three binary-search hints) followed by the table directory.
+  let flavor = view.getUint32(0);
+  let numTables = view.getUint16(4);
+  let directory = 12;
   let tables = new Map<string, SfntTableEntry>();
   for (let i = 0; i < numTables; i++) {
     let record = directory + i * 16;
@@ -210,13 +212,26 @@ function woff2TableSource(bytes: Uint8Array): TableSource {
 // A TrueType Collection packs several faces behind a `ttcf` header, which is not
 // an sfnt table directory — its bytes after the tag are a version and a face
 // count, not `numTables` and table records. As the container comment says, this
-// pass reports a collection as a font (the flavor names it) but does not walk
-// into a face, so it exposes no tables rather than misreading the TTC header as
-// one.
+// pass reports a collection as a font but does not walk into a face, so it
+// exposes no tables rather than misreading the TTC header as one.
+//
+// The `ttcf` signature itself carries no outline flavor, so to name the outline
+// type honestly (a collection may hold TrueType *or* CFF/PostScript faces — an
+// "OpenType Collection") the flavor is read from the first face's sfnt version.
+// The TTC header stores that face's offset at byte 12; reading the 4-byte
+// version there names the flavor without touching any table directory. Falls
+// back to the `ttcf` signature when the offset is out of range.
 function collectionTableSource(bytes: Uint8Array): TableSource {
   let view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let flavor = view.getUint32(0);
+  if (bytes.byteLength >= 16) {
+    let firstFaceOffset = view.getUint32(12);
+    if (firstFaceOffset + 4 <= bytes.byteLength) {
+      flavor = view.getUint32(firstFaceOffset);
+    }
+  }
   return {
-    flavor: view.getUint32(0),
+    flavor,
     container: 'sfnt',
     hasTable: () => false,
     getTable: async () => undefined,
