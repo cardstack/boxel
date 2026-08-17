@@ -16,8 +16,8 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
     class='lucide lucide-clock-alert'
     viewBox='0 0 24 24'
     ...attributes
-  ><path d='M12 6v6l4 2' /><path
-      d='M16 21.16a10 10 0 1 1 5-13.516M20 11.5v6M20 21.5h.01'
+  ><path d='M12 6v6l4 2M20 12v5M20 21h.01' /><path
+      d='M21.25 8.2A10 10 0 1 0 16 21.16'
     /></svg>
 </template>;
 
