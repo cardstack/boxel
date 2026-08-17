@@ -10,7 +10,11 @@ import {
 } from '@cardstack/runtime-common';
 import type { Realm } from '@cardstack/runtime-common/realm';
 
-import { testRealmURL, visitOperatorMode } from '../../helpers';
+import {
+  setupRealmCacheTeardown,
+  testRealmURL,
+  visitOperatorMode,
+} from '../../helpers';
 import { setupInteractSubmodeTests } from '../../helpers/interact-submode-setup';
 
 import type {
@@ -22,13 +26,16 @@ module('Acceptance | interact submode | index changes tests', function (hooks) {
   let realm: Realm;
 
   setupInteractSubmodeTests(hooks, {
-    reuseIndexAcrossTests: 'interactIndexChanges',
     setRealm(value) {
       realm = value;
     },
   });
 
-  module('index changes', function () {
+  module('index changes', function (hooks) {
+    // The helper's realm-building beforeEach runs for these tests too, and
+    // caches under this module's name, which the outer prefix cannot match.
+    setupRealmCacheTeardown(hooks);
+
     test('stack item live updates when index changes', async function (assert) {
       await visitOperatorMode({
         stacks: [
@@ -427,7 +434,11 @@ module('Acceptance | interact submode | index changes tests', function (hooks) {
     });
   });
 
-  module('size limit errors', function () {
+  module('size limit errors', function (hooks) {
+    // The helper's realm-building beforeEach runs for these tests too, and
+    // caches under this module's name, which the outer prefix cannot match.
+    setupRealmCacheTeardown(hooks);
+
     test('edit view shows size limit error when save exceeds limit', async function (assert) {
       let environmentService = getService('environment-service') as any;
       let originalMaxSize = environmentService.cardSizeLimitBytes;
