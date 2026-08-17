@@ -10,7 +10,7 @@
       "implemented": false,
       "evidenceTier": null,
       "auditStatus": "Missing",
-      "whereImplemented": "shared realm: survey-question.gts (Survey composes it; no separate questionnaire card)",
+      "whereImplemented": null,
       "reference": null,
       "catalogMatch": null,
       "provenance": null,

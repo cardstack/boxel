@@ -10,7 +10,7 @@
       "implemented": false,
       "evidenceTier": "POC realm",
       "auditStatus": "POC only",
-      "whereImplemented": "experiments-realm/boxel-software-matrix-layer/meeting.gts",
+      "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/meeting.gts (Meeting CardDef)",
       "reference": null,
       "catalogMatch": null,
       "provenance": "periodic:Meeting",

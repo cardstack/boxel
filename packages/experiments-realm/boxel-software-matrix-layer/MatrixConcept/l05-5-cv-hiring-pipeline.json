@@ -10,7 +10,7 @@
       "implemented": false,
       "evidenceTier": "POC realm",
       "auditStatus": "POC only",
-      "whereImplemented": "experiments-realm/talent-resource-tracker/talent-resource-tracker.gts — Pipeline tab (Kanban board by CandidateStatus stage)",
+      "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/talent-resource-tracker/talent-resource-tracker.gts — the Pipeline tab inside the app shell, not a separate component file",
       "reference": null,
       "catalogMatch": null,
       "provenance": null,

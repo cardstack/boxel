@@ -10,7 +10,7 @@
       "implemented": false,
       "evidenceTier": "Catalog listing",
       "auditStatus": "Extract from listing",
-      "whereImplemented": null,
+      "whereImplemented": "catalog: 7af9aa-blog-app/blog-post.gts — generic option set + transition graph; ticket-taxonomy.gts TicketStatusField is a consumer)",
       "reference": "catalog: 7af9aa-blog-app/blog-post.gts | experiments: experiments-realm/blog-post.gts",
       "catalogMatch": "catalog: 7af9aa-blog-app/blog-post.gts",
       "provenance": "periodic:Status",

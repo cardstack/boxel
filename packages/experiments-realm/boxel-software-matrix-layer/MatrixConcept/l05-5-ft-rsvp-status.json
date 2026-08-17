@@ -10,7 +10,7 @@
       "implemented": false,
       "evidenceTier": null,
       "auditStatus": "Missing",
-      "whereImplemented": "shared realm: rsvp-status-field.gts (statusField-based)",
+      "whereImplemented": null,
       "reference": null,
       "catalogMatch": null,
       "provenance": null,
