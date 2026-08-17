@@ -24,6 +24,17 @@ export const formulaLogicCases: CoverageCase[] = [
     input: { nickname: 'Ada' },
     expected: false,
   },
+  // A condition is read with jq truthiness, not Excel's: only null and false
+  // are false, so the number 0 takes the true branch where Excel takes the
+  // false one. The compiled-scalar copy of IF reads truthiness the same way.
+  // The blank call in the branch that is not taken is what keeps this program
+  // off the fast path and on the builtin this case covers.
+  {
+    covers: 'IF/3',
+    source: 'IF(.count, "some", ISBLANK(.count))',
+    input: { count: 0 },
+    expected: 'some',
+  },
   // One grading ladder per IFS arity, each won by a different band.
   {
     covers: 'IFS/4',

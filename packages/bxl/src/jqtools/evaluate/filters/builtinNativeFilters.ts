@@ -117,7 +117,8 @@ function applyBinaryMath(
 //   - `gamma/0` and `tgamma/0` both compute true Γ (Excel-canonical)
 //   - `atan2/2` follows jq/POSIX argument order (y; x) — see filter below
 //   - the sandbox has no I/O, so `input/0` and its siblings raise
-//     notImplementedError rather than reading a stream
+//     notImplementedError rather than reading a stream, and `inputs/0`
+//     yields the empty stream of a runtime that is out of inputs
 // ────────────────────────────────────────────────────────────────────
 
 const F64_BUF = new ArrayBuffer(8);
@@ -924,11 +925,9 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
       // NaN is not an infinity, so it is excluded here just as C's isinf
       // excludes it. isfinite/0 is defined in terms of this filter, so a NaN
       // counted as infinite would come back non-finite as well.
-      yield (
-        typeOf(input) === Type.number &&
+      yield typeOf(input) === Type.number &&
         !Number.isFinite(input as number) &&
-        !Number.isNaN(input as number)
-      );
+        !Number.isNaN(input as number);
     },
     *'isnan/0'(input: unknown) {
       yield typeOf(input) === Type.number && Number.isNaN(input as number);

@@ -724,7 +724,10 @@ function properValue(textLike: unknown) {
   // run of letters and nothing else: "2-way" becomes "2-Way".
   return parseExcelString(textLike)
     .toLowerCase()
-    .replace(/\p{L}+/gu, (word) => word.charAt(0).toUpperCase() + word.slice(1));
+    .replace(
+      /\p{L}+/gu,
+      (word) => word.charAt(0).toUpperCase() + word.slice(1),
+    );
 }
 
 function textJoin(
@@ -1776,9 +1779,7 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
     // TRIM is defined over the ASCII space alone: it collapses runs of spaces
     // between words and strips them from the ends, leaving tabs, newlines and
     // the non-breaking space to CLEAN and SUBSTITUTE.
-    yield parseExcelString(value)
-      .replace(/ +/g, ' ')
-      .replace(/^ | $/g, '');
+    yield parseExcelString(value).replace(/ +/g, ' ').replace(/^ | $/g, '');
   },
   *'TRUNC/1'(_input, value) {
     yield truncValue(value);

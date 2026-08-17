@@ -1216,7 +1216,7 @@ INDEX(.names, MATCH("target", .ids, 0))
 
 | Function                      | Description                                                                                                                    | Example                                                        |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------- |
-| `IF(test, then, else)`        | Excel-style conditional                                                                                                        | `IF(.score >= 90, "A", "B")`                                   |
+| `IF(test, then, else)`        | Excel-style conditional. The test is read with jq truthiness: only `null` and `false` are false, so `IF(0, …)` takes the true branch where Excel takes the false one. | `IF(.score >= 90, "A", "B")`   |
 | `IFERROR(val, fallback)`      | Catch any error                                                                                                                | `IFERROR(.x / .y, 0)`                                          |
 | `IFNA(val, fallback)`         | Catch only #N/A                                                                                                                | `IFNA(VLOOKUP(...), "missing")`                                |
 | `IFS(c1, v1, c2, v2, ...)`    | Multiple conditions (2--4 pairs)                                                                                               | `IFS(.x > 90, "A", .x > 80, "B", true, "C")`                   |
@@ -1341,7 +1341,7 @@ validation extension.
 | `isBase58`             | `isBase58(value)`                            | Base58 string.                                                                                                    |
 | `isBase64`             | `isBase64(value[, options])`                 | Base64 string.                                                                                                    |
 | `isBoolean`            | `isBoolean(value[, options])`                | Boolean string.                                                                                                   |
-| `isByteLength`         | `isByteLength(value[, options])`             | UTF-8 byte length range.                                                                                          |
+| `isByteLength`         | `isByteLength(value, options)`               | UTF-8 byte length range. Pass the options: upstream validator.js reads the minimum with no fallback, so the one-argument form compares against `undefined` and is false for every string. Its sibling `isLength` has the fallback. |
 | `isDecimal`            | `isDecimal(value[, options])`                | Decimal number string.                                                                                            |
 | `isDivisibleBy`        | `isDivisibleBy(value, number)`               | Numeric string divisible by number.                                                                               |
 | `isEmpty`              | `isEmpty(value[, options])`                  | Empty string.                                                                                                     |

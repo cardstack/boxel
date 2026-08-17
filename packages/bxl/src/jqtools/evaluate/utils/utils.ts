@@ -562,7 +562,8 @@ export function transformRegExpMatch(
     captures: match.slice(1).map((item, i) => {
       const name = captureNames[i] ?? null;
       // An optional group that did not participate has no text and no span.
-      if (item === undefined) return { offset: -1, length: 0, string: null, name };
+      if (item === undefined)
+        return { offset: -1, length: 0, string: null, name };
       return {
         offset: indices[i + 1]![0],
         length: item.length,

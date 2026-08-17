@@ -57,9 +57,13 @@ for (const readableSyntax of [true, false]) {
 }
 
 // A name may open with the exponent letter without being read as one.
-const named = evaluateBxl('.e5 + .e', { e5: 2, e: 3 }, {
-  readableSyntax: false,
-});
+const named = evaluateBxl(
+  '.e5 + .e',
+  { e5: 2, e: 3 },
+  {
+    readableSyntax: false,
+  },
+);
 strictEqual(named.value, 5, 'a field name starting with e survives');
 checks++;
 
