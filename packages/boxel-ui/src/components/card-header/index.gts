@@ -248,7 +248,7 @@ export default class CardHeader extends Component<Signature> {
       </header>
     {{/let}}
     <style scoped>
-      @layer {
+      @layer boxelComponentL4 {
         header {
           container-type: inline-size;
           container-name: card-header;

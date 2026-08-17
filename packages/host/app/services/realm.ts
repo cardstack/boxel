@@ -1278,7 +1278,11 @@ export default class RealmService extends Service {
     for (const realm of this.realms.keys()) {
       let paths = this.realmPathsCache.get(realm);
       if (!paths) {
-        paths = new RealmPaths(new URL(realm));
+        // Built from the identifier rather than parsed as a URL: a realm key
+        // is whatever form the realm was registered under, and only URL-form
+        // keys survive `new URL()`. The string overload ensures the trailing
+        // slash the URL constructor would have supplied.
+        paths = new RealmPaths(ri(realm));
         this.realmPathsCache.set(realm, paths);
       }
       if (paths.inRealm(id)) {

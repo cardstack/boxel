@@ -1,3 +1,7 @@
+// See formulajs/bessel.ts for why this is a reference rather than a
+// tsconfig include or an import.
+// eslint-disable-next-line @typescript-eslint/triple-slash-reference
+/// <reference path="../../types/validator.d.ts" />
 import validatorPackage from 'validator';
 import type { BareNativeFilter } from '../../jqtools/evaluate/filters/lib/nativeFilter.ts';
 import { wrapBareNativeFilters } from '../../jqtools/evaluate/filters/lib/nativeFilter.ts';

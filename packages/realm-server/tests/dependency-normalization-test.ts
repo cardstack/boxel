@@ -59,6 +59,7 @@ module(basename(import.meta.filename), function () {
         'http://test/realm/logo.png',
         'http://test/realm/notes.md',
         'http://test/realm/song.mp3',
+        'http://test/realm/report.pdf',
         'http://test/realm/hello.test.gts',
         'http://test/realm/bundled.js',
         'http://test/realm/person.json',
@@ -85,8 +86,8 @@ module(basename(import.meta.filename), function () {
         ],
       );
       assert.deepEqual(
-        forms('http://test/realm/report.pdf', network),
-        ['http://test/realm/report.pdf', 'http://test/realm/report.pdf.json'],
+        forms('http://test/realm/report.v2', network),
+        ['http://test/realm/report.v2', 'http://test/realm/report.v2.json'],
         'a file the FileDef registry does not name keeps its own URL alongside the card-id form',
       );
       assert.deepEqual(

@@ -100,7 +100,7 @@ minutes.
 - Write at least one sample card instance (`.json`) using the SAME sample
   data as the mockup.
 - Write a Catalog Spec card (`Spec/<card-slug>.json`, adoptsFrom
-  `https://cardstack.com/base/spec#Spec`) linking the sample instances via
+  `@cardstack/base/spec#Spec`) linking the sample instances via
   `linkedExamples`, with its catalog-facing `title` and one-sentence
   `description` attributes populated (never left empty).
 

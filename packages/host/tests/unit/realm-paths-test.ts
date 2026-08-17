@@ -3,6 +3,7 @@ import { module, test } from 'qunit';
 import {
   RealmPaths,
   inferContentType,
+  ri,
   rri,
   toSafeFileName,
 } from '@cardstack/runtime-common';
@@ -115,6 +116,37 @@ module('Unit | RealmPaths', function (hooks) {
       realmPaths.inRealm(rri('https://cardstack.com/hümans/example?a=1&b=2')),
       'local path with a query string is in realm',
     );
+  });
+
+  test('the two constructor overloads describe the same realm', function (assert) {
+    // A caller holding a realm identifier uses the string overload; one holding
+    // a URL uses the other. Both must answer for the same realm, including when
+    // the identifier itself carries percent-escapes — `inRealm` decodes the
+    // candidate, so a realm left encoded would match neither the encoded form
+    // nor the decoded one.
+    let fromId = new RealmPaths(ri('https://cardstack.com/h%C3%BCmans/'));
+    let fromURL = new RealmPaths(new URL('https://cardstack.com/h%C3%BCmans/'));
+
+    assert.strictEqual(
+      fromId.url,
+      fromURL.url,
+      'an encoded identifier and the same URL produce one realm url',
+    );
+
+    for (let candidate of [
+      'https://cardstack.com/h%C3%BCmans/example',
+      'https://cardstack.com/hümans/example',
+    ]) {
+      assert.true(
+        fromId.inRealm(rri(candidate)),
+        `${candidate} is in the realm built from the identifier`,
+      );
+      assert.strictEqual(
+        fromId.local(rri(candidate)),
+        'example',
+        `${candidate} resolves to its local path`,
+      );
+    }
   });
 
   test('#toSafeFileName leaves ordinary names alone', function (assert) {

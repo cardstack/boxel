@@ -45,6 +45,7 @@ import {
   realmURL as realmURLSymbol,
   localId as localIdSymbol,
   meta,
+  ri,
   rri,
   logger,
   formattedError,
@@ -1248,7 +1249,7 @@ export default class StoreService extends Service implements StoreInterface {
   // this to mean "search nothing" rather than "search everything").
   private normalizeRealmPaths(realms: string[] | undefined): string[] {
     return (realms ?? [])
-      .map((realm) => new RealmPaths(new URL(realm)).url)
+      .map((realm) => new RealmPaths(ri(realm)).url)
       .filter(Boolean);
   }
 
@@ -3496,9 +3497,9 @@ function resolveDocUrl(id?: string, realm?: string, local?: string) {
   if (!realm) {
     throw new Error('Cannot resolve target url without a realm');
   }
-  let path = new RealmPaths(new URL(realm));
+  let path = new RealmPaths(ri(realm));
   if (local) {
-    return path.directoryURL(local).href;
+    return path.directoryRRI(local);
   }
   return path.url;
 }

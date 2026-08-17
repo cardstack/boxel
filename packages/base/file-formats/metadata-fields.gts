@@ -24,9 +24,12 @@ import RulerIcon from '@cardstack/boxel-icons/ruler';
 import TagIcon from '@cardstack/boxel-icons/tag';
 import KeyboardMusicIcon from '@cardstack/boxel-icons/keyboard-music';
 import TagsIcon from '@cardstack/boxel-icons/tags';
+import TypographyIcon from '@cardstack/boxel-icons/typography';
 
 import FileCodeIcon from '@cardstack/boxel-icons/file-code';
 import FileInfoIcon from '@cardstack/boxel-icons/file-info';
+import CubeIcon from '@cardstack/boxel-icons/cube';
+import FileTextIcon from '@cardstack/boxel-icons/file-text';
 
 import {
   Component,
@@ -534,7 +537,9 @@ export class MediaEncodingField extends FieldDef {
             >{{@model.container}}</dd></div>
         {{/if}}
         {{#if @model.videoCodec}}
-          <div class='row'><dt>Video</dt><dd class='mono'>{{@model.videoCodec}}</dd></div>
+          <div class='row'><dt>Video</dt><dd
+              class='mono'
+            >{{@model.videoCodec}}</dd></div>
         {{/if}}
         {{#if @model.audioCodec}}
           <div class='row'><dt>{{if @model.videoCodec 'Audio' 'Codec'}}</dt><dd
@@ -542,7 +547,8 @@ export class MediaEncodingField extends FieldDef {
             >{{@model.audioCodec}}</dd></div>
         {{/if}}
         {{#if @model.frameRate.display}}
-          <div class='row'><dt>Frame rate</dt><dd><@fields.frameRate /></dd></div>
+          <div class='row'><dt>Frame rate</dt><dd><@fields.frameRate
+              /></dd></div>
         {{/if}}
         {{#if @model.sampleRate.display}}
           <div class='row'><dt>Sample rate</dt><dd><@fields.sampleRate
@@ -910,6 +916,138 @@ export class MidiMetadataField extends FieldDef {
   };
 }
 
+// What a font file says about itself, read from its own sfnt tables — the name
+// table's identity strings, OS/2's weight/width/vendor, head's em grid, maxp's
+// glyph count, and fvar's variation axes. Shared across every font family
+// (WOFF2/WOFF/TTF/OTF) because the tables read identically regardless of how the
+// bytes were wrapped. Absent for a WOFF2, whose tables are Brotli-compressed and
+// unreadable in the browser extract pass; the live specimen renders anyway.
+export class FontMetadataField extends FieldDef {
+  static displayName = 'Font Metadata';
+  static icon = TypographyIcon;
+
+  @field familyName = contains(StringField);
+  // The named style within the family, e.g. "Bold Italic".
+  @field subfamilyName = contains(StringField);
+  @field fullName = contains(StringField);
+  @field postscriptName = contains(StringField);
+  @field versionName = contains(StringField);
+  // Manufacturer from the name table; `vendorId` is the OS/2 four-character
+  // fallback shown when the name table names no foundry.
+  @field foundry = contains(StringField);
+  @field vendorId = contains(StringField);
+  // OS/2 usWeightClass (100–900).
+  @field weightClass = contains(NumberField);
+  // Label derived from usWidthClass, set only when the face isn't normal width.
+  @field widthName = contains(StringField);
+  @field glyphCount = contains(NumberField);
+  @field unitsPerEm = contains(NumberField);
+  // 'TrueType' or 'PostScript/CFF'.
+  @field outlineType = contains(StringField);
+  @field isVariable = contains(BooleanField);
+  // Query-only style facets: persisted so a search can filter for italic or bold
+  // faces, but deliberately not rendered — the specimen and the isolated
+  // inspector already convey style through `subfamilyName · weightClass`, so
+  // surfacing the raw booleans too would only duplicate it.
+  @field isItalic = contains(BooleanField);
+  @field isBold = contains(BooleanField);
+  // Variation axes as display labels, e.g. "Weight (wght) 100–900".
+  @field axes = containsMany(StringField);
+
+  static embedded = class Embedded extends Component<typeof FontMetadataField> {
+    // The em grid and the outline flavor read as one line — "TrueType ·
+    // variable · 2048 upm" — rather than three near-empty rows.
+    get technicalSummary() {
+      let parts: string[] = [];
+      if (this.args.model?.outlineType) {
+        parts.push(this.args.model.outlineType);
+      }
+      if (this.args.model?.isVariable) {
+        parts.push('variable');
+      }
+      if (this.args.model?.unitsPerEm) {
+        parts.push(`${this.args.model.unitsPerEm} upm`);
+      }
+      return parts.join(' · ');
+    }
+
+    // The name-table foundry is the better label; the OS/2 vendor tag is the
+    // honest fallback that at least identifies who stamped the file.
+    get vendor() {
+      return this.args.model?.foundry || this.args.model?.vendorId;
+    }
+
+    <template>
+      <dl class='metadata-rows'>
+        {{#if @model.familyName}}
+          <div class='row'><dt>Family</dt><dd>{{@model.familyName}}</dd></div>
+        {{/if}}
+        {{#if @model.subfamilyName}}
+          <div class='row'><dt>Style</dt><dd>{{@model.subfamilyName}}</dd></div>
+        {{/if}}
+        {{#if @model.weightClass}}
+          <div class='row'><dt>Weight</dt><dd>{{@model.weightClass}}</dd></div>
+        {{/if}}
+        {{#if @model.widthName}}
+          <div class='row'><dt>Width</dt><dd>{{@model.widthName}}</dd></div>
+        {{/if}}
+        {{#if @model.glyphCount}}
+          <div class='row'><dt>Glyphs</dt><dd>{{@model.glyphCount}}</dd></div>
+        {{/if}}
+        {{#if this.technicalSummary}}
+          <div class='row'><dt>Outline</dt><dd>{{this.technicalSummary}}</dd></div>
+        {{/if}}
+        {{#if @model.axes.length}}
+          <div class='row'><dt>Axes</dt><dd class='list'>{{#each
+                @model.axes as |axis|
+              }}<span>{{axis}}</span>{{/each}}</dd></div>
+        {{/if}}
+        {{#if @model.postscriptName}}
+          <div class='row'><dt>PostScript</dt><dd>{{@model.postscriptName}}</dd></div>
+        {{/if}}
+        {{#if this.vendor}}
+          <div class='row'><dt>Vendor</dt><dd>{{this.vendor}}</dd></div>
+        {{/if}}
+        {{#if @model.versionName}}
+          <div class='row'><dt>Version</dt><dd>{{@model.versionName}}</dd></div>
+        {{/if}}
+      </dl>
+      <style scoped>
+        .metadata-rows {
+          margin: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 0.3125rem;
+          font-size: 0.75rem;
+        }
+        .row {
+          display: flex;
+          gap: 0.625rem;
+          align-items: baseline;
+        }
+        dt {
+          flex: 0 0 5.75rem;
+          font-family: var(--font-mono);
+          font-size: 0.5625rem;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          color: var(--muted-foreground);
+        }
+        dd {
+          margin: 0;
+          min-width: 0;
+          overflow-wrap: anywhere;
+        }
+        .list {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.125rem 0.5rem;
+        }
+      </style>
+    </template>
+  };
+}
+
 // The structural shape of an HTML document: what the markup contains, not what
 // the browser would paint. `isInteractive` is the one derived member —
 // authored scripts or form controls make a document interactive — and it is
@@ -1016,6 +1154,361 @@ export class HtmlMetadataField extends FieldDef {
         dd {
           margin: 0;
           min-width: 0;
+        }
+      </style>
+    </template>
+  };
+}
+
+// The 3D model family's metadata shape (STL, 3MF, and — once their leaves land —
+// glTF/GLB). One field for the whole family, projected onto the isolated shell's
+// `3D model` inspector section, the same way `encoding` serves audio and video.
+//
+// Every fact here is read from the file's HEAD at index time (see the
+// `*-meta-extractor` modules). The true geometry — transform-correct dimensions,
+// full triangle counts — is deliberately left to the live client-side viewer
+// (`Model3DPreview`), which already loads and measures the mesh; paying for a
+// full geometry scan at index time would duplicate that for no gain. So a value
+// is present here only when it sits cheaply in the header: a binary STL's facet
+// count, a slicer 3MF's configured face/part counts, the package's materials and
+// provenance.
+export class Model3dMetadataField extends FieldDef {
+  static displayName = '3D Model Metadata';
+  static icon = CubeIcon;
+
+  // Human label for the concrete format, e.g. `Binary STL` / `3MF package`.
+  @field format = contains(StringField);
+  // Mesh/object count. An STL is exactly one solid, so it reports 1; a slicer
+  // 3MF reports its configured print-part count. Read by the isolated shell's
+  // `hasModel3d` gate together with `triangles`.
+  @field meshes = contains(NumberField);
+  // Triangle/facet count where the header carries it (a binary STL's facet
+  // count, a slicer 3MF's summed configured face count); absent otherwise.
+  @field triangles = contains(NumberField);
+  @field materials = contains(NumberField);
+  @field materialNames = containsMany(StringField);
+  @field unit = contains(StringField);
+  // Authoring/slicer application (3MF) or the binary STL header string.
+  @field generator = contains(StringField);
+  @field solidName = contains(StringField);
+  @field designer = contains(StringField);
+  @field license = contains(StringField);
+  @field plateCount = contains(NumberField);
+  @field printPartCount = contains(NumberField);
+  @field extruderCount = contains(NumberField);
+  @field hasColorData = contains(BooleanField);
+
+  static embedded = class Embedded extends Component<
+    typeof Model3dMetadataField
+  > {
+    get materialList() {
+      return (this.args.model?.materialNames ?? []).join(', ');
+    }
+
+    <template>
+      <dl class='metadata-rows'>
+        {{#if @model.format}}
+          <div class='row'><dt>Format</dt><dd>{{@model.format}}</dd></div>
+        {{/if}}
+        {{#if @model.solidName}}
+          <div class='row'><dt>Solid</dt><dd>{{@model.solidName}}</dd></div>
+        {{/if}}
+        {{#if @model.meshes}}
+          <div class='row'><dt>Meshes</dt><dd>{{@model.meshes}}</dd></div>
+        {{/if}}
+        {{#if @model.triangles}}
+          <div class='row'><dt>Triangles</dt><dd>{{@model.triangles}}</dd></div>
+        {{/if}}
+        {{#if @model.unit}}
+          <div class='row'><dt>Units</dt><dd>{{@model.unit}}</dd></div>
+        {{/if}}
+        {{#if @model.materialNames.length}}
+          <div class='row'><dt>Materials</dt><dd
+            >{{this.materialList}}</dd></div>
+        {{else if @model.materials}}
+          <div class='row'><dt>Materials</dt><dd>{{@model.materials}}</dd></div>
+        {{/if}}
+        {{#if @model.plateCount}}
+          <div class='row'><dt>Plates</dt><dd>{{@model.plateCount}}</dd></div>
+        {{/if}}
+        {{#if @model.printPartCount}}
+          <div class='row'><dt>Print parts</dt><dd
+            >{{@model.printPartCount}}</dd></div>
+        {{/if}}
+        {{#if @model.extruderCount}}
+          <div class='row'><dt>Extruders</dt><dd
+            >{{@model.extruderCount}}</dd></div>
+        {{/if}}
+        {{#if @model.designer}}
+          <div class='row'><dt>Designer</dt><dd>{{@model.designer}}</dd></div>
+        {{/if}}
+        {{#if @model.generator}}
+          <div class='row'><dt>Generator</dt><dd
+              class='mono'
+            >{{@model.generator}}</dd></div>
+        {{/if}}
+        {{#if @model.license}}
+          <div class='row'><dt>License</dt><dd>{{@model.license}}</dd></div>
+        {{/if}}
+        {{#if @model.hasColorData}}
+          <div class='row'><dt>Vertex colors</dt><dd>Present</dd></div>
+        {{/if}}
+      </dl>
+      <style scoped>
+        .metadata-rows {
+          margin: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 0.3125rem;
+          font-size: 0.75rem;
+        }
+        .row {
+          display: flex;
+          gap: 0.625rem;
+          align-items: baseline;
+        }
+        dt {
+          flex: 0 0 5.75rem;
+          font-family: var(--font-mono);
+          font-size: 0.5625rem;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          color: var(--muted-foreground);
+        }
+        dd {
+          margin: 0;
+          min-width: 0;
+          overflow-wrap: anywhere;
+        }
+        .mono {
+          font-family: var(--font-mono);
+        }
+      </style>
+    </template>
+  };
+}
+
+// What a document says about itself: how long it is, what it calls itself, and
+// the tools that made it. Read from a PDF's Info dictionary and page tree today;
+// the same shape fits an Office core-properties block, so it is named for the
+// document family rather than for PDF. Absent for an encrypted document, whose
+// Info strings are ciphertext (`encrypted` records that, so a consumer can tell
+// "no title" from "title withheld").
+export class DocumentInfoField extends FieldDef {
+  static displayName = 'Document Info';
+  static icon = FileTextIcon;
+
+  @field title = contains(StringField);
+  @field author = contains(StringField);
+  @field subject = contains(StringField);
+  @field keywords = contains(StringField);
+  // The authoring application (a PDF's `/Creator`).
+  @field creator = contains(StringField);
+  // The library that wrote the file (a PDF's `/Producer`).
+  @field producer = contains(StringField);
+  @field pageCount = contains(NumberField);
+  @field pdfVersion = contains(StringField);
+  @field created = contains(DateTimeField);
+  @field encrypted = contains(BooleanField);
+
+  static embedded = class Embedded extends Component<typeof DocumentInfoField> {
+    // The authoring tool and the writer library read as one provenance line
+    // rather than two near-duplicate rows.
+    get madeWith() {
+      let parts = [this.args.model?.creator, this.args.model?.producer].filter(
+        Boolean,
+      );
+      return parts.join(' · ');
+    }
+
+    <template>
+      <dl class='metadata-rows'>
+        {{#if @model.pageCount}}
+          <div class='row'><dt>Pages</dt><dd>{{@model.pageCount}}</dd></div>
+        {{/if}}
+        {{#if @model.title}}
+          <div class='row'><dt>Title</dt><dd>{{@model.title}}</dd></div>
+        {{/if}}
+        {{#if @model.author}}
+          <div class='row'><dt>Author</dt><dd>{{@model.author}}</dd></div>
+        {{/if}}
+        {{#if @model.subject}}
+          <div class='row'><dt>Subject</dt><dd>{{@model.subject}}</dd></div>
+        {{/if}}
+        {{#if @model.created}}
+          <div class='row'><dt>Created</dt><dd><@fields.created /></dd></div>
+        {{/if}}
+        {{#if this.madeWith}}
+          <div class='row'><dt>Made with</dt><dd>{{this.madeWith}}</dd></div>
+        {{/if}}
+        {{#if @model.pdfVersion}}
+          <div class='row'><dt>PDF version</dt><dd>{{@model.pdfVersion}}</dd></div>
+        {{/if}}
+        {{#if @model.encrypted}}
+          <div class='row'><dt>Security</dt><dd>Encrypted</dd></div>
+        {{/if}}
+      </dl>
+      <style scoped>
+        .metadata-rows {
+          margin: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 0.3125rem;
+          font-size: 0.75rem;
+        }
+        .row {
+          display: flex;
+          gap: 0.625rem;
+          align-items: baseline;
+        }
+        dt {
+          flex: 0 0 5.75rem;
+          font-family: var(--font-mono);
+          font-size: 0.5625rem;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          color: var(--muted-foreground);
+        }
+        dd {
+          margin: 0;
+          min-width: 0;
+          overflow-wrap: anywhere;
+        }
+      </style>
+    </template>
+  };
+}
+
+// What an Office document says about itself. One shape across Word, PowerPoint,
+// and Excel — they share the same core/extended properties block — with the one
+// structural count that matters to each format (`pageCount` for a document,
+// `slideCount` for a deck, `sheetCount` for a workbook) left unset for the
+// others. `previewJson` carries the bounded structural preview the family
+// renderer draws; it is a serialized string rather than nested fields for the
+// same reason `WaveformMetadataField.barsJson` is — nothing queries an
+// individual paragraph, slide, or cell, and one short string costs far less to
+// index and rehydrate than hundreds of field instances.
+export class OfficeMetadataField extends FieldDef {
+  static displayName = 'Office Metadata';
+  static icon = FileTextIcon;
+
+  // 'word' | 'presentation' | 'spreadsheet' — which Office format this is, so
+  // the renderer and the count label match without sniffing the extension.
+  @field kind = contains(StringField);
+  @field title = contains(StringField);
+  // The `dc:creator`. Named to match the serialized property; labeled "Author"
+  // where it shows, which is how the format presents it.
+  @field creator = contains(StringField);
+  @field subject = contains(StringField);
+  @field keywords = contains(StringField);
+  @field description = contains(StringField);
+  @field lastModifiedBy = contains(StringField);
+  @field application = contains(StringField);
+  @field company = contains(StringField);
+  @field created = contains(DateTimeField);
+  @field modified = contains(DateTimeField);
+  @field pageCount = contains(NumberField);
+  @field wordCount = contains(NumberField);
+  @field slideCount = contains(NumberField);
+  @field sheetCount = contains(NumberField);
+  @field sheetNames = containsMany(StringField);
+  @field previewJson = contains(TextAreaField);
+
+  static embedded = class Embedded extends Component<
+    typeof OfficeMetadataField
+  > {
+    // The structural count that matters to this format, phrased for it.
+    get structure() {
+      let m = this.args.model;
+      if (m?.kind === 'presentation' && m?.slideCount != null) {
+        return `${m.slideCount} ${m.slideCount === 1 ? 'slide' : 'slides'}`;
+      }
+      if (m?.kind === 'spreadsheet' && m?.sheetCount != null) {
+        return `${m.sheetCount} ${m.sheetCount === 1 ? 'sheet' : 'sheets'}`;
+      }
+      if (m?.pageCount != null) {
+        let pages = `${m.pageCount} ${m.pageCount === 1 ? 'page' : 'pages'}`;
+        return m.wordCount != null
+          ? `${pages} · ${m.wordCount.toLocaleString()} words`
+          : pages;
+      }
+      return '';
+    }
+
+    // The authoring application and the company the template carried, read as
+    // one provenance line rather than two near-duplicate rows.
+    get madeWith() {
+      return [this.args.model?.application, this.args.model?.company]
+        .filter(Boolean)
+        .join(' · ');
+    }
+
+    <template>
+      <dl class='metadata-rows'>
+        {{#if this.structure}}
+          <div class='row'><dt>Structure</dt><dd>{{this.structure}}</dd></div>
+        {{/if}}
+        {{#if @model.title}}
+          <div class='row'><dt>Title</dt><dd>{{@model.title}}</dd></div>
+        {{/if}}
+        {{#if @model.creator}}
+          <div class='row'><dt>Author</dt><dd>{{@model.creator}}</dd></div>
+        {{/if}}
+        {{#if @model.subject}}
+          <div class='row'><dt>Subject</dt><dd>{{@model.subject}}</dd></div>
+        {{/if}}
+        {{#if @model.keywords}}
+          <div class='row'><dt>Keywords</dt><dd>{{@model.keywords}}</dd></div>
+        {{/if}}
+        {{#if @model.sheetNames.length}}
+          <div class='row'><dt>Sheets</dt><dd class='list'>{{#each
+                @model.sheetNames as |sheet|
+              }}<span>{{sheet}}</span>{{/each}}</dd></div>
+        {{/if}}
+        {{#if @model.lastModifiedBy}}
+          <div class='row'><dt>Last edited by</dt><dd
+            >{{@model.lastModifiedBy}}</dd></div>
+        {{/if}}
+        {{#if @model.created}}
+          <div class='row'><dt>Created</dt><dd><@fields.created /></dd></div>
+        {{/if}}
+        {{#if @model.modified}}
+          <div class='row'><dt>Modified</dt><dd><@fields.modified /></dd></div>
+        {{/if}}
+        {{#if this.madeWith}}
+          <div class='row'><dt>Made with</dt><dd>{{this.madeWith}}</dd></div>
+        {{/if}}
+      </dl>
+      <style scoped>
+        .metadata-rows {
+          margin: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 0.3125rem;
+          font-size: 0.75rem;
+        }
+        .row {
+          display: flex;
+          gap: 0.625rem;
+          align-items: baseline;
+        }
+        dt {
+          flex: 0 0 5.75rem;
+          font-family: var(--font-mono);
+          font-size: 0.5625rem;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          color: var(--muted-foreground);
+        }
+        dd {
+          margin: 0;
+          min-width: 0;
+          overflow-wrap: anywhere;
+        }
+        .list {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.125rem 0.5rem;
         }
       </style>
     </template>

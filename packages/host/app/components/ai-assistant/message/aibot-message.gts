@@ -133,6 +133,7 @@ export default class FormattedAiBotMessage extends Component<Signature> {
             }}
             @monacoSDK={{@monacoSDK}}
             @isLastAssistantMessage={{@isLastAssistantMessage}}
+            @isStreaming={{@isStreaming}}
             @userMessageThisMessageIsRespondingTo={{@userMessageThisMessageIsRespondingTo}}
             @index={{this.preTagGroupIndex index}}
             @codePatchStatus={{this.codePatchStatus htmlPart.codeData}}
@@ -192,6 +193,7 @@ interface HtmlGroupCodeBlockSignature {
     onPatchCode: (codeData: CodeData) => void;
     monacoSDK: MonacoSDK;
     isLastAssistantMessage: boolean;
+    isStreaming: boolean;
     userMessageThisMessageIsRespondingTo?: MatrixMessage;
     index: number;
     codePatchStatus: CodePatchStatus | 'applying' | 'ready';
@@ -250,6 +252,20 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
     return this.args.codePatchStatus === 'applied'
       ? this.args.codePatchResult?.finalFileUrlAfterCodePatching
       : null;
+  }
+
+  // A block that opened a SEARCH marker but never resolved into a complete
+  // search/replace block is unapplyable, and without this reads as an ordinary
+  // code block with stray box-drawing characters in it. Wait for streaming to
+  // finish first, since a patch mid-stream is incomplete for a moment.
+  private get showMalformedPatchError() {
+    return !this.args.isStreaming && this.args.codeData.malformedPatch;
+  }
+
+  private get malformedPatchMessage() {
+    return this.errorMessage(
+      'the search/replace markers in this block are malformed, so it cannot be applied automatically.',
+    );
   }
 
   private get codePatchErrorMessage() {
@@ -393,6 +409,18 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
         <codeBlock.actions as |actions|>
           <actions.copyCode @textToCopy={{@codeData.code}} />
         </codeBlock.actions>
+        {{#if this.showMalformedPatchError}}
+          <codeBlock.patchFooter>
+            <Alert
+              @type='error'
+              class='code-patch-error'
+              data-test-malformed-patch-error
+              as |Alert|
+            >
+              <Alert.Messages @messages={{array this.malformedPatchMessage}} />
+            </Alert>
+          </codeBlock.patchFooter>
+        {{/if}}
       {{/if}}
     </CodeBlock>
 

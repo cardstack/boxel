@@ -77,7 +77,7 @@ non-obvious translation decision, and when recovering from a failed check.
 - Write sample card instances (`.json`) using the SAME sample data as the
   mockup.
 - Write a Catalog Spec card (`Spec/<card-slug>.json`, adoptsFrom
-  `https://cardstack.com/base/spec#Spec`) linking sample instances via
+  `@cardstack/base/spec#Spec`) linking sample instances via
   `linkedExamples`, with `title` and one-sentence `description` populated.
 
 ## 3. VERIFY

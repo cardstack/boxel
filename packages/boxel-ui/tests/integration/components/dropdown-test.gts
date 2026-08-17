@@ -79,4 +79,45 @@ module('Integration | Component | dropdown', function (hooks) {
       .dom('[data-test-boxel-dropdown-content-2]')
       .exists('dropdown should stay open when autoClose is false');
   });
+
+  test('--boxel-dropdown-background-color wins over ember-basic-dropdown', async function (assert) {
+    // ember-basic-dropdown paints .ember-basic-dropdown-content white. That
+    // rule is less specific than the scoped .boxel-dropdown__content rule, so
+    // it can only win by sitting in a higher cascade layer — which is what
+    // happens when the layer order statement is lost during bundling.
+    document.documentElement.style.setProperty(
+      '--boxel-dropdown-background-color',
+      'rgb(1, 2, 3)',
+    );
+    try {
+      await render(
+        <template>
+          <BoxelDropdown>
+            <:trigger as |dd|>
+              <button data-test-dropdown-trigger {{dd}}>Open</button>
+            </:trigger>
+            <:content>
+              <div>content</div>
+            </:content>
+          </BoxelDropdown>
+        </template>,
+      );
+
+      await click('[data-test-dropdown-trigger]');
+      await waitFor('[data-test-boxel-dropdown-content]');
+
+      const content = document.querySelector(
+        '[data-test-boxel-dropdown-content]',
+      )!;
+      assert.strictEqual(
+        getComputedStyle(content).backgroundColor,
+        'rgb(1, 2, 3)',
+        'the documented custom property paints the dropdown',
+      );
+    } finally {
+      document.documentElement.style.removeProperty(
+        '--boxel-dropdown-background-color',
+      );
+    }
+  });
 });

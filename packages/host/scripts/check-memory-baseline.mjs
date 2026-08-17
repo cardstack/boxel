@@ -3,7 +3,7 @@
 // Compares per-module memory deltas from a CI run against a committed baseline.
 // Exits 0 on pass/warn, exits 1 on hard failure — when a module's delta clears
 // its recent ceiling by more than the larger of +50MB, 100% of the baseline, or
-// the module's own observed run-to-run swing.
+// the module's own demonstrated run-to-run noise band.
 //
 // Usage: node check-memory-baseline.mjs <reports-dir> <baseline-json>
 //
@@ -74,20 +74,33 @@ const baselineCeiling = (entry) => {
   return entry?.delta_mb;
 };
 
-// The peak-to-peak spread of the recent window (max sample − min sample). This
-// is the module's own demonstrated run-to-run noise: a module whose post-GC
-// boundary delta swings because the settle-GC drains a large transient on some
-// runs but not others will show a wide spread even with no leak. The hard gate
-// folds this spread into its threshold so a value inside the module's already-
-// exhibited swing can't block the build — an all-negative window like
-// [-73, -74, -8, -19, -120] spans 112MB, so a one-off +54 reading is noise, not
-// a regression, even though it clears the (floored-at-zero) ceiling by >50MB.
-// Modules with a tight window (spread < the absolute hard threshold) are
-// unaffected. Zero for a single-value baseline that carries no sample window,
-// leaving the absolute/relative thresholds to govern on their own.
-const baselineSpread = (entry) => {
+// The module's demonstrated run-to-run noise band: the span from the lowest
+// recent sample up to the recent ceiling, with the ceiling floored at zero the
+// same way the hard gate floors it. This is the swing the module has already
+// exhibited with no code change — the post-GC boundary delta moves run-to-run
+// because the settle-GC drains large transients on one side of the module
+// boundary on some runs and the other side on others.
+//
+// A negative sample is pure drain-timing noise (a module cannot net-free
+// memory it never retained), and the slosh it measures is directionally
+// symmetric: garbage that drained 90MB late into this module's window (a -90
+// reading) can just as easily linger past the module's end boundary and land
+// as a comparable positive reading. So an all-negative window like
+// [-50.7, -58.6, -90.9, -69.8, -69.8] demonstrates a ~91MB noise band, and a
+// +72.8 reading is inside the module's own swing, not a regression — even
+// though it clears the floored-at-zero ceiling by more than the absolute
+// threshold and the window's raw peak-to-peak spread is small.
+//
+// For a window containing positive samples the floor is a no-op and this
+// reduces to the plain peak-to-peak spread. Modules with a tight window are
+// unaffected — the absolute/relative terms govern. Zero until the window
+// holds at least two samples: a single reading demonstrates no run-to-run
+// swing, so a newly baselined module stays behind the absolute threshold
+// until it has real history. Also zero for a legacy single-value baseline
+// that carries no sample window at all.
+const baselineNoiseBand = (entry) => {
   if (Array.isArray(entry?.samples) && entry.samples.length > 1) {
-    return Math.max(...entry.samples) - Math.min(...entry.samples);
+    return Math.max(Math.max(...entry.samples), 0) - Math.min(...entry.samples);
   }
   return 0;
 };
@@ -135,18 +148,18 @@ for (const [mod, data] of Object.entries(current)) {
     SOFT_ABSOLUTE_MB,
     effectiveBase * SOFT_RELATIVE,
   );
-  // The hard threshold also absorbs the module's demonstrated peak-to-peak
-  // noise. When a module's recent window is entirely negative, its mean baseline
-  // and its ceiling both floor to zero, so the +50MB absolute term alone would
+  // The hard threshold also absorbs the module's demonstrated noise band.
+  // When a module's recent window is entirely negative, its mean baseline and
+  // its ceiling both floor to zero, so the +50MB absolute term alone would
   // block any single reading over 50MB — even from a module that routinely
   // swings by >100MB and merely landed positive this run. Sizing the threshold
-  // to the observed swing means a run has to clear the recent ceiling by more
-  // than the module's own run-to-run range before it blocks; tighter-window
-  // modules fall back to the absolute/relative terms.
+  // to the noise band means a run has to clear the recent ceiling by more than
+  // the module's own run-to-run range before it blocks; tighter-window modules
+  // fall back to the absolute/relative terms.
   const hardThreshold = Math.max(
     HARD_ABSOLUTE_MB,
     effectiveBase * HARD_RELATIVE,
-    baselineSpread(base),
+    baselineNoiseBand(base),
   );
 
   const pct =
@@ -191,12 +204,16 @@ if (failures.length === 0 && warnings.length === 0) {
 }
 
 const samplesWindow = baseline.samplesWindow ?? 1;
+// "up to": modules newer than the window cap carry fewer samples, as does
+// every module while an existing baseline grows toward a raised cap.
 const baselineHeader =
-  samplesWindow > 1 ? `Baseline (mean of last ${samplesWindow})` : 'Baseline';
+  samplesWindow > 1
+    ? `Baseline (mean of up to ${samplesWindow} samples)`
+    : 'Baseline';
 
 if (failures.length > 0) {
   lines.push(
-    `### Failures (over recent ceiling by >${HARD_ABSOLUTE_MB}MB, >${HARD_RELATIVE * 100}%, or the observed swing)\n`,
+    `### Failures (over recent ceiling by >${HARD_ABSOLUTE_MB}MB, >${HARD_RELATIVE * 100}%, or the demonstrated noise band)\n`,
   );
   lines.push(
     `| Module | ${baselineHeader} | Current | Change | Recent samples |`,

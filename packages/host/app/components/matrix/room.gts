@@ -62,6 +62,7 @@ import type { Query } from '@cardstack/runtime-common/query';
 
 import ENV from '@cardstack/host/config/environment';
 import type { FileUploadState } from '@cardstack/host/lib/file-upload-state';
+import { formatTokenUsage } from '@cardstack/host/lib/format-token-usage';
 import type { Message } from '@cardstack/host/lib/matrix-classes/message';
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 import { isAutoExecutableTool } from '@cardstack/host/lib/tool-auto-execute';
@@ -220,6 +221,16 @@ export default class Room extends Component<Signature> {
                   @messages={{array this.unknownMessageSendError}}
                 />
               </Alert>
+            {{/if}}
+
+            {{#if this.conversationTokenUsage}}
+              <div
+                class='conversation-token-usage'
+                data-test-conversation-token-usage
+              >
+                Session total:
+                {{this.conversationTokenUsage}}
+              </div>
             {{/if}}
           {{/if}}
         </AiAssistantConversation>
@@ -486,6 +497,25 @@ export default class Room extends Component<Signature> {
         align-items: center;
         height: 100%;
         gap: 4px;
+      }
+
+      .conversation-token-usage {
+        width: fit-content;
+        /* Extra top margin keeps the summary clear of the last message's own
+           usage line, so the two never read as an accidental pair. */
+        margin: var(--boxel-sp) auto 0;
+        padding: 0.1875rem 0.75rem;
+        /* Bordered chip, one notch brighter and heavier than the
+           per-message lines: the session total is the headline figure.
+           Palette note: the assistant panel is a fixed dark surface, so this
+           follows its local palette rather than the light-themed semantic
+           role tokens. */
+        border: 1px solid var(--boxel-600);
+        border-radius: var(--boxel-border-radius-sm);
+        color: var(--boxel-300);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
       }
 
       .loading-indicator {
@@ -1107,6 +1137,60 @@ export default class Room extends Component<Signature> {
     return this.args.roomResource.messages;
   }
 
+  // The session's token bill so far: every turn's counts summed. Input is
+  // summed rather than read off the last turn because each turn re-sends the
+  // whole conversation — the sum is what the provider actually billed. Shown
+  // only behind the `showTokens` query param.
+  @cached
+  private get conversationTokenUsage() {
+    if (!this.operatorModeStateService.operatorModeController.showTokens) {
+      return undefined;
+    }
+    let promptTokens = 0;
+    let completionTokens = 0;
+    let cachedTokens = 0;
+    let turnsWithCached = 0;
+    let costUsd = 0;
+    let turnsWithCost = 0;
+    let turnsWithUsage = 0;
+    for (let message of this.messages) {
+      let usage = message.usage;
+      // Same gate as the per-message line: a usage object without token
+      // counts must not add a turn to the total that line never shows.
+      if (
+        !usage ||
+        (usage.promptTokens == null && usage.completionTokens == null)
+      ) {
+        continue;
+      }
+      turnsWithUsage++;
+      promptTokens += usage.promptTokens ?? 0;
+      completionTokens += usage.completionTokens ?? 0;
+      if (usage.cachedTokens != null) {
+        cachedTokens += usage.cachedTokens;
+        turnsWithCached++;
+      }
+      if (usage.costUsd != null) {
+        costUsd += usage.costUsd;
+        turnsWithCost++;
+      }
+    }
+    // With a single counted turn the total merely repeats that message's own
+    // line right below it; a sum only earns its place once there is
+    // something to add up.
+    if (turnsWithUsage < 2) {
+      return undefined;
+    }
+    return formatTokenUsage({
+      promptTokens,
+      completionTokens,
+      // An optional figure is only a session total when every counted turn
+      // reported it; a partial sum would read as the whole bill.
+      ...(turnsWithCached === turnsWithUsage ? { cachedTokens } : {}),
+      ...(turnsWithCost === turnsWithUsage ? { costUsd } : {}),
+    });
+  }
+
   private get skills(): RoomSkill[] {
     return this.args.roomResource.skills;
   }
@@ -1663,6 +1747,7 @@ export default class Room extends Component<Signature> {
       baseFileDefCodeRef: baseFileRef,
       contentHash: undefined,
       contentSize: bytes.byteLength,
+      fileSizeLimitBytes: ENV.fileSizeLimitBytes,
       fileBytes: bytes,
       buildError: (errorUrl, error) => {
         let errorJSONAPI = formattedError(errorUrl, error).errors[0];

@@ -149,10 +149,12 @@ export interface FileViewModel {
   encoding?: any;
   mediaTags?: any;
   waveform?: any;
+  midi?: any;
   documentInfo?: any;
   model3d?: any;
   fontMetadata?: any;
   htmlMetadata?: any;
+  officeMetadata?: any;
   posterMetadata?: any;
   thumbnailMetadata?: any;
 }
@@ -256,9 +258,37 @@ function heroFactFor(
     if (clock) {
       return clock;
     }
+    // A MIDI file timed in SMPTE has no seconds to clock; its structure is the
+    // next most identifying fact.
+    if (kind === 'midi' && model.midi?.trackCount) {
+      return `${model.midi.trackCount} tracks`;
+    }
+    if (kind === 'midi' && model.midi?.noteCount) {
+      return `${model.midi.noteCount.toLocaleString()} notes`;
+    }
   }
   if (model.documentInfo?.pageCount) {
     return `${model.documentInfo.pageCount} pages`;
+  }
+  if (['word', 'presentation', 'spreadsheet'].includes(kind)) {
+    // An Office file's most identifying fact is its structural count: a
+    // document's pages, a deck's slides, a workbook's sheets.
+    let office = model.officeMetadata;
+    if (kind === 'presentation' && office?.slideCount != null) {
+      return `${office.slideCount} ${office.slideCount === 1 ? 'slide' : 'slides'}`;
+    }
+    if (kind === 'spreadsheet' && office?.sheetCount != null) {
+      return `${office.sheetCount} ${office.sheetCount === 1 ? 'sheet' : 'sheets'}`;
+    }
+    if (office?.pageCount != null) {
+      return `${office.pageCount} ${office.pageCount === 1 ? 'page' : 'pages'}`;
+    }
+    if (office?.wordCount != null) {
+      return `${office.wordCount.toLocaleString()} words`;
+    }
+    if (office?.title) {
+      return String(office.title);
+    }
   }
   if (kind === 'archive' && model.archiveContents?.length) {
     return `${model.archiveContents.length} entries`;
@@ -398,6 +428,13 @@ export function fileViewModel(
 
   let fontMetadata = file.fontMetadata;
   let htmlMetadata = file.htmlMetadata;
+  let officeMetadata = file.officeMetadata;
+  // The authoring application, trimmed of the version/platform tail LibreOffice
+  // appends ("LibreOffice/6.1.5.2$Linux…" → "LibreOffice") so it reads as a fact
+  // rather than a build string.
+  let officeApp = officeMetadata?.application
+    ? String(officeMetadata.application).split(/[/$]/)[0]!.trim()
+    : undefined;
   let facts = [
     file.language,
     file.encoding?.videoCodec ??
@@ -431,11 +468,18 @@ export function fileViewModel(
     htmlMetadata?.elementCount
       ? `${htmlMetadata.elementCount.toLocaleString()} elements`
       : undefined,
+    officeApp,
+    // A document's word count reads beside its page-count hero; a deck/workbook
+    // already lead with slides/sheets, so their word count is left off.
+    officeMetadata?.kind === 'word' && officeMetadata?.wordCount != null
+      ? `${officeMetadata.wordCount.toLocaleString()} words`
+      : undefined,
   ]
     .filter(Boolean)
     .map(String);
 
-  let title = file.title ?? htmlMetadata?.documentTitle;
+  let title =
+    file.title ?? htmlMetadata?.documentTitle ?? officeMetadata?.title;
 
   return {
     id: file.id,
@@ -526,12 +570,16 @@ export function fileViewModel(
     // authority, with the EXIF tag already folded in at extract time.
     colorProfile: file.colorProfile,
     encoding: file.encoding,
-    mediaTags: file.mediaTags,
+    // The isolated shell renders this group via `<@fields.tags />`, so the
+    // projection must come from the same `tags` field the shell reaches for.
+    mediaTags: file.tags,
     waveform: file.waveform,
+    midi: file.midi,
     documentInfo: file.documentInfo,
     model3d: file.model3d,
     fontMetadata,
     htmlMetadata,
+    officeMetadata,
     posterMetadata: file.posterMetadata,
     thumbnailMetadata: file.thumbnailMetadata,
   };

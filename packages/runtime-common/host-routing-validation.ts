@@ -37,6 +37,8 @@ export const HOST_APP_QUERY_PARAMS = [
   'card',
   'cardPath',
   'debug',
+  // Shows per-message and per-session AI token counts in the assistant panel
+  'showTokens',
   // Deep link into profile settings, consumed once on arrival
   'openProfileSettings',
 ];

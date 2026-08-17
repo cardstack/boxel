@@ -1,5 +1,3 @@
-import 'ember-power-calendar/styles';
-
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -201,16 +199,28 @@ export default class DateRangePicker extends Component<Signature> {
      }}
     {{! template-lint-disable require-scoped-style }}
     <style>
-      .ember-power-calendar {
-        --ember-power-calendar-cell-size: 35px;
-        --ember-power-calendar-row-spacing: var(--boxel-sp-sm);
-        width: 100%;
-      }
-      .ember-power-calendar-week {
-        padding-bottom: var(--ember-power-calendar-row-spacing);
-      }
-      .ember-power-calendar-weekday {
-        padding: var(--boxel-sp-4xs);
+      /* ember-power-calendar's stylesheet sits in the `vendor` layer, so these
+         overrides win from here. See "CSS layers" in ../../../README.md. */
+      @layer boxelComponentL1 {
+        .ember-power-calendar {
+          --ember-power-calendar-cell-size: 35px;
+          --ember-power-calendar-row-spacing: var(--boxel-sp-sm);
+          width: 100%;
+        }
+        .ember-power-calendar-week {
+          padding-bottom: var(--ember-power-calendar-row-spacing);
+        }
+        .ember-power-calendar-weekday {
+          padding: var(--boxel-sp-4xs);
+        }
+
+        /* The vendor sheet sets this on <button> day cells, where the reset
+           layer's `button { font: inherit }` outranks it; restated here so
+           it survives. */
+        .ember-power-calendar-day--selected,
+        .ember-power-calendar-day--selected:not([disabled]):hover {
+          font-weight: bold;
+        }
       }
     </style>
   </template>

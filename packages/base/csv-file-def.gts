@@ -1,6 +1,7 @@
 import { byteStreamToUint8Array } from '@cardstack/runtime-common';
 import { htmlSafe } from '@ember/template';
 import CsvIcon from '@cardstack/boxel-icons/csv';
+import GlimmerComponent from '@glimmer/component';
 import {
   BaseDefComponent,
   Component,
@@ -16,9 +17,13 @@ import {
   type ByteStream,
   type SerializedFile,
 } from './file-api';
+import type { FilePreviewSignature } from './file-formats/file-preview-stage';
 import { fencedCodeBlock } from './markdown-helpers';
 
 const EXCERPT_MAX_LENGTH = 500;
+// An embedded cell shows the head of the table with a "… N more rows" note;
+// the isolated view shows the whole thing.
+const EMBEDDED_MAX_ROWS = 20;
 
 function getExtension(url: string): string {
   try {
@@ -122,8 +127,8 @@ function escapeHtml(unsafe: string): string {
     .replace(APOS_RE, '&#039;');
 }
 
-// content-tag misparses HTML tag literals in .gts files,
-// so we build tags via helpers.
+// content-tag misparses HTML tag literals in .gts files, so we build tags via
+// helpers instead of writing them out.
 function tag(name: string, content: string, attrs?: string): string {
   return attrs
     ? `<${name} ${attrs}>${content}</${name}>`
@@ -166,341 +171,174 @@ function csvToHtml(content: string, maxRows?: number): string {
 
   if (truncated) {
     let remaining = rows.length - 1 - (maxRows ?? 0);
-    html += tag('p', `\u2026 ${remaining} more rows`, 'class="csv-truncated"');
+    html += tag('p', `… ${remaining} more rows`, 'class="csv-truncated"');
   }
 
   return html;
 }
 
-function csvTitle(
-  model: { title?: string | null; name?: string | null } | null | undefined,
-): string {
-  return model?.title ?? model?.name ?? 'Untitled CSV';
-}
-
-class Isolated extends Component<typeof CsvFileDef> {
-  get title() {
-    return csvTitle(this.args.model);
+// The family renderer the four shared shells mount into. A spreadsheet has a
+// natural table view, so embedded/isolated render the parsed rows as a real
+// table (embedded budgets to the head of the file; isolated shows all of it),
+// while a fitted collection cell shows a glanceable row/column count summary
+// rather than a table cropped to illegibility.
+class CsvPreview extends GlimmerComponent<FilePreviewSignature> {
+  get source(): any {
+    return this.args.model?.source;
   }
 
+  get content(): string {
+    return String(this.source?.content ?? '');
+  }
+
+  get hasContent(): boolean {
+    return Boolean(this.content.trim()) || this.rowCount > 0;
+  }
+
+  get isFitted(): boolean {
+    return this.args.mode === 'fitted';
+  }
+
+  get rowCount(): number {
+    return Number(this.source?.rowCount ?? 0);
+  }
+
+  get columnCount(): number {
+    let declared = Number(this.source?.columnCount ?? 0);
+    return declared || this.columns.length;
+  }
+
+  get columns(): string[] {
+    return Array.from(this.source?.columns ?? []).map(String);
+  }
+
+  // Embedded shows the head of the table with a "… N more rows" note; isolated
+  // shows every row. `csvToHtml` owns the whole pipeline: it escapes every cell
+  // first and then assembles the markup, so no second sanitizer pass reparses
+  // our own generated HTML during prerender/indexing.
   get tableHtml() {
-    // `csvToHtml()` owns the whole rendering pipeline here: it escapes every
-    // cell value first and then assembles the table markup we control. A second
-    // sanitizer pass only reparses our own generated HTML during
-    // prerender/indexing and was showing up as avoidable DOMParser churn.
-    return htmlSafe(csvToHtml(this.args.model?.content ?? ''));
-  }
-
-  get hasContent() {
-    return Boolean(this.args.model?.content?.trim());
+    let maxRows =
+      this.args.mode === 'embedded' ? EMBEDDED_MAX_ROWS : undefined;
+    return htmlSafe(csvToHtml(this.content, maxRows));
   }
 
   <template>
-    <article class='csv-isolated' data-test-csv-isolated>
-      <header class='csv-isolated__title'>{{this.title}}</header>
-      {{#if this.hasContent}}
-        <div class='csv-isolated__table'>{{this.tableHtml}}</div>
-      {{/if}}
-    </article>
+    {{#if this.isFitted}}
+      <div class='data-preview data-preview--fitted' data-test-csv-preview>
+        {{#if this.hasContent}}
+          <dl class='data-summary'>
+            <div class='data-summary__metric'>
+              <dt>rows</dt>
+              <dd>{{this.rowCount}}</dd>
+            </div>
+            <div class='data-summary__metric'>
+              <dt>cols</dt>
+              <dd>{{this.columnCount}}</dd>
+            </div>
+          </dl>
+        {{else}}
+          <p class='data-preview__empty'>No rows</p>
+        {{/if}}
+      </div>
+    {{else}}
+      <div
+        class='data-preview data-preview--table'
+        data-mode={{@mode}}
+        data-test-csv-preview
+      >
+        {{#if this.hasContent}}
+          <div class='data-table'>{{this.tableHtml}}</div>
+        {{else}}
+          <p class='data-preview__empty'>No rows</p>
+        {{/if}}
+      </div>
+    {{/if}}
     <style scoped>
-      .csv-isolated {
-        padding: var(--boxel-sp-lg);
-        max-width: 100%;
+      .data-preview {
+        width: 100%;
+        height: 100%;
+        min-height: 0;
+        overflow: auto;
+        background: var(--card);
+        color: var(--foreground);
+        text-align: left;
       }
-
-      .csv-isolated__title {
-        color: var(--boxel-900);
-        font-weight: 600;
-        font-size: var(--boxel-font-size-lg);
-        margin-bottom: var(--boxel-sp);
+      .data-preview--table {
+        padding: var(--boxel-sp);
       }
-
-      .csv-isolated__table {
+      .data-table {
         width: 100%;
         overflow-x: auto;
       }
-
-      .csv-isolated__table :deep(table) {
+      .data-table :deep(table) {
         width: 100%;
         border-collapse: collapse;
+        font-size: var(--boxel-font-size-sm);
       }
-
-      .csv-isolated__table :deep(thead) {
-        border-bottom: 2px solid var(--boxel-border-color);
+      .data-table :deep(thead) {
+        border-bottom: 2px solid var(--border);
       }
-
-      .csv-isolated__table :deep(th) {
-        background: var(--boxel-100);
+      .data-table :deep(th) {
+        background: var(--muted);
         text-align: start;
         padding: var(--boxel-sp-2xs);
         font-weight: 600;
+        white-space: nowrap;
       }
-
-      .csv-isolated__table :deep(th:not(:last-child)),
-      .csv-isolated__table :deep(td:not(:last-child)) {
-        border-right: 1px solid var(--boxel-border-color);
+      .data-table :deep(th:not(:last-child)),
+      .data-table :deep(td:not(:last-child)) {
+        border-right: 1px solid var(--border);
       }
-
-      .csv-isolated__table :deep(td) {
+      .data-table :deep(td) {
         text-align: start;
         padding: var(--boxel-sp-2xs);
       }
-
-      .csv-isolated__table :deep(tr:not(:last-child) td) {
-        border-bottom: 1px solid var(--boxel-border-color);
+      .data-table :deep(tr:not(:last-child) td) {
+        border-bottom: 1px solid var(--border);
       }
-    </style>
-  </template>
-}
-
-class Embedded extends Component<typeof CsvFileDef> {
-  get title() {
-    return csvTitle(this.args.model);
-  }
-
-  get tableHtml() {
-    // `csvToHtml()` owns the whole rendering pipeline here: it escapes every
-    // cell value first and then assembles the table markup we control. A second
-    // sanitizer pass only reparses our own generated HTML during
-    // prerender/indexing and was showing up as avoidable DOMParser churn.
-    return htmlSafe(csvToHtml(this.args.model?.content ?? '', 20));
-  }
-
-  get hasContent() {
-    return Boolean(this.args.model?.content?.trim());
-  }
-
-  <template>
-    <article class='csv-embedded' data-test-csv-embedded>
-      <header class='csv-embedded__title'>{{this.title}}</header>
-      {{#if this.hasContent}}
-        <div class='csv-embedded__content'>{{this.tableHtml}}</div>
-      {{/if}}
-    </article>
-    <style scoped>
-      .csv-embedded {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-xs);
-        padding: var(--boxel-sp);
-      }
-
-      .csv-embedded__title {
-        color: var(--boxel-900);
-        font-weight: 600;
-      }
-
-      .csv-embedded__content {
-        max-height: 200px;
-        overflow: hidden;
-        mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
-        -webkit-mask-image: linear-gradient(
-          to bottom,
-          black 60%,
-          transparent 100%
-        );
-      }
-
-      .csv-embedded__content :deep(table) {
-        width: 100%;
-        border-collapse: collapse;
-      }
-
-      .csv-embedded__content :deep(thead) {
-        border-bottom: 2px solid var(--boxel-border-color);
-      }
-
-      .csv-embedded__content :deep(th) {
-        background: var(--boxel-100);
-        text-align: start;
-        padding: var(--boxel-sp-2xs);
-        font-weight: 600;
-      }
-
-      .csv-embedded__content :deep(th:not(:last-child)),
-      .csv-embedded__content :deep(td:not(:last-child)) {
-        border-right: 1px solid var(--boxel-border-color);
-      }
-
-      .csv-embedded__content :deep(td) {
-        text-align: start;
-        padding: var(--boxel-sp-2xs);
-      }
-
-      .csv-embedded__content :deep(tr:not(:last-child) td) {
-        border-bottom: 1px solid var(--boxel-border-color);
-      }
-
-      .csv-embedded__content :deep(.csv-truncated) {
-        color: var(--boxel-600);
-        font-size: var(--boxel-font-sm);
+      .data-table :deep(.csv-truncated) {
+        color: var(--muted-foreground);
+        font-size: var(--boxel-font-size-sm);
         margin: var(--boxel-sp-xs) 0 0;
       }
-    </style>
-  </template>
-}
 
-class Fitted extends Component<typeof CsvFileDef> {
-  get title() {
-    return csvTitle(this.args.model);
-  }
-
-  get excerpt() {
-    return this.args.model?.excerpt ?? '';
-  }
-
-  get hasExcerpt() {
-    return Boolean(this.excerpt);
-  }
-
-  <template>
-    <article class='csv-fitted' data-test-csv-fitted>
-      <div class='csv-fitted__icon'>
-        <CsvIcon width='100%' height='100%' />
-      </div>
-      <div class='csv-fitted__text'>
-        <header class='csv-fitted__title'>{{this.title}}</header>
-        {{#if this.hasExcerpt}}
-          <p class='csv-fitted__excerpt'>{{this.excerpt}}</p>
-        {{/if}}
-      </div>
-    </article>
-    <style scoped>
-      .csv-fitted {
-        container-name: fitted-card;
-        container-type: size;
-        width: 100%;
-        height: 100%;
+      /* Fitted: a pair of glanceable count tiles rather than a cropped table. */
+      .data-preview--fitted {
         display: flex;
-        align-items: flex-start;
-        gap: var(--boxel-sp-xs);
+        align-items: center;
+        justify-content: center;
         padding: var(--boxel-sp-xs);
         overflow: hidden;
       }
-
-      .csv-fitted__icon {
-        flex-shrink: 0;
-        width: 20px;
-        height: 20px;
-        color: var(--boxel-600);
+      .data-summary {
+        display: flex;
+        gap: var(--boxel-sp);
+        margin: 0;
       }
-
-      .csv-fitted__text {
-        min-width: 0;
-        flex: 1;
+      .data-summary__metric {
         display: flex;
         flex-direction: column;
-        gap: var(--boxel-sp-4xs);
-      }
-
-      .csv-fitted__title {
-        color: var(--boxel-900);
-        font-weight: 600;
-        font-size: var(--boxel-font-sm);
-        overflow: hidden;
-        display: -webkit-box;
-        -webkit-box-orient: vertical;
-        -webkit-line-clamp: 2;
-      }
-
-      .csv-fitted__excerpt {
-        color: var(--boxel-600);
-        font-size: var(--boxel-font-xs);
-        margin: 0;
-        overflow: hidden;
-        display: -webkit-box;
-        -webkit-box-orient: vertical;
-        -webkit-line-clamp: 3;
-      }
-
-      @container fitted-card (aspect-ratio <= 1.0) and (height >= 120px) {
-        .csv-fitted {
-          flex-direction: column;
-          align-items: center;
-          text-align: center;
-        }
-
-        .csv-fitted__icon {
-          width: 28px;
-          height: 28px;
-        }
-
-        .csv-fitted__title {
-          -webkit-line-clamp: 3;
-        }
-      }
-
-      @container fitted-card (aspect-ratio <= 1.0) and (height < 120px) {
-        .csv-fitted__excerpt {
-          display: none;
-        }
-      }
-
-      @container fitted-card (aspect-ratio <= 1.0) and (height < 80px) {
-        .csv-fitted__icon {
-          display: none;
-        }
-      }
-
-      @container fitted-card (1.0 < aspect-ratio) {
-        .csv-fitted {
-          align-items: flex-start;
-        }
-      }
-
-      @container fitted-card (1.0 < aspect-ratio) and (height < 80px) {
-        .csv-fitted__excerpt {
-          display: none;
-        }
-      }
-
-      @container fitted-card (height <= 57px) {
-        .csv-fitted__icon {
-          display: none;
-        }
-
-        .csv-fitted__excerpt {
-          display: none;
-        }
-
-        .csv-fitted__title {
-          font-size: var(--boxel-font-xs);
-          -webkit-line-clamp: 1;
-        }
-      }
-    </style>
-  </template>
-}
-
-class Atom extends Component<typeof CsvFileDef> {
-  get title() {
-    return csvTitle(this.args.model);
-  }
-
-  <template>
-    <span class='csv-atom' data-test-csv-atom>
-      <CsvIcon class='csv-atom__icon' width='16' height='16' />
-      <span class='csv-atom__title'>{{this.title}}</span>
-    </span>
-    <style scoped>
-      .csv-atom {
-        display: inline-flex;
         align-items: center;
-        gap: var(--boxel-sp-4xs);
-        min-width: 0;
+        gap: var(--boxel-sp-5xs);
       }
-
-      .csv-atom__icon {
-        flex-shrink: 0;
-        color: var(--boxel-600);
+      .data-summary__metric dd {
+        margin: 0;
+        font-weight: 700;
+        font-size: var(--boxel-font-size-lg);
+        line-height: 1;
+        color: var(--foreground);
       }
-
-      .csv-atom__title {
-        color: var(--boxel-900);
-        font-size: var(--boxel-font-sm);
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+      .data-summary__metric dt {
+        font-size: var(--boxel-font-size-xs);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted-foreground);
+      }
+      .data-preview__empty {
+        margin: 0;
+        padding: var(--boxel-sp);
+        color: var(--muted-foreground);
+        font-size: var(--boxel-font-size-sm);
       }
     </style>
   </template>
@@ -508,7 +346,7 @@ class Atom extends Component<typeof CsvFileDef> {
 
 class Head extends Component<typeof CsvFileDef> {
   get title() {
-    return csvTitle(this.args.model);
+    return this.args.model?.title ?? this.args.model?.name ?? 'Untitled CSV';
   }
 
   get description() {
@@ -539,6 +377,16 @@ export class CsvFileDef extends FileDef {
   static icon = CsvIcon;
   static acceptTypes = '.csv,text/csv';
 
+  // A `.csv` served without (or with an uninformative) content type would route
+  // to a generic profile by extension alone, so pin the data axes the four
+  // shells present — the family, the labeled kind, and the data renderer — off
+  // the class rather than depending on every instance carrying `text/csv`.
+  static fileFamily = 'data';
+  static fileKind = 'CSV data';
+  static previewKind = 'csv';
+  static previewAdapter = 'data';
+  static previewSource = 'extracted';
+
   @field title = contains(StringField);
   @field excerpt = contains(StringField);
   @field content = contains(StringField);
@@ -546,10 +394,11 @@ export class CsvFileDef extends FileDef {
   @field columnCount = contains(NumberField);
   @field rowCount = contains(NumberField);
 
-  static isolated: BaseDefComponent = Isolated;
-  static embedded: BaseDefComponent = Embedded;
-  static fitted: BaseDefComponent = Fitted;
-  static atom: BaseDefComponent = Atom;
+  // The bespoke isolated/embedded/fitted/atom are gone: CsvFileDef now inherits
+  // the four shared shells from FileDef and supplies only the renderer they
+  // mount, so identity, facts, budgets, and state handling stay in one place
+  // across every file family.
+  static previewComponent = CsvPreview;
   static head: BaseDefComponent = Head;
 
   // CS-10787: emit the CSV source as a fenced `csv` code block. Empty

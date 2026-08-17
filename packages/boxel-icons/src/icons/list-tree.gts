@@ -16,8 +16,8 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
     class='lucide lucide-list-tree'
     viewBox='0 0 24 24'
     ...attributes
-  ><path d='M21 12h-8M21 6H8M21 18h-8M3 6v4c0 1.1.9 2 2 2h3' /><path
-      d='M3 10v6c0 1.1.9 2 2 2h3'
+  ><path d='M8 5h13M13 12h8M13 19h8M3 10a2 2 0 0 0 2 2h3' /><path
+      d='M3 5v12a2 2 0 0 0 2 2h3'
     /></svg>
 </template>;
 

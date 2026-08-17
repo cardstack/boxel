@@ -6,6 +6,8 @@ import {
   waitUntil,
 } from '@ember/test-helpers';
 
+import { currentCompletions, startCompletion } from '@codemirror/autocomplete';
+
 import { module, test } from 'qunit';
 
 import cmContext from '@cardstack/host/lib/codemirror-context';
@@ -194,12 +196,184 @@ module('Acceptance | markdown embed chooser modal', function (hooks) {
       ? cmContext.EditorView.findFromDOM(editorEl)?.state.doc.toString()
       : undefined;
     // The picked Pet lives in a sibling directory to the edited Note, so the
-    // inserted ref is relativized against the document — `../Pet/mango` — the
-    // same form the `/`-search format-picker path produces.
+    // inserted ref is relativized against the document — `../Pet/mango`.
     assert.strictEqual(
       docText,
       `:card[../Pet/mango]`,
       'source carries the inserted inline atom directive, relativized to the document',
+    );
+  });
+
+  test('the `/card` slash command opens the embed chooser and inserts the picked card', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[{ id: noteId, format: 'isolated' }]],
+    });
+
+    await click(`[data-test-operator-mode-stack="0"] [data-test-edit-button]`);
+    await waitFor(
+      `[data-test-stack-card="${noteId}"] [data-test-codemirror-editor]`,
+      { timeout: 5000 },
+    );
+
+    // Trigger the `/card` slash completion the way a user does: type `/` at the
+    // caret and open the autocomplete list. Accepting the `/card` option runs
+    // its `apply`, which deletes the typed `/` and asks the editor to open the
+    // chooser. We invoke that `apply` directly (rather than simulating an Enter
+    // keystroke) so the accept is deterministic and not subject to the
+    // tooltip's selected-option timing.
+    let editorEl = document.querySelector(
+      `[data-test-stack-card="${noteId}"] [data-test-codemirror-editor] .cm-editor`,
+    ) as HTMLElement | null;
+    let view = editorEl ? cmContext.EditorView.findFromDOM(editorEl) : null;
+    assert.ok(view, 'codemirror view is reachable');
+    view!.focus();
+    view!.dispatch({
+      changes: { from: 0, insert: '/' },
+      selection: { anchor: 1 },
+    });
+    startCompletion(view!);
+    await waitUntil(
+      () => currentCompletions(view!.state).some((c) => c.label === '/card'),
+      { timeout: 5000 },
+    );
+    let cardOption = currentCompletions(view!.state).find(
+      (c) => c.label === '/card',
+    );
+    assert.ok(cardOption, 'the `/card` slash completion is offered');
+    // The completion spans the typed `/` (doc positions 0–1); accepting it
+    // deletes the `/` and opens the chooser.
+    (
+      cardOption!.apply as (
+        v: unknown,
+        c: unknown,
+        f: number,
+        t: number,
+      ) => void
+    )(view!, cardOption!, 0, 1);
+    await settled();
+
+    // The `/card` path now reuses the same chooser modal as the toolbar,
+    // instead of the old inline popup.
+    await waitFor('[data-test-markdown-embed-chooser-modal]', {
+      timeout: 5000,
+    });
+    assert
+      .dom('[data-test-markdown-embed-chooser-tab="card"]')
+      .hasAttribute('aria-selected', 'true', 'chooser opens on the Cards tab');
+    assert
+      .dom('[data-test-card-search]')
+      .doesNotExist('the old inline card-search popup is gone');
+
+    // Search for Mango, pick the row, insert.
+    await fillIn(
+      '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-search-field]',
+      'Mango',
+    );
+    await waitFor(
+      `[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-item-button="${mangoId}"]`,
+      { timeout: 5000 },
+    );
+    await click(
+      `[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-item-button="${mangoId}"]`,
+    );
+    await waitFor('[data-test-markdown-embed-preview-cta]:not([disabled])', {
+      timeout: 5000,
+    });
+    await click('[data-test-markdown-embed-preview-cta]');
+
+    await waitUntil(
+      () => !document.querySelector('[data-test-markdown-embed-chooser-modal]'),
+    );
+    await settled();
+
+    let docText = cmContext.EditorView.findFromDOM(editorEl!)
+      ?.state.doc.toString()
+      ?.trim();
+    assert.strictEqual(
+      docText,
+      `:card[../Pet/mango]`,
+      'the slash flow inserts the picked card as an inline directive, and the typed `/` is gone',
+    );
+  });
+
+  test('the `/card` slash command inserts at the caret when typed mid-line', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[{ id: noteId, format: 'isolated' }]],
+    });
+
+    await click(`[data-test-operator-mode-stack="0"] [data-test-edit-button]`);
+    await waitFor(
+      `[data-test-stack-card="${noteId}"] [data-test-codemirror-editor]`,
+      { timeout: 5000 },
+    );
+
+    // Unlike the doc-start case, here the `/` follows existing text. The handler
+    // ignores the completion's position and inserts at the current CM selection,
+    // so the picked card must land where the `/` was — after "Hello " — not at
+    // the document start.
+    let editorEl = document.querySelector(
+      `[data-test-stack-card="${noteId}"] [data-test-codemirror-editor] .cm-editor`,
+    ) as HTMLElement | null;
+    let view = editorEl ? cmContext.EditorView.findFromDOM(editorEl) : null;
+    assert.ok(view, 'codemirror view is reachable');
+    view!.focus();
+    view!.dispatch({
+      changes: { from: 0, insert: 'Hello /' },
+      selection: { anchor: 7 },
+    });
+    startCompletion(view!);
+    await waitUntil(
+      () => currentCompletions(view!.state).some((c) => c.label === '/card'),
+      { timeout: 5000 },
+    );
+    let cardOption = currentCompletions(view!.state).find(
+      (c) => c.label === '/card',
+    );
+    assert.ok(cardOption, 'the `/card` slash completion is offered mid-line');
+    // The completion spans the typed `/` (doc positions 6–7); accepting it
+    // deletes the `/`, leaving the caret after "Hello ".
+    (
+      cardOption!.apply as (
+        v: unknown,
+        c: unknown,
+        f: number,
+        t: number,
+      ) => void
+    )(view!, cardOption!, 6, 7);
+    await settled();
+
+    await waitFor('[data-test-markdown-embed-chooser-modal]', {
+      timeout: 5000,
+    });
+
+    await fillIn(
+      '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-search-field]',
+      'Mango',
+    );
+    await waitFor(
+      `[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-item-button="${mangoId}"]`,
+      { timeout: 5000 },
+    );
+    await click(
+      `[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-item-button="${mangoId}"]`,
+    );
+    await waitFor('[data-test-markdown-embed-preview-cta]:not([disabled])', {
+      timeout: 5000,
+    });
+    await click('[data-test-markdown-embed-preview-cta]');
+
+    await waitUntil(
+      () => !document.querySelector('[data-test-markdown-embed-chooser-modal]'),
+    );
+    await settled();
+
+    let docText = cmContext.EditorView.findFromDOM(
+      editorEl!,
+    )?.state.doc.toString();
+    assert.strictEqual(
+      docText,
+      `Hello :card[../Pet/mango]`,
+      'the card lands at the caret, after the existing text, with the `/` removed',
     );
   });
 

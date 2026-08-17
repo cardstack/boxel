@@ -65,43 +65,80 @@ function astUsesFilterSet(node: unknown, filters: Set<string>): boolean {
   return false;
 }
 
+// A rejected chunk load must not stick: the memo caches the in-flight
+// promise so concurrent callers share one import, but a failure (e.g. a
+// transient network error fetching the chunk) clears the slot so the next
+// caller retries — otherwise every later evaluation would re-reject off
+// the cached rejection and the family could never load.
+function memoizedLoad(
+  read: () => Promise<void> | undefined,
+  write: (value: Promise<void> | undefined) => void,
+  load: () => Promise<void>,
+): Promise<void> {
+  let pending = read();
+  if (!pending) {
+    pending = load().catch((error) => {
+      write(undefined);
+      throw error;
+    });
+    write(pending);
+  }
+  return pending;
+}
+
 async function ensureStatisticalLoaded() {
-  formulaStatisticalLoad ??= import('../registry/formula-statistical.ts').then(
-    ({ formulaStatisticalLibrary }) => {
-      registerBuiltinLibrary('formula-statistical', formulaStatisticalLibrary);
-    },
+  await memoizedLoad(
+    () => formulaStatisticalLoad,
+    (value) => (formulaStatisticalLoad = value),
+    () =>
+      import('../registry/formula-statistical.ts').then(
+        ({ formulaStatisticalLibrary }) => {
+          registerBuiltinLibrary(
+            'formula-statistical',
+            formulaStatisticalLibrary,
+          );
+        },
+      ),
   );
-  await formulaStatisticalLoad;
 }
 
 async function ensureBesselLoaded() {
-  formulaBesselLoad ??= import('../registry/formula-bessel.ts').then(
-    ({ formulaBesselLibrary }) => {
-      registerBuiltinLibrary('formula-bessel', formulaBesselLibrary);
-    },
+  await memoizedLoad(
+    () => formulaBesselLoad,
+    (value) => (formulaBesselLoad = value),
+    () =>
+      import('../registry/formula-bessel.ts').then(
+        ({ formulaBesselLibrary }) => {
+          registerBuiltinLibrary('formula-bessel', formulaBesselLibrary);
+        },
+      ),
   );
-  await formulaBesselLoad;
 }
 
 async function ensureExtrasBundleLoaded() {
-  formulaExtrasBundleLoad ??=
-    import('../registry/bundles/formula-extras.ts').then(
-      ({ formulaExtrasBundle }) => {
-        for (const [name, library] of Object.entries(formulaExtrasBundle)) {
-          registerBuiltinLibrary(name as BuiltinLibraryName, library);
-        }
-      },
-    );
-  await formulaExtrasBundleLoad;
+  await memoizedLoad(
+    () => formulaExtrasBundleLoad,
+    (value) => (formulaExtrasBundleLoad = value),
+    () =>
+      import('../registry/bundles/formula-extras.ts').then(
+        ({ formulaExtrasBundle }) => {
+          for (const [name, library] of Object.entries(formulaExtrasBundle)) {
+            registerBuiltinLibrary(name as BuiltinLibraryName, library);
+          }
+        },
+      ),
+  );
 }
 
 async function ensureValidationLoaded() {
-  validationLoad ??= import('../registry/validation.ts').then(
-    ({ validationLibrary }) => {
-      registerBuiltinLibrary('validation', validationLibrary);
-    },
+  await memoizedLoad(
+    () => validationLoad,
+    (value) => (validationLoad = value),
+    () =>
+      import('../registry/validation.ts').then(({ validationLibrary }) => {
+        registerBuiltinLibrary('validation', validationLibrary);
+      }),
   );
-  await validationLoad;
 }
 
 const EXTRAS_LIBRARIES: BuiltinLibraryName[] = [
@@ -234,4 +271,40 @@ export async function resolveLazyBuiltinLibrariesForExpressions(
     ensureValidationLoaded,
   );
   return next;
+}
+
+const ALL_LAZY_LIBRARIES: BuiltinLibraryName[] = [
+  'formula-statistical',
+  'formula-bessel',
+  ...EXTRAS_LIBRARIES,
+  'validation',
+];
+
+/**
+ * Load every lazy formula extension and fold it into
+ * `DEFAULT_BUILTIN_LIBRARIES`, so synchronous evaluation — most
+ * importantly the `bxl()` / `expression()` computeVia factory, which
+ * cannot await a chunk mid-compute — sees the full formula surface.
+ *
+ * A host that hands BXL to card authors (where any expression may name
+ * any Excel function) awaits this once before serving the module. The
+ * chunks still arrive via dynamic import, so bundlers keep them out of
+ * the initial graph; embeds that skip this call keep the smaller core
+ * and the per-program auto-loading of the async APIs.
+ *
+ * Idempotent and safe to call concurrently — each chunk load is
+ * memoized module-wide.
+ */
+export async function loadAllFormulaExtensions(): Promise<void> {
+  await Promise.all([
+    ensureStatisticalLoaded(),
+    ensureBesselLoaded(),
+    ensureExtrasBundleLoaded(),
+    ensureValidationLoaded(),
+  ]);
+  for (const name of ALL_LAZY_LIBRARIES) {
+    if (!DEFAULT_BUILTIN_LIBRARIES.includes(name)) {
+      DEFAULT_BUILTIN_LIBRARIES.push(name);
+    }
+  }
 }

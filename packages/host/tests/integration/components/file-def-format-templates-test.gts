@@ -128,11 +128,28 @@ module('Integration | FileDef format templates', function (hooks) {
   });
 
   // A family that hasn't landed a renderer yet must degrade to an honest pane
-  // rather than a broken one.
-  test('a family with no preview component renders the generic pane', async function (assert) {
+  // rather than a broken one. In the reading formats the pane names the file and
+  // offers its bytes rather than showing an empty "No preview" void.
+  test('a family with no preview component renders a graceful fallback pane', async function (assert) {
     await renderCard(loader, makeFile(), 'embedded');
     assert.dom('[data-test-file-no-preview]').exists();
+    assert.dom('[data-test-file-generic-name]').hasText('report.pdf');
+    assert.dom('[data-test-file-generic-kind]').hasText('PDF document');
+    assert.dom('[data-test-file-generic-size]').containsText('12');
+    assert
+      .dom('[data-test-file-generic-download]')
+      .hasAttribute('href', 'http://example.com/docs/report.pdf')
+      .hasAttribute('download', 'report.pdf');
+  });
+
+  // The budgeted fitted cell has the metadata strip beside it, so its pane stays
+  // a bare glyph rather than repeating the name and kind.
+  test('the fitted fallback pane stays a minimal glyph', async function (assert) {
+    await renderCard(loader, makeFile(), 'fitted');
     assert.dom('[data-test-file-no-preview]').containsText('No preview');
+    assert
+      .dom('[data-test-file-no-preview] [data-test-file-generic-name]')
+      .doesNotExist();
   });
 
   test('a family preview component is mounted into the stage', async function (assert) {
