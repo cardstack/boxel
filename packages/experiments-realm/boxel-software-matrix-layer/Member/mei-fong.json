@@ -2,13 +2,13 @@
   "data": {
     "type": "card",
     "attributes": {
-      "memberNumber": "NBF-2019-00004821",
-      "tier": "Gold",
-      "tierSince": "2023-07-01",
-      "memberSince": "2019-08-10",
+      "memberNumber": "NBF-2026-00048907",
+      "tier": "Bronze",
+      "tierSince": "2026-08-09",
+      "memberSince": "2026-08-09",
       "status": "Active",
-      "pointsBalance": 3450,
-      "lifetimePoints": 12800,
+      "pointsBalance": 100,
+      "lifetimePoints": 100,
       "cardInfo": {
         "name": null,
         "summary": null,
@@ -19,7 +19,12 @@
     "relationships": {
       "holder": {
         "links": {
-          "self": "../Contact/jason-lim"
+          "self": "../Contact/mei-fong"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
         }
       }
     },

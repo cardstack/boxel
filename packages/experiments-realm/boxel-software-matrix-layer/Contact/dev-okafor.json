@@ -1,0 +1,36 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "firstName": "Dev",
+      "lastName": "Okafor",
+      "email": "dev.okafor@example.net",
+      "jobTitle": null,
+      "role": null,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../contact",
+        "name": "Contact"
+      }
+    },
+    "relationships": {
+      "account": {
+        "links": {
+          "self": "../Account/brightleaf-studio"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/ledger"
+        }
+      }
+    }
+  }
+}

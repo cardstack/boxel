@@ -2,17 +2,17 @@
   "data": {
     "type": "card",
     "attributes": {
-      "reference": "BK-20260912-00417",
-      "quantity": 2,
+      "reference": "BK-20260802-00144",
+      "quantity": 1,
       "rsvp": "Going",
       "paymentStatus": "Paid",
       "totalPrice": {
-        "amount": 90,
+        "amount": 35,
         "currency": {
           "code": "GBP"
         }
       },
-      "checkedInAt": null,
+      "checkedInAt": "2026-08-02T13:05:00.000Z",
       "cardInfo": {
         "name": null,
         "summary": null,
@@ -23,12 +23,12 @@
     "relationships": {
       "event": {
         "links": {
-          "self": "../Match/riverton-home"
+          "self": "../Match/harrow-vale-home"
         }
       },
       "holder": {
         "links": {
-          "self": "../Contact/mei-fong"
+          "self": "../Contact/dev-okafor"
         }
       }
     },

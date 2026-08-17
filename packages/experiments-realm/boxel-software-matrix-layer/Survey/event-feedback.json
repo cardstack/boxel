@@ -2,38 +2,38 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Conference Feedback",
-      "description": "Thanks for attending! Let us know how it went so we can make next year even better.",
+      "title": "Season Kickoff Fan Forum",
+      "description": "Thanks for coming to the kickoff forum! Tell us how the evening went so next season's is even better.",
       "questions": [
         {
-          "prompt": "How would you rate the event overall?",
+          "prompt": "How would you rate the fan forum overall?",
           "helpText": "1 = poor, 5 = excellent",
           "kind": "rating",
           "options": [],
           "required": true
         },
         {
-          "prompt": "Which sessions did you attend?",
+          "prompt": "Which parts of the evening did you join?",
           "helpText": "Select all that apply.",
           "kind": "multi-choice",
           "options": [
-            "Opening keynote",
-            "Workshops",
-            "Lightning talks",
-            "Panel discussion",
-            "Closing party"
+            "Squad Q&A",
+            "Stadium tour",
+            "Kit reveal",
+            "Junior clinic",
+            "Supporters' social"
           ],
           "required": false
         },
         {
-          "prompt": "What was your favorite session?",
+          "prompt": "What was the highlight for you?",
           "helpText": null,
           "kind": "short-text",
           "options": [],
           "required": false
         },
         {
-          "prompt": "Did the event meet your expectations?",
+          "prompt": "Did the evening meet your expectations?",
           "helpText": null,
           "kind": "single-choice",
           "options": [
@@ -44,14 +44,14 @@
           "required": true
         },
         {
-          "prompt": "Would you attend again next year?",
+          "prompt": "Would you come to the next fan forum?",
           "helpText": null,
           "kind": "yes-no",
           "options": [],
           "required": false
         },
         {
-          "prompt": "Any other comments for the organizers?",
+          "prompt": "Any other comments for the club?",
           "helpText": null,
           "kind": "long-text",
           "options": [],
@@ -59,7 +59,7 @@
         }
       ],
       "cardInfo": {
-        "name": "Conference Feedback",
+        "name": "Season Kickoff Fan Forum",
         "summary": "Post-event feedback survey covering ratings, session attendance, and open comments."
       }
     },

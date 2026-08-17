@@ -2,13 +2,13 @@
   "data": {
     "type": "card",
     "attributes": {
-      "memberNumber": "NBF-2019-00004821",
-      "tier": "Gold",
-      "tierSince": "2023-07-01",
-      "memberSince": "2019-08-10",
+      "memberNumber": "NBF-2024-00031277",
+      "tier": "Silver",
+      "tierSince": "2024-08-01",
+      "memberSince": "2024-03-15",
       "status": "Active",
-      "pointsBalance": 3450,
-      "lifetimePoints": 12800,
+      "pointsBalance": 1250,
+      "lifetimePoints": 4300,
       "cardInfo": {
         "name": null,
         "summary": null,
@@ -19,7 +19,12 @@
     "relationships": {
       "holder": {
         "links": {
-          "self": "../Contact/jason-lim"
+          "self": "../Contact/dev-okafor"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
         }
       }
     },

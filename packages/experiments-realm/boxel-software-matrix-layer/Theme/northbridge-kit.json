@@ -1,0 +1,21 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "Northbridge Kit",
+        "summary": "Pitch green and gold trim — the home kit",
+        "notes": null,
+        "cardThumbnailURL": null
+      },
+      "cssImports": [],
+      "cssVariables": ":root {\n  --primary: #0e6b3c;\n  --accent: #d9a91d;\n  --background: #f6f8f5;\n  --card: #ffffff;\n  --foreground: #16241b;\n  --muted-foreground: #5a6b60;\n  --border: #dbe4dc;\n}"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/card-api",
+        "name": "Theme"
+      }
+    }
+  }
+}

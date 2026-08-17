@@ -2,11 +2,11 @@
   "data": {
     "type": "card",
     "attributes": {
-      "amount": 25,
-      "reason": "Completed match-day survey",
-      "source": "Survey",
-      "occurredAt": "2026-04-19T09:05:00.000Z",
-      "expiresAt": "2026-10-31T23:59:59.000Z",
+      "amount": 75,
+      "reason": "Attended v Harrow Vale (home)",
+      "source": "Attendance",
+      "occurredAt": "2026-08-02T15:40:00.000Z",
+      "expiresAt": null,
       "cardInfo": {
         "name": null,
         "summary": null,
@@ -17,7 +17,7 @@
     "relationships": {
       "account": {
         "links": {
-          "self": "../Member/priya-shah"
+          "self": "../Member/dev-okafor"
         }
       }
     },

@@ -3,30 +3,30 @@
     "type": "card",
     "attributes": {
       "surveyId": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Survey/event-feedback",
-      "surveyTitle": "Conference Feedback",
+      "surveyTitle": "Season Kickoff Fan Forum",
       "answers": [
         {
-          "prompt": "How would you rate the event overall?",
+          "prompt": "How would you rate the fan forum overall?",
           "response": "4 / 5"
         },
         {
-          "prompt": "Which sessions did you attend?",
+          "prompt": "Which parts of the evening did you join?",
           "response": "—"
         },
         {
-          "prompt": "What was your favorite session?",
+          "prompt": "What was the highlight for you?",
           "response": "—"
         },
         {
-          "prompt": "Did the event meet your expectations?",
+          "prompt": "Did the evening meet your expectations?",
           "response": "Met them"
         },
         {
-          "prompt": "Would you attend again next year?",
+          "prompt": "Would you come to the next fan forum?",
           "response": "Yes"
         },
         {
-          "prompt": "Any other comments for the organizers?",
+          "prompt": "Any other comments for the club?",
           "response": "—"
         }
       ],
