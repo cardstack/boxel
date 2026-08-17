@@ -10,12 +10,14 @@ export const formulaDateCases: CoverageCase[] = [
   // count from the epoch. 2026-04-30 is the anchor the rest of the table
   // measures against.
   { covers: 'DATE/3', source: 'DATE(2026, 4, 30)', expected: 46142 },
-  // A month past 12 carries into the following year.
-  {
-    covers: 'DATE/3',
-    source: 'DATE(2026, 13, 1) == DATE(2027, 1, 1)',
-    expected: true,
-  },
+  // A month past 12 carries into the following year, month 0 carries back
+  // into the previous one, and a day past the month's end carries too. Each
+  // is asserted against the serial rather than against another DATE call —
+  // comparing two calls to the same function proves it is deterministic, not
+  // that it carries.
+  { covers: 'DATE/3', source: 'DATE(2026, 13, 1)', expected: 46388 },
+  { covers: 'DATE/3', source: 'DATE(2026, 0, 1)', expected: 45992 },
+  { covers: 'DATE/3', source: 'DATE(2026, 4, 31)', expected: 46143 },
   // YEAR, MONTH and DAY read back the three components DATE packed in.
   { covers: 'YEAR/1', source: 'YEAR(DATE(2026, 4, 30))', expected: 2026 },
   { covers: 'MONTH/1', source: 'MONTH(DATE(2026, 4, 30))', expected: 4 },

@@ -1,11 +1,40 @@
+import { ok } from 'node:assert';
 import type { CoverageCase } from './case.ts';
+
+/**
+ * A complex-valued case, asserted on both components.
+ *
+ * Complex numbers travel as strings like '3+4i', and pinning the string would
+ * pin 17-digit formatting rather than the value — but reading back a single
+ * component leaves the other one free, which is exactly where a sign slip or
+ * a swapped real and imaginary part hides. So the case reads both, each to a
+ * tolerance, and the input is chosen to make both non-zero and unequal.
+ */
+function complexCase(
+  covers: string,
+  call: string,
+  real: number,
+  imaginary: number,
+  tolerance = 1e-9,
+): CoverageCase {
+  return {
+    covers,
+    source: `[IMREAL(${call}), IMAGINARY(${call})]`,
+    check(outputs) {
+      const [actualReal, actualImaginary] = outputs[0] as number[];
+      ok(
+        Math.abs(actualReal - real) <= tolerance &&
+          Math.abs(actualImaginary - imaginary) <= tolerance,
+        `expected ${real} + ${imaginary}i +/- ${tolerance}, got ` +
+          `${actualReal} + ${actualImaginary}i`,
+      );
+    },
+  };
+}
 
 // Excel's engineering family, which loads as the lazy formula-extras chunk.
 // Base conversions return text except the *2DEC forms and DECIMAL, which
-// return numbers; complex numbers travel as strings like '3+4i'. Where the
-// exact string result would carry 17-digit decimals, the case extracts one
-// numeric part with IMREAL/IMAGINARY and pins the identity the value must
-// satisfy, with a tolerance, instead of pinning the formatting.
+// return numbers; complex numbers travel as strings like '3+4i'.
 export const formulaEngineeringCases: CoverageCase[] = [
   // Base conversions
   { covers: 'BASE/2', source: 'BASE(7, 2)', expected: '111' },
@@ -98,108 +127,97 @@ export const formulaEngineeringCases: CoverageCase[] = [
     source: 'IMDIV("-238+240i", "10+24i")',
     expected: '5+12i',
   },
-  // (1+i)^2 = 2i
-  {
-    covers: 'IMPOWER/2',
-    source: 'IMAGINARY(IMPOWER("1+i", 2))',
-    expected: 2,
-    tolerance: 1e-9,
-  },
-  // The principal square root of -1 is i.
-  {
-    covers: 'IMSQRT/1',
-    source: 'IMAGINARY(IMSQRT("-1"))',
-    expected: 1,
-    tolerance: 1e-9,
-  },
-  // Complex exp/log
-  {
-    covers: 'IMEXP/1',
-    source: 'IMREAL(IMEXP("1"))',
-    expected: 2.7182818285,
-    tolerance: 1e-9,
-  },
-  // ln(i) = i*pi/2 (principal branch)
-  {
-    covers: 'IMLN/1',
-    source: 'IMAGINARY(IMLN("i"))',
-    expected: Math.PI / 2,
-    tolerance: 1e-12,
-  },
-  {
-    covers: 'IMLOG10/1',
-    source: 'IMREAL(IMLOG10("100"))',
-    expected: 2,
-    tolerance: 1e-9,
-  },
-  {
-    covers: 'IMLOG2/1',
-    source: 'IMREAL(IMLOG2("8"))',
-    expected: 3,
-    tolerance: 1e-9,
-  },
-  // Complex trig at z = i, where each value reduces to a real hyperbolic
-  // (or plain trig) constant: cos(i) = cosh(1), sin(i) = i*sinh(1), etc.
-  {
-    covers: 'IMCOS/1',
-    source: 'IMREAL(IMCOS("i"))',
-    expected: 1.5430806348,
-    tolerance: 1e-9,
-  },
-  {
-    covers: 'IMSIN/1',
-    source: 'IMAGINARY(IMSIN("i"))',
-    expected: 1.1752011936,
-    tolerance: 1e-9,
-  },
-  {
-    covers: 'IMTAN/1',
-    source: 'IMAGINARY(IMTAN("i"))',
-    expected: 0.761594156,
-    tolerance: 1e-9,
-  },
-  {
-    covers: 'IMCOT/1',
-    source: 'IMAGINARY(IMCOT("i"))',
-    expected: -1.3130352855,
-    tolerance: 1e-9,
-  },
-  {
-    covers: 'IMCSC/1',
-    source: 'IMAGINARY(IMCSC("i"))',
-    expected: -0.8509181282,
-    tolerance: 1e-9,
-  },
-  {
-    covers: 'IMSEC/1',
-    source: 'IMREAL(IMSEC("i"))',
-    expected: 0.6480542737,
-    tolerance: 1e-9,
-  },
-  {
-    covers: 'IMCOSH/1',
-    source: 'IMREAL(IMCOSH("i"))',
-    expected: 0.5403023059,
-    tolerance: 1e-9,
-  },
-  {
-    covers: 'IMSINH/1',
-    source: 'IMAGINARY(IMSINH("i"))',
-    expected: 0.8414709848,
-    tolerance: 1e-9,
-  },
-  {
-    covers: 'IMCSCH/1',
-    source: 'IMAGINARY(IMCSCH("i"))',
-    expected: -1.1883951058,
-    tolerance: 1e-9,
-  },
-  {
-    covers: 'IMSECH/1',
-    source: 'IMREAL(IMSECH("i"))',
-    expected: 1.8508157177,
-    tolerance: 1e-9,
-  },
+  // (1+i)^3 = -2+2i, both components moving.
+  complexCase('IMPOWER/2', 'IMPOWER("1+i", 3)', -2, 2),
+  // The principal square root of 3+4i is 2+i.
+  complexCase('IMSQRT/1', 'IMSQRT("3+4i")', 2, 1),
+  // Complex exp/log. e^(1+i) = e*(cos 1 + i sin 1).
+  complexCase(
+    'IMEXP/1',
+    'IMEXP("1+i")',
+    1.4686939399158851,
+    2.2873552871788423,
+  ),
+  // ln(3+4i) = ln 5 + i*atan2(4, 3), principal branch.
+  complexCase('IMLN/1', 'IMLN("3+4i")', 1.6094379124341003, 0.9272952180016122),
+  // The other two logs are that one divided by ln 10 and ln 2.
+  complexCase(
+    'IMLOG10/1',
+    'IMLOG10("3+4i")',
+    0.6989700043360187,
+    0.4027191962733731,
+  ),
+  complexCase(
+    'IMLOG2/1',
+    'IMLOG2("3+4i")',
+    2.321928094887362,
+    1.3378042124509761,
+  ),
+  // Complex trig at z = 1+i rather than at i: on the imaginary axis each of
+  // these collapses to a real constant times 1 or i, which leaves the other
+  // component at zero and unable to catch a swap. Off the axis, cos and cosh
+  // differ only in the sign of the imaginary part, and cot, csc, sec and
+  // their hyperbolic partners each pair with another member of the family.
+  complexCase(
+    'IMCOS/1',
+    'IMCOS("1+i")',
+    0.8337300251311491,
+    -0.9888977057628651,
+  ),
+  complexCase(
+    'IMSIN/1',
+    'IMSIN("1+i")',
+    1.2984575814159773,
+    0.6349639147847361,
+  ),
+  complexCase(
+    'IMTAN/1',
+    'IMTAN("1+i")',
+    0.2717525853195118,
+    1.0839233273386946,
+  ),
+  complexCase(
+    'IMCOT/1',
+    'IMCOT("1+i")',
+    0.21762156185440273,
+    -0.8680141428959249,
+  ),
+  complexCase(
+    'IMCSC/1',
+    'IMCSC("1+i")',
+    0.6215180171704284,
+    -0.30393100162842646,
+  ),
+  complexCase(
+    'IMSEC/1',
+    'IMSEC("1+i")',
+    0.49833703055518686,
+    0.5910838417210451,
+  ),
+  complexCase(
+    'IMCOSH/1',
+    'IMCOSH("1+i")',
+    0.8337300251311491,
+    0.9888977057628651,
+  ),
+  complexCase(
+    'IMSINH/1',
+    'IMSINH("1+i")',
+    0.6349639147847361,
+    1.2984575814159773,
+  ),
+  complexCase(
+    'IMCSCH/1',
+    'IMCSCH("1+i")',
+    0.30393100162842646,
+    -0.6215180171704284,
+  ),
+  complexCase(
+    'IMSECH/1',
+    'IMSECH("1+i")',
+    0.49833703055518686,
+    -0.5910838417210451,
+  ),
   // Unit conversion
   { covers: 'CONVERT/3', source: 'CONVERT(1, "hr", "sec")', expected: 3600 },
   // Temperature converts through an offset, not a ratio.
@@ -230,11 +248,12 @@ export const formulaEngineeringCases: CoverageCase[] = [
     expected: -0.8427007929497149,
     tolerance: 1e-15,
   },
-  // The two-argument form integrates between bounds: ERF(0, 1) = erf(1).
+  // The two-argument form integrates between bounds: erf(upper) - erf(lower).
+  // Both bounds are non-zero, so ignoring the lower one is visible.
   {
     covers: 'ERF/2',
-    source: 'ERF(0, 1)',
-    expected: 0.8427007929497149,
+    source: 'ERF(1, 2)',
+    expected: 0.15262147206923782,
     tolerance: 1e-15,
   },
   {

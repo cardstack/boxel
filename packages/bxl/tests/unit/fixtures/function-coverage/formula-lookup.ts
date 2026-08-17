@@ -93,11 +93,16 @@ export const formulaLookupCases: CoverageCase[] = [
   // MATCH returns a 1-based position; the default match type 1 finds the
   // largest value <= the lookup in an ascending array.
   { covers: 'MATCH/2', source: 'MATCH(7, [1, 3, 5, 9])', expected: 3 },
+  // Exact match, where the two-argument form's implicit type 1 would answer
+  // 3 instead.
   {
     covers: 'MATCH/3',
-    source: 'MATCH("beta", ["alpha", "beta", "gamma"], 0)',
-    expected: 2,
+    source: 'MATCH(5, [1, 3, 5, 9], 0)',
+    expected: 3,
   },
+  // Type -1 reads a descending list and takes the smallest value at or above
+  // the target, which is a different position from what type 1 would pick.
+  { covers: 'MATCH/3', source: 'MATCH(4, [9, 5, 3, 1], -1)', expected: 2 },
   // INDEX over a 1-D array treats the single index as the position.
   { covers: 'INDEX/2', source: 'INDEX(["a", "b", "c"], 2)', expected: 'b' },
   { covers: 'INDEX/3', source: 'INDEX([[1, 2], [3, 4]], 2, 1)', expected: 3 },
@@ -139,9 +144,17 @@ export const formulaLookupCases: CoverageCase[] = [
     expected: 'silver',
   },
   {
+    // Approximate against a key that is not in the table: the flag decides
+    // between the banded answer and #N/A, where an exact hit would give the
+    // same value either way.
     covers: 'VLOOKUP/4',
-    source: 'VLOOKUP("B-2", [["A-1", 120], ["B-2", 40]], 2, false)',
-    expected: 40,
+    source: 'VLOOKUP(50, [[1, "low"], [10, "mid"], [100, "high"]], 2, true)',
+    expected: 'mid',
+  },
+  {
+    covers: 'VLOOKUP/4',
+    source: 'VLOOKUP(50, [[1, "low"], [10, "mid"], [100, "high"]], 2, false)',
+    throws: /#N\/A/,
   },
   {
     covers: 'HLOOKUP/3',
@@ -149,9 +162,15 @@ export const formulaLookupCases: CoverageCase[] = [
     expected: 'ten',
   },
   {
+    // Same flag, same shape, along a row instead of a column.
     covers: 'HLOOKUP/4',
-    source: 'HLOOKUP("Q2", [["Q1", "Q2", "Q3"], [100, 140, 180]], 2, false)',
-    expected: 140,
+    source: 'HLOOKUP(50, [[1, 10, 100], ["one", "ten", "hundred"]], 2, true)',
+    expected: 'ten',
+  },
+  {
+    covers: 'HLOOKUP/4',
+    source: 'HLOOKUP(50, [[1, 10, 100], ["one", "ten", "hundred"]], 2, false)',
+    throws: /#N\/A/,
   },
   // VLOOKUP_BY defaults to exact match; the 5-arg form opts into approximate
   // banding over a sorted key column.

@@ -103,7 +103,15 @@ export const formulaFinancialCases: CoverageCase[] = [
     tolerance: 1e-9,
   },
   // Type 1 pays at the period start, so the first period accrues no interest.
-  { covers: 'IPMT/6', source: 'IPMT(0.1, 1, 3, 1000, 0, 1)', expected: 0 },
+  // Period 2 rather than period 1: with payments at the start of the period,
+  // period 1's interest is zero, and zero is what a constant, a dropped rate
+  // or a dropped principal would all return.
+  {
+    covers: 'IPMT/6',
+    source: 'IPMT(0.1, 2, 3, 1000, 0, 1)',
+    expected: -63.44410876132934,
+    tolerance: 1e-9,
+  },
   {
     covers: 'PPMT/4',
     source: 'PPMT(0.1, 1, 2, 1000)',
@@ -131,8 +139,11 @@ export const formulaFinancialCases: CoverageCase[] = [
   // Principal repaid over the full term is the whole loan.
   {
     covers: 'CUMPRINC/6',
-    source: 'CUMPRINC(0.1, 2, 1000, 1, 2, 0)',
-    expected: -1000,
+    // Two periods of three, not the whole term: cumulative principal over a
+    // full term is -pv whatever the rate, so a full-term case cannot see the
+    // rate, the period bounds or the payment timing.
+    source: 'CUMPRINC(0.1, 3, 1000, 1, 2, 0)',
+    expected: -634.4410876132924,
     tolerance: 1e-9,
   },
   // Even-principal loan: after one of four periods, 3/4 of 4000 still accrues.
@@ -212,8 +223,12 @@ export const formulaFinancialCases: CoverageCase[] = [
   // Equal 10% finance and reinvest rates collapse MIRR to (121/100)^(1/2)-1.
   {
     covers: 'MIRR/3',
-    source: 'MIRR([-100, 0, 121], 0.1, 0.1)',
-    expected: 0.1,
+    // The finance rate discounts the negative flows and the reinvestment rate
+    // compounds the positive ones, so the series needs an outflow after
+    // period 0 for the first rate to reach anything, and the two rates have
+    // to differ for the case to tell them apart.
+    source: 'MIRR([-1000, 300, -200, 500, 400], 0.08, 0.12)',
+    expected: 0.06007250208242665,
     tolerance: 1e-9,
   },
   // Dated flows a whole non-leap year apart make the discount exponent 1.
@@ -346,21 +361,29 @@ export const formulaFinancialCases: CoverageCase[] = [
   // to April, 181 actual days / 180 on a 30-360 basis to July).
   {
     covers: 'ACCRINT/6',
-    source: 'ACCRINT("2023-01-01", "2023-07-01", "2023-07-01", 0.1, 1000, 2)',
-    expected: 50,
+    // Settling mid-period rather than on the coupon date, so the accrual is a
+    // fraction the dates decide: 90 of 360 days on the default 30/360 basis.
+    source: 'ACCRINT("2023-01-01", "2023-07-01", "2023-04-01", 0.1, 1000, 2)',
+    expected: 25,
     tolerance: 1e-9,
   },
   {
     covers: 'ACCRINT/7',
+    // Basis 1 counts the real calendar, so a day either way moves the answer;
+    // bases 0 and 3 divide by a fixed year length instead.
     source:
-      'ACCRINT("2023-01-01", "2023-07-01", "2023-07-01", 0.1, 1000, 2, 3)',
-    expected: 18100 / 365,
+      'ACCRINT("2023-01-15", "2023-07-01", "2023-04-15", 0.1, 1000, 2, 1)',
+    expected: 24.65753424657534,
     tolerance: 1e-9,
   },
+  // On the default 30/360 basis a coupon period is 360/frequency days by
+  // definition, so the dates are inert here and the frequency is what the
+  // case can pin. Basis 3 is the same shape over a 365-day year. The
+  // date-sensitive convention is basis 1, covered below.
   {
     covers: 'COUPDAYS/3',
-    source: 'COUPDAYS("2023-01-15", "2024-01-01", 2)',
-    expected: 180,
+    source: 'COUPDAYS("2023-01-15", "2024-01-01", 4)',
+    expected: 90,
   },
   {
     covers: 'COUPDAYS/4',

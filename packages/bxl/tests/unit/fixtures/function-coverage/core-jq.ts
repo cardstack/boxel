@@ -1,4 +1,27 @@
+import { deepStrictEqual } from 'node:assert';
 import { jqCases, type CoverageCase } from './case.ts';
+
+/** jq's broken-down time: the eight fields `gmtime` and `localtime` yield. */
+function brokenDownTime(wallClock: Date) {
+  return [
+    wallClock.getUTCFullYear(),
+    wallClock.getUTCMonth(),
+    wallClock.getUTCDate(),
+    wallClock.getUTCHours(),
+    wallClock.getUTCMinutes(),
+    wallClock.getUTCSeconds(),
+    wallClock.getUTCDay(),
+    Math.floor(
+      (Date.UTC(
+        wallClock.getUTCFullYear(),
+        wallClock.getUTCMonth(),
+        wallClock.getUTCDate(),
+      ) -
+        Date.UTC(wallClock.getUTCFullYear(), 0, 1)) /
+        86_400_000,
+    ),
+  ];
+}
 
 export const coreJqCases: CoverageCase[] = jqCases([
   // Type filters: each keeps the inputs of one jq type and drops the rest.
@@ -641,46 +664,31 @@ export const coreJqCases: CoverageCase[] = jqCases([
   },
   {
     covers: 'localtime/0',
-    // Reading the host zone is the whole point of localtime, so the assertion
-    // is the shape plus the one calendar day the epoch can land on anywhere.
+    // Reading the host zone is the whole point of localtime, so the answer is
+    // pinned to the epoch moved by exactly the offset that zone was on at the
+    // epoch — which for several of them is not the offset they are on now:
+    // Kathmandu ran +5:30 until 1986 and Kiritimati -10:40 until 1979. A
+    // `gmtime` in disguise disagrees in every zone but UTC.
     source: '0 | localtime',
-    check: (outputs) => {
-      const [parts] = outputs as number[][];
-      if (!Array.isArray(parts) || parts.length !== 8) {
-        throw new Error(
-          `expected 8 broken-down fields, got ${JSON.stringify(parts)}`,
-        );
-      }
-      if (!parts.every((part) => typeof part === 'number')) {
-        throw new Error(
-          `expected numeric fields, got ${JSON.stringify(parts)}`,
-        );
-      }
-      const [year, , , , , second] = parts;
-      if (year !== 1969 && year !== 1970) {
-        throw new Error(
-          `expected the epoch to fall in 1969 or 1970, got ${year}`,
-        );
-      }
-      if (second !== 0) {
-        throw new Error(
-          `expected the epoch to land on a whole minute, got ${second}`,
-        );
-      }
+    check: (outputs, { offsetMinutes }) => {
+      const epoch = new Date(0);
+      deepStrictEqual(
+        outputs[0],
+        brokenDownTime(new Date(offsetMinutes(epoch) * 60_000)),
+      );
     },
   },
   {
     covers: 'strflocaltime/1',
-    // Same host-zone dependence as localtime: any zone puts the epoch on one
-    // of two adjacent dates.
-    source: '0 | strflocaltime("%Y-%m-%d")',
-    check: (outputs) => {
-      const [formatted] = outputs as string[];
-      if (formatted !== '1969-12-31' && formatted !== '1970-01-01') {
-        throw new Error(
-          `expected the epoch date in some zone, got ${JSON.stringify(formatted)}`,
-        );
-      }
+    // Same host-zone dependence as localtime, pinned the same way: the epoch
+    // rendered at the zone's own wall clock, down to the minute, so a
+    // `strftime` in disguise fails everywhere but UTC.
+    source: '0 | strflocaltime("%Y-%m-%dT%H:%M:%S")',
+    check: (outputs, { offsetMinutes }) => {
+      const wallClock = new Date(offsetMinutes(new Date(0)) * 60_000);
+      deepStrictEqual(outputs, [
+        wallClock.toISOString().replace(/\.\d+Z$/, ''),
+      ]);
     },
   },
   {

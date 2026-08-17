@@ -89,6 +89,14 @@ export const formulaLogicCases: CoverageCase[] = [
   // The readable compiler packs SWITCH's variadic arguments into one array,
   // hence arity 1: [expr, match1, result1, ..., default].
   { covers: 'SWITCH/1', source: 'SWITCH("b", "a", 1, "b", 2, 0)', expected: 2 },
+  // An odd argument count means the last one is a default, taken when no arm
+  // matches; without it an unmatched value is #N/A.
+  { covers: 'SWITCH/1', source: 'SWITCH("z", "a", 1, "b", 2, 0)', expected: 0 },
+  {
+    covers: 'SWITCH/1',
+    source: 'SWITCH("z", "a", 1, "b", 2)',
+    throws: /#N\/A/,
+  },
   // Error sentinels
   { covers: 'NA/0', source: 'NA()', throws: /#N\/A/ },
   { covers: 'ERROR_TYPE/1', source: 'ERROR_TYPE(MOD(1, 0))', expected: 2 },
