@@ -2074,7 +2074,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         endLine: 3,
         endColumn: 45,
       },
-      'Context sent with message contains correct selectionRange',
+      `Context sent with message contains correct selectionRange (got ${JSON.stringify(
+        contextSent.codeMode!.selectionRange,
+      )})`,
     );
     assert.strictEqual(
       contextSent.codeMode!.moduleInspectorPanel,
@@ -2231,7 +2233,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         endLine: 6,
         endColumn: 1,
       },
-      'Context sent with message contains correct selectionRange',
+      `Context sent with message contains correct selectionRange (got ${JSON.stringify(
+        contextSent.codeMode!.selectionRange,
+      )})`,
     );
     assert.strictEqual(
       contextSent.codeMode!.moduleInspectorPanel,
