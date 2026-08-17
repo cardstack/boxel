@@ -10,7 +10,7 @@
       "implemented": false,
       "evidenceTier": "POC realm",
       "auditStatus": "POC only",
-      "whereImplemented": "experiments-realm/candidate.gts — modeled as Candidate.appliedRole/appliedDate/status/decisionDate; no separate Application CardDef",
+      "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/candidate.gts — modeled as Candidate.appliedRole / appliedDate / status / decisionDate; no dedicated Application CardDef",
       "reference": null,
       "catalogMatch": null,
       "provenance": null,

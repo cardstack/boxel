@@ -10,7 +10,7 @@
       "implemented": false,
       "evidenceTier": null,
       "auditStatus": "Missing",
-      "whereImplemented": "shared realm: loyalty-tier-field.gts",
+      "whereImplemented": null,
       "reference": null,
       "catalogMatch": null,
       "provenance": null,

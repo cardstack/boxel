@@ -10,7 +10,7 @@
       "implemented": false,
       "evidenceTier": "POC realm",
       "auditStatus": "POC only",
-      "whereImplemented": "experiments-realm/commands/approve-offer-command.gts (ApproveOfferCommand) — candidate offer → onboarding Employee, wired to Pipeline tab",
+      "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/commands/approve-offer-command.gts (ApproveOfferCommand) + https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/commands/approve-service-request-command.gts (ApproveServiceRequestCommand)",
       "reference": null,
       "catalogMatch": null,
       "provenance": "periodic:Approve",

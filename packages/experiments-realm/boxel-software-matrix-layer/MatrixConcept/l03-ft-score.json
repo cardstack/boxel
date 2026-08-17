@@ -10,7 +10,7 @@
       "implemented": false,
       "evidenceTier": "POC realm",
       "auditStatus": "POC only",
-      "whereImplemented": "experiments-realm/boxel-software-matrix-layer/score-field.gts",
+      "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/score-field.gts (ScoreField)",
       "reference": null,
       "catalogMatch": null,
       "provenance": "periodic:Score",

@@ -10,7 +10,7 @@
       "implemented": false,
       "evidenceTier": "POC realm",
       "auditStatus": "POC only",
-      "whereImplemented": "experiments-realm/offer.gts (Offer CardDef) + commands/approve-chain-step-command.gts, commands/generate-offer-letter-command.gts",
+      "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/offer.gts (Offer CardDef) + https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/commands/approve-chain-step-command.gts",
       "reference": null,
       "catalogMatch": null,
       "provenance": null,
