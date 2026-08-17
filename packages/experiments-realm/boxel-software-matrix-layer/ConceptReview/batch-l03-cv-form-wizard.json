@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "verdict": "needs work",
+      "body": "Spec reviewed: Contract-only: no realm example of the step-registration flow. Needs a demo or a linked in-app example.",
+      "createdAt": "2026-08-17T15:31:18.000Z",
+      "resolved": false,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "concept": {
+        "links": {
+          "self": "../MatrixConcept/l03-cv-form-wizard"
+        }
+      },
+      "reviewer": {
+        "links": {
+          "self": "../Teammate/claude-review-agent"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../concept-review",
+        "name": "ConceptReview"
+      }
+    }
+  }
+}

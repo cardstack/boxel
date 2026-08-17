@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "verdict": "approve",
+      "body": "Spec reviewed: ref resolves (shared block); 1 linked example; consumed by club-membership. readMe states the contract. Approving.",
+      "createdAt": "2026-08-17T15:31:18.000Z",
+      "resolved": true,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "concept": {
+        "links": {
+          "self": "../MatrixConcept/l05-5-cv-booking-calendar"
+        }
+      },
+      "reviewer": {
+        "links": {
+          "self": "../Teammate/claude-review-agent"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../concept-review",
+        "name": "ConceptReview"
+      }
+    }
+  }
+}
