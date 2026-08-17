@@ -67,20 +67,32 @@ const EXTRA_USERS: ExtraUser[] = [
 ];
 
 async function waitForSynapse(): Promise<void> {
-  const url = getSynapseURL();
-  const maxAttempts = 24;
+  const base = getSynapseURL().replace(/\/$/, '');
+  // `/_matrix/client/versions` returns 200 only once Synapse has finished
+  // booting and running its database migrations, so it is a truer readiness
+  // signal than a HEAD on the root (which can answer non-2xx while the server
+  // is still coming up, or 404 depending on config).
+  const url = `${base}/_matrix/client/versions`;
+  // The budget is deliberately generous. On a cold or loaded CI runner the
+  // image pull and migrations can take minutes, and a too-tight window took out
+  // the whole test shard before a single test ran rather than tolerating a slow
+  // start.
+  const maxAttempts = 60;
+  const intervalMs = 5000;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
-      const res = await fetch(url, { method: 'HEAD' });
+      const res = await fetch(url);
       if (res.ok) return;
     } catch {
       // fall through to retry
     }
     process.stdout.write('.');
-    await new Promise((r) => setTimeout(r, 5000));
+    await new Promise((r) => setTimeout(r, intervalMs));
   }
   throw new Error(
-    `Failed to reach Synapse at ${url} after ${maxAttempts} attempts.`,
+    `Failed to reach Synapse at ${url} after ${maxAttempts} attempts (~${Math.round(
+      (maxAttempts * intervalMs) / 1000,
+    )}s).`,
   );
 }
 
