@@ -16,14 +16,14 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
     class='lucide lucide-calendar-days'
     viewBox='0 0 24 24'
     ...attributes
-  ><path d='M8 2v4M16 2v4' /><rect
+  ><path d='M8 2v3M16 2v3' /><rect
       width='18'
       height='18'
       x='3'
-      y='4'
+      y='3'
       rx='2'
     /><path
-      d='M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01'
+      d='M3 9h18M8 13h.01M12 13h.01M16 13h.01M8 17h.01M12 17h.01M16 17h.01'
     /></svg>
 </template>;
 

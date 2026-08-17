@@ -16,8 +16,8 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
     class='lucide lucide-list-start'
     viewBox='0 0 24 24'
     ...attributes
-  ><path d='M16 12H3M16 18H3M10 6H3M21 18V8a2 2 0 0 0-2-2h-5' /><path
-      d='m16 8-2-2 2-2'
+  ><path d='M3 5h6M3 12h13M3 19h13M16 8l-3-3 3-3' /><path
+      d='M21 19V7a2 2 0 0 0-2-2h-6'
     /></svg>
 </template>;
 

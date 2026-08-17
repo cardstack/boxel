@@ -16,10 +16,12 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
     class='lucide lucide-toggle-left'
     viewBox='0 0 24 24'
     ...attributes
-  ><rect width='20' height='12' x='2' y='6' rx='6' ry='6' /><circle
-      cx='8'
-      cy='12'
-      r='2'
+  ><circle cx='9' cy='12' r='3' /><rect
+      width='20'
+      height='14'
+      x='2'
+      y='5'
+      rx='7'
     /></svg>
 </template>;
 
