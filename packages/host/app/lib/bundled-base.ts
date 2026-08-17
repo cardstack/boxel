@@ -2,7 +2,7 @@
 // registers them as loader shims, so importing a base module (whether as
 // `@cardstack/base/card-api` or its resolved base-realm URL) resolves to
 // the compiled-in module instead of a network fetch of realm-server-
-// transpiled source. This trades two properties of the fetched path for
+// transpiled source. This trades three properties of the fetched path for
 // speed:
 //
 // - Base modules become singletons shared by every loader generation.
@@ -14,6 +14,19 @@
 //   until the host is rebuilt. This includes indexing — the prerender
 //   renders with the host dist, so index output reflects the bundled base,
 //   not the realm-served source.
+// - An indexed instance's dependencies lose their transitive closure
+//   through base. The loader records `consumedModules` while evaluating
+//   fetched source; a shim carries no dependency chain, so a card's deps
+//   stop at the base modules it names directly and the base-internal and
+//   npm-package entries the fetched path records are absent. Three
+//   `Integration | realm indexing` tests assert the full closure and fail
+//   on that difference. Restoring it needs a *post-compile* dep map:
+//   the fetched closure includes deps the gts/babel transforms inject
+//   (`@ember/template-factory`, `@ember/component/template-only`,
+//   ember-concurrency's async-arrow runtime), which a scan of base's own
+//   import statements can't see. Whether the closure is worth restoring is
+//   a separate question — a bundled base module can't change without a
+//   host rebuild, so nothing in it can invalidate an index entry.
 //
 // The eager glob in bundled-base-modules.js compiles every base module
 // into the host's initial bundle through the same vite/embroider pipeline

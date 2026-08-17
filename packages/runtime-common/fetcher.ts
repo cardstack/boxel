@@ -45,7 +45,12 @@ export function fetcher(
         ? urlOrRequest
         : new Request(urlOrRequest, init);
 
-    let token = fetcherWaiter.beginAsync();
+    // Labeled so a test that times out on this waiter names the request it
+    // was waiting for. Requests answered in-page (a test realm, a
+    // service-worker relay) never reach the global fetch, so the harness'
+    // in-flight-fetch list can be empty while this waiter is still open —
+    // the label is then the only record of what stalled.
+    let token = fetcherWaiter.beginAsync(`${request.method} ${request.url}`);
     try {
       return responseWithWaiters(await buildNext(middlewareStack)(request));
     } finally {
@@ -100,7 +105,11 @@ function responseWithWaiters(response: Response): Response {
       }
       if (typeof key === 'string' && asyncMethods.includes(key)) {
         return async (...args: unknown[]) => {
-          return waitForPromise(value(...args), `fetcher-body:${key}`);
+          let url = Reflect.get(target, 'url');
+          return waitForPromise(
+            value(...args),
+            url ? `fetcher-body:${key} ${url}` : `fetcher-body:${key}`,
+          );
         };
       }
       return value;
