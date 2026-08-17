@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "module": "../product-return",
+        "name": "ProductReturn"
+      },
+      "specType": "card",
+      "cardTitle": "Product Return / RMA (PR)",
+      "cardDescription": "The full returns workflow — reason, per-item condition and disposition, and a refund computed from policy rather than typed in.",
+      "readMe": "## Product Return (PR)\n\n**The refund is computed, never typed in.** Item value comes from the lines; the restocking fee comes from the reason's own policy rate, waived entirely when the fault was ours. Two people processing the same return get the same number, and the arithmetic is visible on the card rather than in someone's head.\n\n`RETURN_REASONS` carries `restockable` and `feeRate` per reason, so a change of returns policy is an edit to one list. `isOurFault()` is exported separately because \"waive the fee\" is a different question from \"can it go back on the shelf\".\n\nPer item: a **condition** (what arrived) and a **disposition** (what happens to it). Only `restock` puts stock back; refurbish, liquidate, dispose and return-to-vendor all remove it from sellable inventory in different ways, and the difference matters to the month-end numbers.\n\nThe four timestamps are event facts — requested, received, inspected, completed — each written once. Progress is a question about which are set.\n\n### Example\n\n`RMA-2026-0089`: a defective trivet, inspected and dispositioned to dispose, fee waived because the fault was ours. `RMA-2026-0091` is the other shape — changed mind, restockable, 15% fee applied.\n\n### Non-goals\n\nThe RMA records the restock decision, not the stock movement. Adjusting the matching `InventoryStock` row when the units are physically put away is a separate, deliberate action — the isolated view says so on the card.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Product Return / RMA (PR)",
+        "summary": "The full returns workflow — reason, per-item condition and disposition, and a refund computed from policy rather than typed in."
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../ProductReturn/rma-0089"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "name": "Spec",
+        "module": "@cardstack/base/spec"
+      }
+    }
+  }
+}

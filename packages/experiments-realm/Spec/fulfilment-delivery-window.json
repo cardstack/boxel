@@ -1,0 +1,53 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "module": "../delivery-window",
+        "name": "DeliveryWindowField"
+      },
+      "specType": "field",
+      "cardTitle": "Delivery Window (DW)",
+      "cardDescription": "The promise made to the customer, as a range rather than a date — with calendar-day handling that does not shift a day west of UTC.",
+      "readMe": "## Delivery Window (DW)\n\nA range, because that is what carriers actually quote (\"2–3 days\"). A single-day promise sets only `latest`. `commitment` carries the carrier's own name for the promise (\"Tracked 48\", \"Next Day\") — the block knows no service names.\n\n**A delivery date is a calendar day, not an instant.** Every date here is read with `getFullYear`/`getMonth`/`getDate` and formatted locally. Reading it back through `toISOString()` moves it to the previous day anywhere east of UTC, which is exactly the kind of bug that only shows up for some of your customers.\n\n`daysRemaining`, `isOverdue` and `relativeLabel` are **getters, not computed fields**: they depend on today, and a stored field that silently changes value every midnight would make the index disagree with itself.\n\nAtom renders the relative form (\"in 2d\", \"3d overdue\") because that is what fits a fitted card's meta row. Overdue is the only state that takes a colour — it is the only one that needs someone to do something.\n\n### Examples\n\nTwo contained examples: a two-day window and a same-day promise.\n\n### Non-goals\n\nNo time-of-day windows. \"Between 09:00 and 13:00\" is a different promise with different data, and belongs to a slot-booking block rather than this one.",
+      "containedExamples": [
+        {
+          "earliest": "2026-08-16",
+          "latest": "2026-08-17",
+          "commitment": "Tracked 48"
+        },
+        {
+          "earliest": null,
+          "latest": "2026-08-15",
+          "commitment": "Next Day"
+        }
+      ],
+      "cardInfo": {
+        "name": "Delivery Window (DW)",
+        "summary": "The promise made to the customer, as a range rather than a date — with calendar-day handling that does not shift a day west of UTC."
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "name": "Spec",
+        "module": "@cardstack/base/spec"
+      },
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "../delivery-window",
+              "name": "DeliveryWindowField"
+            }
+          },
+          {
+            "adoptsFrom": {
+              "module": "../delivery-window",
+              "name": "DeliveryWindowField"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

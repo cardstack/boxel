@@ -1,0 +1,78 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "orderNumber": "ORD-2026-0990",
+      "source": "manual",
+      "customerName": "Harriet Blythe",
+      "customerEmail": "h.blythe@example.com",
+      "shippingAddress": {
+        "addressLine1": "61 Milton Road",
+        "city": "Cambridge",
+        "postalCode": "CB4 1XA",
+        "country": {
+          "name": "United Kingdom",
+          "code": "GB"
+        }
+      },
+      "billingAddress": {
+        "addressLine1": "61 Milton Road",
+        "city": "Cambridge",
+        "postalCode": "CB4 1XA",
+        "country": {
+          "name": "United Kingdom",
+          "code": "GB"
+        }
+      },
+      "lineItems": [
+        {
+          "sku": "SK-450",
+          "productName": "Stoneware Mug Set of 4",
+          "quantity": 1,
+          "quantityFulfilled": 1,
+          "unitPrice": {
+            "amount": 42,
+            "currency": {
+              "code": "GBP"
+            }
+          }
+        }
+      ],
+      "shippingCost": {
+        "amount": 4.99,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "tax": {
+        "amount": 9.4,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "status": "shipped",
+      "paymentStatus": "paid",
+      "priority": "normal",
+      "placedAt": "2026-08-11T08:20:00.000Z",
+      "fulfilledAt": null,
+      "notes": null,
+      "tags": [],
+      "cardInfo": {
+        "name": "ORD-2026-0990"
+      }
+    },
+    "relationships": {
+      "allocatedWarehouse": {
+        "links": {
+          "self": "../Warehouse/wh-east"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../fulfilment-order",
+        "name": "FulfilmentOrder"
+      }
+    }
+  }
+}

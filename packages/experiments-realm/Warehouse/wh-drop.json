@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "code": "DROP-WC",
+      "warehouseName": "WidgetCo Direct",
+      "warehouseType": "dropship",
+      "isActive": true,
+      "address": {
+        "addressLine1": "Werk 3, Industriestrasse 14",
+        "city": "Solingen",
+        "postalCode": "42655",
+        "country": {
+          "name": "Germany",
+          "code": "DE"
+        }
+      },
+      "latitude": 51.1652,
+      "longitude": 7.0671,
+      "contactPerson": "Anke Vogel",
+      "contactEmail": "fulfilment@widgetco.example",
+      "operatingHours": "Mon–Fri 06:00–16:00 CET",
+      "zones": [],
+      "cardInfo": {
+        "name": "WidgetCo Direct"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../warehouse",
+        "name": "Warehouse"
+      }
+    }
+  }
+}

@@ -1,0 +1,102 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "orderNumber": "ORD-2026-1001",
+      "source": "manual",
+      "customerName": "Jane Sowerby",
+      "customerEmail": "jane.sowerby@example.com",
+      "shippingAddress": {
+        "addressLine1": "14 Ashfield Terrace",
+        "city": "Manchester",
+        "postalCode": "M14 5TB",
+        "country": {
+          "name": "United Kingdom",
+          "code": "GB"
+        }
+      },
+      "billingAddress": {
+        "addressLine1": "14 Ashfield Terrace",
+        "city": "Manchester",
+        "postalCode": "M14 5TB",
+        "country": {
+          "name": "United Kingdom",
+          "code": "GB"
+        }
+      },
+      "lineItems": [
+        {
+          "sku": "BW-001",
+          "productName": "Cobalt Wall Hook",
+          "quantity": 2,
+          "quantityFulfilled": 0,
+          "unitPrice": {
+            "amount": 11.5,
+            "currency": {
+              "code": "GBP"
+            }
+          }
+        },
+        {
+          "sku": "RG-042",
+          "productName": "Brass Drawer Pull",
+          "quantity": 1,
+          "quantityFulfilled": 0,
+          "unitPrice": {
+            "amount": 8.95,
+            "currency": {
+              "code": "GBP"
+            }
+          }
+        },
+        {
+          "sku": "PC-100",
+          "productName": "Braided Power Cable 2m",
+          "quantity": 1,
+          "quantityFulfilled": 0,
+          "unitPrice": {
+            "amount": 14,
+            "currency": {
+              "code": "GBP"
+            }
+          }
+        }
+      ],
+      "shippingCost": {
+        "amount": 5.99,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "tax": {
+        "amount": 6.72,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "status": "pending",
+      "paymentStatus": "paid",
+      "priority": "express",
+      "placedAt": "2026-08-14T07:42:00.000Z",
+      "fulfilledAt": null,
+      "notes": null,
+      "tags": ["priority"],
+      "cardInfo": {
+        "name": "ORD-2026-1001"
+      }
+    },
+    "relationships": {
+      "allocatedWarehouse": {
+        "links": {
+          "self": "../Warehouse/wh-main"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../fulfilment-order",
+        "name": "FulfilmentOrder"
+      }
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "binLocation": "B2-A-01",
+      "quantityOnHand": 24,
+      "quantityReserved": 3,
+      "quantityIncoming": 0,
+      "reorderPoint": 12,
+      "reorderQuantity": 40,
+      "lastCountedAt": "2026-08-01T09:15:00.000Z",
+      "lastMovementAt": "2026-08-13T16:42:00.000Z"
+    },
+    "relationships": {
+      "product": {
+        "links": {
+          "self": "../FulfilmentProduct/lm-210"
+        }
+      },
+      "warehouse": {
+        "links": {
+          "self": "../Warehouse/wh-main"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../inventory-stock",
+        "name": "InventoryStock"
+      }
+    }
+  }
+}

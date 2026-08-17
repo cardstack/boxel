@@ -1,0 +1,90 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "orderNumber": "ORD-2026-0982",
+      "source": "manual",
+      "customerName": "Callum Reid",
+      "customerEmail": "c.reid@example.com",
+      "shippingAddress": {
+        "addressLine1": "22 Nicolson Street",
+        "city": "Edinburgh",
+        "postalCode": "EH8 9DH",
+        "country": {
+          "name": "United Kingdom",
+          "code": "GB"
+        }
+      },
+      "billingAddress": {
+        "addressLine1": "22 Nicolson Street",
+        "city": "Edinburgh",
+        "postalCode": "EH8 9DH",
+        "country": {
+          "name": "United Kingdom",
+          "code": "GB"
+        }
+      },
+      "lineItems": [
+        {
+          "sku": "PC-100",
+          "productName": "Braided Power Cable 2m",
+          "quantity": 1,
+          "quantityFulfilled": 1,
+          "unitPrice": {
+            "amount": 14,
+            "currency": {
+              "code": "GBP"
+            }
+          }
+        },
+        {
+          "sku": "BW-001",
+          "productName": "Cobalt Wall Hook",
+          "quantity": 2,
+          "quantityFulfilled": 2,
+          "unitPrice": {
+            "amount": 11.5,
+            "currency": {
+              "code": "GBP"
+            }
+          }
+        }
+      ],
+      "shippingCost": {
+        "amount": 3.99,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "tax": {
+        "amount": 7.4,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "status": "delivered",
+      "paymentStatus": "paid",
+      "priority": "normal",
+      "placedAt": "2026-08-07T10:15:00.000Z",
+      "fulfilledAt": "2026-08-11T14:02:00.000Z",
+      "notes": null,
+      "tags": [],
+      "cardInfo": {
+        "name": "ORD-2026-0982"
+      }
+    },
+    "relationships": {
+      "allocatedWarehouse": {
+        "links": {
+          "self": "../Warehouse/wh-main"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../fulfilment-order",
+        "name": "FulfilmentOrder"
+      }
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "module": "../fulfilment-product",
+        "name": "FulfilmentProduct"
+      },
+      "specType": "card",
+      "cardTitle": "Product / SKU (Pr)",
+      "cardDescription": "A SKU as fulfilment sees it — what you need to move an item, not what you need to sell it.",
+      "readMe": "## Product (Pr)\n\nDeliberately not a retail product card. This one carries weight, box size, barcode, cost, supplier and dropship flag — the things you need to **move** an item. It is named distinctly from the realm's existing `product.gts` so the two coexist; merging them would force one card to carry both jobs.\n\n`shippingProfile` is a `ParcelDimensionsField` — the second consumer of that block, and the reason it is a block: a product's shipping profile is the same shape as a parcel's, so the packing station pre-fills from it.\n\nThe fitted view inverts the usual hierarchy: the **SKU** takes the display size and the product name is the subtitle, because a picker reads the SKU first. That is why this fitted is hand-rolled rather than a `FittedCard`.\n\n### Example\n\nEight SKUs across four categories, including `WD-880` — the dropship item that has a virtual stock row and no physical inventory.\n\n### Non-goals\n\nNo variants, kits or bundles. A kit is one sellable SKU made of several pickable ones, which changes what a pick list means; that is a separate block.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Product / SKU (Pr)",
+        "summary": "A SKU as fulfilment sees it — what you need to move an item, not what you need to sell it."
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../FulfilmentProduct/bw-001"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "name": "Spec",
+        "module": "@cardstack/base/spec"
+      }
+    }
+  }
+}

@@ -1,0 +1,88 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "orderNumber": "ORD-2026-0995",
+      "source": "manual",
+      "customerName": "Derek Olusanya",
+      "customerEmail": "d.olusanya@example.com",
+      "shippingAddress": {
+        "addressLine1": "4 Marine Parade",
+        "city": "Brighton",
+        "postalCode": "BN2 1TA",
+        "country": {
+          "name": "United Kingdom",
+          "code": "GB"
+        },
+        "addressLine2": null,
+        "state": null,
+        "poBoxNumber": null
+      },
+      "billingAddress": {
+        "addressLine1": "4 Marine Parade",
+        "city": "Brighton",
+        "postalCode": "BN2 1TA",
+        "country": {
+          "name": "United Kingdom",
+          "code": "GB"
+        },
+        "addressLine2": null,
+        "state": null,
+        "poBoxNumber": null
+      },
+      "lineItems": [
+        {
+          "sku": "LM-210",
+          "productName": "Linen Lampshade, Small",
+          "quantity": 1,
+          "unitPrice": {
+            "amount": 34,
+            "currency": {
+              "code": "GBP"
+            }
+          },
+          "quantityFulfilled": 1
+        }
+      ],
+      "shippingCost": {
+        "amount": 4.5,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "tax": {
+        "amount": 6.8,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "status": "delivered",
+      "paymentStatus": "paid",
+      "priority": "normal",
+      "placedAt": "2026-08-12T14:31:00.000Z",
+      "fulfilledAt": "2026-08-14T08:43:46.051Z",
+      "notes": null,
+      "tags": [],
+      "cardInfo": {
+        "name": "ORD-2026-0995",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "externalId": null
+    },
+    "relationships": {
+      "allocatedWarehouse": {
+        "links": {
+          "self": "../Warehouse/wh-main"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../fulfilment-order",
+        "name": "FulfilmentOrder"
+      }
+    }
+  }
+}

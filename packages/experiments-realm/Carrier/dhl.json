@@ -1,0 +1,56 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "code": "DHL",
+      "carrierName": "DHL Express",
+      "isActive": true,
+      "accountNumber": "DHL-90144228",
+      "trackingUrlPattern": "https://www.dhl.com/gb-en/home/tracking.html?tracking-id={number}",
+      "dimDivisor": 6000,
+      "brandHue": "#d40511",
+      "onTimeDeliveries": 96,
+      "totalDeliveries": 104,
+      "supportedCountries": ["GB", "DE", "FR", "US", "AU"],
+      "services": [
+        {
+          "code": "DHLEXP",
+          "serviceName": "Express Worldwide",
+          "deliveryDaysMin": 1,
+          "deliveryDaysMax": 3,
+          "baseRate": {
+            "amount": 14.2,
+            "currency": {
+              "code": "GBP"
+            }
+          },
+          "perKgRate": 2.6,
+          "supportsTracking": true
+        },
+        {
+          "code": "DHLECO",
+          "serviceName": "eCommerce",
+          "deliveryDaysMin": 4,
+          "deliveryDaysMax": 7,
+          "baseRate": {
+            "amount": 5.1,
+            "currency": {
+              "code": "GBP"
+            }
+          },
+          "perKgRate": 0.9,
+          "supportsTracking": true
+        }
+      ],
+      "cardInfo": {
+        "name": "DHL Express"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../carrier",
+        "name": "Carrier"
+      }
+    }
+  }
+}

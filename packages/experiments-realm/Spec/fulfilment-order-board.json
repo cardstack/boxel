@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "module": "../order-fulfilment-board",
+        "name": "OrderFulfilmentBoard"
+      },
+      "specType": "component",
+      "cardTitle": "Order Fulfilment Board (OB)",
+      "cardDescription": "A lifecycle board over any set of cards — columns, column mapping and the move itself are all supplied by the consumer.",
+      "readMe": "## Order Fulfilment Board (OB)\n\n**It knows nothing about orders.** The consumer supplies the columns, a `columnKeyFor` function that says which column a card belongs in, and an `onMove` function that performs the move. That is the whole reason this is a block: a board that hardcoded `card.status` against a fulfilment enum could never be the second consumer's board.\n\nDrag mechanics, insertion points and column chrome come from boxel-ui's `KanbanPlane`. This block is the bridge between a list of cards and that plane's placement model, plus the two things the plane leaves open: what a column means, and what happens when something lands in one.\n\nPlacements are held locally so a drag lands immediately and the write happens behind it — without that the card snaps back to its old column for as long as the save takes, which reads as a failed drag. If the write throws, the local copy is dropped and the card re-derives to where it actually is.\n\nA card whose state is not one of the board's columns is **not drawn**. Dropping it into column one would misreport the pipeline.\n\nThe adapter block hands `--boxel-kanban-*` the semantic set once rather than fighting the plane's selectors for specificity.\n\n### Example\n\nThe Board tab of `OrderFulfilmentApp`, where the app supplies five pipeline columns derived from `ORDER_STATUSES` and an `onMove` that patches the order's status.\n\n### Non-goals\n\nNo column configuration UI, no WIP-limit enforcement. The plane accepts a `wipLimit` and the sidebar for editing columns already exists in boxel-ui; wiring persistence for a per-user board layout is a separate concern.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Order Fulfilment Board (OB)",
+        "summary": "A lifecycle board over any set of cards — columns, column mapping and the move itself are all supplied by the consumer."
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../OrderFulfilmentApp/northlight"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "name": "Spec",
+        "module": "@cardstack/base/spec"
+      }
+    }
+  }
+}

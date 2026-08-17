@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "module": "../shipment-status",
+        "name": "ShipmentStatusField"
+      },
+      "specType": "field",
+      "cardTitle": "Shipment Status (SS)",
+      "cardDescription": "The package lifecycle — deliberately a different enum from the order status, so a split shipment is representable.",
+      "readMe": "## Shipment Status (SS)\n\nSix states: label created, in transit, out for delivery, delivered, exception, returned to sender.\n\n**Why this is not the order's status.** One order can carry two shipments at different stages — item A from the London arch, item B from the Manchester 3PL. Collapsing the two enums into one makes that unrepresentable, so they stay separate and the order's status is a summary of its packages rather than a copy of one.\n\n`SHIPMENT_PIPELINE` excludes `exception` and `returned_to_sender` on purpose. A package sitting in exception has not progressed, and a rail that kept advancing while nothing happened would be a lying affordance. `isShipmentException()` is exported so consumers can ask directly.\n\n### Example\n\n`SHP-2026-0146` is out for delivery; `SHP-2026-0142` is the exception case (a failed delivery attempt) and shows the stalled rail.\n\n### Non-goals\n\nCarrier status codes are not normalised here. A carrier scan carries its own code and description on `TrackingEventField`; mapping every carrier vocabulary onto this enum is integration work and belongs with whatever fetches the scans.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Shipment Status (SS)",
+        "summary": "The package lifecycle — deliberately a different enum from the order status, so a split shipment is representable."
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Shipment/shp-0146"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "name": "Spec",
+        "module": "@cardstack/base/spec"
+      }
+    }
+  }
+}

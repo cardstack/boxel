@@ -1,0 +1,69 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "pickListNumber": "PK-2026-0031",
+      "assignedTo": "Priya Raman",
+      "status": "in_progress",
+      "createdAt": "2026-08-14T08:00:00.000Z",
+      "items": [
+        {
+          "sku": "BW-001",
+          "productName": "Cobalt Wall Hook",
+          "barcode": "5012345678901",
+          "binLocation": "A3-B-14",
+          "quantity": 4,
+          "pickedQuantity": 4,
+          "isShort": false,
+          "orderNumbers": ["ORD-2026-0997"]
+        },
+        {
+          "sku": "PC-100",
+          "productName": "Braided Power Cable 2m",
+          "barcode": "5012345678925",
+          "binLocation": "A1-D-06",
+          "quantity": 2,
+          "pickedQuantity": 0,
+          "isShort": false,
+          "orderNumbers": ["ORD-2026-0998"]
+        },
+        {
+          "sku": "CT-330",
+          "productName": "Cast Iron Trivet",
+          "barcode": "5012345678956",
+          "binLocation": "C1-A-09",
+          "quantity": 1,
+          "pickedQuantity": 0,
+          "isShort": false,
+          "orderNumbers": ["ORD-2026-0997"]
+        }
+      ],
+      "cardInfo": {
+        "name": "PK-2026-0031"
+      }
+    },
+    "relationships": {
+      "warehouse": {
+        "links": {
+          "self": "../Warehouse/wh-main"
+        }
+      },
+      "orders.0": {
+        "links": {
+          "self": "../FulfilmentOrder/ord-0997"
+        }
+      },
+      "orders.1": {
+        "links": {
+          "self": "../FulfilmentOrder/ord-0998"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../pick-list",
+        "name": "PickList"
+      }
+    }
+  }
+}

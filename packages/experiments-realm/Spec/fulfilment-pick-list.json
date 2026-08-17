@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "module": "../pick-list",
+        "name": "PickList"
+      },
+      "specType": "card",
+      "cardTitle": "Pick List",
+      "cardDescription": "A batched walk through the warehouse — one oversized item at a time, with keyboard-wedge barcode scanning that works with real hardware.",
+      "readMe": "## Pick List\n\nBatching is the point: the same SKU picked once can serve three orders, so `PickItemField.orderNumbers` is plural and the picker is told the total to grab.\n\nThe route is a plain sort of bin labels, and `routeOrder()` says why: bins are named so that sorting them lexically walks the aisles in order. That is a property of how bins are labelled, not an optimisation this card invents — calling it a solver would overclaim.\n\nThe isolated view is the mobile pick walk: **one item at a time**, oversized, because it is read at arm's length in an aisle by someone holding a box. A USB barcode scanner is a keyboard that types fast and presses Enter, so handling Enter on a text input supports real hardware with no device integration at all — and a scan that does not match the current item says so rather than silently advancing.\n\nPicks persist through `store.patch`, which replaces arrays wholesale, so the whole item list is re-serialized on each write. With no store present (prerender, a read-only surface) the walk renders as a plan and offers no buttons that would silently do nothing.\n\n### Example\n\n`PK-2026-0031` is mid-walk: one line picked, two to go, batched across two orders. `PK-2026-0030` is complete.\n\n### Non-goals\n\nNo wave picking or sort-to-order. Grouping many orders into a wave and sorting items back to orders at the packing station is v1.1 in the source spec.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Pick List",
+        "summary": "A batched walk through the warehouse — one oversized item at a time, with keyboard-wedge barcode scanning that works with real hardware."
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../PickList/pk-0031"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "name": "Spec",
+        "module": "@cardstack/base/spec"
+      }
+    }
+  }
+}

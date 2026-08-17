@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "module": "../order-fulfilment-app",
+        "name": "OrderFulfilmentApp"
+      },
+      "specType": "app",
+      "cardTitle": "Order Fulfilment (app)",
+      "cardDescription": "The stage-2 app: five surfaces composed entirely from the fulfilment blocks, proving they compose and that the neutral ones stay neutral.",
+      "readMe": "## Order Fulfilment\n\nA warehouse and logistics workspace for a small business, and the evidence that the fulfilment blocks compose. Five surfaces:\n\n| Tab | Composes | What it proves |\n|---|---|---|\n| **Board** | Order Fulfilment Board + Order fitted + Order Status | The board block runs a real lifecycle with columns the app supplies |\n| **Inventory** | Inventory Stock + Warehouse + Product | Computed availability and derived low-stock survive a real dataset across three warehouses |\n| **Ship desk** | Parcel Dimensions + Carrier rates | Rate shopping over configured carrier data, with margin per option |\n| **In transit** | Shipment Tracker (compact) + Delivery Window | The tracker's second consumer, at a different density from the shipment card |\n| **Returns** | Product Return + Line Item | The disposition loop closes without a fork |\n\n**The app declares the domain; the blocks stay neutral.** The board columns, the column mapping and what a move means are all supplied here — the board block itself has no idea what \"packing\" is.\n\n**Nothing block-shaped is hand-rolled.** No second status vocabulary, no bespoke timeline, no copied kanban. What the app owns is its canvas: the masthead, the five counters, and the domain decisions the blocks deliberately refused to make.\n\nLive queries via `context.getCards(…, { isLive: true })` mean a card created by a command appears without a reload. The interactive UI is gated on the CRUD functions being present, so prerender gets a **static shell** — which keeps indexing light and avoids rendering a board of themed fitted cards during prerender.\n\nMetrics do not lie: every counter in the masthead is a static tile, and every row that is clickable opens the record it names.\n\n### Example\n\n`Northlight Goods` — 14 orders across the pipeline, 10 stock rows in 3 warehouses, 3 carriers with 7 priced services, 6 shipments including one in exception, and 2 open RMAs.\n\n### Non-goals\n\nNo CSV import, no channel sync, no PO workflow. Those are recorded gaps against the blocks rather than app-local code: an importer is a command block, and a PO is a card block, neither of which exists yet.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Order Fulfilment (app)",
+        "summary": "The stage-2 app: five surfaces composed entirely from the fulfilment blocks, proving they compose and that the neutral ones stay neutral."
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../OrderFulfilmentApp/northlight"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "name": "Spec",
+        "module": "@cardstack/base/spec"
+      }
+    }
+  }
+}

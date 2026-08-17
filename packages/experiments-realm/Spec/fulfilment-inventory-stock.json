@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "module": "../inventory-stock",
+        "name": "InventoryStock"
+      },
+      "specType": "card",
+      "cardTitle": "Inventory Stock",
+      "cardDescription": "One product, in one warehouse, at one bin — three quantities stored and availability computed, never stored.",
+      "readMe": "## Inventory Stock\n\nThree quantities are stored and one is computed, and **which is which is the whole design**:\n\n- `quantityOnHand` — what a physical count would find\n- `quantityReserved` — what is already promised to orders\n- `quantityIncoming` — what is on a purchase order\n- `quantityAvailable` — **computed**: on hand minus reserved\n\nA stored copy of available would drift the moment either half moved. Low stock is likewise derived from the reorder point rather than stored as a flag; a stored flag has to be recomputed by whoever last touched the row, and eventually someone forgets.\n\n`sku`, `productName` and `warehouseCode` are computed fields rather than template traversals of the links. Prerendered fitted does not resolve links, so a fitted template reading `@model.product.sku` renders blank — reading `@model.sku`, an attribute the indexer filled in, renders everywhere.\n\n`stockState` returns one of `out` / `low` / `ok` — one definition read by the stripe, the fitted gauge and the app's filter.\n\n### Example\n\nTen rows across three warehouses, including `SK-450 @ WH-MAIN` — three on hand, all three reserved, which is what puts `ORD-2026-0999` into awaiting-stock.\n\n### Non-goals\n\nNo lot, batch or serial tracking. Those make a quantity into a set of identified units and change every quantity arithmetic here; a separate block.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Inventory Stock",
+        "summary": "One product, in one warehouse, at one bin — three quantities stored and availability computed, never stored."
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../InventoryStock/stock-08"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "name": "Spec",
+        "module": "@cardstack/base/spec"
+      }
+    }
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "code": "DPD",
+      "carrierName": "DPD",
+      "isActive": true,
+      "accountNumber": "DPD-4471902",
+      "trackingUrlPattern": "https://track.dpd.co.uk/parcels/{number}",
+      "dimDivisor": 5000,
+      "brandHue": "#dc0032",
+      "onTimeDeliveries": 268,
+      "totalDeliveries": 291,
+      "supportedCountries": ["GB", "IE", "FR", "DE", "NL"],
+      "services": [
+        {
+          "code": "DPDNEXT",
+          "serviceName": "Next Day",
+          "deliveryDaysMin": 1,
+          "deliveryDaysMax": 1,
+          "baseRate": {
+            "amount": 6.4,
+            "currency": {
+              "code": "GBP"
+            }
+          },
+          "perKgRate": 1.1,
+          "supportsTracking": true
+        },
+        {
+          "code": "DPDTWO",
+          "serviceName": "Two Day",
+          "deliveryDaysMin": 2,
+          "deliveryDaysMax": 2,
+          "baseRate": {
+            "amount": 4.75,
+            "currency": {
+              "code": "GBP"
+            }
+          },
+          "perKgRate": 0.85,
+          "supportsTracking": true
+        }
+      ],
+      "cardInfo": {
+        "name": "DPD"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../carrier",
+        "name": "Carrier"
+      }
+    }
+  }
+}

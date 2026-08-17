@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "module": "../shipment",
+        "name": "Shipment"
+      },
+      "specType": "card",
+      "cardTitle": "Shipment (Sh)",
+      "cardDescription": "A physical package — separate from the order because one order can become two packages and two orders can become one.",
+      "readMe": "## Shipment (Sh)\n\nKept separate from the order on purpose. One order becomes two shipments when stock sits in two warehouses; two orders become one when a customer buys twice in a morning. Neither is expressible if a shipment is a set of fields on the order.\n\n**Everything from the carrier is snapshotted, not read through the link.** Carrier name, service name, tracking URL pattern, dimensional divisor and quoted cost are stamped onto the shipment when the label is created. A carrier renaming a service two years from now must not rewrite what happened to a package that has already arrived.\n\n`isLate` is derived from the promise and the actual, not stored — both halves are already on the card, so a stored flag would only be a third thing to keep in step. `shippingMargin` is computed because losing money on the shipping line is the number worth surfacing.\n\n`TrackingEventField` (also exported here) is one carrier scan, stored verbatim. The sequence is what a customer-service conversation is actually about, so it is not collapsed into the status.\n\nThe isolated view mounts `ShipmentTracker` rather than drawing a second timeline.\n\n### Example\n\nSix shipments: one delivered on time, one delivered late, one out for delivery, one in transit, one dropship in exception (`SHP-2026-0142`), and one whose volumetric weight cost more than the customer paid.\n\n### Non-goals\n\nNo label generation. `labelUrl` is stored and linked, but nothing renders a PDF or ZPL — a label renderer is a separate block with its own owner.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Shipment (Sh)",
+        "summary": "A physical package — separate from the order because one order can become two packages and two orders can become one."
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Shipment/shp-0146"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "name": "Spec",
+        "module": "@cardstack/base/spec"
+      }
+    }
+  }
+}

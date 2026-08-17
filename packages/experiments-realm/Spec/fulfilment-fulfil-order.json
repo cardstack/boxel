@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "module": "../fulfil-order-command",
+        "name": "default"
+      },
+      "specType": "command",
+      "cardTitle": "Fulfil Order (FO)",
+      "cardDescription": "Records a delivery and completes its order, stamping the fulfilment date exactly once.",
+      "readMe": "## Fulfil Order (FO)\n\nMarks a shipment delivered — status, delivery timestamp, proof of delivery, and an appended `Delivered` scan — then closes its order.\n\n**`fulfilledAt` is monotonic.** If the order already carries one, it stands: a second delivery on a split shipment does not rewrite it, so \"how long did this order take\" keeps answering the same thing forever. The result reports `wasAlreadyFulfilled` so a caller can tell the two paths apart.\n\nLine items are marked fulfilled in the **same write** as the date, because the outstanding count is what the returns and partial-ship views read, and two writes is two chances to disagree.\n\nA shipment with no order is a real state — a sample, a replacement — not an error. The command returns without complaint.\n\n### Example\n\nIts natural target is a shipment out for delivery. `SHP-2026-0146` is that shape; `ORD-2026-0982` and its shipment `SHP-2026-0138` show the completed result, with the fulfilment date stamped and every line's `quantityFulfilled` filled in.\n\n### Non-goals\n\nIt does not decide that a package arrived. Something else — a carrier webhook, or a person reading the tracking page — supplies that fact; this command records it.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Fulfil Order (FO)",
+        "summary": "Records a delivery and completes its order, stamping the fulfilment date exactly once."
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Shipment/shp-0146"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "name": "Spec",
+        "module": "@cardstack/base/spec"
+      }
+    }
+  }
+}

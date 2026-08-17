@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "module": "../tracking-number",
+        "name": "TrackingNumberField"
+      },
+      "specType": "field",
+      "cardTitle": "Tracking Number (TN)",
+      "cardDescription": "A carrier reference plus enough context to link out — the URL pattern comes from the consumer, so adding a carrier never means editing this field.",
+      "readMe": "## Tracking Number (TN)\n\nHolds the number, the carrier code, and a `trackingUrlPattern` containing the single placeholder `{number}`. `trackingUrl` is computed from those three.\n\n**The block knows no carriers.** The pattern is data the consumer supplies — the `Carrier` card stores it and `DispatchShipmentCommand` stamps it onto the shipment when the label is created. Adding a carrier is a new Carrier card, never a change here.\n\n`grouped` re-spaces the number in fours, because unbroken twelve-digit runs are close to unreadable when someone is reading one back down a phone line.\n\nAtom is the bare monospace number for tight slots. Embedded adds the carrier code, the outbound link (only when a pattern exists — no dead links) and a copy button.\n\n### Example\n\n`SHP-2026-0145` carries a DPD reference with a working pattern; `SHP-2026-0142` shows the DHL variant.\n\n### Non-goals\n\nNo live tracking. Nothing here fetches carrier status — the field is a reference and a link. Scans arrive as `TrackingEventField` values on the shipment.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Tracking Number (TN)",
+        "summary": "A carrier reference plus enough context to link out — the URL pattern comes from the consumer, so adding a carrier never means editing this field."
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Shipment/shp-0145"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "name": "Spec",
+        "module": "@cardstack/base/spec"
+      }
+    }
+  }
+}

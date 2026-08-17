@@ -1,0 +1,100 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "shipmentNumber": "SHP-2026-0129",
+      "lineItems": [
+        {
+          "sku": "CT-330",
+          "productName": "Cast Iron Trivet",
+          "quantity": 1,
+          "quantityFulfilled": 0,
+          "unitPrice": {
+            "amount": 26,
+            "currency": {
+              "code": "GBP"
+            }
+          }
+        }
+      ],
+      "parcel": {
+        "length": 24,
+        "width": 24,
+        "height": 5,
+        "weight": 1.5,
+        "dimDivisor": 5000
+      },
+      "trackingNumber": {
+        "number": "AB555512345GB",
+        "carrierCode": "ROYAL",
+        "trackingUrlPattern": "https://www.royalmail.com/track-your-item#/tracking-results/{number}"
+      },
+      "deliveryWindow": {
+        "earliest": "2026-08-05",
+        "latest": "2026-08-06",
+        "commitment": "Tracked 48"
+      },
+      "trackingEvents": [
+        {
+          "occurredAt": "2026-08-03T13:00:00.000Z",
+          "statusCode": "AC",
+          "statusDescription": "Accepted at Post Office",
+          "location": "London, GB",
+          "isDelivered": false
+        },
+        {
+          "occurredAt": "2026-08-05T11:20:00.000Z",
+          "statusCode": "DL",
+          "statusDescription": "Delivered",
+          "location": "Whitby, GB",
+          "isDelivered": true
+        }
+      ],
+      "serviceLevel": "Tracked 48",
+      "carrierName": "Royal Mail",
+      "shippingCost": {
+        "amount": 4.4,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "customerPaid": {
+        "amount": 3.99,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "status": "delivered",
+      "shippedAt": "2026-08-03T13:00:00.000Z",
+      "deliveredAt": "2026-08-05T11:20:00.000Z",
+      "proofOfDelivery": null,
+      "isDropship": false,
+      "cardInfo": {
+        "name": "SHP-2026-0129"
+      }
+    },
+    "relationships": {
+      "order": {
+        "links": {
+          "self": "../FulfilmentOrder/ord-0978"
+        }
+      },
+      "originWarehouse": {
+        "links": {
+          "self": "../Warehouse/wh-main"
+        }
+      },
+      "carrier": {
+        "links": {
+          "self": "../Carrier/royal-mail"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../shipment",
+        "name": "Shipment"
+      }
+    }
+  }
+}

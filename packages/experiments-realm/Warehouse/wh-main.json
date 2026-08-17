@@ -1,0 +1,38 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "code": "WH-MAIN",
+      "warehouseName": "Bermondsey Arch",
+      "warehouseType": "owned",
+      "isActive": true,
+      "address": {
+        "addressLine1": "Arch 42, Almond Road",
+        "city": "London",
+        "postalCode": "SE16 3LR",
+        "country": {
+          "name": "United Kingdom",
+          "code": "GB"
+        }
+      },
+      "latitude": 51.4936,
+      "longitude": -0.0587,
+      "contactPerson": "Priya Raman",
+      "contactEmail": "priya@northlight.example",
+      "contactPhone": "+44 20 7946 0912",
+      "operatingHours": "Mon–Fri 08:00–18:00, Sat 09:00–13:00",
+      "totalBins": 240,
+      "occupiedBins": 221,
+      "zones": ["A", "B", "C"],
+      "cardInfo": {
+        "name": "Bermondsey Arch"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../warehouse",
+        "name": "Warehouse"
+      }
+    }
+  }
+}

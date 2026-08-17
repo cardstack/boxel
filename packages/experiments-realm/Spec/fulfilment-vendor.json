@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "module": "../fulfilment-vendor",
+        "name": "FulfilmentVendor"
+      },
+      "specType": "card",
+      "cardTitle": "Vendor (Ve)",
+      "cardDescription": "A supplier, covering both restocking your own shelves and dropshipping direct to your customer.",
+      "readMe": "## Vendor (Ve)\n\nTwo jobs, kept separate because a vendor can do either or both: **restocking** (lead time, minimum order) and **dropshipping** (supported or not, and the per-order fee).\n\nA vendor that does not support dropship still restocks; a vendor that only dropships has no lead time worth recording. Both are valid cards, and the isolated view says which one you are looking at rather than showing empty fields.\n\nThe isolated view is the Vendor Workspace (VW) element: everything you need before placing a restock or handing a dropship order over, on one surface.\n\n### Example\n\nWidgetCo GmbH (dropship enabled, 5-day lead) and Northline Supply (restock only, 12-day lead).\n\n### Non-goals\n\nNo purchase orders. Creating and receiving a PO is v1.1 in the source spec and would be its own card with its own lifecycle; the vendor fields it needs are already here additively.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Vendor (Ve)",
+        "summary": "A supplier, covering both restocking your own shelves and dropshipping direct to your customer."
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../FulfilmentVendor/widgetco"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "name": "Spec",
+        "module": "@cardstack/base/spec"
+      }
+    }
+  }
+}

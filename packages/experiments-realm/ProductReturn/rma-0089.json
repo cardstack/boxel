@@ -1,0 +1,54 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "rmaNumber": "RMA-2026-0089",
+      "customerName": "Elena Marchetti",
+      "status": "inspecting",
+      "reason": "defective",
+      "reasonDetails": "Arrived with a hairline crack across the underside. Photo sent by email.",
+      "lineItems": [
+        {
+          "sku": "CT-330",
+          "productName": "Cast Iron Trivet",
+          "quantity": 1,
+          "unitPrice": {
+            "amount": 26,
+            "currency": {
+              "code": "GBP"
+            }
+          },
+          "itemCondition": "damaged",
+          "disposition": "dispose",
+          "inspectionNotes": "Cracked casting, not salvageable. Photographed for the vendor claim."
+        }
+      ],
+      "returnTrackingNumber": "AB777712345GB",
+      "refundMethod": "original",
+      "requestedAt": "2026-08-08T10:12:00.000Z",
+      "receivedAt": "2026-08-13T09:40:00.000Z",
+      "inspectedAt": "2026-08-14T08:05:00.000Z",
+      "cardInfo": {
+        "name": "RMA-2026-0089"
+      }
+    },
+    "relationships": {
+      "order": {
+        "links": {
+          "self": "../FulfilmentOrder/ord-0978"
+        }
+      },
+      "originalShipment": {
+        "links": {
+          "self": "../Shipment/shp-0129"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product-return",
+        "name": "ProductReturn"
+      }
+    }
+  }
+}

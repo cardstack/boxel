@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "binLocation": "T2-A-05",
+      "quantityOnHand": 6,
+      "quantityReserved": 6,
+      "quantityIncoming": 20,
+      "reorderPoint": 8,
+      "reorderQuantity": 30,
+      "lastCountedAt": "2026-08-01T09:15:00.000Z",
+      "lastMovementAt": "2026-08-13T16:42:00.000Z"
+    },
+    "relationships": {
+      "product": {
+        "links": {
+          "self": "../FulfilmentProduct/lm-215"
+        }
+      },
+      "warehouse": {
+        "links": {
+          "self": "../Warehouse/wh-east"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../inventory-stock",
+        "name": "InventoryStock"
+      }
+    }
+  }
+}

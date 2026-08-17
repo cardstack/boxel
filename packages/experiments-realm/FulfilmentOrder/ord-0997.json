@@ -1,0 +1,90 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "orderNumber": "ORD-2026-0997",
+      "source": "manual",
+      "customerName": "Meera Shah",
+      "customerEmail": "meera.shah@example.com",
+      "shippingAddress": {
+        "addressLine1": "21 Woodhouse Lane",
+        "city": "Leeds",
+        "postalCode": "LS2 3AP",
+        "country": {
+          "name": "United Kingdom",
+          "code": "GB"
+        }
+      },
+      "billingAddress": {
+        "addressLine1": "21 Woodhouse Lane",
+        "city": "Leeds",
+        "postalCode": "LS2 3AP",
+        "country": {
+          "name": "United Kingdom",
+          "code": "GB"
+        }
+      },
+      "lineItems": [
+        {
+          "sku": "BW-001",
+          "productName": "Cobalt Wall Hook",
+          "quantity": 4,
+          "quantityFulfilled": 0,
+          "unitPrice": {
+            "amount": 11.5,
+            "currency": {
+              "code": "GBP"
+            }
+          }
+        },
+        {
+          "sku": "CT-330",
+          "productName": "Cast Iron Trivet",
+          "quantity": 1,
+          "quantityFulfilled": 0,
+          "unitPrice": {
+            "amount": 26,
+            "currency": {
+              "code": "GBP"
+            }
+          }
+        }
+      ],
+      "shippingCost": {
+        "amount": 8.99,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "tax": {
+        "amount": 14.4,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "status": "picking",
+      "paymentStatus": "paid",
+      "priority": "rush",
+      "placedAt": "2026-08-13T09:48:00.000Z",
+      "fulfilledAt": null,
+      "notes": null,
+      "tags": ["priority"],
+      "cardInfo": {
+        "name": "ORD-2026-0997"
+      }
+    },
+    "relationships": {
+      "allocatedWarehouse": {
+        "links": {
+          "self": "../Warehouse/wh-main"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../fulfilment-order",
+        "name": "FulfilmentOrder"
+      }
+    }
+  }
+}

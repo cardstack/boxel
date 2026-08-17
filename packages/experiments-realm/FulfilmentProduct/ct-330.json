@@ -1,0 +1,49 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "sku": "CT-330",
+      "productName": "Cast Iron Trivet",
+      "category": "Kitchen",
+      "barcode": "5012345678956",
+      "shippingProfile": {
+        "length": 22,
+        "width": 22,
+        "height": 3,
+        "weight": 1.4,
+        "dimDivisor": 5000
+      },
+      "vendorSku": "CT-330-V",
+      "cost": {
+        "amount": 7.6,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "price": {
+        "amount": 26,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "isDropship": false,
+      "isActive": true,
+      "cardInfo": {
+        "name": "Cast Iron Trivet"
+      }
+    },
+    "relationships": {
+      "vendor": {
+        "links": {
+          "self": "../FulfilmentVendor/widgetco"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../fulfilment-product",
+        "name": "FulfilmentProduct"
+      }
+    }
+  }
+}

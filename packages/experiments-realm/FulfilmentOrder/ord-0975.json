@@ -1,0 +1,78 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "orderNumber": "ORD-2026-0975",
+      "source": "manual",
+      "customerName": "Owen Pritchard",
+      "customerEmail": "o.pritchard@example.com",
+      "shippingAddress": {
+        "addressLine1": "3 Beach Road",
+        "city": "Swansea",
+        "postalCode": "SA1 4PY",
+        "country": {
+          "name": "United Kingdom",
+          "code": "GB"
+        }
+      },
+      "billingAddress": {
+        "addressLine1": "3 Beach Road",
+        "city": "Swansea",
+        "postalCode": "SA1 4PY",
+        "country": {
+          "name": "United Kingdom",
+          "code": "GB"
+        }
+      },
+      "lineItems": [
+        {
+          "sku": "LM-215",
+          "productName": "Linen Lampshade, Large",
+          "quantity": 1,
+          "quantityFulfilled": 1,
+          "unitPrice": {
+            "amount": 52,
+            "currency": {
+              "code": "GBP"
+            }
+          }
+        }
+      ],
+      "shippingCost": {
+        "amount": 6.99,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "tax": {
+        "amount": 11.8,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "status": "delivered",
+      "paymentStatus": "paid",
+      "priority": "normal",
+      "placedAt": "2026-07-30T09:00:00.000Z",
+      "fulfilledAt": "2026-08-04T15:40:00.000Z",
+      "notes": null,
+      "tags": [],
+      "cardInfo": {
+        "name": "ORD-2026-0975"
+      }
+    },
+    "relationships": {
+      "allocatedWarehouse": {
+        "links": {
+          "self": "../Warehouse/wh-east"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../fulfilment-order",
+        "name": "FulfilmentOrder"
+      }
+    }
+  }
+}

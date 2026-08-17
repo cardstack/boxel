@@ -1,0 +1,49 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "sku": "PC-100",
+      "productName": "Braided Power Cable 2m",
+      "category": "Electrical",
+      "barcode": "5012345678925",
+      "shippingProfile": {
+        "length": 18,
+        "width": 12,
+        "height": 5,
+        "weight": 0.31,
+        "dimDivisor": 5000
+      },
+      "vendorSku": "PC-100-V",
+      "cost": {
+        "amount": 4.2,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "price": {
+        "amount": 14,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "isDropship": false,
+      "isActive": true,
+      "cardInfo": {
+        "name": "Braided Power Cable 2m"
+      }
+    },
+    "relationships": {
+      "vendor": {
+        "links": {
+          "self": "../FulfilmentVendor/widgetco"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../fulfilment-product",
+        "name": "FulfilmentProduct"
+      }
+    }
+  }
+}
