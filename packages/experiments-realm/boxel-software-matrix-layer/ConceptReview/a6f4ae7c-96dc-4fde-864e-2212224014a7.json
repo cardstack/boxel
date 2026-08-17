@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "verdict": "approve",
+      "body": "Spec reviewed: shared block resolves, ServiceDesk + SLA Policy consume it in use. Approving.",
+      "createdAt": "2026-08-17T10:43:40.221Z",
+      "resolved": true,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "concept": {
+        "links": {
+          "self": "../MatrixConcept/l03-tc-schedule"
+        }
+      },
+      "reviewer": {
+        "links": {
+          "self": "../Teammate/richard"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../concept-review",
+        "name": "ConceptReview"
+      }
+    }
+  }
+}
