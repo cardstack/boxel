@@ -137,15 +137,22 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
     if (!fileUrl || !searchReplaceBlock) {
       return;
     }
+    // This runs outside the task, so cancelling the task does not stop it here:
+    // every await is a point where a newer load may have taken over, and the
+    // abort signal only reaches the fetch. Check ownership after each one
+    // before writing to the resource, or a superseded load resumes later and
+    // overwrites the state — and the diff on screen — belonging to the patch
+    // that replaced it.
+    let originalCode: string;
     try {
       let result = await this.cardService.getSource(new URL(fileUrl), {
         signal,
       });
-      if (result.status === 404) {
-        this.originalCode = ''; // We are creating a new file, so we don't have the original code
-      } else {
-        this.originalCode = result.content;
+      if (signal.aborted) {
+        return;
       }
+      // A 404 means we are creating a new file, so there is no original code.
+      originalCode = result.status === 404 ? '' : result.content;
     } catch (error) {
       if (signal.aborted) {
         // Superseded by a newer load, or the resource went away. Neither is a
@@ -155,6 +162,7 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
       this.errorMessage = `Failed to load code from ${fileUrl}`;
       return;
     }
+    this.originalCode = originalCode;
 
     let applySearchReplaceBlockCommand = new ApplySearchReplaceBlockTool(
       this.toolService.toolContext,
@@ -163,12 +171,19 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
     try {
       let { resultContent: patchedCode } =
         await applySearchReplaceBlockCommand.execute({
-          fileContent: this.originalCode,
+          // This load's own code, not whatever the resource holds by now.
+          fileContent: originalCode,
           codeBlock: searchReplaceBlock,
         });
+      if (signal.aborted) {
+        return;
+      }
       this.modifiedCode = patchedCode;
     } catch (error) {
-      this.modifiedCode = this.originalCode;
+      if (signal.aborted) {
+        return;
+      }
+      this.modifiedCode = originalCode;
       this.errorMessage =
         error instanceof Error ? error.message : String(error);
     }

@@ -536,6 +536,103 @@ ${REPLACE_MARKER}
     assert.false(signals[1]?.aborted, 'the current load is untouched');
   });
 
+  // `loadDiff` runs outside the task, so cancelling the task does not stop it —
+  // it keeps going at every await, and the abort signal only reaches the fetch.
+  // A superseded load that resumes afterwards must not write its answer over
+  // the patch that replaced it.
+  test('a superseded load that resolves late does not overwrite the newer diff', async function (assert) {
+    let releases: Array<(content: string) => void> = [];
+    cardService.getSource = async () => {
+      let content = await new Promise<string>((resolve) => {
+        releases.push(resolve);
+      });
+      return {
+        status: 200,
+        contentType: 'application/vnd.card+source',
+        content,
+      };
+    };
+
+    let monacoSDK = await monacoService.getMonacoContext();
+    let component: any = null;
+
+    class TestComponent extends Component {
+      @tracked htmlParts = [];
+
+      constructor(owner: Owner, args: any) {
+        super(owner, args);
+        component = this;
+      }
+
+      <template>
+        <FormattedAiBotMessage
+          @monacoSDK={{monacoSDK}}
+          @htmlParts={{this.htmlParts}}
+          @roomId='!abcd'
+          @eventId='1234'
+          @isStreaming={{false}}
+          @isLastAssistantMessage={{true}}
+        />
+      </template>
+    }
+
+    await renderComponent(TestComponent);
+    if (!component) {
+      throw new Error('Component not found');
+    }
+
+    let blockFor = (
+      replacement: string,
+    ) => `<pre data-code-language="typescript">
+https://example.com/file.ts
+${SEARCH_MARKER}
+let a = 1;
+${SEPARATOR_MARKER}
+${replacement}
+${REPLACE_MARKER}
+</pre>`;
+
+    // The superseded load, left mid-flight.
+    component.htmlParts = parseHtmlContent(
+      blockFor('let a = 2;'),
+      roomId,
+      eventId,
+    );
+    await waitUntil(() => releases.length === 1);
+
+    // A different patch takes over before the first one has its source.
+    component.htmlParts = parseHtmlContent(
+      blockFor('let a = 3;'),
+      roomId,
+      eventId,
+    );
+    await waitUntil(() => releases.length === 2);
+
+    // The newer load finishes first and puts its diff on screen.
+    releases[1]('let a = 1;');
+    await settled();
+    await waitFor('.code-block-diff');
+    await waitUntil(() =>
+      (
+        document.getElementsByClassName('view-lines')[2] as HTMLElement
+      )?.innerText.includes('let a = 3;'),
+    );
+
+    // Only now does the abandoned one come back with its answer.
+    releases[0]('let a = 1;');
+    await settled();
+
+    assert
+      .dom('[data-test-apply-code-button]')
+      .exists('the newer patch is still the one on offer');
+    assert.ok(
+      (
+        document.getElementsByClassName('view-lines')[2] as HTMLElement
+      )?.innerText.includes('let a = 3;'),
+      'the diff still shows the newer replacement, not the abandoned one',
+    );
+  });
+
   test('a patch whose diff has not arrived says so instead of rendering nothing', async function (assert) {
     let releaseGetSource: (() => void) | undefined;
     cardService.getSource = async () => {
