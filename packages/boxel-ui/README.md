@@ -35,7 +35,9 @@ repeats the same statement in an inline `<style>` at the top of `<head>`, and
 that is the copy that decides the order — `packages/host/index.html`,
 `packages/host/tests/index.html`, `tests/index.html`,
 `docs-app/index.html`, and `docs-app/tests/index.html`. Change the order in one
-place and you have to change it in all of them.
+place and you have to change it in all of them —
+`bin/check-css-layer-order-sync.mjs` (run as part of `pnpm lint`) fails if any
+copy drifts from `global.css`.
 
 The duplication is not decorative. A layer's precedence is fixed by where its
 name *first* appears, and in a bundled build that is not the order the source
