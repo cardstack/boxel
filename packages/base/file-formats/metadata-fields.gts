@@ -28,6 +28,7 @@ import TypographyIcon from '@cardstack/boxel-icons/typography';
 
 import FileCodeIcon from '@cardstack/boxel-icons/file-code';
 import FileInfoIcon from '@cardstack/boxel-icons/file-info';
+import FileTextIcon from '@cardstack/boxel-icons/file-text';
 
 import {
   Component,
@@ -1149,6 +1150,97 @@ export class HtmlMetadataField extends FieldDef {
         dd {
           margin: 0;
           min-width: 0;
+        }
+      </style>
+    </template>
+  };
+}
+
+// What a document says about itself: how long it is, what it calls itself, and
+// the tools that made it. Read from a PDF's Info dictionary and page tree today;
+// the same shape fits an Office core-properties block, so it is named for the
+// document family rather than for PDF. Absent for an encrypted document, whose
+// Info strings are ciphertext (`encrypted` records that, so a consumer can tell
+// "no title" from "title withheld").
+export class DocumentInfoField extends FieldDef {
+  static displayName = 'Document Info';
+  static icon = FileTextIcon;
+
+  @field title = contains(StringField);
+  @field author = contains(StringField);
+  @field subject = contains(StringField);
+  @field keywords = contains(StringField);
+  // The authoring application (a PDF's `/Creator`).
+  @field creator = contains(StringField);
+  // The library that wrote the file (a PDF's `/Producer`).
+  @field producer = contains(StringField);
+  @field pageCount = contains(NumberField);
+  @field pdfVersion = contains(StringField);
+  @field created = contains(DateTimeField);
+  @field encrypted = contains(BooleanField);
+
+  static embedded = class Embedded extends Component<typeof DocumentInfoField> {
+    // The authoring tool and the writer library read as one provenance line
+    // rather than two near-duplicate rows.
+    get madeWith() {
+      let parts = [this.args.model?.creator, this.args.model?.producer].filter(
+        Boolean,
+      );
+      return parts.join(' · ');
+    }
+
+    <template>
+      <dl class='metadata-rows'>
+        {{#if @model.pageCount}}
+          <div class='row'><dt>Pages</dt><dd>{{@model.pageCount}}</dd></div>
+        {{/if}}
+        {{#if @model.title}}
+          <div class='row'><dt>Title</dt><dd>{{@model.title}}</dd></div>
+        {{/if}}
+        {{#if @model.author}}
+          <div class='row'><dt>Author</dt><dd>{{@model.author}}</dd></div>
+        {{/if}}
+        {{#if @model.subject}}
+          <div class='row'><dt>Subject</dt><dd>{{@model.subject}}</dd></div>
+        {{/if}}
+        {{#if @model.created}}
+          <div class='row'><dt>Created</dt><dd><@fields.created /></dd></div>
+        {{/if}}
+        {{#if this.madeWith}}
+          <div class='row'><dt>Made with</dt><dd>{{this.madeWith}}</dd></div>
+        {{/if}}
+        {{#if @model.pdfVersion}}
+          <div class='row'><dt>PDF version</dt><dd>{{@model.pdfVersion}}</dd></div>
+        {{/if}}
+        {{#if @model.encrypted}}
+          <div class='row'><dt>Security</dt><dd>Encrypted</dd></div>
+        {{/if}}
+      </dl>
+      <style scoped>
+        .metadata-rows {
+          margin: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 0.3125rem;
+          font-size: 0.75rem;
+        }
+        .row {
+          display: flex;
+          gap: 0.625rem;
+          align-items: baseline;
+        }
+        dt {
+          flex: 0 0 5.75rem;
+          font-family: var(--font-mono);
+          font-size: 0.5625rem;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          color: var(--muted-foreground);
+        }
+        dd {
+          margin: 0;
+          min-width: 0;
+          overflow-wrap: anywhere;
         }
       </style>
     </template>

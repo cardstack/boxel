@@ -63,6 +63,7 @@ export {
   CameraCaptureField,
   CodedValueField,
   ColorProfileField,
+  DocumentInfoField,
   ExifMetadataField,
   FontMetadataField,
   GeoLocationField,
