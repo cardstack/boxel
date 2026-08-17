@@ -2,12 +2,12 @@
   "data": {
     "type": "card",
     "attributes": {
-      "reference": "BK-20260912-00417",
-      "quantity": 2,
+      "reference": "BK-20261101-00602",
+      "quantity": 1,
       "rsvp": "Going",
       "paymentStatus": "Paid",
       "totalPrice": {
-        "amount": 90,
+        "amount": 42,
         "currency": {
           "code": "GBP"
         }
@@ -23,12 +23,12 @@
     "relationships": {
       "event": {
         "links": {
-          "self": "../Match/riverton-home"
+          "self": "../Match/ashworth-away"
         }
       },
       "holder": {
         "links": {
-          "self": "../Contact/mei-fong"
+          "self": "../Contact/priya-shah"
         }
       }
     },

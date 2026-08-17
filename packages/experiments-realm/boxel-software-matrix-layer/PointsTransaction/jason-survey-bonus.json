@@ -6,7 +6,7 @@
       "reason": "Completed post-event survey",
       "source": "Survey",
       "occurredAt": "2026-08-03T09:12:00.000Z",
-      "expiresAt": null,
+      "expiresAt": "2026-11-30T23:59:59.000Z",
       "cardInfo": {
         "name": null,
         "summary": null,

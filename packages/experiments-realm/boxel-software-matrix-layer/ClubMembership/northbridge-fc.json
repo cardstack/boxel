@@ -15,6 +15,13 @@
         "module": "../club-membership/club-membership",
         "name": "ClubMembership"
       }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/northbridge-kit"
+        }
+      }
     }
   }
 }

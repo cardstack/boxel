@@ -2,34 +2,30 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Northbridge FC v Riverton Rovers",
-      "kind": "Match",
-      "startsAt": "2026-09-12T14:00:00.000Z",
-      "endsAt": "2026-09-12T16:00:00.000Z",
+      "title": "End of Season Awards Night",
+      "kind": "Club Event",
+      "startsAt": "2027-05-22T18:00:00.000Z",
+      "endsAt": "2027-05-22T22:30:00.000Z",
       "status": "Scheduled",
       "capacity": {
-        "total": 52000,
+        "total": 450,
         "unit": "seats",
         "allocations": [
           {
-            "name": "Season tickets",
-            "quantity": 28000
-          },
-          {
             "name": "Members",
-            "quantity": 15000
+            "quantity": 300
           },
           {
-            "name": "Away supporters",
-            "quantity": 3000
+            "name": "Guests",
+            "quantity": 100
           },
           {
-            "name": "Hospitality",
-            "quantity": 2500
+            "name": "Staff & players",
+            "quantity": 50
           }
         ]
       },
-      "description": "League fixture, matchweek 4. Gates open two hours before kick-off; the North Stand rail link runs every ten minutes from midday.",
+      "description": "Season awards dinner in the Meridian Park hospitality suite — player of the season, golden boot, and the supporters' awards. Dress code: smart. Doors 6pm, dinner 7:30pm.",
       "cardInfo": {
         "name": null,
         "summary": null,
