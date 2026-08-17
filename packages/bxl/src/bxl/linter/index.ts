@@ -469,7 +469,6 @@ function lintFunctionDispatchStyle(
           suggestion:
             'Excel INDEX(array, row) owns this name. To key rows by a field as jq INDEX does, use reduce Rows[] as $row ({}; .[$row.id] = $row), or map to {key, value} pairs and from_entries.',
         });
-        continue;
       }
       if (call.dispatch.dialect === 'bxl-helper') {
         const helperName = call.dispatch.name;

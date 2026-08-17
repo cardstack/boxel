@@ -76,6 +76,15 @@ versions may change syntax behavior until `1.0.0`.
   `COUPDAYS` (a real coupon period under actual/actual). Each is pinned by a
   case in the function-coverage suite; see `src/*/UPSTREAM-DIFFS.md`.
 
+- **Excel wildcards are matched in linear time.** `SEARCH` and the `COUNTIF`
+  family of criteria share one matcher that walks the text once. Compiling `*`
+  to a regex's `.*` made a pattern carrying several stars exponential — a stray
+  run of asterisks over an ordinary text field took tens of seconds, blocking an
+  indexing worker or the browser's main thread.
+
+- **`max_by`/`min_by` on an empty array yield `null`**, as `max`/`min` already
+  did, rather than an empty stream.
+
 - **Numeric literals accept an exponent.** `1e3`, `1E-3` and `5e-324` are
   single numbers in both readable and canonical-jq syntax, where the tokenizer
   previously ended the literal at the first digit and read the rest as a name.

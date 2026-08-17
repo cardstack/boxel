@@ -20,6 +20,7 @@ import {
 } from '../../formulajs/criteria.ts';
 import { EXCEL_ERROR, throwExcelError } from '../../formulajs/errors.ts';
 import { isoWeekNumber } from '../../formulajs/isoWeek.ts';
+import { excelWildcardSearch } from '../../formulajs/wildcard.ts';
 import { compare } from '../../jqtools/evaluate/compare.ts';
 import type { BareNativeFilter } from '../../jqtools/evaluate/filters/lib/nativeFilter.ts';
 import { wrapBareNativeFilters } from '../../jqtools/evaluate/filters/lib/nativeFilter.ts';
@@ -218,7 +219,12 @@ function nowSerial() {
 const SERIAL_EPOCH_UTC_MS = Date.UTC(1899, 11, 30);
 
 function serialToUtcDate(serial: number): Date {
-  return new Date(SERIAL_EPOCH_UTC_MS + serial * NOW_SERIAL_MS_PER_DAY);
+  // Rounded to the millisecond: a serial is a fraction that rarely lands on one
+  // exactly, and Date truncates toward zero, which would drop a second off a
+  // time of day below the 1970 epoch and not above it.
+  return new Date(
+    Math.round(SERIAL_EPOCH_UTC_MS + serial * NOW_SERIAL_MS_PER_DAY),
+  );
 }
 
 function weekdayValue(serialDateLike: unknown, returnTypeLike: unknown = 1) {
@@ -277,31 +283,6 @@ function replaceNth(
   return text;
 }
 
-/**
- * Excel's wildcards for the arguments that take them: `*` for any run of
- * characters, `?` for exactly one, and `~` escaping any of the three.
- */
-function excelWildcardPattern(pattern: string, flags: string): RegExp {
-  let source = '';
-  for (let index = 0; index < pattern.length; index++) {
-    const char = pattern[index];
-    if (char === '~' && '*?~'.includes(pattern[index + 1] ?? '')) {
-      source += escapeRegExpLiteral(pattern[++index]);
-    } else if (char === '*') {
-      source += '[\\s\\S]*';
-    } else if (char === '?') {
-      source += '[\\s\\S]';
-    } else {
-      source += escapeRegExpLiteral(char);
-    }
-  }
-  return new RegExp(source, flags);
-}
-
-function escapeRegExpLiteral(text: string) {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
 function searchValue(
   findTextLike: unknown,
   withinTextLike: unknown,
@@ -318,9 +299,7 @@ function searchValue(
   }
   // SEARCH differs from FIND in two ways, not one: it ignores case and it
   // reads find_text as a wildcard pattern.
-  const found = withinText
-    .slice(startNum - 1)
-    .search(excelWildcardPattern(findText, 'i'));
+  const found = excelWildcardSearch(findText, withinText.slice(startNum - 1));
   if (found === -1) {
     throwExcelError(EXCEL_ERROR.value);
   }
@@ -398,12 +377,16 @@ const WEEKDAY_NAMES = [
 
 type DateFormatField =
   | 'literal'
+  | 'ignored'
   | 'year'
   | 'month'
   | 'day'
   | 'hour'
   | 'minute'
   | 'second'
+  | 'elapsedHour'
+  | 'elapsedMinute'
+  | 'elapsedSecond'
   | 'meridiem';
 
 interface DateFormatToken {
@@ -411,23 +394,50 @@ interface DateFormatToken {
   text: string;
 }
 
+// A bracketed run is a colour, a condition or a locale — none of them date
+// codes — unless it is one of the elapsed-time codes, which are.
+const ELAPSED_CODE = /^\[(h+|m+|s+)\]$/i;
+const NON_ELAPSED_BRACKET = /\[(?!(?:h+|m+|s+)\])[^\]]*\]/gi;
+// Everything a clock is allowed to be punctuated with, for reading whether an
+// `m` run sits next to an hour or a seconds run.
+const CLOCK_SEPARATOR = /^[\s:.,\-/]$/;
+
 /**
  * True when a format code addresses a date or a time rather than a number.
- * Quoted and escaped literals are excluded, since they may spell anything.
+ * Quoted, escaped and bracketed runs are excluded: they may spell anything,
+ * and `[Red]` carrying a `d` would otherwise make a currency format a date.
  */
 function isDateFormatCode(formatText: string) {
   return /[ymdhs]/i.test(
-    formatText.replace(/"[^"]*"/g, '').replace(/\\[\s\S]/g, ''),
+    formatText
+      .replace(/"[^"]*"/g, '')
+      .replace(/\\[\s\S]/g, '')
+      .replace(NON_ELAPSED_BRACKET, ''),
   );
 }
 
 function tokenizeDateFormat(formatText: string): DateFormatToken[] {
   const runs =
-    formatText.match(/AM\/PM|A\/P|y+|m+|d+|h+|s+|"[^"]*"|\\[\s\S]|[\s\S]/gi) ??
-    [];
+    formatText.match(
+      /AM\/PM|A\/P|\[[^\]]*\]|y+|m+|d+|h+|s+|"[^"]*"|\\[\s\S]|[\s\S]/gi,
+    ) ?? [];
   const tokens = runs.map((text): DateFormatToken => {
     const code = text.toLowerCase();
     if (code === 'am/pm' || code === 'a/p') return { field: 'meridiem', text };
+    const elapsed = ELAPSED_CODE.exec(code);
+    if (elapsed) {
+      const unit = elapsed[1][0];
+      return {
+        field:
+          unit === 'h'
+            ? 'elapsedHour'
+            : unit === 'm'
+              ? 'elapsedMinute'
+              : 'elapsedSecond',
+        text,
+      };
+    }
+    if (code.startsWith('[')) return { field: 'ignored', text };
     if (/^y+$/.test(code)) return { field: 'year', text };
     if (/^m+$/.test(code)) return { field: 'month', text };
     if (/^d+$/.test(code)) return { field: 'day', text };
@@ -436,21 +446,29 @@ function tokenizeDateFormat(formatText: string): DateFormatToken[] {
     return { field: 'literal', text };
   });
 
-  // An `m` run means minutes when it neighbours an hour or second run, and
-  // months everywhere else. Only separators may sit in between.
+  // An `m` run means minutes exactly where the clock puts it: directly after an
+  // hour run, or directly before a seconds run, with nothing but separators in
+  // between. Everywhere else it is the month — including before an hour, which
+  // is how `d mmm h:mm` keeps its month name.
   const neighbour = (from: number, step: number): DateFormatField => {
     for (let i = from + step; i >= 0 && i < tokens.length; i += step) {
-      if (tokens[i].field !== 'literal') return tokens[i].field;
-      if (!/^[\s:.,\-/]$/.test(tokens[i].text)) break;
+      const { field, text } = tokens[i];
+      if (field === 'ignored') continue;
+      if (field !== 'literal') return field;
+      if (!CLOCK_SEPARATOR.test(text)) break;
     }
     return 'literal';
   };
-  tokens.forEach((token, index) => {
-    if (token.field !== 'month') return;
-    const adjacent = [neighbour(index, -1), neighbour(index, 1)];
-    if (adjacent.includes('hour') || adjacent.includes('second')) {
-      token.field = 'minute';
-    }
+  // Decided against the original classification, then applied, so that one
+  // `m` run's reading cannot depend on another's having been rewritten first.
+  const readsAsMinutes = tokens.map(
+    (token, index) =>
+      token.field === 'month' &&
+      (['hour', 'elapsedHour'].includes(neighbour(index, -1)) ||
+        ['second', 'elapsedSecond'].includes(neighbour(index, 1))),
+  );
+  readsAsMinutes.forEach((isMinutes, index) => {
+    if (isMinutes) tokens[index].field = 'minute';
   });
 
   return tokens;
@@ -462,10 +480,16 @@ function renderDateFormat(serial: number, formatText: string) {
   const twelveHour = tokens.some((token) => token.field === 'meridiem');
   const pad = (value: number, width: number) =>
     String(value).padStart(width, '0');
+  // Elapsed totals come from the rounded millisecond rather than the raw
+  // serial, so a duration that is a whole number of seconds does not truncate
+  // to one less through the fraction that represents it.
+  const elapsedMs = Math.round(serial * NOW_SERIAL_MS_PER_DAY);
 
   return tokens
     .map(({ field, text }) => {
       const width = text.length;
+      // An elapsed code carries its width inside the brackets.
+      const bracketWidth = width - 2;
       switch (field) {
         case 'year':
           return width <= 2
@@ -493,6 +517,17 @@ function renderDateFormat(serial: number, formatText: string) {
           return pad(date.getUTCMinutes(), Math.min(width, 2));
         case 'second':
           return pad(date.getUTCSeconds(), Math.min(width, 2));
+        // Elapsed time is the whole duration, not a field of the clock, so
+        // `[h]:mm` on a day and a half is 36:00 rather than 12:00.
+        case 'elapsedHour':
+          return pad(Math.floor(elapsedMs / 3_600_000), bracketWidth);
+        case 'elapsedMinute':
+          return pad(Math.floor(elapsedMs / 60_000), bracketWidth);
+        case 'elapsedSecond':
+          return pad(Math.floor(elapsedMs / 1_000), bracketWidth);
+        // A colour, condition or locale code prints nothing.
+        case 'ignored':
+          return '';
         case 'meridiem': {
           const half = date.getUTCHours() < 12 ? 'AM' : 'PM';
           const shown = text.length === 3 ? half.slice(0, 1) : half;

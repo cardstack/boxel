@@ -330,6 +330,15 @@ export const formulaStatisticalCases: CoverageCase[] = [
     expected: 0.9816843611112658,
     tolerance: 1e-9,
   },
+  // The density needs its own case with shape and scale far apart: at 2 and 1
+  // the cumulative form alone would pass with the two transposed. Microsoft
+  // documents WEIBULL.DIST(105, 20, 100, FALSE) as 0.035589.
+  {
+    covers: 'WEIBULL_DIST/4',
+    source: 'WEIBULL_DIST(105, 20, 100, false)',
+    expected: 0.03558886402450434,
+    tolerance: 1e-12,
+  },
   // One-tailed upper-tail test against the hypothesized mean. With x equal
   // to the sample mean, z = 0 and p is exactly 1/2; giving sigma = 2 with
   // n = 4 and a mean one unit above x makes z = 1, the upper normal tail.

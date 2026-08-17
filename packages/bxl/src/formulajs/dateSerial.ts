@@ -341,7 +341,10 @@ export function excelDays360(
 
 export function excelWeeknum(serialLike: unknown, returnTypeLike: unknown = 1) {
   const date = parseExcelDate(serialLike);
-  const returnType = Math.floor(Number(returnTypeLike) || 1);
+  // Not `Number(x) || 1`: that reads 0 and a non-numeric argument as the
+  // default rather than as the errors they are, which would slip past the
+  // return-type check below.
+  const returnType = Math.floor(parseExcelNumber(returnTypeLike));
   // Return type 21 asks for the ISO week, which numbers from the week holding
   // the year's first Thursday rather than from the week holding January 1st.
   if (returnType === 21) {

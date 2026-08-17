@@ -244,6 +244,20 @@ export const formulaEngineeringCases: CoverageCase[] = [
     tolerance: 1e-15,
   },
   { covers: 'ERFC/1', source: 'ERFC(0)', expected: 1 },
+  // x² is what the series takes, and it runs out of exponent long before erf
+  // stops being ±1: past about 1.3e154 it overflows, and the answer is the
+  // saturated one rather than the NaN a series would return.
+  { covers: 'ERF/1', source: 'ERF(POWER(10, 200))', expected: 1 },
+  { covers: 'ERF/1', source: 'ERF(-POWER(10, 200))', expected: -1 },
+  { covers: 'ERFC/1', source: 'ERFC(POWER(10, 200))', expected: 0 },
+  { covers: 'ERFC/1', source: 'ERFC(-POWER(10, 200))', expected: 2 },
+  // At the other end x² is subnormal, where erf is 2x/√π exactly.
+  {
+    covers: 'ERF/1',
+    source: 'ERF(POWER(10, -300))',
+    expected: 1.1283791670955126e-300,
+    tolerance: 1e-315,
+  },
   // The complement is computed as the upper tail rather than as 1 - ERF, which
   // is the only way the far tail keeps any significant digits at all.
   {

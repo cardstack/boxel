@@ -562,7 +562,9 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
       }
     },
     *'_max_by_impl/1'(input: any[], ref: any[][]) {
+      // An empty array has a null maximum, as max/0 and min/0 also report.
       if (input.length === 0) {
+        yield null;
         return;
       }
 
@@ -579,6 +581,7 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
     },
     *'_min_by_impl/1'(input: any[], ref: any[][]) {
       if (input.length === 0) {
+        yield null;
         return;
       }
 
@@ -986,8 +989,8 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
       // C lgamma_r reports ln|Γ(x)| through its return value and the sign of
       // Γ(x) through a pointer arg; jq returns the two as a pair, and so does
       // this. Γ is positive everywhere above zero and alternates sign between
-      // the poles below it, so the sign follows from ⌊x⌋'s parity. At a pole,
-      // where the magnitude overflows, the sign is reported as positive.
+      // the poles below it, so the sign follows from ⌊x⌋'s parity, and is
+      // reported as positive at the poles themselves.
       const x = assertNumber(input);
       const sign = x < 0 && Math.floor(x) % 2 !== 0 ? -1 : 1;
       yield [lgammaApprox(x), sign];

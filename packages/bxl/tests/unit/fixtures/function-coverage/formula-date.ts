@@ -178,9 +178,23 @@ export const formulaDateCases: CoverageCase[] = dateCases([
     source: 'WEEKNUM(DATE(2026, 4, 26), 21)',
     expected: 17,
   },
+  // 2026-04-26 is a Sunday, so a week opening on Wednesday puts it in the week
+  // that began on the 22nd — the 17th of the year.
+  {
+    covers: 'WEEKNUM/2',
+    source: 'WEEKNUM(DATE(2026, 4, 26), 13)',
+    expected: 17,
+  },
   {
     covers: 'WEEKNUM/2',
     source: 'WEEKNUM(DATE(2026, 4, 26), 5)',
+    throws: /#NUM!/,
+  },
+  // Zero is out of range like any other unknown type, not a stand-in for the
+  // default.
+  {
+    covers: 'WEEKNUM/2',
+    source: 'WEEKNUM(DATE(2026, 4, 26), 0)',
     throws: /#NUM!/,
   },
   // 2026-06-15 is the Monday that opens ISO week 25 of 2026.

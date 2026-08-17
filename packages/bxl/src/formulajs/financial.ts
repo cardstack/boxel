@@ -24,12 +24,34 @@ function parseCashFlows(values: unknown) {
 }
 
 /**
- * The magnitude a rate solver's residual is judged against. A net present
- * value of a hundredth of a cent is a root for flows in the millions and
- * nowhere near one for flows in the pennies.
+ * Whether the rate a solver stopped at is really a root, asked two ways.
+ *
+ * A net present value of zero settles it outright, which is the ordinary case
+ * and also what a double root gives, since the curve touches zero without
+ * crossing. But discounting amplifies rounding — dividing by `(1 + rate)^n`
+ * multiplies the error in `1 + rate` by the same factor — so near -100%, or
+ * over a long series, the smallest residual any double can produce is nowhere
+ * near zero. There, what marks a root is the crossing itself: the sign flips
+ * across a neighbourhood a few billion ulps wide, which rounding does not do
+ * and a rate that is not a root does not do.
  */
-function cashFlowScale(values: number[]) {
-  return values.reduce((total, value) => total + Math.abs(value), 0) || 1;
+function isNetPresentValueRoot(
+  netPresentValue: (rate: number) => number,
+  rate: number,
+  tolerance: number,
+) {
+  const residual = netPresentValue(rate);
+  if (!Number.isFinite(residual)) return false;
+  if (Math.abs(residual) <= tolerance) return true;
+
+  const nudge = Math.max(Math.abs(rate), 1e-8) * 1e-9;
+  const below = netPresentValue(rate - nudge);
+  const above = netPresentValue(rate + nudge);
+  return (
+    Number.isFinite(below) &&
+    Number.isFinite(above) &&
+    Math.sign(below) !== Math.sign(above)
+  );
 }
 
 export function excelFv(
@@ -398,7 +420,6 @@ export function excelIrr(valuesLike: unknown, guessLike = 0.1) {
   };
 
   const epsMax = 1e-10;
-  const tolerance = epsMax * cashFlowScale(values);
 
   for (let i = 0; i < 50; i++) {
     const resultValue = npv(guess);
@@ -421,9 +442,8 @@ export function excelIrr(valuesLike: unknown, guessLike = 0.1) {
 
   // Newton's method walks to some rate whether or not a root exists, and a
   // series like [-1, 3, -2.5] has none, so the rate it settled on only counts
-  // if the net present value there is actually zero.
-  const residual = npv(guess);
-  if (!Number.isFinite(residual) || Math.abs(residual) > tolerance) {
+  // if the net present value there really is zero.
+  if (!isNetPresentValueRoot(npv, guess, epsMax)) {
     throwExcelError(EXCEL_ERROR.num);
   }
 
@@ -479,7 +499,6 @@ export function excelXirr(
   };
 
   const epsMax = 1e-10;
-  const tolerance = epsMax * cashFlowScale(values);
 
   for (let i = 0; i < 100; i++) {
     const nextGuess = guess - irrResult(guess) / irrDerivative(guess);
@@ -496,8 +515,7 @@ export function excelXirr(
   // As for IRR: a rate the search never brought to zero is not a root. A rate
   // at or below -100% is not one either — discounting by it raises a negative
   // number to a fractional power, so the residual there is not even a number.
-  const residual = guess > -1 ? irrResult(guess) : Number.NaN;
-  if (!Number.isFinite(residual) || Math.abs(residual) > tolerance) {
+  if (guess <= -1 || !isNetPresentValueRoot(irrResult, guess, epsMax)) {
     throwExcelError(EXCEL_ERROR.num);
   }
 
@@ -754,15 +772,38 @@ export function excelPricedisc(
   return redemption * (1 - disc * yf);
 }
 
+/** The last day of the month `date` falls in. */
+function lastDayOfMonth(date: Date) {
+  return new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0),
+  ).getUTCDate();
+}
+
 /** A date `months` on, clamped to the target month's last day. */
 function addMonthsClamped(date: Date, months: number) {
   const shifted = new Date(
     Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + months, 1),
   );
-  const lastDay = new Date(
-    Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth() + 1, 0),
-  ).getUTCDate();
-  shifted.setUTCDate(Math.min(date.getUTCDate(), lastDay));
+  shifted.setUTCDate(Math.min(date.getUTCDate(), lastDayOfMonth(shifted)));
+  return shifted;
+}
+
+/**
+ * A coupon date `months` from maturity. A bond maturing on the last day of a
+ * month pays on the last day of every month in its schedule, so clamping the
+ * day number is not enough: a February 28th maturity would give an August 28th
+ * where the schedule wants the 31st.
+ */
+function addCouponMonths(maturity: Date, months: number) {
+  const shifted = new Date(
+    Date.UTC(maturity.getUTCFullYear(), maturity.getUTCMonth() + months, 1),
+  );
+  const endOfMonth = maturity.getUTCDate() === lastDayOfMonth(maturity);
+  shifted.setUTCDate(
+    endOfMonth
+      ? lastDayOfMonth(shifted)
+      : Math.min(maturity.getUTCDate(), lastDayOfMonth(shifted)),
+  );
   return shifted;
 }
 
@@ -777,27 +818,32 @@ export function excelCoupdays(
   if (![1, 2, 4].includes(frequency)) throwExcelError(EXCEL_ERROR.num);
   if (basis < 0 || basis > 4) throwExcelError(EXCEL_ERROR.num);
 
+  // Validated for every basis, even though only actual/actual reads the dates:
+  // the same arguments must not be an error under one convention and an answer
+  // under another.
+  const settlement = parseExcelDate(settlementLike);
+  const maturity = parseExcelDate(maturityLike);
+  const span = daysBetween(settlement, maturity);
+  if (!Number.isFinite(span) || span <= 0) {
+    throwExcelError(EXCEL_ERROR.num);
+  }
+
   if (basis === 1) {
     // Actual/actual is the one convention where the answer is a real calendar
     // span, so it needs the coupon period settlement falls in. Coupon dates
     // run backwards from maturity a period at a time.
-    const settlement = parseExcelDate(settlementLike);
-    const maturity = parseExcelDate(maturityLike);
-    if (daysBetween(settlement, maturity) <= 0) {
-      throwExcelError(EXCEL_ERROR.num);
-    }
     // Every coupon date is measured from maturity, not from the one before it:
-    // stepping back a period at a time from an already-clamped date would
-    // carry the clamp forward, so an August 31st maturity would go
-    // February 28th and then August 28th instead of back to the month's end.
+    // stepping back a period at a time from an already-clamped date would carry
+    // the clamp forward, so an August 31st maturity would go February 28th and
+    // then August 28th instead of back to the month's end.
     const monthsPerPeriod = 12 / frequency;
     let periods = 1;
     let periodEnd = maturity;
-    let periodStart = addMonthsClamped(maturity, -monthsPerPeriod);
+    let periodStart = addCouponMonths(maturity, -monthsPerPeriod);
     while (periodStart.getTime() > settlement.getTime()) {
       periods++;
       periodEnd = periodStart;
-      periodStart = addMonthsClamped(maturity, -periods * monthsPerPeriod);
+      periodStart = addCouponMonths(maturity, -periods * monthsPerPeriod);
     }
     return daysBetween(periodStart, periodEnd);
   }

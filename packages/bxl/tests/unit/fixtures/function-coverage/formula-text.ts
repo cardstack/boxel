@@ -89,6 +89,14 @@ export const formulaTextCases: CoverageCase[] = [
   // A start position past the end of the text is an error, even for a pattern
   // that can match nothing.
   { covers: 'SEARCH/3', source: 'SEARCH("*", "abc", 5)', throws: /#VALUE!/ },
+  // Stars are matched by walking the text once, not by a backtracking regex, so
+  // a pattern full of them answers in linear time instead of exponential.
+  {
+    covers: 'SEARCH/2',
+    source:
+      'SEARCH("*a*a*a*a*a*a*a*a*b", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")',
+    throws: /#VALUE!/,
+  },
   { covers: 'EXACT/2', source: 'EXACT("Word", "word")', expected: false },
   // Substitution. SUBSTITUTE matches text, REPLACE matches a position span,
   // and REPLACE's new text comes last, after the start and length.
@@ -108,6 +116,13 @@ export const formulaTextCases: CoverageCase[] = [
     covers: 'SUBSTITUTE/4',
     source: 'SUBSTITUTE("a-a-a", "a", "b", 1)',
     expected: 'b-a-a',
+  },
+  // Occurrences do not overlap: "aaa" holds one "aa", not two, so there is no
+  // second instance to replace and the text comes back whole.
+  {
+    covers: 'SUBSTITUTE/4',
+    source: 'SUBSTITUTE("aaa", "aa", "X", 2)',
+    expected: 'aaa',
   },
   {
     covers: 'REPLACE/4',
@@ -166,6 +181,62 @@ export const formulaTextCases: CoverageCase[] = [
     covers: 'TEXT/2',
     source: 'TEXT(DATE(2026, 4, 30) + TIME(14, 5, 9), "mm/dd h:mm:ss AM/PM")',
     expected: '04/30 2:05:09 PM',
+    zones: TIMEZONES,
+  },
+  // Minutes only where the clock puts them — after an hour, or before seconds.
+  // A month run that merely precedes an hour is still a month.
+  {
+    covers: 'TEXT/2',
+    source: 'TEXT(DATE(2026, 4, 30) + TIME(14, 5, 9), "d mmm h:mm")',
+    expected: '30 Apr 14:05',
+    zones: TIMEZONES,
+  },
+  {
+    covers: 'TEXT/2',
+    source: 'TEXT(DATE(2026, 4, 30) + TIME(14, 5, 9), "mm hh")',
+    expected: '04 14',
+    zones: TIMEZONES,
+  },
+  // A bracketed run is a colour, a condition or a locale, so a `d` inside one
+  // does not make a number format a date format.
+  {
+    covers: 'TEXT/2',
+    source: 'TEXT(1234.5, "[Red]#,##0.0")',
+    expected: '1,234.5',
+  },
+  {
+    covers: 'TEXT/2',
+    source: 'TEXT(DATE(2026, 4, 30), "[$-409]yyyy-mm-dd")',
+    expected: '2026-04-30',
+    zones: TIMEZONES,
+  },
+  // The bracketed clock codes are the exception: they ask for elapsed time, so
+  // a day and a half is 36 hours and the minutes beside them are the clock's.
+  {
+    covers: 'TEXT/2',
+    source: 'TEXT(1.5, "[h]:mm")',
+    expected: '36:00',
+    zones: TIMEZONES,
+  },
+  {
+    covers: 'TEXT/2',
+    source: 'TEXT(1.5, "[mm]")',
+    expected: '2160',
+    zones: TIMEZONES,
+  },
+  // A time of day below the 1970 epoch reads the same as one above it: the
+  // serial is a fraction that lands a hair under the second it names, and
+  // truncating it would drop that second on one side of the epoch only.
+  {
+    covers: 'TEXT/2',
+    source: 'TEXT(TIME(12, 30, 0), "hh:mm:ss")',
+    expected: '12:30:00',
+    zones: TIMEZONES,
+  },
+  {
+    covers: 'TEXT/2',
+    source: 'TEXT(DATE(2023, 1, 1) + TIME(12, 30, 0), "hh:mm:ss")',
+    expected: '12:30:00',
     zones: TIMEZONES,
   },
   { covers: 'FIXED/1', source: 'FIXED(1234.567)', expected: '1,234.57' },

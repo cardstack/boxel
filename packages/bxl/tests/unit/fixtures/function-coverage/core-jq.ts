@@ -321,6 +321,10 @@ export const coreJqCases: CoverageCase[] = jqCases([
     ],
     expected: { v: 2, i: 0 },
   },
+  // An empty array has a null extreme rather than no answer at all, matching
+  // what max/0 and min/0 report.
+  { covers: 'max_by/1', source: '[] | max_by(.)', expected: null },
+  { covers: 'min_by/1', source: '[] | min_by(.)', expected: null },
   // bsearch returns the hit index, or -1 - insertionPoint when the target is absent.
   { covers: 'bsearch/1', source: '[1,3,5] | bsearch(4)', expected: -3 },
   { covers: 'all/0', source: 'all', input: [true, false], expected: false },
@@ -454,6 +458,19 @@ export const coreJqCases: CoverageCase[] = jqCases([
     covers: 'match/1',
     source: '"abc" | match("(x)?(b)") | .captures[0]',
     expected: { offset: -1, length: 0, string: null, name: null },
+  },
+  // Capture names are read off the pattern by counting group openings, so the
+  // count has to skip the parentheses that are not groups: one inside a
+  // character class, and the one opening a lookbehind.
+  {
+    covers: 'match/1',
+    source: '"a(b" | match("[(](?<x>b)") | .captures[0].name',
+    expected: 'x',
+  },
+  {
+    covers: 'match/1',
+    source: '"ab" | match("(?<=a)(?<x>b)") | .captures[0].name',
+    expected: 'x',
   },
   { covers: 'test/1', source: '"abc" | test("b.")', expected: true },
   { covers: 'test/2', source: '"ABC" | test("abc"; "i")', expected: true },

@@ -691,8 +691,23 @@ function upperGammaHalf(x: number) {
 // ½ + 1 is where the series stops converging faster than the fraction.
 const GAMMA_SERIES_LIMIT = 1.5;
 
+// x² is what the gamma functions take, and squaring is what runs out of
+// exponent first: above ~1.3e154 it overflows to Infinity, below ~1.5e-162 it
+// underflows to zero. Both ends have an exact answer — erf saturates at ±1,
+// and near the origin it is 2x/√π — so they are answered directly rather than
+// handed to a series that would return NaN or zero.
+const TWO_OVER_ROOT_PI = 1.1283791670955126;
+// Below this, x² is subnormal or zero: the series would take the logarithm of
+// a number that has already lost most of its digits, where 2x/√π is exact —
+// the next term of the expansion is smaller than a double can hold.
+const SMALLEST_NORMAL = 2.2250738585072014e-308;
+
 function erfValue(x: number) {
   const squared = x * x;
+  if (!Number.isFinite(squared)) {
+    return Number.isNaN(x) ? Number.NaN : Math.sign(x);
+  }
+  if (squared < SMALLEST_NORMAL) return x === 0 ? 0 : TWO_OVER_ROOT_PI * x;
   const value =
     squared < GAMMA_SERIES_LIMIT
       ? lowerGammaHalf(squared)
@@ -711,6 +726,11 @@ export function excelErf(lowerLike: unknown, upperLike?: unknown) {
 export function excelErfc(valueLike: unknown) {
   const value = parseExcelNumber(valueLike);
   const squared = value * value;
+  if (!Number.isFinite(squared)) {
+    return Number.isNaN(value) ? Number.NaN : value > 0 ? 0 : 2;
+  }
+  // erf(x) is smaller than the gap between 1 and its neighbour here.
+  if (squared < SMALLEST_NORMAL) return 1;
   // Computed as the upper tail rather than as 1 - ERF, so the far tail keeps
   // its precision: ERFC(6) is 2.15e-17, not zero.
   const complement =

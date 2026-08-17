@@ -168,6 +168,24 @@ export const formulaFinancialCases: CoverageCase[] = [
   // iteration still ends somewhere, which is why the result is checked
   // against the series rather than taken on trust.
   { covers: 'IRR/1', source: 'IRR([-1, 3, -2.5])', throws: /#NUM!/ },
+  // A rate near -100% is a root the residual cannot show: dividing by a
+  // 1 + rate of a millionth multiplies rounding by the same factor, so the net
+  // present value at the exact root is a millionth rather than zero. What marks
+  // it is the crossing. 0.001 discounted at -99.9999% is exactly 1000.
+  {
+    covers: 'IRR/1',
+    source: 'IRR([-1000, 0.001])',
+    expected: -0.999999,
+    tolerance: 1e-9,
+  },
+  // A double root touches zero without crossing it, so this one is carried by
+  // the residual instead: 230 and -132.25 put both roots at 15%.
+  {
+    covers: 'IRR/1',
+    source: 'IRR([-100, 230, -132.25])',
+    expected: 0.15,
+    tolerance: 1e-6,
+  },
   // Two sign changes give -100, +230, -132 exact roots at 10% and 20%, so a
   // guess above the turning point returns the higher one. The same series
   // carries the guess arities of IRR_BY, XIRR and XIRR_BY.
@@ -378,6 +396,36 @@ export const formulaFinancialCases: CoverageCase[] = [
     covers: 'COUPDAYS/4',
     source: 'COUPDAYS("2025-09-01", "2026-08-31", 2, 1)',
     expected: 181,
+    zones: TIMEZONES,
+  },
+  // A maturity on the last day of a short month keeps the schedule on month
+  // ends too: the coupon date behind 2026-02-28 is 2025-08-31, not the 28th, so
+  // the period holding settlement is 181 days rather than 184.
+  {
+    covers: 'COUPDAYS/4',
+    source: 'COUPDAYS("2026-01-15", "2026-02-28", 2, 1)',
+    expected: 181,
+    zones: TIMEZONES,
+  },
+  {
+    covers: 'COUPDAYS/4',
+    source: 'COUPDAYS("2027-11-15", "2028-02-29", 2, 1)',
+    expected: 182,
+    zones: TIMEZONES,
+  },
+  // The dates are checked whatever the basis, even where the answer does not
+  // read them, so one argument list cannot be an error under one convention and
+  // an answer under another.
+  {
+    covers: 'COUPDAYS/4',
+    source: 'COUPDAYS("2024-01-01", "2023-01-01", 2, 0)',
+    throws: /#NUM!/,
+    zones: TIMEZONES,
+  },
+  {
+    covers: 'COUPDAYS/4',
+    source: 'COUPDAYS("2023-01-15", "2024-01-01", 2, 5)',
+    throws: /#NUM!/,
     zones: TIMEZONES,
   },
   {
