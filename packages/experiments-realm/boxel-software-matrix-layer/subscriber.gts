@@ -186,6 +186,13 @@ export class Subscriber extends CardDef {
         .line-since {
           display: none;
         }
+        /* Badge degradation: strip height keeps only the first line. */
+        @container fitted-card (max-height: 50px) {
+          .fitted {
+            padding: 0.25rem 0.5rem;
+            gap: 0.125rem;
+          }
+        }
         @container fitted-card (min-height: 65px) {
           .line-plans {
             display: block;

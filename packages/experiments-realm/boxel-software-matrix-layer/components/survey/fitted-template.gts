@@ -103,7 +103,7 @@ export class SurveyFitted extends Component<typeof Survey> {
       }
 
       /* BADGE */
-      @container (max-width: 150px) and (max-height: 169px) {
+      @container fitted-card (max-width: 150px) and (max-height: 169px) {
         .sf-badge {
           display: flex;
           align-items: center;
@@ -131,7 +131,7 @@ export class SurveyFitted extends Component<typeof Survey> {
       }
 
       /* STRIP */
-      @container (min-width: 151px) and (max-height: 169px) {
+      @container fitted-card (min-width: 151px) and (max-height: 169px) {
         .sf-strip {
           display: flex;
           align-items: center;
@@ -156,7 +156,7 @@ export class SurveyFitted extends Component<typeof Survey> {
       }
 
       /* TILE */
-      @container (max-width: 399px) and (min-height: 170px) {
+      @container fitted-card (max-width: 399px) and (min-height: 170px) {
         .sf-tile {
           display: flex;
           flex-direction: column;
@@ -189,7 +189,7 @@ export class SurveyFitted extends Component<typeof Survey> {
       }
 
       /* CARD */
-      @container (min-width: 400px) and (min-height: 170px) {
+      @container fitted-card (min-width: 400px) and (min-height: 170px) {
         .sf-card {
           display: flex;
           align-items: center;
