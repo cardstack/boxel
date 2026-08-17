@@ -608,15 +608,23 @@ ${REPLACE_MARKER}
     );
     await waitUntil(() => releases.length === 2);
 
+    // Which pane holds the replacement depends on how many editors are on the
+    // page, so ask whether any of them shows it rather than picking an index.
+    let shownInDiff = (text: string) =>
+      Array.from(document.getElementsByClassName('view-lines')).some((el) =>
+        (el as HTMLElement).innerText.includes(text),
+      );
+
     // The newer load finishes first and puts its diff on screen.
     releases[1]('let a = 1;');
     await settled();
-    await waitFor('.code-block-diff');
-    await waitUntil(() =>
-      (
-        document.getElementsByClassName('view-lines')[2] as HTMLElement
-      )?.innerText.includes('let a = 3;'),
+    await waitUntil(
+      () =>
+        document.querySelectorAll('.code-block-diff .cdr.line-insert').length >
+        0,
+      { timeout: 5000 },
     );
+    await waitUntil(() => shownInDiff('let a = 3;'), { timeout: 5000 });
 
     // Only now does the abandoned one come back with its answer.
     releases[0]('let a = 1;');
@@ -625,11 +633,13 @@ ${REPLACE_MARKER}
     assert
       .dom('[data-test-apply-code-button]')
       .exists('the newer patch is still the one on offer');
-    assert.ok(
-      (
-        document.getElementsByClassName('view-lines')[2] as HTMLElement
-      )?.innerText.includes('let a = 3;'),
-      'the diff still shows the newer replacement, not the abandoned one',
+    assert.true(
+      shownInDiff('let a = 3;'),
+      'the diff still shows the newer replacement',
+    );
+    assert.false(
+      shownInDiff('let a = 2;'),
+      'the abandoned patch never reaches the screen',
     );
   });
 
