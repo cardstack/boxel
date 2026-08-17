@@ -63,11 +63,13 @@ export {
   CameraCaptureField,
   CodedValueField,
   ColorProfileField,
+  DocumentInfoField,
   ExifMetadataField,
   FontMetadataField,
   GeoLocationField,
   HtmlMetadataField,
   METADATA_VOCABULARIES,
+  OfficeMetadataField,
   QuantityField,
   labelForCode,
 } from './metadata-fields';

@@ -1,5 +1,3 @@
-import 'ember-power-select/styles';
-
 import Check from '@cardstack/boxel-icons/check';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { registerDestructor } from '@ember/destroyable';
@@ -525,265 +523,273 @@ export default class BoxelSelect<ItemT = any> extends Component<
     </style>
     {{! template-lint-disable require-scoped-style }}
     <style>
-      .boxel-select__dropdown.ember-power-select-dropdown {
-        --dropdown-background-color: var(
-          --boxel-dropdown-background-color,
-          var(--background, var(--boxel-light))
-        );
-        --dropdown-border-color: var(
-          --boxel-dropdown-border-color,
-          var(--border, var(--boxel-border-color))
-        );
-        --dropdown-text-color: var(
-          --boxel-dropdown-text-color,
-          var(--foreground, var(--boxel-dark))
-        );
-        --dropdown-highlight-color: var(
-          --boxel-dropdown-highlight-color,
-          var(--theme-highlight, var(--boxel-highlight))
-        );
-        --dropdown-highlight-hover-color: var(
-          --boxel-dropdown-hover-color,
-          var(--theme-highlight-hover, var(--boxel-highlight))
-        );
-        --dropdown-hover-color: var(
-          --boxel-dropdown-hover-color,
-          var(--theme-hover, var(--boxel-light-100))
-        );
-        --dropdown-focus-border-color: var(
-          --boxel-dropdown-focus-border-color,
-          var(--ring, var(--boxel-highlight-hover))
-        );
-        --dropdown-selected-text-color: var(
-          --boxel-dropdown-selected-text-color,
-          var(--foreground, var(--boxel-dark))
-        );
+      /* Unscoped because the dropdown renders in a wormhole outside this
+         component. See "CSS layers" in ../../../README.md. */
+      @layer boxelComponentL1 {
+        .boxel-select__dropdown.ember-power-select-dropdown {
+          --dropdown-background-color: var(
+            --boxel-dropdown-background-color,
+            var(--background, var(--boxel-light))
+          );
+          --dropdown-border-color: var(
+            --boxel-dropdown-border-color,
+            var(--border, var(--boxel-border-color))
+          );
+          --dropdown-text-color: var(
+            --boxel-dropdown-text-color,
+            var(--foreground, var(--boxel-dark))
+          );
+          --dropdown-highlight-color: var(
+            --boxel-dropdown-highlight-color,
+            var(--theme-highlight, var(--boxel-highlight))
+          );
+          --dropdown-highlight-hover-color: var(
+            --boxel-dropdown-hover-color,
+            var(--theme-highlight-hover, var(--boxel-highlight))
+          );
+          --dropdown-hover-color: var(
+            --boxel-dropdown-hover-color,
+            var(--theme-hover, var(--boxel-light-100))
+          );
+          --dropdown-focus-border-color: var(
+            --boxel-dropdown-focus-border-color,
+            var(--ring, var(--boxel-highlight-hover))
+          );
+          --dropdown-selected-text-color: var(
+            --boxel-dropdown-selected-text-color,
+            var(--foreground, var(--boxel-dark))
+          );
 
-        box-shadow: var(--boxel-box-shadow);
-        border-radius: var(--boxel-form-control-border-radius);
-        background-color: var(--dropdown-background-color);
-        border: 1px solid var(--dropdown-border-color);
-        z-index: var(--boxel-layer-modal-urgent);
-        max-height: var(--boxel-select-max-height, 12.5rem);
-        overflow: hidden;
-        font-family: inherit;
-      }
+          box-shadow: var(--boxel-box-shadow);
+          border-radius: var(--boxel-form-control-border-radius);
+          background-color: var(--dropdown-background-color);
+          border: 1px solid var(--dropdown-border-color);
+          z-index: var(--boxel-layer-modal-urgent);
+          max-height: var(--boxel-select-max-height, 12.5rem);
+          overflow: hidden;
+          font-family: inherit;
+        }
 
-      .boxel-select__dropdown:not(.ember-basic-dropdown-content--above) {
-        margin-top: 4px;
-        margin-bottom: 0;
-      }
+        .boxel-select__dropdown:not(.ember-basic-dropdown-content--above) {
+          margin-top: 4px;
+          margin-bottom: 0;
+        }
 
-      .boxel-select__dropdown ul {
-        list-style: none;
-        padding: var(--boxel-sp-xxxs);
-        margin: 0;
-        overflow: auto;
-        max-height: inherit;
-        font-family: inherit;
-      }
+        .boxel-select__dropdown ul {
+          list-style: none;
+          padding: var(--boxel-sp-xxxs);
+          margin: 0;
+          overflow: auto;
+          max-height: inherit;
+          font-family: inherit;
+        }
 
-      .boxel-select__dropdown .ember-power-select-option {
-        padding: var(--boxel-sp-xxs);
-        background-color: var(--dropdown-background-color);
-        color: var(--dropdown-text-color);
-        transition: background-color var(--boxel-transition);
-        border-radius: var(--boxel-border-radius-sm);
-        cursor: pointer;
-        border: none;
-        width: 100%;
-        text-align: left;
-        font-family: inherit;
-        font-size: var(--boxel-font-size-sm);
-        letter-spacing: var(--boxel-lsp-sm);
-        margin-bottom: 2px;
-      }
+        .boxel-select__dropdown .ember-power-select-option {
+          padding: var(--boxel-sp-xxs);
+          background-color: var(--dropdown-background-color);
+          color: var(--dropdown-text-color);
+          transition: background-color var(--boxel-transition);
+          border-radius: var(--boxel-border-radius-sm);
+          cursor: pointer;
+          border: none;
+          width: 100%;
+          text-align: left;
+          font-family: inherit;
+          font-size: var(--boxel-font-size-sm);
+          letter-spacing: var(--boxel-lsp-sm);
+          margin-bottom: 2px;
+        }
 
-      .boxel-select__dropdown .ember-power-select-option[aria-selected='true'] {
-        background-color: var(--dropdown-highlight-color);
-        color: var(--dropdown-selected-text-color);
-      }
+        .boxel-select__dropdown
+          .ember-power-select-option[aria-selected='true'] {
+          background-color: var(--dropdown-highlight-color);
+          color: var(--dropdown-selected-text-color);
+        }
 
-      .boxel-select__dropdown
-        .ember-power-select-option[aria-selected='true']:hover {
-        background-color: var(--dropdown-highlight-hover-color);
-        color: var(--dropdown-selected-text-color);
-      }
+        .boxel-select__dropdown
+          .ember-power-select-option[aria-selected='true']:hover {
+          background-color: var(--dropdown-highlight-hover-color);
+          color: var(--dropdown-selected-text-color);
+        }
 
-      .boxel-select__dropdown .ember-power-select-option:hover {
-        background-color: var(--dropdown-hover-color);
-        color: var(--dropdown-selected-text-color);
-      }
+        .boxel-select__dropdown .ember-power-select-option:hover {
+          background-color: var(--dropdown-hover-color);
+          color: var(--dropdown-selected-text-color);
+        }
 
-      .boxel-select__dropdown .ember-power-select-option:focus {
-        outline: none;
-        background-color: var(--dropdown-highlight-color);
-        color: var(--dropdown-selected-text-color);
-      }
+        .boxel-select__dropdown .ember-power-select-option:focus {
+          outline: none;
+          background-color: var(--dropdown-highlight-color);
+          color: var(--dropdown-selected-text-color);
+        }
 
-      .boxel-select__dropdown .ember-power-select-search {
-        padding: var(--boxel-sp-xs);
-        border-bottom: 1px solid var(--dropdown-border-color);
-      }
+        .boxel-select__dropdown .ember-power-select-search {
+          padding: var(--boxel-sp-xs);
+          border-bottom: 1px solid var(--dropdown-border-color);
+        }
 
-      .boxel-select__dropdown .ember-power-select-search-input {
-        background-color: var(--dropdown-background-color);
-        color: var(--dropdown-text-color);
-        border: 1px solid var(--dropdown-border-color);
-        border-radius: var(--boxel-border-radius-xs);
-        padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
-        font-family: inherit;
-        font-size: var(--boxel-font-size-sm);
-        letter-spacing: var(--boxel-lsp-sm);
-        width: 100%;
-        box-sizing: border-box;
-      }
+        .boxel-select__dropdown .ember-power-select-search-input {
+          background-color: var(--dropdown-background-color);
+          color: var(--dropdown-text-color);
+          border: 1px solid var(--dropdown-border-color);
+          border-radius: var(--boxel-border-radius-xs);
+          padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
+          font-family: inherit;
+          font-size: var(--boxel-font-size-sm);
+          letter-spacing: var(--boxel-lsp-sm);
+          width: 100%;
+          box-sizing: border-box;
+        }
 
-      .boxel-select__dropdown .ember-power-select-search-input:focus {
-        border: 1px solid var(--dropdown-focus-border-color);
-        box-shadow: 0 0 0 1px var(--dropdown-focus-border-color);
-        outline: none;
-      }
+        .boxel-select__dropdown .ember-power-select-search-input:focus {
+          border: 1px solid var(--dropdown-focus-border-color);
+          box-shadow: 0 0 0 1px var(--dropdown-focus-border-color);
+          outline: none;
+        }
 
-      .boxel-select__dropdown .ember-power-select-option--no-matches-message {
-        padding: var(--boxel-sp-sm);
-        color: var(--dropdown-text-color);
-        font-style: italic;
-        text-align: center;
-      }
+        .boxel-select__dropdown .ember-power-select-option--no-matches-message {
+          padding: var(--boxel-sp-sm);
+          color: var(--dropdown-text-color);
+          font-style: italic;
+          text-align: center;
+        }
 
-      .boxel-select__dropdown .ember-power-select-option--loading-message {
-        padding: var(--boxel-sp-sm);
-        color: var(--dropdown-text-color);
-        text-align: center;
-      }
+        .boxel-select__dropdown .ember-power-select-option--loading-message {
+          padding: var(--boxel-sp-sm);
+          color: var(--dropdown-text-color);
+          text-align: center;
+        }
 
-      /* All variants use the same reusable theme variables */
-      .boxel-select__dropdown[class*='variant-'] {
-        --dropdown-highlight-color: var(
-          --boxel-dropdown-highlight-color,
-          var(--theme-highlight, var(--boxel-highlight))
-        );
-        --dropdown-highlight-hover-color: var(
-          --boxel-dropdown-hover-color,
-          var(--theme-highlight-hover, var(--boxel-highlight-hover))
-        );
-        --dropdown-hover-color: var(
-          --boxel-dropdown-hover-color,
-          var(--theme-hover, var(--boxel-light-100))
-        );
-      }
+        /* All variants use the same reusable theme variables */
+        .boxel-select__dropdown[class*='variant-'] {
+          --dropdown-highlight-color: var(
+            --boxel-dropdown-highlight-color,
+            var(--theme-highlight, var(--boxel-highlight))
+          );
+          --dropdown-highlight-hover-color: var(
+            --boxel-dropdown-hover-color,
+            var(--theme-highlight-hover, var(--boxel-highlight-hover))
+          );
+          --dropdown-hover-color: var(
+            --boxel-dropdown-hover-color,
+            var(--theme-hover, var(--boxel-light-100))
+          );
+        }
 
-      .boxel-select__dropdown.variant-primary {
-        --dropdown-highlight-color: var(
-          --boxel-dropdown-highlight-color,
-          var(--primary, var(--boxel-600))
-        );
-        --dropdown-highlight-hover-color: var(
-          --boxel-dropdown-hover-color,
-          var(--primary, var(--boxel-600))
-        );
-        --dropdown-hover-color: var(
-          --boxel-dropdown-hover-color,
-          var(--theme-hover, var(--boxel-500))
-        );
-        --dropdown-selected-text-color: var(
-          --primary-foreground,
-          var(--foreground, var(--boxel-light))
-        );
-        --dropdown-focus-border-color: var(
-          --primary,
-          var(--boxel-outline-color)
-        );
-      }
+        .boxel-select__dropdown.variant-primary {
+          --dropdown-highlight-color: var(
+            --boxel-dropdown-highlight-color,
+            var(--primary, var(--boxel-600))
+          );
+          --dropdown-highlight-hover-color: var(
+            --boxel-dropdown-hover-color,
+            var(--primary, var(--boxel-600))
+          );
+          --dropdown-hover-color: var(
+            --boxel-dropdown-hover-color,
+            var(--theme-hover, var(--boxel-500))
+          );
+          --dropdown-selected-text-color: var(
+            --primary-foreground,
+            var(--foreground, var(--boxel-light))
+          );
+          --dropdown-focus-border-color: var(
+            --primary,
+            var(--boxel-outline-color)
+          );
+        }
 
-      .boxel-select__dropdown.variant-secondary {
-        --dropdown-highlight-color: var(
-          --boxel-dropdown-highlight-color,
-          var(--secondary, var(--boxel-400))
-        );
-        --dropdown-highlight-hover-color: var(
-          --boxel-dropdown-hover-color,
-          var(--secondary, var(--boxel-400))
-        );
-        --dropdown-hover-color: var(
-          --boxel-dropdown-hover-color,
-          var(--theme-hover, var(--boxel-light-100))
-        );
-        --dropdown-selected-text-color: var(
-          --secondary-foreground,
-          var(--foreground, var(--boxel-dark))
-        );
-        --dropdown-focus-border-color: var(
-          --secondary,
-          var(--boxel-outline-color)
-        );
-      }
+        .boxel-select__dropdown.variant-secondary {
+          --dropdown-highlight-color: var(
+            --boxel-dropdown-highlight-color,
+            var(--secondary, var(--boxel-400))
+          );
+          --dropdown-highlight-hover-color: var(
+            --boxel-dropdown-hover-color,
+            var(--secondary, var(--boxel-400))
+          );
+          --dropdown-hover-color: var(
+            --boxel-dropdown-hover-color,
+            var(--theme-hover, var(--boxel-light-100))
+          );
+          --dropdown-selected-text-color: var(
+            --secondary-foreground,
+            var(--foreground, var(--boxel-dark))
+          );
+          --dropdown-focus-border-color: var(
+            --secondary,
+            var(--boxel-outline-color)
+          );
+        }
 
-      .boxel-select__dropdown.variant-muted {
-        --dropdown-highlight-color: var(
-          --boxel-dropdown-highlight-color,
-          var(--muted, var(--boxel-200))
-        );
-        --dropdown-highlight-hover-color: var(
-          --boxel-dropdown-hover-color,
-          var(--muted, var(--boxel-200))
-        );
-        --dropdown-hover-color: var(
-          --boxel-dropdown-hover-color,
-          var(--theme-hover, var(--boxel-light-100))
-        );
-        --dropdown-selected-text-color: var(
-          --muted-foreground,
-          var(--foreground, var(--boxel-dark))
-        );
-        --dropdown-focus-border-color: var(--muted, var(--boxel-outline-color));
-      }
+        .boxel-select__dropdown.variant-muted {
+          --dropdown-highlight-color: var(
+            --boxel-dropdown-highlight-color,
+            var(--muted, var(--boxel-200))
+          );
+          --dropdown-highlight-hover-color: var(
+            --boxel-dropdown-hover-color,
+            var(--muted, var(--boxel-200))
+          );
+          --dropdown-hover-color: var(
+            --boxel-dropdown-hover-color,
+            var(--theme-hover, var(--boxel-light-100))
+          );
+          --dropdown-selected-text-color: var(
+            --muted-foreground,
+            var(--foreground, var(--boxel-dark))
+          );
+          --dropdown-focus-border-color: var(
+            --muted,
+            var(--boxel-outline-color)
+          );
+        }
 
-      .boxel-select__dropdown.variant-destructive {
-        --dropdown-highlight-color: var(
-          --boxel-dropdown-highlight-color,
-          var(--destructive, var(--boxel-danger))
-        );
-        --dropdown-highlight-hover-color: var(
-          --boxel-dropdown-hover-color,
-          var(--destructive, var(--boxel-danger))
-        );
-        --dropdown-hover-color: var(
-          --boxel-dropdown-hover-color,
-          var(--theme-hover, var(--boxel-light-100))
-        );
-        --dropdown-selected-text-color: var(
-          --destructive-foreground,
-          var(--foreground, var(--boxel-dark))
-        );
-        --dropdown-focus-border-color: var(
-          --destructive,
-          var(--boxel-outline-color)
-        );
-      }
+        .boxel-select__dropdown.variant-destructive {
+          --dropdown-highlight-color: var(
+            --boxel-dropdown-highlight-color,
+            var(--destructive, var(--boxel-danger))
+          );
+          --dropdown-highlight-hover-color: var(
+            --boxel-dropdown-hover-color,
+            var(--destructive, var(--boxel-danger))
+          );
+          --dropdown-hover-color: var(
+            --boxel-dropdown-hover-color,
+            var(--theme-hover, var(--boxel-light-100))
+          );
+          --dropdown-selected-text-color: var(
+            --destructive-foreground,
+            var(--foreground, var(--boxel-dark))
+          );
+          --dropdown-focus-border-color: var(
+            --destructive,
+            var(--boxel-outline-color)
+          );
+        }
 
-      :global(#select-dropdown-overlay) {
-        position: absolute;
-        z-index: 10000;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        pointer-events: none;
-      }
+        :global(#select-dropdown-overlay) {
+          position: absolute;
+          z-index: 10000;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          pointer-events: none;
+        }
 
-      /* Accessibility: Status announcement region */
-      .ember-power-select-visually-hidden {
-        position: absolute !important;
-        width: 1px !important;
-        height: 1px !important;
-        padding: 0 !important;
-        margin: -1px !important;
-        overflow: hidden !important;
-        clip: rect(0, 0, 0, 0) !important;
-        white-space: nowrap !important;
-        border: 0 !important;
+        /* Accessibility: Status announcement region */
+        .ember-power-select-visually-hidden {
+          position: absolute !important;
+          width: 1px !important;
+          height: 1px !important;
+          padding: 0 !important;
+          margin: -1px !important;
+          overflow: hidden !important;
+          clip: rect(0, 0, 0, 0) !important;
+          white-space: nowrap !important;
+          border: 0 !important;
+        }
       }
     </style>
   </template>

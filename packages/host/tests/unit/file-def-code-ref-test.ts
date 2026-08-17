@@ -61,6 +61,34 @@ module('Unit | isFileDefCodeRef', function (hooks) {
     );
     assert.true(
       isFileDefCodeRef(
+        { module: baseRRI('pdf-file-def'), name: 'PdfDef' },
+        virtualNetwork,
+      ),
+      'PdfDef',
+    );
+    assert.true(
+      isFileDefCodeRef(
+        { module: baseRRI('docx-file-def'), name: 'DocxDef' },
+        virtualNetwork,
+      ),
+      'DocxDef',
+    );
+    assert.true(
+      isFileDefCodeRef(
+        { module: baseRRI('pptx-file-def'), name: 'PptxDef' },
+        virtualNetwork,
+      ),
+      'PptxDef',
+    );
+    assert.true(
+      isFileDefCodeRef(
+        { module: baseRRI('xlsx-file-def'), name: 'XlsxDef' },
+        virtualNetwork,
+      ),
+      'XlsxDef',
+    );
+    assert.true(
+      isFileDefCodeRef(
         { module: baseRRI('woff2-font-def'), name: 'Woff2Def' },
         virtualNetwork,
       ),

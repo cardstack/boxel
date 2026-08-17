@@ -27,7 +27,7 @@ export interface Signature {
 
 const RadioInputItem: TemplateOnlyComponent<Signature> = <template>
   <style scoped>
-    @layer {
+    @layer boxelComponentL1 {
       .boxel-radio-option {
         --radio-border: 1.5px solid
           var(
