@@ -6,6 +6,48 @@ Entries below are written by CI on each stable promotion — most recent first.
 
 <!-- New entries are inserted directly below this line by the stable job in .github/workflows/boxel-cli-publish.yml. -->
 
+## 2026-08-12 — npm v0.5.0
+
+Release: https://github.com/cardstack/boxel/releases/tag/boxel-cli-v0.5.0
+
+## @cardstack/boxel-cli v0.5.0 (npm `latest`)
+
+https://www.npmjs.com/package/@cardstack/boxel-cli/v/0.5.0
+
+## Changes
+
+- docs: Markdown & Plain Text FileDef formats on the shared shells by @lukemelia in https://github.com/cardstack/boxel/pull/5746
+- feat: Add progress bar for publishing by @backspace in https://github.com/cardstack/boxel/pull/5731
+- fix: treat video as binary in the CLI; read MP4, MOV, and WebM metadata by @lukemelia in https://github.com/cardstack/boxel/pull/5713
+- fix: classify unknown file types as binary so bytes survive the CLI by @habdelra in https://github.com/cardstack/boxel/pull/5732
+- chore: change boxel-ui to flat directory structure by @backspace in https://github.com/cardstack/boxel/pull/5646
+- feat(skills): drop the slash commands from the plugin by @jurgenwerk in https://github.com/cardstack/boxel/pull/5694
+- fix: add per-user session revocation and shorten session token lifetime by @lukemelia in https://github.com/cardstack/boxel/pull/5698
+- feat: allow signup via the cli-auth browser flow by @lukemelia in https://github.com/cardstack/boxel/pull/5686
+- feat: default `boxel profile add` to production, choose other environments with flags by @lukemelia in https://github.com/cardstack/boxel/pull/5685
+- feat: package the boxel-cli plugin for OpenAI Codex by @jurgenwerk in https://github.com/cardstack/boxel/pull/5645
+- feat: Sign in to boxel-cli through the browser by @lukemelia in https://github.com/cardstack/boxel/pull/5661
+- feat: expose realm skills to Claude Code on realm sync by @jurgenwerk in https://github.com/cardstack/boxel/pull/5675
+- revert: remove experimental Realm Script notebooks from main by @christse in https://github.com/cardstack/boxel/pull/5669
+- feat: add Realm Script notebooks and live activity by @christse in https://github.com/cardstack/boxel/pull/5667
+- docs: describe a workspace's root card by its role, not as CardsGrid by @lukemelia in https://github.com/cardstack/boxel/pull/5635
+- fix(skills): resolve run-command linksTo inputs given a card ID string by @FadhlanR in https://github.com/cardstack/boxel/pull/5616
+- fix: Add more typecheck fixes for CLI parse by @backspace in https://github.com/cardstack/boxel/pull/5577
+- feat: bump boxel-skills to v0.0.30 by @jurgenwerk in https://github.com/cardstack/boxel/pull/5590
+- docs: remove the boxel-development skill; factory loads the boxel skill by @jurgenwerk in https://github.com/cardstack/boxel/pull/5571
+- fix: Update CLI parse command to work in npm context by @backspace in https://github.com/cardstack/boxel/pull/5551
+- test: Add CI for npm-installed CLI by @backspace in https://github.com/cardstack/boxel/pull/5542
+- fix: dedup card .json file rows in boxel-cli search output by @FadhlanR in https://github.com/cardstack/boxel/pull/5514
+- fix(boxel-cli): register realm-watch signal handlers before the initial poll by @habdelra in https://github.com/cardstack/boxel/pull/5525
+- fix: treat published prerendered HTML as first-class (co-equal priority + publish awaits it) by @habdelra in https://github.com/cardstack/boxel/pull/5517
+- feat: mixed cards + files entry search with scope and client parity by @FadhlanR in https://github.com/cardstack/boxel/pull/5428
+- feat: rewrite build-skills.ts as copy-only from the pinned boxel-skills tag by @lukemelia in https://github.com/cardstack/boxel/pull/5501
+- feat: generate skill tool definitions at index time and serve them via file-meta by @jurgenwerk in https://github.com/cardstack/boxel/pull/5477
+- refactor: Change static imports to use `@cardstack/base` by @backspace in https://github.com/cardstack/boxel/pull/5452
+- feat: accept prefix RRIs in CLI by @backspace in https://github.com/cardstack/boxel/pull/5451
+
+**Full Changelog**: https://github.com/cardstack/boxel/compare/boxel-cli-v0.4.0...boxel-cli-v0.5.0
+
 ## 2026-07-09 — npm v0.4.0
 
 Release: https://github.com/cardstack/boxel/releases/tag/boxel-cli-v0.4.0

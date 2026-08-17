@@ -21,8 +21,11 @@ import {
 } from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
+import type RealmService from '@cardstack/host/services/realm';
 
 import {
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
   getDbAdapter,
   setupLocalIndexing,
   setupOnSave,
@@ -230,6 +233,12 @@ module('Acceptance | host submode', function (hooks) {
   });
 
   module('with a dangling host routing rule', function (hooks) {
+    // Each snapshot this module's tests create stays attached until it is
+    // deleted, and SQLite caps attached databases per connection. The prefix is
+    // derived from the running module's name, and nested modules have distinct
+    // names, so every scope that runs tests registers its own teardown.
+    setupRealmCacheTeardown(hooks);
+
     hooks.beforeEach(async function () {
       let dbAdapter = await getDbAdapter();
       await query(dbAdapter, [
@@ -261,10 +270,23 @@ module('Acceptance | host submode', function (hooks) {
           },
         },
       };
-      await setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        contents: realmContents,
+      // Each of these nested modules builds the same realm for every one of its
+      // tests, so the indexed result is cached per module and restored instead
+      // of being rebuilt. The seeded realm_metadata row above is part of what
+      // the snapshot captures, so a restored test starts from the same state.
+      await withCachedRealmSetup(async () => {
+        await setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          contents: realmContents,
+        });
       });
+
+      // `withUpdatedTestRealmInfo` reads the realm service's resource for this
+      // realm, and some tests read it before their own visit. Nothing in the
+      // harness registers it — app components do, incidentally, while rendering
+      // during setup — so ask for it here rather than depend on what the setup
+      // visit happened to render.
+      await (getService('realm') as RealmService).ensureRealmMeta(testRealmURL);
     });
 
     test('publish modal warns that a routing rule points to a missing card', async function (assert) {
@@ -289,11 +311,30 @@ module('Acceptance | host submode', function (hooks) {
   });
 
   module('with a realm that is not publishable', function (hooks) {
+    // Each snapshot this module's tests create stays attached until it is
+    // deleted, and SQLite caps attached databases per connection. The prefix is
+    // derived from the running module's name, and nested modules have distinct
+    // names, so every scope that runs tests registers its own teardown.
+    setupRealmCacheTeardown(hooks);
+
     hooks.beforeEach(async function () {
-      await setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        contents: realmContents,
+      // Each of these nested modules builds the same realm for every one of its
+      // tests, so the indexed result is cached per module and restored instead
+      // of being rebuilt. The seeded realm_metadata row above is part of what
+      // the snapshot captures, so a restored test starts from the same state.
+      await withCachedRealmSetup(async () => {
+        await setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          contents: realmContents,
+        });
       });
+
+      // `withUpdatedTestRealmInfo` reads the realm service's resource for this
+      // realm, and some tests read it before their own visit. Nothing in the
+      // harness registers it — app components do, incidentally, while rendering
+      // during setup — so ask for it here rather than depend on what the setup
+      // visit happened to render.
+      await (getService('realm') as RealmService).ensureRealmMeta(testRealmURL);
     });
 
     test('host submode is not available', async function (assert) {
@@ -319,6 +360,12 @@ module('Acceptance | host submode', function (hooks) {
   });
 
   module('with a realm that is publishable', function (hooks) {
+    // Each snapshot this module's tests create stays attached until it is
+    // deleted, and SQLite caps attached databases per connection. The prefix is
+    // derived from the running module's name, and nested modules have distinct
+    // names, so every scope that runs tests registers its own teardown.
+    setupRealmCacheTeardown(hooks);
+
     hooks.beforeEach(async function () {
       // CS-10053: publishable lives in realm_metadata now. Seed the row
       // BEFORE setupAcceptanceTestRealm so parseRealmInfo's first read
@@ -331,10 +378,23 @@ module('Acceptance | host submode', function (hooks) {
         param(true),
         `) ON CONFLICT (url) DO UPDATE SET publishable = true`,
       ]);
-      await setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        contents: realmContents,
+      // Each of these nested modules builds the same realm for every one of its
+      // tests, so the indexed result is cached per module and restored instead
+      // of being rebuilt. The seeded realm_metadata row above is part of what
+      // the snapshot captures, so a restored test starts from the same state.
+      await withCachedRealmSetup(async () => {
+        await setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          contents: realmContents,
+        });
       });
+
+      // `withUpdatedTestRealmInfo` reads the realm service's resource for this
+      // realm, and some tests read it before their own visit. Nothing in the
+      // harness registers it — app components do, incidentally, while rendering
+      // during setup — so ask for it here rather than depend on what the setup
+      // visit happened to render.
+      await (getService('realm') as RealmService).ensureRealmMeta(testRealmURL);
     });
 
     test('host submode is available', async function (assert) {
@@ -716,6 +776,27 @@ module('Acceptance | host submode', function (hooks) {
     });
 
     module('publish and unpublish realm', function (hooks) {
+      // This module calls no caching helper of its own, so the registration below
+      // looks superfluous. It isn't. The parent's beforeEach runs for these tests
+      // too and caches the realm it builds under a key from
+      // `getCurrentModuleCacheKey()`, which reads the *running test's* module
+      // name — for a test in here that is the composed
+      // "… > with a realm that is publishable > publish and unpublish realm". So
+      // the parent exports a snapshot under this module's name and leaves it
+      // attached.
+      //
+      // Teardown deletes by `snapshot_${simpleHash(moduleName)}_`, and the hash
+      // of the parent's name is not the hash of this one, so the parent's
+      // registration cannot reach these. Without this line one snapshot database
+      // stays attached for the rest of the shard, against SQLite's per-connection
+      // cap on attached databases.
+      //
+      // A consequence, not a defect: the parent's own tests and these cache the
+      // same realm under two keys, so it is indexed once per scope rather than
+      // shared. That is inherent to keying by module name — don't "deduplicate"
+      // it by dropping a registration.
+      setupRealmCacheTeardown(hooks);
+
       let publishDeferred: Deferred<void>;
       let unpublishDeferred: Deferred<void>;
 

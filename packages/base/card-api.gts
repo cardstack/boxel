@@ -2655,6 +2655,23 @@ export class BaseDef {
     }
   }
 }
+
+// @cardstack/bxl materializes `{ as: FieldDef }` expression results through
+// the platform's field metadata, but it cannot import this module — it also
+// loads outside a realm (node tooling, the realm-server), where `https:`
+// module specifiers are rejected at load time. The bridge is instance-carried:
+// every instance of this card-api copy inherits its own `getFields` under a
+// cross-realm symbol, so BXL always materializes through the copy that
+// created the instance it was handed — correct even when several loader
+// universes are alive at once. `globalThis.__cardstackGetFields` (registered
+// in field-support) remains as the fallback for consumers without an
+// instance in hand.
+Object.defineProperty(BaseDef.prototype, Symbol.for('cardstack.getFields'), {
+  value: getFields,
+  enumerable: false,
+  configurable: true,
+});
+
 export class Component<
   CardT extends BaseDefConstructor,
 > extends GlimmerComponent<SignatureFor<CardT>> {}

@@ -1,11 +1,28 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import type { Test, SuperTest } from 'supertest';
-import { basename } from 'path';
-import type { Realm } from '@cardstack/runtime-common';
-import { SupportedMimeType } from '@cardstack/runtime-common';
+import { basename, join } from 'path';
+import fsExtra from 'fs-extra';
+const { ensureDirSync, writeJSONSync } = fsExtra;
+import { dirSync } from 'tmp';
+import type {
+  Realm,
+  QueuePublisher,
+  QueueRunner,
+} from '@cardstack/runtime-common';
+import {
+  CachingDefinitionLookup,
+  SupportedMimeType,
+} from '@cardstack/runtime-common';
 import { indexingConcurrencyGroup } from '@cardstack/runtime-common/jobs/indexing';
-import { setupPermissionedRealmCached } from '../helpers/index.ts';
+import {
+  createRealm,
+  createVirtualNetwork,
+  getTestPrerenderer,
+  setupDB,
+  setupPermissionedRealmCached,
+  testCreatePrerenderAuth,
+} from '../helpers/index.ts';
 import type { PgAdapter } from '@cardstack/postgres';
 
 // `_readiness-check` answers whether one realm's content is ready, not whether
@@ -95,6 +112,100 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           'Retry-After',
         ),
         'the retry hint is readable cross-origin',
+      );
+    });
+  });
+
+  // A realm that is mounted but whose start() has not completed. The gate in
+  // front of that state is the one a publish poll sits behind: a brand-new
+  // published realm is mounted and serving before its from-scratch index
+  // finishes. The realm here is deliberately never started, which is the
+  // never-settles end of that spectrum — a startup that hangs rather than one
+  // that is merely slow. The endpoint must still answer.
+  module('startup that has not completed', function (hooks) {
+    let dbAdapter: PgAdapter;
+    let publisher: QueuePublisher;
+    let runner: QueueRunner;
+
+    setupDB(hooks, {
+      beforeEach: async (adapter, pub, run) => {
+        dbAdapter = adapter;
+        publisher = pub;
+        runner = run;
+      },
+    });
+
+    const unstartedRealmURL = 'http://127.0.0.1:6677/unstarted/';
+
+    async function buildUnstartedRealm(): Promise<Realm> {
+      let dir = join(dirSync().name, 'unstarted-realm');
+      ensureDirSync(dir);
+      writeJSONSync(join(dir, 'realm.json'), {
+        data: {
+          type: 'card',
+          attributes: { cardInfo: { name: 'Unstarted Realm' } },
+          meta: {
+            adoptsFrom: {
+              module: '@cardstack/base/realm-config',
+              name: 'RealmConfig',
+            },
+          },
+        },
+      });
+      let virtualNetwork = createVirtualNetwork();
+      let definitionLookup = new CachingDefinitionLookup(
+        dbAdapter,
+        await getTestPrerenderer(),
+        virtualNetwork,
+        testCreatePrerenderAuth,
+      );
+      // createRealm constructs without starting, so #startedUp stays pending
+      // for as long as this realm exists.
+      let { realm } = await createRealm({
+        dir,
+        definitionLookup,
+        realmURL: unstartedRealmURL,
+        permissions: { '*': ['read'] },
+        virtualNetwork,
+        publisher,
+        runner,
+        dbAdapter,
+      });
+      return realm;
+    }
+
+    test('answers 503 naming the startup stage instead of holding the request open', async function (assert) {
+      let realm = await buildUnstartedRealm();
+      let startedAt = Date.now();
+      let response = await realm.handle(
+        new Request(`${unstartedRealmURL}_readiness-check`, {
+          headers: { Accept: SupportedMimeType.RealmInfo },
+        }),
+      );
+      let elapsed = Date.now() - startedAt;
+
+      assert.ok(response, 'the realm handled the request');
+      assert.strictEqual(
+        response!.status,
+        503,
+        'reports not-ready rather than hanging until the caller gives up',
+      );
+      assert.strictEqual(
+        response!.headers.get('X-Boxel-Not-Ready'),
+        'startup',
+        'names startup — not the shared index lane — as the outstanding stage',
+      );
+      assert.strictEqual(
+        response!.headers.get('Retry-After'),
+        '1',
+        'tells the caller to poll again',
+      );
+      // The budget bounds one request; the assertion is that the request came
+      // back on its own rather than being released by something else. A
+      // generous ceiling keeps this from failing on a loaded CI box.
+      assert.true(
+        elapsed < 60_000,
+        `answered within the in-process budget (took ${elapsed}ms)`,
       );
     });
   });

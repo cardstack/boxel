@@ -68,6 +68,7 @@ import type {
   InviteEvent,
   JoinEvent,
   LeaveEvent,
+  CardMessageContent,
   CardMessageEvent,
   DebugMessageEvent,
   MessageEvent,
@@ -762,6 +763,16 @@ export class RoomResource extends Resource<Args> {
       (clientGeneratedId
         ? this._messageCache.get(clientGeneratedId)
         : undefined);
+    // Usage can arrive on an edit sent after the finishing one (the provider
+    // reports it on a trailing chunk). The finished-guard below skips such
+    // edits — it exists to stop stale previews from un-finishing a message —
+    // so apply the late counts directly.
+    if (message?.isStreamingOfEventFinished) {
+      let usage = (event.content as CardMessageContent).data?.usage;
+      if (usage && !message.usage) {
+        message.setUsage(usage);
+      }
+    }
     if (!message?.isStreamingOfEventFinished) {
       let author = this.upsertRoomMember({
         roomId,

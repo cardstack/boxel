@@ -208,14 +208,14 @@ async function waitForHttpReady(url: string, timeoutMs = 60_000) {
 }
 
 // Wait for a realm's `_readiness-check` to succeed. Unlike waitForHttpReady
-// (which only proves a port answers), the probe blocks server-side until the
-// realm's first from-scratch index and any in-flight index settle, so a success
-// means that realm is fully indexed and safe to create/publish against. The
-// server holds each request open until indexing settles, so a single `fetch`
-// could block past the budget (up to undici's default header timeout) and never
-// return to the loop condition — abort it at the remaining budget so the
-// configured timeout is actually enforced and the caller can stop the child
-// processes and emit diagnostics instead of leaving global setup to hang.
+// (which only proves a port answers), the probe gates server-side on the
+// realm's first from-scratch index and any in-flight index, so a success means
+// that realm is fully indexed and safe to create/publish against. The server
+// holds each request open while those settle — bounded, but a single `fetch`
+// can still outlast the remaining budget and never return to the loop
+// condition — so abort it at the remaining budget, keeping the configured
+// timeout enforced and letting the caller stop the child processes and emit
+// diagnostics instead of leaving global setup to hang.
 async function waitForRealmIndexed(url: string, timeoutMs: number) {
   let start = Date.now();
   let lastError: string | undefined;

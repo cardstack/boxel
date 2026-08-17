@@ -17,7 +17,7 @@ module('Integration | codemirror-context', function (hooks) {
       content: '# Hello World',
       onDocChange: () => {},
       onCardTargetsChange: () => {},
-      onOpenCardSearch: () => {},
+      onOpenEmbedChooser: () => {},
     });
 
     assert.strictEqual(
@@ -32,7 +32,7 @@ module('Integration | codemirror-context', function (hooks) {
       content: '',
       onDocChange: () => {},
       onCardTargetsChange: () => {},
-      onOpenCardSearch: () => {},
+      onOpenEmbedChooser: () => {},
     });
 
     assert.strictEqual(state.doc.toString(), '', 'state has empty content');
@@ -47,7 +47,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: 'Some markdown text',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -84,7 +84,7 @@ module('Integration | codemirror-context', function (hooks) {
       content: markdown,
       onDocChange: () => {},
       onCardTargetsChange: () => {},
-      onOpenCardSearch: () => {},
+      onOpenEmbedChooser: () => {},
     });
 
     assert.strictEqual(
@@ -106,7 +106,7 @@ module('Integration | codemirror-context', function (hooks) {
           lastChange = text;
         },
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -153,7 +153,7 @@ module('Integration | codemirror-context', function (hooks) {
         onCardTargetsChange: (t: CardWidgetTarget[]) => {
           targets = t;
         },
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -198,7 +198,7 @@ module('Integration | codemirror-context', function (hooks) {
         onCardTargetsChange: (t: CardWidgetTarget[]) => {
           targets = t;
         },
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -243,7 +243,7 @@ module('Integration | codemirror-context', function (hooks) {
         onCardTargetsChange: (t: CardWidgetTarget[]) => {
           targets = t;
         },
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({ state, parent: element });
@@ -289,7 +289,7 @@ module('Integration | codemirror-context', function (hooks) {
         onCardTargetsChange: (t: CardWidgetTarget[]) => {
           targets = t;
         },
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({ state, parent: element });
@@ -335,7 +335,7 @@ module('Integration | codemirror-context', function (hooks) {
         onCardTargetsChange: (t: CardWidgetTarget[]) => {
           targets = t;
         },
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({ state, parent: element });
@@ -379,7 +379,7 @@ module('Integration | codemirror-context', function (hooks) {
         onCardTargetsChange: (t: CardWidgetTarget[]) => {
           targets = t;
         },
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -416,7 +416,7 @@ module('Integration | codemirror-context', function (hooks) {
         onCardTargetsChange: (t: CardWidgetTarget[]) => {
           targets = t;
         },
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -458,7 +458,7 @@ module('Integration | codemirror-context', function (hooks) {
       onCardTargetsChange: (t: CardWidgetTarget[]) => {
         targets = t;
       },
-      onOpenCardSearch: () => {},
+      onOpenEmbedChooser: () => {},
     });
     let view = new cmContext.EditorView({ state, parent: element });
     // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- waiting for rAF-based codemirror widget notification
@@ -629,7 +629,7 @@ module('Integration | codemirror-context', function (hooks) {
           docText = text;
         },
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -665,7 +665,7 @@ module('Integration | codemirror-context', function (hooks) {
           docText = text;
         },
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -699,7 +699,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: 'Hello World',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -738,7 +738,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: 'Original',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -823,7 +823,7 @@ module('Integration | codemirror-context', function (hooks) {
         onCardTargetsChange: (t: CardWidgetTarget[]) => {
           targets = t;
         },
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       // This is the critical line — the old ViewPlugin approach threw
@@ -879,7 +879,7 @@ module('Integration | codemirror-context', function (hooks) {
         onCardTargetsChange: (t: CardWidgetTarget[]) => {
           targets = t;
         },
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -922,7 +922,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: '# Hello World',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
         livePreview: false,
       });
 
@@ -955,7 +955,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: 'Some **bold** text',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
         livePreview: false,
       });
 
@@ -994,7 +994,7 @@ module('Integration | codemirror-context', function (hooks) {
         onCardTargetsChange: (t: CardWidgetTarget[]) => {
           targets = t;
         },
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
         livePreview: false,
       });
 
@@ -1034,7 +1034,7 @@ module('Integration | codemirror-context', function (hooks) {
           'Text before\n\n::card[https://example.com/cards/1]\n\nText after',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
         livePreview: false,
       });
 
@@ -1067,7 +1067,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: '# Hello World',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
         livePreview: true,
       });
 
@@ -1098,7 +1098,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: '# Hello World',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
         livePreview: true,
       });
 
@@ -1140,7 +1140,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: 'Hello World',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -1173,7 +1173,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: 'Hello **World**',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -1206,7 +1206,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: 'Hello **World** end',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -1240,7 +1240,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: 'Hello World',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -1272,7 +1272,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: 'Hello World',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -1304,7 +1304,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: 'Hello World',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -1336,7 +1336,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: 'Hello World',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -1384,7 +1384,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: 'Hello World',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
         onSelectionChange: (info) => {
           selectionInfo = info;
         },
@@ -1418,7 +1418,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: 'Hello World',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
         onSelectionChange: (info) => {
           selectionInfo = info;
         },
@@ -1459,7 +1459,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: 'Hello **World** end',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
         onSelectionChange: (info) => {
           formats = info.formats;
         },
@@ -1493,7 +1493,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: 'Hello World',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -1528,7 +1528,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: '# Hello World',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -1570,7 +1570,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: '# Hello World',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -1613,7 +1613,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: 'Item one\nItem two\nItem three',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -1659,7 +1659,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: '- Item one\n- Item two\n- Item three',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -1717,7 +1717,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: 'First\nSecond',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -1762,7 +1762,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: 'A quote\nAnother line',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -1807,7 +1807,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: '- Item one\nItem two\n- Item three',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -1866,7 +1866,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: 'Click here for details',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -1917,7 +1917,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: 'Click [here](https://example.com) for details',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -2006,7 +2006,7 @@ module('Integration | codemirror-context', function (hooks) {
         content,
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
         onSelectionChange: (info) => {
           lastInfo = info;
         },
@@ -2048,7 +2048,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: ':card[./mango]',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
         onSelectionChange: (info) => {
           lastInfo = info;
         },

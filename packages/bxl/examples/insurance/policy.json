@@ -1,0 +1,62 @@
+{
+  "policyId": "POL-100020",
+  "productLine": "Commercial Auto",
+  "state": "TX",
+  "classCode": "TRUCK-LIGHT",
+  "earnedPremium": 8120,
+  "expectedLossUsd": 2200,
+  "targetCombinedRatio": 0.95,
+  "cededPremiumUsd": 0,
+
+  "scenario": {
+    "scenarioId": "Base_2026",
+    "frequencyTrend": 0.035,
+    "severityTrend": 0.055,
+    "socialInflationTrend": 0.020,
+    "catLoadFactor": 1.00,
+    "expenseFactor": 1.00,
+    "lossDevelopmentFactor": 1.00,
+    "capitalChargeFactor": 1.00
+  },
+
+  "coverage": {
+    "exposureCount": 8,
+    "limit": 1000000,
+    "deductible": 1000,
+    "baseRate": 920,
+    "credibilityWeight": 0.65
+  },
+
+  "ratingFactors": {
+    "classFactor": 1.14,
+    "territoryFactor": 1.18,
+    "limitFactor": 1.22,
+    "deductibleFactor": 1.00,
+    "riskScoreFactor": 1.18
+  },
+
+  "claimsExperience": {
+    "paidLoss": 1500,
+    "caseReserve": 500,
+    "alae": 120
+  },
+
+  "selectedLdf": 1.20,
+  "developmentAgeMonths": 24,
+
+  "quotaShareCededPct": 0.25,
+  "xolRetention": 500000,
+  "xolLimit": 2000000,
+  "appliesFlag": "No",
+
+  "commissionPct": 0.125,
+  "premiumTaxPct": 0.018,
+  "variableExpensePct": 0.075,
+  "fixedExpensePerPolicy": 420,
+  "ulaePctOfLoss": 0.045,
+
+  "catAalRate": 0.0001,
+  "catPmlLoad": 0.0,
+  "catCapitalLoad": 0.0,
+  "capitalChargePct": 0.05
+}

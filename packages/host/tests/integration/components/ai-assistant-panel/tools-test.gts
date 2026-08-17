@@ -27,6 +27,8 @@ import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import {
+  withCachedRealmSetup,
+  setupRealmCacheTeardown,
   addSkillToAiAssistant,
   percySnapshot,
   testRealmURL,
@@ -77,6 +79,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
   });
 
   setupLocalIndexing(hooks);
+  setupRealmCacheTeardown(hooks);
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
@@ -186,143 +189,147 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     let petMango = new Pet({ name: 'Mango' });
     let petJackie = new Pet({ name: 'Jackie' });
 
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'address.gts': { Address },
-        'hello.txt': 'Hello, world!',
-        'person.gts': { Person },
-        'pet.gts': { Pet },
-        'Pet/mango.json': petMango,
-        'Pet/jackie.json': petJackie,
-        'Person/fadhlan.json': new Person({
-          firstName: 'Fadhlan',
-          address: new Address({
-            city: 'Bandung',
-            country: 'Indonesia',
+    // Both realms are the same for every test in this module, so the indexed
+    // result is cached and restored rather than rebuilt.
+    await withCachedRealmSetup(async () => {
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'address.gts': { Address },
+          'hello.txt': 'Hello, world!',
+          'person.gts': { Person },
+          'pet.gts': { Pet },
+          'Pet/mango.json': petMango,
+          'Pet/jackie.json': petJackie,
+          'Person/fadhlan.json': new Person({
+            firstName: 'Fadhlan',
+            address: new Address({
+              city: 'Bandung',
+              country: 'Indonesia',
+            }),
+            pet: petMango,
           }),
-          pet: petMango,
-        }),
-        'Person/burcu.json': new Person({
-          firstName: 'Burcu',
-          friends: [petJackie, petMango],
-        }),
-        'Person/mickey.json': new Person({
-          firstName: 'Mickey',
-        }),
-        'Person/justin.json': new Person({ firstName: 'Justin' }),
-        'Person/ian.json': new Person({ firstName: 'Ian' }),
-        'Person/matic.json': new Person({ firstName: 'Matic' }),
-        'Person/buck.json': new Person({ firstName: 'Buck' }),
-        'Person/hassan.json': new Person({ firstName: 'Hassan' }),
-        'Skill/boxel-environment.json': {
-          data: {
-            attributes: {
-              title: 'Boxel Environment',
-              description: 'Test environment skill',
-              instructions: 'Test skill card for environment commands',
-              commands: [
-                {
-                  codeRef: {
-                    name: 'SearchCardsByTypeAndTitleTool',
-                    module: '@cardstack/boxel-host/commands/search-cards',
+          'Person/burcu.json': new Person({
+            firstName: 'Burcu',
+            friends: [petJackie, petMango],
+          }),
+          'Person/mickey.json': new Person({
+            firstName: 'Mickey',
+          }),
+          'Person/justin.json': new Person({ firstName: 'Justin' }),
+          'Person/ian.json': new Person({ firstName: 'Ian' }),
+          'Person/matic.json': new Person({ firstName: 'Matic' }),
+          'Person/buck.json': new Person({ firstName: 'Buck' }),
+          'Person/hassan.json': new Person({ firstName: 'Hassan' }),
+          'Skill/boxel-environment.json': {
+            data: {
+              attributes: {
+                title: 'Boxel Environment',
+                description: 'Test environment skill',
+                instructions: 'Test skill card for environment commands',
+                commands: [
+                  {
+                    codeRef: {
+                      name: 'SearchCardsByTypeAndTitleTool',
+                      module: '@cardstack/boxel-host/commands/search-cards',
+                    },
+                    requiresApproval: false,
                   },
-                  requiresApproval: false,
-                },
-                {
-                  codeRef: {
-                    name: 'SearchCardsByQueryTool',
-                    module: '@cardstack/boxel-host/commands/search-cards',
+                  {
+                    codeRef: {
+                      name: 'SearchCardsByQueryTool',
+                      module: '@cardstack/boxel-host/commands/search-cards',
+                    },
+                    requiresApproval: false,
                   },
-                  requiresApproval: false,
-                },
-                {
-                  codeRef: {
-                    name: 'default',
-                    module:
-                      '@cardstack/boxel-host/commands/read-file-for-ai-assistant',
+                  {
+                    codeRef: {
+                      name: 'default',
+                      module:
+                        '@cardstack/boxel-host/commands/read-file-for-ai-assistant',
+                    },
+                    requiresApproval: false,
                   },
-                  requiresApproval: false,
-                },
-                {
-                  codeRef: {
-                    name: 'default',
-                    module:
-                      '@cardstack/boxel-host/commands/read-card-for-ai-assistant',
+                  {
+                    codeRef: {
+                      name: 'default',
+                      module:
+                        '@cardstack/boxel-host/commands/read-card-for-ai-assistant',
+                    },
+                    requiresApproval: false,
                   },
-                  requiresApproval: false,
-                },
-              ],
-            },
-            meta: {
-              adoptsFrom: skillCardRef,
+                ],
+              },
+              meta: {
+                adoptsFrom: skillCardRef,
+              },
             },
           },
+          'realm.json': realmConfigCardJSON({ name: realmName }),
         },
-        'realm.json': realmConfigCardJSON({ name: realmName }),
-      },
-    });
+      });
 
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      realmURL: readOnlyRealmURL,
-      contents: {
-        'pet.gts': `
-          import { contains, field, CardDef } from "@cardstack/base/card-api";
-          import StringField from "@cardstack/base/string";
-          export class Pet extends CardDef {
-            static displayName = 'Pet';
-            @field name = contains(StringField);
-          }
-        `,
-        'person.gts': `
-          import { contains, field, linksTo, CardDef } from "@cardstack/base/card-api";
-          import StringField from "@cardstack/base/string";
-          import { Pet } from "./pet";
-          export class Person extends CardDef {
-            static displayName = 'Person';
-            @field firstName = contains(StringField);
-            @field pet = linksTo(Pet);
-          }
-        `,
-        'Person/ian.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              firstName: 'Ian',
-            },
-            relationships: {
-              pet: {
-                data: {
-                  type: 'card',
-                  id: `${readOnlyRealmURL}Pet/rose`,
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        realmURL: readOnlyRealmURL,
+        contents: {
+          'pet.gts': `
+            import { contains, field, CardDef } from "@cardstack/base/card-api";
+            import StringField from "@cardstack/base/string";
+            export class Pet extends CardDef {
+              static displayName = 'Pet';
+              @field name = contains(StringField);
+            }
+          `,
+          'person.gts': `
+            import { contains, field, linksTo, CardDef } from "@cardstack/base/card-api";
+            import StringField from "@cardstack/base/string";
+            import { Pet } from "./pet";
+            export class Person extends CardDef {
+              static displayName = 'Person';
+              @field firstName = contains(StringField);
+              @field pet = linksTo(Pet);
+            }
+          `,
+          'Person/ian.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'Ian',
+              },
+              relationships: {
+                pet: {
+                  data: {
+                    type: 'card',
+                    id: `${readOnlyRealmURL}Pet/rose`,
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './person',
+                  name: 'Person',
                 },
               },
             },
-            meta: {
-              adoptsFrom: {
-                module: './person',
-                name: 'Person',
+          },
+          'Pet/rose.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                name: 'Rose',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './pet',
+                  name: 'Pet',
+                },
               },
             },
           },
+          'realm.json': realmConfigCardJSON({ name: readOnlyRealmName }),
         },
-        'Pet/rose.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              name: 'Rose',
-            },
-            meta: {
-              adoptsFrom: {
-                module: './pet',
-                name: 'Pet',
-              },
-            },
-          },
-        },
-        'realm.json': realmConfigCardJSON({ name: readOnlyRealmName }),
-      },
+      });
     });
   });
 

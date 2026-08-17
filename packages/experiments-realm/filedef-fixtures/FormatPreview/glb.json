@@ -1,0 +1,47 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "glb · Format Preview",
+      "cardInfo": {
+        "name": "glb · Format Preview",
+        "summary": "Simple, moderate, and complex glb fixtures across atom, embedded, isolated, and the 16 fitted envelopes."
+      }
+    },
+    "relationships": {
+      "previewFiles.0": {
+        "links": {
+          "self": "../samples/glb-simple.glb"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/glb-simple.glb"
+        }
+      },
+      "previewFiles.1": {
+        "links": {
+          "self": "../samples/glb-moderate.glb"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/glb-moderate.glb"
+        }
+      },
+      "previewFiles.2": {
+        "links": {
+          "self": "../samples/glb-complex.glb"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/glb-complex.glb"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../format-preview",
+        "name": "FileDefFormatPreview"
+      }
+    }
+  }
+}

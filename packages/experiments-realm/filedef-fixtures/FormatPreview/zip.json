@@ -1,0 +1,47 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "zip · Format Preview",
+      "cardInfo": {
+        "name": "zip · Format Preview",
+        "summary": "Simple, moderate, and complex zip fixtures across atom, embedded, isolated, and the 16 fitted envelopes."
+      }
+    },
+    "relationships": {
+      "previewFiles.0": {
+        "links": {
+          "self": "../samples/zip-simple.zip"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/zip-simple.zip"
+        }
+      },
+      "previewFiles.1": {
+        "links": {
+          "self": "../samples/zip-moderate.zip"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/zip-moderate.zip"
+        }
+      },
+      "previewFiles.2": {
+        "links": {
+          "self": "../samples/zip-complex.zip"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/zip-complex.zip"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../format-preview",
+        "name": "FileDefFormatPreview"
+      }
+    }
+  }
+}

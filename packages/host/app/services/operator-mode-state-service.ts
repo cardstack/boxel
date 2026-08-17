@@ -16,6 +16,7 @@ import type {
   RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import {
+  ri,
   rri,
   RealmPaths,
   type LocalPath,
@@ -419,7 +420,7 @@ export default class OperatorModeStateService extends Service {
     for (let item of items) {
       this.trimItemsFromStack(item);
     }
-    let realmPaths = new RealmPaths(new URL(cardRealmUrl));
+    let realmPaths = new RealmPaths(ri(cardRealmUrl));
     let cardPath = realmPaths.local(rri(`${cardId}.json`));
     this.recentFilesService.removeRecentFile(cardPath);
     this.recentCardsService.remove(cardId);
@@ -822,11 +823,11 @@ export default class OperatorModeStateService extends Service {
 
   get codePathRelativeToRealm() {
     if (this._state.codePath && this.realmURL) {
-      let realmPath = new RealmPaths(new URL(this.realmURL));
+      let realmPath = new RealmPaths(ri(this.realmURL));
 
       if (realmPath.inRealm(this._state.codePath)) {
         try {
-          return realmPath.local(this._state.codePath!);
+          return realmPath.local(rri(this._state.codePath!.href));
         } catch (err: any) {
           if (err.status === 404) {
             return undefined;
@@ -846,7 +847,7 @@ export default class OperatorModeStateService extends Service {
   }
 
   onFileSelected = async (entryPath: LocalPath) => {
-    let fileUrl = new RealmPaths(new URL(this.realmURL)).fileURL(entryPath);
+    let fileUrl = new RealmPaths(ri(this.realmURL)).fileRRI(entryPath);
     await this.updateCodePath(fileUrl);
   };
 

@@ -1,0 +1,47 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "json · Format Preview",
+      "cardInfo": {
+        "name": "json · Format Preview",
+        "summary": "Simple, moderate, and complex json fixtures across atom, embedded, isolated, and the 16 fitted envelopes."
+      }
+    },
+    "relationships": {
+      "previewFiles.0": {
+        "links": {
+          "self": "../samples/json-simple.data.json"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/json-simple.data.json"
+        }
+      },
+      "previewFiles.1": {
+        "links": {
+          "self": "../samples/json-moderate.data.json"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/json-moderate.data.json"
+        }
+      },
+      "previewFiles.2": {
+        "links": {
+          "self": "../samples/json-complex.data.json"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/json-complex.data.json"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../format-preview",
+        "name": "FileDefFormatPreview"
+      }
+    }
+  }
+}

@@ -19,3 +19,8 @@ packages/observability/grafanactl/resources/
 # The CLI-authored skills under plugin/skills/ ride along; they're markdown
 # maintained by hand + build-plugin.ts, not prettier.
 packages/boxel-cli/plugin/skills/
+
+# FileDef regression fixtures: licensed sample files whose bytes must match
+# the integrity manifest in the sibling SOURCES.md. Reformatting a fixture
+# breaks its recorded SHA-256 and drifts it from its documented provenance.
+packages/experiments-realm/filedef-fixtures/samples/

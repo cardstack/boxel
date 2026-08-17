@@ -140,6 +140,16 @@ module('Acceptance | json file def', function (hooks) {
       String(result.searchDoc?.content).includes('lodash'),
       'content includes full JSON',
     );
+    assert.strictEqual(
+      result.searchDoc?.rootType,
+      'object',
+      'records the root JSON type',
+    );
+    assert.strictEqual(
+      result.searchDoc?.keyCount,
+      3,
+      'counts the top-level keys',
+    );
     assert.strictEqual(result.searchDoc?.name, 'config.json');
   });
 

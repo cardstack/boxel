@@ -1,5 +1,6 @@
 import {
   RealmPaths,
+  ri,
   rri,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
@@ -17,7 +18,7 @@ import {
  */
 export function normalizeRealms(realms: string[]): string[] {
   return realms.map((r) => {
-    return new RealmPaths(new URL(r)).url;
+    return new RealmPaths(ri(r)).url;
   });
 }
 

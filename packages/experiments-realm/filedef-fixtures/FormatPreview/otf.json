@@ -1,0 +1,47 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "otf · Format Preview",
+      "cardInfo": {
+        "name": "otf · Format Preview",
+        "summary": "Simple, moderate, and complex otf fixtures across atom, embedded, isolated, and the 16 fitted envelopes."
+      }
+    },
+    "relationships": {
+      "previewFiles.0": {
+        "links": {
+          "self": "../samples/otf-simple.otf"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/otf-simple.otf"
+        }
+      },
+      "previewFiles.1": {
+        "links": {
+          "self": "../samples/otf-moderate.otf"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/otf-moderate.otf"
+        }
+      },
+      "previewFiles.2": {
+        "links": {
+          "self": "../samples/otf-complex.otf"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/otf-complex.otf"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../format-preview",
+        "name": "FileDefFormatPreview"
+      }
+    }
+  }
+}

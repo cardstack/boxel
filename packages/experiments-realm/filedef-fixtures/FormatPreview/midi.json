@@ -1,0 +1,47 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "midi · Format Preview",
+      "cardInfo": {
+        "name": "midi · Format Preview",
+        "summary": "Simple, moderate, and complex midi fixtures across atom, embedded, isolated, and the 16 fitted envelopes."
+      }
+    },
+    "relationships": {
+      "previewFiles.0": {
+        "links": {
+          "self": "../samples/midi-simple.mid"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/midi-simple.mid"
+        }
+      },
+      "previewFiles.1": {
+        "links": {
+          "self": "../samples/midi-moderate.mid"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/midi-moderate.mid"
+        }
+      },
+      "previewFiles.2": {
+        "links": {
+          "self": "../samples/midi-complex.mid"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/midi-complex.mid"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../format-preview",
+        "name": "FileDefFormatPreview"
+      }
+    }
+  }
+}

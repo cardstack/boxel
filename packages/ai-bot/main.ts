@@ -127,7 +127,20 @@ class Assistant {
     let request: Parameters<typeof this.openai.chat.completions.stream>[0] = {
       model: this.getModel(prompt),
       messages: prompt.messages as ChatCompletionMessageParam[],
+      // A streamed response reports no token counts unless asked. With this
+      // the provider delivers a usage block at the end of the stream — on a
+      // trailing chunk whose `choices` is empty or carries no finish_reason,
+      // which is why the Responder's end-of-stream detection must never
+      // un-set itself on a later chunk (see onChunk).
+      stream_options: { include_usage: true },
     };
+    // OpenRouter's usage accounting. On top of the OpenAI-shaped counts above
+    // it adds `prompt_tokens_details.cached_tokens` (the prompt-cache split)
+    // and an inline `cost` to the same trailing usage payload. The inline
+    // cost also lets the chunk handler's preferred billing path run instead
+    // of the slower generation-API fallback. Not in the OpenAI types, hence
+    // the cast.
+    (request as Record<string, unknown>).usage = { include: true };
 
     if (prompt.reasoningEffort !== undefined) {
       request.reasoning_effort = prompt.reasoningEffort;
