@@ -1,0 +1,49 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "sku": "BW-001",
+      "productName": "Cobalt Wall Hook",
+      "category": "Hardware",
+      "barcode": "5012345678901",
+      "shippingProfile": {
+        "length": 12,
+        "width": 8,
+        "height": 4,
+        "weight": 0.24,
+        "dimDivisor": 5000
+      },
+      "vendorSku": "BW-001-V",
+      "cost": {
+        "amount": 3.1,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "price": {
+        "amount": 11.5,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "isDropship": false,
+      "isActive": true,
+      "cardInfo": {
+        "name": "Cobalt Wall Hook"
+      }
+    },
+    "relationships": {
+      "vendor": {
+        "links": {
+          "self": "../FulfilmentVendor/northline"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../fulfilment-product",
+        "name": "FulfilmentProduct"
+      }
+    }
+  }
+}

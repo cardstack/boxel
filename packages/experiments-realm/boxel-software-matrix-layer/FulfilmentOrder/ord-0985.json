@@ -1,0 +1,78 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "orderNumber": "ORD-2026-0985",
+      "source": "manual",
+      "customerName": "Grace Yeboah",
+      "customerEmail": "grace.y@example.com",
+      "shippingAddress": {
+        "addressLine1": "7 Ffordd Pen Llech",
+        "city": "Cardiff",
+        "postalCode": "CF10 1AA",
+        "country": {
+          "name": "United Kingdom",
+          "code": "GB"
+        }
+      },
+      "billingAddress": {
+        "addressLine1": "7 Ffordd Pen Llech",
+        "city": "Cardiff",
+        "postalCode": "CF10 1AA",
+        "country": {
+          "name": "United Kingdom",
+          "code": "GB"
+        }
+      },
+      "lineItems": [
+        {
+          "sku": "WD-880",
+          "productName": "Walnut Desk Riser",
+          "quantity": 1,
+          "quantityFulfilled": 1,
+          "unitPrice": {
+            "amount": 96,
+            "currency": {
+              "code": "GBP"
+            }
+          }
+        }
+      ],
+      "shippingCost": {
+        "amount": 0,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "tax": {
+        "amount": 19.2,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "status": "shipped",
+      "paymentStatus": "paid",
+      "priority": "normal",
+      "placedAt": "2026-08-10T13:44:00.000Z",
+      "fulfilledAt": null,
+      "notes": "Dropship. WidgetCo ships the riser direct; we never handle it.",
+      "tags": [],
+      "cardInfo": {
+        "name": "ORD-2026-0985"
+      }
+    },
+    "relationships": {
+      "allocatedWarehouse": {
+        "links": {
+          "self": "../Warehouse/wh-drop"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../fulfilment-order",
+        "name": "FulfilmentOrder"
+      }
+    }
+  }
+}

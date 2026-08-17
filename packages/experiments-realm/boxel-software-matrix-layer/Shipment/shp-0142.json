@@ -1,0 +1,114 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "shipmentNumber": "SHP-2026-0142",
+      "lineItems": [
+        {
+          "sku": "WD-880",
+          "productName": "Walnut Desk Riser",
+          "quantity": 1,
+          "quantityFulfilled": 0,
+          "unitPrice": {
+            "amount": 96,
+            "currency": {
+              "code": "GBP"
+            }
+          }
+        }
+      ],
+      "parcel": {
+        "length": 62,
+        "width": 30,
+        "height": 16,
+        "weight": 3.9,
+        "dimDivisor": 6000
+      },
+      "trackingNumber": {
+        "number": "4471902288301",
+        "carrierCode": "DHL",
+        "trackingUrlPattern": "https://www.dhl.com/gb-en/home/tracking.html?tracking-id={number}"
+      },
+      "deliveryWindow": {
+        "earliest": "2026-08-13",
+        "latest": "2026-08-15",
+        "commitment": "eCommerce"
+      },
+      "trackingEvents": [
+        {
+          "occurredAt": "2026-08-10T18:20:00.000Z",
+          "statusCode": "PU",
+          "statusDescription": "Shipment picked up",
+          "location": "Solingen, DE",
+          "isDelivered": false
+        },
+        {
+          "occurredAt": "2026-08-11T04:10:00.000Z",
+          "statusCode": "DP",
+          "statusDescription": "Departed facility",
+          "location": "Leipzig, DE",
+          "isDelivered": false
+        },
+        {
+          "occurredAt": "2026-08-12T19:35:00.000Z",
+          "statusCode": "AR",
+          "statusDescription": "Arrived at facility",
+          "location": "East Midlands, GB",
+          "isDelivered": false
+        },
+        {
+          "occurredAt": "2026-08-13T11:12:00.000Z",
+          "statusCode": "EX",
+          "statusDescription": "Delivery attempted — nobody home",
+          "location": "Cardiff, GB",
+          "isDelivered": false
+        }
+      ],
+      "serviceLevel": "eCommerce",
+      "carrierName": "DHL Express",
+      "shippingCost": {
+        "amount": 8.61,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "customerPaid": {
+        "amount": 0,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "status": "exception",
+      "shippedAt": "2026-08-10T18:20:00.000Z",
+      "deliveredAt": null,
+      "proofOfDelivery": null,
+      "isDropship": true,
+      "cardInfo": {
+        "name": "SHP-2026-0142"
+      }
+    },
+    "relationships": {
+      "order": {
+        "links": {
+          "self": "../FulfilmentOrder/ord-0985"
+        }
+      },
+      "originWarehouse": {
+        "links": {
+          "self": "../Warehouse/wh-drop"
+        }
+      },
+      "carrier": {
+        "links": {
+          "self": "../Carrier/dhl"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../shipment",
+        "name": "Shipment"
+      }
+    }
+  }
+}

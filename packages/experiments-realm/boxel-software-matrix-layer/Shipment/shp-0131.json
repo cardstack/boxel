@@ -1,0 +1,107 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "shipmentNumber": "SHP-2026-0131",
+      "lineItems": [
+        {
+          "sku": "LM-215",
+          "productName": "Linen Lampshade, Large",
+          "quantity": 1,
+          "quantityFulfilled": 0,
+          "unitPrice": {
+            "amount": 52,
+            "currency": {
+              "code": "GBP"
+            }
+          }
+        }
+      ],
+      "parcel": {
+        "length": 50,
+        "width": 50,
+        "height": 38,
+        "weight": 1.1,
+        "dimDivisor": 5000
+      },
+      "trackingNumber": {
+        "number": "AB987654321GB",
+        "carrierCode": "ROYAL",
+        "trackingUrlPattern": "https://www.royalmail.com/track-your-item#/tracking-results/{number}"
+      },
+      "deliveryWindow": {
+        "earliest": "2026-08-02",
+        "latest": "2026-08-03",
+        "commitment": "Tracked 24"
+      },
+      "trackingEvents": [
+        {
+          "occurredAt": "2026-08-01T14:20:00.000Z",
+          "statusCode": "AC",
+          "statusDescription": "Accepted at depot",
+          "location": "Manchester, GB",
+          "isDelivered": false
+        },
+        {
+          "occurredAt": "2026-08-02T18:00:00.000Z",
+          "statusCode": "IT",
+          "statusDescription": "In transit",
+          "location": "Swansea Mail Centre, GB",
+          "isDelivered": false
+        },
+        {
+          "occurredAt": "2026-08-04T15:40:00.000Z",
+          "statusCode": "DL",
+          "statusDescription": "Delivered",
+          "location": "Swansea, GB",
+          "isDelivered": true
+        }
+      ],
+      "serviceLevel": "Tracked 24",
+      "carrierName": "Royal Mail",
+      "shippingCost": {
+        "amount": 23.65,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "customerPaid": {
+        "amount": 6.99,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "status": "delivered",
+      "shippedAt": "2026-08-01T14:20:00.000Z",
+      "deliveredAt": "2026-08-04T15:40:00.000Z",
+      "proofOfDelivery": null,
+      "isDropship": false,
+      "cardInfo": {
+        "name": "SHP-2026-0131"
+      }
+    },
+    "relationships": {
+      "order": {
+        "links": {
+          "self": "../FulfilmentOrder/ord-0975"
+        }
+      },
+      "originWarehouse": {
+        "links": {
+          "self": "../Warehouse/wh-east"
+        }
+      },
+      "carrier": {
+        "links": {
+          "self": "../Carrier/royal-mail"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../shipment",
+        "name": "Shipment"
+      }
+    }
+  }
+}

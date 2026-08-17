@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "module": "../carrier",
+        "name": "Carrier"
+      },
+      "specType": "card",
+      "cardTitle": "Carrier (Ca)",
+      "cardDescription": "A shipping provider and its priced services — the data rate shopping compares, plus the tracking URL pattern and dimensional divisor consumers stamp onto shipments.",
+      "readMe": "## Carrier (Ca)\n\nHolds what you need to actually use a carrier: the account number, the services with their transit times and rates, the countries served, the tracking URL pattern, the dimensional divisor, and an on-time record.\n\n**The rate table is data on the card, not an API call.** The platform has no carrier integration, and shipping a fake one under the name \"rate shopping\" would mislead the next adopter. `quoteService(service, billableWeight)` is exported as a pure function so the ship desk, the shipment card and any future rules engine price a parcel the same way.\n\n`brandHue` is the carrier's own colour, carried as data and consumed only diluted — a brand hue cannot be contrast-checked against a theme in advance, so it never carries text.\n\n`onTimePercent` is computed from the two counts. With no deliveries recorded it reports nothing rather than 0%, which would read as \"always late\".\n\n### Example\n\nRoyal Mail, with three priced services. DPD and DHL Express exercise the second and third carriers rate shopping compares against.\n\n### Non-goals\n\nNo live rates, labels or tracking fetch. `CarrierIntegration` in the source spec is deliberately not built: it would need credentials storage and an outbound HTTP surface, and is recorded as a platform ask rather than stubbed.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Carrier (Ca)",
+        "summary": "A shipping provider and its priced services — the data rate shopping compares, plus the tracking URL pattern and dimensional divisor consumers stamp onto shipments."
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Carrier/royal-mail"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "name": "Spec",
+        "module": "@cardstack/base/spec"
+      }
+    }
+  }
+}

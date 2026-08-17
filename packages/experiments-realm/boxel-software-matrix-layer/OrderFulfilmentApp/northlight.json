@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "operationName": "Northlight Goods",
+      "cardInfo": {
+        "name": "Northlight Goods — Fulfilment",
+        "summary": "Warehouse and logistics workspace for a small business: order board, multi-warehouse stock, carrier rate comparison, live tracking and full RMA returns.",
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../order-fulfilment-app",
+        "name": "OrderFulfilmentApp"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

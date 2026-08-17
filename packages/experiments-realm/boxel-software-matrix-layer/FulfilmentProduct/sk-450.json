@@ -1,0 +1,49 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "sku": "SK-450",
+      "productName": "Stoneware Mug Set of 4",
+      "category": "Kitchen",
+      "barcode": "5012345678963",
+      "shippingProfile": {
+        "length": 28,
+        "width": 28,
+        "height": 14,
+        "weight": 2.3,
+        "dimDivisor": 5000
+      },
+      "vendorSku": "SK-450-V",
+      "cost": {
+        "amount": 12.2,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "price": {
+        "amount": 42,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "isDropship": false,
+      "isActive": true,
+      "cardInfo": {
+        "name": "Stoneware Mug Set of 4"
+      }
+    },
+    "relationships": {
+      "vendor": {
+        "links": {
+          "self": "../FulfilmentVendor/northline"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../fulfilment-product",
+        "name": "FulfilmentProduct"
+      }
+    }
+  }
+}

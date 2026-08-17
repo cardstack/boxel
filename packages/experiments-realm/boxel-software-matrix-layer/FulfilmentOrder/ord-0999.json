@@ -1,0 +1,90 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "orderNumber": "ORD-2026-0999",
+      "source": "manual",
+      "customerName": "Priya Nair",
+      "customerEmail": "p.nair@example.com",
+      "shippingAddress": {
+        "addressLine1": "88 Clapham Common North Side",
+        "city": "London",
+        "postalCode": "SW4 9SD",
+        "country": {
+          "name": "United Kingdom",
+          "code": "GB"
+        }
+      },
+      "billingAddress": {
+        "addressLine1": "88 Clapham Common North Side",
+        "city": "London",
+        "postalCode": "SW4 9SD",
+        "country": {
+          "name": "United Kingdom",
+          "code": "GB"
+        }
+      },
+      "lineItems": [
+        {
+          "sku": "SK-450",
+          "productName": "Stoneware Mug Set of 4",
+          "quantity": 1,
+          "quantityFulfilled": 0,
+          "unitPrice": {
+            "amount": 42,
+            "currency": {
+              "code": "GBP"
+            }
+          }
+        },
+        {
+          "sku": "LM-210",
+          "productName": "Linen Lampshade, Small",
+          "quantity": 1,
+          "quantityFulfilled": 0,
+          "unitPrice": {
+            "amount": 34,
+            "currency": {
+              "code": "GBP"
+            }
+          }
+        }
+      ],
+      "shippingCost": {
+        "amount": 4.99,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "tax": {
+        "amount": 13,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "status": "awaiting_stock",
+      "paymentStatus": "paid",
+      "priority": "normal",
+      "placedAt": "2026-08-13T15:22:00.000Z",
+      "fulfilledAt": null,
+      "notes": "Stoneware mugs are down to 3 on hand and all three are reserved. Waiting on the Northline restock before this can be picked.",
+      "tags": [],
+      "cardInfo": {
+        "name": "ORD-2026-0999"
+      }
+    },
+    "relationships": {
+      "allocatedWarehouse": {
+        "links": {
+          "self": "../Warehouse/wh-main"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../fulfilment-order",
+        "name": "FulfilmentOrder"
+      }
+    }
+  }
+}

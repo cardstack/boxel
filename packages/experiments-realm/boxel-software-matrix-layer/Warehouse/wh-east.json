@@ -1,0 +1,38 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "code": "WH-EAST",
+      "warehouseName": "Trafford Overflow",
+      "warehouseType": "third_party",
+      "isActive": true,
+      "address": {
+        "addressLine1": "Unit 7, Barton Dock Road",
+        "city": "Manchester",
+        "postalCode": "M17 8TX",
+        "country": {
+          "name": "United Kingdom",
+          "code": "GB"
+        }
+      },
+      "latitude": 53.4668,
+      "longitude": -2.3312,
+      "contactPerson": "Trafford 3PL desk",
+      "contactEmail": "ops@trafford3pl.example",
+      "contactPhone": "+44 161 496 0188",
+      "operatingHours": "Mon–Fri 07:00–19:00",
+      "totalBins": 180,
+      "occupiedBins": 140,
+      "zones": ["T1", "T2"],
+      "cardInfo": {
+        "name": "Trafford Overflow"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../warehouse",
+        "name": "Warehouse"
+      }
+    }
+  }
+}

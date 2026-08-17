@@ -1,0 +1,90 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "orderNumber": "ORD-2026-0994",
+      "source": "manual",
+      "customerName": "Sofia Lindqvist",
+      "customerEmail": "sofia.l@example.com",
+      "shippingAddress": {
+        "addressLine1": "12 Grainger Street",
+        "city": "Newcastle",
+        "postalCode": "NE1 5JE",
+        "country": {
+          "name": "United Kingdom",
+          "code": "GB"
+        }
+      },
+      "billingAddress": {
+        "addressLine1": "12 Grainger Street",
+        "city": "Newcastle",
+        "postalCode": "NE1 5JE",
+        "country": {
+          "name": "United Kingdom",
+          "code": "GB"
+        }
+      },
+      "lineItems": [
+        {
+          "sku": "RG-042",
+          "productName": "Brass Drawer Pull",
+          "quantity": 2,
+          "quantityFulfilled": 0,
+          "unitPrice": {
+            "amount": 8.95,
+            "currency": {
+              "code": "GBP"
+            }
+          }
+        },
+        {
+          "sku": "BW-001",
+          "productName": "Cobalt Wall Hook",
+          "quantity": 1,
+          "quantityFulfilled": 0,
+          "unitPrice": {
+            "amount": 11.5,
+            "currency": {
+              "code": "GBP"
+            }
+          }
+        }
+      ],
+      "shippingCost": {
+        "amount": 3.99,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "tax": {
+        "amount": 6.1,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "status": "packing",
+      "paymentStatus": "paid",
+      "priority": "normal",
+      "placedAt": "2026-08-12T12:02:00.000Z",
+      "fulfilledAt": null,
+      "notes": null,
+      "tags": [],
+      "cardInfo": {
+        "name": "ORD-2026-0994"
+      }
+    },
+    "relationships": {
+      "allocatedWarehouse": {
+        "links": {
+          "self": "../Warehouse/wh-main"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../fulfilment-order",
+        "name": "FulfilmentOrder"
+      }
+    }
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "module": "../parcel-dimensions",
+        "name": "ParcelDimensionsField"
+      },
+      "specType": "field",
+      "cardTitle": "Parcel Dimensions (PD)",
+      "cardDescription": "Length, width, height and weight — and the volumetric weight carriers actually bill on, using a divisor the consumer supplies.",
+      "readMe": "## Parcel Dimensions (PD)\n\nCaptures what the packing station measures and derives what the carrier charges for.\n\nCarriers bill the greater of actual weight and **volumetric weight** — a big light box takes the same van space as a small heavy one. The divisor that converts volume to weight differs per carrier (5000 and 6000 are both common), so this block does not pick one: `dimDivisor` is supplied by the consumer, and with none set the block reports actual weight rather than inventing a number.\n\n`billableWeight` is the max of the two. `isVolumetric` is true when the carrier will bill more than the scale says — the one number here a packer can act on, by choosing a smaller box, which is why it is the only thing in the embedded view that gets a tint.\n\nThe edit view is the packing-station capture: four inputs and a live billable-weight readout.\n\n### Examples\n\nTwo contained examples: a small hardware parcel that bills on actual weight, and a lampshade box that bills volumetric — the case the whole field exists for.\n\n### Non-goals\n\nMetric only. An imperial variant needs unit-aware serialization, not a display toggle, and would be a different field.",
+      "containedExamples": [
+        {
+          "length": 26,
+          "width": 18,
+          "height": 10,
+          "weight": 0.79,
+          "dimDivisor": 5000
+        },
+        {
+          "length": 50,
+          "width": 50,
+          "height": 38,
+          "weight": 1.2,
+          "dimDivisor": 5000
+        }
+      ],
+      "cardInfo": {
+        "name": "Parcel Dimensions (PD)",
+        "summary": "Length, width, height and weight — and the volumetric weight carriers actually bill on, using a divisor the consumer supplies."
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "name": "Spec",
+        "module": "@cardstack/base/spec"
+      },
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "../parcel-dimensions",
+              "name": "ParcelDimensionsField"
+            }
+          },
+          {
+            "adoptsFrom": {
+              "module": "../parcel-dimensions",
+              "name": "ParcelDimensionsField"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

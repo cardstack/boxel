@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "module": "../order-status",
+        "name": "OrderStatusField"
+      },
+      "specType": "field",
+      "cardTitle": "Order Status (OS)",
+      "cardDescription": "The order lifecycle as an enum field, plus the colour language that goes with it — one source read by the board, the pill and the app.",
+      "readMe": "## Order Status (OS)\n\nTen lifecycle states, from `pending` through to `returned`. Built on `enumField`, so the edit view (a BoxelSelect), markdown output and value validation come for free; this block adds the atom and embedded renderings, which are the status pill everything else displays.\n\n**Import the colours, do not re-declare them.** `ORDER_STATUSES` exports `{ value, label, hue }` for every state and `orderStatusStyle(value)` resolves one. A board column, a fitted card's status dot and an app's legend all read that single table — which is the only reason they cannot drift apart.\n\n`ORDER_PIPELINE` is a separate, shorter list: the happy path. `on_hold`, `cancelled` and `returned` are exits, not stages, so `orderProgress()` measures against the pipeline and reports 0 for an order that has left it rather than a misleading fraction.\n\nThe hue is never used as text. It appears as a 14% fill and a 32% border, with the label mixed toward the theme's own `--foreground` so it stays legible in both light and dark — see `fulfilment-status-chip`.\n\n### Example\n\nThe example is an in-use one: every order in `FulfilmentOrder/` carries this field, and `ORD-2026-1001` shows it in the `pending` state on a live board.\n\n### Non-goals\n\nThis block does not own transitions. Which states may follow which is a domain rule, and it lives with the commands that perform the moves (`dispatch-shipment-command`, `fulfil-order-command`) — not in the enum.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Order Status (OS)",
+        "summary": "The order lifecycle as an enum field, plus the colour language that goes with it — one source read by the board, the pill and the app."
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../FulfilmentOrder/ord-1001"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "name": "Spec",
+        "module": "@cardstack/base/spec"
+      }
+    }
+  }
+}

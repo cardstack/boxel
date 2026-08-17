@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "module": "../dispatch-shipment-command",
+        "name": "default"
+      },
+      "specType": "command",
+      "cardTitle": "Dispatch Shipment (DS)",
+      "cardDescription": "The single writer of 'this package is with the carrier' — stamps service, tracking, quoted cost and window, and moves the order to shipped.",
+      "readMe": "## Dispatch Shipment (DS)\n\nTakes a shipment id, a service code and a tracking number. Re-fetches the shipment rather than trusting what the caller handed over — a caller may pass a shipment whose linked carrier was never loaded, and reading `.carrier` off that gives `undefined` rather than an error.\n\nWhat it stamps, all as a **snapshot**: carrier name, service name, tracking number with the carrier's URL pattern, the dimensional divisor on the parcel, the quoted cost from `quoteService`, and a delivery window built from the service's transit days. Dates are built as `YYYY-MM-DD` from `getFullYear`/`getMonth`/`getDate`, so a package promised for the 15th is not recorded as the 14th.\n\nIt also owns the order's transition to `shipped`, because a shipment existing and an order claiming to be shipped must never disagree — and the way to guarantee that is for one piece of code to write both. Only orders still in the pipeline are moved: a delivered or cancelled order is not walked backwards by a late dispatch on a second shipment.\n\nCompound values are patched as JSON through `PatchCardInstanceCommand`, never constructed as field instances.\n\n### Example\n\nIts natural target is a packed shipment with a carrier chosen and no tracking number yet. `SHP-2026-0145` is the shape it operates on — the linked example shows the result of a dispatch, with the snapshotted carrier fields and the appended \"Handed to carrier\" scan.\n\n### Non-goals\n\nIt does not buy a label or call a carrier. The tracking number is supplied by whoever printed the label; the quoted cost comes from the Carrier card’s own rate table.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Dispatch Shipment (DS)",
+        "summary": "The single writer of 'this package is with the carrier' — stamps service, tracking, quoted cost and window, and moves the order to shipped."
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Shipment/shp-0145"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "name": "Spec",
+        "module": "@cardstack/base/spec"
+      }
+    }
+  }
+}

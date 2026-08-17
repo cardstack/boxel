@@ -1,0 +1,126 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "shipmentNumber": "SHP-2026-0138",
+      "lineItems": [
+        {
+          "sku": "PC-100",
+          "productName": "Braided Power Cable 2m",
+          "quantity": 1,
+          "quantityFulfilled": 0,
+          "unitPrice": {
+            "amount": 14,
+            "currency": {
+              "code": "GBP"
+            }
+          }
+        },
+        {
+          "sku": "BW-001",
+          "productName": "Cobalt Wall Hook",
+          "quantity": 2,
+          "quantityFulfilled": 0,
+          "unitPrice": {
+            "amount": 11.5,
+            "currency": {
+              "code": "GBP"
+            }
+          }
+        }
+      ],
+      "parcel": {
+        "length": 26,
+        "width": 18,
+        "height": 10,
+        "weight": 0.79,
+        "dimDivisor": 5000
+      },
+      "trackingNumber": {
+        "number": "AB123456789GB",
+        "carrierCode": "ROYAL",
+        "trackingUrlPattern": "https://www.royalmail.com/track-your-item#/tracking-results/{number}"
+      },
+      "deliveryWindow": {
+        "earliest": "2026-08-10",
+        "latest": "2026-08-11",
+        "commitment": "Tracked 48"
+      },
+      "trackingEvents": [
+        {
+          "occurredAt": "2026-08-08T15:00:00.000Z",
+          "statusCode": "AC",
+          "statusDescription": "Accepted at Post Office",
+          "location": "London, GB",
+          "isDelivered": false
+        },
+        {
+          "occurredAt": "2026-08-09T20:45:00.000Z",
+          "statusCode": "IT",
+          "statusDescription": "In transit",
+          "location": "Warrington Mail Centre, GB",
+          "isDelivered": false
+        },
+        {
+          "occurredAt": "2026-08-11T09:15:00.000Z",
+          "statusCode": "OD",
+          "statusDescription": "Out for delivery",
+          "location": "Edinburgh, GB",
+          "isDelivered": false
+        },
+        {
+          "occurredAt": "2026-08-11T14:02:00.000Z",
+          "statusCode": "DL",
+          "statusDescription": "Delivered",
+          "location": "Edinburgh, GB",
+          "isDelivered": true
+        }
+      ],
+      "serviceLevel": "Tracked 48",
+      "carrierName": "Royal Mail",
+      "shippingCost": {
+        "amount": 3.9,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "customerPaid": {
+        "amount": 3.99,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "status": "delivered",
+      "shippedAt": "2026-08-08T15:00:00.000Z",
+      "deliveredAt": "2026-08-11T14:02:00.000Z",
+      "proofOfDelivery": "Left with neighbour at no. 24",
+      "isDropship": false,
+      "cardInfo": {
+        "name": "SHP-2026-0138"
+      }
+    },
+    "relationships": {
+      "order": {
+        "links": {
+          "self": "../FulfilmentOrder/ord-0982"
+        }
+      },
+      "originWarehouse": {
+        "links": {
+          "self": "../Warehouse/wh-main"
+        }
+      },
+      "carrier": {
+        "links": {
+          "self": "../Carrier/royal-mail"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../shipment",
+        "name": "Shipment"
+      }
+    }
+  }
+}

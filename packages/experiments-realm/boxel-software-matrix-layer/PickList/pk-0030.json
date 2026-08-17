@@ -1,0 +1,60 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "pickListNumber": "PK-2026-0030",
+      "assignedTo": "Priya Raman",
+      "status": "complete",
+      "createdAt": "2026-08-13T08:10:00.000Z",
+      "completedAt": "2026-08-13T08:38:00.000Z",
+      "items": [
+        {
+          "sku": "RG-042",
+          "productName": "Brass Drawer Pull",
+          "barcode": "5012345678918",
+          "binLocation": "A3-B-18",
+          "quantity": 2,
+          "pickedQuantity": 2,
+          "isShort": false,
+          "orderNumbers": ["ORD-2026-0994"]
+        },
+        {
+          "sku": "LM-210",
+          "productName": "Linen Lampshade, Small",
+          "barcode": "5012345678932",
+          "binLocation": "B2-A-01",
+          "quantity": 1,
+          "pickedQuantity": 1,
+          "isShort": false,
+          "orderNumbers": ["ORD-2026-0995"]
+        }
+      ],
+      "cardInfo": {
+        "name": "PK-2026-0030"
+      }
+    },
+    "relationships": {
+      "warehouse": {
+        "links": {
+          "self": "../Warehouse/wh-main"
+        }
+      },
+      "orders.0": {
+        "links": {
+          "self": "../FulfilmentOrder/ord-0994"
+        }
+      },
+      "orders.1": {
+        "links": {
+          "self": "../FulfilmentOrder/ord-0995"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../pick-list",
+        "name": "PickList"
+      }
+    }
+  }
+}
