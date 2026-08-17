@@ -23,6 +23,15 @@ function parseCashFlows(values: unknown) {
   return parsed;
 }
 
+/**
+ * The magnitude a rate solver's residual is judged against. A net present
+ * value of a hundredth of a cent is a root for flows in the millions and
+ * nowhere near one for flows in the pennies.
+ */
+function cashFlowScale(values: number[]) {
+  return values.reduce((total, value) => total + Math.abs(value), 0) || 1;
+}
+
 export function excelFv(
   rateLike: unknown,
   nperLike: unknown,
@@ -389,6 +398,7 @@ export function excelIrr(valuesLike: unknown, guessLike = 0.1) {
   };
 
   const epsMax = 1e-10;
+  const tolerance = epsMax * cashFlowScale(values);
 
   for (let i = 0; i < 50; i++) {
     const resultValue = npv(guess);
@@ -398,14 +408,23 @@ export function excelIrr(valuesLike: unknown, guessLike = 0.1) {
       break;
     }
 
-    const nextGuess = guess - resultValue / derivative;
-    if (
-      Math.abs(nextGuess - guess) <= epsMax &&
-      Math.abs(resultValue) <= epsMax
-    ) {
-      return nextGuess;
+    const nextGuess = Math.max(
+      -0.99999999,
+      Math.min(guess - resultValue / derivative, 1000),
+    );
+    const settled = Math.abs(nextGuess - guess) <= epsMax;
+    guess = nextGuess;
+    if (settled) {
+      break;
     }
-    guess = Math.max(-0.99999999, Math.min(nextGuess, 1000));
+  }
+
+  // Newton's method walks to some rate whether or not a root exists, and a
+  // series like [-1, 3, -2.5] has none, so the rate it settled on only counts
+  // if the net present value there is actually zero.
+  const residual = npv(guess);
+  if (!Number.isFinite(residual) || Math.abs(residual) > tolerance) {
+    throwExcelError(EXCEL_ERROR.num);
   }
 
   return guess;
@@ -460,19 +479,26 @@ export function excelXirr(
   };
 
   const epsMax = 1e-10;
+  const tolerance = epsMax * cashFlowScale(values);
 
   for (let i = 0; i < 100; i++) {
-    const resultValue = irrResult(guess);
-    const nextGuess = guess - resultValue / irrDerivative(guess);
-
-    if (
-      Math.abs(nextGuess - guess) <= epsMax &&
-      Math.abs(resultValue) <= epsMax
-    ) {
-      return nextGuess;
+    const nextGuess = guess - irrResult(guess) / irrDerivative(guess);
+    if (!Number.isFinite(nextGuess)) {
+      break;
     }
-
+    const settled = Math.abs(nextGuess - guess) <= epsMax;
     guess = nextGuess;
+    if (settled) {
+      break;
+    }
+  }
+
+  // As for IRR: a rate the search never brought to zero is not a root. A rate
+  // at or below -100% is not one either — discounting by it raises a negative
+  // number to a fractional power, so the residual there is not even a number.
+  const residual = guess > -1 ? irrResult(guess) : Number.NaN;
+  if (!Number.isFinite(residual) || Math.abs(residual) > tolerance) {
+    throwExcelError(EXCEL_ERROR.num);
   }
 
   return guess;
@@ -728,30 +754,60 @@ export function excelPricedisc(
   return redemption * (1 - disc * yf);
 }
 
+/** A date `months` on, clamped to the target month's last day. */
+function addMonthsClamped(date: Date, months: number) {
+  const shifted = new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + months, 1),
+  );
+  const lastDay = new Date(
+    Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth() + 1, 0),
+  ).getUTCDate();
+  shifted.setUTCDate(Math.min(date.getUTCDate(), lastDay));
+  return shifted;
+}
+
 export function excelCoupdays(
-  _settlementLike: unknown,
-  _maturityLike: unknown,
+  settlementLike: unknown,
+  maturityLike: unknown,
   frequencyLike: unknown,
   basisLike: unknown = 0,
 ) {
   const frequency = Math.floor(parseExcelNumber(frequencyLike));
   const basis = Math.floor(Number(basisLike) || 0);
   if (![1, 2, 4].includes(frequency)) throwExcelError(EXCEL_ERROR.num);
-  // Coupon-period length comes from the basis convention alone, so the
-  // settlement and maturity dates do not participate.
-  switch (basis) {
-    case 0:
-    case 4:
-      return 360 / frequency;
-    case 1:
-      return 365 / frequency; // approximate for actual/actual
-    case 2:
-      return 360 / frequency;
-    case 3:
-      return 365 / frequency;
-    default:
+  if (basis < 0 || basis > 4) throwExcelError(EXCEL_ERROR.num);
+
+  if (basis === 1) {
+    // Actual/actual is the one convention where the answer is a real calendar
+    // span, so it needs the coupon period settlement falls in. Coupon dates
+    // run backwards from maturity a period at a time.
+    const settlement = parseExcelDate(settlementLike);
+    const maturity = parseExcelDate(maturityLike);
+    if (daysBetween(settlement, maturity) <= 0) {
       throwExcelError(EXCEL_ERROR.num);
+    }
+    const monthsPerPeriod = 12 / frequency;
+    let periodEnd = maturity;
+    let periodStart = addMonthsClamped(maturity, -monthsPerPeriod);
+    while (periodStart.getTime() > settlement.getTime()) {
+      periodEnd = periodStart;
+      periodStart = addMonthsClamped(periodStart, -monthsPerPeriod);
+    }
+    return daysBetween(periodStart, periodEnd);
   }
+
+  // Every other basis gives all coupon periods the same nominal length, so the
+  // dates do not participate.
+  return (basis === 3 ? 365 : 360) / frequency;
+}
+
+/**
+ * Whether a Treasury bill matures inside a year of settlement, which the
+ * TBILL family requires — the instrument they price is short-dated by
+ * definition, so a longer span is an error rather than an extrapolation.
+ */
+function matureWithinAYear(settlement: Date, maturity: Date) {
+  return maturity.getTime() <= addMonthsClamped(settlement, 12).getTime();
 }
 
 export function excelTbilleq(
@@ -763,7 +819,9 @@ export function excelTbilleq(
   const maturity = parseExcelDate(maturityLike);
   const discount = parseExcelNumber(discountLike);
   const dsm = daysBetween(settlement, maturity);
-  if (dsm <= 0 || discount <= 0) throwExcelError(EXCEL_ERROR.num);
+  if (dsm <= 0 || discount <= 0 || !matureWithinAYear(settlement, maturity)) {
+    throwExcelError(EXCEL_ERROR.num);
+  }
   return (365 * discount) / (360 - discount * dsm);
 }
 
@@ -776,7 +834,9 @@ export function excelTbillprice(
   const maturity = parseExcelDate(maturityLike);
   const discount = parseExcelNumber(discountLike);
   const dsm = daysBetween(settlement, maturity);
-  if (dsm <= 0 || discount <= 0) throwExcelError(EXCEL_ERROR.num);
+  if (dsm <= 0 || discount <= 0 || !matureWithinAYear(settlement, maturity)) {
+    throwExcelError(EXCEL_ERROR.num);
+  }
   return 100 * (1 - (discount * dsm) / 360);
 }
 
@@ -789,6 +849,8 @@ export function excelTbillyield(
   const maturity = parseExcelDate(maturityLike);
   const price = parseExcelNumber(priceLike);
   const dsm = daysBetween(settlement, maturity);
-  if (dsm <= 0 || price <= 0) throwExcelError(EXCEL_ERROR.num);
+  if (dsm <= 0 || price <= 0 || !matureWithinAYear(settlement, maturity)) {
+    throwExcelError(EXCEL_ERROR.num);
+  }
   return ((100 - price) / price) * (360 / dsm);
 }

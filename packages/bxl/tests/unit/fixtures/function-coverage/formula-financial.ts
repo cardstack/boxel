@@ -163,6 +163,11 @@ export const formulaFinancialCases: CoverageCase[] = [
     tolerance: 1e-7,
   },
   { covers: 'IRR/1', source: 'IRR([100, 110])', throws: /#NUM!/ },
+  // -1, +3, -2.5 changes sign twice but its net present value never reaches
+  // zero at any rate, so there is no internal rate of return to report. The
+  // iteration still ends somewhere, which is why the result is checked
+  // against the series rather than taken on trust.
+  { covers: 'IRR/1', source: 'IRR([-1, 3, -2.5])', throws: /#NUM!/ },
   // Two sign changes give -100, +230, -132 exact roots at 10% and 20%, so a
   // guess above the turning point returns the higher one. The same series
   // carries the guess arities of IRR_BY, XIRR and XIRR_BY.
@@ -210,6 +215,12 @@ export const formulaFinancialCases: CoverageCase[] = [
     ],
     expected: 10,
     tolerance: 1e-9,
+    zones: TIMEZONES,
+  },
+  {
+    covers: 'XIRR/2',
+    source: 'XIRR([-1, 3, -2.5], ["2020-01-01", "2021-01-01", "2022-01-01"])',
+    throws: /#NUM!/,
     zones: TIMEZONES,
   },
   {
@@ -349,6 +360,15 @@ export const formulaFinancialCases: CoverageCase[] = [
     expected: 182.5,
     zones: TIMEZONES,
   },
+  // Basis 1 is actual/actual, the one convention that measures a real calendar
+  // span: settlement falls in the period from 2010-11-15 to 2011-05-15, which
+  // is 181 days long.
+  {
+    covers: 'COUPDAYS/4',
+    source: 'COUPDAYS("2011-01-25", "2011-11-15", 2, 1)',
+    expected: 181,
+    zones: TIMEZONES,
+  },
   {
     covers: 'DISC/4',
     source: 'DISC("2023-01-01", "2023-07-01", 97.5, 100)',
@@ -382,6 +402,26 @@ export const formulaFinancialCases: CoverageCase[] = [
     source: 'TBILLEQ("2023-01-01", "2023-04-01", 0.04)',
     expected: 14.6 / 356.4,
     tolerance: 1e-9,
+    zones: TIMEZONES,
+  },
+  // A Treasury bill is short-dated by definition, so a maturity more than a
+  // year out is an error rather than an extrapolation.
+  {
+    covers: 'TBILLEQ/3',
+    source: 'TBILLEQ("2023-01-01", "2024-04-01", 0.04)',
+    throws: /#NUM!/,
+    zones: TIMEZONES,
+  },
+  {
+    covers: 'TBILLPRICE/3',
+    source: 'TBILLPRICE("2023-01-01", "2024-04-01", 0.04)',
+    throws: /#NUM!/,
+    zones: TIMEZONES,
+  },
+  {
+    covers: 'TBILLYIELD/3',
+    source: 'TBILLYIELD("2023-01-01", "2024-04-01", 98)',
+    throws: /#NUM!/,
     zones: TIMEZONES,
   },
   {

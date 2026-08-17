@@ -132,18 +132,32 @@ function parseComplex(value: unknown): ComplexNumber {
   return { real: realPart, imaginary, unit };
 }
 
+/**
+ * A number in the given radix. Excel renders digits above 9 in upper case —
+ * DEC2HEX(255) is "FF" — while the reading side accepts either casing, so a
+ * round trip survives.
+ */
+function radixDigits(value: number, radix: number) {
+  return value.toString(radix).toUpperCase();
+}
+
 function formatComplex(real: number, imaginary: number, unit: ImaginaryUnit) {
   if (real === 0 && imaginary === 0) {
     return 0;
   }
+  // A unit coefficient is left implicit in both directions, so ±1 renders as
+  // the bare unit with its sign — the same forms the parser above reads.
+  const term =
+    Math.abs(imaginary) === 1
+      ? `${imaginary < 0 ? '-' : ''}${unit}`
+      : `${imaginary}${unit}`;
   if (real === 0) {
-    return imaginary === 1 ? unit : `${imaginary}${unit}`;
+    return term;
   }
   if (imaginary === 0) {
     return String(real);
   }
-  const sign = imaginary > 0 ? '+' : '';
-  return `${real}${sign}${imaginary === 1 ? unit : `${imaginary}${unit}`}`;
+  return `${real}${imaginary > 0 ? '+' : ''}${term}`;
 }
 
 export function excelBitAnd(leftLike: unknown, rightLike: unknown) {
@@ -198,10 +212,10 @@ export function excelBin2Hex(numberLike: unknown, placesLike?: unknown) {
   ensureMatches(number, /^[01]{1,10}$/);
 
   if (number.length === 10 && number.startsWith('1')) {
-    return (1099511627264 + parseInt(number.slice(1), 2)).toString(16);
+    return radixDigits(1099511627264 + parseInt(number.slice(1), 2), 16);
   }
 
-  return padResult(parseInt(number, 2).toString(16), placesLike);
+  return padResult(radixDigits(parseInt(number, 2), 16), placesLike);
 }
 
 export function excelBin2Oct(numberLike: unknown, placesLike?: unknown) {
@@ -243,10 +257,10 @@ export function excelDec2Hex(numberLike: unknown, placesLike?: unknown) {
   }
 
   if (number < 0) {
-    return (1099511627776 + number).toString(16);
+    return radixDigits(1099511627776 + number, 16);
   }
 
-  return padResult(number.toString(16), placesLike);
+  return padResult(radixDigits(number, 16), placesLike);
 }
 
 export function excelDec2Oct(numberLike: unknown, placesLike?: unknown) {
@@ -340,10 +354,10 @@ export function excelOct2Hex(numberLike: unknown, placesLike?: unknown) {
 
   const decimal = parseInt(number, 8);
   if (decimal >= 536870912) {
-    return `ff${(decimal + 3221225472).toString(16)}`;
+    return `FF${radixDigits(decimal + 3221225472, 16)}`;
   }
 
-  return padResult(decimal.toString(16), placesLike);
+  return padResult(radixDigits(decimal, 16), placesLike);
 }
 
 export function excelDelta(leftLike: unknown, rightLike: unknown = 0) {
@@ -367,7 +381,7 @@ export function excelBase(
     throwExcelError(EXCEL_ERROR.num);
   }
 
-  const result = number.toString(radix);
+  const result = radixDigits(number, radix);
   return `${'0'.repeat(Math.max(minLength - result.length, 0))}${result}`;
 }
 
@@ -630,31 +644,80 @@ export function excelImArgument(valueLike: unknown) {
 // ERF / ERFC
 // ═══════════════════════════════════════════════════════════════
 
-// Horner approximation of erf (Abramowitz and Stegun 7.1.26)
-export function excelErf(lowerLike: unknown, upperLike?: unknown) {
-  function erf1(x: number) {
-    const a1 = 0.254829592,
-      a2 = -0.284496736,
-      a3 = 1.421413741;
-    const a4 = -1.453152027,
-      a5 = 1.061405429,
-      p = 0.3275911;
-    const sign = x < 0 ? -1 : 1;
-    const t = 1 / (1 + p * Math.abs(x));
-    const y =
-      1 - ((((a5 * t + a4) * t + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
-    return sign * y;
+// Both come from the regularized incomplete gamma function, since
+// erf(x) = P(½, x²) and erfc(x) = Q(½, x²). A rational approximation of erf
+// is good to about 1e-7, which is enough to report erf(0) as a billionth
+// rather than as zero, and taking erfc as 1 - erf loses every significant
+// digit once erf rounds to 1 near x = 6.
+const LN_GAMMA_HALF = 0.5723649429247001; // ln Γ(½) = ln √π
+const GAMMA_EPSILON = 1e-16;
+const GAMMA_FLOOR = 1e-300;
+const GAMMA_MAX_TERMS = 300;
+
+/** P(½, x) — the series form, which converges quickly for small x. */
+function lowerGammaHalf(x: number) {
+  if (x <= 0) return 0;
+  let term = 2; // 1/a with a = ½
+  let sum = term;
+  for (let n = 1; n < GAMMA_MAX_TERMS; n++) {
+    term *= x / (0.5 + n);
+    sum += term;
+    if (Math.abs(term) < Math.abs(sum) * GAMMA_EPSILON) break;
   }
+  return sum * Math.exp(-x + 0.5 * Math.log(x) - LN_GAMMA_HALF);
+}
+
+/** Q(½, x) — the continued fraction, which converges quickly for large x. */
+function upperGammaHalf(x: number) {
+  let b = x + 0.5;
+  let c = 1 / GAMMA_FLOOR;
+  let d = 1 / b;
+  let fraction = d;
+  for (let i = 1; i < GAMMA_MAX_TERMS; i++) {
+    const numerator = -i * (i - 0.5);
+    b += 2;
+    d = numerator * d + b;
+    if (Math.abs(d) < GAMMA_FLOOR) d = GAMMA_FLOOR;
+    c = b + numerator / c;
+    if (Math.abs(c) < GAMMA_FLOOR) c = GAMMA_FLOOR;
+    d = 1 / d;
+    const delta = d * c;
+    fraction *= delta;
+    if (Math.abs(delta - 1) < GAMMA_EPSILON) break;
+  }
+  return Math.exp(-x + 0.5 * Math.log(x) - LN_GAMMA_HALF) * fraction;
+}
+
+// ½ + 1 is where the series stops converging faster than the fraction.
+const GAMMA_SERIES_LIMIT = 1.5;
+
+function erfValue(x: number) {
+  const squared = x * x;
+  const value =
+    squared < GAMMA_SERIES_LIMIT
+      ? lowerGammaHalf(squared)
+      : 1 - upperGammaHalf(squared);
+  return x < 0 ? -value : value;
+}
+
+export function excelErf(lowerLike: unknown, upperLike?: unknown) {
   const lower = parseExcelNumber(lowerLike);
   if (upperLike !== undefined) {
-    const upper = parseExcelNumber(upperLike);
-    return erf1(upper) - erf1(lower);
+    return erfValue(parseExcelNumber(upperLike)) - erfValue(lower);
   }
-  return erf1(lower);
+  return erfValue(lower);
 }
 
 export function excelErfc(valueLike: unknown) {
-  return 1 - excelErf(valueLike);
+  const value = parseExcelNumber(valueLike);
+  const squared = value * value;
+  // Computed as the upper tail rather than as 1 - ERF, so the far tail keeps
+  // its precision: ERFC(6) is 2.15e-17, not zero.
+  const complement =
+    squared < GAMMA_SERIES_LIMIT
+      ? 1 - lowerGammaHalf(squared)
+      : upperGammaHalf(squared);
+  return value < 0 ? 2 - complement : complement;
 }
 
 // ═══════════════════════════════════════════════════════════════

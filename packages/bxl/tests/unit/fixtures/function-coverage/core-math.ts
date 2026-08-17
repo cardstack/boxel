@@ -165,11 +165,6 @@ export const coreMathCases: CoverageCase[] = jqCases([
     source: 'round',
     input: -2.5,
     expected: -3,
-    knownDefect:
-      'the implementation is a bare Math.round, which ties toward +Infinity, ' +
-      'so every negative half goes the wrong way. C round, jq and Excel all ' +
-      'tie away from zero; positive halves agree by coincidence',
-    produces: { expected: -2 },
   },
   { covers: 'floor/0', source: 'floor', input: -1.5, expected: -2 },
   { covers: 'ceil/0', source: 'ceil', input: 1.2, expected: 2 },
@@ -246,12 +241,6 @@ export const coreMathCases: CoverageCase[] = jqCases([
     covers: 'isinfinite/0',
     source: 'nan | isinfinite',
     expected: false,
-    knownDefect:
-      'the test is !Number.isFinite(x), which is also true for NaN. This ' +
-      'cascades into isfinite/0, defined in jq source as ' +
-      'type == "number" and (isinfinite | not), so nan | isfinite is false ' +
-      'here where jq gives true',
-    produces: { expected: true },
   },
   { covers: 'isfinite/0', source: 'infinite | isfinite', expected: false },
   // isfinite is defined in jq source as type == "number" and (isinfinite |
@@ -261,10 +250,6 @@ export const coreMathCases: CoverageCase[] = jqCases([
     covers: 'isfinite/0',
     source: 'nan | isfinite',
     expected: true,
-    knownDefect:
-      'isinfinite/0 reports NaN as infinite and this definition negates it, ' +
-      'so NaN comes back non-finite. Fixing isinfinite fixes this too',
-    produces: { expected: false },
   },
   // 1e-320 is subnormal: finite and nonzero, but below the normal threshold.
   { covers: 'isnormal/0', source: 'isnormal', input: 1e-320, expected: false },
@@ -306,10 +291,6 @@ export const coreMathCases: CoverageCase[] = jqCases([
       ok(Math.abs(pair[0] - -0.0562437) <= 1e-7, `ln|gamma| was ${pair[0]}`);
       strictEqual(pair[1], -1, 'sign of gamma(-2.5)');
     },
-    knownDefect:
-      'only the scalar ln|gamma(x)| is returned, so the sign the function ' +
-      'exists to report is dropped. jq returns it as element 1 of a pair',
-    produces: { expected: -0.056243716497675456, tolerance: 1e-12 },
   },
   // The erf implementation is a rational approximation good to ~1.5e-7.
   {

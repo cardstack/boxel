@@ -108,6 +108,26 @@ If you need log-Γ, use the unambiguous spellings — they compute the same thin
 | true Γ(x) | `x \| gamma` (== `tgamma`) | `GAMMA(x)`     |
 | log Γ(x)  | `x \| lgamma`              | `GAMMALN(x)`   |
 
+#### `INDEX` — Excel's positional lookup takes the name
+
+jq has an `INDEX` of its own: `INDEX(stream; key_expr)` builds an object keyed
+by an expression, and `INDEX(key_expr)` is the same over `.[]`. Excel's
+`INDEX(array, row)` claims that name here, and it wins — spreadsheet authors are
+this surface's audience and the formula library loads by default for cards. jq's
+`INDEX` is therefore unreachable, in both arities, and calling it fails with
+`Cannot index array with string`.
+
+The linter says so rather than leaving that message to explain itself: a one-
+argument `INDEX`, or a two-argument one written with jq's semicolon, reports
+`jq-index-shadowed-by-excel` at warning severity. The substitutes are ordinary
+jq:
+
+```text
+reduce Rows[] as $row ({}; .[$row.id] = $row)   -- key rows by a field
+Rows | map({key: .id, value: .}) | from_entries -- the same, via pairs
+INDEX(.names, 2)                                -- Excel: second name
+```
+
 #### Quick reference: collisions and resolutions
 
 > Spelling reminder: prefer the **UPPERCASE** form for any name that ends up at an Excel function. Lowercase still resolves but the linter emits an info-level `excel-name-uppercase-preferred` nudge — see [Linter style nudges](#linter-style-nudges).
@@ -116,6 +136,7 @@ If you need log-Γ, use the unambiguous spellings — they compute the same thin
 | ------------------------------------------ | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | `MATCH(value, array)` / `match(re; flags)` | Excel lookup with comma; jq regex with semicolon      | `match(re)` is jq by arity; `MATCH(value, array, 0)` is Excel by arity.                             |
 | `INDEX(array, row)` / `index(value)`       | Excel lookup with 2-3 args; jq index-of with 1 arg    | Excel rows are one-based; jq index result is zero-based.                                            |
+| `INDEX(array, row)` / `INDEX(stream; key)` | Excel lookup wins; jq's object-building INDEX is unreachable | Not a dispatch: both spell `INDEX/2`. The linter reports `jq-index-shadowed-by-excel`.        |
 | `TYPE(value)` / `type`                     | Excel numeric type code vs jq type string             | Parenthesized one-arg call is Excel; bare pipe filter is jq.                                        |
 | `LOG(x)` / `log`                           | Excel base-10 log vs jq natural log                   | Arity decides. `LOG(x, base)` is Excel.                                                             |
 | `NOW()` / `now`                            | Excel date serial vs jq epoch seconds                 | Call shape decides. `now()` is Excel and formats to `NOW()`. Bare `NOW` is jq and formats to `now`. |
@@ -271,7 +292,7 @@ BXL absorbs five Excel-specific idioms so a formula from a spreadsheet works ver
 | `&` string concat                 | Rewrite to `((a\|tostring) + (b\|tostring))` — Excel-style coercion.       | `"Invoice-" & "Invoice Number"` |
 | Unknown characters                | Caught by the linter as `untokenizable-character`; never crashes solidify. | —                               |
 
-> **Paste test:** Sampled FormulaJS cases across math/trig, text, logical, statistical, engineering, information, date/time, and financial formulas work unchanged in the async compatibility runtime. Known paste gap: `MODE` is not implemented. `AND` / `OR` / `XOR` use array-style arguments, and `DEC2HEX` returns lowercase.
+> **Paste test:** Sampled FormulaJS cases across math/trig, text, logical, statistical, engineering, information, date/time, and financial formulas work unchanged in the async compatibility runtime. Known paste gap: `MODE` is not implemented, and `AND` / `OR` / `XOR` use array-style arguments.
 
 ## Interesting Patterns
 

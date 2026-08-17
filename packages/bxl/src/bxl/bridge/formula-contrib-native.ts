@@ -19,6 +19,7 @@ import {
   matchesCriteria,
 } from '../../formulajs/criteria.ts';
 import { EXCEL_ERROR, throwExcelError } from '../../formulajs/errors.ts';
+import { isoWeekNumber } from '../../formulajs/isoWeek.ts';
 import { compare } from '../../jqtools/evaluate/compare.ts';
 import type { BareNativeFilter } from '../../jqtools/evaluate/filters/lib/nativeFilter.ts';
 import { wrapBareNativeFilters } from '../../jqtools/evaluate/filters/lib/nativeFilter.ts';
@@ -220,6 +221,29 @@ function serialToUtcDate(serial: number): Date {
   return new Date(SERIAL_EPOCH_UTC_MS + serial * NOW_SERIAL_MS_PER_DAY);
 }
 
+function weekdayValue(serialDateLike: unknown, returnTypeLike: unknown = 1) {
+  const serial = Math.floor(parseExcelNumber(serialDateLike));
+  const type = Math.floor(parseExcelNumber(returnTypeLike));
+  const dayOfWeek = serialToUtcDate(serial).getUTCDay(); // 0 = Sunday
+  // Every return type says which weekday counts as the first: type 1 starts
+  // the week on Sunday, types 2 and 3 and 11 on Monday, and 12 through 17 walk
+  // the start forward a day at a time, back around to Sunday. Type 3 is the
+  // one that numbers from zero.
+  const firstDay =
+    type === 1
+      ? 0
+      : type === 2 || type === 3 || type === 11
+        ? 1
+        : type >= 12 && type <= 17
+          ? (type - 10) % 7
+          : undefined;
+  if (firstDay === undefined) {
+    throwExcelError(EXCEL_ERROR.num);
+  }
+  const offset = (dayOfWeek - firstDay + 7) % 7;
+  return type === 3 ? offset : offset + 1;
+}
+
 function utcDateToSerial(date: Date): number {
   return Math.floor(
     (date.getTime() - SERIAL_EPOCH_UTC_MS) / NOW_SERIAL_MS_PER_DAY,
@@ -232,20 +256,72 @@ function replaceNth(
   newText: string,
   instance: number,
 ) {
-  let index = 0;
-  let found = 0;
+  if (oldText === '') {
+    return text;
+  }
 
-  while (index > -1 && text.indexOf(oldText, index) > -1) {
-    index = text.indexOf(oldText, index + 1);
+  // Instance 1 is the first occurrence wherever it sits, the very start of the
+  // string included, and occurrences do not overlap.
+  let index = text.indexOf(oldText);
+  let found = 0;
+  while (index > -1) {
     found++;
-    if (index > -1 && found === instance) {
+    if (found === instance) {
       return (
         text.slice(0, index) + newText + text.slice(index + oldText.length)
       );
     }
+    index = text.indexOf(oldText, index + oldText.length);
   }
 
   return text;
+}
+
+/**
+ * Excel's wildcards for the arguments that take them: `*` for any run of
+ * characters, `?` for exactly one, and `~` escaping any of the three.
+ */
+function excelWildcardPattern(pattern: string, flags: string): RegExp {
+  let source = '';
+  for (let index = 0; index < pattern.length; index++) {
+    const char = pattern[index];
+    if (char === '~' && '*?~'.includes(pattern[index + 1] ?? '')) {
+      source += escapeRegExpLiteral(pattern[++index]);
+    } else if (char === '*') {
+      source += '[\\s\\S]*';
+    } else if (char === '?') {
+      source += '[\\s\\S]';
+    } else {
+      source += escapeRegExpLiteral(char);
+    }
+  }
+  return new RegExp(source, flags);
+}
+
+function escapeRegExpLiteral(text: string) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function searchValue(
+  findTextLike: unknown,
+  withinTextLike: unknown,
+  startNumLike: unknown = 1,
+) {
+  const findText = parseExcelString(findTextLike);
+  const withinText = parseExcelString(withinTextLike);
+  const startNum = Math.trunc(parseExcelNumber(startNumLike));
+  if (startNum < 1) {
+    throwExcelError(EXCEL_ERROR.value);
+  }
+  // SEARCH differs from FIND in two ways, not one: it ignores case and it
+  // reads find_text as a wildcard pattern.
+  const found = withinText
+    .slice(startNum - 1)
+    .search(excelWildcardPattern(findText, 'i'));
+  if (found === -1) {
+    throwExcelError(EXCEL_ERROR.value);
+  }
+  return found + startNum;
 }
 
 function toTextForConcat(value: unknown) {
@@ -292,6 +368,140 @@ function excelValue(textLike: unknown) {
   return isPercent ? output * 0.01 : output;
 }
 
+const MONTH_NAMES = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+
+const WEEKDAY_NAMES = [
+  'Sunday',
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+];
+
+type DateFormatField =
+  | 'literal'
+  | 'year'
+  | 'month'
+  | 'day'
+  | 'hour'
+  | 'minute'
+  | 'second'
+  | 'meridiem';
+
+interface DateFormatToken {
+  field: DateFormatField;
+  text: string;
+}
+
+/**
+ * True when a format code addresses a date or a time rather than a number.
+ * Quoted and escaped literals are excluded, since they may spell anything.
+ */
+function isDateFormatCode(formatText: string) {
+  return /[ymdhs]/i.test(
+    formatText.replace(/"[^"]*"/g, '').replace(/\\[\s\S]/g, ''),
+  );
+}
+
+function tokenizeDateFormat(formatText: string): DateFormatToken[] {
+  const runs =
+    formatText.match(/AM\/PM|A\/P|y+|m+|d+|h+|s+|"[^"]*"|\\[\s\S]|[\s\S]/gi) ??
+    [];
+  const tokens = runs.map((text): DateFormatToken => {
+    const code = text.toLowerCase();
+    if (code === 'am/pm' || code === 'a/p') return { field: 'meridiem', text };
+    if (/^y+$/.test(code)) return { field: 'year', text };
+    if (/^m+$/.test(code)) return { field: 'month', text };
+    if (/^d+$/.test(code)) return { field: 'day', text };
+    if (/^h+$/.test(code)) return { field: 'hour', text };
+    if (/^s+$/.test(code)) return { field: 'second', text };
+    return { field: 'literal', text };
+  });
+
+  // An `m` run means minutes when it neighbours an hour or second run, and
+  // months everywhere else. Only separators may sit in between.
+  const neighbour = (from: number, step: number): DateFormatField => {
+    for (let i = from + step; i >= 0 && i < tokens.length; i += step) {
+      if (tokens[i].field !== 'literal') return tokens[i].field;
+      if (!/^[\s:.,\-/]$/.test(tokens[i].text)) break;
+    }
+    return 'literal';
+  };
+  tokens.forEach((token, index) => {
+    if (token.field !== 'month') return;
+    const adjacent = [neighbour(index, -1), neighbour(index, 1)];
+    if (adjacent.includes('hour') || adjacent.includes('second')) {
+      token.field = 'minute';
+    }
+  });
+
+  return tokens;
+}
+
+function renderDateFormat(serial: number, formatText: string) {
+  const date = serialToUtcDate(serial);
+  const tokens = tokenizeDateFormat(formatText);
+  const twelveHour = tokens.some((token) => token.field === 'meridiem');
+  const pad = (value: number, width: number) =>
+    String(value).padStart(width, '0');
+
+  return tokens
+    .map(({ field, text }) => {
+      const width = text.length;
+      switch (field) {
+        case 'year':
+          return width <= 2
+            ? pad(date.getUTCFullYear() % 100, 2)
+            : pad(date.getUTCFullYear(), 4);
+        case 'month': {
+          const name = MONTH_NAMES[date.getUTCMonth()];
+          if (width >= 4) return name;
+          if (width === 3) return name.slice(0, 3);
+          return pad(date.getUTCMonth() + 1, Math.min(width, 2));
+        }
+        case 'day': {
+          if (width >= 4) return WEEKDAY_NAMES[date.getUTCDay()];
+          if (width === 3) return WEEKDAY_NAMES[date.getUTCDay()].slice(0, 3);
+          return pad(date.getUTCDate(), Math.min(width, 2));
+        }
+        case 'hour': {
+          const hours = date.getUTCHours();
+          const shown = twelveHour ? hours % 12 || 12 : hours;
+          return pad(shown, Math.min(width, 2));
+        }
+        case 'minute':
+          return pad(date.getUTCMinutes(), Math.min(width, 2));
+        case 'second':
+          return pad(date.getUTCSeconds(), Math.min(width, 2));
+        case 'meridiem': {
+          const half = date.getUTCHours() < 12 ? 'AM' : 'PM';
+          const shown = text.length === 3 ? half.slice(0, 1) : half;
+          return text === text.toLowerCase() ? shown.toLowerCase() : shown;
+        }
+        default:
+          return text.startsWith('"')
+            ? text.slice(1, -1)
+            : text.replace(/^\\/, '');
+      }
+    })
+    .join('');
+}
+
 function excelText(valueLike: unknown, formatTextLike: unknown) {
   if (valueLike instanceof Date) {
     return valueLike.toISOString().slice(0, 10);
@@ -307,6 +517,10 @@ function excelText(valueLike: unknown, formatTextLike: unknown) {
 
   if (typeof formatTextLike !== 'string') {
     throwExcelError(EXCEL_ERROR.value);
+  }
+
+  if (isDateFormatCode(formatTextLike)) {
+    return renderDateFormat(parseExcelNumber(valueLike), formatTextLike);
   }
 
   const currencySymbol = formatTextLike.startsWith('$') ? '$' : '';
@@ -410,13 +624,18 @@ function numberValue(
     throwExcelError(EXCEL_ERROR.value);
   }
 
+  // Spaces are ignored wherever they appear, and each trailing percent sign
+  // divides the result by 100 — "9%%" is 0.0009.
+  const compacted = text.replace(/ /g, '');
+  const percentSigns = /%*$/.exec(compacted)![0].length;
+  const digits = compacted.slice(0, compacted.length - percentSigns);
   const parsed = Number(
-    text.split(groupSeparator).join('').replace(decimalSeparator, '.'),
+    digits.split(groupSeparator).join('').replace(decimalSeparator, '.'),
   );
   if (Number.isNaN(parsed)) {
     throwExcelError(EXCEL_ERROR.value);
   }
-  return parsed;
+  return parsed / 100 ** percentSigns;
 }
 
 const ROMAN_TOKEN_VALUES: Record<string, number> = {
@@ -501,10 +720,11 @@ function romanValue(numberLike: unknown) {
 }
 
 function properValue(textLike: unknown) {
-  return parseExcelString(textLike).replace(
-    /\w\S*/g,
-    (entry) => entry.charAt(0).toUpperCase() + entry.slice(1).toLowerCase(),
-  );
+  // Excel capitalizes every letter that follows a non-letter, so a word is a
+  // run of letters and nothing else: "2-way" becomes "2-Way".
+  return parseExcelString(textLike)
+    .toLowerCase()
+    .replace(/\p{L}+/gu, (word) => word.charAt(0).toUpperCase() + word.slice(1));
 }
 
 function textJoin(
@@ -1113,8 +1333,10 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
     yield averageExcelRange(colValues(filteredRows, valueKey));
   },
   *'CHAR/1'(_input, value) {
-    const number = parseExcelNumber(value);
-    if (number === 0) {
+    // CHAR spans the single-byte character set: 1 through 255. UNICHAR is the
+    // one that reaches beyond it.
+    const number = Math.trunc(parseExcelNumber(value));
+    if (number < 1 || number > 255) {
       throwExcelError(EXCEL_ERROR.value);
     }
     yield String.fromCharCode(number);
@@ -1455,25 +1677,10 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
     yield roundBase(value, digits, Math.ceil);
   },
   *'SEARCH/2'(_input, findText, withinText) {
-    const found = parseExcelString(withinText)
-      .toLowerCase()
-      .indexOf(parseExcelString(findText).toLowerCase());
-    if (found === -1) {
-      throwExcelError(EXCEL_ERROR.value);
-    }
-    yield found + 1;
+    yield searchValue(findText, withinText);
   },
   *'SEARCH/3'(_input, findText, withinText, startNum) {
-    const found = parseExcelString(withinText)
-      .toLowerCase()
-      .indexOf(
-        parseExcelString(findText).toLowerCase(),
-        parseExcelNumber(startNum) - 1,
-      );
-    if (found === -1) {
-      throwExcelError(EXCEL_ERROR.value);
-    }
-    yield found + 1;
+    yield searchValue(findText, withinText, startNum);
   },
   *'SEC/1'(_input, value) {
     yield checkedMathResult(1 / Math.cos(parseExcelNumber(value)));
@@ -1566,7 +1773,12 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
     yield textJoin(delimiter, ignoreEmpty, values);
   },
   *'TRIM/1'(_input, value) {
-    yield parseExcelString(value).replace(/\s+/g, ' ').trim();
+    // TRIM is defined over the ASCII space alone: it collapses runs of spaces
+    // between words and strips them from the ends, leaving tabs, newlines and
+    // the non-breaking space to CLEAN and SUBSTITUTE.
+    yield parseExcelString(value)
+      .replace(/ +/g, ' ')
+      .replace(/^ | $/g, '');
   },
   *'TRUNC/1'(_input, value) {
     yield truncValue(value);
@@ -1893,13 +2105,12 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   // Information functions
   // ═══════════════════════════════════════════════════════════════
 
+  // Excel truncates toward zero before testing parity, so -2.5 is even.
   *'ISEVEN/1'(_input, value) {
-    const n = parseExcelNumber(value);
-    yield Math.floor(n) % 2 === 0;
+    yield truncValue(value) % 2 === 0;
   },
   *'ISODD/1'(_input, value) {
-    const n = parseExcelNumber(value);
-    yield Math.floor(n) % 2 !== 0;
+    yield truncValue(value) % 2 !== 0;
   },
   *'ISLOGICAL/1'(_input, value) {
     yield typeof value === 'boolean';
@@ -2282,29 +2493,14 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
     yield Math.floor(frac * 24 * 60 * 60) % 60;
   },
   *'WEEKDAY/1'(_input, serialDate) {
-    // Default type 1: Sunday=1 .. Saturday=7
-    const serial = Math.floor(parseExcelNumber(serialDate));
-    yield serialToUtcDate(serial).getUTCDay() + 1;
+    yield weekdayValue(serialDate);
   },
   *'WEEKDAY/2'(_input, serialDate, returnType) {
-    const serial = Math.floor(parseExcelNumber(serialDate));
-    const type = Math.floor(parseExcelNumber(returnType));
-    const dow = serialToUtcDate(serial).getUTCDay(); // 0=Sun
-    if (type === 1) yield dow + 1;
-    else if (type === 2) yield dow === 0 ? 7 : dow;
-    else if (type === 3) yield dow === 0 ? 6 : dow - 1;
-    else yield dow + 1;
+    yield weekdayValue(serialDate, returnType);
   },
   *'ISOWEEKNUM/1'(_input, serialDate) {
     const serial = Math.floor(parseExcelNumber(serialDate));
-    const date = serialToUtcDate(serial);
-    const dayOfYear =
-      Math.floor(
-        (date.getTime() - Date.UTC(date.getUTCFullYear(), 0, 1)) / 86400000,
-      ) + 1;
-    const dow = date.getUTCDay() || 7; // Mon=1..Sun=7
-    const woy = Math.floor((dayOfYear - dow + 10) / 7);
-    yield woy;
+    yield isoWeekNumber(serialToUtcDate(serial));
   },
   *'EDATE/2'(_input, startDate, months) {
     const serial = Math.floor(parseExcelNumber(startDate));
@@ -2344,9 +2540,14 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
     const str = String(text);
     const match = str.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
     if (!match) throwExcelError(EXCEL_ERROR.value);
-    const h = parseInt(match[1], 10);
+    let h = parseInt(match[1], 10);
     const m = parseInt(match[2], 10);
     const s = match[3] ? parseInt(match[3], 10) : 0;
+    // A 12-hour reading closes with a meridiem: PM adds twelve hours to every
+    // hour but noon's, and 12 AM is midnight.
+    const meridiem = /\d\s*([ap])\.?m?\.?\s*$/i.exec(str)?.[1].toLowerCase();
+    if (meridiem === 'p' && h < 12) h += 12;
+    if (meridiem === 'a' && h === 12) h = 0;
     yield (h * 3600 + m * 60 + s) / 86400;
   },
 

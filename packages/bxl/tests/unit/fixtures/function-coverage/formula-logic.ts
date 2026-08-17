@@ -109,19 +109,12 @@ export const formulaLogicCases: CoverageCase[] = [
     covers: 'ISEVEN/1',
     source: 'ISEVEN(-2.5)',
     expected: true,
-    knownDefect:
-      'Math.floor instead of truncation toward zero, so every negative ' +
-      'non-integer is inverted. truncValue in the same module already ' +
-      'implements Excel truncation correctly',
-    produces: { expected: false },
   },
   { covers: 'ISODD/1', source: 'ISODD(3.5)', expected: true },
   {
     covers: 'ISODD/1',
     source: 'ISODD(-2.5)',
     expected: false,
-    knownDefect: 'floors instead of truncating, as for ISEVEN/1',
-    produces: { expected: true },
   },
   { covers: 'ISLOGICAL/1', source: 'ISLOGICAL(FALSE())', expected: true },
   // Numeric text is still text, never a number.
