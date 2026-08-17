@@ -61,6 +61,13 @@ module('Unit | isFileDefCodeRef', function (hooks) {
     );
     assert.true(
       isFileDefCodeRef(
+        { module: baseRRI('pdf-file-def'), name: 'PdfDef' },
+        virtualNetwork,
+      ),
+      'PdfDef',
+    );
+    assert.true(
+      isFileDefCodeRef(
         { module: baseRRI('docx-file-def'), name: 'DocxDef' },
         virtualNetwork,
       ),

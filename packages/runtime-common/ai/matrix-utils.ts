@@ -1,10 +1,6 @@
 import type { IContent, MatrixClient } from 'matrix-js-sdk';
 import { Method } from 'matrix-js-sdk';
-import {
-  REPLACE_MARKER,
-  SEARCH_MARKER,
-  SEPARATOR_MARKER,
-} from '../constants.ts';
+import { findSearchReplaceBlock } from '../search-replace-markers.ts';
 import { logger } from '../log.ts';
 import { OpenAIError } from 'openai/error';
 import type { ToolRequest } from '../commands.ts';
@@ -437,15 +433,16 @@ export function isToolOrCodePatchResult(
 }
 
 export function extractCodePatchBlocks(s: string) {
-  let matches = [
-    ...s.matchAll(
-      new RegExp(
-        `${SEARCH_MARKER}.*?${SEPARATOR_MARKER}.*?${REPLACE_MARKER}`,
-        'gs',
-      ),
-    ),
-  ];
-  return matches.map((match) => match[0]);
+  let blocks: string[] = [];
+  let from = 0;
+  for (;;) {
+    let block = findSearchReplaceBlock(s, from);
+    if (!block) {
+      return blocks;
+    }
+    blocks.push(s.substring(block.start, block.end));
+    from = block.end;
+  }
 }
 
 // Normalize a Matrix media URL (HTTP download URL or mxc://) into a canonical key.
