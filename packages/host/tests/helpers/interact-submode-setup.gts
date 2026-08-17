@@ -334,13 +334,12 @@ export function setupInteractSubmodeTests(
 
     let mangoPet = new Pet({ name: 'Mango' });
 
-    let realm: Realm;
     // The four realms are the same for every test in a module using this
     // helper, so the indexed result is cached and restored rather than rebuilt.
     // One block covers all four: the snapshot is taken after the callback
     // resolves, so it cannot omit a realm the way a hand-placed capture could.
-    await withCachedRealmSetup(async () => {
-      ({ realm } = await setupAcceptanceTestRealm({
+    let realm = await withCachedRealmSetup(async () => {
+      let { realm } = await setupAcceptanceTestRealm({
         mockMatrixUtils,
         fileSizeLimitBytes,
         audioSizeLimitBytes,
@@ -502,7 +501,7 @@ export function setupInteractSubmodeTests(
             iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
           }),
         },
-      }));
+      });
 
       await setupAcceptanceTestRealm({
         mockMatrixUtils,
@@ -564,6 +563,8 @@ export function setupInteractSubmodeTests(
           }),
         },
       });
+
+      return realm;
     });
 
     setRealm(realm);
