@@ -322,8 +322,10 @@ module('Integration | searchable search doc', function (hooks) {
 
     let agentRef = (id: string) => ({ links: { self: id } });
 
-    // Every test builds these fixtures identically, so the indexed result is
-    // cached for the module and restored rather than rebuilt.
+    // Every test builds these fixtures identically and only reads the search
+    // docs they produce, so the indexed result is cached for the module and
+    // restored rather than rebuilt. Both halves matter: identical fixtures make
+    // the cache possible, and no test mutating them is what makes it sound.
     await withCachedRealmSetup(async () => {
       ({ realm } = await setupIntegrationTestRealm({
         mockMatrixUtils,
