@@ -1981,7 +1981,12 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         endLine: 1,
         endColumn: 1,
       },
-      'Context sent with message contains correct selectionRange',
+      // The value is in the message because the TAP reporter renders a failed
+      // deepEqual's operands as `[object Object]`, and a shard that fails
+      // uploads no test-report artifact to read them from.
+      `Context sent with message contains correct selectionRange (got ${JSON.stringify(
+        contextSent.codeMode!.selectionRange,
+      )})`,
     );
     assert.strictEqual(
       contextSent.codeMode!.moduleInspectorPanel,
