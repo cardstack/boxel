@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Survey Question",
+      "specType": "field",
+      "ref": {
+        "module": "../survey-question",
+        "name": "SurveyQuestion"
+      },
+      "readMe": "# Survey Question\n\n## Summary\nOne question inside a Survey — a contained FieldDef, so questions live and\ntravel with their survey document (ordering matters, no independent\nidentity).\n\n## API\n- `prompt` — the question text; `helpText` — secondary guidance\n- `kind` — rating | single-choice | multi-choice | short-text\n- `options` — the choice list for choice kinds\n- `required` — wizard enforcement\n\n## Usage\n`Survey.questions = containsMany(SurveyQuestion)`; the survey wizard walks\nthem in order and enforces `required` before advancing.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Survey Question",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

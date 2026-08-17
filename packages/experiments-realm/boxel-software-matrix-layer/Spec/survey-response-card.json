@@ -1,0 +1,34 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Survey Response",
+      "specType": "card",
+      "ref": {
+        "module": "../survey-response",
+        "name": "SurveyResponse"
+      },
+      "readMe": "# Survey Response\n\n## Summary\nOne submitted answer set. Answers are SNAPSHOTS — each row embeds the\nprompt text it answered alongside the response, and `surveyTitle` snapshots\nthe title, so editing the Survey later never rewrites what a respondent\nactually saw and said.\n\n## API\n- `survey` — linksTo the Survey it answers (for counting and navigation)\n- `surveyTitle` — snapshot of the title at submission time\n- `answers` — containsMany SurveyAnswer (`{ prompt, response }` snapshots)\n\n## Invariant\nTreat instances as immutable once submitted: corrections are a new\nresponse, not an edit.\n\nThe linked example is a real submitted match-day response.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Survey Response",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../SurveyResponse/event-feedback-jason"
+        }
+      }
+    }
+  }
+}
