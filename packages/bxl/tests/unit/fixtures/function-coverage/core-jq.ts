@@ -1,4 +1,4 @@
-import { jqCases, TIMEZONES, type CoverageCase } from './case.ts';
+import { jqCases, type CoverageCase } from './case.ts';
 
 export const coreJqCases: CoverageCase[] = jqCases([
   // Type filters: each keeps the inputs of one jq type and drops the rest.
@@ -603,49 +603,41 @@ export const coreJqCases: CoverageCase[] = jqCases([
     covers: 'gmtime/0',
     source: '1425599507 | gmtime',
     expected: [2015, 2, 5, 23, 51, 47, 4, 63],
-    zones: TIMEZONES,
   },
   {
     covers: 'mktime/0',
     source: '[2015,2,5,23,51,47,4,63] | mktime',
     expected: 1425599507,
-    zones: TIMEZONES,
   },
   {
     covers: 'strftime/1',
     source: '1425599507 | strftime("%Y-%m-%dT%H:%M:%SZ")',
     expected: '2015-03-05T23:51:47Z',
-    zones: TIMEZONES,
   },
   {
     covers: 'strptime/1',
     source: '"2015-03-05T23:51:47Z" | strptime("%Y-%m-%dT%H:%M:%SZ")',
     expected: [2015, 2, 5, 23, 51, 47, 4, 63],
-    zones: TIMEZONES,
   },
   {
     covers: 'todate/0',
     source: '1425599507 | todate',
     expected: '2015-03-05T23:51:47Z',
-    zones: TIMEZONES,
   },
   {
     covers: 'todateiso8601/0',
     source: '86400 | todateiso8601',
     expected: '1970-01-02T00:00:00Z',
-    zones: TIMEZONES,
   },
   {
     covers: 'fromdate/0',
     source: '"2015-03-05T23:51:47Z" | fromdate',
     expected: 1425599507,
-    zones: TIMEZONES,
   },
   {
     covers: 'fromdateiso8601/0',
     source: '"1970-01-02T00:00:00Z" | fromdateiso8601',
     expected: 86400,
-    zones: TIMEZONES,
   },
   {
     covers: 'localtime/0',
@@ -676,7 +668,6 @@ export const coreJqCases: CoverageCase[] = jqCases([
         );
       }
     },
-    zones: TIMEZONES,
   },
   {
     covers: 'strflocaltime/1',
@@ -691,7 +682,6 @@ export const coreJqCases: CoverageCase[] = jqCases([
         );
       }
     },
-    zones: TIMEZONES,
   },
   {
     covers: 'now/0',
@@ -710,7 +700,6 @@ export const coreJqCases: CoverageCase[] = jqCases([
         );
       }
     },
-    zones: TIMEZONES,
   },
 
   // Failure and termination.
@@ -796,5 +785,114 @@ export const coreJqCases: CoverageCase[] = jqCases([
     covers: 'have_literal_numbers/0',
     source: 'have_literal_numbers',
     expected: false,
+  },
+
+  // Private helpers: callable, but kept out of what `builtins` reports —
+  // jq hides its own the same way. Each is the worker a public definition
+  // delegates to, so its own contract is worth pinning rather than leaving
+  // to whatever the wrapper happens to exercise. See PRIVATE_BUILTINS in
+  // ../gate.ts for why each one is unlisted.
+  {
+    covers: 'env/0',
+    // The sandbox blocks it by name, which is the point: a card expression
+    // must not be able to read the process environment.
+    source: 'env',
+    throws: /env is not available in the public BXL sandbox/,
+  },
+  // `_assign` and `_modify` are what jq's grammar desugars `=` and `|=` into.
+  // BXL's evaluator applies both operators directly, so these run only when a
+  // program names one — which a jq program ported from upstream may.
+  {
+    covers: '_assign/2',
+    source: '_assign(.a, .b; 9)',
+    input: { a: 1, b: 2 },
+    expected: { a: 9, b: 9 },
+  },
+  {
+    covers: '_modify/2',
+    source: '_modify(.a, .b; . + 1)',
+    input: { a: 1, b: 2 },
+    expected: { a: 2, b: 3 },
+  },
+  // Likewise unary minus.
+  { covers: '_negate/0', source: '_negate', input: 5, expected: -5 },
+  // `_flatten` takes the remaining depth, so 1 flattens one level and leaves
+  // the nesting below it alone.
+  {
+    covers: '_flatten/1',
+    source: '_flatten(1)',
+    input: [[1, [2]], [3]],
+    expected: [1, [2], 3],
+  },
+  // The string half of `indices`: every start offset of the needle, counted
+  // in code points.
+  {
+    covers: '_strindices/1',
+    source: '_strindices("ab")',
+    input: 'abcab',
+    expected: [0, 3],
+  },
+  // `match`, `test` and `capture` all funnel here. The third argument is the
+  // test flag: true reports only whether the regex matched.
+  {
+    covers: '_match_impl/3',
+    source: '_match_impl("b(c)"; null; false)',
+    input: 'abc',
+    expected: [
+      {
+        offset: 1,
+        length: 2,
+        string: 'bc',
+        captures: [{ offset: 2, length: 1, string: 'c', name: null }],
+      },
+    ],
+  },
+  {
+    covers: '_match_impl/3',
+    source: '_match_impl("z"; null; true)',
+    input: 'abc',
+    expected: false,
+  },
+  // `_nwise` chunks a stream; the two-argument form takes the array to chunk
+  // as its first argument rather than reading it from the input.
+  {
+    covers: '_nwise/2',
+    source: '[_nwise([1, 2, 3, 4, 5]; 2)]',
+    expected: [[1, 2], [3, 4], [5]],
+  },
+  {
+    covers: '_nwise/1',
+    source: '[_nwise(2)]',
+    input: [1, 2, 3, 4, 5],
+    expected: [[1, 2], [3, 4], [5]],
+  },
+  // The `_*_by_impl` family shares one protocol: the caller passes
+  // `map([f])`, so the key expression is evaluated once per element and the
+  // worker compares keys rather than whole items. A key array shorter than
+  // the input would leave later elements keyless, which is why each case
+  // uses a key that disagrees with the item's own ordering.
+  {
+    covers: '_sort_by_impl/1',
+    source: '_sort_by_impl(map([-.n]))',
+    input: [{ n: 1 }, { n: 3 }, { n: 2 }],
+    expected: [{ n: 3 }, { n: 2 }, { n: 1 }],
+  },
+  {
+    covers: '_group_by_impl/1',
+    source: '_group_by_impl(map([.n % 2]))',
+    input: [{ n: 1 }, { n: 2 }, { n: 3 }],
+    expected: [[{ n: 2 }], [{ n: 1 }, { n: 3 }]],
+  },
+  {
+    covers: '_min_by_impl/1',
+    source: '_min_by_impl(map([-.n]))',
+    input: [{ n: 1 }, { n: 3 }, { n: 2 }],
+    expected: { n: 3 },
+  },
+  {
+    covers: '_max_by_impl/1',
+    source: '_max_by_impl(map([-.n]))',
+    input: [{ n: 1 }, { n: 3 }, { n: 2 }],
+    expected: { n: 1 },
   },
 ]);

@@ -1,4 +1,4 @@
-import { TIMEZONES, type CoverageCase } from './case.ts';
+import type { CoverageCase } from './case.ts';
 
 export const validationCases: CoverageCase[] = [
   // Comparison and membership. `matches` takes the pattern as a string, and
@@ -482,67 +482,56 @@ export const validationCases: CoverageCase[] = [
     covers: 'isAfter/1',
     source: 'isAfter("2200-01-01")',
     expected: true,
-    zones: TIMEZONES,
   },
   {
     covers: 'isAfter/2',
     source: 'isAfter("1900-01-02", {comparisonDate: "1900-01-01"})',
     expected: true,
-    zones: TIMEZONES,
   },
   {
     covers: 'isBefore/1',
     source: 'isBefore("1900-01-01")',
     expected: true,
-    zones: TIMEZONES,
   },
   {
     covers: 'isBefore/2',
     source: 'isBefore("2200-01-02", {comparisonDate: "2200-01-03"})',
     expected: true,
-    zones: TIMEZONES,
   },
   {
     covers: 'isDate/1',
     source: 'isDate("10-05-2026")',
     expected: false,
-    zones: TIMEZONES,
   },
   {
     covers: 'isDate/2',
     source: 'isDate("10-05-2026", {format: "DD-MM-YYYY"})',
     expected: true,
-    zones: TIMEZONES,
   },
   // Without strict mode isISO8601 checks only the shape, so February 30 passes.
   {
     covers: 'isISO8601/1',
     source: 'isISO8601("2026-02-30")',
     expected: true,
-    zones: TIMEZONES,
   },
   {
     covers: 'isISO8601/2',
     source: 'isISO8601("2026-02-30", {strict: true})',
     expected: false,
-    zones: TIMEZONES,
   },
   {
     covers: 'isRFC3339/1',
     source: 'isRFC3339("2026-05-10T12:34:56Z")',
     expected: true,
-    zones: TIMEZONES,
   },
   {
     covers: 'isTime/1',
     source: 'isTime("11:59 PM")',
     expected: false,
-    zones: TIMEZONES,
   },
   {
     covers: 'isTime/2',
     source: 'isTime("11:59 PM", {hourFormat: "hour12"})',
     expected: true,
-    zones: TIMEZONES,
   },
 ];

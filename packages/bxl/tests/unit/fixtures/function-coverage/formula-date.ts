@@ -1,10 +1,10 @@
 import { ok, strictEqual } from 'node:assert';
-import { dateCases, type CoverageCase } from './case.ts';
+import type { CoverageCase } from './case.ts';
 
-// Every case here runs under each of `TIMEZONES` and has to give the same
-// answer in all of them: a serial names a calendar day, not an instant, and
-// indexing evaluates these in UTC while the author's browser does not.
-export const formulaDateCases: CoverageCase[] = dateCases([
+// A serial names a calendar day, not an instant, and indexing evaluates these
+// in UTC while the author's browser does not — so the runner's zone sweep
+// matters more here than anywhere else in the suite.
+export const formulaDateCases: CoverageCase[] = [
   // Serial 1 is 1900-01-01, and Excel's deliberate 1900 leap-year bug slips a
   // phantom 1900-02-29 in, so every later date sits one above a true day
   // count from the epoch. 2026-04-30 is the anchor the rest of the table
@@ -352,4 +352,4 @@ export const formulaDateCases: CoverageCase[] = dateCases([
       strictEqual(floored, today, 'flooring NOW must land on TODAY');
     },
   },
-]);
+];

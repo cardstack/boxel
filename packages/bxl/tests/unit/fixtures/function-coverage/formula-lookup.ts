@@ -101,6 +101,22 @@ export const formulaLookupCases: CoverageCase[] = [
   // INDEX over a 1-D array treats the single index as the position.
   { covers: 'INDEX/2', source: 'INDEX(["a", "b", "c"], 2)', expected: 'b' },
   { covers: 'INDEX/3', source: 'INDEX([[1, 2], [3, 4]], 2, 1)', expected: 3 },
+  // `def INDEX` delegates to a differently named worker, because a jq
+  // definition wins over a native of the same key: an `INDEX` definition
+  // calling `INDEX` would only recurse. The worker is callable in its own
+  // right, so it is pinned here rather than only through the wrapper.
+  {
+    covers: '_EXCEL_INDEX/2',
+    source: '_EXCEL_INDEX(["a", "b", "c"]; 2)',
+    readableSyntax: false,
+    expected: 'b',
+  },
+  {
+    covers: '_EXCEL_INDEX/3',
+    source: '_EXCEL_INDEX([[1, 2], [3, 4]]; 2; 1)',
+    readableSyntax: false,
+    expected: 3,
+  },
   // Legacy vector LOOKUP: without a result vector it returns from the lookup
   // vector itself, approximate (largest value <= lookup, ascending data).
   { covers: 'LOOKUP/2', source: 'LOOKUP(6, [1, 4, 9])', expected: 4 },

@@ -1,4 +1,4 @@
-import { TIMEZONES, type CoverageCase } from './case.ts';
+import type { CoverageCase } from './case.ts';
 
 // Expected values are derived from the published Excel definitions, not from
 // the implementation: zero-rate TVM results are exact quotients, nonzero-rate
@@ -222,7 +222,6 @@ export const formulaFinancialCases: CoverageCase[] = [
     source: 'XNPV(0.1, [-100, 121], ["2023-01-01", "2024-01-01"])',
     expected: 10,
     tolerance: 1e-9,
-    zones: TIMEZONES,
   },
   {
     covers: 'XNPV_BY/4',
@@ -233,20 +232,17 @@ export const formulaFinancialCases: CoverageCase[] = [
     ],
     expected: 10,
     tolerance: 1e-9,
-    zones: TIMEZONES,
   },
   {
     covers: 'XIRR/2',
     source: 'XIRR([-1, 3, -2.5], ["2020-01-01", "2021-01-01", "2022-01-01"])',
     throws: /#NUM!/,
-    zones: TIMEZONES,
   },
   {
     covers: 'XIRR/2',
     source: 'XIRR([-100, 110], ["2023-01-01", "2024-01-01"])',
     expected: 0.1,
     tolerance: 1e-7,
-    zones: TIMEZONES,
   },
   // 2021 and 2022 are both non-leap, so the dated exponents are exactly 1 and
   // 2 and the two-root series above applies unchanged.
@@ -256,7 +252,6 @@ export const formulaFinancialCases: CoverageCase[] = [
       'XIRR([-100, 230, -132], ["2021-01-01", "2022-01-01", "2023-01-01"], 0.3)',
     expected: 0.2,
     tolerance: 1e-7,
-    zones: TIMEZONES,
   },
   {
     covers: 'XIRR_BY/3',
@@ -267,7 +262,6 @@ export const formulaFinancialCases: CoverageCase[] = [
     ],
     expected: 0.1,
     tolerance: 1e-7,
-    zones: TIMEZONES,
   },
   {
     covers: 'XIRR_BY/4',
@@ -279,7 +273,6 @@ export const formulaFinancialCases: CoverageCase[] = [
     ],
     expected: 0.2,
     tolerance: 1e-7,
-    zones: TIMEZONES,
   },
   // Rate conversions: EFFECT and NOMINAL invert each other at 10%/semiannual.
   {
@@ -356,7 +349,6 @@ export const formulaFinancialCases: CoverageCase[] = [
     source: 'ACCRINT("2023-01-01", "2023-07-01", "2023-07-01", 0.1, 1000, 2)',
     expected: 50,
     tolerance: 1e-9,
-    zones: TIMEZONES,
   },
   {
     covers: 'ACCRINT/7',
@@ -364,19 +356,16 @@ export const formulaFinancialCases: CoverageCase[] = [
       'ACCRINT("2023-01-01", "2023-07-01", "2023-07-01", 0.1, 1000, 2, 3)',
     expected: 18100 / 365,
     tolerance: 1e-9,
-    zones: TIMEZONES,
   },
   {
     covers: 'COUPDAYS/3',
     source: 'COUPDAYS("2023-01-15", "2024-01-01", 2)',
     expected: 180,
-    zones: TIMEZONES,
   },
   {
     covers: 'COUPDAYS/4',
     source: 'COUPDAYS("2023-01-15", "2024-01-01", 2, 3)',
     expected: 182.5,
-    zones: TIMEZONES,
   },
   // Basis 1 is actual/actual, the one convention that measures a real calendar
   // span: settlement falls in the period from 2010-11-15 to 2011-05-15, which
@@ -385,7 +374,6 @@ export const formulaFinancialCases: CoverageCase[] = [
     covers: 'COUPDAYS/4',
     source: 'COUPDAYS("2011-01-25", "2011-11-15", 2, 1)',
     expected: 181,
-    zones: TIMEZONES,
   },
   // A maturity on the last day of the month keeps the schedule on month ends:
   // the coupon dates behind 2026-08-31 are 2026-02-28 and 2025-08-31, so
@@ -396,7 +384,6 @@ export const formulaFinancialCases: CoverageCase[] = [
     covers: 'COUPDAYS/4',
     source: 'COUPDAYS("2025-09-01", "2026-08-31", 2, 1)',
     expected: 181,
-    zones: TIMEZONES,
   },
   // A maturity on the last day of a short month keeps the schedule on month
   // ends too: the coupon date behind 2026-02-28 is 2025-08-31, not the 28th, so
@@ -405,13 +392,11 @@ export const formulaFinancialCases: CoverageCase[] = [
     covers: 'COUPDAYS/4',
     source: 'COUPDAYS("2026-01-15", "2026-02-28", 2, 1)',
     expected: 181,
-    zones: TIMEZONES,
   },
   {
     covers: 'COUPDAYS/4',
     source: 'COUPDAYS("2027-11-15", "2028-02-29", 2, 1)',
     expected: 182,
-    zones: TIMEZONES,
   },
   // The dates are checked whatever the basis, even where the answer does not
   // read them, so one argument list cannot be an error under one convention and
@@ -420,48 +405,41 @@ export const formulaFinancialCases: CoverageCase[] = [
     covers: 'COUPDAYS/4',
     source: 'COUPDAYS("2024-01-01", "2023-01-01", 2, 0)',
     throws: /#NUM!/,
-    zones: TIMEZONES,
   },
   {
     covers: 'COUPDAYS/4',
     source: 'COUPDAYS("2023-01-15", "2024-01-01", 2, 5)',
     throws: /#NUM!/,
-    zones: TIMEZONES,
   },
   {
     covers: 'DISC/4',
     source: 'DISC("2023-01-01", "2023-07-01", 97.5, 100)',
     expected: 0.05,
     tolerance: 1e-9,
-    zones: TIMEZONES,
   },
   {
     covers: 'DISC/5',
     source: 'DISC("2023-01-01", "2023-07-01", 97.5, 100, 3)',
     expected: 9.125 / 181,
     tolerance: 1e-9,
-    zones: TIMEZONES,
   },
   {
     covers: 'PRICEDISC/4',
     source: 'PRICEDISC("2023-01-01", "2023-07-01", 0.05, 100)',
     expected: 97.5,
     tolerance: 1e-9,
-    zones: TIMEZONES,
   },
   {
     covers: 'PRICEDISC/5',
     source: 'PRICEDISC("2023-01-01", "2023-07-01", 0.05, 100, 3)',
     expected: 100 * (1 - 0.05 * (181 / 365)),
     tolerance: 1e-9,
-    zones: TIMEZONES,
   },
   {
     covers: 'TBILLEQ/3',
     source: 'TBILLEQ("2023-01-01", "2023-04-01", 0.04)',
     expected: 14.6 / 356.4,
     tolerance: 1e-9,
-    zones: TIMEZONES,
   },
   // A Treasury bill is short-dated by definition, so a maturity more than a
   // year out is an error rather than an extrapolation.
@@ -469,32 +447,27 @@ export const formulaFinancialCases: CoverageCase[] = [
     covers: 'TBILLEQ/3',
     source: 'TBILLEQ("2023-01-01", "2024-04-01", 0.04)',
     throws: /#NUM!/,
-    zones: TIMEZONES,
   },
   {
     covers: 'TBILLPRICE/3',
     source: 'TBILLPRICE("2023-01-01", "2024-04-01", 0.04)',
     throws: /#NUM!/,
-    zones: TIMEZONES,
   },
   {
     covers: 'TBILLYIELD/3',
     source: 'TBILLYIELD("2023-01-01", "2024-04-01", 98)',
     throws: /#NUM!/,
-    zones: TIMEZONES,
   },
   {
     covers: 'TBILLPRICE/3',
     source: 'TBILLPRICE("2023-01-01", "2023-04-01", 0.04)',
     expected: 99,
     tolerance: 1e-9,
-    zones: TIMEZONES,
   },
   {
     covers: 'TBILLYIELD/3',
     source: 'TBILLYIELD("2023-01-01", "2023-04-01", 98)',
     expected: 8 / 98,
     tolerance: 1e-9,
-    zones: TIMEZONES,
   },
 ];
