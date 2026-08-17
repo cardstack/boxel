@@ -87,7 +87,7 @@ const Pill: TemplateOnlyComponent<PillSignature> = <template>
   {{/let}}
 
   <style scoped>
-    @layer {
+    @layer boxelComponentL1 {
       .pill {
         /* internal properties */
         --pill-padding: var(--boxel-sp-5xs) var(--boxel-sp-xxxs);
