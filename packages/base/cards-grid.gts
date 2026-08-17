@@ -65,8 +65,7 @@ function realmFetch(): typeof globalThis.fetch {
   // transpiled to CommonJS and so it complains about import.meta. But this
   // file always runs as ESM.
   // @ts-ignore
-  let loader: Loader | undefined =
-    (import.meta as any).loader ?? Loader.forBundledModules();
+  let loader = (import.meta as any).loader ?? Loader.forBundledModules();
   return loader?.fetch ?? fetch;
 }
 
