@@ -34,6 +34,7 @@ const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
   '.text': { module: baseModule('text-file-def'), name: 'TextFileDef' },
   '.json': { module: baseModule('json-file-def'), name: 'JsonFileDef' },
   '.csv': { module: baseModule('csv-file-def'), name: 'CsvFileDef' },
+  '.pdf': { module: baseModule('pdf-file-def'), name: 'PdfDef' },
   '.mp3': { module: baseModule('mp3-audio-def'), name: 'Mp3Def' },
   '.wav': { module: baseModule('wav-audio-def'), name: 'WavDef' },
   '.ogg': { module: baseModule('ogg-audio-def'), name: 'OggDef' },
@@ -55,6 +56,11 @@ const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
   // Both extend ThreeDModelDef, which renders a live client-side WebGL viewer.
   '.stl': { module: baseModule('stl-model-def'), name: 'StlDef' },
   '.3mf': { module: baseModule('three-mf-def'), name: 'ThreeMfDef' },
+  '.zip': { module: baseModule('zip-file-def'), name: 'ZipDef' },
+  '.woff2': { module: baseModule('woff2-font-def'), name: 'Woff2Def' },
+  '.woff': { module: baseModule('woff-font-def'), name: 'WoffDef' },
+  '.ttf': { module: baseModule('ttf-font-def'), name: 'TtfDef' },
+  '.otf': { module: baseModule('otf-font-def'), name: 'OtfDef' },
   '.mismatch': {
     module: './filedef-mismatch' as RealmResourceIdentifier,
     name: 'FileDef',

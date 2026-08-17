@@ -1,0 +1,667 @@
+// Cyclic-graph materialization suite.
+//
+// A Boxel card graph is legitimately cyclic — a Claim links to a Policy
+// whose query-backed `claims` contains that same Claim — while jq's data
+// model is acyclic JSON. The computeVia factory bridges the two with a
+// lazy, cycle-guarded view of the compute target (see
+// `src/bxl/bridge/card-input.ts`). This suite pins that contract:
+//
+//   - re-entering a value on the traversal path yields a bounded `{ id }`
+//     reference (by object identity AND by id, so a fresh instance of an
+//     already-visited card clips too);
+//   - structural operations (`unique`, `==`, `tojson`, `keys`) terminate
+//     on cyclic graphs and see a card's real field map, not an opaque
+//     empty object;
+//   - program outputs are unwrapped back to raw values — identity with
+//     the underlying graph is preserved for downstream consumers;
+//   - the depth cap and the runtime budget fail fast with clear errors
+//     instead of unbounded churn.
+
+import { deepStrictEqual, match, ok, strictEqual, throws } from 'node:assert';
+import { expression, jq, fx } from '../../src/index.ts';
+import { materializeCardInput } from '../../src/bxl/bridge/card-input.ts';
+
+let pass = 0;
+let fail = 0;
+const failures: string[] = [];
+
+function check(name: string, fn: () => void) {
+  try {
+    fn();
+    pass++;
+  } catch (error) {
+    fail++;
+    failures.push(`  ${name}\n    ${(error as Error).message.split('\n')[0]}`);
+  }
+}
+
+// ------------------------------------------------------------------ Card stand-ins
+//
+// Mimics card-api's shape: field state lives outside the instance (here a
+// private field), fields read through prototype getters, and the class
+// hierarchy carries the `getFields` stamp under the cross-realm symbol.
+// The private-field access doubles as a canary: if materialization ever
+// binds a getter to its facade instead of the raw instance, the brand
+// check throws.
+
+const GET_FIELDS_BRIDGE = Symbol.for('cardstack.getFields');
+
+type FieldMap = Record<string, { fieldType: string; card?: unknown }>;
+const fieldMaps = new Map<unknown, FieldMap>();
+
+abstract class StubBase {
+  abstract get id(): string | undefined;
+}
+Object.defineProperty(StubBase.prototype, GET_FIELDS_BRIDGE, {
+  value: (instance: object) => fieldMaps.get(instance.constructor) ?? {},
+  enumerable: false,
+});
+
+interface ClaimState {
+  id: string;
+  claimStatus: string;
+  paidAmount: number;
+  policy: () => unknown;
+}
+
+class ClaimStub extends StubBase {
+  #state: ClaimState;
+  constructor(state: ClaimState) {
+    super();
+    this.#state = state;
+  }
+  get id() {
+    return this.#state.id;
+  }
+  get claimStatus() {
+    return this.#state.claimStatus;
+  }
+  get paidAmount() {
+    return this.#state.paidAmount;
+  }
+  get policy() {
+    return this.#state.policy();
+  }
+}
+fieldMaps.set(ClaimStub, {
+  id: { fieldType: 'contains' },
+  claimStatus: { fieldType: 'contains' },
+  paidAmount: { fieldType: 'contains' },
+  policy: { fieldType: 'linksTo' },
+});
+
+interface PolicyState {
+  id: string;
+  annualPremium: number;
+  claims: ClaimStub[];
+}
+
+class PolicyStub extends StubBase {
+  #state: PolicyState;
+  constructor(state: PolicyState) {
+    super();
+    this.#state = state;
+  }
+  get id() {
+    return this.#state.id;
+  }
+  get annualPremium() {
+    return this.#state.annualPremium;
+  }
+  get claims() {
+    return this.#state.claims;
+  }
+}
+fieldMaps.set(PolicyStub, {
+  id: { fieldType: 'contains' },
+  annualPremium: { fieldType: 'contains' },
+  claims: { fieldType: 'linksToMany' },
+});
+
+/** A Policy whose claims all link back to it — a true reference cycle. */
+function makeCyclicPolicy(
+  claimSpecs: Array<Pick<ClaimState, 'id' | 'claimStatus' | 'paidAmount'>>,
+  policyFor?: (policy: PolicyStub) => () => unknown,
+) {
+  const state: PolicyState = { id: 'pol-1', annualPremium: 12000, claims: [] };
+  const policy = new PolicyStub(state);
+  const backEdge = policyFor ? policyFor(policy) : () => policy;
+  state.claims = claimSpecs.map(
+    (spec) => new ClaimStub({ ...spec, policy: backEdge }),
+  );
+  return policy;
+}
+
+const run = (source: string, self: object) => {
+  const strings = Object.assign([source], {
+    raw: [source],
+  }) as unknown as TemplateStringsArray;
+  return expression(jq(strings)).call(self);
+};
+
+// ------------------------------------------------------------------ Bounded { id } references
+
+check('walking the back-edge yields a bounded { id } reference', () => {
+  const policy = makeCyclicPolicy([
+    { id: 'clm-1', claimStatus: 'Open', paidAmount: 3200 },
+  ]);
+  deepStrictEqual(run('.claims[0].policy', policy), { id: 'pol-1' });
+});
+
+check('fields beyond the clip read as null, id stays reachable', () => {
+  const policy = makeCyclicPolicy([
+    { id: 'clm-1', claimStatus: 'Open', paidAmount: 3200 },
+  ]);
+  strictEqual(run('.claims[0].policy.id', policy), 'pol-1');
+  strictEqual(run('.claims[0].policy.annualPremium', policy), null);
+});
+
+check('a fresh instance of a visited card clips by id', () => {
+  // Query resolution can hand back a different object for the same card
+  // mid-walk; identity alone would miss that cycle.
+  const policy = makeCyclicPolicy(
+    [{ id: 'clm-1', claimStatus: 'Open', paidAmount: 3200 }],
+    (original) => () =>
+      new PolicyStub({
+        id: original.id!,
+        annualPremium: original.annualPremium,
+        claims: original.claims,
+      }),
+  );
+  deepStrictEqual(run('.claims[0].policy', policy), { id: 'pol-1' });
+});
+
+check('ordinary JSON with an id colliding with a card id stays intact', () => {
+  // id-based clipping is a card-to-card affair; contained JSON is free to
+  // carry id values equal to an ancestor card's without being that card.
+  const policy = new PolicyStub({
+    id: 'pol-1',
+    annualPremium: 12000,
+    claims: [],
+  }) as PolicyStub & { metadata?: unknown };
+  fieldMaps.set(PolicyStub, {
+    ...fieldMaps.get(PolicyStub)!,
+    metadata: { fieldType: 'contains' },
+  });
+  Object.defineProperty(policy, 'metadata', {
+    value: { id: 'pol-1', label: 'x' },
+    enumerable: false,
+    configurable: true,
+  });
+  try {
+    strictEqual(run('.metadata["label"]', policy), 'x');
+  } finally {
+    const map = { ...fieldMaps.get(PolicyStub)! };
+    delete (map as Record<string, unknown>).metadata;
+    fieldMaps.set(PolicyStub, map);
+  }
+});
+
+check('a diamond is not a cycle: shared values materialize fully', () => {
+  // Two claims sharing one policy is re-entry only along a single path;
+  // reads that do not loop back are untouched.
+  const policy = makeCyclicPolicy([
+    { id: 'clm-1', claimStatus: 'Open', paidAmount: 3200 },
+    { id: 'clm-2', claimStatus: 'Closed', paidAmount: 780 },
+  ]);
+  deepStrictEqual(run('[.claims[] | .paidAmount]', policy), [3200, 780]);
+  strictEqual(run('[.claims[] | .paidAmount] | add', policy), 3980);
+});
+
+// ------------------------------------------------------------------ Structural operations
+
+check('unique distinguishes cards by materialized fields', () => {
+  const policy = makeCyclicPolicy([
+    { id: 'clm-1', claimStatus: 'Open', paidAmount: 3200 },
+    { id: 'clm-2', claimStatus: 'Closed', paidAmount: 780 },
+  ]);
+  strictEqual(run('[.claims[]] | unique | length', policy), 2);
+});
+
+check('equality compares materialized fields across the cycle', () => {
+  const policy = makeCyclicPolicy([
+    { id: 'clm-1', claimStatus: 'Open', paidAmount: 3200 },
+    { id: 'clm-2', claimStatus: 'Closed', paidAmount: 780 },
+  ]);
+  strictEqual(
+    run('if (.claims[0]) == (.claims[1]) then 1 else 0 end', policy),
+    0,
+  );
+  strictEqual(
+    run('if (.claims[0]) == (.claims[0]) then 1 else 0 end', policy),
+    1,
+  );
+});
+
+check('keys enumerates the card field map', () => {
+  const policy = makeCyclicPolicy([]);
+  deepStrictEqual(run('keys', policy), ['annualPremium', 'claims', 'id']);
+});
+
+check('tojson terminates, embedding the bounded reference', () => {
+  const policy = makeCyclicPolicy([
+    { id: 'clm-1', claimStatus: 'Open', paidAmount: 3200 },
+  ]);
+  // Rooted at the claim: its policy is a first visit and materializes in
+  // full; the policy's claims loop back to the claim, which clips there.
+  const doc = JSON.parse(run('tojson', policy.claims[0]) as string) as {
+    id: string;
+    policy: { id: string; claims: Array<{ id: string; policy: unknown }> };
+  };
+  strictEqual(doc.id, 'clm-1');
+  strictEqual(doc.policy.id, 'pol-1');
+  deepStrictEqual(doc.policy.claims, [{ id: 'clm-1' }]);
+});
+
+check('a walk rooted at the cycle owner clips its own re-entry', () => {
+  const policy = makeCyclicPolicy([
+    { id: 'clm-1', claimStatus: 'Open', paidAmount: 3200 },
+  ]);
+  const doc = JSON.parse(run('.claims[0] | tojson', policy) as string) as {
+    id: string;
+    policy: unknown;
+  };
+  strictEqual(doc.id, 'clm-1');
+  // The traversal began at the policy, so the claim's back-edge is
+  // already a re-entry.
+  deepStrictEqual(doc.policy, { id: 'pol-1' });
+});
+
+check('plain-object cycles terminate too', () => {
+  // The general guard also covers non-card values that alias each other.
+  interface Node {
+    name: string;
+    next: Node | null;
+  }
+  const a: Node = { name: 'a', next: null };
+  const b: Node = { name: 'b', next: a };
+  a.next = b;
+  const doc = JSON.parse(run('tojson', a) as string) as {
+    next: { next: { id: undefined } };
+  };
+  strictEqual(doc.next.next.id, undefined);
+});
+
+// ------------------------------------------------------------------ Output unwrapping
+
+check('outputs hand back the raw graph, not the lazy view', () => {
+  const policy = makeCyclicPolicy([
+    { id: 'clm-1', claimStatus: 'Open', paidAmount: 3200 },
+  ]);
+  strictEqual(run('.', policy), policy);
+  strictEqual(run('.claims', policy), policy.claims);
+  strictEqual(run('.claims[0]', policy), policy.claims[0]);
+});
+
+check('sort works on a wrapped array and never mutates the original', () => {
+  const nums = [3, 1, 2];
+  const holder = { nums };
+  deepStrictEqual(run('.nums | sort', holder), [1, 2, 3]);
+  deepStrictEqual(nums, [3, 1, 2]);
+});
+
+check('sort works on a wrapped linked-card array', () => {
+  const policy = makeCyclicPolicy([
+    { id: 'clm-2', claimStatus: 'Open', paidAmount: 780 },
+    { id: 'clm-1', claimStatus: 'Open', paidAmount: 3200 },
+  ]);
+  const rawOrder = [...policy.claims];
+  const sorted = run('.claims | sort', policy) as ClaimStub[];
+  // Cards compare by materialized fields in sorted-key order, so the
+  // claims order by id here; elements unwrap to the raw instances and
+  // the card's own array keeps its order.
+  deepStrictEqual(
+    sorted.map((entry) => entry.id),
+    ['clm-1', 'clm-2'],
+  );
+  ok(sorted.every((entry) => policy.claims.includes(entry)));
+  deepStrictEqual([...policy.claims], rawOrder);
+});
+
+check(
+  'a live tracked-array shape (guarded writes, hidden slots) reads cleanly',
+  () => {
+    // linksToMany hands over a proxy whose writes are managed and whose
+    // sentinel slots are masked from reads — sorting and aggregating over
+    // it must neither write through it nor trip on a masked slot.
+    const claims = [
+      new ClaimStub({
+        id: 'clm-1',
+        claimStatus: 'Open',
+        paidAmount: 3200,
+        policy: () => null,
+      }),
+      new ClaimStub({
+        id: 'clm-2',
+        claimStatus: 'Open',
+        paidAmount: 780,
+        policy: () => null,
+      }),
+    ];
+    const tracked = new Proxy(claims, {
+      get(target, prop, receiver) {
+        if (prop === '1') {
+          return undefined; // a masked sentinel slot
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+      set() {
+        throw new Error('tracked arrays reject direct writes');
+      },
+    });
+    const holder = new PolicyStub({
+      id: 'pol-t',
+      annualPremium: 1,
+      claims: tracked as unknown as ClaimStub[],
+    });
+    strictEqual(run('.claims | length', holder), 2);
+    strictEqual(run('.claims[0].paidAmount', holder), 3200);
+    strictEqual(run('.claims[1]', holder), null);
+    // Sorting must copy — the tracked array's write guard would throw on
+    // any in-place swap.
+    const unmasked = new Proxy(claims, {
+      set() {
+        throw new Error('tracked arrays reject direct writes');
+      },
+    });
+    const holder2 = new PolicyStub({
+      id: 'pol-u',
+      annualPremium: 1,
+      claims: unmasked as unknown as ClaimStub[],
+    });
+    strictEqual((run('.claims | sort', holder2) as unknown[]).length, 2);
+  },
+);
+
+check('an aliased jq container unwraps at every occurrence', () => {
+  const policy = makeCyclicPolicy([
+    { id: 'clm-1', claimStatus: 'Open', paidAmount: 3200 },
+  ]);
+  // The container bound once and embedded twice must resolve to one
+  // unwrapped result — both occurrences hand back the raw claims array.
+  const out = run(
+    '{ n: .claims } as $shared | { a: $shared, b: $shared }',
+    policy,
+  ) as { a: { n: unknown }; b: { n: unknown } };
+  strictEqual(out.a.n, policy.claims);
+  strictEqual(out.b.n, policy.claims);
+  strictEqual(out.a, out.b);
+});
+
+check('outputs nested in jq-built containers unwrap as well', () => {
+  const policy = makeCyclicPolicy([
+    { id: 'clm-1', claimStatus: 'Open', paidAmount: 3200 },
+  ]);
+  const out = run('{ first: .claims[0], count: 1 }', policy) as {
+    first: unknown;
+    count: number;
+  };
+  strictEqual(out.first, policy.claims[0]);
+  strictEqual(out.count, 1);
+});
+
+check('fx expressions read through the view unchanged', () => {
+  const policy = makeCyclicPolicy([
+    { id: 'clm-1', claimStatus: 'Open', paidAmount: 3200 },
+  ]);
+  strictEqual(expression(fx`ROUND(AnnualPremium / 12, 2)`).call(policy), 1000);
+});
+
+// ------------------------------------------------------------------ Fail-fast backstops
+
+check('a graph deeper than the cap fails with a clear error', () => {
+  interface Deep {
+    child: Deep | null;
+  }
+  const root: Deep = { child: null };
+  let cursor = root;
+  for (let i = 0; i < 300; i++) {
+    cursor.child = { child: null };
+    cursor = cursor.child;
+  }
+  throws(
+    () => run('tojson', root),
+    (error: Error) => {
+      match(error.message, /exceeded 256 nested\s+hops/);
+      return true;
+    },
+  );
+});
+
+check('materialization hops count toward the runtime step budget', () => {
+  const policy = makeCyclicPolicy(
+    Array.from({ length: 200 }, (_, i) => ({
+      id: `clm-${i}`,
+      claimStatus: 'Open',
+      paidAmount: i,
+    })),
+  );
+  const strings = Object.assign(['. | tojson | length'], {
+    raw: ['. | tojson | length'],
+  }) as unknown as TemplateStringsArray;
+  const compute = expression(jq(strings), {
+    runtimeLimits: { maxSteps: 50 },
+  });
+  throws(
+    () => compute.call(policy),
+    (error: Error) => {
+      match(error.message, /step runtime limit/);
+      return true;
+    },
+  );
+});
+
+check('getters bind the raw instance, never the facade', () => {
+  // ClaimStub/PolicyStub read state through a private field; a getter
+  // invoked with the facade as `this` would fail its brand check. Any
+  // value coming back proves the binding.
+  const policy = makeCyclicPolicy([
+    { id: 'clm-1', claimStatus: 'Open', paidAmount: 3200 },
+  ]);
+  strictEqual(run('.claims[0].paidAmount', policy), 3200);
+});
+
+check('values without field metadata pass through raw', () => {
+  const when = new Date('2026-01-15T00:00:00Z');
+  const holder = { when };
+  ok(run('.when', holder) === when);
+});
+
+check('unset links read as null, keeping comparison semantics intact', () => {
+  // Card-api reads a non-present link as undefined — a value jq's data
+  // model has no place for. It must surface as null, or a card would
+  // compare unequal to itself and unique would never collapse.
+  const makeClaim = () =>
+    new ClaimStub({
+      id: 'clm-1',
+      claimStatus: 'Open',
+      paidAmount: 100,
+      policy: () => undefined,
+    });
+  const claim = makeClaim();
+  strictEqual(run('if . == . then 1 else 0 end', claim), 1);
+  strictEqual(run('.policy | type', claim), 'null');
+  const holder = new PolicyStub({
+    id: 'pol-1',
+    annualPremium: 1,
+    claims: [makeClaim(), makeClaim()],
+  });
+  strictEqual(run('[.claims[]] | unique | length', holder), 1);
+});
+
+check('a compute that structurally enumerates itself reads as blank', () => {
+  // `tojson` over `.` enumerates every field, including the one this
+  // compute produces — a spreadsheet circular reference. The in-flight
+  // field reads as null instead of recursing without bound.
+  const compute = (() => {
+    const strings = Object.assign(['. | tojson'], {
+      raw: ['. | tojson'],
+    }) as unknown as TemplateStringsArray;
+    return expression(jq(strings));
+  })();
+  class SelfStub extends StubBase {
+    get id() {
+      return 'self-1';
+    }
+    get name() {
+      return 'self';
+    }
+    get digest() {
+      return compute.call(this);
+    }
+  }
+  fieldMaps.set(SelfStub, {
+    id: { fieldType: 'contains' },
+    name: { fieldType: 'contains' },
+    digest: { fieldType: 'contains' },
+  });
+  const doc = JSON.parse(compute.call(new SelfStub()) as string) as {
+    name: string;
+    digest: unknown;
+  };
+  strictEqual(doc.name, 'self');
+  strictEqual(doc.digest, null);
+});
+
+check('mutually recursive computes across linked cards stay bounded', () => {
+  const mkCompute = () => {
+    const strings = Object.assign(['. | tojson'], {
+      raw: ['. | tojson'],
+    }) as unknown as TemplateStringsArray;
+    return expression(jq(strings));
+  };
+  const computeA = mkCompute();
+  const computeB = mkCompute();
+  interface PairState {
+    id: string;
+    other: () => unknown;
+    compute: (this: object) => unknown;
+  }
+  class PairStub extends StubBase {
+    #state: PairState;
+    constructor(state: PairState) {
+      super();
+      this.#state = state;
+    }
+    get id() {
+      return this.#state.id;
+    }
+    get other() {
+      return this.#state.other();
+    }
+    get digest() {
+      return this.#state.compute.call(this);
+    }
+  }
+  fieldMaps.set(PairStub, {
+    id: { fieldType: 'contains' },
+    other: { fieldType: 'linksTo' },
+    digest: { fieldType: 'contains' },
+  });
+  const stateA: PairState = {
+    id: 'pair-a',
+    other: () => b,
+    compute: computeA as (this: object) => unknown,
+  };
+  const a = new PairStub(stateA);
+  const b = new PairStub({
+    id: 'pair-b',
+    other: () => a,
+    compute: computeB as (this: object) => unknown,
+  });
+  const doc = JSON.parse(computeA.call(a) as string) as {
+    id: string;
+    other: { id: string };
+  };
+  strictEqual(doc.id, 'pair-a');
+  strictEqual(doc.other.id, 'pair-b');
+});
+
+check('a sentinel-named property cannot demote the depth-cap error', () => {
+  // Excel-error tolerance matches sentinel strings in messages; the
+  // depth-cap error embeds user property names in its path and must stay
+  // a loud failure even when one of them is literally "#N/A".
+  interface Deep {
+    ['#N/A']: Deep | null;
+  }
+  const root: Deep = { '#N/A': null };
+  let cursor = root;
+  for (let i = 0; i < 300; i++) {
+    const next: Deep = { '#N/A': null };
+    cursor['#N/A'] = next;
+    cursor = next;
+  }
+  throws(
+    () => run('tojson', root),
+    (error: Error) => {
+      match(error.message, /materialization exceeded/);
+      return true;
+    },
+  );
+});
+
+check('unsaved cards clip by identity only, never against each other', () => {
+  // Two distinct cards without ids are distinct values; a self-cycle on
+  // an unsaved card still clips, reading as an empty bounded reference.
+  const inner = new PolicyStub({
+    id: undefined as unknown as string,
+    annualPremium: 7,
+    claims: [],
+  });
+  const state = {
+    id: undefined as unknown as string,
+    claimStatus: 'Open',
+    paidAmount: 1,
+    policy: () => inner,
+  };
+  const outer = new ClaimStub(state);
+  strictEqual(run('.policy.annualPremium', outer), 7);
+  state.policy = () => outer as unknown as PolicyStub;
+  const clipped = run('.policy | tojson', outer);
+  strictEqual(clipped, '{}');
+});
+
+check('{ as: Cls } materializes from unwrapped output over a cycle', () => {
+  class Band {
+    label: string = '';
+    total: number = 0;
+  }
+  const policy = makeCyclicPolicy([
+    { id: 'clm-1', claimStatus: 'Open', paidAmount: 3200 },
+  ]);
+  const strings = Object.assign(
+    [
+      '{ label: .claims[0].claimStatus, total: [.claims[] | .paidAmount] | add }',
+    ],
+    {
+      raw: [
+        '{ label: .claims[0].claimStatus, total: [.claims[] | .paidAmount] | add }',
+      ],
+    },
+  ) as unknown as TemplateStringsArray;
+  const out = expression(jq(strings), { as: Band }).call(policy) as Band;
+  ok(out instanceof Band);
+  strictEqual(out.label, 'Open');
+  strictEqual(out.total, 3200);
+});
+
+check('the view is read-only and refuses to be frozen', () => {
+  const view = materializeCardInput({ n: 1 }) as Record<string, unknown>;
+  throws(
+    () => {
+      view.n = 2;
+    },
+    (error: Error) => /read-only/.test(error.message),
+  );
+  throws(() => Object.freeze(view));
+  strictEqual(view.n, 1);
+});
+
+console.log(
+  `BXL Boxel cyclic-graph materialization: ${pass}/${pass + fail} cases passed`,
+);
+if (fail > 0) {
+  console.log('Failures:');
+  for (const f of failures) console.log(f);
+  process.exit(1);
+}

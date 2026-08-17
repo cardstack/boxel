@@ -13,7 +13,7 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 // dependency graph, so a glyph taken from it costs nothing extra.
 import { Warning } from '@cardstack/boxel-ui/icons';
 
-import { fileIconFor } from './file-presentation';
+import { downloadNameFor, fileIconFor, humanSize } from './file-presentation';
 import type { FileFormat, FileViewModel } from './file-view-model';
 
 import type { ComponentLike } from '@glint/template';
@@ -84,6 +84,36 @@ export class FilePreviewStage extends GlimmerComponent<StageSignature> {
     return fileIconFor(this.model);
   }
 
+  // The generic pane stands in for a file whose family has no renderer — most
+  // often a plain binary. Rather than an empty "No preview" void, the reading
+  // formats present what the realm does know: name, kind, and size, plus a way
+  // to get the bytes.
+  get displayName() {
+    return this.model?.name || this.model?.baseName || 'Untitled file';
+  }
+
+  get size() {
+    return humanSize(this.model?.contentSize);
+  }
+
+  // The reading formats have room for a labeled fallback card; the budgeted
+  // fitted cell stays a bare glyph so it never competes with the metadata strip
+  // the fitted shell draws beside it.
+  get showGenericDetail() {
+    return this.args.mode === 'embedded' || this.args.mode === 'isolated';
+  }
+
+  // Embedded is the only reading format whose shell offers no download of its
+  // own, so the fallback pane carries the affordance there. The isolated shell
+  // already exposes Download and Copy link in its header.
+  get showGenericDownload() {
+    return this.args.mode === 'embedded' && Boolean(this.model?.url);
+  }
+
+  get genericIconSize() {
+    return this.showGenericDetail ? '44' : '30';
+  }
+
   get srcTag() {
     return (this.model?.previewSource ?? '').toUpperCase();
   }
@@ -119,8 +149,37 @@ export class FilePreviewStage extends GlimmerComponent<StageSignature> {
           <@preview @model={{@model}} @mode={{@mode}} @fields={{@fields}} />
         {{else}}
           <div class='generic-pane' data-test-file-no-preview>
-            <this.icon width='30' height='30' aria-hidden='true' />
-            <span class='pane-label'>No preview</span>
+            <this.icon
+              class='gp-icon'
+              width={{this.genericIconSize}}
+              height={{this.genericIconSize}}
+              aria-hidden='true'
+            />
+            {{#if this.showGenericDetail}}
+              <div
+                class='gp-name'
+                title={{this.displayName}}
+                data-test-file-generic-name
+              >{{this.displayName}}</div>
+              <div class='gp-facts'>
+                {{#if @model.kind}}<span
+                    data-test-file-generic-kind
+                  >{{@model.kind}}</span>{{/if}}
+                {{#if this.size}}<span
+                    data-test-file-generic-size
+                  >{{this.size}}</span>{{/if}}
+              </div>
+              {{#if this.showGenericDownload}}
+                <a
+                  class='gp-download'
+                  href={{@model.url}}
+                  download={{downloadNameFor @model}}
+                  data-test-file-generic-download
+                >Download</a>
+              {{/if}}
+            {{else}}
+              <span class='pane-label'>No preview</span>
+            {{/if}}
           </div>
         {{/if}}
 
@@ -203,6 +262,43 @@ export class FilePreviewStage extends GlimmerComponent<StageSignature> {
         font-size: 0.53125rem;
         letter-spacing: 0.1em;
         text-transform: uppercase;
+      }
+      .gp-icon {
+        color: var(--muted-foreground);
+      }
+      .gp-name {
+        max-width: min(100%, 22rem);
+        font-family: var(--font-sans);
+        font-size: 0.8125rem;
+        font-weight: 600;
+        color: var(--foreground);
+        text-align: center;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .gp-facts {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-family: var(--font-mono);
+        font-size: 0.5625rem;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--muted-foreground);
+      }
+      .gp-download {
+        margin-top: 4px;
+        font-family: var(--font-sans);
+        font-size: 0.71875rem;
+        font-weight: 600;
+        text-decoration: none;
+        color: var(--fd-paper, var(--card, #f7f7f5));
+        background: var(--fd-slate, var(--foreground));
+        border: 1px solid var(--fd-slate, var(--foreground));
+        border-radius: 6px;
+        padding: 5px 14px;
+        line-height: 1.4;
       }
       /* The glyph paints with `fill`, so tint it rather than setting `color`. */
       .warn-icon {

@@ -18,14 +18,14 @@ Two on-demand references carry the full detail:
 
 ### 1. Base card API (URL-pinned, always available)
 
-`https://cardstack.com/base/<module>` — `card-api` provides `CardDef`,
+`@cardstack/base/<module>` — `card-api` provides `CardDef`,
 `FieldDef`, `Component`, `field`, `contains`, `containsMany`, `linksTo`,
 `linksToMany`, plus the `realmURL` Symbol on models. Field types each live in
 their own module (`string`, `number`, `boolean`, `date`, `datetime`,
 `markdown`, `enum`, `color`, `url`, `email`, …). File-backed fields
 (`FileDef`, `ImageDef`, `PngDef`, `MarkdownDef`, `CsvFileDef`, …) come from
 the `*-file-def` modules and are used via `linksTo`. Base field modules are
-**default exports** (`import StringField from 'https://cardstack.com/base/string'`).
+**default exports** (`import StringField from '@cardstack/base/string'`).
 
 ### 2. Runtime APIs — `@cardstack/runtime-common`
 

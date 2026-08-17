@@ -1051,6 +1051,7 @@ export * from './bfm-card-references.ts';
 export * from './bfm-math-render.ts';
 export * from './bfm-mermaid-render.ts';
 export * from './constants.ts';
+export * from './search-replace-markers.ts';
 export * from './helpers/const.ts';
 export * from './document.ts';
 export * from './matrix-constants.ts';

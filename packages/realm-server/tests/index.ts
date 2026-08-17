@@ -282,6 +282,7 @@ const ALL_TEST_FILES: string[] = [
   './is-json-content-type-test',
   './file-size-limit-test',
   './content-hash-test',
+  './fitted-formats-parity-test',
   './prerender-diagnostics-persistence-test',
   './prerender-proxy-test',
   './prerender-v8-prof-test',

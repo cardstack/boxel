@@ -59,7 +59,7 @@ an import path; the `imports` validation step fails phantom ones.
 3. **BUILD**: translate the mockup into the `.gts` card (isolated +
    embedded + fitted templates), sample instances (same data as the
    mockup), and a Catalog Spec (`Spec/<slug>.json`, adoptsFrom
-   `https://cardstack.com/base/spec#Spec`, `linkedExamples` →
+   `@cardstack/base/spec#Spec`, `linkedExamples` →
    instances). **MANDATORY before writing any fitted template:
    `read_skill({ name: 'boxel-development', reference:
 'dev-fitted-formats.md' })`** — it is the container-query standard

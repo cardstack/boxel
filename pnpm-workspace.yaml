@@ -47,6 +47,7 @@ catalog:
   "@lucide/lab": ^0.1.2
   "@lukeed/uuid": ^2.0.1
   "@octokit/rest": ^22.0.1
+  "@openfga/syntax-transformer": 0.2.0
   "@percy/cli": ^1.31.1
   "@percy/ember": ^5.0.0
   "@playwright/test": ^1.54.0
@@ -113,6 +114,7 @@ catalog:
   babel-eslint: ^10.1.0
   babel-plugin-dynamic-import-node: ^2.3.3
   babel-plugin-ember-template-compilation: ^2.4.1
+  bessel: ^1.0.2
   broccoli-asset-rev: ^3.0.0
   buffer: ^6.0.3
   camelcase: ^6.3.0
@@ -178,6 +180,7 @@ catalog:
   jsdom: ^21.1.1
   json-typescript: ^1.1.2
   jsonwebtoken: 9.0.3
+  jstat: ^1.9.6
   koa: ^2.14.1
   koa-compose: ^4.1.0
   koa-proxies: ^0.12.3
@@ -246,6 +249,7 @@ catalog:
   util: ^0.12.5
   uuid: ^9.0.1
   validate-peer-dependencies: ^1.1.0
+  validator: ^13.15.35
   vite: ^6.3.2
   vitest: ^2.1.9
   wait-for-localhost-cli: ^3.2.0
