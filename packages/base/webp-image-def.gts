@@ -39,3 +39,5 @@ export class WebpDef extends RasterImageDef {
     };
   }
 }
+
+export default WebpDef;
