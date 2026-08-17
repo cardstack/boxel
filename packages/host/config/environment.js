@@ -227,6 +227,9 @@ module.exports = function (environment) {
 
     // Catalog realms are not available in test environment
     ENV.resolvedCatalogRealmURL = undefined;
+    // Neither is the OpenRouter catalog realm; tests that exercise the model
+    // cost-tier lookup point this at their own test realm explicitly.
+    ENV.resolvedOpenRouterRealmURL = undefined;
     ENV.defaultSystemCardId = 'http://test-realm/test/SystemCard/default';
     ENV.defaultFieldSpecId = 'http://test-realm/test/fields/field';
   }

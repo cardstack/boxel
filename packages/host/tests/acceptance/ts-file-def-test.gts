@@ -138,6 +138,11 @@ export const MAX_RETRIES = 3;`,
       String(result.searchDoc?.content).includes('greet'),
       'content includes full source',
     );
+    assert.strictEqual(
+      result.searchDoc?.lineCount,
+      5,
+      'line count is the source line count, without a trailing-newline inflation',
+    );
     assert.strictEqual(result.searchDoc?.name, 'utils.ts');
   });
 

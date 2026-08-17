@@ -146,7 +146,7 @@ module, every same-realm module it imports transitively
 (**including type-only imports**, which a runtime dep graph would
 miss but `boxel parse` needs), its sample instances, and its
 **card/app** Catalog Spec. Cross-realm imports
-(`https://cardstack.com/base/...`) and component/function Specs
+(`@cardstack/base/...`) and component/function Specs
 are left out on purpose. Pass `--realm <url>` only if the source
 realm can't be auto-detected.
 
@@ -284,7 +284,7 @@ field names, types, and enums it returns verbatim. Schemas are
 cached on the realm server; repeated calls are cheap.
 
 Catalog Spec cards (`Spec/<slug>.json`) are different — they adopt
-from `https://cardstack.com/base/spec` / `Spec`. Spec authoring is
+from `@cardstack/base/spec` / `Spec`. Spec authoring is
 covered in the `software-factory-operations` skill.
 
 ## Naming conventions

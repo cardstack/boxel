@@ -26,9 +26,10 @@ import { setupApplicationTest } from '../helpers/setup';
 // End-to-end coverage of the StlDef / ThreeMfDef extract chain through the real
 // render/file-extract route (the path the indexer drives): a file is served
 // from the test realm, the route runs the leaf `extractAttributes`, and the
-// resulting file-meta search doc carries the parsed 3D metadata. The pure
-// parsers are unit-tested separately in `unit/model-meta-extractor-test.ts`;
-// this proves the full round-trip and the base-realm code-ref resolution.
+// resulting file-meta search doc carries the parsed facts on the shared
+// `model3d` field. The pure parsers are unit-tested separately in
+// `unit/model-meta-extractor-test.ts`; this proves the full round-trip, the
+// base-realm code-ref resolution, and the projection onto `model3d`.
 
 // One ASCII STL facet — the realm serves it as text, StlDef parses it.
 const CUBE_STL = [
@@ -42,6 +43,28 @@ const CUBE_STL = [
   ' endfacet',
   'endsolid testcube',
 ].join('\n');
+
+// A minimal glTF 2.0 document whose header enumerates every fact the extractor
+// projects: one triangulated mesh (24 vertices, 36 indices), bounds spanning
+// 2 x 4 x 6, and a named generator.
+const CUBE_GLTF = JSON.stringify({
+  asset: { version: '2.0', generator: 'Test Exporter 1.0' },
+  meshes: [
+    { primitives: [{ attributes: { POSITION: 0 }, indices: 1, mode: 4 }] },
+  ],
+  accessors: [
+    {
+      type: 'VEC3',
+      componentType: 5126,
+      count: 24,
+      min: [-1, -2, -3],
+      max: [1, 2, 3],
+    },
+    { type: 'SCALAR', componentType: 5123, count: 36 },
+  ],
+  materials: [{}, {}],
+  nodes: [{}, {}, {}],
+});
 
 const CUBE_MODEL_XML = `<?xml version="1.0" encoding="UTF-8"?>
 <model unit="millimeter" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
@@ -88,10 +111,15 @@ module('Acceptance | model file-extract', function (hooks) {
       JSON.stringify(renderOptions),
     )}/file-extract`;
 
+  const MODULE_BY_DEF: Record<string, string> = {
+    StlDef: 'stl-model-def',
+    ThreeMfDef: 'three-mf-def',
+    GltfDef: 'gltf-model-def',
+    GlbDef: 'gltf-model-def',
+  };
+
   const baseFileDefCodeRef = (name: string): ResolvedCodeRef => ({
-    module: `${baseRealm.url}${
-      name === 'StlDef' ? 'stl-model-def' : 'three-mf-def'
-    }` as RealmResourceIdentifier,
+    module: `${baseRealm.url}${MODULE_BY_DEF[name]}` as RealmResourceIdentifier,
     name,
   });
 
@@ -133,13 +161,14 @@ module('Acceptance | model file-extract', function (hooks) {
           ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'cube.stl': CUBE_STL,
           'cube.3mf': CUBE_3MF,
+          'cube.gltf': CUBE_GLTF,
           'notmodel.stl': 'this is not an STL file',
         },
       });
     });
   });
 
-  test('extracts STL scene + mesh metadata through the render route', async function (assert) {
+  test('extracts STL facts onto model3d through the render route', async function (assert) {
     await visit(
       renderPath(fileURL('cube.stl'), {
         fileExtract: true,
@@ -149,24 +178,26 @@ module('Acceptance | model file-extract', function (hooks) {
     let result = await captureFileExtractResult('ready');
     let doc = result.searchDoc as Record<string, any>;
     assert.strictEqual(result.status, 'ready');
-    assert.strictEqual(doc?.stlMetadata?.encoding, 'ASCII');
-    assert.strictEqual(doc?.stlMetadata?.solidName, 'testcube');
-    assert.false(doc?.stlMetadata?.hasColorData);
-    // Header-only sniff: dimensions come from the client-side viewer, never the
-    // index, and an ASCII STL carries no facet count in its header.
+    assert.strictEqual(doc?.model3d?.format, 'ASCII STL');
+    assert.strictEqual(doc?.model3d?.solidName, 'testcube');
+    // An STL is exactly one solid, so `meshes` is always 1 — this also keeps the
+    // isolated shell's `3D model` section visible for ASCII STL.
+    assert.strictEqual(doc?.model3d?.meshes, 1);
+    // Header-only sniff: an ASCII STL carries no facet count, and dimensions
+    // come from the client-side viewer, never the index.
     assert.strictEqual(
-      doc?.stlMetadata?.facetCount,
+      doc?.model3d?.triangles,
       undefined,
-      'no ASCII count',
+      'no ASCII facet count',
     );
     assert.strictEqual(
-      doc?.stlMetadata?.sizeX,
+      doc?.model3d?.hasColorData,
       undefined,
-      'no index-time size',
+      'no color data (false is pruned)',
     );
   });
 
-  test('extracts 3MF scene + package metadata through the render route', async function (assert) {
+  test('extracts 3MF facts onto model3d through the render route', async function (assert) {
     await visit(
       renderPath(fileURL('cube.3mf'), {
         fileExtract: true,
@@ -176,14 +207,42 @@ module('Acceptance | model file-extract', function (hooks) {
     let result = await captureFileExtractResult('ready');
     let doc = result.searchDoc as Record<string, any>;
     assert.strictEqual(result.status, 'ready');
-    assert.strictEqual(doc?.threeMfMetadata?.unit, 'millimeter');
-    assert.strictEqual(doc?.threeMfMetadata?.title, 'Round-trip Cube');
-    assert.strictEqual(doc?.threeMfMetadata?.designer, 'Test');
-    // Bounded prologue read: no geometry counts, no index-time dimensions.
+    assert.strictEqual(doc?.model3d?.format, '3MF package');
+    assert.strictEqual(doc?.model3d?.unit, 'millimeter');
+    assert.strictEqual(doc?.model3d?.designer, 'Test');
+    // Bounded prologue read: geometry counts come only from a slicer config,
+    // which this minimal package has none of.
     assert.strictEqual(
-      doc?.threeMfMetadata?.sizeX,
+      doc?.model3d?.triangles,
       undefined,
-      'no index-time size',
+      'no geometry counts without slicer config',
+    );
+  });
+
+  test('extracts glTF facts onto model3d through the render route', async function (assert) {
+    await visit(
+      renderPath(fileURL('cube.gltf'), {
+        fileExtract: true,
+        fileDefCodeRef: baseFileDefCodeRef('GltfDef'),
+      }),
+    );
+    let result = await captureFileExtractResult('ready');
+    let doc = result.searchDoc as Record<string, any>;
+    assert.strictEqual(result.status, 'ready');
+    // Container label folds in the asset version.
+    assert.strictEqual(doc?.model3d?.format, 'glTF JSON 2.0');
+    assert.strictEqual(doc?.model3d?.generator, 'Test Exporter 1.0');
+    // Unlike STL/3MF, a glTF header enumerates its scene graph directly, so
+    // geometry facts are honest header-only answers.
+    assert.strictEqual(doc?.model3d?.meshes, 1);
+    assert.strictEqual(doc?.model3d?.vertices, 24, 'POSITION accessor count');
+    assert.strictEqual(doc?.model3d?.triangles, 12, '36 indices / 3');
+    assert.strictEqual(doc?.model3d?.materials, 2);
+    assert.strictEqual(doc?.model3d?.nodes, 3);
+    assert.strictEqual(
+      doc?.model3d?.dimensions,
+      '2 \u00d7 4 \u00d7 6',
+      'max minus min per axis',
     );
   });
 
@@ -198,10 +257,6 @@ module('Acceptance | model file-extract', function (hooks) {
     let doc = result.searchDoc as Record<string, any>;
     assert.strictEqual(result.status, 'ready', 'still indexes as base file');
     assert.true(result.mismatch, 'sets mismatch flag');
-    assert.strictEqual(
-      doc?.stlMetadata,
-      undefined,
-      'no 3D metadata on fallback',
-    );
+    assert.strictEqual(doc?.model3d, undefined, 'no 3D metadata on fallback');
   });
 });

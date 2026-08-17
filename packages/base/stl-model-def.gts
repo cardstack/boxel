@@ -1,17 +1,6 @@
-import GlimmerComponent from '@glimmer/component';
 import File3dIcon from '@cardstack/boxel-icons/file-3d';
 import { byteStreamToUint8Array } from '@cardstack/runtime-common';
 import { DEFAULT_FILE_SIZE_LIMIT_BYTES } from '@cardstack/runtime-common/constants';
-import {
-  BaseDefComponent,
-  Component,
-  FieldDef,
-  StringField,
-  contains,
-  field,
-} from './card-api';
-import NumberField from './number';
-import BooleanField from './boolean';
 import {
   FileContentMismatchError,
   type ByteStream,
@@ -19,112 +8,31 @@ import {
 } from './file-api';
 import {
   ThreeDModelDef,
-  ModelIsolatedBody,
-  ModelInspectorSection,
   getExtension,
-  type ModelInspectorRow,
+  model3dAttributes,
+  type SerializedModel3d,
 } from './three-d-model-def';
 import { parseStl, type StlMetadata } from './stl-meta-extractor';
 
-export class StlMetadataField extends FieldDef {
-  static displayName = 'STL Mesh Metadata';
-  static icon = File3dIcon;
-  @field encoding = contains(StringField);
-  @field solidName = contains(StringField);
-  @field binaryHeader = contains(StringField);
-  @field facetCount = contains(NumberField);
-  @field hasColorData = contains(BooleanField);
-
-  static embedded = class Embedded extends Component<typeof StlMetadataField> {
-    <template>
-      <dl class='stl-meta'>
-        {{#if @model.encoding}}<div><dt>Encoding</dt><dd
-            >{{@model.encoding}}</dd></div>{{/if}}
-        {{#if @model.solidName}}<div><dt>Solid</dt><dd
-            >{{@model.solidName}}</dd></div>{{/if}}
-        {{#if @model.facetCount}}<div><dt>Facets</dt><dd
-            >{{@model.facetCount}}</dd></div>{{/if}}
-        <div><dt>Color data</dt><dd>{{if
-              @model.hasColorData
-              'Present'
-              'None'
-            }}</dd></div>
-        {{#if @model.binaryHeader}}<div><dt>Header</dt><dd
-              class='mono'
-            >{{@model.binaryHeader}}</dd></div>{{/if}}
-      </dl>
-      <style scoped>
-        .stl-meta {
-          margin: 0;
-          display: grid;
-          gap: 5px;
-        }
-        .stl-meta div {
-          display: grid;
-          grid-template-columns: 88px minmax(0, 1fr);
-          gap: 10px;
-        }
-        dt {
-          color: var(--boxel-450);
-          font: 0.5625rem var(--boxel-monospace-font-family, monospace);
-          text-transform: uppercase;
-        }
-        dd {
-          min-width: 0;
-          margin: 0;
-          overflow-wrap: anywhere;
-        }
-        .mono {
-          font-family: var(--boxel-monospace-font-family, monospace);
-        }
-      </style>
-    </template>
+// Project the STL header sniff onto the shared `model3d` field. An STL file is
+// exactly one solid, so `meshes` is always 1 — which also keeps the isolated
+// shell's `3D model` section visible for ASCII STL, whose header carries no
+// facet count.
+function stlToModel3d(s: StlMetadata): SerializedModel3d {
+  return {
+    format: s.encoding === 'binary' ? 'Binary STL' : 'ASCII STL',
+    meshes: 1,
+    triangles: s.facetCount,
+    solidName: s.solidName,
+    generator: s.binaryHeader,
+    hasColorData: s.hasColorData ? true : undefined,
   };
-}
-
-class StlIsolated extends GlimmerComponent<{ Args: { model: StlDef } }> {
-  get stlRows(): ModelInspectorRow[] {
-    let s = this.args.model.stlMetadata;
-    let rows: ModelInspectorRow[] = [];
-    if (!s) {
-      return rows;
-    }
-    if (s.encoding) {
-      rows.push({ term: 'Encoding', detail: s.encoding });
-    }
-    if (s.solidName) {
-      rows.push({ term: 'Solid', detail: s.solidName });
-    }
-    if (s.facetCount) {
-      rows.push({ term: 'Facets', detail: s.facetCount });
-    }
-    rows.push({
-      term: 'Color data',
-      detail: s.hasColorData ? 'Present' : 'None',
-    });
-    if (s.binaryHeader) {
-      rows.push({ term: 'Header', detail: s.binaryHeader });
-    }
-    return rows;
-  }
-
-  <template>
-    <ModelIsolatedBody @model={{@model}}>
-      {{#if @model.stlMetadata}}
-        <ModelInspectorSection @heading='STL mesh' @rows={{this.stlRows}} />
-      {{/if}}
-    </ModelIsolatedBody>
-  </template>
 }
 
 export class StlDef extends ThreeDModelDef {
   static displayName = 'STL Mesh';
   static icon = File3dIcon;
   static acceptTypes = '.stl,model/stl,application/sla';
-
-  @field stlMetadata = contains(StlMetadataField);
-
-  static isolated: BaseDefComponent = StlIsolated;
 
   static async extractAttributes(
     url: string,
@@ -138,11 +46,7 @@ export class StlDef extends ThreeDModelDef {
       // the same ceiling the write path enforces, so the two stay in step.
       fileSizeLimitBytes?: number;
     } = {},
-  ): Promise<
-    // `stlMetadata` is optional: over the size cap we skip the sniff and return
-    // only the base file attributes (see below).
-    SerializedFile<Partial<{ stlMetadata: StlMetadata }>>
-  > {
+  ): Promise<SerializedFile<Partial<{ model3d: SerializedModel3d }>>> {
     let extension = getExtension(url);
     if (extension !== '.stl') {
       throw new FileContentMismatchError(
@@ -181,6 +85,8 @@ export class StlDef extends ThreeDModelDef {
         'File does not contain parseable STL geometry',
       );
     }
-    return { ...base, ...parsed };
+    return { ...base, ...model3dAttributes(stlToModel3d(parsed.stlMetadata)) };
   }
 }
+
+export default StlDef;

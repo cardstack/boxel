@@ -4,6 +4,7 @@ import { basename } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import sinon from 'sinon';
 import { PgAdapter, PgQueueRunner } from '@cardstack/postgres';
+import { FULL_REINDEX_JOB_TIMEOUT_SEC } from '@cardstack/runtime-common/tasks/full-reindex';
 import { sumUpCreditsLedger } from '@cardstack/billing/billing-queries';
 import { boxelUIChecker } from '../../lib/boxel-ui-change-checker.ts';
 import {
@@ -1023,8 +1024,8 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
             );
             assert.strictEqual(
               reindexJob.timeout,
-              360,
-              'job has correct timeout (6 minutes)',
+              FULL_REINDEX_JOB_TIMEOUT_SEC,
+              'job carries the full-reindex budget',
             );
             assert.ok(
               reindexJob.args.realmUrls.includes(registryOnlyRealmURL),

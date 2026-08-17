@@ -13,6 +13,7 @@ import {
   type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import { CachingDefinitionLookup } from '@cardstack/runtime-common/definition-lookup';
+import { awaitPublishedHtmlReady } from '@cardstack/runtime-common/jobs/prerender-html';
 import { VirtualNetwork } from '@cardstack/runtime-common/virtual-network';
 
 import type SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
@@ -337,6 +338,33 @@ module('Unit | prerendered-html read path', function (hooks) {
       vanGogh.isolatedHtml,
       `<div class="isolated">Van Gogh</div>`,
       'other rows keep serving their prerendered_html',
+    );
+  });
+
+  test('published HTML readiness uses the per-row predicate under SQLite', async function (assert) {
+    assert.false(
+      await awaitPublishedHtmlReady(adapter, testRealmURL, {
+        timeoutMs: 100,
+        pollIntervalMs: 20,
+      }),
+      'the missing prerendered_html row holds readiness',
+    );
+
+    await adapter.execute(`DELETE FROM boxel_index WHERE url = $1`, {
+      bind: [`${testRealmURL}3.json`],
+    });
+    await adapter.execute(
+      `UPDATE realm_generations SET current_generation = 9 WHERE realm_url = $1`,
+      { bind: [testRealmURL] },
+    );
+    await adapter.execute(
+      `UPDATE prerendered_html SET is_deleted = TRUE WHERE url = $1`,
+      { bind: [`${testRealmURL}1.json`] },
+    );
+
+    assert.true(
+      await awaitPublishedHtmlReady(adapter, testRealmURL, { timeoutMs: 100 }),
+      'row-level generations are caught up regardless of the realm watermark or a current tombstone',
     );
   });
 

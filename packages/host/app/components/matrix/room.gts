@@ -53,13 +53,16 @@ import {
   internalKeyFor,
   isCardInstance,
   resolveFileDefCodeRef,
+  rri,
   stringifyErrorForLog,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
 import { DEFAULT_FALLBACK_MODELS } from '@cardstack/runtime-common/matrix-constants';
+import type { Query } from '@cardstack/runtime-common/query';
 
 import ENV from '@cardstack/host/config/environment';
 import type { FileUploadState } from '@cardstack/host/lib/file-upload-state';
+import { formatTokenUsage } from '@cardstack/host/lib/format-token-usage';
 import type { Message } from '@cardstack/host/lib/matrix-classes/message';
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 import { isAutoExecutableTool } from '@cardstack/host/lib/tool-auto-execute';
@@ -218,6 +221,16 @@ export default class Room extends Component<Signature> {
                   @messages={{array this.unknownMessageSendError}}
                 />
               </Alert>
+            {{/if}}
+
+            {{#if this.conversationTokenUsage}}
+              <div
+                class='conversation-token-usage'
+                data-test-conversation-token-usage
+              >
+                Session total:
+                {{this.conversationTokenUsage}}
+              </div>
             {{/if}}
           {{/if}}
         </AiAssistantConversation>
@@ -484,6 +497,25 @@ export default class Room extends Component<Signature> {
         align-items: center;
         height: 100%;
         gap: 4px;
+      }
+
+      .conversation-token-usage {
+        width: fit-content;
+        /* Extra top margin keeps the summary clear of the last message's own
+           usage line, so the two never read as an accidental pair. */
+        margin: var(--boxel-sp) auto 0;
+        padding: 0.1875rem 0.75rem;
+        /* Bordered chip, one notch brighter and heavier than the
+           per-message lines: the session total is the headline figure.
+           Palette note: the assistant panel is a fixed dark surface, so this
+           follows its local palette rather than the light-themed semantic
+           role tokens. */
+        border: 1px solid var(--boxel-600);
+        border-radius: var(--boxel-border-radius-sm);
+        color: var(--boxel-300);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
       }
 
       .loading-indicator {
@@ -1105,11 +1137,78 @@ export default class Room extends Component<Signature> {
     return this.args.roomResource.messages;
   }
 
+  // The session's token bill so far: every turn's counts summed. Input is
+  // summed rather than read off the last turn because each turn re-sends the
+  // whole conversation — the sum is what the provider actually billed. Shown
+  // only behind the `showTokens` query param.
+  @cached
+  private get conversationTokenUsage() {
+    if (!this.operatorModeStateService.operatorModeController.showTokens) {
+      return undefined;
+    }
+    let promptTokens = 0;
+    let completionTokens = 0;
+    let cachedTokens = 0;
+    let turnsWithCached = 0;
+    let costUsd = 0;
+    let turnsWithCost = 0;
+    let turnsWithUsage = 0;
+    for (let message of this.messages) {
+      let usage = message.usage;
+      // Same gate as the per-message line: a usage object without token
+      // counts must not add a turn to the total that line never shows.
+      if (
+        !usage ||
+        (usage.promptTokens == null && usage.completionTokens == null)
+      ) {
+        continue;
+      }
+      turnsWithUsage++;
+      promptTokens += usage.promptTokens ?? 0;
+      completionTokens += usage.completionTokens ?? 0;
+      if (usage.cachedTokens != null) {
+        cachedTokens += usage.cachedTokens;
+        turnsWithCached++;
+      }
+      if (usage.costUsd != null) {
+        costUsd += usage.costUsd;
+        turnsWithCost++;
+      }
+    }
+    // With a single counted turn the total merely repeats that message's own
+    // line right below it; a sum only earns its place once there is
+    // something to add up.
+    if (turnsWithUsage < 2) {
+      return undefined;
+    }
+    return formatTokenUsage({
+      promptTokens,
+      completionTokens,
+      // An optional figure is only a session total when every counted turn
+      // reported it; a partial sum would read as the whole bill.
+      ...(turnsWithCached === turnsWithUsage ? { cachedTokens } : {}),
+      ...(turnsWithCost === turnsWithUsage ? { costUsd } : {}),
+    });
+  }
+
   private get skills(): RoomSkill[] {
     return this.args.roomResource.skills;
   }
 
   private get llmsForSelectMenu(): LLMOption[] {
+    this.ensureModelCostTiersLoaded();
+    let costTierByModelId = this.modelCostTierByModelId;
+    return this.baseLlmOptions.map((option) => ({
+      ...option,
+      costTierLabel: costTierByModelId.get(option.modelId),
+    }));
+  }
+
+  // The pickable models, before cost tiers are attached. Single source of
+  // truth for both the rendered options and the cost-tier lookup's model-id
+  // set, so the two can't drift apart.
+  @cached
+  private get baseLlmOptions(): LLMOption[] {
     // Read from the system card if available
     let systemCard = this.matrixService.systemCard;
     if (systemCard?.modelConfigurations) {
@@ -1158,6 +1257,97 @@ export default class Room extends Component<Signature> {
       name: fallbackById.get(id)?.displayName ?? id,
     }));
   }
+
+  // The distinct OpenRouter model ids that can appear in the picker.
+  @cached
+  private get pickerModelIds(): string[] {
+    return [...new Set(this.baseLlmOptions.map((option) => option.modelId))];
+  }
+
+  // Cost tier ($…$$$$ / Free) per model id, populated by `loadModelCostTiers`.
+  @tracked private modelCostTierByModelId: Map<string, string> = new Map();
+  // Content key of the last load (realm + sorted model ids). Deliberately a
+  // plain field, not tracked: it gates the load without being part of the
+  // reactive graph.
+  private lastModelCostTierKey = '';
+
+  // Kicks a cost-tier load whenever the pickable model set changes. Keyed on
+  // model-id *content* (not array identity), so the live matrix churn behind
+  // `pickerModelIds` — new `usedLLMs` array each sync — can't retrigger it.
+  // Called during render (from `llmsForSelectMenu`), so nothing on the
+  // synchronous path here may write tracked state: when there is nothing to
+  // load (realm unconfigured, no models) we return without performing the
+  // task, and the task body itself only writes after its await.
+  private ensureModelCostTiersLoaded() {
+    let modelIds = this.pickerModelIds;
+    let realmURL = ENV.resolvedOpenRouterRealmURL;
+    let key =
+      realmURL && modelIds.length > 0
+        ? `${realmURL}::${[...modelIds].sort().join('|')}`
+        : '';
+    if (key === this.lastModelCostTierKey) {
+      return;
+    }
+    this.lastModelCostTierKey = key;
+    if (!key) {
+      return;
+    }
+    this.loadModelCostTiers.perform(modelIds, realmURL!, key);
+  }
+
+  // Looks up the cost tier for each pickable model by matching its `modelId`
+  // against the OpenRouter model catalog. The tier is a `computeVia` field on
+  // the `OpenRouterModel` card (derived there from its own pricing), which is
+  // correlated to a model configuration by the `modelId` string, not a link —
+  // so we search that realm and read each match's `costTierLabel`. Degrades to
+  // an empty map when the OpenRouter realm is unconfigured, unreachable, or a
+  // model has no matching catalog card — the badge is cosmetic and must never
+  // surface an error.
+  //
+  // This is a task rather than a `trackedFunction`/resource on purpose:
+  // `store.search` hydrates cards (mutating tracked store state) and we then
+  // read those cards' fields, so a reactive body would self-invalidate into an
+  // endless re-run and never settle. The task runs the search + field reads off
+  // the render's reactive path and only writes the tracked map the picker reads.
+  private loadModelCostTiers = restartableTask(
+    async (modelIds: string[], realmURL: string, key: string) => {
+      let tiers = new Map<string, string>();
+      try {
+        let query: Query = {
+          filter: {
+            on: {
+              module: rri(new URL('openrouter-model', realmURL).href),
+              name: 'OpenRouterModel',
+            },
+            in: { modelId: modelIds },
+          },
+        };
+        let instances = await this.store.search(query, [realmURL]);
+        for (let instance of instances) {
+          let model = instance as unknown as {
+            modelId?: string;
+            costTierLabel?: string;
+          };
+          if (!model.modelId || !model.costTierLabel) {
+            continue;
+          }
+          tiers.set(model.modelId, model.costTierLabel);
+        }
+      } catch (e) {
+        console.warn('Failed to load model cost tiers', e);
+        // Keep whatever map we already have and clear the gate key (if no
+        // newer load has claimed it) so a later render retries. Skipping the
+        // tracked-map write matters: writing it would invalidate the picker
+        // and re-render straight back into a retry loop while the catalog
+        // realm is down.
+        if (this.lastModelCostTierKey === key) {
+          this.lastModelCostTierKey = '';
+        }
+        return;
+      }
+      this.modelCostTierByModelId = tiers;
+    },
+  );
 
   private get systemCardId(): string | undefined {
     return this.matrixService.systemCard?.id;

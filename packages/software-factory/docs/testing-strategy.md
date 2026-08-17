@@ -228,7 +228,7 @@ Examples:
 
 **IMPORTANT:** "Spec" has two completely different meanings in the software factory:
 
-1. **Catalog Spec card** (`Spec/` folder, `.json` files) — A card instance adopting from `https://cardstack.com/base/spec#Spec`. This is a catalog entry describing a card. Example: `Spec/sticky-note.json`.
+1. **Catalog Spec card** (`Spec/` folder, `.json` files) — A card instance adopting from `@cardstack/base/spec#Spec`. This is a catalog entry describing a card. Example: `Spec/sticky-note.json`.
 
 2. **QUnit test file** (`.test.gts` files, co-located with card definitions) — A GTS file that exports a `runTests()` function containing QUnit test modules. The live-test infrastructure discovers these via `_mtimes` and runs them in the browser. Example: `sticky-note.test.gts` tests that StickyNote renders correctly.
 

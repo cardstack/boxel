@@ -8,6 +8,7 @@ import {
   unarchiveRealm,
   type Realm,
 } from '@cardstack/runtime-common';
+import { FULL_REINDEX_JOB_TIMEOUT_SEC } from '@cardstack/runtime-common/tasks/full-reindex';
 import * as Sentry from '@sentry/node';
 import { REALMS_LIST_UPDATED_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import {
@@ -51,7 +52,7 @@ export default function handleUnarchiveRealm({
         await queue.publish<void>({
           jobType: `full-reindex`,
           concurrencyGroup: `full-reindex-group`,
-          timeout: 6 * 60,
+          timeout: FULL_REINDEX_JOB_TIMEOUT_SEC,
           priority: systemInitiatedPriority,
           args: { realmUrls: [realmURL] },
         });

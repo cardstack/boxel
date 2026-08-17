@@ -1132,7 +1132,7 @@ export function setupOnSave(hooks: NestedHooks) {
   });
 }
 
-interface RealmContents {
+export interface RealmContents {
   [key: string]:
     | CardDef
     | FieldDef
@@ -2224,9 +2224,25 @@ export async function addSkillToAiAssistant(
   skillCardId: string,
   roomId?: string,
 ) {
-  let resolvedRoomId =
-    roomId ??
-    document.querySelector('[data-test-room]')?.getAttribute('data-test-room');
+  // The room element can lag the click that opened or created the room: room
+  // creation resolves through async matrix operations, so `[data-test-room]`
+  // may not carry the id yet in the runloop the caller reached. Waiting for it
+  // rather than reading a single snapshot is what removes the intermittent
+  // "Expected an active AI assistant room" failure; a genuine absence still
+  // surfaces the same message when the wait times out.
+  let resolvedRoomId = roomId;
+  if (!resolvedRoomId) {
+    resolvedRoomId = (await waitUntil(
+      () =>
+        document
+          .querySelector('[data-test-room]')
+          ?.getAttribute('data-test-room'),
+      {
+        timeout: 5000,
+        timeoutMessage: `Expected an active AI assistant room before adding skill "${skillCardId}"`,
+      },
+    )) as string;
+  }
 
   if (!resolvedRoomId) {
     throw new Error(

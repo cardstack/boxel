@@ -1,7 +1,7 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import type Owner from '@ember/owner';
+import { getOwner, type default as Owner } from '@ember/owner';
 import { service } from '@ember/service';
 
 import Component from '@glimmer/component';
@@ -309,12 +309,18 @@ export default class ProfileEmail extends Component<Signature> {
       </FieldContainer>
     {{/if}}
     {{#if this.showPasswordModal}}
-      <PasswordModal
-        @confirmPassword={{this.confirmPasswordForEmailChange}}
-        @clearPasswordError={{this.clearPasswordError}}
-        @togglePasswordModal={{this.cancelEmailChange}}
-        @passwordError={{this.passwordError}}
-      />
+      {{! The surrounding settings modal's .dialog-box has
+          container-type: inline-size, whose layout containment captures
+          position: fixed descendants. Portal this nested modal to the app
+          root so it positions and overlays against the viewport. }}
+      {{#in-element this.appRootElement insertBefore=null}}
+        <PasswordModal
+          @confirmPassword={{this.confirmPasswordForEmailChange}}
+          @clearPasswordError={{this.clearPasswordError}}
+          @togglePasswordModal={{this.cancelEmailChange}}
+          @passwordError={{this.passwordError}}
+        />
+      {{/in-element}}
     {{/if}}
 
     <style scoped>
@@ -332,9 +338,6 @@ export default class ProfileEmail extends Component<Signature> {
       }
       .profile-field :deep(.invalid) {
         box-shadow: none;
-      }
-      .profile-field + .profile-field {
-        margin-top: var(--boxel-sp-xl);
       }
       .warning-box {
         margin-top: var(--boxel-sp-xl);
@@ -409,6 +412,13 @@ export default class ProfileEmail extends Component<Signature> {
         display: flex;
         justify-content: space-between;
       }
+
+      @container dialog-box (width <= 48rem) {
+        .profile-field {
+          grid-template-columns: 1fr;
+          gap: var(--boxel-sp-xs);
+        }
+      }
     </style>
   </template>
 
@@ -475,6 +485,14 @@ export default class ProfileEmail extends Component<Signature> {
 
   private get emailValidationState() {
     return this.emailError ? 'invalid' : 'initial';
+  }
+
+  private get appRootElement(): HTMLElement {
+    // @ts-expect-error rootElement exists on the owner at runtime
+    let root = getOwner(this)?.rootElement ?? document.body;
+    return typeof root === 'string'
+      ? (document.querySelector(root) as HTMLElement)
+      : root;
   }
 
   private get showPasswordModal() {

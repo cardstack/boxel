@@ -24,6 +24,7 @@ import { isSampledContentHash } from '@cardstack/runtime-common';
 
 import {
   boundedVideoFrameAspectRatio,
+  downloadNameFor,
   fileIconFor,
   humanSize,
   shortDate,
@@ -58,10 +59,6 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
 
   get icon() {
     return fileIconFor(this.args.model);
-  }
-
-  get downloadName() {
-    return this.args.model?.name || undefined;
   }
 
   // Keep the clipboard write inside the browser gesture that asked for it.
@@ -256,6 +253,27 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
     return Boolean(t?.trackTitle || t?.artist);
   }
 
+  get hasMidi() {
+    // Any extracted sequence fact is worth the group — a file may carry tempo,
+    // key/meter, programs, or a pitch range while reporting zero notes/tracks or
+    // no computed duration (e.g. a SMPTE-timed conductor track).
+    let m = this.args.model?.midi;
+    return Boolean(
+      m?.trackCount ||
+        m?.noteCount ||
+        m?.durationSeconds ||
+        m?.format != null ||
+        m?.ppq ||
+        m?.pitchRange ||
+        m?.hasPercussion ||
+        m?.keySignatures?.length ||
+        m?.timeSignatures?.length ||
+        m?.tempoMap?.length ||
+        m?.programs?.length ||
+        m?.channels?.length,
+    );
+  }
+
   get hasDocInfo() {
     let d = this.args.model?.documentInfo;
     return Boolean(d?.author || d?.pageCount);
@@ -263,7 +281,7 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
 
   get hasModel3d() {
     let m = this.args.model?.model3d;
-    return Boolean(m?.meshes || m?.triangles);
+    return Boolean(m?.meshes || m?.triangles || m?.vertices || m?.dimensions);
   }
 
   get hasFontMetadata() {
@@ -344,7 +362,7 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
             <a
               class='act primary'
               href={{@model.url}}
-              download={{this.downloadName}}
+              download={{downloadNameFor @model}}
               data-test-file-download
             >Download</a>
             {{! The pressed control announces its own success without extra
@@ -544,7 +562,11 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
           {{/if}}
           {{#if this.hasTags}}
             <h2 class='insp-group'>Tags</h2>
-            <div class='insp-family'><@fields.mediaTags /></div>
+            <div class='insp-family'><@fields.tags /></div>
+          {{/if}}
+          {{#if this.hasMidi}}
+            <h2 class='insp-group'>MIDI sequence</h2>
+            <div class='insp-family'><@fields.midi /></div>
           {{/if}}
           {{#if this.hasDocInfo}}
             <h2 class='insp-group'>Document</h2>
@@ -681,13 +703,24 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
         gap: 20px;
         align-items: start;
       }
-      /* HTML owns a full-width document stage; its metadata follows below in
-         reading order. */
-      .iso[data-preview-kind='html'] .iso-cols {
+      /* A document is read top to bottom, so its metadata follows below in
+         reading order rather than competing for width beside it. Long-form
+         text, source code, and data tables and trees all read this way. */
+      .iso[data-preview-kind='html'] .iso-cols,
+      .iso[data-preview-kind='markdown'] .iso-cols,
+      .iso[data-preview-kind='doc'] .iso-cols,
+      .iso[data-preview-kind='code'] .iso-cols,
+      .iso[data-preview-kind='json'] .iso-cols,
+      .iso[data-preview-kind='csv'] .iso-cols {
         grid-template-columns: minmax(0, 1fr);
         gap: 24px;
       }
-      .iso[data-preview-kind='html'] .inspector {
+      .iso[data-preview-kind='html'] .inspector,
+      .iso[data-preview-kind='markdown'] .inspector,
+      .iso[data-preview-kind='doc'] .inspector,
+      .iso[data-preview-kind='code'] .inspector,
+      .iso[data-preview-kind='json'] .inspector,
+      .iso[data-preview-kind='csv'] .inspector {
         width: 100%;
       }
       @container (max-width: 760px) {
@@ -712,6 +745,42 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
       .iso[data-preview-kind='html'] .iso-stage {
         height: clamp(560px, 72vh, 920px);
         background: var(--card);
+      }
+      /* A source file grows to its own length rather than scrolling inside a
+         fixed hero: the whole point of the isolated view is to read the file
+         top to bottom. It keeps a floor so a short file still presents as a
+         page, and its own dark surface stays clipped to the rounded frame. */
+      .iso[data-preview-kind='code'] .iso-stage {
+        height: auto;
+        min-height: 240px;
+        overflow: hidden;
+        background: var(--boxel-dark, #1e1e1e);
+      }
+      /* A prose document grows to its own length rather than scrolling inside a
+         fixed hero: the whole point of the isolated view is to read it. It keeps
+         a floor so a one-line file still presents as a page. */
+      .iso[data-preview-kind='markdown'] .iso-stage,
+      .iso[data-preview-kind='doc'] .iso-stage {
+        height: auto;
+        min-height: 240px;
+        overflow: visible;
+        background: var(--card);
+      }
+      /* A data table reads the same way, but clips at its rounded border
+         instead of overflowing. */
+      .iso[data-preview-kind='csv'] .iso-stage {
+        height: auto;
+        min-height: 240px;
+        overflow: hidden;
+        background: var(--card);
+      }
+      /* The JSON inspector is a dark panel in either theme, so its floor is
+         dark too — a short document must not leave a light band beneath it. */
+      .iso[data-preview-kind='json'] .iso-stage {
+        height: auto;
+        min-height: 240px;
+        overflow: hidden;
+        background: var(--boxel-dark, #1e1e1e);
       }
       /* Exact aspect ratio within useful limits; matte beyond them. */
       .iso[data-preview-kind='video'] .iso-stage {

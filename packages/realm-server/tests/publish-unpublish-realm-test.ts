@@ -1452,16 +1452,29 @@ module(basename(import.meta.filename), function () {
           'cold republish accepted',
         );
 
-        // _readiness-check must block on the in-flight reindex, so by the time
-        // it returns 200 the published index already reflects the update. (The
-        // route only matches the RealmInfo mime, so set Accept accordingly.)
-        let readinessResponse = await request
-          .get(`${publishedRealmPath}_readiness-check`)
-          .set('Host', publishedRealmHost)
-          .set('Accept', 'application/vnd.api+json');
-        assert.strictEqual(
-          readinessResponse.status,
-          200,
+        // _readiness-check gates on the in-flight reindex, so by the time it
+        // reports ready the published index already reflects the update. Poll
+        // for that rather than asking once: readiness bounds how long it holds
+        // a single request and answers 503 with `Retry-After` once the budget
+        // is spent, so a reindex longer than the budget takes more than one
+        // request to observe. (The route only matches the RealmInfo mime, so
+        // set Accept accordingly.)
+        assert.true(
+          await waitUntil(
+            async () =>
+              (
+                await request
+                  .get(`${publishedRealmPath}_readiness-check`)
+                  .set('Host', publishedRealmHost)
+                  .set('Accept', 'application/vnd.api+json')
+              ).status === 200,
+            {
+              timeout: 120_000,
+              interval: 1000,
+              timeoutMessage:
+                'republished realm never passed its readiness check',
+            },
+          ),
           'readiness check reports ready',
         );
 

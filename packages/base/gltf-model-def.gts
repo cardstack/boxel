@@ -1,16 +1,6 @@
-import GlimmerComponent from '@glimmer/component';
 import File3dIcon from '@cardstack/boxel-icons/file-3d';
 import { byteStreamToUint8Array } from '@cardstack/runtime-common';
 import { DEFAULT_FILE_SIZE_LIMIT_BYTES } from '@cardstack/runtime-common/constants';
-import {
-  BaseDefComponent,
-  Component,
-  FieldDef,
-  StringField,
-  contains,
-  field,
-} from './card-api';
-import NumberField from './number';
 import {
   FileContentMismatchError,
   type ByteStream,
@@ -18,141 +8,49 @@ import {
 } from './file-api';
 import {
   ThreeDModelDef,
-  ModelIsolatedBody,
-  ModelInspectorSection,
   getExtension,
-  type ModelInspectorRow,
+  model3dAttributes,
+  type SerializedModel3d,
 } from './three-d-model-def';
 import { parseGltf, type GltfMetadata } from './gltf-meta-extractor';
 
-// The structural facts the glTF header carries. Shared by both leaves — a `.glb`
-// is the same glTF document in a binary wrapper — so the JSON and binary forms
-// read identically in the inspector.
-export class GltfMetadataField extends FieldDef {
-  static displayName = 'glTF Model Metadata';
-  static icon = File3dIcon;
-  @field container = contains(StringField);
-  @field gltfVersion = contains(StringField);
-  @field generator = contains(StringField);
-  @field meshCount = contains(NumberField);
-  @field materialCount = contains(NumberField);
-  @field nodeCount = contains(NumberField);
-  @field animationCount = contains(NumberField);
-  @field textureCount = contains(NumberField);
-  @field vertexCount = contains(NumberField);
-  @field triangleCount = contains(NumberField);
-  @field dimensions = contains(StringField);
-
-  static embedded = class Embedded extends Component<typeof GltfMetadataField> {
-    <template>
-      <dl class='gltf-meta'>
-        {{#if @model.gltfVersion}}<div><dt>Version</dt><dd
-            >glTF {{@model.gltfVersion}}</dd></div>{{/if}}
-        {{#if @model.generator}}<div><dt>Generator</dt><dd
-            >{{@model.generator}}</dd></div>{{/if}}
-        {{#if @model.vertexCount}}<div><dt>Vertices</dt><dd
-            >{{@model.vertexCount}}</dd></div>{{/if}}
-        {{#if @model.triangleCount}}<div><dt>Triangles</dt><dd
-            >{{@model.triangleCount}}</dd></div>{{/if}}
-        {{#if @model.dimensions}}<div><dt>Size</dt><dd
-            >{{@model.dimensions}}</dd></div>{{/if}}
-        {{#if @model.meshCount}}<div><dt>Meshes</dt><dd
-            >{{@model.meshCount}}</dd></div>{{/if}}
-        {{#if @model.materialCount}}<div><dt>Materials</dt><dd
-            >{{@model.materialCount}}</dd></div>{{/if}}
-        {{#if @model.nodeCount}}<div><dt>Nodes</dt><dd
-            >{{@model.nodeCount}}</dd></div>{{/if}}
-        {{#if @model.animationCount}}<div><dt>Animations</dt><dd
-            >{{@model.animationCount}}</dd></div>{{/if}}
-        {{#if @model.textureCount}}<div><dt>Textures</dt><dd
-            >{{@model.textureCount}}</dd></div>{{/if}}
-      </dl>
-      <style scoped>
-        .gltf-meta {
-          margin: 0;
-          display: grid;
-          gap: 5px;
-        }
-        .gltf-meta div {
-          display: grid;
-          grid-template-columns: 88px minmax(0, 1fr);
-          gap: 10px;
-        }
-        dt {
-          color: var(--boxel-450);
-          font: 0.5625rem var(--boxel-monospace-font-family, monospace);
-          text-transform: uppercase;
-        }
-        dd {
-          min-width: 0;
-          margin: 0;
-          overflow-wrap: anywhere;
-        }
-      </style>
-    </template>
+// Project the glTF header read onto the shared `model3d` field. A `.glb` is the
+// same glTF document in a binary wrapper, so both leaves share this mapping and
+// differ only in the container label. Unlike STL/3MF, a glTF header enumerates
+// its scene graph directly, so vertex/dimension facts sit cheaply in the JSON
+// chunk and are honest header-only answers.
+function gltfToModel3d(g: GltfMetadata): SerializedModel3d {
+  let containerLabel = g.container === 'glb' ? 'Binary glTF' : 'glTF JSON';
+  return {
+    format: g.gltfVersion
+      ? `${containerLabel} ${g.gltfVersion}`
+      : containerLabel,
+    meshes: g.meshCount,
+    triangles: g.triangleCount,
+    vertices: g.vertexCount,
+    materials: g.materialCount,
+    nodes: g.nodeCount,
+    animations: g.animationCount,
+    textures: g.textureCount,
+    dimensions: g.dimensions,
+    generator: g.generator,
   };
 }
 
-// Both leaves share this inspector body: the metadata shape is identical, so a
-// `.glb` and a `.gltf` list the same facts beneath the shared live viewer.
-class GltfIsolated extends GlimmerComponent<{ Args: { model: GltfDef } }> {
-  get gltfRows(): ModelInspectorRow[] {
-    let g = this.args.model.gltfMetadata;
-    let rows: ModelInspectorRow[] = [];
-    if (!g) {
-      return rows;
-    }
-    if (g.gltfVersion) {
-      rows.push({ term: 'Version', detail: `glTF ${g.gltfVersion}` });
-    }
-    if (g.generator) {
-      rows.push({ term: 'Generator', detail: g.generator });
-    }
-    if (g.vertexCount) {
-      rows.push({ term: 'Vertices', detail: g.vertexCount });
-    }
-    if (g.triangleCount) {
-      rows.push({ term: 'Triangles', detail: g.triangleCount });
-    }
-    if (g.dimensions) {
-      rows.push({ term: 'Size', detail: g.dimensions });
-    }
-    if (g.meshCount) {
-      rows.push({ term: 'Meshes', detail: g.meshCount });
-    }
-    if (g.materialCount) {
-      rows.push({ term: 'Materials', detail: g.materialCount });
-    }
-    if (g.nodeCount) {
-      rows.push({ term: 'Nodes', detail: g.nodeCount });
-    }
-    if (g.animationCount) {
-      rows.push({ term: 'Animations', detail: g.animationCount });
-    }
-    if (g.textureCount) {
-      rows.push({ term: 'Textures', detail: g.textureCount });
-    }
-    return rows;
-  }
-
-  <template>
-    <ModelIsolatedBody @model={{@model}}>
-      {{#if @model.gltfMetadata}}
-        <ModelInspectorSection @heading='glTF model' @rows={{this.gltfRows}} />
-      {{/if}}
-    </ModelIsolatedBody>
-  </template>
-}
-
 // A shared extract step for both leaves: the container form is auto-detected by
-// `parseGltf`, so the only per-format difference is which extension is accepted.
+// `parseGltf`, so the only per-format difference is which extension is
+// accepted and how a parse failure is described.
 async function extractGltfAttributes(
   expectedExtension: '.gltf' | '.glb',
   containerLabel: string,
   url: string,
   getStream: () => Promise<ByteStream>,
-  options: { contentHash?: string; contentSize?: number; fileSizeLimitBytes?: number },
-): Promise<SerializedFile<Partial<{ gltfMetadata: GltfMetadata }>>> {
+  options: {
+    contentHash?: string;
+    contentSize?: number;
+    fileSizeLimitBytes?: number;
+  },
+): Promise<SerializedFile<Partial<{ model3d: SerializedModel3d }>>> {
   let extension = getExtension(url);
   if (extension !== expectedExtension) {
     throw new FileContentMismatchError(
@@ -166,12 +64,17 @@ async function extractGltfAttributes(
     return bytesPromise;
   };
 
-  let base = await ThreeDModelDef.extractAttributes(url, memoizedStream, options);
+  let base = await ThreeDModelDef.extractAttributes(
+    url,
+    memoizedStream,
+    options,
+  );
   let bytes = await memoizedStream();
-  // Over the size cap, keep the model type but skip the sniff — the file still
-  // renders through the live client-side viewer, which parses its own geometry;
-  // it just has an empty inspector panel. Do NOT throw here: that would demote
-  // the file to a plain FileDef and lose the 3D card entirely.
+  // Over the size cap, skip the sniff but keep the model type — the file still
+  // renders via the live client-side viewer (which parses its own geometry);
+  // it just has an empty inspector panel and the cube placeholder. Do NOT
+  // throw FileContentMismatchError here: that would demote the file to a plain
+  // FileDef and lose the 3D card entirely.
   let sizeCap = options.fileSizeLimitBytes ?? DEFAULT_FILE_SIZE_LIMIT_BYTES;
   if (bytes.byteLength > sizeCap) {
     console.warn(
@@ -190,7 +93,7 @@ async function extractGltfAttributes(
       `File does not contain a parseable ${containerLabel}`,
     );
   }
-  return { ...base, ...parsed };
+  return { ...base, ...model3dAttributes(gltfToModel3d(parsed.gltfMetadata)) };
 }
 
 // The JSON form (`.gltf`). Its buffers and textures may be external or embedded
@@ -200,10 +103,6 @@ export class GltfDef extends ThreeDModelDef {
   static icon = File3dIcon;
   static acceptTypes = '.gltf,model/gltf+json';
 
-  @field gltfMetadata = contains(GltfMetadataField);
-
-  static isolated: BaseDefComponent = GltfIsolated;
-
   static async extractAttributes(
     url: string,
     getStream: () => Promise<ByteStream>,
@@ -212,7 +111,7 @@ export class GltfDef extends ThreeDModelDef {
       contentSize?: number;
       fileSizeLimitBytes?: number;
     } = {},
-  ): Promise<SerializedFile<Partial<{ gltfMetadata: GltfMetadata }>>> {
+  ): Promise<SerializedFile<Partial<{ model3d: SerializedModel3d }>>> {
     return extractGltfAttributes(
       '.gltf',
       'glTF JSON document',
@@ -231,10 +130,6 @@ export class GlbDef extends ThreeDModelDef {
   static icon = File3dIcon;
   static acceptTypes = '.glb,model/gltf-binary';
 
-  @field gltfMetadata = contains(GltfMetadataField);
-
-  static isolated: BaseDefComponent = GltfIsolated;
-
   static async extractAttributes(
     url: string,
     getStream: () => Promise<ByteStream>,
@@ -243,7 +138,7 @@ export class GlbDef extends ThreeDModelDef {
       contentSize?: number;
       fileSizeLimitBytes?: number;
     } = {},
-  ): Promise<SerializedFile<Partial<{ gltfMetadata: GltfMetadata }>>> {
+  ): Promise<SerializedFile<Partial<{ model3d: SerializedModel3d }>>> {
     return extractGltfAttributes(
       '.glb',
       'GLB container',
@@ -253,3 +148,5 @@ export class GlbDef extends ThreeDModelDef {
     );
   }
 }
+
+export default GltfDef;

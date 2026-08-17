@@ -442,6 +442,16 @@ export function getFields(
   return fields;
 }
 
+// The ambient half of the @cardstack/bxl field-metadata bridge. BXL cannot
+// import this module — it also loads outside a realm (node tooling, the
+// realm-server), where `https:` module specifiers are rejected at load time —
+// so it reads `getFields` out-of-band. The primary bridge is instance-carried
+// (card-api stamps `getFields` onto `BaseDef.prototype` under a cross-realm
+// symbol, so each value resolves the card-api copy that created it); this
+// well-known global is the fallback for consumers that hold no instance,
+// e.g. BXL's mutation adapter resolving field metadata at plan time.
+(globalThis as any).__cardstackGetFields = getFields;
+
 function computeFields(
   cardInstanceOrClass: BaseDef | typeof BaseDef,
   opts?: { usedLinksToFieldsOnly?: boolean; includeComputeds?: boolean },

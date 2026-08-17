@@ -19,6 +19,8 @@ const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
   // TODO: Replace with realm metadata configuration.
   '.markdown': { module: baseModule('markdown-file-def'), name: 'MarkdownDef' },
   '.md': { module: baseModule('markdown-file-def'), name: 'MarkdownDef' },
+  '.html': { module: baseModule('html-file-def'), name: 'HtmlDef' },
+  '.htm': { module: baseModule('html-file-def'), name: 'HtmlDef' },
   '.png': { module: baseModule('png-image-def'), name: 'PngDef' },
   '.jpg': { module: baseModule('jpg-image-def'), name: 'JpgDef' },
   '.jpeg': { module: baseModule('jpg-image-def'), name: 'JpgDef' },
@@ -32,6 +34,7 @@ const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
   '.text': { module: baseModule('text-file-def'), name: 'TextFileDef' },
   '.json': { module: baseModule('json-file-def'), name: 'JsonFileDef' },
   '.csv': { module: baseModule('csv-file-def'), name: 'CsvFileDef' },
+  '.pdf': { module: baseModule('pdf-file-def'), name: 'PdfDef' },
   '.mp3': { module: baseModule('mp3-audio-def'), name: 'Mp3Def' },
   '.wav': { module: baseModule('wav-audio-def'), name: 'WavDef' },
   '.ogg': { module: baseModule('ogg-audio-def'), name: 'OggDef' },
@@ -49,10 +52,18 @@ const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
   '.m4v': { module: baseModule('mp4-video-def'), name: 'Mp4Def' },
   '.mov': { module: baseModule('mov-video-def'), name: 'MovDef' },
   '.webm': { module: baseModule('webm-video-def'), name: 'WebmDef' },
+  // 3D model formats. STL is raw triangle geometry; 3MF is a zipped OPC
+  // package; GLB/glTF are the binary and JSON forms of the same scene format.
+  // All extend ThreeDModelDef, which renders a live client-side WebGL viewer.
   '.stl': { module: baseModule('stl-model-def'), name: 'StlDef' },
   '.3mf': { module: baseModule('three-mf-def'), name: 'ThreeMfDef' },
   '.glb': { module: baseModule('gltf-model-def'), name: 'GlbDef' },
   '.gltf': { module: baseModule('gltf-model-def'), name: 'GltfDef' },
+  '.zip': { module: baseModule('zip-file-def'), name: 'ZipDef' },
+  '.woff2': { module: baseModule('woff2-font-def'), name: 'Woff2Def' },
+  '.woff': { module: baseModule('woff-font-def'), name: 'WoffDef' },
+  '.ttf': { module: baseModule('ttf-font-def'), name: 'TtfDef' },
+  '.otf': { module: baseModule('otf-font-def'), name: 'OtfDef' },
   '.mismatch': {
     module: './filedef-mismatch' as RealmResourceIdentifier,
     name: 'FileDef',

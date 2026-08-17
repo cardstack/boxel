@@ -11,12 +11,13 @@ function specCard(
   id: string,
   specType: string | undefined,
   refName: string,
+  refModule = '../my-module',
 ): Record<string, unknown> {
   return {
     id: `${REALM}Spec/${id}`,
     attributes: {
       ...(specType ? { specType } : {}),
-      ref: { module: '../my-module', name: refName },
+      ref: { module: refModule, name: refName },
     },
     relationships: {},
   };
@@ -44,6 +45,29 @@ module('discoverRealmSpecs', function () {
 
     assert.strictEqual(error, undefined);
     assert.deepEqual(specs.map((s) => s.cardName).sort(), ['MyApp', 'MyCard']);
+  });
+
+  test('a Spec whose ref names a base card is skipped in either module form', async function (assert) {
+    let { specs, error } = await discoverRealmSpecs({
+      targetRealm: REALM,
+      client: clientReturning([
+        specCard('local-spec', 'card', 'MyCard'),
+        specCard('prefix-spec', 'card', 'default', '@cardstack/base/theme'),
+        specCard(
+          'url-spec',
+          'card',
+          'default',
+          'https://cardstack.com/base/theme',
+        ),
+      ]),
+    });
+
+    assert.strictEqual(error, undefined);
+    assert.deepEqual(
+      specs.map((s) => s.cardName),
+      ['MyCard'],
+      'a base-realm ref is out of reach of prerender instantiation whether it is written as a prefix or as a URL, so only the local Spec survives',
+    );
   });
 
   test('a realm with only non-instantiable Specs returns immediately instead of polling', async function (assert) {

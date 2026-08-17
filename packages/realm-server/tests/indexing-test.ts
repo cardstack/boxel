@@ -1159,20 +1159,31 @@ module(basename(import.meta.filename), function () {
       );
 
       // CS-11171: executable modules are FileDef subclasses — `person.gts`
-      // resolves to GtsFileDef, which inherits its fitted/isolated/etc.
-      // templates (and their `data-test-ts-*` markers) from TsFileDef.
+      // resolves to GtsFileDef, which inherits the four shared FileDef shells
+      // (marked `data-test-file-*`) and their code renderer from TsFileDef.
       // CardsGrid's "All Files" group renders those formats. Before the
       // fix, the fused visit gated fileRender behind `!isModule`, so every
       // HTML column on these rows was NULL and the grid showed nothing.
       // The FileDef FileRender pass now runs for modules too.
       assert.ok(
-        entry?.isolatedHtml?.includes('data-test-ts-isolated'),
-        'executable file entry has FileDef isolated HTML (GtsFileDef, via the inherited TsFileDef template)',
+        entry?.isolatedHtml?.includes('data-test-file-isolated'),
+        'executable file entry has FileDef isolated HTML (GtsFileDef, via the shared shell)',
+      );
+      // The shared shell mounts GtsFileDef's code renderer, and that renderer
+      // syntax-highlights the source: a `.gts` module has keywords, so the
+      // rendered HTML carries both the preview hook and highlight spans.
+      assert.ok(
+        entry?.isolatedHtml?.includes('data-test-ts-preview'),
+        'isolated HTML mounts the code preview renderer',
+      );
+      assert.ok(
+        entry?.isolatedHtml?.includes('ts-keyword'),
+        'code preview syntax-highlights the source',
       );
       let fittedHtml = Object.values(entry?.fittedHtml ?? {}).join('');
       assert.ok(
-        fittedHtml.includes('data-test-ts-fitted'),
-        'executable file entry has FileDef fitted HTML (GtsFileDef, via the inherited TsFileDef template)',
+        fittedHtml.includes('data-test-file-fitted'),
+        'executable file entry has FileDef fitted HTML (GtsFileDef, via the shared shell)',
       );
     });
 

@@ -23,7 +23,12 @@ const PNPM_OWNED_FILES = new Set(['pnpm-lock.yaml', 'pnpm-workspace.yaml']);
 // it and drifts the copy from its source. Regenerating (`pnpm build:skills`)
 // then reports phantom diffs. Match on a path segment so absolute staged paths
 // work.
-const VERBATIM_COPIED_TREES = ['/packages/boxel-cli/plugin/skills/'];
+const VERBATIM_COPIED_TREES = [
+  '/packages/boxel-cli/plugin/skills/',
+  // Licensed FileDef sample files whose bytes must match the integrity
+  // manifest in the sibling SOURCES.md.
+  '/packages/experiments-realm/filedef-fixtures/samples/',
+];
 const isVerbatimCopy = (file) => {
   const posix = file.replace(/\\/g, '/');
   return VERBATIM_COPIED_TREES.some((tree) => posix.includes(tree));

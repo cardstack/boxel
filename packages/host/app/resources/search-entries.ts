@@ -25,6 +25,7 @@ import {
   isIconResource,
   logger as runtimeLogger,
   resourceIdentity,
+  ri,
   rri,
   wireFilterHasMatches,
   RealmPaths,
@@ -728,7 +729,7 @@ export class SearchEntriesResource extends Resource<Args> {
 
     // One RealmPaths per searched realm per build — not per entry.
     let realmPaths = this.realmsToSearch.map(
-      (realm) => new RealmPaths(new URL(realm)),
+      (realm) => new RealmPaths(ri(realm)),
     );
     let realmUrlFor = (id: string): string => {
       let idRRI = rri(id);

@@ -8,8 +8,13 @@ const path = require('path');
 
 const DEFAULT_REALM_URLS = ['https://localhost:4201/skills/'];
 
+// REALM_URL may name one realm or a comma-separated list (each realm gets its
+// own live-test discovery page below). Trim + drop empties so a single value or
+// a trailing comma both behave.
 const realmURLs = process.env.REALM_URL
-  ? [process.env.REALM_URL]
+  ? process.env.REALM_URL.split(',')
+      .map((url) => url.trim())
+      .filter(Boolean)
   : DEFAULT_REALM_URLS;
 
 // Optional QUnit filter (plain substring or /regex/) so a caller can run a

@@ -18,6 +18,7 @@ import handleFetchCatalogRealmsRequest from './handlers/handle-fetch-catalog-rea
 import handleFetchUserRequest from './handlers/handle-fetch-user.ts';
 import handleStripeWebhookRequest from './handlers/handle-stripe-webhook.ts';
 import handlePublishRealm from './handlers/handle-publish-realm.ts';
+import handlePublishProgress from './handlers/handle-publish-progress.ts';
 import handleUnpublishRealm from './handlers/handle-unpublish-realm.ts';
 import handleArchiveRealm from './handlers/handle-archive-realm.ts';
 import handleUnarchiveRealm from './handlers/handle-unarchive-realm.ts';
@@ -289,6 +290,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_publish-realm',
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handlePublishRealm(args),
+  );
+  router.get(
+    '/_publish-progress',
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handlePublishProgress(args),
   );
   router.post(
     '/_unpublish-realm',

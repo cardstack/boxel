@@ -2,6 +2,8 @@ import {
   isResolvedCodeRef,
   isValidPrerenderedHtmlFormat,
   RealmPaths,
+  ri,
+  rri,
   type CardResource,
   type ErrorEntry,
   type FileMetaResource,
@@ -108,9 +110,7 @@ export class RenderableSearchEntry {
   // the id isn't under the entry's realm.
   get name(): string {
     try {
-      return new RealmPaths(new URL(this.raw.realmUrl)).local(
-        new URL(this.raw.id),
-      );
+      return new RealmPaths(ri(this.raw.realmUrl)).local(rri(this.raw.id));
     } catch {
       return this.raw.id;
     }

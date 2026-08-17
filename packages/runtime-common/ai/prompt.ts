@@ -80,11 +80,7 @@ import { isMarkdownFile } from '../paths.ts';
 import { SKILL_INSTRUCTIONS_MESSAGE, SYSTEM_MESSAGE } from './constants.ts';
 import { MAX_CORRECTNESS_FIX_ATTEMPTS } from './correctness-constants.ts';
 import { humanReadable } from '../code-ref.ts';
-import {
-  SEARCH_MARKER,
-  REPLACE_MARKER,
-  SEPARATOR_MARKER,
-} from '../constants.ts';
+import { findSearchReplaceBlock } from '../search-replace-markers.ts';
 
 const CARD_PATCH_COMMAND_NAMES = new Set(['patchCardInstance', 'patchFields']);
 const CHECK_CORRECTNESS_TOOL_NAME = 'checkCorrectness';
@@ -1311,6 +1307,14 @@ const CORRECTNESS_SUCCESS_SUMMARY_INSTRUCTION =
 
 const CORRECTNESS_FAILURE_LIMIT_INSTRUCTION = `Automated correctness fixes have already been attempted ${MAX_CORRECTNESS_FIX_ATTEMPTS} times and the target is still failing validation. Stop proposing further automated patches; instead, summarize the remaining errors and ask the user how they want to proceed. Do not mention correctness or automated checks or tool calls.`;
 
+// This lands mid-answer, right after a file is written, and it is the last
+// thing the model reads before replying — so an instruction that only asks
+// for a summary reads as the end of the work. It was: a build announced as
+// two cards delivered one, reported it was clean, and stopped, because
+// nothing resumes a plan across turns.
+const CHECK_CORRECTNESS_SUMMARY_INSTRUCTION =
+  'The automated correctness checks have finished. Summarize the results based on the tool output above in one short sentence. Do not mention: correctness, automated correctness checks, tool calls. If work you already described remains unfinished, carry straight on with it in the same reply — this is a note on what just landed, not a request to stop.';
+
 function extractCorrectnessResultCard(
   toolResult?: ToolResultEvent,
 ): CorrectnessResultSummary | undefined {
@@ -1653,18 +1657,6 @@ export async function buildPromptForModel(
       }
     }
   }
-  if (shouldPromptCheckCorrectnessSummary(history, aiBotUserId)) {
-    historicalMessages.push({
-      role: 'user',
-      content:
-        // This lands mid-answer, right after a file is written, and it is the
-        // last thing the model reads before replying — so an instruction that
-        // only asks for a summary reads as the end of the work. It was: a build
-        // announced as two cards delivered one, reported it was clean, and
-        // stopped, because nothing resumes a plan across turns.
-        'The automated correctness checks have finished. Summarize the results based on the tool output above in one short sentence. Do not mention: correctness, automated correctness checks, tool calls. If work you already described remains unfinished, carry straight on with it in the same reply — this is a note on what just landed, not a request to stop.',
-    });
-  }
   let systemMessageParts = [SYSTEM_MESSAGE];
 
   systemMessageParts.push(
@@ -1705,33 +1697,67 @@ export async function buildPromptForModel(
     tools,
     disabledSkillIds,
   );
-  // The context should be placed where it explains the state of the host.
-  // This is either:
-  // * After the last tool call message, if the last message was a tool call
-  // * At the front of the last user message otherwise
-  //
-  // Providers disagree about where a `system` message may sit, and the array
-  // has to satisfy the strictest of them: OpenAI rejects one placed between an
-  // assistant and its tool messages, and Anthropic requires one to immediately
-  // precede an `assistant` message or end the array. A `system` message before
-  // the last user turn always has a `user` after it, so it can never satisfy
-  // Anthropic — the context is folded into that user turn instead of standing
-  // as its own message. Trailing it after a tool result keeps its own message,
-  // which is legal everywhere because it ends the array.
-  let lastMessage = messages[messages.length - 1];
-  if (lastMessage.role === 'tool') {
-    messages.push({ role: 'system', content: contextContent });
-  } else {
-    let lastUserIndex = findLastIndex(messages, (msg) => msg.role === 'user');
-    if (lastUserIndex !== -1) {
-      messages[lastUserIndex] = prependContextToMessage(
-        messages[lastUserIndex],
-        contextContent,
-      );
-    }
-  }
+  // The context carries the current time, so its bytes change on every
+  // request. Prompt caching is an exact prefix match, so it trails the
+  // conversation as its own message, after the cache marker — never folded
+  // into a history message, whose bytes must stay stable across requests.
+  // Its role must be `user`: OpenRouter hoists non-leading `system`
+  // messages into the top-level system parameter, which would put this
+  // volatile content in front of the whole conversation and defeat the
+  // cache.
+  normalizeHistoryContentShape(messages);
+  addHistoryCacheBreakpoint(messages, messages.length - 1);
+  // The correctness-summary instruction applies to this request only, so it
+  // rides the volatile trailing message; a history entry that vanishes on
+  // the next request would both churn the history and waste the marker.
+  let trailingContent = shouldPromptCheckCorrectnessSummary(
+    history,
+    aiBotUserId,
+  )
+    ? `${contextContent}\n\n${CHECK_CORRECTNESS_SUMMARY_INSTRUCTION}`
+    : contextContent;
+  messages.push({ role: 'user', content: trailingContent });
 
   return messages;
+}
+
+// Serializes every history message in the parts-array form, every turn.
+// The cache marker needs the parts form and moves forward each turn; if
+// only the marked message were converted, messages would flip between the
+// string and parts shapes as the marker passes through — different bytes on
+// the wire, so each flip is a cache miss at that position. Empty contents
+// stay untouched: an empty text part would be rejected.
+function normalizeHistoryContentShape(messages: OpenAIPromptMessage[]) {
+  for (let i = 1; i < messages.length; i++) {
+    let message = messages[i];
+    if (typeof message.content === 'string' && message.content) {
+      message.content = [{ type: 'text', text: message.content }];
+    }
+  }
+}
+
+// Marks the end of the stable history as cacheable — the second of the
+// prompt's two breakpoints (the first sits on the system message). This is
+// what keeps pulled skill files (readRealmFile results) from being
+// re-billed at full price on every later request. Walks backward past
+// unmarkable messages (empty content); never marks messages[0], the system
+// message.
+function addHistoryCacheBreakpoint(
+  messages: OpenAIPromptMessage[],
+  index: number,
+) {
+  for (let i = Math.min(index, messages.length - 1); i >= 1; i--) {
+    // Contents were normalized to the parts form before this runs; anything
+    // still a string is empty and cannot carry a marker.
+    let { content } = messages[i];
+    if (Array.isArray(content) && content.length > 0) {
+      content[content.length - 1] = {
+        ...content[content.length - 1],
+        cache_control: { type: 'ephemeral' },
+      };
+      return;
+    }
+  }
 }
 
 function collectPendingCodePatchCorrectnessCheck(
@@ -2291,29 +2317,6 @@ export const buildAttachmentsMessagePart = async (
   return { text, mediaParts };
 };
 
-// Puts the host-state context at the front of a user turn, so it reads as the
-// setting for what the user then asks. String content stays a string; content
-// already split into parts gains one leading text part, which keeps any image,
-// file, or audio parts — and their `cache_control` — exactly as they were.
-function prependContextToMessage(
-  message: OpenAIPromptMessage,
-  contextContent: string,
-): OpenAIPromptMessage {
-  if (typeof message.content === 'string') {
-    return {
-      ...message,
-      content: `${contextContent}\n\n${message.content}`,
-    };
-  }
-  return {
-    ...message,
-    content: [
-      { type: 'text', text: contextContent } as TextContent,
-      ...message.content,
-    ],
-  };
-}
-
 export const buildContextMessage = async (
   client: MatrixClient,
   history: DiscreteMatrixEvent[],
@@ -2685,30 +2688,20 @@ function elideCodeBlocks(
 
   let codeBlockIndex = 0;
 
-  while (
-    content.includes(SEARCH_MARKER) &&
-    content.includes(SEPARATOR_MARKER) &&
-    content.includes(REPLACE_MARKER)
-  ) {
-    const searchStartIndex: number = content.indexOf(SEARCH_MARKER);
-    const separatorIndex: number = content.indexOf(
-      SEPARATOR_MARKER,
-      searchStartIndex,
-    );
-    const replaceEndIndex: number = content.indexOf(
-      REPLACE_MARKER,
-      separatorIndex,
-    );
+  for (;;) {
+    const block = findSearchReplaceBlock(content);
+    if (!block) {
+      return content;
+    }
 
     // replace the content between the markers with a placeholder
     content =
-      content.substring(0, searchStartIndex) +
+      content.substring(0, block.start) +
       getPlaceholder(codeBlockIndex) +
-      content.substring(replaceEndIndex + REPLACE_MARKER.length);
+      content.substring(block.end);
 
     codeBlockIndex++;
   }
-  return content;
 }
 
 export function mxcUrlToHttp(mxc: string, baseUrl: string): string {
