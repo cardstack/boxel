@@ -112,14 +112,14 @@ export default class FileChooserModal extends Component<Signature> {
       let deferred = this.deferred;
       try {
         if (deferred && selectedRealm && path) {
-          let fileURL = new RealmPaths(selectedRealm.url).fileURL(path);
-          let file = await this.store.get<FileDef>(fileURL.href, {
+          let fileId = new RealmPaths(selectedRealm.id).fileRRI(path);
+          let file = await this.store.get<FileDef>(fileId, {
             type: 'file-meta',
           });
           if (isCardErrorJSONAPI(file)) {
             deferred.reject(
               new Error(
-                `file-chooser/modal: failed to load file meta for ${fileURL.href}`,
+                `file-chooser/modal: failed to load file meta for ${fileId}`,
               ),
             );
             return;
@@ -389,7 +389,7 @@ export default class FileChooserModal extends Component<Signature> {
                 {{! Force recreation when realm changes or chooser reopens }}
                 {{#each (array chooser.fileTreeKey)}}
                   <chooser.FileTree
-                    @realmURL={{chooser.selectedRealm.url.href}}
+                    @realmURL={{chooser.selectedRealm.id}}
                     @onFileConfirmed={{fn
                       (perform this.pickTask)
                       chooser.selectedRealm

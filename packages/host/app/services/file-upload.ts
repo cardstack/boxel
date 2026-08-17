@@ -10,6 +10,7 @@ import {
   isCardErrorJSONAPI,
   toSafeFileName,
   type LocalPath,
+  type RealmIdentifier,
 } from '@cardstack/runtime-common';
 import {
   fileSizeLimitFor,
@@ -72,9 +73,12 @@ export default class FileUploadService extends Service {
     this.activeUploads = [];
   }
 
-  uploadFile(opts: { realmURL: URL; acceptTypes?: string }): FileUploadTask {
+  uploadFile(opts: {
+    realm: RealmIdentifier;
+    acceptTypes?: string;
+  }): FileUploadTask {
     let task = new FileUploadTask();
-    this._startTask(task, opts.realmURL);
+    this._startTask(task, opts.realm);
 
     if (!isTesting()) {
       this._openFilePicker(task, opts.acceptTypes);
@@ -83,17 +87,20 @@ export default class FileUploadService extends Service {
     return task;
   }
 
-  uploadProvidedFile(opts: { realmURL: URL; file: File }): FileUploadTask {
+  uploadProvidedFile(opts: {
+    realm: RealmIdentifier;
+    file: File;
+  }): FileUploadTask {
     let task = new FileUploadTask();
-    this._startTask(task, opts.realmURL);
+    this._startTask(task, opts.realm);
     task._resolveFile(opts.file);
 
     return task;
   }
 
-  private _startTask(task: FileUploadTask, realmURL: URL) {
+  private _startTask(task: FileUploadTask, realm: RealmIdentifier) {
     this.activeUploads = [...this.activeUploads, task];
-    this._processUpload(task, realmURL).finally(() => {
+    this._processUpload(task, realm).finally(() => {
       this.activeUploads = this.activeUploads.filter((t) => t !== task);
     });
   }
@@ -190,7 +197,7 @@ export default class FileUploadService extends Service {
     return deferred.promise;
   }
 
-  private async _processUpload(task: FileUploadTask, realmURL: URL) {
+  private async _processUpload(task: FileUploadTask, realm: RealmIdentifier) {
     try {
       let file = await task.awaitFile();
 
@@ -231,9 +238,9 @@ export default class FileUploadService extends Service {
 
       task.state = 'uploading';
 
-      let targetUrl = new RealmPaths(realmURL).fileURL(uploadName as LocalPath);
+      let targetId = new RealmPaths(realm).fileRRI(uploadName as LocalPath);
 
-      let response = await this.network.authedFetch(targetUrl, {
+      let response = await this.network.authedFetch(targetId, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/octet-stream',
@@ -253,11 +260,11 @@ export default class FileUploadService extends Service {
           // response may not be JSON
         }
         throw new Error(
-          `Upload of ${file.name} to ${realmURL.href} failed: ${response.status}${detail ? ` ${detail}` : ''}`,
+          `Upload of ${file.name} to ${realm} failed: ${response.status}${detail ? ` ${detail}` : ''}`,
         );
       }
 
-      let fileDef = await this.store.getWithoutCache<FileDef>(targetUrl.href, {
+      let fileDef = await this.store.getWithoutCache<FileDef>(targetId, {
         type: 'file-meta',
       });
       if (isCardErrorJSONAPI(fileDef)) {

@@ -64,8 +64,8 @@ enums it returns verbatim. Schemas are cached per-process, so repeated
 calls are cheap.
 
 Catalog Spec cards (`Spec/<slug>.json`) are different — they adopt from
-`https://cardstack.com/base/spec` / `Spec`. Fetch their schema the same
-way: `get_card_schema({ module: "https://cardstack.com/base/spec",
+`@cardstack/base/spec` / `Spec`. Fetch their schema the same
+way: `get_card_schema({ module: "@cardstack/base/spec",
 name: "Spec" })`. The catalog spec workflow is documented in the
 software-factory-operations skill.
 

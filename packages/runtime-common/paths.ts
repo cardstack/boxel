@@ -33,10 +33,17 @@ export class RealmPaths {
     realmURLOrId: URL | RealmIdentifier,
     virtualNetwork?: RealmPathsVirtualNetwork,
   ) {
+    // Both overloads decode. `inRealm` decodes the candidate before comparing,
+    // so a realm whose own identifier stayed percent-encoded would match
+    // nothing — not the encoded candidate, which gets decoded, and not the
+    // decoded one. Decoding here keeps the two overloads interchangeable for
+    // the same realm, which is what callers holding an identifier rely on.
+    // Identifiers carrying no escape (every RRI prefix, most URLs) are returned
+    // unchanged, so this costs nothing in the common case.
     if (realmURLOrId instanceof URL) {
       this.url = ensureTrailingSlash(decodeURI(realmURLOrId.href));
     } else {
-      this.url = ensureTrailingSlash(realmURLOrId);
+      this.url = ensureTrailingSlash(decodeUriIfNeeded(realmURLOrId));
     }
     this.urlWithoutTrailingSlash = this.url.replace(/\/$/, '');
     this.virtualNetwork = virtualNetwork;

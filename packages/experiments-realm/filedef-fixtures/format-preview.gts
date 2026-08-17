@@ -11,49 +11,14 @@ import LayoutDashboardIcon from '@cardstack/boxel-icons/layout-dashboard';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { fn, get } from '@ember/helper';
+import { htmlSafe } from '@ember/template';
+import { FITTED_FORMATS } from '@cardstack/runtime-common';
 
-// The 16 host-owned fitted envelopes. These mirror FITTED_FORMATS in
-// runtime-common/formats.ts (which card modules cannot import), so the
-// dimensions here are the host's pixel specs, not layout choices — keep them
-// in px and keep them in sync with that list.
-const FORMAT_GROUPS = [
-  {
-    label: 'Badges',
-    formats: [
-      { key: 'badge-s', name: 'Small Badge', w: 150, h: 40 },
-      { key: 'badge-m', name: 'Medium Badge', w: 150, h: 65 },
-      { key: 'badge-l', name: 'Large Badge', w: 150, h: 105 },
-    ],
-  },
-  {
-    label: 'Strips',
-    formats: [
-      { key: 'strip-1', name: 'Single Strip', w: 250, h: 40 },
-      { key: 'strip-2', name: 'Double Strip', w: 250, h: 65 },
-      { key: 'strip-3', name: 'Triple Strip', w: 250, h: 105 },
-      { key: 'strip-wide-2', name: 'Double Wide Strip', w: 400, h: 65 },
-      { key: 'strip-wide-3', name: 'Triple Wide Strip', w: 400, h: 105 },
-    ],
-  },
-  {
-    label: 'Tiles',
-    formats: [
-      { key: 'tile-s', name: 'Small Tile', w: 150, h: 170 },
-      { key: 'tile-r', name: 'Regular Tile', w: 250, h: 170 },
-      { key: 'tile-grid', name: 'CardsGrid Tile', w: 170, h: 250 },
-      { key: 'tile-tall', name: 'Tall Tile', w: 150, h: 275 },
-      { key: 'tile-l', name: 'Large Tile', w: 250, h: 275 },
-    ],
-  },
-  {
-    label: 'Cards',
-    formats: [
-      { key: 'card-c', name: 'Compact Card', w: 400, h: 170 },
-      { key: 'card-f', name: 'Full Card', w: 400, h: 275 },
-      { key: 'card-x', name: 'Expanded Card', w: 400, h: 445 },
-    ],
-  },
-];
+// Each envelope frame gets the host's exact pixel spec inline, so the boxes
+// below are always the sizes the host actually renders fitted cards at.
+function frameSize({ width, height }: { width: number; height: number }) {
+  return htmlSafe(`width: ${width}px; height: ${height}px`);
+}
 
 type PreviewItem = {
   index: number;
@@ -258,17 +223,17 @@ class FormatPreviewIsolated extends Component<typeof FileDefFormatPreview> {
           </div>
 
           <div class='format-collage'>
-            {{#each FORMAT_GROUPS as |group|}}
+            {{#each FITTED_FORMATS as |group|}}
               <section class='format-group'>
-                <h3>{{group.label}}</h3>
+                <h3>{{group.name}}</h3>
                 <div class='format-list'>
-                  {{#each group.formats as |fmt|}}
+                  {{#each group.specs as |spec|}}
                     <article class='format-item'>
                       <div class='format-label'>
-                        <strong>{{fmt.name}}</strong>
-                        <span>{{fmt.w}} × {{fmt.h}}</span>
+                        <strong>{{spec.title}}</strong>
+                        <span>{{spec.width}} × {{spec.height}}</span>
                       </div>
-                      <div class='format-frame size-{{fmt.key}}'>
+                      <div class='format-frame' style={{frameSize spec}}>
                         {{#let
                           (get @fields.previewFiles this.selectedFieldIndex)
                           as |FileField|
@@ -522,71 +487,6 @@ class FormatPreviewIsolated extends Component<typeof FileDefFormatPreview> {
         min-height: 0;
         overflow: hidden;
         background: var(--card);
-      }
-      /* Envelope frames are the host's pixel specs (see FORMAT_GROUPS). */
-      .size-badge-s {
-        width: 150px;
-        height: 40px;
-      }
-      .size-badge-m {
-        width: 150px;
-        height: 65px;
-      }
-      .size-badge-l {
-        width: 150px;
-        height: 105px;
-      }
-      .size-strip-1 {
-        width: 250px;
-        height: 40px;
-      }
-      .size-strip-2 {
-        width: 250px;
-        height: 65px;
-      }
-      .size-strip-3 {
-        width: 250px;
-        height: 105px;
-      }
-      .size-strip-wide-2 {
-        width: 400px;
-        height: 65px;
-      }
-      .size-strip-wide-3 {
-        width: 400px;
-        height: 105px;
-      }
-      .size-tile-s {
-        width: 150px;
-        height: 170px;
-      }
-      .size-tile-r {
-        width: 250px;
-        height: 170px;
-      }
-      .size-tile-grid {
-        width: 170px;
-        height: 250px;
-      }
-      .size-tile-tall {
-        width: 150px;
-        height: 275px;
-      }
-      .size-tile-l {
-        width: 250px;
-        height: 275px;
-      }
-      .size-card-c {
-        width: 400px;
-        height: 170px;
-      }
-      .size-card-f {
-        width: 400px;
-        height: 275px;
-      }
-      .size-card-x {
-        width: 400px;
-        height: 445px;
       }
       .format-panel {
         display: grid;

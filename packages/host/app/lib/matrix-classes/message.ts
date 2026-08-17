@@ -17,6 +17,7 @@ import type MessageCodePatchResult from './message-code-patch-result';
 
 import type MessageTool from './message-tool';
 import type { FileDef } from '@cardstack/base/file-api';
+import type { TokenUsage } from '@cardstack/base/matrix-event';
 import type { EventStatus } from 'matrix-js-sdk';
 
 const ErrorMessage: Record<string, string> = {
@@ -50,6 +51,7 @@ interface RoomMessageOptional {
   continuationOf?: string | null;
   agentId?: string;
   isCodePatchCorrectness?: boolean;
+  usage?: TokenUsage;
 }
 
 export class Message implements RoomMessageInterface {
@@ -82,6 +84,9 @@ export class Message implements RoomMessageInterface {
   eventId: string;
   roomId: string;
   agentId?: string;
+  // Tracked because the counts arrive on a late streamed edit, after the
+  // message is already rendered.
+  @tracked private _usage?: TokenUsage;
 
   //This property is used for testing purpose
   instanceId: string;
@@ -97,6 +102,7 @@ export class Message implements RoomMessageInterface {
     this.status = init.status;
     this.roomId = init.roomId;
     this.agentId = init.agentId;
+    this._usage = init.usage;
     this.attachedFiles = init.attachedFiles;
     this.hasContinuation = init.hasContinuation;
     this.continuationOf = init.continuationOf;
@@ -156,6 +162,17 @@ export class Message implements RoomMessageInterface {
 
   get continuedCommands() {
     return this.continuedInMessage?.tools;
+  }
+
+  // Like tools and body, the usage of a split answer lives on the final part
+  // of the continuation chain; the head chases it so callers see one value
+  // per answer.
+  get usage(): TokenUsage | undefined {
+    return this.continuedInMessage?.usage ?? this._usage;
+  }
+
+  setUsage(usage: TokenUsage) {
+    this._usage = usage;
   }
 
   setIsStreamingFinished(isStreamingFinished: boolean | undefined) {

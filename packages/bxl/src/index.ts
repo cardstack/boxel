@@ -20,6 +20,7 @@ import {
   type PreparedNativeJq,
   tokenizeNativeJq,
 } from './bxl/bridge/native.ts';
+import { materializeCardInput, safeFieldMap } from './bxl/bridge/card-input.ts';
 import type { NativeRuntimeLimits } from './jqtools/evaluate/runtimeState.ts';
 import type {
   ReadableSchema,
@@ -265,6 +266,8 @@ export type {
   BxlProfileFunctionSafety,
   BxlSafeResult,
 };
+
+export { loadAllFormulaExtensions } from './bxl/bridge/lazy-formulas.ts';
 
 export {
   BXL_AUTHORIZATION_IR_SCHEMA,
@@ -825,45 +828,12 @@ function makeTagged(
   };
 }
 
-// Boxel's `getFields` arrives out-of-band: a host registers it on
-// `globalThis` and `safeFieldMap` picks it up from there. This module does not
-// import `https://cardstack.com/base/card-api` itself, because Node's ESM
-// loader rejects `https:` schemes at module-load time — a static import would
-// break every consumer that runs outside a realm (tests, tooling, the
-// realm-server). Absent a registration, the field-aware paths degrade rather
-// than throw.
-type GetFieldsFn = (
-  instance: unknown,
-  options?: { includeComputeds?: boolean },
-) => Record<
-  string,
-  {
-    fieldType?: string;
-    card?: unknown;
-    computeVia?: (...args: unknown[]) => unknown;
-  }
->;
-
-const GET_FIELDS_KEY = '__cardstackGetFields' as const;
-
-function getCardstackGetFields(): GetFieldsFn | undefined {
-  const fn = (globalThis as unknown as Record<string, unknown>)[GET_FIELDS_KEY];
-  return typeof fn === 'function' ? (fn as GetFieldsFn) : undefined;
-}
-
-function safeFieldMap(value: unknown) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const getFields = getCardstackGetFields();
-  if (!getFields) return null;
-  try {
-    return getFields(value, { includeComputeds: false });
-  } catch {
-    return null;
-  }
-}
+// Boxel's `getFields` arrives out-of-band via the bridges the card-input
+// module owns (instance-carried stamp first, ambient global fallback); the
+// same module supplies the lazy cycle-guarded view of a card graph that
+// the computeVia factory hands to the jq engine.
 
 function fieldMapForShape(shape: new () => unknown, instance: unknown) {
-  if (!getCardstackGetFields()) return null;
   for (const target of [instance, shape]) {
     const map = safeFieldMap(target);
     if (map && Object.keys(map).length > 0) return map;
@@ -991,18 +961,25 @@ function objectMemoKey(value: unknown): object | null {
  * - `` fx`…` `` — Excel-like readable BXL; identical to a plain
  *   string today, explicit at the call site for cross-tag clarity.
  *
- * Beyond plain `evaluateBxl`, the factory adds five behaviors that
+ * Beyond plain `evaluateBxl`, the factory adds six behaviors that
  * Boxel realms need:
  * 1. **Prepare-once evaluation** — parse/compile happens when the
  *    compute function is constructed, not on every field access.
  * 2. **Derive-profile validation** — the source must be deterministic
  *    record-local computation before a compute function is returned.
- * 3. **Excel-error catch** — a thrown `#N/A`, `#DIV/0!`, `#VALUE!`,
+ * 3. **Cycle-guarded lazy materialization** — the card graph reaches jq
+ *    through a lazy view that materializes fields as the program touches
+ *    them; re-entering a card already on the traversal path (card graphs
+ *    are legitimately cyclic — jq's data model is not) yields a bounded
+ *    `{ id }` reference instead of recursing, mirroring the platform's
+ *    `queryableValue`. The README's "Linked cards, cycles, and bounded
+ *    references" section documents the semantics.
+ * 4. **Excel-error catch** — a thrown `#N/A`, `#DIV/0!`, `#VALUE!`,
  *    etc. is captured at the boundary and surfaced as `null` so the
  *    indexer doesn't tear down the card mid-render.
- * 4. **`as: SomeFieldDef`** — the raw output is materialized as an
+ * 5. **`as: SomeFieldDef`** — the raw output is materialized as an
  *    instance of the given class via {@link BxlOptions.as}.
- * 5. **Tag-aware `readableSyntax` default** — `jq` tag → false,
+ * 6. **Tag-aware `readableSyntax` default** — `jq` tag → false,
  *    everything else → true. Explicit `options.readableSyntax` always
  *    wins.
  *
@@ -1049,6 +1026,7 @@ export function bxl(
     memoize === false
       ? undefined
       : new WeakMap<object, { cycle: number; value: unknown }>();
+  const inFlight = new WeakSet<object>();
 
   const computeViaBxl = function computeViaBxl(this: object) {
     const memoKey = objectMemoKey(this);
@@ -1060,9 +1038,29 @@ export function bxl(
       }
     }
 
+    // A structural operation over `.` enumerates every field of the card —
+    // including the one this very compute produces, re-entering it through
+    // the field's getter with no completed value to serve. That is a
+    // spreadsheet circular reference: the in-flight field reads as blank
+    // (the same surface as an Excel error) rather than recursing without
+    // bound. Mutual cycles across cards break the same way, since each
+    // card's compute is in flight while it enumerates the other.
+    if (memoKey) {
+      if (inFlight.has(memoKey)) {
+        return null;
+      }
+      inFlight.add(memoKey);
+    }
+
     let raw: unknown;
     try {
-      raw = prepared.evaluate(this).value;
+      // The card graph reaches jq through a lazy, cycle-guarded view:
+      // fields materialize as the program touches them, and re-entering
+      // a card already on the traversal path yields a bounded `{ id }`
+      // reference instead of recursing — card graphs are legitimately
+      // cyclic, jq's data model is not. Outputs are unwrapped back to
+      // raw values inside the run, so nothing downstream sees the view.
+      raw = prepared.evaluate(materializeCardInput(this)).value;
     } catch (error) {
       // Excel-style errors (#N/A, #DIV/0!, #VALUE!, etc.) are first-class
       // values in spreadsheet semantics — they should land in the field,
@@ -1074,6 +1072,10 @@ export function bxl(
         return null;
       }
       throw error;
+    } finally {
+      if (memoKey) {
+        inFlight.delete(memoKey);
+      }
     }
     const value = materializeAs(raw, ShapeClass);
     if (memoCache && memoKey && cycle !== null) {
@@ -1112,6 +1114,12 @@ function isExcelErrorMessage(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
   const message = (error as { message?: unknown }).message;
   if (typeof message !== 'string') return false;
+  // The depth-cap error embeds user property names in its path, and a
+  // property named after a sentinel must not demote that fail-fast error
+  // to a blank field.
+  if (message.includes('BXL input materialization exceeded')) {
+    return false;
+  }
   // Native dialect errors wrap the Excel sentinel as their message; the
   // sentinel may appear alone or with surrounding context.
   return Array.from(EXCEL_ERROR_SENTINELS).some((sentinel) =>

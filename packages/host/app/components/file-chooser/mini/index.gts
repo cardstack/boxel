@@ -7,7 +7,7 @@ import { tracked } from '@glimmer/tracking';
 import { BoxelButton, LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
-import { RealmPaths, type LocalPath } from '@cardstack/runtime-common';
+import { RealmPaths, rri, type LocalPath } from '@cardstack/runtime-common';
 
 import FileChooser, { type FileChooserRealm } from '../panel';
 
@@ -16,19 +16,19 @@ import type { FileDef } from '@cardstack/base/file-api';
 interface Signature {
   Element: HTMLDivElement;
   Args: {
-    // Fired with the absolute URL of the file the user confirms (Enter on a
+    // Fired with the identifier of the file the user confirms (Enter on a
     // tree row) or finishes uploading. The hosting container decides what to do
     // with it (this primitive never confirms or dismisses on its own).
-    onSelect: (url: string) => void;
+    onSelect: (id: string) => void;
     // Fired on a single-click highlight of a tree row, before confirmation.
     // Lets a host preview the highlighted file without committing to it — the
     // card chooser previews on a single click, so this keeps the file chooser
     // symmetric for consumers that want the same.
-    onHighlight?: (url: string) => void;
+    onHighlight?: (id: string) => void;
     // Workspace to open on first render. Read once at mount; later parent
     // updates are ignored. Defaults to the first known realm.
     initialRealmURL?: string;
-    // Absolute URL of the currently selected file — the matching tree row gets
+    // Identifier of the currently selected file — the matching tree row gets
     // the selection highlight. Omit for a chooser with no pinned selection.
     selected?: string;
   };
@@ -51,11 +51,11 @@ export default class MiniFileChooser extends Component<Signature> {
     if (!selected || !selectedRealm) {
       return undefined;
     }
-    let paths = new RealmPaths(selectedRealm.url);
+    let paths = new RealmPaths(selectedRealm.id);
     try {
-      let url = new URL(selected);
-      if (paths.inRealm(url)) {
-        return paths.local(url);
+      let id = rri(selected);
+      if (paths.inRealm(id)) {
+        return paths.local(id);
       }
     } catch {
       // malformed URL or outside the realm — nothing to highlight
@@ -80,8 +80,8 @@ export default class MiniFileChooser extends Component<Signature> {
     // Single click highlights the row and previews it via onHighlight, but does
     // NOT call onSelect — that's reserved for confirmation (Enter) so a host
     // can distinguish "previewing" from "committing".
-    let url = new RealmPaths(realm.url).fileURL(path);
-    this.args.onHighlight?.(url.href);
+    let id = new RealmPaths(realm.id).fileRRI(path);
+    this.args.onHighlight?.(id);
   }
 
   @action
@@ -93,8 +93,8 @@ export default class MiniFileChooser extends Component<Signature> {
       return;
     }
     this.userSelectedFile = path;
-    let url = new RealmPaths(realm.url).fileURL(path);
-    this.args.onSelect(url.href);
+    let id = new RealmPaths(realm.id).fileRRI(path);
+    this.args.onSelect(id);
   }
 
   @action
@@ -142,7 +142,7 @@ export default class MiniFileChooser extends Component<Signature> {
               {{! Force recreation when the realm changes }}
               {{#each (array chooser.fileTreeKey)}}
                 <chooser.FileTree
-                  @realmURL={{chooser.selectedRealm.url.href}}
+                  @realmURL={{chooser.selectedRealm.id}}
                   @selectedFile={{this.selectedFileFor chooser.selectedRealm}}
                   @onFileSelected={{fn
                     this.handleFileSelectOnly
