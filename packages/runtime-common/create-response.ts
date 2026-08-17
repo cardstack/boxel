@@ -28,8 +28,11 @@ export function createResponse({
       // which is why `Retry-After` appears below: readiness pairs it with
       // `X-Boxel-Not-Ready` on a 503, and a cross-origin caller that could read
       // the stage but not the retry hint would only have half the answer.
+      // Content-Range/Accept-Ranges let a cross-origin caller reason about a
+      // 206 byte-range response (Content-Length is safelisted, but is listed
+      // for symmetry with the range pair).
       'Access-Control-Expose-Headers':
-        'X-Boxel-Realm-Url,X-Boxel-Realm-Public-Readable,X-Boxel-Realm-Archived,X-Boxel-Canonical-Path,X-Boxel-Not-Ready,Authorization,Cache-Control,ETag,Retry-After',
+        'X-Boxel-Realm-Url,X-Boxel-Realm-Public-Readable,X-Boxel-Realm-Archived,X-Boxel-Canonical-Path,X-Boxel-Not-Ready,Authorization,Cache-Control,ETag,Retry-After,Content-Range,Accept-Ranges,Content-Length',
     },
   });
 }
