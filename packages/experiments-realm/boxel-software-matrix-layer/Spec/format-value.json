@@ -8,7 +8,7 @@
         "module": "https://cardstack.com/base/card-api",
         "name": "queryableValue"
       },
-      "readMe": "# Format Value\n\n## Contract\nThe value pipeline between a field's rich instance value and its other\nrepresentations: `serialize` (wire JSON), `queryableValue` (what the search\nindex stores and filters on), and the format components (what renders).\n\nInvariants:\n- `queryableValue` must be stable and comparable — formatted display\n  strings do not sort/filter correctly; keep raw values queryable and\n  format only at render.\n- A field with custom `serialize` must deserialize its own output\n  (round-trip law).\n\n## Captured example\n`PercentageField` stores `12.5`, queries as a number, and renders `12.5%` —\nthree representations of one value.\n\n## Source\n`https://cardstack.com/base/card-api` (`queryableValue`,\n`getQueryableValue`, `formatQuery`).",
+      "readMe": "# Format Value\n\n## Summary\nA field value carries three representations: `serialize` produces the wire\nJSON, `queryableValue` supplies what the search index stores and filters\non, and the format components render the value.\n\n## Invariants\n- `queryableValue` must be stable and comparable — formatted display\n  strings do not sort/filter correctly; keep raw values queryable and\n  format only at render.\n- A field with custom `serialize` must deserialize its own output\n  (round-trip law).\n\n## Example\n`PercentageField` demonstrates this: it stores `12.5`, queries as a number,\nand renders `12.5%` — three representations of one value.\n\n## Module\n`https://cardstack.com/base/card-api` — exports `queryableValue`,\n`getQueryableValue`, `formatQuery`.",
       "containedExamples": [],
       "cardInfo": {
         "name": "Format Value",
