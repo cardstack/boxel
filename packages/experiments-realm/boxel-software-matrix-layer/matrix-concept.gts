@@ -607,7 +607,16 @@ export class MatrixConcept extends CardDef {
       let m = this.args.model as MatrixConcept;
       let approved = this.reviewStatus === 'approved';
       return [
-        { label: 'Built', done: m.workState === 'Done' || approved },
+        {
+          label: 'Built',
+          // Code existing anywhere counts — a base/platform implementation
+          // is built even when nobody has claimed it in workState.
+          done:
+            m.workState === 'Done' ||
+            approved ||
+            Boolean(m.implemented) ||
+            Boolean(m.evidenceTier),
+        },
         { label: 'Spec', done: Boolean(m.sharedSpec) },
         { label: 'Approved', done: approved },
       ];
@@ -618,6 +627,13 @@ export class MatrixConcept extends CardDef {
         .split(',')
         .map((s) => s.trim())
         .filter(Boolean);
+    }
+
+    // Kernel and Contracts rows ARE the platform — everything imports them,
+    // so a consumer list there is definitional noise, not reuse evidence.
+    get showConsumers(): boolean {
+      let layer = (this.args.model as MatrixConcept).layer;
+      return layer !== '01' && layer !== '02' && this.consumerList.length > 0;
     }
 
     private get consumerExampleIds(): Record<string, string> {
@@ -665,32 +681,70 @@ export class MatrixConcept extends CardDef {
       this.showReviewForm = !this.showReviewForm;
     }
 
-    @action async submitReview() {
-      if (!this.commandContext || !this.realm) return;
-      if (!this.reviewBody.trim()) {
-        this.statusMessage = 'Write something first';
-        return;
-      }
+    private async saveReview(verdict: string, body: string): Promise<boolean> {
+      if (!this.commandContext || !this.realm) return false;
       this.busy = true;
+      this.statusMessage = 'Saving — the realm takes a few seconds…';
       try {
         await new SaveCardCommand(this.commandContext).execute({
           card: new ConceptReview({
             concept: this.args.model as MatrixConcept,
             reviewer: this.selectedReviewer,
-            verdict: this.reviewVerdict,
-            body: this.reviewBody.trim(),
+            verdict,
+            body,
             createdAt: new Date(),
-            resolved: this.reviewVerdict !== 'needs work',
+            resolved: verdict !== 'needs work',
           }),
           realm: this.realm,
         } as any);
-        this.reviewBody = '';
         this.statusMessage = '';
-        this.showReviewForm = false;
+        return true;
       } catch (e: any) {
         this.statusMessage = e?.message ?? 'Review failed to save';
+        return false;
       } finally {
         this.busy = false;
+      }
+    }
+
+    @action async submitReview() {
+      if (!this.reviewBody.trim()) {
+        this.statusMessage = 'Write something first';
+        return;
+      }
+      if (await this.saveReview(this.reviewVerdict, this.reviewBody.trim())) {
+        this.reviewBody = '';
+        this.showReviewForm = false;
+      }
+    }
+
+    // Approval carries a name: an anonymous approve is worthless in a review
+    // trail, so Acting as… is required here (comments may stay unattributed).
+    @action async approve() {
+      if (!this.selectedReviewer) {
+        this.statusMessage = 'Pick who you are in "Acting as…" to approve';
+        return;
+      }
+      let body =
+        this.stateReason.trim() ||
+        'Approved — Spec and evidence reviewed on the concept card.';
+      if (await this.saveReview('approve', body)) {
+        this.stateReason = '';
+      }
+    }
+
+    @action async requestChanges() {
+      if (!this.selectedReviewer) {
+        this.statusMessage =
+          'Pick who you are in "Acting as…" to request changes';
+        return;
+      }
+      if (!this.stateReason.trim()) {
+        this.statusMessage = 'Say what needs to change in the reason line';
+        return;
+      }
+      if (await this.saveReview('needs work', this.stateReason.trim())) {
+        this.stateReason = '';
       }
     }
 
@@ -823,7 +877,7 @@ export class MatrixConcept extends CardDef {
                     {{/if}}
                   </dd>
                 {{/if}}
-                {{#if this.consumerList.length}}
+                {{#if this.showConsumers}}
                   <dt>Used by</dt>
                   <dd class='consumers'>
                     {{#each this.consumerEntries as |entry|}}
@@ -887,6 +941,28 @@ export class MatrixConcept extends CardDef {
                       >{{t.name}}</option>
                     {{/each}}
                   </select>
+                  <input
+                    type='text'
+                    placeholder='Reason (one line)'
+                    value={{this.stateReason}}
+                    aria-label='Reason'
+                    {{on 'input' this.setStateReason}}
+                  />
+                </div>
+                <div class='action-row verdict-row'>
+                  <BoxelButton
+                    @kind='primary'
+                    @size='extra-small'
+                    @loading={{this.busy}}
+                    @disabled={{this.busy}}
+                    {{on 'click' this.approve}}
+                  >Approve</BoxelButton>
+                  <BoxelButton
+                    @kind='secondary'
+                    @size='extra-small'
+                    @disabled={{this.busy}}
+                    {{on 'click' this.requestChanges}}
+                  >Request changes</BoxelButton>
                   <select
                     aria-label='New state'
                     {{on 'change' this.setNewState}}
@@ -900,13 +976,6 @@ export class MatrixConcept extends CardDef {
                       >{{displayState s}}</option>
                     {{/each}}
                   </select>
-                  <input
-                    type='text'
-                    placeholder='Reason (one line)'
-                    value={{this.stateReason}}
-                    aria-label='Reason'
-                    {{on 'input' this.setStateReason}}
-                  />
                   <BoxelButton
                     @kind='secondary'
                     @size='extra-small'

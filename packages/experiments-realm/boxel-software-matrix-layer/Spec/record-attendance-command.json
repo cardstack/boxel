@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Record Attendance",
+      "specType": "command",
+      "ref": {
+        "module": "../club-membership/record-attendance",
+        "name": "default"
+      },
+      "readMe": "# Record Attendance\n\n## Summary\nThe club's check-in composition: one command that (1) checks the booking in\nvia Check In Booking (one-time-use enforcement lives there) and (2) credits\nattendance points via Credit Points using the club's arithmetic — 50 home /\n150 away, times the member's tier multiplier. The rates and the multiplier\nare club business, which is exactly why they live here and not in either\nblock.\n\n## Result\n`{ booking, transaction, pointsAwarded, message }` — the console's\ncelebration toast performs `pointsAwarded` when it lands.\n\n## Invariants\n- Points are credited ONLY through Credit Points (the ledger's single\n  writer); this command never touches balances directly.\n- A booking that is already checked in or Declined is refused upstream.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Record Attendance",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

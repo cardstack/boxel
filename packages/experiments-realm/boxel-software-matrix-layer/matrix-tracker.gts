@@ -1020,7 +1020,10 @@ export class MatrixTracker extends CardDef {
           font-variant-numeric: tabular-nums;
           text-align: right;
         }
-        .backlog-row {
+        /* Doubled class beats the later .queue-row declaration — with equal
+           specificity the 5-column queue grid won, squeezing the backlog
+           label into the 2.5rem symbol column, one word per line. */
+        .queue-row.backlog-row {
           grid-template-columns: 1fr auto;
         }
         .backlog-row .cell-concept {
