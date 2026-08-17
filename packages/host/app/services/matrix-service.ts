@@ -39,9 +39,7 @@ import {
   logger,
   Deferred,
   ri,
-  SEARCH_MARKER,
-  REPLACE_MARKER,
-  SEPARATOR_MARKER,
+  containsSearchReplaceMarker,
   isCardErrorJSONAPI,
   stringifyErrorForLog,
 } from '@cardstack/runtime-common';
@@ -3051,11 +3049,7 @@ export default class MatrixService extends Service {
       // message, still offered an apply button for them. Whether there is
       // anything to apply is decided later against the whole answer.
       let body = event.content.body as string;
-      if (
-        body.includes(SEARCH_MARKER) ||
-        body.includes(SEPARATOR_MARKER) ||
-        body.includes(REPLACE_MARKER)
-      ) {
+      if (containsSearchReplaceMarker(body)) {
         this.toolService.queueEventForCodePatchProcessing(event);
       }
     }
