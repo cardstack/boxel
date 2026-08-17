@@ -14,7 +14,8 @@
       "adoptsFrom": {
         "module": "../club-membership/club-membership",
         "name": "ClubMembership"
-      }
+      },
+      "_touched": 1786961547235
     },
     "relationships": {
       "cardInfo.theme": {

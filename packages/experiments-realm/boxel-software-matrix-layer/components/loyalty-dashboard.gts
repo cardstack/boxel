@@ -26,6 +26,12 @@ interface Signature {
      */
     expiringPoints?: number;
     expiringOn?: Date;
+    /**
+     * The rung above, resolved by the consumer from ITS ladder
+     * (`nextTier(MyTierField, account.tier)`) — the dashboard displays the
+     * aspiration, it never walks a ladder itself.
+     */
+    nextTier?: TierOption;
   };
   Blocks: {
     /** The consumer's calls to action: view rewards, upgrade, renew. */
@@ -97,13 +103,19 @@ export class LoyaltyDashboard extends GlimmerComponent<Signature> {
             }}</span>
           <span class='ld-number'>{{@account.memberNumber}}</span>
         </div>
-        {{#if @tier}}
-          <TierBadge
-            @label={{if @tier.label @tier.label @tier.value}}
-            @hue={{@tier.hue}}
-            @value={{@tier.value}}
-          />
-        {{/if}}
+        <div class='ld-standing'>
+          {{#if @tier}}
+            <TierBadge
+              @label={{if @tier.label @tier.label @tier.value}}
+              @hue={{@tier.hue}}
+              @value={{@tier.value}}
+            />
+          {{/if}}
+          {{#if @nextTier}}
+            <span class='ld-next-tier'>next:
+              {{if @nextTier.label @nextTier.label @nextTier.value}}</span>
+          {{/if}}
+        </div>
       </header>
 
       <div class='ld-stats'>
@@ -189,6 +201,17 @@ export class LoyaltyDashboard extends GlimmerComponent<Signature> {
         font-family: var(--font-mono, ui-monospace, monospace);
         font-size: var(--boxel-font-size-xs);
         letter-spacing: 0.04em;
+        color: var(--muted-foreground, var(--boxel-450));
+      }
+      .ld-standing {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: var(--boxel-sp-5xs);
+        flex-shrink: 0;
+      }
+      .ld-next-tier {
+        font-size: var(--boxel-font-size-xs);
         color: var(--muted-foreground, var(--boxel-450));
       }
       .ld-stats {
