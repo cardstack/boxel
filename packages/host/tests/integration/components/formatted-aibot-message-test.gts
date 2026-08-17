@@ -582,65 +582,57 @@ ${REPLACE_MARKER}
     }
 
     let blockFor = (
+      search: string,
       replacement: string,
     ) => `<pre data-code-language="typescript">
 https://example.com/file.ts
 ${SEARCH_MARKER}
-let a = 1;
+${search}
 ${SEPARATOR_MARKER}
 ${replacement}
 ${REPLACE_MARKER}
 </pre>`;
 
-    // The superseded load, left mid-flight.
+    // The abandoned load searches for something the file does not contain, so
+    // if it ever finishes it reports that the patch could not be applied. That
+    // makes the clobber observable without reading anything out of the diff
+    // editor, whose internals are not this test's business.
     component.htmlParts = parseHtmlContent(
-      blockFor('let a = 2;'),
+      blockFor('let missing = 0;', 'let a = 2;'),
       roomId,
       eventId,
     );
     await waitUntil(() => releases.length === 1);
 
-    // A different patch takes over before the first one has its source.
+    // A patch that does apply takes over before the first one has its source.
     component.htmlParts = parseHtmlContent(
-      blockFor('let a = 3;'),
+      blockFor('let a = 1;', 'let a = 3;'),
       roomId,
       eventId,
     );
     await waitUntil(() => releases.length === 2);
 
-    // Which pane holds the replacement depends on how many editors are on the
-    // page, so ask whether any of them shows it rather than picking an index.
-    let shownInDiff = (text: string) =>
-      Array.from(document.getElementsByClassName('view-lines')).some((el) =>
-        (el as HTMLElement).innerText.includes(text),
-      );
-
     // The newer load finishes first and puts its diff on screen.
     releases[1]('let a = 1;');
     await settled();
-    await waitUntil(
-      () =>
-        document.querySelectorAll('.code-block-diff .cdr.line-insert').length >
-        0,
-      { timeout: 5000 },
-    );
-    await waitUntil(() => shownInDiff('let a = 3;'), { timeout: 5000 });
+    await waitFor('.code-block-diff');
+    assert
+      .dom('[data-test-error-message]')
+      .doesNotExist('the applicable patch loaded cleanly');
 
     // Only now does the abandoned one come back with its answer.
     releases[0]('let a = 1;');
     await settled();
 
     assert
+      .dom('[data-test-error-message]')
+      .doesNotExist(
+        'the abandoned load does not report its failure over the newer patch',
+      );
+    assert.dom('.code-block-diff').exists('the newer diff is still on screen');
+    assert
       .dom('[data-test-apply-code-button]')
-      .exists('the newer patch is still the one on offer');
-    assert.true(
-      shownInDiff('let a = 3;'),
-      'the diff still shows the newer replacement',
-    );
-    assert.false(
-      shownInDiff('let a = 2;'),
-      'the abandoned patch never reaches the screen',
-    );
+      .exists('and is still the one on offer');
   });
 
   test('a patch whose diff has not arrived says so instead of rendering nothing', async function (assert) {
