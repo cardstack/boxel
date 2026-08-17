@@ -41,6 +41,7 @@ import {
   baseRealm,
   baseRealmRRI,
   isCardInstance,
+  Loader,
   SupportedMimeType,
   subscribeToRealm,
   codeRefFromInternalKey,
@@ -81,6 +82,25 @@ import { Spec } from './spec';
 // bundler reports the compiled chunk's URL, not the realm module's), so
 // state it directly.
 const here: string = new URL('./workspace', baseRealm.url).href;
+
+// A realm URL that reaches a card can be a virtual alias (e.g.
+// `https://cardstack.com/base/`) that only the virtual network knows how to
+// resolve; a native fetch of one leaves the page for a host that need not
+// exist, failing with `TypeError: Failed to fetch`. The loader's fetch maps
+// the alias to the URL the realm is really served from and carries realm
+// auth, rather than relying on the auth service worker to inject it. A base
+// module compiled into the host bundle is evaluated by the platform and so
+// has no `import.meta.loader`; it uses the loader the host publishes for
+// bundled modules instead.
+function realmFetch(): typeof globalThis.fetch {
+  // When type-checking realm-server, tsc sees this file and thinks it will be
+  // transpiled to CommonJS and so it complains about import.meta. But this
+  // file always runs as ESM.
+  // @ts-ignore
+  let loader: Loader | undefined =
+    (import.meta as any).loader ?? Loader.forBundledModules();
+  return loader?.fetch ?? fetch;
+}
 
 const [, StripView, GridView] = VIEW_OPTIONS;
 
@@ -3336,7 +3356,7 @@ class Isolated extends Component<typeof Workspace> {
     if (!realm) {
       return;
     }
-    let response = await fetch(`${realm}_types`, {
+    let response = await realmFetch()(`${realm}_types`, {
       headers: {
         Accept: SupportedMimeType.CardTypeSummary,
       },
