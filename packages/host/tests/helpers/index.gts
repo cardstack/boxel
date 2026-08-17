@@ -247,11 +247,35 @@ export async function withCachedRealmSetup<T>(
   let dbAdapter = await getDbAdapter();
   if (dbAdapter.hasSnapshot(snapshotName)) {
     await dbAdapter.importSnapshot(snapshotName);
-    return setup();
+    let result = await setup();
+    // A restored index does not stop the realm indexing. Every fixture carries
+    // the mtime the *current* adapter stamped it with, while the restored rows
+    // carry the first test's, and `discover-invalidations` compares those for
+    // equality — so `realm.start()` invalidates the lot and re-indexes. The work
+    // is cheap, because the snapshot also restored the transpile and prerender
+    // caches, but it is asynchronous: without draining it here, a test that
+    // reads index-derived state races indexing still in flight. That is not
+    // hypothetical — it is how `ai-assistant`'s code-mode test lost the cursor
+    // position it clicks a definition to reach.
+    //
+    // Deliberately not solved by making the mtimes match. The mtime comparison
+    // is what rebuilds the index when a module's fixtures diverge from the
+    // snapshot under an unchanged cache key, which is this helper's only
+    // protection against silently serving the wrong fixtures.
+    await drainRealmIndexing();
+    return result;
   }
   let result = await setup();
   await dbAdapter.exportSnapshot(snapshotName);
   return result;
+}
+
+// Settle any indexing the realms have in flight. Mirrors what
+// `setupLocalIndexing`'s afterEach does between tests.
+async function drainRealmIndexing(): Promise<void> {
+  for (let { realm } of getTestRealmRegistry().values()) {
+    await realm.incrementalIndexing();
+  }
 }
 
 function getCurrentModuleCacheKey(): string {
