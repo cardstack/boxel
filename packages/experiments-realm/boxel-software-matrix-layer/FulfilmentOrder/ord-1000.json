@@ -1,0 +1,78 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "orderNumber": "ORD-2026-1000",
+      "source": "manual",
+      "customerName": "Tomás Ferreira",
+      "customerEmail": "tomas.f@example.com",
+      "shippingAddress": {
+        "addressLine1": "3 Beckford Close",
+        "city": "Bristol",
+        "postalCode": "BS6 5NE",
+        "country": {
+          "name": "United Kingdom",
+          "code": "GB"
+        }
+      },
+      "billingAddress": {
+        "addressLine1": "3 Beckford Close",
+        "city": "Bristol",
+        "postalCode": "BS6 5NE",
+        "country": {
+          "name": "United Kingdom",
+          "code": "GB"
+        }
+      },
+      "lineItems": [
+        {
+          "sku": "CT-330",
+          "productName": "Cast Iron Trivet",
+          "quantity": 1,
+          "quantityFulfilled": 0,
+          "unitPrice": {
+            "amount": 26,
+            "currency": {
+              "code": "GBP"
+            }
+          }
+        }
+      ],
+      "shippingCost": {
+        "amount": 3.99,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "tax": {
+        "amount": 4.4,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "status": "pending",
+      "paymentStatus": "paid",
+      "priority": "normal",
+      "placedAt": "2026-08-14T06:10:00.000Z",
+      "fulfilledAt": null,
+      "notes": null,
+      "tags": [],
+      "cardInfo": {
+        "name": "ORD-2026-1000"
+      }
+    },
+    "relationships": {
+      "allocatedWarehouse": {
+        "links": {
+          "self": "../Warehouse/wh-main"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../fulfilment-order",
+        "name": "FulfilmentOrder"
+      }
+    }
+  }
+}

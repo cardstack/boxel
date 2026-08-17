@@ -1,0 +1,78 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "orderNumber": "ORD-2026-0978",
+      "source": "manual",
+      "customerName": "Elena Marchetti",
+      "customerEmail": "e.marchetti@example.com",
+      "shippingAddress": {
+        "addressLine1": "5 Sandgate",
+        "city": "Whitby",
+        "postalCode": "YO22 4DB",
+        "country": {
+          "name": "United Kingdom",
+          "code": "GB"
+        }
+      },
+      "billingAddress": {
+        "addressLine1": "5 Sandgate",
+        "city": "Whitby",
+        "postalCode": "YO22 4DB",
+        "country": {
+          "name": "United Kingdom",
+          "code": "GB"
+        }
+      },
+      "lineItems": [
+        {
+          "sku": "CT-330",
+          "productName": "Cast Iron Trivet",
+          "quantity": 1,
+          "quantityFulfilled": 1,
+          "unitPrice": {
+            "amount": 26,
+            "currency": {
+              "code": "GBP"
+            }
+          }
+        }
+      ],
+      "shippingCost": {
+        "amount": 3.99,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "tax": {
+        "amount": 5.2,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "status": "returned",
+      "paymentStatus": "refunded",
+      "priority": "normal",
+      "placedAt": "2026-08-02T16:30:00.000Z",
+      "fulfilledAt": "2026-08-05T11:20:00.000Z",
+      "notes": null,
+      "tags": [],
+      "cardInfo": {
+        "name": "ORD-2026-0978"
+      }
+    },
+    "relationships": {
+      "allocatedWarehouse": {
+        "links": {
+          "self": "../Warehouse/wh-main"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../fulfilment-order",
+        "name": "FulfilmentOrder"
+      }
+    }
+  }
+}

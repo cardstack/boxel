@@ -1,0 +1,104 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "shipmentNumber": "SHP-2026-0150",
+      "lineItems": [
+        {
+          "sku": "LM-210",
+          "productName": "Linen Lampshade, Small",
+          "quantity": 1,
+          "unitPrice": {
+            "amount": 34,
+            "currency": {
+              "code": "GBP"
+            }
+          },
+          "quantityFulfilled": 0
+        }
+      ],
+      "parcel": {
+        "length": 36,
+        "width": 36,
+        "height": 30,
+        "weight": 0.75,
+        "dimDivisor": 5000
+      },
+      "customerPaid": {
+        "amount": 4.5,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "status": "delivered",
+      "isDropship": false,
+      "cardInfo": {
+        "name": "SHP-2026-0150",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "trackingNumber": {
+        "number": "AB334455667GB",
+        "carrierCode": "ROYALMAIL",
+        "trackingUrlPattern": "https://www.royalmail.com/track-your-item#/tracking-results/{number}"
+      },
+      "deliveryWindow": {
+        "earliest": "2026-08-16",
+        "latest": "2026-08-17",
+        "commitment": "Tracked 48"
+      },
+      "trackingEvents": [
+        {
+          "occurredAt": "2026-08-14T08:43:26.694Z",
+          "statusCode": "DISPATCH",
+          "statusDescription": "Handed to carrier",
+          "location": "London",
+          "isDelivered": false
+        },
+        {
+          "occurredAt": "2026-08-14T08:43:46.051Z",
+          "statusCode": "DL",
+          "statusDescription": "Delivered",
+          "location": null,
+          "isDelivered": true
+        }
+      ],
+      "serviceLevel": "Tracked 48",
+      "carrierName": "Royal Mail",
+      "shippingCost": {
+        "amount": 8.8,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "labelUrl": null,
+      "shippedAt": "2026-08-14T08:43:26.694Z",
+      "deliveredAt": "2026-08-14T08:43:46.051Z",
+      "proofOfDelivery": null
+    },
+    "relationships": {
+      "order": {
+        "links": {
+          "self": "../FulfilmentOrder/ord-0995"
+        }
+      },
+      "originWarehouse": {
+        "links": {
+          "self": "../Warehouse/wh-main"
+        }
+      },
+      "carrier": {
+        "links": {
+          "self": "../Carrier/royal-mail"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../shipment",
+        "name": "Shipment"
+      }
+    }
+  }
+}

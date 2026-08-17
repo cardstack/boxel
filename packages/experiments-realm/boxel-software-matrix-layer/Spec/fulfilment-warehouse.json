@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "module": "../warehouse",
+        "name": "Warehouse"
+      },
+      "specType": "card",
+      "cardTitle": "Warehouse / Location (Lo)",
+      "cardDescription": "A stock location — owned, 3PL or a virtual dropship point — with address, coordinates, bin capacity and derived utilisation.",
+      "readMe": "## Warehouse (Lo)\n\nThree kinds of location on one card, on purpose: a building you own, a 3PL that holds your stock, and a **virtual dropship location** that holds nothing at all but exists so an order can be allocated somewhere. Treating them as one card is what keeps allocation logic in one place.\n\nBin-level granularity is optional. A spare-room operation has no bins and reports no utilisation, rather than a fake 0%.\n\nCoordinates are stored as a plain latitude/longitude pair rather than a geo field, so the card stays usable in realms that do not carry the catalog's geo blocks. A map consumer reads the pair.\n\n### Example\n\nThree warehouses: the Bermondsey arch (owned, 92% full), Trafford (3PL), and WidgetCo Direct (virtual — its isolated view explains that stock is never counted there).\n\n### Non-goals\n\nNo slotting or bin optimisation. Bins are recorded, not arranged; `pick-list` sorts a route from bin labels and says why that is a property of the labelling rather than a solver.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Warehouse / Location (Lo)",
+        "summary": "A stock location — owned, 3PL or a virtual dropship point — with address, coordinates, bin capacity and derived utilisation."
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Warehouse/wh-main"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "name": "Spec",
+        "module": "@cardstack/base/spec"
+      }
+    }
+  }
+}

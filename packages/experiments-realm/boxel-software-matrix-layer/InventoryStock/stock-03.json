@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "binLocation": "A3-B-18",
+      "quantityOnHand": 9,
+      "quantityReserved": 4,
+      "quantityIncoming": 0,
+      "reorderPoint": 15,
+      "reorderQuantity": 80,
+      "lastCountedAt": "2026-08-01T09:15:00.000Z",
+      "lastMovementAt": "2026-08-13T16:42:00.000Z"
+    },
+    "relationships": {
+      "product": {
+        "links": {
+          "self": "../FulfilmentProduct/rg-042"
+        }
+      },
+      "warehouse": {
+        "links": {
+          "self": "../Warehouse/wh-main"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../inventory-stock",
+        "name": "InventoryStock"
+      }
+    }
+  }
+}

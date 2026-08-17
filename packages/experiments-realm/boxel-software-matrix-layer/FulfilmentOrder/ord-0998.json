@@ -1,0 +1,78 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "orderNumber": "ORD-2026-0998",
+      "source": "manual",
+      "customerName": "Alan Whitcombe",
+      "customerEmail": "a.whitcombe@example.com",
+      "shippingAddress": {
+        "addressLine1": "9 Bootham Row",
+        "city": "York",
+        "postalCode": "YO30 7BW",
+        "country": {
+          "name": "United Kingdom",
+          "code": "GB"
+        }
+      },
+      "billingAddress": {
+        "addressLine1": "9 Bootham Row",
+        "city": "York",
+        "postalCode": "YO30 7BW",
+        "country": {
+          "name": "United Kingdom",
+          "code": "GB"
+        }
+      },
+      "lineItems": [
+        {
+          "sku": "PC-100",
+          "productName": "Braided Power Cable 2m",
+          "quantity": 2,
+          "quantityFulfilled": 0,
+          "unitPrice": {
+            "amount": 14,
+            "currency": {
+              "code": "GBP"
+            }
+          }
+        }
+      ],
+      "shippingCost": {
+        "amount": 3.99,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "tax": {
+        "amount": 5.6,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "status": "picking",
+      "paymentStatus": "paid",
+      "priority": "normal",
+      "placedAt": "2026-08-13T11:05:00.000Z",
+      "fulfilledAt": null,
+      "notes": null,
+      "tags": [],
+      "cardInfo": {
+        "name": "ORD-2026-0998"
+      }
+    },
+    "relationships": {
+      "allocatedWarehouse": {
+        "links": {
+          "self": "../Warehouse/wh-main"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../fulfilment-order",
+        "name": "FulfilmentOrder"
+      }
+    }
+  }
+}

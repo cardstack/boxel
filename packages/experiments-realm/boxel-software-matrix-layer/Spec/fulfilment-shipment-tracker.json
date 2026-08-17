@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "module": "../shipment-tracker",
+        "name": "ShipmentTracker"
+      },
+      "specType": "component",
+      "cardTitle": "Shipment Tracker (ST · TV · Fe)",
+      "cardDescription": "Three densities of one journey — the stage rail, the scan log, and the composed tracker — shipped from one module so they cannot disagree.",
+      "readMe": "## Shipment Tracker (ST), Tracking Status View (TV), Feed (Fe)\n\nThree exports, one module, because they read the same event log and must never disagree about it:\n\n- **`TrackingStatusView` (TV)** — the compact stage rail. Four fixed stages, because progress is only legible as a fraction of a known route. A package in exception shows the rail **stalled where it stopped** rather than advancing; a progress bar that keeps moving while nothing happens is a lying affordance.\n- **`TrackingEventFeed` (Fe)** — the scan log, oldest first, the way a carrier prints it. Empty is a designed state: no scans in the first few hours is normal, and saying so beats an empty box.\n- **`ShipmentTracker` (ST)** — composes both plus the outbound carrier link. Composition rather than a third implementation, so a fix to either half lands in all three consumers.\n\nAll three are domain-neutral: they take a status, a list of events and an optional promise, and have no idea what a warehouse is. Anything with scans can mount them.\n\nEvents are read property-by-property rather than spread — these are field instances whose values live on prototype accessors that a spread would silently drop.\n\n### Example\n\nTwo consumers already: the isolated view of every `Shipment`, and the In transit tab of `OrderFulfilmentApp`, which mounts it in `@compact` mode. `SHP-2026-0142` is the exception case.\n\n### Non-goals\n\nIt does not fetch. Scans are handed in; polling a carrier is integration work with no home in the platform yet.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Shipment Tracker (ST · TV · Fe)",
+        "summary": "Three densities of one journey — the stage rail, the scan log, and the composed tracker — shipped from one module so they cannot disagree."
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Shipment/shp-0142"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "name": "Spec",
+        "module": "@cardstack/base/spec"
+      }
+    }
+  }
+}

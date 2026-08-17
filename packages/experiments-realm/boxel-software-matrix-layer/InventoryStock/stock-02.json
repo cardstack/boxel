@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "binLocation": "T1-C-02",
+      "quantityOnHand": 18,
+      "quantityReserved": 0,
+      "quantityIncoming": 40,
+      "reorderPoint": 10,
+      "reorderQuantity": 60,
+      "lastCountedAt": "2026-08-01T09:15:00.000Z",
+      "lastMovementAt": "2026-08-13T16:42:00.000Z"
+    },
+    "relationships": {
+      "product": {
+        "links": {
+          "self": "../FulfilmentProduct/bw-001"
+        }
+      },
+      "warehouse": {
+        "links": {
+          "self": "../Warehouse/wh-east"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../inventory-stock",
+        "name": "InventoryStock"
+      }
+    }
+  }
+}

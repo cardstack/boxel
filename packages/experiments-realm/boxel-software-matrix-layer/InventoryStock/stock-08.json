@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "binLocation": "C1-B-03",
+      "quantityOnHand": 3,
+      "quantityReserved": 3,
+      "quantityIncoming": 0,
+      "reorderPoint": 10,
+      "reorderQuantity": 40,
+      "lastCountedAt": "2026-08-01T09:15:00.000Z",
+      "lastMovementAt": "2026-08-13T16:42:00.000Z"
+    },
+    "relationships": {
+      "product": {
+        "links": {
+          "self": "../FulfilmentProduct/sk-450"
+        }
+      },
+      "warehouse": {
+        "links": {
+          "self": "../Warehouse/wh-main"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../inventory-stock",
+        "name": "InventoryStock"
+      }
+    }
+  }
+}

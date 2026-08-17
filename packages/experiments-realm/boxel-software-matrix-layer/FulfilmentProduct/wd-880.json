@@ -1,0 +1,49 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "sku": "WD-880",
+      "productName": "Walnut Desk Riser",
+      "category": "Furniture",
+      "barcode": "5012345678970",
+      "shippingProfile": {
+        "length": 58,
+        "width": 26,
+        "height": 12,
+        "weight": 3.6,
+        "dimDivisor": 5000
+      },
+      "vendorSku": "WD-880-V",
+      "cost": {
+        "amount": 28,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "price": {
+        "amount": 96,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "isDropship": true,
+      "isActive": true,
+      "cardInfo": {
+        "name": "Walnut Desk Riser"
+      }
+    },
+    "relationships": {
+      "vendor": {
+        "links": {
+          "self": "../FulfilmentVendor/widgetco"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../fulfilment-product",
+        "name": "FulfilmentProduct"
+      }
+    }
+  }
+}

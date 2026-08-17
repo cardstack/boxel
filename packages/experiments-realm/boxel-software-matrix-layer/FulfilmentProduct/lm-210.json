@@ -1,0 +1,49 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "sku": "LM-210",
+      "productName": "Linen Lampshade, Small",
+      "category": "Lighting",
+      "barcode": "5012345678932",
+      "shippingProfile": {
+        "length": 32,
+        "width": 32,
+        "height": 26,
+        "weight": 0.62,
+        "dimDivisor": 5000
+      },
+      "vendorSku": "LM-210-V",
+      "cost": {
+        "amount": 9.8,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "price": {
+        "amount": 34,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "isDropship": false,
+      "isActive": true,
+      "cardInfo": {
+        "name": "Linen Lampshade, Small"
+      }
+    },
+    "relationships": {
+      "vendor": {
+        "links": {
+          "self": "../FulfilmentVendor/northline"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../fulfilment-product",
+        "name": "FulfilmentProduct"
+      }
+    }
+  }
+}

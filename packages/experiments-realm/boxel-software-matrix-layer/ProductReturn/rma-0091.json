@@ -1,0 +1,51 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "rmaNumber": "RMA-2026-0091",
+      "customerName": "Owen Pritchard",
+      "status": "approved",
+      "reason": "changed_mind",
+      "reasonDetails": "Too large for the alcove it was bought for.",
+      "lineItems": [
+        {
+          "sku": "LM-215",
+          "productName": "Linen Lampshade, Large",
+          "quantity": 1,
+          "unitPrice": {
+            "amount": 52,
+            "currency": {
+              "code": "GBP"
+            }
+          },
+          "itemCondition": "new",
+          "disposition": "restock",
+          "inspectionNotes": null
+        }
+      ],
+      "refundMethod": "original",
+      "requestedAt": "2026-08-12T19:30:00.000Z",
+      "cardInfo": {
+        "name": "RMA-2026-0091"
+      }
+    },
+    "relationships": {
+      "order": {
+        "links": {
+          "self": "../FulfilmentOrder/ord-0975"
+        }
+      },
+      "originalShipment": {
+        "links": {
+          "self": "../Shipment/shp-0131"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product-return",
+        "name": "ProductReturn"
+      }
+    }
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "code": "WIDGCO",
+      "vendorName": "WidgetCo GmbH",
+      "contactEmail": "orders@widgetco.example",
+      "contactPhone": "+49 212 5540 118",
+      "address": {
+        "addressLine1": "Industriestrasse 14",
+        "city": "Solingen",
+        "postalCode": "42655",
+        "country": {
+          "name": "Germany",
+          "code": "DE"
+        }
+      },
+      "leadTimeDays": 5,
+      "minimumOrder": {
+        "amount": 400,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "supportsDropship": true,
+      "dropshipFee": {
+        "amount": 2.5,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "cardInfo": {
+        "name": "WidgetCo GmbH"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../fulfilment-vendor",
+        "name": "FulfilmentVendor"
+      }
+    }
+  }
+}

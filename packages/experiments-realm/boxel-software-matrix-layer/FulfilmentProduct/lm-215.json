@@ -1,0 +1,49 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "sku": "LM-215",
+      "productName": "Linen Lampshade, Large",
+      "category": "Lighting",
+      "barcode": "5012345678949",
+      "shippingProfile": {
+        "length": 46,
+        "width": 46,
+        "height": 34,
+        "weight": 1.05,
+        "dimDivisor": 5000
+      },
+      "vendorSku": "LM-215-V",
+      "cost": {
+        "amount": 14.5,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "price": {
+        "amount": 52,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "isDropship": false,
+      "isActive": true,
+      "cardInfo": {
+        "name": "Linen Lampshade, Large"
+      }
+    },
+    "relationships": {
+      "vendor": {
+        "links": {
+          "self": "../FulfilmentVendor/northline"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../fulfilment-product",
+        "name": "FulfilmentProduct"
+      }
+    }
+  }
+}

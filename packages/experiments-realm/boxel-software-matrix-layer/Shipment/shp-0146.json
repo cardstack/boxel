@@ -1,0 +1,114 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "shipmentNumber": "SHP-2026-0146",
+      "lineItems": [
+        {
+          "sku": "LM-215",
+          "productName": "Linen Lampshade, Large",
+          "quantity": 1,
+          "quantityFulfilled": 0,
+          "unitPrice": {
+            "amount": 52,
+            "currency": {
+              "code": "GBP"
+            }
+          }
+        }
+      ],
+      "parcel": {
+        "length": 50,
+        "width": 50,
+        "height": 38,
+        "weight": 1.2,
+        "dimDivisor": 5000
+      },
+      "trackingNumber": {
+        "number": "15501298447264",
+        "carrierCode": "DPD",
+        "trackingUrlPattern": "https://track.dpd.co.uk/parcels/{number}"
+      },
+      "deliveryWindow": {
+        "earliest": "2026-08-14",
+        "latest": "2026-08-14",
+        "commitment": "Next Day"
+      },
+      "trackingEvents": [
+        {
+          "occurredAt": "2026-08-13T17:05:00.000Z",
+          "statusCode": "PU",
+          "statusDescription": "Collected from sender",
+          "location": "Manchester, GB",
+          "isDelivered": false
+        },
+        {
+          "occurredAt": "2026-08-13T23:40:00.000Z",
+          "statusCode": "DP",
+          "statusDescription": "Departed DPD hub",
+          "location": "Hinckley, GB",
+          "isDelivered": false
+        },
+        {
+          "occurredAt": "2026-08-14T05:50:00.000Z",
+          "statusCode": "AR",
+          "statusDescription": "Arrived at delivery depot",
+          "location": "Leeds, GB",
+          "isDelivered": false
+        },
+        {
+          "occurredAt": "2026-08-14T08:02:00.000Z",
+          "statusCode": "OD",
+          "statusDescription": "Out for delivery",
+          "location": "Leeds, GB",
+          "isDelivered": false
+        }
+      ],
+      "serviceLevel": "Next Day",
+      "carrierName": "DPD",
+      "shippingCost": {
+        "amount": 27.3,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "customerPaid": {
+        "amount": 9.99,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "status": "out_for_delivery",
+      "shippedAt": "2026-08-13T17:05:00.000Z",
+      "deliveredAt": null,
+      "proofOfDelivery": null,
+      "isDropship": false,
+      "cardInfo": {
+        "name": "SHP-2026-0146"
+      }
+    },
+    "relationships": {
+      "order": {
+        "links": {
+          "self": "../FulfilmentOrder/ord-0989"
+        }
+      },
+      "originWarehouse": {
+        "links": {
+          "self": "../Warehouse/wh-east"
+        }
+      },
+      "carrier": {
+        "links": {
+          "self": "../Carrier/dpd"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../shipment",
+        "name": "Shipment"
+      }
+    }
+  }
+}

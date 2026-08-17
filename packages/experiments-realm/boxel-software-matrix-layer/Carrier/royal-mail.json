@@ -1,0 +1,50 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "code": "ROYALMAIL",
+      "carrierName": "Royal Mail",
+      "isActive": true,
+      "accountNumber": "RM-8841205",
+      "trackingUrlPattern": "https://www.royalmail.com/track-your-item#/tracking-results/{number}",
+      "dimDivisor": 5000,
+      "brandHue": "#e4162b",
+      "onTimeDeliveries": 412,
+      "totalDeliveries": 437,
+      "supportedCountries": ["GB", "IE", "FR", "DE"],
+      "services": [
+        {
+          "code": "RM48",
+          "serviceName": "Tracked 48",
+          "deliveryDaysMin": 2,
+          "deliveryDaysMax": 3,
+          "baseRate": { "amount": 3.35, "currency": { "code": "GBP" } },
+          "perKgRate": 0.7,
+          "supportsTracking": true
+        },
+        {
+          "code": "RM24",
+          "serviceName": "Tracked 24",
+          "deliveryDaysMin": 1,
+          "deliveryDaysMax": 2,
+          "baseRate": { "amount": 4.6, "currency": { "code": "GBP" } },
+          "perKgRate": 0.95,
+          "supportsTracking": true
+        },
+        {
+          "code": "RMSD",
+          "serviceName": "Special Delivery by 1pm",
+          "deliveryDaysMin": 1,
+          "deliveryDaysMax": 1,
+          "baseRate": { "amount": 7.85, "currency": { "code": "GBP" } },
+          "perKgRate": 1.4,
+          "supportsTracking": true
+        }
+      ],
+      "cardInfo": { "name": "Royal Mail" }
+    },
+    "meta": {
+      "adoptsFrom": { "module": "../carrier", "name": "Carrier" }
+    }
+  }
+}

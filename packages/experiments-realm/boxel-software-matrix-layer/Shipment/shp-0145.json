@@ -1,0 +1,107 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "shipmentNumber": "SHP-2026-0145",
+      "lineItems": [
+        {
+          "sku": "SK-450",
+          "productName": "Stoneware Mug Set of 4",
+          "quantity": 1,
+          "quantityFulfilled": 0,
+          "unitPrice": {
+            "amount": 42,
+            "currency": {
+              "code": "GBP"
+            }
+          }
+        }
+      ],
+      "parcel": {
+        "length": 30,
+        "width": 30,
+        "height": 16,
+        "weight": 2.5,
+        "dimDivisor": 5000
+      },
+      "trackingNumber": {
+        "number": "15501298447120",
+        "carrierCode": "DPD",
+        "trackingUrlPattern": "https://track.dpd.co.uk/parcels/{number}"
+      },
+      "deliveryWindow": {
+        "earliest": "2026-08-14",
+        "latest": "2026-08-15",
+        "commitment": "Two Day"
+      },
+      "trackingEvents": [
+        {
+          "occurredAt": "2026-08-12T16:40:00.000Z",
+          "statusCode": "PU",
+          "statusDescription": "Collected from sender",
+          "location": "Manchester, GB",
+          "isDelivered": false
+        },
+        {
+          "occurredAt": "2026-08-12T22:15:00.000Z",
+          "statusCode": "DP",
+          "statusDescription": "Departed DPD hub",
+          "location": "Hinckley, GB",
+          "isDelivered": false
+        },
+        {
+          "occurredAt": "2026-08-13T06:30:00.000Z",
+          "statusCode": "AR",
+          "statusDescription": "Arrived at delivery depot",
+          "location": "Cambridge, GB",
+          "isDelivered": false
+        }
+      ],
+      "serviceLevel": "Two Day",
+      "carrierName": "DPD",
+      "shippingCost": {
+        "amount": 6.87,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "customerPaid": {
+        "amount": 4.99,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "status": "in_transit",
+      "shippedAt": "2026-08-12T16:40:00.000Z",
+      "deliveredAt": null,
+      "proofOfDelivery": null,
+      "isDropship": false,
+      "cardInfo": {
+        "name": "SHP-2026-0145"
+      }
+    },
+    "relationships": {
+      "order": {
+        "links": {
+          "self": "../FulfilmentOrder/ord-0990"
+        }
+      },
+      "originWarehouse": {
+        "links": {
+          "self": "../Warehouse/wh-east"
+        }
+      },
+      "carrier": {
+        "links": {
+          "self": "../Carrier/dpd"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../shipment",
+        "name": "Shipment"
+      }
+    }
+  }
+}

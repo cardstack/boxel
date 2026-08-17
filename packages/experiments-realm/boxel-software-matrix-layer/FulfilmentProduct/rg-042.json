@@ -1,0 +1,49 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "sku": "RG-042",
+      "productName": "Brass Drawer Pull",
+      "category": "Hardware",
+      "barcode": "5012345678918",
+      "shippingProfile": {
+        "length": 10,
+        "width": 6,
+        "height": 4,
+        "weight": 0.18,
+        "dimDivisor": 5000
+      },
+      "vendorSku": "RG-042-V",
+      "cost": {
+        "amount": 2.4,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "price": {
+        "amount": 8.95,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "isDropship": false,
+      "isActive": true,
+      "cardInfo": {
+        "name": "Brass Drawer Pull"
+      }
+    },
+    "relationships": {
+      "vendor": {
+        "links": {
+          "self": "../FulfilmentVendor/northline"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../fulfilment-product",
+        "name": "FulfilmentProduct"
+      }
+    }
+  }
+}

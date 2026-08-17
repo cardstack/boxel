@@ -21,6 +21,11 @@
         "links": {
           "self": "../Contact/marcus-obi"
         }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     },
     "meta": {

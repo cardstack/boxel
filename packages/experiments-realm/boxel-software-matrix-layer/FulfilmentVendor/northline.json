@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "code": "NORTHL",
+      "vendorName": "Northline Supply",
+      "contactEmail": "sales@northline.example",
+      "contactPhone": "+44 113 496 0221",
+      "address": {
+        "addressLine1": "18 Kirkstall Road",
+        "city": "Leeds",
+        "postalCode": "LS3 1HS",
+        "country": {
+          "name": "United Kingdom",
+          "code": "GB"
+        }
+      },
+      "leadTimeDays": 12,
+      "minimumOrder": {
+        "amount": 250,
+        "currency": {
+          "code": "GBP"
+        }
+      },
+      "supportsDropship": false,
+      "cardInfo": {
+        "name": "Northline Supply"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../fulfilment-vendor",
+        "name": "FulfilmentVendor"
+      }
+    }
+  }
+}

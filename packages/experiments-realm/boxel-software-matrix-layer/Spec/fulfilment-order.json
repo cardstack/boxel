@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "module": "../fulfilment-order",
+        "name": "FulfilmentOrder"
+      },
+      "specType": "card",
+      "cardTitle": "Order (Or)",
+      "cardDescription": "What the customer bought and how far it has got — money computed from the lines, fulfilment recorded as an event fact.",
+      "readMe": "## Order (Or)\n\n**Money is computed, never stored.** Subtotal comes from the lines, total from subtotal plus shipping plus tax. A stored total is a number that can disagree with the rows above it, and eventually does.\n\n**`fulfilledAt` is an event fact** — the datetime the order first completed, written once by `FulfilOrderCommand` and never moved. \"Is it fulfilled\" is a question about that date rather than a second flag that can drift out of step with it.\n\n`source` and `externalId` exist now so that a Shopify or WooCommerce integration later is a new enum option rather than a migration. v1 enters orders by hand.\n\nThe isolated view is the shipping label: perforated divisions, an express rail down the left edge, monospace order number, and the money arithmetic shown rather than summarised. The fitted view is hand-rolled for the same reason — the card has a visual world of its own, and bending `FittedCard`'s slot model around it would cost more than building it.\n\n### Example\n\nFourteen orders spanning every board column plus the exits: `ORD-2026-1001` (express, pending), `ORD-2026-0999` (awaiting stock, with the reason in its notes), `ORD-2026-0996` (on hold, payment failed) and `ORD-2026-0982` (delivered, with its fulfilment date stamped).\n\n### Non-goals\n\nNo payment processing. Payment status is recorded; taking or refunding money happens in the sales channel, per the source spec’s own out-of-scope list.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Order (Or)",
+        "summary": "What the customer bought and how far it has got — money computed from the lines, fulfilment recorded as an event fact."
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../FulfilmentOrder/ord-1001"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "name": "Spec",
+        "module": "@cardstack/base/spec"
+      }
+    }
+  }
+}
