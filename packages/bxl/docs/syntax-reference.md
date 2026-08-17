@@ -112,15 +112,19 @@ If you need log-Γ, use the unambiguous spellings — they compute the same thin
 
 jq has an `INDEX` of its own: `INDEX(stream; key_expr)` builds an object keyed
 by an expression, and `INDEX(key_expr)` is the same over `.[]`. Excel's
-`INDEX(array, row)` claims that name here, and it wins — spreadsheet authors are
-this surface's audience and the formula library loads by default for cards. jq's
-`INDEX` is therefore unreachable, in both arities, and calling it fails with
-`Cannot index array with string`.
+`INDEX(array, row)` claims the two-argument name here, and it wins — spreadsheet
+authors are this surface's audience and the formula library loads by default for
+cards. So the object-building `INDEX` is out of reach in both arities: the
+two-argument form resolves to Excel's positional lookup and fails with
+`Cannot index array with string`, and the one-argument form is jq's own
+`index` — index-of — in readable BXL, or a delegation to the shadowed
+two-argument form in canonical jq.
 
-The linter says so rather than leaving that message to explain itself: a one-
-argument `INDEX`, or a two-argument one written with jq's semicolon, reports
-`jq-index-shadowed-by-excel` at warning severity. The substitutes are ordinary
-jq:
+The linter says so rather than leaving that message to explain itself: a
+two-argument `INDEX` written with jq's semicolon reports
+`jq-index-shadowed-by-excel` at warning severity. One argument is not flagged,
+since index-of is a function in its own right, and jq has no three-argument
+`INDEX` to shadow. The substitutes are ordinary jq:
 
 ```text
 reduce Rows[] as $row ({}; .[$row.id] = $row)   -- key rows by a field

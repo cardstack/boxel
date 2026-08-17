@@ -86,6 +86,9 @@ export const formulaTextCases: CoverageCase[] = [
     expected: 8,
   },
   { covers: 'SEARCH/2', source: 'SEARCH("~*", "3 * 4")', expected: 3 },
+  // A start position past the end of the text is an error, even for a pattern
+  // that can match nothing.
+  { covers: 'SEARCH/3', source: 'SEARCH("*", "abc", 5)', throws: /#VALUE!/ },
   { covers: 'EXACT/2', source: 'EXACT("Word", "word")', expected: false },
   // Substitution. SUBSTITUTE matches text, REPLACE matches a position span,
   // and REPLACE's new text comes last, after the start and length.
@@ -148,6 +151,13 @@ export const formulaTextCases: CoverageCase[] = [
     covers: 'TEXT/2',
     source: 'TEXT(DATE(2026, 4, 30), "dddd d mmm yy")',
     expected: 'Thursday 30 Apr 26',
+    zones: TIMEZONES,
+  },
+  // Five m's is the single-letter month, one more than the full name.
+  {
+    covers: 'TEXT/2',
+    source: 'TEXT(DATE(2026, 4, 30), "mmmmm")',
+    expected: 'A',
     zones: TIMEZONES,
   },
   // `mm` is minutes next to an hour or a second, and months anywhere else, so

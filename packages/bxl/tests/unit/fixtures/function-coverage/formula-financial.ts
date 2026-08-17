@@ -369,6 +369,17 @@ export const formulaFinancialCases: CoverageCase[] = [
     expected: 181,
     zones: TIMEZONES,
   },
+  // A maturity on the last day of the month keeps the schedule on month ends:
+  // the coupon dates behind 2026-08-31 are 2026-02-28 and 2025-08-31, so
+  // settlement sits in a 181-day period. Measuring each date from the one
+  // before it would carry February's clamp forward to an August 28th and
+  // report 184.
+  {
+    covers: 'COUPDAYS/4',
+    source: 'COUPDAYS("2025-09-01", "2026-08-31", 2, 1)',
+    expected: 181,
+    zones: TIMEZONES,
+  },
   {
     covers: 'DISC/4',
     source: 'DISC("2023-01-01", "2023-07-01", 97.5, 100)',

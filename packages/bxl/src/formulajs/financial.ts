@@ -786,12 +786,18 @@ export function excelCoupdays(
     if (daysBetween(settlement, maturity) <= 0) {
       throwExcelError(EXCEL_ERROR.num);
     }
+    // Every coupon date is measured from maturity, not from the one before it:
+    // stepping back a period at a time from an already-clamped date would
+    // carry the clamp forward, so an August 31st maturity would go
+    // February 28th and then August 28th instead of back to the month's end.
     const monthsPerPeriod = 12 / frequency;
+    let periods = 1;
     let periodEnd = maturity;
     let periodStart = addMonthsClamped(maturity, -monthsPerPeriod);
     while (periodStart.getTime() > settlement.getTime()) {
+      periods++;
       periodEnd = periodStart;
-      periodStart = addMonthsClamped(periodStart, -monthsPerPeriod);
+      periodStart = addMonthsClamped(maturity, -periods * monthsPerPeriod);
     }
     return daysBetween(periodStart, periodEnd);
   }

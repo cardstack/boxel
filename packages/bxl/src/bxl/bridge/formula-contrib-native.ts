@@ -310,7 +310,10 @@ function searchValue(
   const findText = parseExcelString(findTextLike);
   const withinText = parseExcelString(withinTextLike);
   const startNum = Math.trunc(parseExcelNumber(startNumLike));
-  if (startNum < 1) {
+  // A start position outside the text is an error, not an empty haystack —
+  // otherwise a pattern that can match nothing, like `*`, would report a hit
+  // past the end of the string.
+  if (startNum < 1 || startNum > withinText.length) {
     throwExcelError(EXCEL_ERROR.value);
   }
   // SEARCH differs from FIND in two ways, not one: it ignores case and it
@@ -469,10 +472,12 @@ function renderDateFormat(serial: number, formatText: string) {
             ? pad(date.getUTCFullYear() % 100, 2)
             : pad(date.getUTCFullYear(), 4);
         case 'month': {
+          // Five m's is Excel's single-letter month, past four's full name.
           const name = MONTH_NAMES[date.getUTCMonth()];
-          if (width >= 4) return name;
+          if (width >= 5) return name.slice(0, 1);
+          if (width === 4) return name;
           if (width === 3) return name.slice(0, 3);
-          return pad(date.getUTCMonth() + 1, Math.min(width, 2));
+          return pad(date.getUTCMonth() + 1, width);
         }
         case 'day': {
           if (width >= 4) return WEEKDAY_NAMES[date.getUTCDay()];
