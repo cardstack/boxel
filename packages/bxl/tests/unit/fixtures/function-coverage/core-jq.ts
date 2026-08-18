@@ -73,6 +73,7 @@ export const coreJqCases: CoverageCase[] = jqCases([
     expected: [2, 3],
   },
   { covers: 'not/0', source: 'false | not', expected: true },
+  { covers: 'not/0', source: 'true | not', expected: false },
   { covers: 'type/0', source: '[] | type', expected: 'array' },
   { covers: 'length/0', source: 'length', input: { a: 1, b: 2 }, expected: 2 },
   { covers: 'length/0', source: 'null | length', expected: 0 },
@@ -91,7 +92,9 @@ export const coreJqCases: CoverageCase[] = jqCases([
     expected: ['b', 'a'],
   },
   { covers: 'has/1', source: 'has("a")', input: { a: 1 }, expected: true },
+  { covers: 'has/1', source: 'has("b")', input: { a: 1 }, expected: false },
   { covers: 'in/1', source: '"a" | in({"a":1})', expected: true },
+  { covers: 'in/1', source: '"b" | in({"a":1})', expected: false },
   {
     covers: 'to_entries/0',
     source: 'to_entries',
@@ -178,7 +181,14 @@ export const coreJqCases: CoverageCase[] = jqCases([
     input: ['foobar', 'baz'],
     expected: true,
   },
+  {
+    covers: 'contains/1',
+    source: 'contains(["nope"])',
+    input: ['foobar', 'baz'],
+    expected: false,
+  },
   { covers: 'inside/1', source: '"bar" | inside("foobar")', expected: true },
+  { covers: 'inside/1', source: '"baz" | inside("foobar")', expected: false },
   {
     covers: 'indices/1',
     source: 'indices([1,2])',
@@ -351,12 +361,19 @@ export const coreJqCases: CoverageCase[] = jqCases([
   // bsearch returns the hit index, or -1 - insertionPoint when the target is absent.
   { covers: 'bsearch/1', source: '[1,3,5] | bsearch(4)', expected: -3 },
   { covers: 'all/0', source: 'all', input: [true, false], expected: false },
+  { covers: 'all/0', source: 'all', input: [true, true], expected: true },
   { covers: 'all/1', source: 'all(. > 0)', input: [1, 2], expected: true },
+  { covers: 'all/1', source: 'all(. > 0)', input: [1, -1], expected: false },
   { covers: 'all/2', source: 'all(range(3); . < 2)', expected: false },
+  { covers: 'all/2', source: 'all(range(3); . < 3)', expected: true },
   { covers: 'any/0', source: 'any', input: [false, true], expected: true },
+  { covers: 'any/0', source: 'any', input: [false, false], expected: false },
   { covers: 'any/1', source: 'any(. > 1)', input: [1, 2], expected: true },
+  { covers: 'any/1', source: 'any(. > 1)', input: [0, 1], expected: false },
   { covers: 'any/2', source: 'any(range(3); . == 2)', expected: true },
+  { covers: 'any/2', source: 'any(range(3); . == 5)', expected: false },
   { covers: 'isempty/1', source: 'isempty(empty)', expected: true },
+  { covers: 'isempty/1', source: 'isempty(1)', expected: false },
 
   // Generators and control flow.
   { covers: 'empty/0', source: '1, empty, 2', outputs: [1, 2] },
@@ -410,9 +427,19 @@ export const coreJqCases: CoverageCase[] = jqCases([
     expected: true,
   },
   {
+    covers: 'startswith/1',
+    source: '"foobar" | startswith("bar")',
+    expected: false,
+  },
+  {
     covers: 'endswith/1',
     source: '"foobar" | endswith("bar")',
     expected: true,
+  },
+  {
+    covers: 'endswith/1',
+    source: '"foobar" | endswith("foo")',
+    expected: false,
   },
   {
     covers: 'ltrimstr/1',
@@ -496,7 +523,10 @@ export const coreJqCases: CoverageCase[] = jqCases([
     expected: 'x',
   },
   { covers: 'test/1', source: '"abc" | test("b.")', expected: true },
+  { covers: 'test/1', source: '"abc" | test("z.")', expected: false },
   { covers: 'test/2', source: '"ABC" | test("abc"; "i")', expected: true },
+  // Without the ignore-case flag the same pattern no longer matches.
+  { covers: 'test/2', source: '"ABC" | test("abc"; "g")', expected: false },
   {
     covers: 'capture/1',
     source: '"abc123" | capture("(?<num>[0-9]+)")',
@@ -555,6 +585,7 @@ export const coreJqCases: CoverageCase[] = jqCases([
   },
   { covers: 'tonumber/0', source: '"3.5" | tonumber', expected: 3.5 },
   { covers: 'toboolean/0', source: '"true" | toboolean', expected: true },
+  { covers: 'toboolean/0', source: '"false" | toboolean', expected: false },
   {
     covers: 'tojson/0',
     source: 'tojson',
@@ -602,7 +633,9 @@ export const coreJqCases: CoverageCase[] = jqCases([
     expected: { a: { id: 'a', n: 1 }, b: { id: 'b', n: 2 } },
   },
   { covers: 'IN/1', source: '2 | IN(1,2,3)', expected: true },
+  { covers: 'IN/1', source: '9 | IN(1,2,3)', expected: false },
   { covers: 'IN/2', source: 'IN(1,2,3; 2)', expected: true },
+  { covers: 'IN/2', source: 'IN(1,2,3; 9)', expected: false },
   {
     covers: 'JOIN/2',
     source: 'JOIN({"a":1}; .k)',
@@ -788,6 +821,9 @@ export const coreJqCases: CoverageCase[] = jqCases([
     source: 'get_prog_origin',
     expected: 'native-inline',
   },
+  // Build-configuration constants, so one polarity is the whole answer:
+  // BXL's numbers are IEEE doubles, with no decNumber and no preserved
+  // literal text. Every other predicate in the suite is asserted both ways.
   { covers: 'have_decnum/0', source: 'have_decnum', expected: false },
   {
     covers: 'have_literal_numbers/0',
@@ -860,6 +896,12 @@ export const coreJqCases: CoverageCase[] = jqCases([
     source: '_match_impl("z"; null; true)',
     input: 'abc',
     expected: false,
+  },
+  {
+    covers: '_match_impl/3',
+    source: '_match_impl("b"; null; true)',
+    input: 'abc',
+    expected: true,
   },
   // `_nwise` chunks a stream; the two-argument form takes the array to chunk
   // as its first argument rather than reading it from the input.

@@ -98,6 +98,7 @@ export const formulaTextCases: CoverageCase[] = [
     throws: /#VALUE!/,
   },
   { covers: 'EXACT/2', source: 'EXACT("Word", "word")', expected: false },
+  { covers: 'EXACT/2', source: 'EXACT("word", "word")', expected: true },
   // Substitution. SUBSTITUTE matches text, REPLACE matches a position span,
   // and REPLACE's new text comes last, after the start and length.
   {

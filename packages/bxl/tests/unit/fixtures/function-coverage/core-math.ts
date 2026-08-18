@@ -244,6 +244,7 @@ export const coreMathCases: CoverageCase[] = jqCases([
     },
   },
   { covers: 'isnan/0', source: 'nan | isnan', expected: true },
+  { covers: 'isnan/0', source: 'isnan', input: 1, expected: false },
   { covers: 'isinfinite/0', source: 'infinite | isinfinite', expected: true },
   // NaN is not an infinity: C isinf(NaN) and jq's isinfinite are false.
   {
@@ -262,6 +263,7 @@ export const coreMathCases: CoverageCase[] = jqCases([
   },
   // 1e-320 is subnormal: finite and nonzero, but below the normal threshold.
   { covers: 'isnormal/0', source: 'isnormal', input: 1e-320, expected: false },
+  { covers: 'isnormal/0', source: 'isnormal', input: 1, expected: true },
   // Gamma and error functions
   // gamma is true Γ (Γ(5) = 4! = 24), not the historical POSIX log-Γ alias.
   {

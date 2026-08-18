@@ -79,18 +79,18 @@ export const formulaDateCases: CoverageCase[] = [
     source: 'DATEVALUE("Thu Apr 30 2026")',
     expected: 46142,
   },
-  // Month arithmetic. EDATE clamps the day of month to the target month's
-  // last day rather than letting it overflow, so one month past January 31
-  // is February 28, not March 3.
-  {
-    covers: 'EDATE/2',
-    source: 'EDATE(DATE(2026, 1, 31), 1) == DATE(2026, 2, 28)',
-    expected: true,
-  },
+  // Month arithmetic, asserted on the serial rather than against another
+  // call: a comparison of two functions is satisfied by any pair that agrees,
+  // including two that are wrong together. EDATE clamps the day of month to
+  // the target month's last day rather than letting it overflow, so one month
+  // past January 31 is February 28 (serial 46081), not March 3.
+  { covers: 'EDATE/2', source: 'EDATE(DATE(2026, 1, 31), 1)', expected: 46081 },
+  // EOMONTH ignores the day entirely and answers the last day of the month
+  // the offset lands on: 2026-03-31.
   {
     covers: 'EOMONTH/2',
-    source: 'EOMONTH(DATE(2026, 2, 5), 1) == DATE(2026, 3, 31)',
-    expected: true,
+    source: 'EOMONTH(DATE(2026, 2, 5), 1)',
+    expected: 46112,
   },
   // The unit decides what the difference counts. "YM" is the month remainder
   // after whole years, so both the 2 years and the trailing 26 days drop out.
