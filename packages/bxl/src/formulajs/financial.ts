@@ -23,6 +23,37 @@ function parseCashFlows(values: unknown) {
   return parsed;
 }
 
+/**
+ * Whether the rate a solver stopped at is really a root, asked two ways.
+ *
+ * A net present value of zero settles it outright, which is the ordinary case
+ * and also what a double root gives, since the curve touches zero without
+ * crossing. But discounting amplifies rounding — dividing by `(1 + rate)^n`
+ * multiplies the error in `1 + rate` by the same factor — so near -100%, or
+ * over a long series, the smallest residual any double can produce is nowhere
+ * near zero. There, what marks a root is the crossing itself: the sign flips
+ * across a neighbourhood a few billion ulps wide, which rounding does not do
+ * and a rate that is not a root does not do.
+ */
+function isNetPresentValueRoot(
+  netPresentValue: (rate: number) => number,
+  rate: number,
+  tolerance: number,
+) {
+  const residual = netPresentValue(rate);
+  if (!Number.isFinite(residual)) return false;
+  if (Math.abs(residual) <= tolerance) return true;
+
+  const nudge = Math.max(Math.abs(rate), 1e-8) * 1e-9;
+  const below = netPresentValue(rate - nudge);
+  const above = netPresentValue(rate + nudge);
+  return (
+    Number.isFinite(below) &&
+    Number.isFinite(above) &&
+    Math.sign(below) !== Math.sign(above)
+  );
+}
+
 export function excelFv(
   rateLike: unknown,
   nperLike: unknown,
@@ -398,14 +429,22 @@ export function excelIrr(valuesLike: unknown, guessLike = 0.1) {
       break;
     }
 
-    const nextGuess = guess - resultValue / derivative;
-    if (
-      Math.abs(nextGuess - guess) <= epsMax &&
-      Math.abs(resultValue) <= epsMax
-    ) {
-      return nextGuess;
+    const nextGuess = Math.max(
+      -0.99999999,
+      Math.min(guess - resultValue / derivative, 1000),
+    );
+    const settled = Math.abs(nextGuess - guess) <= epsMax;
+    guess = nextGuess;
+    if (settled) {
+      break;
     }
-    guess = Math.max(-0.99999999, Math.min(nextGuess, 1000));
+  }
+
+  // Newton's method walks to some rate whether or not a root exists, and a
+  // series like [-1, 3, -2.5] has none, so the rate it settled on only counts
+  // if the net present value there really is zero.
+  if (!isNetPresentValueRoot(npv, guess, epsMax)) {
+    throwExcelError(EXCEL_ERROR.num);
   }
 
   return guess;
@@ -462,17 +501,22 @@ export function excelXirr(
   const epsMax = 1e-10;
 
   for (let i = 0; i < 100; i++) {
-    const resultValue = irrResult(guess);
-    const nextGuess = guess - resultValue / irrDerivative(guess);
-
-    if (
-      Math.abs(nextGuess - guess) <= epsMax &&
-      Math.abs(resultValue) <= epsMax
-    ) {
-      return nextGuess;
+    const nextGuess = guess - irrResult(guess) / irrDerivative(guess);
+    if (!Number.isFinite(nextGuess)) {
+      break;
     }
-
+    const settled = Math.abs(nextGuess - guess) <= epsMax;
     guess = nextGuess;
+    if (settled) {
+      break;
+    }
+  }
+
+  // As for IRR: a rate the search never brought to zero is not a root. A rate
+  // at or below -100% is not one either — discounting by it raises a negative
+  // number to a fractional power, so the residual there is not even a number.
+  if (guess <= -1 || !isNetPresentValueRoot(irrResult, guess, epsMax)) {
+    throwExcelError(EXCEL_ERROR.num);
   }
 
   return guess;
@@ -728,30 +772,94 @@ export function excelPricedisc(
   return redemption * (1 - disc * yf);
 }
 
+/** The last day of the month `date` falls in. */
+function lastDayOfMonth(date: Date) {
+  return new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0),
+  ).getUTCDate();
+}
+
+/** A date `months` on, clamped to the target month's last day. */
+function addMonthsClamped(date: Date, months: number) {
+  const shifted = new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + months, 1),
+  );
+  shifted.setUTCDate(Math.min(date.getUTCDate(), lastDayOfMonth(shifted)));
+  return shifted;
+}
+
+/**
+ * A coupon date `months` from maturity. A bond maturing on the last day of a
+ * month pays on the last day of every month in its schedule, so clamping the
+ * day number is not enough: a February 28th maturity would give an August 28th
+ * where the schedule wants the 31st.
+ */
+function addCouponMonths(maturity: Date, months: number) {
+  const shifted = new Date(
+    Date.UTC(maturity.getUTCFullYear(), maturity.getUTCMonth() + months, 1),
+  );
+  const endOfMonth = maturity.getUTCDate() === lastDayOfMonth(maturity);
+  shifted.setUTCDate(
+    endOfMonth
+      ? lastDayOfMonth(shifted)
+      : Math.min(maturity.getUTCDate(), lastDayOfMonth(shifted)),
+  );
+  return shifted;
+}
+
 export function excelCoupdays(
-  _settlementLike: unknown,
-  _maturityLike: unknown,
+  settlementLike: unknown,
+  maturityLike: unknown,
   frequencyLike: unknown,
   basisLike: unknown = 0,
 ) {
   const frequency = Math.floor(parseExcelNumber(frequencyLike));
   const basis = Math.floor(Number(basisLike) || 0);
   if (![1, 2, 4].includes(frequency)) throwExcelError(EXCEL_ERROR.num);
-  // Coupon-period length comes from the basis convention alone, so the
-  // settlement and maturity dates do not participate.
-  switch (basis) {
-    case 0:
-    case 4:
-      return 360 / frequency;
-    case 1:
-      return 365 / frequency; // approximate for actual/actual
-    case 2:
-      return 360 / frequency;
-    case 3:
-      return 365 / frequency;
-    default:
-      throwExcelError(EXCEL_ERROR.num);
+  if (basis < 0 || basis > 4) throwExcelError(EXCEL_ERROR.num);
+
+  // Validated for every basis, even though only actual/actual reads the dates:
+  // the same arguments must not be an error under one convention and an answer
+  // under another.
+  const settlement = parseExcelDate(settlementLike);
+  const maturity = parseExcelDate(maturityLike);
+  const span = daysBetween(settlement, maturity);
+  if (!Number.isFinite(span) || span <= 0) {
+    throwExcelError(EXCEL_ERROR.num);
   }
+
+  if (basis === 1) {
+    // Actual/actual is the one convention where the answer is a real calendar
+    // span, so it needs the coupon period settlement falls in. Coupon dates
+    // run backwards from maturity a period at a time.
+    // Every coupon date is measured from maturity, not from the one before it:
+    // stepping back a period at a time from an already-clamped date would carry
+    // the clamp forward, so an August 31st maturity would go February 28th and
+    // then August 28th instead of back to the month's end.
+    const monthsPerPeriod = 12 / frequency;
+    let periods = 1;
+    let periodEnd = maturity;
+    let periodStart = addCouponMonths(maturity, -monthsPerPeriod);
+    while (periodStart.getTime() > settlement.getTime()) {
+      periods++;
+      periodEnd = periodStart;
+      periodStart = addCouponMonths(maturity, -periods * monthsPerPeriod);
+    }
+    return daysBetween(periodStart, periodEnd);
+  }
+
+  // Every other basis gives all coupon periods the same nominal length, so the
+  // dates do not participate.
+  return (basis === 3 ? 365 : 360) / frequency;
+}
+
+/**
+ * Whether a Treasury bill matures inside a year of settlement, which the
+ * TBILL family requires — the instrument they price is short-dated by
+ * definition, so a longer span is an error rather than an extrapolation.
+ */
+function matureWithinAYear(settlement: Date, maturity: Date) {
+  return maturity.getTime() <= addMonthsClamped(settlement, 12).getTime();
 }
 
 export function excelTbilleq(
@@ -763,7 +871,9 @@ export function excelTbilleq(
   const maturity = parseExcelDate(maturityLike);
   const discount = parseExcelNumber(discountLike);
   const dsm = daysBetween(settlement, maturity);
-  if (dsm <= 0 || discount <= 0) throwExcelError(EXCEL_ERROR.num);
+  if (dsm <= 0 || discount <= 0 || !matureWithinAYear(settlement, maturity)) {
+    throwExcelError(EXCEL_ERROR.num);
+  }
   return (365 * discount) / (360 - discount * dsm);
 }
 
@@ -776,7 +886,9 @@ export function excelTbillprice(
   const maturity = parseExcelDate(maturityLike);
   const discount = parseExcelNumber(discountLike);
   const dsm = daysBetween(settlement, maturity);
-  if (dsm <= 0 || discount <= 0) throwExcelError(EXCEL_ERROR.num);
+  if (dsm <= 0 || discount <= 0 || !matureWithinAYear(settlement, maturity)) {
+    throwExcelError(EXCEL_ERROR.num);
+  }
   return 100 * (1 - (discount * dsm) / 360);
 }
 
@@ -789,6 +901,8 @@ export function excelTbillyield(
   const maturity = parseExcelDate(maturityLike);
   const price = parseExcelNumber(priceLike);
   const dsm = daysBetween(settlement, maturity);
-  if (dsm <= 0 || price <= 0) throwExcelError(EXCEL_ERROR.num);
+  if (dsm <= 0 || price <= 0 || !matureWithinAYear(settlement, maturity)) {
+    throwExcelError(EXCEL_ERROR.num);
+  }
   return ((100 - price) / price) * (360 / dsm);
 }

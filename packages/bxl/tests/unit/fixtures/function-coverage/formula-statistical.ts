@@ -311,22 +311,33 @@ export const formulaStatisticalCases: CoverageCase[] = [
     expected: 0.16794970566215628,
     tolerance: 1e-9,
   },
+  // Unequal sizes and unequal variances, which is where the choice of test
+  // shows: this is Excel's T.TEST(...; 2; 3), the two-tailed unequal-variance
+  // form, whose degrees of freedom are Welch–Satterthwaite's 2.05 rather than
+  // the pooled 5. Pooling them would give 0.0159 instead.
+  {
+    covers: 'T_TEST/2',
+    source: 'T_TEST([1, 2, 3, 4], [10, 20, 30])',
+    expected: 0.0919893089522017,
+    tolerance: 1e-9,
+  },
   // Excel's WEIBULL.DIST(x, alpha, beta, ...) takes alpha as the shape and
   // beta as the scale: CDF = 1 - exp(-(x/beta)^alpha), so 1 - exp(-4) here.
-  // This case fails: the bridge hands alpha and beta to jstat in its
-  // (scale, shape) order, transposing the two.
+  // Transposing the two would give 1 - exp(-1) instead.
   {
     covers: 'WEIBULL_DIST/4',
     source: 'WEIBULL_DIST(2, 2, 1, true)',
     expected: 0.9816843611112658,
     tolerance: 1e-9,
-    knownDefect:
-      "alpha and beta reach jstat transposed — jstat's signature is " +
-      '(x, scale, shape) but the call passes (x, alpha, beta), and Excel ' +
-      'makes alpha the shape. The returned 1 - e^-1 is the transposed ' +
-      'evaluation. On realistic parameters it saturates to 0 or 1 rather ' +
-      'than merely being off',
-    produces: { expected: 0.6321205588285577, tolerance: 1e-15 },
+  },
+  // The density needs its own case with shape and scale far apart: at 2 and 1
+  // the cumulative form alone would pass with the two transposed. Microsoft
+  // documents WEIBULL.DIST(105, 20, 100, FALSE) as 0.035589.
+  {
+    covers: 'WEIBULL_DIST/4',
+    source: 'WEIBULL_DIST(105, 20, 100, false)',
+    expected: 0.03558886402450434,
+    tolerance: 1e-12,
   },
   // One-tailed upper-tail test against the hypothesized mean. With x equal
   // to the sample mean, z = 0 and p is exactly 1/2; giving sigma = 2 with

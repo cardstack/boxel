@@ -14,18 +14,13 @@ export const formulaEngineeringCases: CoverageCase[] = [
     covers: 'BASE/2',
     source: 'BASE(255, 16)',
     expected: 'FF',
-    knownDefect:
-      'a bare toString(radix) with no toUpperCase. The whole hex-emitting ' +
-      'family is affected — BIN2HEX, DEC2HEX, OCT2HEX, BASE. The input side ' +
-      'already accepts either casing, so uppercasing output breaks no ' +
-      'round trip',
-    produces: { expected: 'ff' },
   },
   // The third argument is a minimum length, zero-padded.
   { covers: 'BASE/3', source: 'BASE(15, 2, 10)', expected: '0000001111' },
   // Ten-digit binary reads as 10-bit two's complement.
   { covers: 'BIN2DEC/1', source: 'BIN2DEC("1110011100")', expected: -100 },
   { covers: 'BIN2HEX/1', source: 'BIN2HEX("10000")', expected: '10' },
+  { covers: 'BIN2HEX/1', source: 'BIN2HEX("11111111")', expected: 'FF' },
   { covers: 'BIN2HEX/2', source: 'BIN2HEX("1001", 3)', expected: '009' },
   { covers: 'BIN2OCT/1', source: 'BIN2OCT("1100100")', expected: '144' },
   { covers: 'BIN2OCT/2', source: 'BIN2OCT("1001", 3)', expected: '011' },
@@ -38,8 +33,6 @@ export const formulaEngineeringCases: CoverageCase[] = [
     covers: 'DEC2HEX/1',
     source: 'DEC2HEX(255)',
     expected: 'FF',
-    knownDefect: 'lowercase hex digits, as for BASE/2',
-    produces: { expected: 'ff' },
   },
   { covers: 'DEC2HEX/2', source: 'DEC2HEX(100, 4)', expected: '0064' },
   { covers: 'DEC2OCT/1', source: 'DEC2OCT(58)', expected: '72' },
@@ -55,6 +48,7 @@ export const formulaEngineeringCases: CoverageCase[] = [
   { covers: 'OCT2BIN/2', source: 'OCT2BIN("3", 3)', expected: '011' },
   { covers: 'OCT2DEC/1', source: 'OCT2DEC("54")', expected: 44 },
   { covers: 'OCT2HEX/1', source: 'OCT2HEX("100")', expected: '40' },
+  { covers: 'OCT2HEX/1', source: 'OCT2HEX("377")', expected: 'FF' },
   { covers: 'OCT2HEX/2', source: 'OCT2HEX("100", 4)', expected: '0040' },
   // Bitwise — operands limited to 48 bits, shift counts signed
   { covers: 'BITAND/2', source: 'BITAND(13, 25)', expected: 9 },
@@ -73,12 +67,6 @@ export const formulaEngineeringCases: CoverageCase[] = [
     covers: 'COMPLEX/2',
     source: 'COMPLEX(0, -1)',
     expected: '-i',
-    knownDefect:
-      'formatComplex special-cases an imaginary part of 1 to drop the ' +
-      'coefficient but has no mirror for -1, so it emits "-1i". The library ' +
-      'parses "-i" perfectly well — it just cannot write it — and every ' +
-      'IM* function formats through here',
-    produces: { expected: '-1i' },
   },
   { covers: 'COMPLEX/3', source: 'COMPLEX(3, 4, "j")', expected: '3+4j' },
   { covers: 'IMREAL/1', source: 'IMREAL("6-9i")', expected: 6 },
@@ -231,21 +219,52 @@ export const formulaEngineeringCases: CoverageCase[] = [
   {
     covers: 'ERF/1',
     source: 'ERF(1)',
-    expected: 0.8427007929,
-    tolerance: 1e-6,
+    expected: 0.8427007929497149,
+    tolerance: 1e-15,
+  },
+  // erf is odd and zero at the origin, both exactly.
+  { covers: 'ERF/1', source: 'ERF(0)', expected: 0 },
+  {
+    covers: 'ERF/1',
+    source: 'ERF(-1)',
+    expected: -0.8427007929497149,
+    tolerance: 1e-15,
   },
   // The two-argument form integrates between bounds: ERF(0, 1) = erf(1).
   {
     covers: 'ERF/2',
     source: 'ERF(0, 1)',
-    expected: 0.8427007929,
-    tolerance: 1e-6,
+    expected: 0.8427007929497149,
+    tolerance: 1e-15,
   },
   {
     covers: 'ERFC/1',
     source: 'ERFC(1)',
-    expected: 0.1572992071,
-    tolerance: 1e-6,
+    expected: 0.15729920705028513,
+    tolerance: 1e-15,
+  },
+  { covers: 'ERFC/1', source: 'ERFC(0)', expected: 1 },
+  // x² is what the series takes, and it runs out of exponent long before erf
+  // stops being ±1: past about 1.3e154 it overflows, and the answer is the
+  // saturated one rather than the NaN a series would return.
+  { covers: 'ERF/1', source: 'ERF(POWER(10, 200))', expected: 1 },
+  { covers: 'ERF/1', source: 'ERF(-POWER(10, 200))', expected: -1 },
+  { covers: 'ERFC/1', source: 'ERFC(POWER(10, 200))', expected: 0 },
+  { covers: 'ERFC/1', source: 'ERFC(-POWER(10, 200))', expected: 2 },
+  // At the other end x² is subnormal, where erf is 2x/√π exactly.
+  {
+    covers: 'ERF/1',
+    source: 'ERF(POWER(10, -300))',
+    expected: 1.1283791670955126e-300,
+    tolerance: 1e-315,
+  },
+  // The complement is computed as the upper tail rather than as 1 - ERF, which
+  // is the only way the far tail keeps any significant digits at all.
+  {
+    covers: 'ERFC/1',
+    source: 'ERFC(6)',
+    expected: 2.1519736712498913e-17,
+    tolerance: 1e-25,
   },
   { covers: 'UNICHAR/1', source: 'UNICHAR(66)', expected: 'B' },
 ];

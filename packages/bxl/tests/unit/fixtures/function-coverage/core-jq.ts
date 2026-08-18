@@ -39,11 +39,6 @@ export const coreJqCases: CoverageCase[] = jqCases([
     // empty array and object as well as a populated one.
     source: '[(1, [2], [], {}) | scalars_or_empty]',
     expected: [1, [], {}],
-    knownDefect:
-      'the implementation is `if (isScalar(input)) yield input`, making it a ' +
-      'byte-identical copy of scalars/0 — empty collections are dropped ' +
-      'rather than kept',
-    produces: { expected: [1] },
   },
   { covers: 'finites/0', source: '[(1, infinite) | finites]', expected: [1] },
   // Zero is finite but subnormal-or-zero, so it is not "normal".
@@ -306,6 +301,30 @@ export const coreJqCases: CoverageCase[] = jqCases([
     input: [{ v: 4 }, { v: 2 }],
     expected: { v: 2 },
   },
+  // The two disagree on ties: max_by keeps the last item holding the winning
+  // key, min_by the first. Asserted because either could plausibly be picked.
+  {
+    covers: 'max_by/1',
+    source: 'max_by(.v)',
+    input: [
+      { v: 2, i: 0 },
+      { v: 2, i: 1 },
+    ],
+    expected: { v: 2, i: 1 },
+  },
+  {
+    covers: 'min_by/1',
+    source: 'min_by(.v)',
+    input: [
+      { v: 2, i: 0 },
+      { v: 2, i: 1 },
+    ],
+    expected: { v: 2, i: 0 },
+  },
+  // An empty array has a null extreme rather than no answer at all, matching
+  // what max/0 and min/0 report.
+  { covers: 'max_by/1', source: '[] | max_by(.)', expected: null },
+  { covers: 'min_by/1', source: '[] | min_by(.)', expected: null },
   // bsearch returns the hit index, or -1 - insertionPoint when the target is absent.
   { covers: 'bsearch/1', source: '[1,3,5] | bsearch(4)', expected: -3 },
   { covers: 'all/0', source: 'all', input: [true, false], expected: false },
@@ -420,22 +439,38 @@ export const coreJqCases: CoverageCase[] = jqCases([
     source: '"abc" | match("b")',
     expected: { offset: 1, length: 1, string: 'b', captures: [] },
   },
-  // The capture name on a match is the root the capture/sub/gsub defects all
-  // grow from, so it is pinned here rather than only through them — patching
-  // `capture` alone would promote those cases and leave this one failing.
+  // A named group carries its name onto the match, which is where `capture`,
+  // `sub` and `gsub` all read it from — so it is asserted at that root as
+  // well as through each of them.
   {
     covers: 'match/1',
     source: '"abc123" | match("(?<num>[0-9]+)") | .captures[0].name',
     expected: 'num',
-    knownDefect:
-      'transformRegExpMatch hardcodes name: null on every capture and never ' +
-      "reads the match's groups",
-    produces: { expected: null },
   },
   {
     covers: 'match/2',
     source: '"aA" | [match("a"; "gi") | .offset]',
     expected: [0, 1],
+  },
+  // An optional group that did not take part still occupies its slot, with no
+  // text and no position.
+  {
+    covers: 'match/1',
+    source: '"abc" | match("(x)?(b)") | .captures[0]',
+    expected: { offset: -1, length: 0, string: null, name: null },
+  },
+  // Capture names are read off the pattern by counting group openings, so the
+  // count has to skip the parentheses that are not groups: one inside a
+  // character class, and the one opening a lookbehind.
+  {
+    covers: 'match/1',
+    source: '"a(b" | match("[(](?<x>b)") | .captures[0].name',
+    expected: 'x',
+  },
+  {
+    covers: 'match/1',
+    source: '"ab" | match("(?<=a)(?<x>b)") | .captures[0].name',
+    expected: 'x',
   },
   { covers: 'test/1', source: '"abc" | test("b.")', expected: true },
   { covers: 'test/2', source: '"ABC" | test("abc"; "i")', expected: true },
@@ -443,19 +478,11 @@ export const coreJqCases: CoverageCase[] = jqCases([
     covers: 'capture/1',
     source: '"abc123" | capture("(?<num>[0-9]+)")',
     expected: { num: '123' },
-    knownDefect:
-      'transformRegExpMatch hardcodes name: null on every capture and never ' +
-      "reads the match's groups, so capture's select(.name != null) rejects " +
-      'everything and yields {}. sub/gsub replacement captures are empty for ' +
-      'the same reason',
-    produces: { expected: {} },
   },
   {
     covers: 'capture/2',
     source: '"XYZ" | capture("(?<low>xyz)"; "i")',
     expected: { low: 'XYZ' },
-    knownDefect: 'named captures are discarded, as for capture/1',
-    produces: { expected: {} },
   },
   {
     covers: 'scan/1',
@@ -473,18 +500,11 @@ export const coreJqCases: CoverageCase[] = jqCases([
     covers: 'sub/2',
     source: '"abc" | sub("(?<x>b)"; "[" + .x + "]")',
     expected: 'a[b]c',
-    knownDefect:
-      'the replacement sees no named captures, for the same reason capture/1 ' +
-      'yields {} — transformRegExpMatch never reads the match groups — so the ' +
-      'interpolation substitutes nothing',
-    produces: { expected: 'a[]c' },
   },
   {
     covers: 'gsub/2',
     source: '"abc" | gsub("(?<x>b)"; "<" + .x + ">")',
     expected: 'a<b>c',
-    knownDefect: 'named captures are discarded, as for sub/2',
-    produces: { expected: 'a<>c' },
   },
   { covers: 'gsub/3', source: '"aBa" | gsub("b"; "-"; "i")', expected: 'a-a' },
   {
@@ -713,16 +733,11 @@ export const coreJqCases: CoverageCase[] = jqCases([
   },
   {
     covers: 'inputs/0',
-    // jq defines inputs as repeat(input) with the end-of-input break caught,
-    // so a runtime with no further inputs yields an empty stream rather than
-    // raising. That input/0 itself is unimplemented is documented; inputs
-    // failing hard is a downstream consequence that is not.
+    // `inputs` is every remaining input, and a runtime whose inputs are
+    // exhausted — as this one's always are — has none, so it yields an empty
+    // stream where `input` raises.
     source: '[inputs]',
     expected: [],
-    knownDefect:
-      'the unimplemented input/0 raises instead of signalling break, so the ' +
-      'catch in the jq definition never runs and the error escapes',
-    produces: { throws: /Feature 'input\/0' is not implemented/ },
   },
   {
     covers: 'input_filename/0',

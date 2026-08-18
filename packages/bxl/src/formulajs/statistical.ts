@@ -706,12 +706,19 @@ export function excelTTest(array1Like: unknown, array2Like: unknown) {
   }
   const meanX = jStat.mean(array1);
   const meanY = jStat.mean(array2);
-  const sx = jStat.variance(array1, true);
-  const sy = jStat.variance(array2, true);
-  const statistic =
-    Math.abs(meanX - meanY) /
-    Math.sqrt(sx / array1.length + sy / array2.length);
-  return excelTDist2T(statistic, array1.length + array2.length - 2);
+  // Two-sample, unequal-variance, two-tailed — Excel's T.TEST type 3, which
+  // the two-argument form has no way to say otherwise. Equal variance is the
+  // assumption most easily violated without notice in card data, so the test
+  // that does not require it is the safer default.
+  const errorX = jStat.variance(array1, true) / array1.length;
+  const errorY = jStat.variance(array2, true) / array2.length;
+  const statistic = Math.abs(meanX - meanY) / Math.sqrt(errorX + errorY);
+  // Welch–Satterthwaite: the degrees of freedom that go with that standard
+  // error. Pooled degrees of freedom would belong to the equal-variance test.
+  const degreesOfFreedom =
+    (errorX + errorY) ** 2 /
+    (errorX ** 2 / (array1.length - 1) + errorY ** 2 / (array2.length - 1));
+  return excelTDist2T(statistic, degreesOfFreedom);
 }
 
 export function excelWeibullDist(
@@ -727,10 +734,13 @@ export function excelWeibullDist(
   if (x < 0 || alpha <= 0 || beta <= 0) {
     throwExcelError(EXCEL_ERROR.num);
   }
+  // Excel's alpha is the shape and its beta the scale, giving a CDF of
+  // 1 - exp(-(x/beta)^alpha). jstat takes the two the other way round, as
+  // (x, scale, shape), so they cross here.
   return checkedNumber(
     cumulative
-      ? jStat.weibull.cdf(x, alpha, beta)
-      : jStat.weibull.pdf(x, alpha, beta),
+      ? jStat.weibull.cdf(x, beta, alpha)
+      : jStat.weibull.pdf(x, beta, alpha),
   );
 }
 

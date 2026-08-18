@@ -56,6 +56,39 @@ versions may change syntax behavior until `1.0.0`.
   TypeScript — `engines.node` is now `>=24`.
 - Relative import specifiers use `.ts` extensions throughout.
 
+### Fixed
+
+- **Twenty functions that answered something other than their specification.**
+  On the jq side: named captures now travel on a match, so `capture`, `sub` and
+  `gsub` can read them, and a group that did not participate reports an absent
+  capture rather than crashing; `round` ties away from zero; `isinfinite`
+  excludes NaN, and `isfinite` with it; `lgamma_r` returns its `[magnitude,
+  sign]` pair; `scalars_or_empty` keeps empty collections; `max_by` breaks ties
+  on the last maximum, as jq does; `inputs` yields an empty stream. On the Excel
+  side: `PROPER`, `TRIM`, `SEARCH` (wildcards), `SUBSTITUTE` (an occurrence at
+  position 0), `TEXT` (date format codes), `NUMBERVALUE` (percent signs and
+  spaces), `CHAR` (bounded to 1–255), `ISEVEN`/`ISODD` (truncation),
+  `WEEKDAY`/`WEEKNUM` (every return type), `ISOWEEKNUM`, `TIMEVALUE` (AM/PM),
+  `BASE`/`BIN2HEX`/`DEC2HEX`/`OCT2HEX` (upper-case digits), `COMPLEX` (`-i`),
+  `ERF`/`ERFC` (full double precision), `WEIBULL_DIST` (shape and scale),
+  `T_TEST` (Welch degrees of freedom), `IRR`/`IRR_BY`/`XIRR` (`#NUM!` for a
+  series with no root), the `TBILL` family (maturity within a year) and
+  `COUPDAYS` (a real coupon period under actual/actual). Each is pinned by a
+  case in the function-coverage suite; see `src/*/UPSTREAM-DIFFS.md`.
+
+- **Excel wildcards are matched in linear time.** `SEARCH` and the `COUNTIF`
+  family of criteria share one matcher that walks the text once. Compiling `*`
+  to a regex's `.*` made a pattern carrying several stars exponential — a stray
+  run of asterisks over an ordinary text field took tens of seconds, blocking an
+  indexing worker or the browser's main thread.
+
+- **`max_by`/`min_by` on an empty array yield `null`**, as `max`/`min` already
+  did, rather than an empty stream.
+
+- **Numeric literals accept an exponent.** `1e3`, `1E-3` and `5e-324` are
+  single numbers in both readable and canonical-jq syntax, where the tokenizer
+  previously ended the literal at the first digit and read the rest as a name.
+
 ### Removed
 
 - **`BXL_BUILD_INFO.buildTime`.** Only a bundling step ever set it; the const

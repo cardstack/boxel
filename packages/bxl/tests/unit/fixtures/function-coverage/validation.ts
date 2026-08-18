@@ -44,8 +44,10 @@ export const validationCases: CoverageCase[] = [
     source: 'isLength("😀😀", {min: 3})',
     expected: false,
   },
-  // isByteLength with no options leaves its minimum unset, so no string can
-  // satisfy it; the non-string guard is the only assertion it supports.
+  // Upstream validator.js reads the minimum as `arguments[1]` with no `|| 0`
+  // fallback, so the one-argument form compares a length against `undefined`
+  // and no string can satisfy it. The bridge is faithful to that, which leaves
+  // the non-string guard as the only assertion this arity supports.
   { covers: 'isByteLength/1', source: 'isByteLength(42)', expected: false },
   // Byte length counts UTF-8 bytes: "héllo" is five characters, six bytes.
   {

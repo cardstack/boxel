@@ -108,6 +108,30 @@ If you need log-Γ, use the unambiguous spellings — they compute the same thin
 | true Γ(x) | `x \| gamma` (== `tgamma`) | `GAMMA(x)`     |
 | log Γ(x)  | `x \| lgamma`              | `GAMMALN(x)`   |
 
+#### `INDEX` — Excel's positional lookup takes the name
+
+jq has an `INDEX` of its own: `INDEX(stream; key_expr)` builds an object keyed
+by an expression, and `INDEX(key_expr)` is the same over `.[]`. Excel's
+`INDEX(array, row)` claims the two-argument name here, and it wins — spreadsheet
+authors are this surface's audience and the formula library loads by default for
+cards. So the object-building `INDEX` is out of reach in both arities: the
+two-argument form resolves to Excel's positional lookup and fails with
+`Cannot index array with string`, and the one-argument form is jq's own
+`index` — index-of — in readable BXL, or a delegation to the shadowed
+two-argument form in canonical jq.
+
+The linter says so rather than leaving that message to explain itself: a
+two-argument `INDEX` written with jq's semicolon reports
+`jq-index-shadowed-by-excel` at warning severity. One argument is not flagged,
+since index-of is a function in its own right, and jq has no three-argument
+`INDEX` to shadow. The substitutes are ordinary jq:
+
+```text
+reduce Rows[] as $row ({}; .[$row.id] = $row)   -- key rows by a field
+Rows | map({key: .id, value: .}) | from_entries -- the same, via pairs
+INDEX(.names, 2)                                -- Excel: second name
+```
+
 #### Quick reference: collisions and resolutions
 
 > Spelling reminder: prefer the **UPPERCASE** form for any name that ends up at an Excel function. Lowercase still resolves but the linter emits an info-level `excel-name-uppercase-preferred` nudge — see [Linter style nudges](#linter-style-nudges).
@@ -116,6 +140,7 @@ If you need log-Γ, use the unambiguous spellings — they compute the same thin
 | ------------------------------------------ | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | `MATCH(value, array)` / `match(re; flags)` | Excel lookup with comma; jq regex with semicolon      | `match(re)` is jq by arity; `MATCH(value, array, 0)` is Excel by arity.                             |
 | `INDEX(array, row)` / `index(value)`       | Excel lookup with 2-3 args; jq index-of with 1 arg    | Excel rows are one-based; jq index result is zero-based.                                            |
+| `INDEX(array, row)` / `INDEX(stream; key)` | Excel lookup wins; jq's object-building INDEX is unreachable | Not a dispatch: both spell `INDEX/2`. The linter reports `jq-index-shadowed-by-excel`.        |
 | `TYPE(value)` / `type`                     | Excel numeric type code vs jq type string             | Parenthesized one-arg call is Excel; bare pipe filter is jq.                                        |
 | `LOG(x)` / `log`                           | Excel base-10 log vs jq natural log                   | Arity decides. `LOG(x, base)` is Excel.                                                             |
 | `NOW()` / `now`                            | Excel date serial vs jq epoch seconds                 | Call shape decides. `now()` is Excel and formats to `NOW()`. Bare `NOW` is jq and formats to `now`. |
@@ -271,7 +296,7 @@ BXL absorbs five Excel-specific idioms so a formula from a spreadsheet works ver
 | `&` string concat                 | Rewrite to `((a\|tostring) + (b\|tostring))` — Excel-style coercion.       | `"Invoice-" & "Invoice Number"` |
 | Unknown characters                | Caught by the linter as `untokenizable-character`; never crashes solidify. | —                               |
 
-> **Paste test:** Sampled FormulaJS cases across math/trig, text, logical, statistical, engineering, information, date/time, and financial formulas work unchanged in the async compatibility runtime. Known paste gap: `MODE` is not implemented. `AND` / `OR` / `XOR` use array-style arguments, and `DEC2HEX` returns lowercase.
+> **Paste test:** Sampled FormulaJS cases across math/trig, text, logical, statistical, engineering, information, date/time, and financial formulas work unchanged in the async compatibility runtime. Known paste gap: `MODE` is not implemented, and `AND` / `OR` / `XOR` use array-style arguments.
 
 ## Interesting Patterns
 
@@ -1195,7 +1220,7 @@ INDEX(.names, MATCH("target", .ids, 0))
 
 | Function                      | Description                                                                                                                    | Example                                                        |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------- |
-| `IF(test, then, else)`        | Excel-style conditional                                                                                                        | `IF(.score >= 90, "A", "B")`                                   |
+| `IF(test, then, else)`        | Excel-style conditional. The test is read with jq truthiness: only `null` and `false` are false, so `IF(0, …)` takes the true branch where Excel takes the false one. | `IF(.score >= 90, "A", "B")`   |
 | `IFERROR(val, fallback)`      | Catch any error                                                                                                                | `IFERROR(.x / .y, 0)`                                          |
 | `IFNA(val, fallback)`         | Catch only #N/A                                                                                                                | `IFNA(VLOOKUP(...), "missing")`                                |
 | `IFS(c1, v1, c2, v2, ...)`    | Multiple conditions (2--4 pairs)                                                                                               | `IFS(.x > 90, "A", .x > 80, "B", true, "C")`                   |
@@ -1320,7 +1345,7 @@ validation extension.
 | `isBase58`             | `isBase58(value)`                            | Base58 string.                                                                                                    |
 | `isBase64`             | `isBase64(value[, options])`                 | Base64 string.                                                                                                    |
 | `isBoolean`            | `isBoolean(value[, options])`                | Boolean string.                                                                                                   |
-| `isByteLength`         | `isByteLength(value[, options])`             | UTF-8 byte length range.                                                                                          |
+| `isByteLength`         | `isByteLength(value, options)`               | UTF-8 byte length range. Pass the options: upstream validator.js reads the minimum with no fallback, so the one-argument form compares against `undefined` and is false for every string. Its sibling `isLength` has the fallback. |
 | `isDecimal`            | `isDecimal(value[, options])`                | Decimal number string.                                                                                            |
 | `isDivisibleBy`        | `isDivisibleBy(value, number)`               | Numeric string divisible by number.                                                                               |
 | `isEmpty`              | `isEmpty(value[, options])`                  | Empty string.                                                                                                     |

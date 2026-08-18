@@ -1,5 +1,6 @@
 import { parseExcelNumber } from './common.ts';
 import { EXCEL_ERROR, throwExcelError } from './errors.ts';
+import { isoWeekNumber } from './isoWeek.ts';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 // A date string denotes a calendar day only when it names no zone at all, and
@@ -340,13 +341,32 @@ export function excelDays360(
 
 export function excelWeeknum(serialLike: unknown, returnTypeLike: unknown = 1) {
   const date = parseExcelDate(serialLike);
-  const returnType = Math.floor(Number(returnTypeLike) || 1);
+  // Not `Number(x) || 1`: that reads 0 and a non-numeric argument as the
+  // default rather than as the errors they are, which would slip past the
+  // return-type check below.
+  const returnType = Math.floor(parseExcelNumber(returnTypeLike));
+  // Return type 21 asks for the ISO week, which numbers from the week holding
+  // the year's first Thursday rather than from the week holding January 1st.
+  if (returnType === 21) {
+    return isoWeekNumber(date);
+  }
+  // Every other return type says which weekday opens the week: 1 opens it on
+  // Sunday, 2 and 11 on Monday, then 12 through 17 walk the start forward a
+  // day at a time, back around to Sunday.
+  const firstDay =
+    returnType === 1
+      ? 0
+      : returnType === 2 || returnType === 11
+        ? 1
+        : returnType >= 12 && returnType <= 17
+          ? (returnType - 10) % 7
+          : undefined;
+  if (firstDay === undefined) {
+    throwExcelError(EXCEL_ERROR.num);
+  }
   const jan1 = utcDate(date.getUTCFullYear(), 0, 1);
   const dayOfYear = Math.floor((date.getTime() - jan1.getTime()) / MS_PER_DAY);
-  // returnType 1: week starts Sunday, 2: week starts Monday
-  const jan1Dow = jan1.getUTCDay();
-  const startOffset =
-    returnType === 2 ? (jan1Dow === 0 ? 6 : jan1Dow - 1) : jan1Dow;
+  const startOffset = (jan1.getUTCDay() - firstDay + 7) % 7;
   return Math.floor((dayOfYear + startOffset) / 7) + 1;
 }
 
