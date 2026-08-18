@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "CSV File",
+      "specType": "card",
+      "ref": {
+        "module": "https://cardstack.com/base/csv-file-def",
+        "name": "CsvFileDef"
+      },
+      "readMe": "# CSV File\n\n## Summary\nThe FileDef specialization for comma-separated tabular data. An instance is an uploaded realm\nfile with card semantics: the binary lives at the file URL, the card\ncarries metadata and renders with data-aware formats.\n\n## Example\n```ts\nimport { CsvFileDef } from 'https://cardstack.com/base/csv-file-def';\n\n@field attachment = linksTo(CsvFileDef);\n```\nInstances are created by upload (`createFileDef` wires the type from the\nMIME type). Live examples need uploaded fixtures — same fixture pass as the\nFile renderer specs.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "CSV File",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

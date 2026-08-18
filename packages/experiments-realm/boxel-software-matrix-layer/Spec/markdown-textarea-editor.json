@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Markdown Textarea Editor",
+      "specType": "component",
+      "ref": {
+        "module": "https://cardstack.com/base/markdown",
+        "name": "default"
+      },
+      "readMe": "# Markdown Textarea Editor\n\n## Summary\nThe edit-format component that ships inside the field — a multi-line editor whose read formats render the markdown. Declaring\nthe field is all it takes; the editor renders wherever the card is edited.\n\n## Example\n```ts\nimport MarkdownField from 'https://cardstack.com/base/markdown';\n\n@field value = contains(MarkdownField);\n```\nCustom editors replace it by overriding the field's `edit` format; the\nvalue-attribute + input-event binding pattern applies.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Markdown Textarea Editor",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

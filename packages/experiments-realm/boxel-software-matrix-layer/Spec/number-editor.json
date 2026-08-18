@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Number Editor",
+      "specType": "component",
+      "ref": {
+        "module": "https://cardstack.com/base/number",
+        "name": "default"
+      },
+      "readMe": "# Number Editor\n\n## Summary\nThe edit-format component that ships inside the field — a numeric input with number coercion. Declaring\nthe field is all it takes; the editor renders wherever the card is edited.\n\n## Example\n```ts\nimport NumberField from 'https://cardstack.com/base/number';\n\n@field value = contains(NumberField);\n```\nCustom editors replace it by overriding the field's `edit` format; the\nvalue-attribute + input-event binding pattern applies.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Number Editor",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

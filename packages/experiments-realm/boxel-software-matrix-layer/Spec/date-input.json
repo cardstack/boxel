@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Date Input",
+      "specType": "component",
+      "ref": {
+        "module": "https://cardstack.com/base/date",
+        "name": "default"
+      },
+      "readMe": "# Date Input\n\n## Summary\nThe edit-format component that ships inside the field — a native date picker writing YYYY-MM-DD. Declaring\nthe field is all it takes; the editor renders wherever the card is edited.\n\n## Example\n```ts\nimport DateField from 'https://cardstack.com/base/date';\n\n@field value = contains(DateField);\n```\nCustom editors replace it by overriding the field's `edit` format; the\nvalue-attribute + input-event binding pattern applies.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Date Input",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

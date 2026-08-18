@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Audio File",
+      "specType": "card",
+      "ref": {
+        "module": "https://cardstack.com/base/audio-file-def",
+        "name": "AudioDef"
+      },
+      "readMe": "# Audio File\n\n## Summary\nThe FileDef specialization for the shared base for the typed audio formats (MP3, WAV, FLAC, M4A). An instance is an uploaded realm\nfile with card semantics: the binary lives at the file URL, the card\ncarries metadata and renders with audio-aware formats.\n\n## Example\n```ts\nimport { AudioDef } from 'https://cardstack.com/base/audio-file-def';\n\n@field attachment = linksTo(AudioDef);\n```\nInstances are created by upload (`createFileDef` wires the type from the\nMIME type). Live examples need uploaded fixtures — same fixture pass as the\nFile renderer specs.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Audio File",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

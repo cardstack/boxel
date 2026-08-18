@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Markdown File",
+      "specType": "card",
+      "ref": {
+        "module": "https://cardstack.com/base/markdown-file-def",
+        "name": "MarkdownDef"
+      },
+      "readMe": "# Markdown File\n\n## Summary\nThe FileDef specialization for markdown documents, rendered rich. An instance is an uploaded realm\nfile with card semantics: the binary lives at the file URL, the card\ncarries metadata and renders with document-aware formats.\n\n## Example\n```ts\nimport { MarkdownDef } from 'https://cardstack.com/base/markdown-file-def';\n\n@field attachment = linksTo(MarkdownDef);\n```\nInstances are created by upload (`createFileDef` wires the type from the\nMIME type). Live examples need uploaded fixtures — same fixture pass as the\nFile renderer specs.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Markdown File",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
