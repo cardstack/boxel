@@ -2579,8 +2579,20 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
       }
       /* MapRender fills its host, so the host must state a height or Leaflet
          initialises against a zero rect. */
+      /* `flex: none` is the whole fix, and it is why the map had height in the
+         code-submode preview but none in interact mode. `.panel` is a COLUMN
+         FLEX container that is itself height-constrained (`flex: 1;
+         min-height: 0; overflow-y: auto`), so every direct child is a flex item
+         with the default `flex-shrink: 1`. Once the tab's content exceeded the
+         panel, the browser shrank the item that had no floor to defend — this
+         one — straight down to 0, and Leaflet then initialised against an empty
+         rect. `height` is not a floor in a flex item; `flex-shrink: 0` plus a
+         `min-height` is. The preview container is not height-constrained, so
+         there was no shrink pressure there and the bug never showed. */
       .wh-map {
+        flex: none;
         height: 200px;
+        min-height: 200px;
         border-radius: var(--radius, 8px);
         overflow: hidden;
         border: 1px solid var(--ful-border, var(--boxel-border-color));
@@ -2588,6 +2600,7 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
       @container ful-panel (width < 560px) {
         .wh-map {
           height: 150px;
+          min-height: 150px;
         }
       }
       .transit-head {
