@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Fetch Card JSON",
+      "specType": "command",
+      "ref": {
+        "module": "@cardstack/boxel-host/commands/fetch-card-json",
+        "name": "default"
+      },
+      "readMe": "# Fetch Card JSON\n\n## Summary\nHost command — fetch a card as a JSON document by URL. Available to\ncards and commands via the runtime loader, and to AI assistant rooms as a\ntool.\n\n## Example\n```ts\nimport FetchCardJsonTool from '@cardstack/boxel-host/commands/fetch-card-json';\n\nlet result = await new FetchCardJsonTool(commandContext).execute({\n  /* input fields */\n} as any);\n```\n`commandContext` comes from `@context.commandContext` inside any card\nformat. In an AI room the same tool is invoked by name.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Fetch Card JSON",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

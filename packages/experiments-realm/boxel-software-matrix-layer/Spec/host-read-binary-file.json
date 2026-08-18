@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Read Binary File",
+      "specType": "command",
+      "ref": {
+        "module": "@cardstack/boxel-host/commands/read-binary-file",
+        "name": "default"
+      },
+      "readMe": "# Read Binary File\n\n## Summary\nHost command — read a binary file from a URL and return its content as base64. Available to\ncards and commands via the runtime loader, and to AI assistant rooms as a\ntool.\n\n## Example\n```ts\nimport ReadBinaryFileTool from '@cardstack/boxel-host/commands/read-binary-file';\n\nlet result = await new ReadBinaryFileTool(commandContext).execute({\n  /* input fields */\n} as any);\n```\n`commandContext` comes from `@context.commandContext` inside any card\nformat. In an AI room the same tool is invoked by name (action verb: Read).",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Read Binary File",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Save Card",
+      "specType": "command",
+      "ref": {
+        "module": "@cardstack/boxel-host/commands/save-card",
+        "name": "default"
+      },
+      "readMe": "# Save Card\n\n## Summary\nHost command — the host Save Card tool.. Available to\ncards and commands via the runtime loader, and to AI assistant rooms as a\ntool.\n\n## Example\n```ts\nimport SaveCardTool from '@cardstack/boxel-host/commands/save-card';\n\nlet result = await new SaveCardTool(commandContext).execute({\n  /* input fields */\n} as any);\n```\n`commandContext` comes from `@context.commandContext` inside any card\nformat. In an AI room the same tool is invoked by name (action verb: Save).",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Save Card",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

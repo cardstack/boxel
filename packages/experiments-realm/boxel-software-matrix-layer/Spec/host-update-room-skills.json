@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Update Room Skills",
+      "specType": "command",
+      "ref": {
+        "module": "@cardstack/boxel-host/commands/update-room-skills",
+        "name": "default"
+      },
+      "readMe": "# Update Room Skills\n\n## Summary\nHost command — updates the enabled and disabled skills for a room. Available to\ncards and commands via the runtime loader, and to AI assistant rooms as a\ntool.\n\n## Example\n```ts\nimport UpdateRoomSkillsTool from '@cardstack/boxel-host/commands/update-room-skills';\n\nlet result = await new UpdateRoomSkillsTool(commandContext).execute({\n  /* input fields */\n} as any);\n```\n`commandContext` comes from `@context.commandContext` inside any card\nformat. In an AI room the same tool is invoked by name (action verb: Update).",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Update Room Skills",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

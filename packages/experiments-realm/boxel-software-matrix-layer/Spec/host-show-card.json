@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Show Card",
+      "specType": "command",
+      "ref": {
+        "module": "@cardstack/boxel-host/commands/show-card",
+        "name": "default"
+      },
+      "readMe": "# Show Card\n\n## Summary\nHost command — show a card in the UI. The cardId must be a fully qualified URL.. Available to\ncards and commands via the runtime loader, and to AI assistant rooms as a\ntool.\n\n## Example\n```ts\nimport ShowCardTool from '@cardstack/boxel-host/commands/show-card';\n\nlet result = await new ShowCardTool(commandContext).execute({\n  /* input fields */\n} as any);\n```\n`commandContext` comes from `@context.commandContext` inside any card\nformat. In an AI room the same tool is invoked by name (action verb: Show Card).",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Show Card",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

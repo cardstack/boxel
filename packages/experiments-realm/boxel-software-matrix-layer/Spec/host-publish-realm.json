@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Publish Realm",
+      "specType": "command",
+      "ref": {
+        "module": "@cardstack/boxel-host/commands/publish-realm",
+        "name": "default"
+      },
+      "readMe": "# Publish Realm\n\n## Summary\nHost command — publish a realm to one or more destinations. Available to\ncards and commands via the runtime loader, and to AI assistant rooms as a\ntool.\n\n## Example\n```ts\nimport PublishRealmTool from '@cardstack/boxel-host/commands/publish-realm';\n\nlet result = await new PublishRealmTool(commandContext).execute({\n  /* input fields */\n} as any);\n```\n`commandContext` comes from `@context.commandContext` inside any card\nformat. In an AI room the same tool is invoked by name (action verb: Publish).",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Publish Realm",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

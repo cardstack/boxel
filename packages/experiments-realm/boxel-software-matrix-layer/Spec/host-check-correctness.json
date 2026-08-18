@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Check Correctness",
+      "specType": "command",
+      "ref": {
+        "module": "@cardstack/boxel-host/commands/check-correctness",
+        "name": "default"
+      },
+      "readMe": "# Check Correctness\n\n## Summary\nHost command — run post-change correctness checks for a specific file or card instance.. Available to\ncards and commands via the runtime loader, and to AI assistant rooms as a\ntool.\n\n## Example\n```ts\nimport CheckCorrectnessTool from '@cardstack/boxel-host/commands/check-correctness';\n\nlet result = await new CheckCorrectnessTool(commandContext).execute({\n  /* input fields */\n} as any);\n```\n`commandContext` comes from `@context.commandContext` inside any card\nformat. In an AI room the same tool is invoked by name (action verb: Check).",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Check Correctness",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

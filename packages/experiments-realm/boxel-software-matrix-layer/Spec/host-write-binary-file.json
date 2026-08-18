@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Write Binary File",
+      "specType": "command",
+      "ref": {
+        "module": "@cardstack/boxel-host/commands/write-binary-file",
+        "name": "default"
+      },
+      "readMe": "# Write Binary File\n\n## Summary\nHost command — write a binary file to a realm. Available to\ncards and commands via the runtime loader, and to AI assistant rooms as a\ntool.\n\n## Example\n```ts\nimport WriteBinaryFileTool from '@cardstack/boxel-host/commands/write-binary-file';\n\nlet result = await new WriteBinaryFileTool(commandContext).execute({\n  /* input fields */\n} as any);\n```\n`commandContext` comes from `@context.commandContext` inside any card\nformat. In an AI room the same tool is invoked by name (action verb: Write).",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Write Binary File",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

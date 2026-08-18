@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Apply Markdown Edit",
+      "specType": "command",
+      "ref": {
+        "module": "@cardstack/boxel-host/commands/apply-markdown-edit",
+        "name": "default"
+      },
+      "readMe": "# Apply Markdown Edit\n\n## Summary\nHost command — apply a targeted edit to markdown content only (for example .md/.markdown text). This command is not for source code edits such as .gts/.ts/.js/.json files.. Available to\ncards and commands via the runtime loader, and to AI assistant rooms as a\ntool.\n\n## Example\n```ts\nimport ApplyMarkdownEditTool from '@cardstack/boxel-host/commands/apply-markdown-edit';\n\nlet result = await new ApplyMarkdownEditTool(commandContext).execute({\n  /* input fields */\n} as any);\n```\n`commandContext` comes from `@context.commandContext` inside any card\nformat. In an AI room the same tool is invoked by name (action verb: Apply Markdown Edit).",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Apply Markdown Edit",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

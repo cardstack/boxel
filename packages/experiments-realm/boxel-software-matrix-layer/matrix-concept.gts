@@ -51,7 +51,7 @@ const WorkStateField = enumField(StringField, {
 });
 
 const SpecTargetField = enumField(StringField, {
-  options: ['shared block', 'base realm', 'catalog'],
+  options: ['shared block', 'base realm', 'catalog', 'platform package'],
   displayName: 'Spec Target',
 });
 
