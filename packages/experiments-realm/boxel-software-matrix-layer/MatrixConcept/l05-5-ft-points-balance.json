@@ -21,7 +21,7 @@
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/points-balance-field",
       "specTarget": "shared block",
       "consumers": "loyalty-account",
-      "consumerExamples": "{\"loyalty-account\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/LoyaltyAccount/jason-lim\"}",
+      "consumerExamples": "{\"loyalty-account\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/PointsTransaction/7177a7d6-c2c4-4395-a841-6b507c3334ff\"}",
       "catalogDisposition": null,
       "cardInfo": {
         "name": null,

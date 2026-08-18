@@ -21,7 +21,7 @@
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/contact",
       "specTarget": "shared block",
       "consumers": "booking, convert-lead, deal, loyalty-account, revenue-os, subscriber",
-      "consumerExamples": "{\"booking\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Booking/bk-20260802-00101\", \"deal\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Deal/acme-enterprise-renewal\", \"loyalty-account\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/LoyaltyAccount/jason-lim\", \"revenue-os\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/RevenueOs/main\", \"subscriber\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Subscriber/acme-industries\"}",
+      "consumerExamples": "{\"booking\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Booking/bk-20260802-00101\", \"deal\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Deal/acme-enterprise-renewal\", \"loyalty-account\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/PointsTransaction/7177a7d6-c2c4-4395-a841-6b507c3334ff\", \"revenue-os\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/RevenueOs/main\", \"subscriber\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Subscriber/acme-industries\"}",
       "catalogDisposition": null,
       "cardInfo": {
         "name": null,
