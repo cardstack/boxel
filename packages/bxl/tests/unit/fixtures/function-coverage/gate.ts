@@ -29,13 +29,13 @@ import { AUTHORIZATION_LIBRARIES } from './case.ts';
  * listed here that the chunk does not register would send BXL off to fetch a
  * family that still cannot answer.
  */
-const LAZY_FAMILY_MANIFESTS: [BuiltinLibraryName, Set<string>][] = [
-  ['formula-statistical', FORMULA_STATISTICAL_FILTERS],
-  ['formula-bessel', FORMULA_BESSEL_FILTERS],
-  ['formula-engineering', FORMULA_ENGINEERING_FILTERS],
-  ['formula-financial', FORMULA_FINANCIAL_FILTERS],
-  ['validation', VALIDATION_FILTERS],
-];
+const LAZY_FAMILY_MANIFESTS: Record<string, Set<string>> = {
+  'formula-statistical': FORMULA_STATISTICAL_FILTERS,
+  'formula-bessel': FORMULA_BESSEL_FILTERS,
+  'formula-engineering': FORMULA_ENGINEERING_FILTERS,
+  'formula-financial': FORMULA_FINANCIAL_FILTERS,
+  validation: VALIDATION_FILTERS,
+};
 
 /**
  * Names a program can call but `builtins` does not report, each with why it
@@ -86,16 +86,20 @@ export const PRIVATE_BUILTINS = new Map<string, string>([
 ]);
 
 /**
- * jq definitions one library deliberately hides from another, keyed
- * `NAME/arity: loser -> winner`. Resolution is last-wins, so the entry names
- * which spelling of a shared name the platform answers to.
+ * Implementations one library deliberately hides from another, keyed
+ * `kind NAME/arity: loser -> winner`. Resolution is last-wins within each of
+ * the two maps, so the entry names which library's version of a shared name
+ * the platform answers to. Checked in both directions: a collision that is
+ * not listed fails, and a listed collision that no longer happens fails too.
  */
-export const SHADOWED_JQ_DEFINITIONS = new Map<string, string>([
+export const SHADOWED_BUILTINS = new Map<string, string>([
   [
-    'INDEX/2: core -> formula',
+    'jq INDEX/2: core -> formula',
     "Excel's INDEX wins over jq's object-builder for the card audience, which " +
       "also rewires jq's `INDEX/1` — it delegates to whichever `INDEX/2` " +
-      'resolved. The linter reports the collision as jq-index-shadowed-by-excel.',
+      "resolved, so the jq call shape reaches Excel's positional lookup and " +
+      'fails. The linter reports the two-argument call as ' +
+      'jq-index-shadowed-by-excel.',
   ],
 ]);
 
@@ -140,22 +144,56 @@ export function registryGateFailures(
     );
   }
 
-  // A manifest is the auto-loader's promise that naming one of these
-  // functions is worth fetching the chunk. The chunk has to deliver it, and
-  // deliver it itself: the auto-loader adds only the family the manifest
-  // matched, so a name some other family happens to register is still absent
-  // from the set the program ends up resolving against. Ask the library
-  // directly rather than resolving a registry around it.
-  for (const [library, manifest] of LAZY_FAMILY_MANIFESTS) {
+  // A manifest and its library have to agree exactly, in both directions, and
+  // the roster of them is the derived lazy list so a new family cannot arrive
+  // without one.
+  //
+  // A name the manifest lists but the library does not register sends the
+  // auto-loader to fetch a chunk that still cannot answer — and asking the
+  // library directly rather than resolving a registry around it matters,
+  // because for three of the five families the loader adds only the family
+  // that matched, leaving a name some other chunk owns out of reach.
+  // (formula-engineering and formula-financial ship as one bundle and are
+  // added together, so they would cover for each other; the check does not
+  // let them.)
+  //
+  // The other direction is the one that reaches a card: the loader decides
+  // whether a chunk is needed by matching the program's source against the
+  // manifest, so a name the library registers but the manifest omits never
+  // triggers the load and is simply missing at evaluation time.
+  const manifestFamilies = Object.keys(LAZY_FAMILY_MANIFESTS).sort();
+  const expectedFamilies = [...LAZY_BUILTIN_LIBRARIES].sort();
+  if (manifestFamilies.join() !== expectedFamilies.join()) {
+    failures.push(
+      'the lazy families with a manifest listed here and the lazy libraries ' +
+        `the registry knows about have drifted apart\n    manifests: ` +
+        `${manifestFamilies.join(', ')}\n    libraries: ${expectedFamilies.join(', ')}`,
+    );
+  }
+  for (const [library, manifest] of Object.entries(LAZY_FAMILY_MANIFESTS)) {
     const owned = BXL_REGISTRY[library] ?? { jq: {}, native: {} };
+    const registered = new Set([
+      ...Object.keys(owned.jq),
+      ...Object.keys(owned.native),
+    ]);
     const undelivered = [...manifest]
-      .filter((name) => !(name in owned.jq) && !(name in owned.native))
+      .filter((name) => !registered.has(name))
       .sort();
     if (undelivered.length > 0) {
       failures.push(
         `the ${library} manifest lists function(s) that library does not ` +
           'register, so auto-loading them would fetch the chunk and still ' +
           `fail\n    ${undelivered.join(', ')}`,
+      );
+    }
+    const unlisted = [...registered]
+      .filter((name) => !manifest.has(name))
+      .sort();
+    if (unlisted.length > 0) {
+      failures.push(
+        `the ${library} library registers function(s) its manifest omits, so ` +
+          'naming one never triggers the chunk load and it is absent when the ' +
+          `program runs\n    ${unlisted.join(', ')}`,
       );
     }
   }
@@ -198,29 +236,46 @@ export function registryGateFailures(
     }
   }
 
-  // The same hazard one level over: `resolveRegistry` is last-wins on the jq
-  // definitions too, so a later library's `def X` hides an earlier one's. The
-  // key survives, so coverage still credits it — from whichever definition
-  // won, which may not be the one a caller means. Each collision is a
-  // decision about which spelling of a name the platform answers to, so each
-  // has to be recorded.
+  // The same hazard one library over: `resolveRegistry` copies each library's
+  // maps in turn, so a later library's entry hides an earlier one's at the
+  // same key. Unlike the jq-over-native case the key survives, so coverage
+  // keeps crediting it — from whichever implementation won, which may not be
+  // the one a caller means. Each collision is a decision about which
+  // library's version of a name the platform answers to, so each is recorded.
+  const collisions = new Set<string>();
   for (const libraries of [cardLibraries, AUTHORIZATION_LIBRARIES]) {
-    const owner = new Map<string, string>();
-    for (const library of libraries) {
-      for (const name of Object.keys(BXL_REGISTRY[library]?.jq ?? {})) {
-        const previous = owner.get(name);
-        const collision = `${name}: ${previous} -> ${library}`;
-        if (previous && !SHADOWED_JQ_DEFINITIONS.has(collision)) {
-          failures.push(
-            `resolving [${libraries.join(', ')}] lets ${library}'s \`${name}\` ` +
-              `definition hide ${previous}'s; record which one the platform ` +
-              'answers to in SHADOWED_JQ_DEFINITIONS, or rename one of them' +
-              `\n    ${collision}`,
-          );
+    for (const kind of ['jq', 'native'] as const) {
+      const owner = new Map<string, string>();
+      for (const library of libraries) {
+        for (const name of Object.keys(BXL_REGISTRY[library]?.[kind] ?? {})) {
+          const previous = owner.get(name);
+          if (previous) {
+            const collision = `${kind} ${name}: ${previous} -> ${library}`;
+            collisions.add(collision);
+            if (!SHADOWED_BUILTINS.has(collision)) {
+              failures.push(
+                `resolving [${libraries.join(', ')}] lets ${library}'s ` +
+                  `\`${name}\` hide ${previous}'s; record which one the ` +
+                  'platform answers to in SHADOWED_BUILTINS, or rename one of ' +
+                  `them\n    ${collision}`,
+              );
+            }
+          }
+          owner.set(name, library);
         }
-        owner.set(name, library);
       }
     }
+  }
+
+  const settled = [...SHADOWED_BUILTINS.keys()]
+    .filter((collision) => !collisions.has(collision))
+    .sort();
+  if (settled.length > 0) {
+    failures.push(
+      'these collisions are recorded as settled but no longer happen, so the ' +
+        'record now claims something about the platform that is not true; ' +
+        `drop them from SHADOWED_BUILTINS\n    ${settled.join(', ')}`,
+    );
   }
 
   return failures;
