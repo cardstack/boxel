@@ -804,6 +804,10 @@ export const coreJqCases: CoverageCase[] = jqCases([
         if (!names.includes(name))
           throw new Error(`expected ${name} in the list`);
       }
+      // `env` is callable but blocked, so it must not be advertised either.
+      if (names.includes('env/0')) {
+        throw new Error('env/0 is sandbox-blocked and must not be listed');
+      }
       const sorted = [...names].sort();
       if (names.some((name, index) => name !== sorted[index])) {
         throw new Error('expected the list to be sorted');
