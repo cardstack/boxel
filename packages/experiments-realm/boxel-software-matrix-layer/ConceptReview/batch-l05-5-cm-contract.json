@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "verdict": "approve",
-      "body": "Spec reviewed: ref resolves (shared block); 3 linked examples; consumed by close-won, order, subscription. readMe states the contract. Approving.",
+      "verdict": "comment",
+      "body": "Criteria check (agent — not an approval; see review standard): ref resolves (shared block); 3 linked examples; consumed by close-won, order, subscription. readMe states the contract. Passes the mechanical bar; awaiting an independent approver.",
       "createdAt": "2026-08-17T15:31:18.000Z",
       "resolved": true,
       "cardInfo": {
