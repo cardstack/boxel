@@ -20,6 +20,7 @@ import { claimsFromRawToken } from '@cardstack/host/services/realm';
 import { RecentCards } from '@cardstack/host/utils/local-storage-keys';
 
 import {
+  setupRealmCacheTeardown,
   assertMessages,
   percySnapshot,
   testRealmURL,
@@ -39,12 +40,15 @@ module(
     let { setRealmPermissions, setActiveRealms } = setupInteractSubmodeTests(
       hooks,
       {
-        reuseIndexAcrossTests: 'interactCreationAndPermissions',
         setRealm() {},
       },
     );
 
-    module('1 stack creation flows', function () {
+    module('1 stack creation flows', function (hooks) {
+      // The helper's realm-building beforeEach runs for these tests too, and
+      // caches under this module's name, which the outer prefix cannot match.
+      setupRealmCacheTeardown(hooks);
+
       test<TestContextWithSave>('can create a card from the index stack item', async function (assert) {
         assert.expect(7);
         await visitOperatorMode({
@@ -424,6 +428,10 @@ module(
     });
 
     module('1 stack, when the user lacks write permissions', function (hooks) {
+      // The helper's realm-building beforeEach runs for these tests too, and
+      // caches under this module's name, which the outer prefix cannot match.
+      setupRealmCacheTeardown(hooks);
+
       hooks.beforeEach(async function () {
         setRealmPermissions({
           [testRealmURL]: ['read'],
@@ -684,6 +692,10 @@ module(
     });
 
     module('2 stacks with differing permissions', function (hooks) {
+      // The helper's realm-building beforeEach runs for these tests too, and
+      // caches under this module's name, which the outer prefix cannot match.
+      setupRealmCacheTeardown(hooks);
+
       hooks.beforeEach(async function () {
         setRealmPermissions({
           [testRealmURL]: ['read'],
@@ -823,7 +835,11 @@ module(
       });
     });
 
-    module('workspace index card', function () {
+    module('workspace index card', function (hooks) {
+      // The helper's realm-building beforeEach runs for these tests too, and
+      // caches under this module's name, which the outer prefix cannot match.
+      setupRealmCacheTeardown(hooks);
+
       test('cannot be deleted', async function (assert) {
         await visitOperatorMode({
           stacks: [

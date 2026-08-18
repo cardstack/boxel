@@ -15,6 +15,7 @@ import { Deferred } from '@cardstack/runtime-common';
 import type { Realm } from '@cardstack/runtime-common/realm';
 
 import {
+  setupRealmCacheTeardown,
   percySnapshot,
   testRealmURL,
   visitOperatorMode,
@@ -29,13 +30,16 @@ module('Acceptance | interact submode | single stack tests', function (hooks) {
   let realm: Realm;
 
   setupInteractSubmodeTests(hooks, {
-    reuseIndexAcrossTests: 'interactSingleStack',
     setRealm(value) {
       realm = value;
     },
   });
 
-  module('1 stack', function (_hooks) {
+  module('1 stack', function (hooks) {
+    // The helper's realm-building beforeEach runs for these tests too, and
+    // caches under this module's name, which the outer prefix cannot match.
+    setupRealmCacheTeardown(hooks);
+
     test('restoring the stack from query param', async function (assert) {
       await visitOperatorMode({
         stacks: [

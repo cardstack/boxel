@@ -211,6 +211,21 @@ function nowSerial() {
   return daySerial + seconds / 86400;
 }
 
+// Serial day 0. An Excel serial names a calendar day, not an instant, so the
+// epoch and every read of a serial-derived date are anchored to UTC: a serial
+// must denote the same day whatever zone the host runs in.
+const SERIAL_EPOCH_UTC_MS = Date.UTC(1899, 11, 30);
+
+function serialToUtcDate(serial: number): Date {
+  return new Date(SERIAL_EPOCH_UTC_MS + serial * NOW_SERIAL_MS_PER_DAY);
+}
+
+function utcDateToSerial(date: Date): number {
+  return Math.floor(
+    (date.getTime() - SERIAL_EPOCH_UTC_MS) / NOW_SERIAL_MS_PER_DAY,
+  );
+}
+
 function replaceNth(
   text: string,
   oldText: string,
@@ -2239,10 +2254,14 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
     yield end - start;
   },
   *'TODAY/0'() {
-    // Returns Excel date serial for today
+    // Today's serial, read off the same UTC clock NOW/0 reads, so
+    // FLOOR(NOW()) and TODAY() cannot name different days.
     const now = new Date();
-    const epoch = new Date(1899, 11, 30);
-    yield Math.floor((now.getTime() - epoch.getTime()) / 86400000);
+    yield utcDateToSerial(
+      new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+      ),
+    );
   },
   *'NOW/0'() {
     yield nowSerial();
@@ -2265,16 +2284,12 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   *'WEEKDAY/1'(_input, serialDate) {
     // Default type 1: Sunday=1 .. Saturday=7
     const serial = Math.floor(parseExcelNumber(serialDate));
-    const epoch = new Date(1899, 11, 30);
-    const date = new Date(epoch.getTime() + serial * 86400000);
-    yield date.getDay() + 1;
+    yield serialToUtcDate(serial).getUTCDay() + 1;
   },
   *'WEEKDAY/2'(_input, serialDate, returnType) {
     const serial = Math.floor(parseExcelNumber(serialDate));
-    const epoch = new Date(1899, 11, 30);
-    const date = new Date(epoch.getTime() + serial * 86400000);
     const type = Math.floor(parseExcelNumber(returnType));
-    const dow = date.getDay(); // 0=Sun
+    const dow = serialToUtcDate(serial).getUTCDay(); // 0=Sun
     if (type === 1) yield dow + 1;
     else if (type === 2) yield dow === 0 ? 7 : dow;
     else if (type === 3) yield dow === 0 ? 6 : dow - 1;
@@ -2282,32 +2297,37 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   },
   *'ISOWEEKNUM/1'(_input, serialDate) {
     const serial = Math.floor(parseExcelNumber(serialDate));
-    const epoch = new Date(1899, 11, 30);
-    const date = new Date(epoch.getTime() + serial * 86400000);
+    const date = serialToUtcDate(serial);
     const dayOfYear =
       Math.floor(
-        (date.getTime() - new Date(date.getFullYear(), 0, 1).getTime()) /
-          86400000,
+        (date.getTime() - Date.UTC(date.getUTCFullYear(), 0, 1)) / 86400000,
       ) + 1;
-    const dow = date.getDay() || 7; // Mon=1..Sun=7
+    const dow = date.getUTCDay() || 7; // Mon=1..Sun=7
     const woy = Math.floor((dayOfYear - dow + 10) / 7);
     yield woy;
   },
   *'EDATE/2'(_input, startDate, months) {
     const serial = Math.floor(parseExcelNumber(startDate));
     const m = Math.floor(parseExcelNumber(months));
-    const epoch = new Date(1899, 11, 30);
-    const date = new Date(epoch.getTime() + serial * 86400000);
-    date.setMonth(date.getMonth() + m);
-    yield Math.floor((date.getTime() - epoch.getTime()) / 86400000);
+    const date = serialToUtcDate(serial);
+    // Excel clamps to the target month's last day rather than letting the
+    // day overflow: EDATE("2026-01-31", 1) is 2026-02-28, not 2026-03-03.
+    const target = new Date(
+      Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + m, 1),
+    );
+    const lastDayOfTarget = new Date(
+      Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0),
+    ).getUTCDate();
+    target.setUTCDate(Math.min(date.getUTCDate(), lastDayOfTarget));
+    yield utcDateToSerial(target);
   },
   *'EOMONTH/2'(_input, startDate, months) {
     const serial = Math.floor(parseExcelNumber(startDate));
     const m = Math.floor(parseExcelNumber(months));
-    const epoch = new Date(1899, 11, 30);
-    const date = new Date(epoch.getTime() + serial * 86400000);
-    date.setMonth(date.getMonth() + m + 1, 0); // last day of target month
-    yield Math.floor((date.getTime() - epoch.getTime()) / 86400000);
+    const date = serialToUtcDate(serial);
+    // Day 0 of the following month is the last day of the target month.
+    date.setUTCMonth(date.getUTCMonth() + m + 1, 0);
+    yield utcDateToSerial(date);
   },
 
   // ═══════════════════════════════════════════════════════════════

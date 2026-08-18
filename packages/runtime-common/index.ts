@@ -1035,6 +1035,7 @@ import type { LocalPath } from './paths.ts';
 import type { CardTypeFilter, Query, EveryFilter } from './query.ts';
 import { Loader } from './loader.ts';
 export * from './frontmatter-parse.ts';
+export * from './http-range.ts';
 export * from './paths.ts';
 export * from './realm-client.ts';
 export * from './realm-operations.ts';

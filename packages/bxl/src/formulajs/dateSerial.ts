@@ -2,6 +2,15 @@ import { parseExcelNumber } from './common.ts';
 import { EXCEL_ERROR, throwExcelError } from './errors.ts';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
+// A date string denotes a calendar day only when it names no zone at all, and
+// only then may its civil fields be re-anchored to UTC. Spotting every way a
+// zone can be written is a losing game — `Z`, `+05:30`, `GMT`, `EST`,
+// `Europe/Paris` — and missing one silently reintroduces host dependence, so
+// recognize the zone-less civil forms instead and leave anything else as the
+// instant the parser produced. Covers `4/30/2026`, `2026/04/30`,
+// `30-Apr-2026`, `April 30, 2026`, each with an optional time of day.
+const ZONELESS_CIVIL_DATE =
+  /^\s*(?:[A-Za-z]{3,},? )?(?:\d{1,4}[/-]\d{1,2}[/-]\d{1,4}|\d{1,2}[ -][A-Za-z]{3,}\.?[ -]\d{2,4}|[A-Za-z]{3,}\.? ?\d{1,2},? ?\d{2,4})(?:[T ]\d{1,2}:\d{2}(?::\d{2})?(?:\.\d+)?(?: ?[AaPp]\.?[Mm]\.?)?)?\s*$/;
 const WEEKEND_TYPES: Record<number, number[]> = {
   1: [0, 6],
   2: [0, 1],
@@ -26,8 +35,11 @@ function utcDate(
   hours = 0,
   minutes = 0,
   seconds = 0,
+  milliseconds = 0,
 ) {
-  return new Date(Date.UTC(year, month, day, hours, minutes, seconds));
+  return new Date(
+    Date.UTC(year, month, day, hours, minutes, seconds, milliseconds),
+  );
 }
 
 export function serialToExcelDate(serial: number): Date {
@@ -93,12 +105,30 @@ export function parseExcelDate(value: unknown): Date {
       return parseExcelDate(numeric);
     }
 
-    const parsed = /^\d{4}-\d\d?-\d\d?$/.test(value)
-      ? new Date(`${value}T00:00:00.000Z`)
-      : new Date(value);
-
-    if (!Number.isNaN(parsed.getTime())) {
-      return parsed;
+    if (/^\d{4}-\d\d?-\d\d?$/.test(value)) {
+      const parsed = new Date(`${value}T00:00:00.000Z`);
+      if (!Number.isNaN(parsed.getTime())) {
+        return parsed;
+      }
+    } else {
+      const parsed = new Date(value);
+      if (!Number.isNaN(parsed.getTime())) {
+        // A date string naming no zone denotes a calendar day, not an
+        // instant, but the runtime resolves it against the host zone. Read
+        // back the civil fields it produced and re-anchor them to UTC, so
+        // the serial names the same day wherever the expression runs.
+        return ZONELESS_CIVIL_DATE.test(value)
+          ? utcDate(
+              parsed.getFullYear(),
+              parsed.getMonth(),
+              parsed.getDate(),
+              parsed.getHours(),
+              parsed.getMinutes(),
+              parsed.getSeconds(),
+              parsed.getMilliseconds(),
+            )
+          : parsed;
+      }
     }
   }
 

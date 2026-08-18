@@ -11,6 +11,7 @@ import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import type StoreService from '@cardstack/host/services/store';
 
 import {
+  setupRealmCacheTeardown,
   percySnapshot,
   testRealmURL,
   type TestContextWithSave,
@@ -23,9 +24,7 @@ import { setupOperatorModeTests } from './operator-mode/setup';
 import type { CardDef } from '@cardstack/base/card-api';
 
 module('Integration | operator-mode | basics', function (hooks) {
-  let ctx = setupOperatorModeTests(hooks, {
-    reuseIndexAcrossTests: 'operatorMode',
-  });
+  let ctx = setupOperatorModeTests(hooks);
 
   let noop = () => {};
 
@@ -156,6 +155,10 @@ module('Integration | operator-mode | basics', function (hooks) {
   module(
     'card with an error that has a last known good state',
     function (hooks) {
+      // The helper's realm-building beforeEach runs for these tests too, and caches
+      // under this module's name, which the outer teardown's prefix cannot match.
+      setupRealmCacheTeardown(hooks);
+
       hooks.beforeEach(async function () {
         // Flip the existing clean ExplodingCard/1 (status='ok', cardTitle
         // resolves to 'Stable Example') to status='boom' so the cardTitle
@@ -831,7 +834,11 @@ module('Integration | operator-mode | basics', function (hooks) {
     );
   });
 
-  module('expand to full width', function () {
+  module('expand to full width', function (hooks) {
+    // The helper's realm-building beforeEach runs for these tests too, and caches
+    // under this module's name, which the outer teardown's prefix cannot match.
+    setupRealmCacheTeardown(hooks);
+
     test('can expand card to full width via more options menu and collapse via header button', async function (assert) {
       let personCard = `${testRealmURL}Person/fadhlan`;
       ctx.setCardInOperatorModeState(personCard);

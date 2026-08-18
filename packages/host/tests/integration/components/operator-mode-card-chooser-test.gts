@@ -21,19 +21,26 @@ import {
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import { percySnapshot, testModuleRealm, testRealmURL } from '../../helpers';
+import {
+  percySnapshot,
+  setupRealmCacheTeardown,
+  testModuleRealm,
+  testRealmURL,
+} from '../../helpers';
 import { renderComponent } from '../../helpers/render-component';
 
 import { setupOperatorModeTests } from './operator-mode/setup';
 
 module('Integration | operator-mode | card chooser', function (hooks) {
-  let ctx = setupOperatorModeTests(hooks, {
-    reuseIndexAcrossTests: 'operatorModeCardChooser',
-  });
+  let ctx = setupOperatorModeTests(hooks);
 
   let noop = () => {};
 
-  module('recents section', function () {
+  module('recents section', function (hooks) {
+    // The helper's realm-building beforeEach runs for these tests too, and caches
+    // under this module's name, which the outer teardown's prefix cannot match.
+    setupRealmCacheTeardown(hooks);
+
     test(`displays recently accessed card`, async function (assert) {
       ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
       await renderComponent(

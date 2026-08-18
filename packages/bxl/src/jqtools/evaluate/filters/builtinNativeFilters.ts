@@ -588,7 +588,7 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
     *'_sort_by_impl/1'(input: any[], ref: any[][]) {
       yield input
         .map((item, i) => ({ item, ref: ref[i] }))
-        .sort(compare)
+        .sort((a, b) => compare(a.ref, b.ref))
         .map(({ item }) => item);
     },
     *'_unique_by_impl/1'(input: any[], ref: any[][]) {
