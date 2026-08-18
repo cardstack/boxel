@@ -926,11 +926,12 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
   <template>
     {{#if this.cm}}
       {{! `data-overlay-clip-container` / `data-overlay-clip-header` mark the
-          boundary the operator-mode overlay layer clips against: adorn overlays
-          drawn over embedded compose-preview cards are cut off where a card
-          scrolls behind the sticky toolbar, so the outline no longer paints on
-          top of it. Consumed by the `offset` middleware in
-          operator-mode/overlays.gts. }}
+          scroll scope and its sticky header so an overlay layer can clip a
+          decorated card's overlay behind the header: adorn overlays drawn over
+          embedded compose-preview cards are cut off where a card scrolls behind
+          the sticky toolbar, so the outline no longer paints on top of it. This
+          is a data-attribute contract — the consumer finds these markers by
+          attribute, not by importing this module. }}
       <div
         class='codemirror-editor'
         data-overlay-clip-container

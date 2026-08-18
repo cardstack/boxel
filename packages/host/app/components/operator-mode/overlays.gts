@@ -21,7 +21,7 @@ import type { CardDefOrId } from './stack-item';
 
 import type { RenderedCardForOverlayActions } from '../../resources/element-tracker';
 import type { CardDef, Format, ViewCardFn } from '@cardstack/base/card-api';
-import type { MiddlewareState } from '@floating-ui/dom';
+import type { MiddlewareState, ReferenceElement } from '@floating-ui/dom';
 
 interface OverlaySignature {
   Args: {
@@ -74,6 +74,29 @@ export function stickyClipHeaderFor(reference: Element): HTMLElement | null {
       .closest('[data-overlay-clip-container]')
       ?.querySelector<HTMLElement>('[data-overlay-clip-header]') ?? null
   );
+}
+
+// Reads the live rects of `reference` and its clip container's sticky header
+// and assigns the resulting clip to `floating.style.clipPath` — the glue that
+// turns the pure helpers above into the running fix. Both elements must be laid
+// out in the document. Clears to '' when the reference is not an HTMLElement,
+// sits in no marked container, or has scrolled clear of the header. Exported so
+// a test can drive it without standing up the floating-ui middleware.
+export function applyStickyHeaderClip(
+  reference: ReferenceElement,
+  floating: HTMLElement,
+): void {
+  let clipPath = '';
+  if (reference instanceof HTMLElement) {
+    let header = stickyClipHeaderFor(reference);
+    if (header) {
+      clipPath = stickyHeaderClipPath(
+        reference.getBoundingClientRect().top,
+        header.getBoundingClientRect().bottom,
+      );
+    }
+  }
+  floating.style.clipPath = clipPath;
 }
 
 export default class Overlays extends Component<OverlaySignature> {
@@ -182,17 +205,7 @@ export default class Overlays extends Component<OverlaySignature> {
       // the x/y offsets below we deliberately don't divide `clipTop` by the
       // parent scale — under the test runner's #ember-testing scale the clip
       // line is therefore only approximate, which doesn't affect real users.
-      let clipPath = '';
-      if (reference instanceof HTMLElement) {
-        let header = stickyClipHeaderFor(reference);
-        if (header) {
-          clipPath = stickyHeaderClipPath(
-            refRect.top,
-            header.getBoundingClientRect().bottom,
-          );
-        }
-      }
-      floating.style.clipPath = clipPath;
+      applyStickyHeaderClip(reference, floating);
 
       // Position the overlay from the live reference rect relative to the
       // floating element's own offset parent, rather than floating-ui's
