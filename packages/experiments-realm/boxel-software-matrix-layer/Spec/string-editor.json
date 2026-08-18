@@ -8,7 +8,7 @@
         "module": "https://cardstack.com/base/string",
         "name": "default"
       },
-      "readMe": "# String Editor\n\n## Contract\nThe edit-format component of `StringField` — the single-line text input\nevery string-valued field inherits. Subclasses (Email, URL, Phone Number)\nkeep the editor and add validation/affordances.\n\nInvariants:\n- Edit format binds `value` attribute + input event (element-content\n  binding does not clear programmatically; bind the attribute).\n- Read formats render the raw string; no markdown interpretation (that is\n  Markdown's job).\n\n## Usage\nComes free with `contains(StringField)` in edit format; embedded custom\neditors follow the same value+event pattern.\n\n## Source\n`https://cardstack.com/base/string` (default `StringField`, editor\nincluded).",
+      "readMe": "# String Editor\n\n## Contract\nThe edit-format component of `StringField` — the single-line text input\nevery string-valued field inherits. Subclasses (Email, URL, Phone Number)\nkeep the editor and add validation/affordances.\n\nInvariants:\n- Edit format binds `value` attribute + input event (element-content\n  binding does not clear programmatically; bind the attribute).\n- Read formats render the raw string; no markdown interpretation (that is\n  Markdown's job).\n\n## Example\n```ts\nimport StringField from 'https://cardstack.com/base/string';\n\n@field name = contains(StringField);\n// Edit format renders the single-line editor automatically.\n```\nCustom editors follow the same pattern — bind the value attribute and the\ninput event:\n```gts\n<input value={{@model.name}} {{on 'input' this.setName}} />\n```",
       "containedExamples": [],
       "cardInfo": {
         "name": "String Editor",

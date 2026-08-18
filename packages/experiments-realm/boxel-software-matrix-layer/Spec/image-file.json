@@ -8,7 +8,7 @@
         "module": "https://cardstack.com/base/card-api",
         "name": "ImageDef"
       },
-      "readMe": "# Image File\n\n## Contract\n`ImageDef` is the FileDef specialization for image files: an uploaded realm\nfile with image-aware rendering (dimension-aware fitted/embedded formats).\n\nInvariants:\n- Fitted format FILLS its container; embedded letterboxes — pick the\n  format for the layout you need.\n- Instances are realm files with card semantics; the binary lives at the\n  file URL, the card carries metadata.\n\n## Usage\n```ts\nimport { ImageDef } from 'https://cardstack.com/base/card-api';\n```\nLive examples need uploaded image fixtures — same fixtures pass as the\nFile renderer specs (flagged for review).\n\n## Source\n`https://cardstack.com/base/card-api` (`ImageDef`, `FileDef`,\n`createFileDef`).",
+      "readMe": "# Image File\n\n## Contract\n`ImageDef` is the FileDef specialization for image files: an uploaded realm\nfile with image-aware rendering (dimension-aware fitted/embedded formats).\n\nInvariants:\n- Fitted format FILLS its container; embedded letterboxes — pick the\n  format for the layout you need.\n- Instances are realm files with card semantics; the binary lives at the\n  file URL, the card carries metadata.\n\n## Example\n```ts\nimport { ImageDef, createFileDef } from 'https://cardstack.com/base/card-api';\n\n@field productPhoto = linksTo(ImageDef);\n```\nFitted format fills its container; embedded letterboxes — pick per layout.",
       "containedExamples": [],
       "cardInfo": {
         "name": "Image File",
