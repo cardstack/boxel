@@ -436,6 +436,29 @@ export const formulaFinancialCases: CoverageCase[] = [
     expected: 13.516483516483516,
     tolerance: 1e-9,
   },
+  {
+    covers: 'ACCRINT/7',
+    // A month-end anchor keeps the whole schedule on month ends: behind
+    // 2023-08-31 sit 2023-02-28 and 2022-08-31, so issue accrues 18 of the 181
+    // days in the period ending February and settlement 46 of the 184 in the
+    // one after — 1000 * 0.05 * (18/181 + 46/184). Measuring each date from the
+    // one before it would carry February's clamp forward to an August 28th and
+    // divide by the wrong lengths. Issue also shares February with a coupon
+    // date it precedes, which is the case whole months alone misplace.
+    source:
+      'ACCRINT("2023-02-10", "2023-08-31", "2023-04-15", 0.1, 1000, 2, 1)',
+    expected: 17.472375690607734,
+    tolerance: 1e-9,
+  },
+  {
+    covers: 'ACCRINT/6',
+    // The schedule anchor is read on every basis, so a first_interest that is
+    // not a date is an error even where the accrual would not have consulted
+    // the schedule it anchors. The same arguments must not be an error under
+    // one convention and an answer under another.
+    source: 'ACCRINT("2023-01-01", "not a date", "2023-04-01", 0.1, 1000, 2)',
+    throws: /#VALUE!/,
+  },
   // On the default 30/360 basis a coupon period is 360/frequency days by
   // definition, so the dates are inert here and the frequency is what the
   // case can pin. Basis 3 is the same shape over a 365-day year. The

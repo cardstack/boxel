@@ -556,9 +556,13 @@ export function excelMirr(
 }
 
 /**
- * Interest accrued from issue to settlement, which a bond pays a coupon at a
- * time: `rate / frequency` per quasi-coupon period, earned in proportion to
- * the share of each period the holding covers.
+ * Interest accrued between issue and settlement. A bond pays `rate / frequency`
+ * per quasi-coupon period, and a holding earns each period's coupon in
+ * proportion to the share of that period it covers.
+ *
+ * Excel's optional eighth argument, `calc_method`, is not part of the exposed
+ * surface, so the accrual always runs from issue rather than from the first
+ * interest payment.
  */
 export function excelAccrint(
   issueLike: unknown,
@@ -600,12 +604,13 @@ export function excelAccrint(
     );
   }
 
-  // Every other basis gives all coupon periods the same nominal length,
-  // year/frequency, so each period's share is the segment's year fraction
-  // times the frequency — and summed over the holding the frequency cancels,
-  // leaving the whole accrual at par * rate * YEARFRAC however the schedule
-  // falls. `first_interest` and `frequency` reach the answer only through the
-  // period lengths, so on these bases they have nothing left to say.
+  // Every other basis gives a coupon period the same nominal length,
+  // year/frequency, whatever dates the schedule falls on. For a holding inside
+  // one period that makes its share `frequency * YEARFRAC` and the frequency
+  // cancels exactly, leaving par * rate * YEARFRAC with nothing for the
+  // schedule to add. Across several periods the two readings can part, because
+  // a period's own day count under the basis need not be its nominal length;
+  // these bases measure the holding as a whole rather than period by period.
   return par * rate * yearFrac(issue, settlement, basis);
 }
 
@@ -841,7 +846,7 @@ function addCouponMonths(anchor: Date, months: number) {
 }
 
 /**
- * How many coupons' worth of interest accrues over `start` → `settlement` on
+ * How many coupons' worth of interest accrues over `issue` → `settlement` on
  * an actual/actual basis: each quasi-coupon period the holding touches
  * contributes the share of its own real length the holding covers, and the
  * shares sum. A holding that spans a period and a half earns one and a half
@@ -856,37 +861,45 @@ function addCouponMonths(anchor: Date, months: number) {
  * February's clamp forward.
  */
 function accruedCoupons(
-  start: Date,
+  issue: Date,
   settlement: Date,
   anchor: Date,
   frequency: number,
 ) {
   const monthsPerPeriod = 12 / frequency;
-  const couponDate = (periods: number) =>
-    addCouponMonths(anchor, periods * monthsPerPeriod);
+  const couponDate = (periods: number) => {
+    const date = addCouponMonths(anchor, periods * monthsPerPeriod);
+    // A schedule that runs past the last representable date is an
+    // out-of-range date rather than an accrual, the same answer a serial
+    // beyond the calendar's end gets.
+    if (Number.isNaN(date.getTime())) {
+      throwExcelError(EXCEL_ERROR.num);
+    }
+    return date;
+  };
 
-  // Counting whole months from the anchor names the period `start` falls in,
+  // Counting whole months from the anchor names the period `issue` falls in,
   // to within one: month arithmetic cannot see the day numbers, so a boundary
-  // later in the month than `start` is one the count still claims. It can only
+  // later in the month than `issue` is one the count still claims. It can only
   // err in that direction — the period after the counted one begins in a later
-  // month than `start`, so it can never have started already — which makes one
+  // month than `issue`, so it can never have started already — which makes one
   // step back the whole correction.
   let periods = Math.floor(
-    ((start.getUTCFullYear() - anchor.getUTCFullYear()) * 12 +
-      start.getUTCMonth() -
+    ((issue.getUTCFullYear() - anchor.getUTCFullYear()) * 12 +
+      issue.getUTCMonth() -
       anchor.getUTCMonth()) /
       monthsPerPeriod,
   );
-  if (couponDate(periods).getTime() > start.getTime()) periods--;
+  if (couponDate(periods).getTime() > issue.getTime()) periods--;
 
   let shares = 0;
   let periodStart = couponDate(periods);
   while (periodStart.getTime() < settlement.getTime()) {
     const periodEnd = couponDate(periods + 1);
-    // The span's own ends bound the first and last periods; the ones between
-    // are covered whole.
+    // The holding's own ends bound the first and last periods; the ones
+    // between are covered whole.
     const segmentStart =
-      periodStart.getTime() > start.getTime() ? periodStart : start;
+      periodStart.getTime() > issue.getTime() ? periodStart : issue;
     const segmentEnd =
       periodEnd.getTime() < settlement.getTime() ? periodEnd : settlement;
     shares +=
