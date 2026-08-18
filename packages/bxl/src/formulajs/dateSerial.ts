@@ -242,6 +242,12 @@ export function yearFrac(
     case 3:
       return daysBetween(startDate, endDate) / 365;
     case 4:
+      // The European 30/360 pulls a day-31 back to the 30th at both ends of
+      // the span, where basis 0 above only reaches the end date once the start
+      // has already landed on the 30th. It counts the same days as DAYS360's
+      // European method.
+      if (sd === 31) sd = 30;
+      if (ed === 31) ed = 30;
       return (ed + em * 30 + ey * 360 - (sd + sm * 30 + sy * 360)) / 360;
     default:
       throwExcelError(EXCEL_ERROR.num);

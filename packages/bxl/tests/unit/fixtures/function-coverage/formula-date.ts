@@ -125,6 +125,45 @@ export const formulaDateCases: CoverageCase[] = [
     expected: 0.4958904109589,
     tolerance: 1e-12,
   },
+  // Basis 4 is the European 30/360, which pulls a day-31 back to the 30th at
+  // both ends of the span before counting. Three spans separate it from a raw
+  // 30/360 that leaves the 31st where it stands — a day-31 start, a day-31 end,
+  // and one with both, where the two shifts cancel — and the day-31 end also
+  // separates it from basis 0, whose US rule reaches that end conditionally.
+  {
+    covers: 'YEARFRAC/3',
+    // 394 days from the 31st of July, where leaving that 31st where it stands
+    // would count 393.
+    source: 'YEARFRAC(DATE(2021, 7, 31), DATE(2022, 9, 4), 4)',
+    expected: 1.0944444444444446,
+    tolerance: 1e-12,
+  },
+  {
+    covers: 'YEARFRAC/3',
+    // 61 days to the 31st of August, from a start earlier than the 30th.
+    source: 'YEARFRAC(DATE(2023, 6, 29), DATE(2023, 8, 31), 4)',
+    expected: 0.16944444444444445,
+    tolerance: 1e-12,
+  },
+  {
+    covers: 'YEARFRAC/3',
+    // The same span on basis 0, the US 30/360, which is where the two
+    // conventions part company: it reaches the end date only once the start
+    // has landed on the 30th, so this August 31st stays where it is and the
+    // span counts 62 days.
+    source: 'YEARFRAC(DATE(2023, 6, 29), DATE(2023, 8, 31), 0)',
+    expected: 0.17222222222222222,
+    tolerance: 1e-12,
+  },
+  {
+    covers: 'YEARFRAC/3',
+    // Day 31 at both ends: 210 days, the same answer a raw 30/360 gives, and
+    // one a convention that pulled back a single end would miss by a day in
+    // either direction.
+    source: 'YEARFRAC(DATE(2023, 1, 31), DATE(2023, 8, 31), 4)',
+    expected: 0.5833333333333334,
+    tolerance: 1e-12,
+  },
   // Week fields. 2026-04-30 is a Thursday: return type 1, the default,
   // numbers from Sunday = 1, type 2 from Monday = 1.
   { covers: 'WEEKDAY/1', source: 'WEEKDAY(DATE(2026, 4, 30))', expected: 5 },
