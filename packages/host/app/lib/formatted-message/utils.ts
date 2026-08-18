@@ -1,7 +1,7 @@
 import type { SafeString } from '@ember/template';
 import { htmlSafe } from '@ember/template';
 
-import { SEARCH_MARKER } from '@cardstack/runtime-common';
+import { startsSearchMarker } from '@cardstack/runtime-common';
 import { unescapeHtml } from '@cardstack/runtime-common/helpers/html';
 
 import {
@@ -32,6 +32,7 @@ export function extractCodeData(
       code: null,
       language: null,
       searchReplaceBlock: null,
+      malformedPatch: false,
       roomId: '',
       eventId: '',
       codeBlockIndex: -1,
@@ -75,7 +76,7 @@ export function extractCodeData(
 
   let fileUrl: string | undefined = undefined;
   let isBeginningOfSearchReplaceBlock =
-    lines.length > 1 && lines[1].startsWith(SEARCH_MARKER.slice(0, 3));
+    lines.length > 1 && startsSearchMarker(lines[1]);
 
   let isNewFile = false;
 
@@ -102,15 +103,17 @@ export function extractCodeData(
   }
 
   let contentWithoutFirstLine = content.slice(lines[0].length).trimStart();
+  let searchReplaceBlock = isCompleteSearchReplaceBlock(contentWithoutFirstLine)
+    ? contentWithoutFirstLine
+    : null;
 
   return {
     language: language ?? '',
     code: codeToDisplay,
     fileUrl: fileUrl ?? null,
     isNewFile,
-    searchReplaceBlock: isCompleteSearchReplaceBlock(contentWithoutFirstLine)
-      ? contentWithoutFirstLine
-      : null,
+    searchReplaceBlock,
+    malformedPatch: isBeginningOfSearchReplaceBlock && !searchReplaceBlock,
     roomId,
     eventId,
     codeBlockIndex,
@@ -152,6 +155,10 @@ export interface CodeData {
   code: string | null;
   language: string | null;
   searchReplaceBlock?: string | null;
+  // The block opened a SEARCH marker but never resolved into a complete
+  // search/replace block. True while a patch is still streaming in, and true
+  // afterwards only when the markers came through malformed.
+  malformedPatch: boolean;
   roomId: string;
   eventId: string;
   codeBlockIndex: number;

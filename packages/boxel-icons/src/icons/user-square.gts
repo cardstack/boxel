@@ -13,14 +13,14 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
     stroke-linecap='round'
     stroke-linejoin='round'
     stroke-width='2'
-    class='icon icon-tabler icons-tabler-outline icon-tabler-user-square'
+    class='lucide lucide-user-square'
     viewBox='0 0 24 24'
     ...attributes
-  ><path stroke='none' d='M0 0h24v24H0z' /><path
-      d='M9 10a3 3 0 1 0 6 0 3 3 0 0 0-6 0M6 21v-1a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v1'
-    /><path
-      d='M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'
-    /></svg>
+  ><rect width='18' height='18' x='3' y='3' rx='2' /><circle
+      cx='12'
+      cy='10'
+      r='3'
+    /><path d='M7 21v-2a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2' /></svg>
 </template>;
 
 // @ts-expect-error this is the only way to set a name on a Template Only Component currently

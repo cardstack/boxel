@@ -5,6 +5,7 @@ import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
 import menuItem from '../../helpers/menu-item.ts';
+import IconTrash from '../../icons/icon-trash.gts';
 import BoxelButton from '../button/index.gts';
 import BoxelMenu from '../menu/index.gts';
 import BoxelDropdown from './index.gts';
@@ -50,6 +51,12 @@ export default class BoxelDropdownUsage extends Component {
                   'Duplicate' (fn this.log 'Duplicate menu item clicked')
                 )
                 (menuItem 'Share' (fn this.log 'Share menu item clicked'))
+                (menuItem
+                  'Delete'
+                  (fn this.log 'Delete menu item clicked')
+                  icon=IconTrash
+                  dangerous=true
+                )
               }}
             />
           </:content>

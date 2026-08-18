@@ -46,7 +46,7 @@ The three levels have different jobs:
 
 ## Integrity manifest
 
-Fixture bytes are committed to the repository and served by the realm directly from disk. The `samples/` tree is exempt from repository formatting tools so these bytes stay stable; any intentional change to a fixture must update its row here. A mismatch between this manifest and the file on disk means the fixture no longer matches its recorded provenance.
+Fixture bytes are committed to the repository and served by the realm directly from disk. The `samples/` tree is exempt from repository formatting tools so these bytes stay stable; any intentional change to a fixture must update its row here. Nothing recomputes these hashes automatically — the manifest is a reference for manual audits. To check a fixture's provenance, hash it (`shasum -a 256 samples/<file>`) and compare against its row; a mismatch means the fixture no longer matches its recorded provenance and should be re-verified against its listed source.
 
 | File                            | Bytes   | SHA-256                                                          |
 | ------------------------------- | ------- | ---------------------------------------------------------------- |

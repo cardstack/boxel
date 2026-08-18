@@ -13,7 +13,7 @@ import {
 import EmailField from '@cardstack/base/email';
 
 import Email from '@cardstack/boxel-icons/mail';
-import Linkedin from '@cardstack/boxel-icons/linkedin';
+import Linkedin from '@cardstack/boxel-icons/brand-linkedin';
 import XIcon from '@cardstack/boxel-icons/brand-x';
 import UserIcon from '@cardstack/boxel-icons/user';
 import UserRoundPen from '@cardstack/boxel-icons/user-round-pen';

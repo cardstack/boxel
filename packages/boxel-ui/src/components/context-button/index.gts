@@ -112,7 +112,7 @@ const DropdownButton: TemplateOnlyComponent<Signature> = <template>
     />
   {{/let}}
   <style scoped>
-    @layer boxelComponentL2 {
+    @layer boxelComponentL3 {
       .boxel-context-button {
         color: inherit;
         background-color: transparent;

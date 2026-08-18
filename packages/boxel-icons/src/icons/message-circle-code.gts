@@ -16,8 +16,8 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
     class='lucide lucide-message-circle-code'
     viewBox='0 0 24 24'
     ...attributes
-  ><path d='M10 9.5 8 12l2 2.5M14 9.5l2 2.5-2 2.5' /><path
-      d='M7.9 20A9 9 0 1 0 4 16.1L2 22z'
+  ><path d='m10 9-3 3 3 3M14 15l3-3-3-3' /><path
+      d='M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719'
     /></svg>
 </template>;
 

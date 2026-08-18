@@ -16,11 +16,11 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
     class='lucide lucide-pause'
     viewBox='0 0 24 24'
     ...attributes
-  ><rect width='4' height='16' x='14' y='4' rx='1' /><rect
-      width='4'
-      height='16'
-      x='6'
-      y='4'
+  ><rect width='5' height='18' x='14' y='3' rx='1' /><rect
+      width='5'
+      height='18'
+      x='5'
+      y='3'
       rx='1'
     /></svg>
 </template>;

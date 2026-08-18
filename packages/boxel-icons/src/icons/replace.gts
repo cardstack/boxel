@@ -17,13 +17,13 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
     viewBox='0 0 24 24'
     ...attributes
   ><path
-      d='M14 4a2 2 0 0 1 2-2M16 10a2 2 0 0 1-2-2M20 2a2 2 0 0 1 2 2M22 8a2 2 0 0 1-2 2M3 7l3 3 3-3'
-    /><path d='M6 10V5a3 3 0 0 1 3-3h1' /><rect
-      width='8'
-      height='8'
-      x='2'
+      d='M14 4a1 1 0 0 1 1-1M15 10a1 1 0 0 1-1-1M21 4a1 1 0 0 0-1-1M21 9a1 1 0 0 1-1 1M3 7l3 3 3-3'
+    /><path d='M6 10V5a2 2 0 0 1 2-2h2' /><rect
+      width='7'
+      height='7'
+      x='3'
       y='14'
-      rx='2'
+      rx='1'
     /></svg>
 </template>;
 

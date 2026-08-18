@@ -36,7 +36,7 @@ const Container: TemplateOnlyComponent<Signature> = <template>
     </TagName>
   {{/let}}
   <style scoped>
-    @layer {
+    @layer boxelComponentL1 {
       .boxel-container {
         padding: var(--boxel-container-padding, var(--boxel-sp));
       }
