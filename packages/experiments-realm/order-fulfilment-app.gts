@@ -1385,7 +1385,7 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
                   <Table
                     @items={{this.inventoryRows}}
                     @columns={{this.inventoryColumns}}
-                    @pageSize={{12}}
+                    @pageSize={{5}}
                     @onRowClick={{this.openCard}}
                     @emptyMessage={{if
                       this.inventoryLoading
