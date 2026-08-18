@@ -93,10 +93,10 @@ sign]` pair; `scalars_or_empty` keeps empty collections; `max_by` breaks ties
   period on the schedule `first_interest` anchors: periods a holding covers whole
   each earn one coupon, the period it opens in earns the share of its own length
   it covers, and settlement's distance from a reference coupon date is a signed
-  share of a single period. Measuring the holding as a whole — `par * rate *
-YEARFRAC(issue, settlement)`, which is what an implementation that never reads
-  the schedule answers — agrees only while a holding stays inside one period, and
-  parts from it by a coupon or more across several, in either direction. A
+  share of a single period. Measuring the holding as a whole instead, as
+  `par * rate * YEARFRAC(issue, settlement)`, is what an implementation that
+  never reads the schedule answers; it agrees only while a holding stays inside
+  one period, and parts by a coupon or more across several, in either direction. A
   period's own day count is what separates them: an actual/360 semiannual period
   runs 181 to 184 days against a nominal 180, and a US 30/360 period between two
   month ends counts 178 or 183. The bases also disagree with each other, so a
