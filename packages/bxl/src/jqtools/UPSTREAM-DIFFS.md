@@ -64,6 +64,10 @@ contributed upstream:
 - `sort/0` sorts a copy instead of calling `input.sort()` in place —
   upstream mutates the caller's array, which corrupts live inputs (card
   arrays with change subscribers, read-only lazy views).
+- `cbrt/0` answers `Math.cbrt`, which is exact on perfect cubes where a
+  libm `cbrt` is not: `27|cbrt` is 3 here and 3.0000000000000004 in
+  jq 1.7. The exact answer is the one a card author expects, so this is
+  the rare place the fork prefers its own result to jq's.
 
 ## Additions (new files, no upstream equivalent)
 
@@ -129,7 +133,7 @@ adds the binary entries:
 ### 33 stubs filled with libm-equivalent implementations
 
 | Filter                            | Backing impl                              | Notes                                                                                                                                                                 |
-| --------------------------------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| --------------------------------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `drem/2`, `remainder/2`           | `ieeeRemainder`                           | x - n·y, n = round-half-to-even(x/y).                                                                                                                                 |
 | `nextafter/2`, `nexttoward/2`     | `ieeeNextafter`                           | IEEE 754 step via DataView bits.                                                                                                                                      |
 | `ldexp/2`, `scalb/2`, `scalbln/2` | `x * 2^trunc(n)`                          | All three identical in IEEE 754.                                                                                                                                      |
@@ -141,7 +145,6 @@ adds the binary entries:
 | `significand/0`                   | `x / 2^logb(x)`                           | ∈ [1, 2) for normal x.                                                                                                                                                |
 | `nearbyint/0`, `rint/0`           | `roundHalfToEven`                         | Banker's rounding.                                                                                                                                                    |
 | `pow10/0`                         | `Math.pow(10, x)`                         |                                                                                                                                                                       |
-| `cbrt/0`                          | `Math.cbrt`                               | Exact on perfect cubes where jq's libm is not: `27                                                                                                                    | cbrt` is 3 here and 3.0000000000000004 in jq 1.7. |
 | `expm1/0`                         | `Math.expm1`                              |                                                                                                                                                                       |
 | `scalars_or_empty/0`              | scalars, plus empty collections           | The empty array and empty object are what separate it from `scalars/0`.                                                                                               |
 | `erf/0`, `erfc/0`                 | Abramowitz & Stegun 7.1.26                | ~1.5e-7 max error, where a libm `erf` is exact to the last bit. Excel's `ERF`/`ERFC` in the formula bridge are computed to full double precision instead.             |

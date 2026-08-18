@@ -141,12 +141,7 @@ export const AUTHORIZATION_LIBRARIES: BuiltinLibraryName[] = [
   'authorization',
 ];
 
-/** Marks a table of authorization builtins, which only that set exposes. */
-export function authorizationLibraryCases(
-  cases: CoverageCase[],
-): CoverageCase[] {
-  return cases.map((entry) => ({
-    libraries: AUTHORIZATION_LIBRARIES,
-    ...entry,
-  }));
+/** Marks a case as reaching the authorization surface, which only that set exposes. */
+export function inAuthorizationLibraries(entry: CoverageCase): CoverageCase {
+  return { libraries: AUTHORIZATION_LIBRARIES, ...entry };
 }

@@ -1,6 +1,6 @@
 import { ok, strictEqual } from 'node:assert';
 import {
-  authorizationLibraryCases,
+  inAuthorizationLibraries,
   jqCases,
   type CoverageCase,
 } from './case.ts';
@@ -35,74 +35,69 @@ const authorizationInput = {
   ],
 };
 
-export const authorizationCases: CoverageCase[] = authorizationLibraryCases(
-  jqCases([
-    {
-      covers: 'auth_check/3',
-      source:
-        'auth_check(.model; .tuples; {subject: "user:member", relation: "viewer", object: "document:private"})',
-      input: authorizationInput,
-      expected: true,
+export const authorizationCases: CoverageCase[] = jqCases([
+  {
+    covers: 'auth_check/3',
+    source:
+      'auth_check(.model; .tuples; {subject: "user:member", relation: "viewer", object: "document:private"})',
+    input: authorizationInput,
+    expected: true,
+  },
+  {
+    covers: 'auth_check/3',
+    source:
+      'auth_check(.model; .tuples; {subject: "user:blocked", relation: "viewer", object: "document:private"})',
+    input: authorizationInput,
+    expected: false,
+  },
+  {
+    covers: 'auth_check_result/3',
+    source:
+      'auth_check_result(.model; .tuples; {subject: "user:member", relation: "viewer", object: "document:private", trace: true})',
+    input: authorizationInput,
+    check(outputs) {
+      const result = outputs[0] as {
+        ok: boolean;
+        value: { allowed: boolean; trace: unknown[] };
+      };
+      strictEqual(result.ok, true);
+      strictEqual(result.value.allowed, true);
+      ok(result.value.trace.length > 0, 'a traced check explains itself');
     },
-    {
-      covers: 'auth_check/3',
-      source:
-        'auth_check(.model; .tuples; {subject: "user:blocked", relation: "viewer", object: "document:private"})',
-      input: authorizationInput,
-      expected: false,
+  },
+  {
+    covers: 'auth_list_users/3',
+    source:
+      'auth_list_users(.model; .tuples; {object: "document:private", relation: "viewer", filters: ["user"]})',
+    input: authorizationInput,
+    check(outputs) {
+      const result = outputs[0] as { ok: boolean; value: { users: string[] } };
+      strictEqual(result.ok, true);
+      strictEqual(result.value.users.join(','), 'user:member');
     },
-    {
-      covers: 'auth_check_result/3',
-      source:
-        'auth_check_result(.model; .tuples; {subject: "user:member", relation: "viewer", object: "document:private", trace: true})',
-      input: authorizationInput,
-      check(outputs) {
-        const result = outputs[0] as {
-          ok: boolean;
-          value: { allowed: boolean; trace: unknown[] };
-        };
-        strictEqual(result.ok, true);
-        strictEqual(result.value.allowed, true);
-        ok(result.value.trace.length > 0, 'a traced check explains itself');
-      },
+  },
+  {
+    covers: 'auth_list_objects/3',
+    source:
+      'auth_list_objects(.model; .tuples; {subject: "user:member", type: "document", relation: "viewer"})',
+    input: authorizationInput,
+    check(outputs) {
+      const result = outputs[0] as {
+        ok: boolean;
+        value: { objects: string[] };
+      };
+      strictEqual(result.ok, true);
+      strictEqual(result.value.objects.join(','), 'document:private');
     },
-    {
-      covers: 'auth_list_users/3',
-      source:
-        'auth_list_users(.model; .tuples; {object: "document:private", relation: "viewer", filters: ["user"]})',
-      input: authorizationInput,
-      check(outputs) {
-        const result = outputs[0] as {
-          ok: boolean;
-          value: { users: string[] };
-        };
-        strictEqual(result.ok, true);
-        strictEqual(result.value.users.join(','), 'user:member');
-      },
-    },
-    {
-      covers: 'auth_list_objects/3',
-      source:
-        'auth_list_objects(.model; .tuples; {subject: "user:member", type: "document", relation: "viewer"})',
-      input: authorizationInput,
-      check(outputs) {
-        const result = outputs[0] as {
-          ok: boolean;
-          value: { objects: string[] };
-        };
-        strictEqual(result.ok, true);
-        strictEqual(result.value.objects.join(','), 'document:private');
-      },
-    },
-    {
-      covers: 'ip_in_cidr/2',
-      source: 'ip_in_cidr("10.1.2.3"; "10.1.0.0/16")',
-      expected: true,
-    },
-    {
-      covers: 'ip_in_cidr/2',
-      source: 'ip_in_cidr("10.2.2.3"; "10.1.0.0/16")',
-      expected: false,
-    },
-  ]),
-);
+  },
+  {
+    covers: 'ip_in_cidr/2',
+    source: 'ip_in_cidr("10.1.2.3"; "10.1.0.0/16")',
+    expected: true,
+  },
+  {
+    covers: 'ip_in_cidr/2',
+    source: 'ip_in_cidr("10.2.2.3"; "10.1.0.0/16")',
+    expected: false,
+  },
+]).map(inAuthorizationLibraries);
