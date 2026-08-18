@@ -525,7 +525,7 @@ export const coreJqCases: CoverageCase[] = jqCases([
   { covers: 'test/1', source: '"abc" | test("b.")', expected: true },
   { covers: 'test/1', source: '"abc" | test("z.")', expected: false },
   { covers: 'test/2', source: '"ABC" | test("abc"; "i")', expected: true },
-  // Without the ignore-case flag the same pattern no longer matches.
+  // The same pattern without the ignore-case flag does not match.
   { covers: 'test/2', source: '"ABC" | test("abc"; "g")', expected: false },
   {
     covers: 'capture/1',
