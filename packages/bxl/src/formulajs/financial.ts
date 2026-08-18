@@ -555,9 +555,18 @@ export function excelMirr(
   return Math.pow(numerator / denominator, 1 / (values.length - 1)) - 1;
 }
 
+/**
+ * Interest accrued between issue and settlement. A bond pays `rate / frequency`
+ * per quasi-coupon period, and a holding earns each period's coupon in
+ * proportion to the share of that period it covers.
+ *
+ * Excel's optional eighth argument, `calc_method`, is not part of the exposed
+ * surface, so the accrual always runs from issue rather than from the first
+ * interest payment.
+ */
 export function excelAccrint(
   issueLike: unknown,
-  _firstInterestLike: unknown,
+  firstInterestLike: unknown,
   settlementLike: unknown,
   rateLike: unknown,
   parLike: unknown,
@@ -565,6 +574,10 @@ export function excelAccrint(
   basisLike = 0,
 ) {
   const issue = parseExcelDate(issueLike);
+  // Parsed for every basis, even though only actual/actual reads the schedule
+  // it anchors: the same arguments must not be an error under one convention
+  // and an answer under another.
+  const firstInterest = parseExcelDate(firstInterestLike);
   const settlement = parseExcelDate(settlementLike);
   const rate = parseExcelNumber(rateLike);
   const par = parseExcelNumber(parLike);
@@ -583,6 +596,21 @@ export function excelAccrint(
     throwExcelError(EXCEL_ERROR.num);
   }
 
+  if (basis === 1) {
+    return (
+      par *
+      (rate / frequency) *
+      accruedCoupons(issue, settlement, firstInterest, frequency)
+    );
+  }
+
+  // Every other basis gives a coupon period the same nominal length,
+  // year/frequency, whatever dates the schedule falls on. For a holding inside
+  // one period that makes its share `frequency * YEARFRAC` and the frequency
+  // cancels exactly, leaving par * rate * YEARFRAC with nothing for the
+  // schedule to add. Across several periods the two readings can part, because
+  // a period's own day count under the basis need not be its nominal length;
+  // these bases measure the holding as a whole rather than period by period.
   return par * rate * yearFrac(issue, settlement, basis);
 }
 
@@ -798,22 +826,90 @@ function addMonthsClamped(date: Date, months: number) {
 }
 
 /**
- * A coupon date `months` from maturity. A bond maturing on the last day of a
- * month pays on the last day of every month in its schedule, so clamping the
- * day number is not enough: a February 28th maturity would give an August 28th
- * where the schedule wants the 31st.
+ * A coupon date `months` from `anchor` — a known date on the bond's schedule,
+ * its maturity or its first interest payment. A bond whose anchor is the last
+ * day of a month pays on the last day of every month in its schedule, so
+ * clamping the day number is not enough: a February 28th anchor would give an
+ * August 28th where the schedule wants the 31st.
  */
-function addCouponMonths(maturity: Date, months: number) {
+function addCouponMonths(anchor: Date, months: number) {
   const shifted = new Date(
-    Date.UTC(maturity.getUTCFullYear(), maturity.getUTCMonth() + months, 1),
+    Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth() + months, 1),
   );
-  const endOfMonth = maturity.getUTCDate() === lastDayOfMonth(maturity);
+  const endOfMonth = anchor.getUTCDate() === lastDayOfMonth(anchor);
   shifted.setUTCDate(
     endOfMonth
       ? lastDayOfMonth(shifted)
-      : Math.min(maturity.getUTCDate(), lastDayOfMonth(shifted)),
+      : Math.min(anchor.getUTCDate(), lastDayOfMonth(shifted)),
   );
   return shifted;
+}
+
+/**
+ * How many coupons' worth of interest accrues over `issue` → `settlement` on
+ * an actual/actual basis: each quasi-coupon period the holding touches
+ * contributes the share of its own real length the holding covers, and the
+ * shares sum. A holding that spans a period and a half earns one and a half
+ * coupons, and the two halves divide by their own lengths — which is why no
+ * single year fraction over the whole holding can stand in for the sum.
+ *
+ * The periods are the schedule `anchor` — the first interest payment — sits
+ * on, extended in both directions at `frequency` a year, since a bond can be
+ * issued periods before its first payment and still be accruing periods after
+ * it. Every boundary is measured from the anchor rather than from the boundary
+ * before it, so a month-end schedule stays on month ends instead of carrying
+ * February's clamp forward.
+ */
+function accruedCoupons(
+  issue: Date,
+  settlement: Date,
+  anchor: Date,
+  frequency: number,
+) {
+  const monthsPerPeriod = 12 / frequency;
+  const couponDate = (periods: number) => {
+    const date = addCouponMonths(anchor, periods * monthsPerPeriod);
+    // A schedule that runs past the last representable date is an
+    // out-of-range date rather than an accrual, the same answer a serial
+    // beyond the calendar's end gets.
+    if (Number.isNaN(date.getTime())) {
+      throwExcelError(EXCEL_ERROR.num);
+    }
+    return date;
+  };
+
+  // Counting whole months from the anchor names the period `issue` falls in,
+  // to within one: month arithmetic cannot see the day numbers, so a boundary
+  // later in the month than `issue` is one the count still claims. It can only
+  // err in that direction — the period after the counted one begins in a later
+  // month than `issue`, so it can never have started already — which makes one
+  // step back the whole correction.
+  let periods = Math.floor(
+    ((issue.getUTCFullYear() - anchor.getUTCFullYear()) * 12 +
+      issue.getUTCMonth() -
+      anchor.getUTCMonth()) /
+      monthsPerPeriod,
+  );
+  if (couponDate(periods).getTime() > issue.getTime()) periods--;
+
+  let shares = 0;
+  let periodStart = couponDate(periods);
+  while (periodStart.getTime() < settlement.getTime()) {
+    const periodEnd = couponDate(periods + 1);
+    // The holding's own ends bound the first and last periods; the ones
+    // between are covered whole.
+    const segmentStart =
+      periodStart.getTime() > issue.getTime() ? periodStart : issue;
+    const segmentEnd =
+      periodEnd.getTime() < settlement.getTime() ? periodEnd : settlement;
+    shares +=
+      daysBetween(segmentStart, segmentEnd) /
+      daysBetween(periodStart, periodEnd);
+    periods++;
+    periodStart = periodEnd;
+  }
+
+  return shares;
 }
 
 export function excelCoupdays(
