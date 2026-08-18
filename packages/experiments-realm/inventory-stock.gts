@@ -151,6 +151,19 @@ export class InventoryStock extends CardDef {
     },
   });
 
+  // `stockState` is the indexed value a query filters on (`ok` / `low` / `out` /
+  // `draft`); this is what a reader should see. Kept beside the hue so the two
+  // cannot drift apart.
+  get stockStateLabel() {
+    if (this.isDraft) {
+      return 'Draft';
+    }
+    if (this.isOutOfStock) {
+      return 'Out of stock';
+    }
+    return this.isLowStock ? 'Low stock' : 'In stock';
+  }
+
   get stockHue() {
     if (this.isDraft) {
       return '#94a3b8';

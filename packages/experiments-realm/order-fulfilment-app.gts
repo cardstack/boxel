@@ -14,7 +14,7 @@ import {
   type Query,
 } from '@cardstack/runtime-common';
 import CardList from '@cardstack/base/components/card-list';
-import { Table } from './fulfilment-table';
+import { Table, type TableColumn } from './table';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
@@ -137,6 +137,13 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
   private carrierQuery: ReturnType<getCards> | undefined;
   private returnQuery: ReturnType<getCards> | undefined;
   private pickQuery: ReturnType<getCards> | undefined;
+  // The table view needs RESOLVED instances, while the grid/list views take the
+  // Query itself. Feeding the table from `this.stock` would break the mirroring
+  // rule — that resource is unfiltered, so the table would show rows the grid had
+  // filtered out. These two follow `inventoryQuery` / `returnsQuery`, the very
+  // objects CardList is handed, so the row sets cannot diverge.
+  private inventoryRowsQuery: ReturnType<getCards> | undefined;
+  private returnsRowsQuery: ReturnType<getCards> | undefined;
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
@@ -180,6 +187,18 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
       live,
     );
     this.pickQuery = ctx?.getCards(this, () => byType(PickList), realms, live);
+    this.inventoryRowsQuery = ctx?.getCards(
+      this,
+      () => this.inventoryQuery,
+      realms,
+      live,
+    );
+    this.returnsRowsQuery = ctx?.getCards(
+      this,
+      () => this.returnsQuery,
+      realms,
+      live,
+    );
   }
 
   private get realms(): string[] | undefined {
@@ -267,19 +286,6 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
     );
   }
 
-  get inventoryTypeRef() {
-    return identifyCard(InventoryStock);
-  }
-
-  get returnsTypeRef() {
-    return identifyCard(ProductReturn);
-  }
-
-  // The Table paginates itself, which is why it wants a SINGLE realm — passing
-  // an array is how a table quietly starts dropping rows.
-  get realm() {
-    return this.realms?.[0];
-  }
 
   // `card` / `list` / `grid` are cell shapes over one renderer; `table` is the
   // other layer entirely.
@@ -776,6 +782,110 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
     showFitButton: true,
   };
 
+  // ── Table columns, declared rather than derived ───────────────────────────
+  //
+  // The schema-driven table needed three flags (`showClean`,
+  // `showComputedFields`, `showPrimitivesOnly`) to guess which of the card's
+  // fields belonged in a row. Declaring them answers that question instead: a
+  // stock row is its identity, its location and the four quantities, and nothing
+  // else. `align: 'right'` on the numerics is what makes a column of figures
+  // readable — the component gives those cells tabular-nums.
+
+  get inventoryRows() {
+    return ((this.inventoryRowsQuery?.instances ?? []) as InventoryStock[]).filter(
+      Boolean,
+    );
+  }
+
+  get returnsRows() {
+    return ((this.returnsRowsQuery?.instances ?? []) as ProductReturn[]).filter(
+      Boolean,
+    );
+  }
+
+  get inventoryLoading() {
+    return (
+      Boolean(this.inventoryRowsQuery?.isLoading) && !this.inventoryRows.length
+    );
+  }
+
+  get returnsLoading() {
+    return Boolean(this.returnsRowsQuery?.isLoading) && !this.returnsRows.length;
+  }
+
+  inventoryColumns: TableColumn[] = [
+    { key: 'sku', label: 'SKU', value: (r: any) => r.sku },
+    { key: 'product', label: 'Product', value: (r: any) => r.productName },
+    { key: 'warehouse', label: 'Warehouse', value: (r: any) => r.warehouseCode },
+    { key: 'bin', label: 'Bin', value: (r: any) => r.binLocation },
+    {
+      key: 'onHand',
+      label: 'On hand',
+      align: 'right',
+      value: (r: any) => r.quantityOnHand,
+    },
+    {
+      key: 'reserved',
+      label: 'Reserved',
+      align: 'right',
+      value: (r: any) => r.quantityReserved,
+    },
+    {
+      key: 'available',
+      label: 'Available',
+      align: 'right',
+      value: (r: any) => r.quantityAvailable,
+    },
+    {
+      key: 'incoming',
+      label: 'Incoming',
+      align: 'right',
+      value: (r: any) => r.quantityIncoming,
+    },
+    // Custom so the cell can render the status chip. `sortValue` sorts by the
+    // indexed state rather than by the chip's label, which is what a reader
+    // means by "sort by status".
+    {
+      key: 'state',
+      label: 'State',
+      custom: true,
+      value: (r: any) => r.stockState,
+      sortValue: (r: any) => r.stockState,
+    },
+  ];
+
+  returnsColumns: TableColumn[] = [
+    { key: 'rma', label: 'RMA', value: (r: any) => r.rmaNumber },
+    { key: 'customer', label: 'Customer', value: (r: any) => r.customerName },
+    { key: 'order', label: 'Order', value: (r: any) => r.order?.orderNumber },
+    { key: 'reason', label: 'Reason', value: (r: any) => r.reason },
+    {
+      key: 'items',
+      label: 'Items',
+      align: 'right',
+      value: (r: any) => r.itemCount,
+    },
+    // Money renders through `money` for one format across the card, but sorts on
+    // the raw amount — sorting the formatted string would put £9.00 after £10.00.
+    {
+      key: 'refund',
+      label: 'Refund',
+      align: 'right',
+      value: (r: any) =>
+        r.refundAmount?.amount == null
+          ? null
+          : money(r.refundAmount.amount, r.refundAmount.currency?.code),
+      sortValue: (r: any) => r.refundAmount?.amount,
+    },
+    {
+      key: 'state',
+      label: 'State',
+      custom: true,
+      value: (r: any) => r.status,
+      sortValue: (r: any) => r.lifecycleState,
+    },
+  ];
+
   @action setInventoryStatus(value: 'all' | 'low' | 'out') {
     this.inventoryStatus = value;
   }
@@ -1269,17 +1379,29 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
                     @viewOption={{this.viewOptionFor this.inventoryView}}
                   />
                 {{else}}
-                  <div class='table-scroll'>
-                    <Table
-                      @query={{this.inventoryQuery}}
-                      @realm={{this.realm}}
-                      @cardTypeRef={{this.inventoryTypeRef}}
-                      @context={{@context}}
-                      @showClean={{true}}
-                      @showComputedFields={{false}}
-                      @showPrimitivesOnly={{false}}
-                    />
-                  </div>
+                  {{! Columns declared, not derived — and `@pageSize` means the
+                      table owns its own paging, so a realm with a thousand stock
+                      rows draws twelve and says how many there really are. }}
+                  <Table
+                    @items={{this.inventoryRows}}
+                    @columns={{this.inventoryColumns}}
+                    @pageSize={{12}}
+                    @onRowClick={{this.openCard}}
+                    @emptyMessage={{if
+                      this.inventoryLoading
+                      'Loading stock…'
+                      'No stock rows match this filter.'
+                    }}
+                  >
+                    <:cell as |row column|>
+                      {{#if (eq column.key 'state')}}
+                        <StatusChip
+                          @label={{row.stockStateLabel}}
+                          @hue={{row.stockHue}}
+                        />
+                      {{/if}}
+                    </:cell>
+                  </Table>
                 {{/if}}
               {{else}}
                 <p class='empty'>Loading stock…</p>
@@ -1665,17 +1787,26 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
                   @viewOption={{this.viewOptionFor this.returnsView}}
                 />
               {{else}}
-                <div class='table-scroll'>
-                  <Table
-                    @query={{this.returnsQuery}}
-                    @realm={{this.realm}}
-                    @cardTypeRef={{this.returnsTypeRef}}
-                    @context={{@context}}
-                    @showClean={{true}}
-                    @showComputedFields={{false}}
-                    @showPrimitivesOnly={{false}}
-                  />
-                </div>
+                <Table
+                  @items={{this.returnsRows}}
+                  @columns={{this.returnsColumns}}
+                  @pageSize={{12}}
+                  @onRowClick={{this.openCard}}
+                  @emptyMessage={{if
+                    this.returnsLoading
+                    'Loading returns…'
+                    'No returns match this filter.'
+                  }}
+                >
+                  <:cell as |row column|>
+                    {{#if (eq column.key 'state')}}
+                      <StatusChip
+                        @label={{row.statusStyle.label}}
+                        @hue={{row.statusStyle.hue}}
+                      />
+                    {{/if}}
+                  </:cell>
+                </Table>
               {{/if}}
             {{else}}
               <p class='empty'>No returns match this filter.</p>
@@ -1991,9 +2122,6 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
         }
       }
 
-      .table-scroll {
-        overflow-x: auto;
-      }
 
       .ofb-host {
         flex: 1;
