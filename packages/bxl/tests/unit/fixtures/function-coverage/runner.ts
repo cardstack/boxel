@@ -25,7 +25,71 @@ import {
   type BareNativeFilter,
   type NativeFilter,
 } from '../../../../src/jqtools/evaluate/filters/lib/nativeFilter.ts';
-import type { CoverageCase, Expectation } from './case.ts';
+import {
+  CARD_LIBRARIES,
+  type CoverageCase,
+  type Expectation,
+  type ZoneContext,
+} from './case.ts';
+
+/**
+ * The host zones every case is evaluated under. Between them they cover both
+ * ends of the offset range (Kiritimati at +14, Etc/GMT+12 at the -12 floor),
+ * whole-hour, half-hour and quarter-hour offsets, and DST in both
+ * hemispheres — Los Angeles shifting by an hour and Lord Howe by thirty
+ * minutes. A result that is the same in all of them does not depend on the
+ * host zone.
+ *
+ * The sweep is unconditional rather than something a case opts into: a case
+ * that reads a date is not always obvious from its source, and the whole
+ * suite runs under all of these in about a second.
+ */
+export const COVERAGE_ZONES = [
+  'UTC',
+  'America/Los_Angeles',
+  'Asia/Kathmandu',
+  'Australia/Lord_Howe',
+  'Pacific/Kiritimati',
+  'Etc/GMT+12',
+];
+
+function zoneContext(zone: string): ZoneContext {
+  return {
+    zone,
+    // Read through a formatter bound to the zone by name rather than through
+    // the ambient `getTimezoneOffset`, so a caller gets the same answer no
+    // matter when in the sweep it asks.
+    offsetMinutes(instant: Date) {
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: zone,
+        hour12: false,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      }).formatToParts(instant);
+      const field = (type: string) =>
+        Number(parts.find((part) => part.type === type)!.value);
+      // Assign the year separately: `Date.UTC` reads a year of 0-99 as
+      // 1900 + year, which would put any instant in the first century a
+      // couple of millennia away from where the formatter placed it.
+      const local = new Date(
+        Date.UTC(
+          2000,
+          field('month') - 1,
+          field('day'),
+          field('hour') % 24,
+          field('minute'),
+          field('second'),
+        ),
+      );
+      local.setUTCFullYear(field('year'));
+      return Math.round((local.getTime() - instant.getTime()) / 60_000);
+    },
+  };
+}
 
 const invoked = new Set<string>();
 
@@ -62,8 +126,12 @@ function recordJqDef<T extends object>(name: string, def: T): T {
 
 /**
  * Replace every registered library with a recording equivalent and return the
- * library list to evaluate against. Call once, before anything resolves the
- * registry — `loadAllFormulaExtensions()` first, so the lazy families are in.
+ * library list cases evaluate against by default. Call once, before anything
+ * resolves the registry — `loadAllFormulaExtensions()` first, so the lazy
+ * families are in.
+ *
+ * Every library is wrapped, including the ones outside the default set, so a
+ * case that names its own `libraries` still earns credit by invocation.
  */
 export function installInvocationRecorder(): BuiltinLibraryName[] {
   for (const [libraryName, library] of Object.entries(BXL_REGISTRY)) {
@@ -82,7 +150,7 @@ export function installInvocationRecorder(): BuiltinLibraryName[] {
       ),
     });
   }
-  return Object.keys(BXL_REGISTRY) as BuiltinLibraryName[];
+  return CARD_LIBRARIES;
 }
 
 const recordedRegistries = new WeakSet<ResolvedBuiltinRegistry>();
@@ -107,8 +175,9 @@ function recordResolvedBuiltinsFilter(libraries: BuiltinLibraryName[]) {
 /**
  * Evaluate one case and check both halves of its contract: the program
  * produced what the case says, and it really invoked the name the case
- * covers. A case listing `zones` has to satisfy that in every one of them.
- * Returns `undefined` on success, or a description of the failure.
+ * covers. Every case has to satisfy that under each of
+ * {@link COVERAGE_ZONES}. Returns `undefined` on success, or a description of
+ * the failure.
  */
 export function runCoverageCase(
   testCase: CoverageCase,
@@ -121,13 +190,11 @@ export function runCoverageCase(
     return `a case needs exactly one of expected/outputs/throws/check, got ${expectations.length}`;
   }
 
-  if (!testCase.zones) return runInAmbientZone(testCase, libraries);
-
   const ambient = process.env.TZ;
   try {
-    for (const zone of testCase.zones) {
+    for (const zone of COVERAGE_ZONES) {
       process.env.TZ = zone;
-      const failure = runInAmbientZone(testCase, libraries);
+      const failure = runInZone(testCase, libraries, zoneContext(zone));
       if (failure) return `under TZ=${zone}: ${failure}`;
     }
   } finally {
@@ -137,9 +204,10 @@ export function runCoverageCase(
   return undefined;
 }
 
-function runInAmbientZone(
+function runInZone(
   testCase: CoverageCase,
   libraries: BuiltinLibraryName[],
+  context: ZoneContext,
 ): string | undefined {
   const effective = testCase.libraries ?? libraries;
   recordResolvedBuiltinsFilter(effective);
@@ -168,14 +236,19 @@ function runInAmbientZone(
     if (!testCase.produces) {
       return 'a knownDefect case must record what it produces today';
     }
-    if (!checkExpectation(testCase, outputs, thrown)) {
+    if (!checkExpectation(testCase, outputs, thrown, context)) {
       return (
         'this case documents a known defect but now produces the expected ' +
         `result. If ${testCase.covers} was fixed, drop its knownDefect and ` +
         'produces so the case asserts normally.'
       );
     }
-    const drifted = checkExpectation(testCase.produces, outputs, thrown);
+    const drifted = checkExpectation(
+      testCase.produces,
+      outputs,
+      thrown,
+      context,
+    );
     return drifted
       ? `the defect changed shape — this case still fails, but no longer the ` +
           `documented way, so its knownDefect note is now wrong: ${drifted}`
@@ -183,7 +256,7 @@ function runInAmbientZone(
   }
 
   return (
-    checkExpectation(testCase, outputs, thrown) ??
+    checkExpectation(testCase, outputs, thrown, context) ??
     (reached.has(testCase.covers)
       ? undefined
       : `the program never invoked ${testCase.covers}` +
@@ -196,6 +269,7 @@ function checkExpectation(
   testCase: Expectation,
   outputs: unknown[] | undefined,
   thrown: unknown,
+  context: ZoneContext,
 ): string | undefined {
   try {
     if (testCase.throws) {
@@ -211,7 +285,7 @@ function checkExpectation(
       if (testCase.outputs) {
         deepStrictEqual(values, testCase.outputs);
       } else if (testCase.check) {
-        testCase.check(values);
+        testCase.check(values, context);
       } else if (testCase.tolerance !== undefined) {
         strictEqual(values.length, 1, 'expected a single output');
         const actual = values[0];
