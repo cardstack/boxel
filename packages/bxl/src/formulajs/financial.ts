@@ -531,16 +531,25 @@ export function excelMirr(
   const financeRate = parseExcelNumber(financeRateLike);
   const reinvestRate = parseExcelNumber(reinvestRateLike);
 
-  const payments = values.filter((value) => value < 0);
-  const incomes = values.filter((value) => value >= 0);
+  // Each series keeps every flow's time slot, with a zero standing in for the
+  // flows of the other sign, so a flow is discounted by when it happens and
+  // not by its position among flows that share its sign.
+  const payments = values.map((value) => (value < 0 ? value : 0));
+  const incomes = values.map((value) => (value >= 0 ? value : 0));
 
-  if (payments.length === 0 || incomes.length === 0) {
+  if (
+    !values.some((value) => value < 0) ||
+    !values.some((value) => value >= 0)
+  ) {
     throwExcelError(EXCEL_ERROR.div0);
   }
 
+  // NPV discounts from period one, so (1+reinvestRate)^n carries the positives
+  // forward to the final period while (1+financeRate) brings the negatives
+  // back to period zero — the two ends the rate is the geometric mean between.
   const numerator =
     -excelNpv(reinvestRate, incomes) *
-    Math.pow(1 + reinvestRate, values.length - 1);
+    Math.pow(1 + reinvestRate, values.length);
   const denominator = excelNpv(financeRate, payments) * (1 + financeRate);
 
   return Math.pow(numerator / denominator, 1 / (values.length - 1)) - 1;

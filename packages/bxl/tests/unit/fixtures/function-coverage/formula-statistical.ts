@@ -41,11 +41,12 @@ export const formulaStatisticalCases: CoverageCase[] = [
     expected: 4,
     tolerance: 1e-9,
   },
-  // C(3,1)/2^3 = 3/8.
   {
     covers: 'BINOM_DIST/4',
-    source: 'BINOM_DIST(1, 3, 0.5, false)',
-    expected: 0.375,
+    // p away from 0.5, so p and 1-p are not interchangeable and a
+    // success/failure swap is visible: C(3,1)*0.25*0.75^2.
+    source: 'BINOM_DIST(1, 3, 0.25, false)',
+    expected: 0.421875,
     tolerance: 1e-12,
   },
   // C(4,2)/2^4 = 6/16; adding the upper bound sums P(2..4) = 11/16.
@@ -105,13 +106,18 @@ export const formulaStatisticalCases: CoverageCase[] = [
     expected: 0.979981992270027,
     tolerance: 1e-8,
   },
-  // The t quantile with 1 degree of freedom is tan(pi*(p - 1/2)), so alpha
-  // 0.5 gives t = tan(pi/4) = 1, leaving sd/sqrt(n) = 1/sqrt(2).
   {
     covers: 'CONFIDENCE_T/3',
-    source: 'CONFIDENCE_T(0.5, 1, 2)',
-    expected: 0.7071067811865476,
-    tolerance: 1e-6,
+    // T.INV.2T(0.05, 4) / sqrt(5), where the two-tailed t quantile is
+    // 2.7764451051977944 — solved in closed form, since for four degrees of
+    // freedom the Student-t CDF integrates to 1/2 + (3/4)(s - s^3/3) with
+    // s = t/sqrt(t^2 + 4). The normal quantile in its place would answer
+    // 0.877, three and a half million tolerances away, so the tolerance is
+    // set by the ~1e-8 accuracy of the underlying t inverse rather than by
+    // anything this case needs to tell apart.
+    source: 'CONFIDENCE_T(0.05, 1, 5)',
+    expected: 1.2416639982037645,
+    tolerance: 1e-7,
   },
   // Density lambda*exp(-lambda*x) = 2/e^2.
   {
@@ -161,8 +167,10 @@ export const formulaStatisticalCases: CoverageCase[] = [
   { covers: 'GAMMA/1', source: 'GAMMA(5)', expected: 24, tolerance: 1e-9 },
   {
     covers: 'GAMMALN/1',
-    source: 'GAMMALN(1)',
-    expected: 0,
+    // ln Gamma(1/2) = ln sqrt(pi). Gamma(1) is 1 and its log 0, which a
+    // stub returning zero also satisfies.
+    source: 'GAMMALN(0.5)',
+    expected: 0.5723649429247001,
     tolerance: 1e-12,
   },
   // ln(Gamma(6)) = ln(120).
@@ -197,6 +205,10 @@ export const formulaStatisticalCases: CoverageCase[] = [
   // C(4,1)*C(6,1)/C(10,2) = 24/45.
   {
     covers: 'HYPGEOM_DIST/5',
+    // The sample size and the population's success count are interchangeable
+    // here, and not by accident: C(K,k)C(N-K,n-k)/C(N,n) is symmetric in n
+    // and K, so no case can separate them and transposing them in the bridge
+    // would change no answer.
     source: 'HYPGEOM_DIST(1, 2, 4, 10, false)',
     expected: 0.5333333333333333,
     tolerance: 1e-9,
@@ -211,8 +223,9 @@ export const formulaStatisticalCases: CoverageCase[] = [
   },
   {
     covers: 'LOGNORM_INV/3',
-    source: 'LOGNORM_INV(0.5, 1, 2)',
-    expected: 2.718281828459045,
+    // Off the median: at p = 0.5 the answer is exp(mu) whatever sigma is.
+    source: 'LOGNORM_INV(0.9, 1, 2)',
+    expected: 35.27248263126183,
     tolerance: 1e-8,
   },
   // P(1 failure before the 2nd success) = C(2,1)*(1/2)^2*(1/2) = 1/4.
@@ -339,13 +352,16 @@ export const formulaStatisticalCases: CoverageCase[] = [
     expected: 0.03558886402450434,
     tolerance: 1e-12,
   },
-  // One-tailed upper-tail test against the hypothesized mean. With x equal
-  // to the sample mean, z = 0 and p is exactly 1/2; giving sigma = 2 with
-  // n = 4 and a mean one unit above x makes z = 1, the upper normal tail.
+  // One-tailed upper-tail test against the hypothesized mean. The
+  // three-argument form takes the population sigma instead of estimating it,
+  // so sigma = 2 over n = 4 with a mean one unit above x makes z = 1.
   {
     covers: 'Z_TEST/2',
-    source: 'Z_TEST([1, 2, 3, 4, 5], 3)',
-    expected: 0.5,
+    // A hypothesized mean away from the sample mean: at x = 3 the statistic
+    // is exactly 0 and the answer is 0.5 whatever the spread, so the sample
+    // itself would be inert.
+    source: 'Z_TEST([1, 2, 3, 4, 5], 2)',
+    expected: 0.07864960352514261,
     tolerance: 1e-12,
   },
   {

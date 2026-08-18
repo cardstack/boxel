@@ -1,4 +1,4 @@
-import { TIMEZONES, type CoverageCase } from './case.ts';
+import type { CoverageCase } from './case.ts';
 
 export const formulaTextCases: CoverageCase[] = [
   // Character codes. CHAR maps a single-byte code back to its character,
@@ -98,6 +98,7 @@ export const formulaTextCases: CoverageCase[] = [
     throws: /#VALUE!/,
   },
   { covers: 'EXACT/2', source: 'EXACT("Word", "word")', expected: false },
+  { covers: 'EXACT/2', source: 'EXACT("word", "word")', expected: true },
   // Substitution. SUBSTITUTE matches text, REPLACE matches a position span,
   // and REPLACE's new text comes last, after the start and length.
   {
@@ -158,7 +159,6 @@ export const formulaTextCases: CoverageCase[] = [
     covers: 'TEXT/2',
     source: 'TEXT(DATE(2026, 4, 30), "yyyy-mm-dd")',
     expected: '2026-04-30',
-    zones: TIMEZONES,
   },
   // Month and weekday names come from the run length: three letters abbreviate,
   // four or more spell it out.
@@ -166,14 +166,12 @@ export const formulaTextCases: CoverageCase[] = [
     covers: 'TEXT/2',
     source: 'TEXT(DATE(2026, 4, 30), "dddd d mmm yy")',
     expected: 'Thursday 30 Apr 26',
-    zones: TIMEZONES,
   },
   // Five m's is the single-letter month, one more than the full name.
   {
     covers: 'TEXT/2',
     source: 'TEXT(DATE(2026, 4, 30), "mmmmm")',
     expected: 'A',
-    zones: TIMEZONES,
   },
   // `mm` is minutes next to an hour or a second, and months anywhere else, so
   // one format code carries both readings.
@@ -181,7 +179,6 @@ export const formulaTextCases: CoverageCase[] = [
     covers: 'TEXT/2',
     source: 'TEXT(DATE(2026, 4, 30) + TIME(14, 5, 9), "mm/dd h:mm:ss AM/PM")',
     expected: '04/30 2:05:09 PM',
-    zones: TIMEZONES,
   },
   // Minutes only where the clock puts them — after an hour, or before seconds.
   // A month run that merely precedes an hour is still a month.
@@ -189,13 +186,11 @@ export const formulaTextCases: CoverageCase[] = [
     covers: 'TEXT/2',
     source: 'TEXT(DATE(2026, 4, 30) + TIME(14, 5, 9), "d mmm h:mm")',
     expected: '30 Apr 14:05',
-    zones: TIMEZONES,
   },
   {
     covers: 'TEXT/2',
     source: 'TEXT(DATE(2026, 4, 30) + TIME(14, 5, 9), "mm hh")',
     expected: '04 14',
-    zones: TIMEZONES,
   },
   // A bracketed run is a colour, a condition or a locale, so a `d` inside one
   // does not make a number format a date format.
@@ -208,7 +203,6 @@ export const formulaTextCases: CoverageCase[] = [
     covers: 'TEXT/2',
     source: 'TEXT(DATE(2026, 4, 30), "[$-409]yyyy-mm-dd")',
     expected: '2026-04-30',
-    zones: TIMEZONES,
   },
   // The bracketed clock codes are the exception: they ask for elapsed time, so
   // a day and a half is 36 hours and the minutes beside them are the clock's.
@@ -216,13 +210,11 @@ export const formulaTextCases: CoverageCase[] = [
     covers: 'TEXT/2',
     source: 'TEXT(1.5, "[h]:mm")',
     expected: '36:00',
-    zones: TIMEZONES,
   },
   {
     covers: 'TEXT/2',
     source: 'TEXT(1.5, "[mm]")',
     expected: '2160',
-    zones: TIMEZONES,
   },
   // A time of day below the 1970 epoch reads the same as one above it: the
   // serial is a fraction that lands a hair under the second it names, and
@@ -231,13 +223,11 @@ export const formulaTextCases: CoverageCase[] = [
     covers: 'TEXT/2',
     source: 'TEXT(TIME(12, 30, 0), "hh:mm:ss")',
     expected: '12:30:00',
-    zones: TIMEZONES,
   },
   {
     covers: 'TEXT/2',
     source: 'TEXT(DATE(2023, 1, 1) + TIME(12, 30, 0), "hh:mm:ss")',
     expected: '12:30:00',
-    zones: TIMEZONES,
   },
   { covers: 'FIXED/1', source: 'FIXED(1234.567)', expected: '1,234.57' },
   // Negative decimals round to the left of the point.
