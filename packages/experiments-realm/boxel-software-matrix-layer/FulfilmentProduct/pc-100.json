@@ -30,6 +30,10 @@
       "isActive": true,
       "cardInfo": {
         "name": "Braided Power Cable 2m"
+      },
+      "image": {
+        "url": "https://images.pexels.com/photos/7720705/pexels-photo-7720705.jpeg?auto=compress&cs=tinysrgb&w=800",
+        "sourceMode": "url"
       }
     },
     "relationships": {

@@ -17,9 +17,14 @@ import MarkdownField from '@cardstack/base/markdown';
 import { htmlSafe } from '@ember/template';
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 import RotateIcon from '@cardstack/boxel-icons/rotate-ccw';
+import Boxes from '@cardstack/boxel-icons/boxes';
+import Calculator from '@cardstack/boxel-icons/calculator';
+import Clock from '@cardstack/boxel-icons/clock';
+import FileText from '@cardstack/boxel-icons/file-text';
 import { FulfilmentOrder } from './fulfilment-order';
 import { Shipment } from './shipment';
 import StatusChip, { type StatusStyle } from './fulfilment-status-chip';
+import { money } from './fulfilment-format';
 
 export const RETURN_STATUSES: StatusStyle[] = [
   { value: 'requested', label: 'Requested', hue: '#3b82f6' },
@@ -436,7 +441,7 @@ export class ProductReturn extends CardDef {
         </header>
 
         <section class='sec'>
-          <h2>Reason</h2>
+          <h2><FileText class='sec-icon' role='presentation' />Reason</h2>
           <p class='reason'>{{@model.reasonLabel}}</p>
           {{#if @model.reasonDetails}}
             <p class='detail'>“{{@model.reasonDetails}}”</p>
@@ -444,7 +449,7 @@ export class ProductReturn extends CardDef {
         </section>
 
         <section class='sec'>
-          <h2>Items and disposition</h2>
+          <h2><Boxes class='sec-icon' role='presentation' />Items and disposition</h2>
           {{#if @model.lineItems.length}}
             <div class='ri-head'>
               <span>Item</span><span>Qty</span><span>Condition</span><span
@@ -457,21 +462,21 @@ export class ProductReturn extends CardDef {
         </section>
 
         <section class='sec'>
-          <h2>Refund calculation</h2>
+          <h2><Calculator class='sec-icon' role='presentation' />Refund calculation</h2>
           <dl class='calc'>
             <div>
               <dt>Item value</dt>
-              <dd><@fields.itemsValue @format='atom' /></dd>
+              <dd>{{money @model.itemsValue.amount @model.currencyCode}}</dd>
             </div>
             <div>
               <dt>Restocking fee
                 {{#if @model.feeWaived}}<span class='waived'>waived — our
                     fault</span>{{/if}}</dt>
-              <dd>−<@fields.restockingFee @format='atom' /></dd>
+              <dd>−{{money @model.restockingFee.amount @model.currencyCode}}</dd>
             </div>
             <div class='total'>
               <dt>Refund</dt>
-              <dd><@fields.refundAmount @format='atom' /></dd>
+              <dd>{{money @model.refundAmount.amount @model.currencyCode}}</dd>
             </div>
           </dl>
           <p class='via'>
@@ -492,7 +497,7 @@ export class ProductReturn extends CardDef {
         {{/if}}
 
         <section class='sec'>
-          <h2>Timeline</h2>
+          <h2><Clock class='sec-icon' role='presentation' />Timeline</h2>
           <dl class='kv'>
             <div>
               <dt>Requested</dt>
@@ -522,12 +527,48 @@ export class ProductReturn extends CardDef {
 
       <style scoped>
         .ret {
+          /* Type scale, mapped to the house 1.333 modular scale rather than the
+             28 hand-picked rem values these cards used to carry — 44 of which
+             fell below 12px, under the smallest token the design system has. */
+          --t-micro: var(--boxel-font-size-xs);
+          --t-sm: var(--boxel-font-size-sm);
+          --t-body: var(--boxel-font-size);
+          --t-lg: var(--boxel-font-size-lg);
+          --t-xl: var(--boxel-font-size-xl);
+          /* Isolated gets NO container from the host — every ancestor up to the
+             panel is `container-type: normal`, so an `@container` rule here is
+             inert until this declares its own. `inline-size`, not `size`: the
+             card scrolls, and `size` needs a definite block size. */
+          container-type: inline-size;
+          container-name: card-iso;
           --ful-bg: var(--background);
           --ful-fg: var(--foreground);
           --ful-muted-fg: var(--muted-foreground);
           --ful-border: var(--border);
           --ful-perf: color-mix(in oklch, var(--foreground) 22%, transparent);
+          /* ONE panel primitive. Every full-width tinted block on this card —
+             section, note, alert, callout — takes its ground, inset and radius
+             from here, because a background makes spacing VISIBLE: while
+             sections were separated by whitespace alone, a note padded
+             `sp-sm` and a section padded `sp-lg` looked the same. Tint them
+             both and their text edges no longer line up down the page, and
+             every gap between them reads as a mis-registration rather than a
+             rhythm. The inset is the thing that must agree; the tint only
+             exposed it. */
+          --panel-bg: color-mix(in oklch, var(--foreground) 3%, transparent);
+          --panel-pad: var(--boxel-sp) var(--boxel-sp-lg) var(--boxel-sp-lg);
+          --panel-radius: var(--radius, 8px);
+          /* The ONE vertical rhythm. It used to be `margin-top` on `.sec` plus a
+             `.cols .sec { margin-top: 0 }` override for the side-by-side case —
+             two mechanisms for one relationship, and `.cols` itself had neither,
+             so the measured gap above a two-column group was 0px while the gap
+             above a stacked section was 28.4px. A tinted panel colliding with
+             the text above it is what that 0 looks like. */
+          --panel-gap: var(--boxel-sp-xl);
 
+          display: flex;
+          flex-direction: column;
+          gap: var(--panel-gap);
           height: 100%;
           overflow-y: auto;
           padding: var(--boxel-sp-lg);
@@ -545,7 +586,7 @@ export class ProductReturn extends CardDef {
           border-bottom: 2px dashed var(--ful-perf);
         }
         .eyebrow {
-          font-size: 0.62rem;
+          font-size: var(--t-micro);
           font-weight: 700;
           letter-spacing: 0.2em;
           text-transform: uppercase;
@@ -554,32 +595,46 @@ export class ProductReturn extends CardDef {
         .num {
           margin: 2px 0 0;
           font-family: var(--font-mono, ui-monospace, monospace);
-          font-size: 2rem;
+          font-size: var(--t-xl);
           line-height: 1;
         }
         .sub {
           margin: 8px 0 0;
-          font-size: 0.9rem;
+          font-size: var(--t-sm);
           color: var(--ful-muted-fg, var(--boxel-500));
         }
         .sec {
-          margin-top: var(--boxel-sp-lg);
+          /* A surface, not just a gap. Sections were told apart only by spacing,
+             and their headings were 12px uppercase muted — pixel-identical to
+             every table column label on the card, so "where does a section
+             start" had no answer. The ground is mixed toward --foreground so it
+             follows the theme in both modes rather than being a grey. */
+          padding: var(--panel-pad);
+          border-radius: var(--panel-radius);
+          background: var(--panel-bg);
         }
         .sec h2 {
+          /* The section heading is now the loudest uppercase thing on the card:
+             --foreground against the column labels' --muted-foreground. Weight
+             alone (500 vs 400) was not a readable difference. */
+          display: flex;
+          align-items: center;
+          gap: 7px;
           margin: 0 0 var(--boxel-sp-xs);
-          font-size: 0.72rem;
-          letter-spacing: 0.12em;
+          font-size: var(--t-micro);
+          font-weight: 700;
+          letter-spacing: 0.14em;
           text-transform: uppercase;
-          color: var(--ful-muted-fg, var(--boxel-500));
+          color: var(--ful-fg, var(--foreground, var(--boxel-dark)));
         }
         .reason {
           margin: 0;
-          font-size: 1.05rem;
+          font-size: var(--t-body);
           font-weight: 600;
         }
         .detail {
           margin: 4px 0 0;
-          font-size: 0.88rem;
+          font-size: var(--t-sm);
           font-style: italic;
           color: var(--ful-muted-fg, var(--boxel-500));
         }
@@ -589,7 +644,7 @@ export class ProductReturn extends CardDef {
           gap: var(--boxel-sp-xs);
           padding-bottom: 4px;
           border-bottom: 1px solid var(--ful-border, var(--boxel-border-color));
-          font-size: 0.62rem;
+          font-size: var(--t-micro);
           letter-spacing: 0.1em;
           text-transform: uppercase;
           color: var(--ful-muted-fg, var(--boxel-500));
@@ -607,7 +662,7 @@ export class ProductReturn extends CardDef {
           display: grid;
           grid-template-columns: minmax(0, 1fr) 7rem;
           gap: var(--boxel-sp-xs);
-          font-size: 0.9rem;
+          font-size: var(--t-sm);
         }
         .calc dt {
           color: var(--ful-muted-fg, var(--boxel-500));
@@ -620,7 +675,7 @@ export class ProductReturn extends CardDef {
         }
         .waived {
           margin-left: 6px;
-          font-size: 0.7rem;
+          font-size: var(--t-micro);
           letter-spacing: 0.04em;
           text-transform: uppercase;
         }
@@ -633,13 +688,13 @@ export class ProductReturn extends CardDef {
           color: var(--ful-fg, var(--boxel-dark));
         }
         .total dd {
-          font-size: 1.3rem;
+          font-size: var(--t-lg);
           font-weight: 800;
         }
         .via,
         .restock-note {
           margin: var(--boxel-sp-sm) 0 0;
-          font-size: 0.8rem;
+          font-size: var(--t-micro);
           color: var(--ful-muted-fg, var(--boxel-500));
         }
         .restock-note {
@@ -658,16 +713,35 @@ export class ProductReturn extends CardDef {
           gap: var(--boxel-sp-xs);
         }
         .kv dt {
-          font-size: 0.8rem;
+          font-size: var(--t-micro);
           color: var(--ful-muted-fg, var(--boxel-500));
         }
         .kv dd {
           margin: 0;
-          font-size: 0.85rem;
+          font-size: var(--t-sm);
         }
         .empty {
-          font-size: 0.85rem;
+          font-size: var(--t-sm);
           color: var(--ful-muted-fg, var(--boxel-500));
+        }
+      
+        /* Section icons: one size, one muted colour, everywhere. They make the
+           card scannable by shape; they must never compete with the heading. */
+        h2 .sec-icon {
+          width: max(14px, 1em);
+          height: max(14px, 1em);
+          flex: 0 0 auto;
+          color: var(--ful-muted-fg, var(--boxel-500));
+        }
+
+        /* One collapse stop. The card is rendered in a resizable stack panel, so
+           this fires when a second card opens beside it — not only on a phone. */
+        @container card-iso (width < 720px) {
+          .cols,
+          .grid,
+          .two {
+            grid-template-columns: 1fr;
+          }
         }
       </style>
     </template>
@@ -682,7 +756,7 @@ export class ProductReturn extends CardDef {
             @label={{@model.statusStyle.label}}
             @hue={{@model.statusStyle.hue}}
           /></span>
-        <span class='r-slot'><@fields.refundAmount @format='atom' /></span>
+        <span class='r-slot'>{{money @model.refundAmount.amount @model.currencyCode}}</span>
       </div>
 
       <style scoped>
@@ -749,10 +823,27 @@ export class ProductReturn extends CardDef {
         <div class='r-body'>
           <p class='reason'>{{@model.reasonLabel}}</p>
           <p class='cust'>{{if @model.customerName @model.customerName ''}}</p>
+          {{! Only rendered at the tall quantum. Without it a 170x250 tile spent
+              ~200px of its body row on nothing, which is what made the card read
+              as unfinished rather than as spacious. }}
+          <dl class='detail'>
+            {{#if @model.orderNumber}}
+              <div><dt>Order</dt><dd>{{@model.orderNumber}}</dd></div>
+            {{/if}}
+            {{#if @model.requestedAt}}
+              <div>
+                <dt>Requested</dt>
+                <dd><@fields.requestedAt @format='atom' /></dd>
+              </div>
+            {{/if}}
+            {{#if @model.reasonDetails}}
+              <p class='detail-note'>{{@model.reasonDetails}}</p>
+            {{/if}}
+          </dl>
         </div>
         <div class='r-meta'>
           <span class='items'>{{@model.itemCount}} items</span>
-          <span class='refund'><@fields.refundAmount @format='atom' /></span>
+          <span class='refund'>{{money @model.refundAmount.amount @model.currencyCode}}</span>
         </div>
       </article>
 
@@ -772,7 +863,7 @@ export class ProductReturn extends CardDef {
             min(calc(3px + 2.1cqi + 1cqb - 0.6 * var(--ar)), 10cqb),
             17px
           );
-          --meta-size: max(8px, calc(var(--type-base) / var(--type-ratio)));
+          --meta-size: max(11px, calc(var(--type-base) / var(--type-ratio)));
           --glyph-size: max(11px, min(3cqi, 14cqb));
           /* The identifier is a VALUE, so it must render in full. It is capped
              against the inline axis as well as the block axis so a real order /
@@ -842,20 +933,63 @@ export class ProductReturn extends CardDef {
             transparent
           );
         }
+        .hd-row {
+          flex: 0 1 auto;
+        }
+        /* The RMA number is the identifier the operator reads back to a customer,
+           so it never shrinks and never ellipsises. When the head is tight it is
+           the STATUS — a label, recoverable from the dot colour — that yields. */
         .num {
+          flex: 0 0 auto;
           font-family: var(--font-mono, ui-monospace, monospace);
           font-size: var(--num-size);
           font-weight: 800;
           line-height: 1.2;
           white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
         }
         .status {
+          flex: 0 1 auto;
+          min-width: 0;
           font-size: var(--meta-size);
           font-weight: 700;
           white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
           color: var(--muted-foreground, var(--boxel-500));
+        }
+        .detail {
+          display: none;
+          margin: 0;
+        }
+        .detail > div {
+          display: flex;
+          justify-content: space-between;
+          gap: 6px;
+          font-size: var(--meta-size);
+          line-height: 1.3;
+        }
+        .detail dt {
+          color: var(--muted-foreground, var(--boxel-500));
+        }
+        .detail dd {
+          margin: 0;
+          font-family: var(--font-mono, ui-monospace, monospace);
+          font-variant-numeric: tabular-nums;
+          text-align: right;
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .detail-note {
+          margin: 4px 0 0;
+          font-size: var(--meta-size);
+          line-height: 1.35;
+          color: var(--muted-foreground, var(--boxel-500));
+          display: -webkit-box;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 3;
+          overflow: hidden;
         }
         .reason {
           margin: 2px 0 0;
@@ -897,6 +1031,22 @@ export class ProductReturn extends CardDef {
         @container fitted-card (80px < height <= 130px) {
           .cust {
             display: none;
+          }
+        }
+        /* Tall cells earn the detail block; it is the row that stops a 250px
+           tile from being 200px of empty. `auto` rows above it keep the reason
+           and customer at their natural height so nothing clips. */
+        @container fitted-card (height > 180px) {
+          .r-body {
+            display: grid;
+            grid-template-rows: auto auto minmax(0, 1fr);
+            gap: 4px;
+          }
+          .detail {
+            display: block;
+            align-self: start;
+            padding-top: 5px;
+            border-top: 1px dashed var(--perf);
           }
         }
         @container fitted-card (width <= 150px) {

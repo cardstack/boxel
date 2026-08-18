@@ -30,6 +30,10 @@
       "isActive": true,
       "cardInfo": {
         "name": "Linen Lampshade, Large"
+      },
+      "image": {
+        "url": "https://images.pexels.com/photos/6916280/pexels-photo-6916280.jpeg?auto=compress&cs=tinysrgb&w=800",
+        "sourceMode": "url"
       }
     },
     "relationships": {
