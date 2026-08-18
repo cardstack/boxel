@@ -18,7 +18,7 @@ import { Table } from './fulfilment-table';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 import { htmlSafe } from '@ember/template';
 import { debounce } from 'lodash-es';
 import type Owner from '@ember/owner';
@@ -33,6 +33,8 @@ import PlusIcon from '@cardstack/boxel-icons/plus';
 import LayoutGridIcon from '@cardstack/boxel-icons/layout-grid';
 import LayoutListIcon from '@cardstack/boxel-icons/layout-list';
 import TableIcon from '@cardstack/boxel-icons/table';
+import TriangleAlert from '@cardstack/boxel-icons/triangle-alert';
+import ChevronRight from '@cardstack/boxel-icons/chevron-right';
 
 import { FulfilmentOrder } from './fulfilment-order';
 import { Shipment } from './shipment';
@@ -43,9 +45,14 @@ import { ProductReturn } from './product-return';
 import { PickList } from './pick-list';
 import { ORDER_STATUSES, orderStatusStyle } from './order-status';
 import { isShipmentException } from './shipment-status';
+import {
+  MapRender,
+  type Coordinate,
+} from '@cardstack/catalog/components/map-render';
 import { OrderFulfilmentBoard, type BoardColumn } from './order-fulfilment-board';
 import { ShipmentTracker } from './shipment-tracker';
 import StatusChip from './fulfilment-status-chip';
+import { money, stamp } from './fulfilment-format';
 
 // The app declares the domain; the blocks stay neutral. These columns are the
 // fulfilment pipeline — the board block itself has no idea what "packing"
@@ -69,19 +76,9 @@ const TABS = [
   { key: 'returns', label: 'Returns' },
 ];
 
-function money(amount: number | undefined, code = 'GBP') {
-  if (amount == null) {
-    return '—';
-  }
-  try {
-    return new Intl.NumberFormat(undefined, {
-      style: 'currency',
-      currency: code,
-    }).format(amount);
-  } catch {
-    return String(amount);
-  }
-}
+// A tracker-per-row list is expensive to draw, so the transit tab pages rather
+// than rendering every shipment a realm holds.
+const TRANSIT_PAGE = 12;
 
 function pct(value: number | undefined) {
   return htmlSafe(`width: ${Math.min(100, Math.max(0, value ?? 0))}%`);
@@ -114,13 +111,20 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
   @tracked boardSearch = '';
   @tracked inventorySearch = '';
   @tracked returnsSearch = '';
+  @tracked transitSearch = '';
   @tracked inventoryStatus: 'all' | 'low' | 'out' = 'all';
   @tracked returnsStatus: 'all' | 'open' | 'closed' = 'all';
+  // The transit tab had no filter row at all, which is why a delivered parcel
+  // was unreachable. It defaults to `transit` — the working set — but every
+  // other state is now one click away instead of nowhere.
+  @tracked transitStatus: 'transit' | 'delivered' | 'attention' | 'all' =
+    'transit';
   // Inventory defaults to the table: a stock row is six numeric columns, and
   // that is what a table is for. Returns defaults to the grid — an RMA reads as
   // a card. Both offer the other view; neither is forced into the wrong shape.
   @tracked inventoryView = 'table';
   @tracked returnsView = 'grid';
+  @tracked transitLimit = TRANSIT_PAGE;
   @tracked selectedShipmentId: string | undefined = undefined;
 
   private orderQuery: ReturnType<getCards> | undefined;
@@ -257,6 +261,9 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
   private debouncedReturnsSearch = debounce((v: string) => {
     this.returnsSearch = v;
   }, 250);
+  private debouncedTransitSearch = debounce((v: string) => {
+    this.transitSearch = v;
+  }, 250);
 
   @action setBoardSearch(v: string) {
     this.debouncedBoardSearch(v);
@@ -284,6 +291,9 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
     return Boolean((this.args as any).viewCard);
   }
 
+  // An unresolved query and an empty realm both yield zero instances, so
+  // without this the first paint of every tab asserted "No orders in the
+  // pipeline" — an empty state stating something the app did not yet know.
   get orders(): FulfilmentOrder[] {
     return ((this.orderQuery?.instances ?? []) as FulfilmentOrder[]).filter(
       Boolean,
@@ -326,11 +336,24 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
     return BOARD_COLUMNS;
   }
 
+  // An empty board with orders in hand is a SEARCH result, not an empty
+  // pipeline — the old single message asserted the latter for both, so a search
+  // that matched nothing read as "you have no orders at all".
+  get boardEmptyMessage() {
+    // Loading is not empty. Until this branch existed the first paint of the
+    // board asserted the pipeline was clear.
+    if (this.ordersLoading) {
+      return 'Loading orders…';
+    }
+    if (this.boardSearch.trim() && this.orders.length) {
+      return 'No orders match this search.';
+    }
+    return 'No orders in the pipeline. Everything raised so far is shipped, delivered or on hold.';
+  }
+
   get boardOrders() {
     let term = this.boardSearch.trim().toLowerCase();
-    let inPipeline = this.orders.filter((o) =>
-      BOARD_COLUMNS.some((c) => c.key === o.status),
-    );
+    let inPipeline = this.orders.filter(this.isOnBoard);
     if (!term) {
       return inPipeline;
     }
@@ -347,8 +370,19 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
     });
   }
 
+  // ONE rule decides both whether a card is on the board and which column it
+  // lands in. They used to be two: membership tested `status` against the
+  // column list, while `columnKeyFor` fell back to 'pending' when status was
+  // missing. Deleting a card empties the store's copy for a moment, and in that
+  // moment the two disagreed — so a deleted Processing card reappeared under
+  // Pending until the page was reloaded.
+  private isOnBoard = (order: FulfilmentOrder) =>
+    BOARD_COLUMNS.some((c) => c.key === order.status);
+
   @action columnKeyFor(order: FulfilmentOrder) {
-    return order.status ?? 'pending';
+    // Safe without a fallback: `boardOrders` has already guaranteed the status
+    // names a column. A fallback here could only ever invent one.
+    return order.status;
   }
 
   @action
@@ -366,7 +400,9 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
 
   @action async createOrder() {
     let create = (this.args as any).createCard;
-    let realm = this.realms?.[0];
+    // `realms` are strings but the host reads `opts.realmURL.href` — pass a URL.
+    let realmHref = this.realms?.[0];
+    let realm = realmHref ? new URL(realmHref) : undefined;
     let ref = identifyCard(FulfilmentOrder);
     if (!create || !ref || !realm) {
       return;
@@ -375,6 +411,9 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
       realmURL: realm,
       doc: {
         data: {
+          // When a `doc` is supplied the host skips `ref` entirely and adds the
+          // document as-is, so the doc has to carry its own adoptsFrom.
+          meta: { adoptsFrom: ref },
           attributes: {
             status: 'pending',
             priority: 'normal',
@@ -389,17 +428,24 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
 
   @action async createStockRow() {
     let create = (this.args as any).createCard;
-    let realm = this.realms?.[0];
+    // `realms` are strings but the host reads `opts.realmURL.href` — pass a URL.
+    let realmHref = this.realms?.[0];
+    let realm = realmHref ? new URL(realmHref) : undefined;
     let ref = identifyCard(InventoryStock);
     if (!create || !ref || !realm) {
       return;
     }
-    await create(ref, undefined, { realmURL: realm });
+    await create(ref, undefined, {
+      realmURL: realm,
+      doc: { data: { meta: { adoptsFrom: ref } } },
+    });
   }
 
   @action async createReturn() {
     let create = (this.args as any).createCard;
-    let realm = this.realms?.[0];
+    // `realms` are strings but the host reads `opts.realmURL.href` — pass a URL.
+    let realmHref = this.realms?.[0];
+    let realm = realmHref ? new URL(realmHref) : undefined;
     let ref = identifyCard(ProductReturn);
     if (!create || !ref || !realm) {
       return;
@@ -408,6 +454,7 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
       realmURL: realm,
       doc: {
         data: {
+          meta: { adoptsFrom: ref },
           attributes: {
             status: 'requested',
             requestedAt: new Date().toISOString(),
@@ -431,10 +478,30 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
     ).length;
   }
 
+  // "In transit" now means what the words say: on the road. It used to be
+  // `status && status !== 'delivered'`, which counted a label printed this
+  // morning and a package sitting in exception as in transit — so the KPI
+  // disagreed with the word above it, and the tab listed parcels that had not
+  // moved yet alongside ones that had stopped moving.
   get inTransit() {
     return this.shipments.filter(
-      (s) => s.status && s.status !== 'delivered',
+      (s) => s.status === 'in_transit' || s.status === 'out_for_delivery',
     );
+  }
+
+  // The read side of Mark delivered. Nothing in this app listed a delivered
+  // shipment: the transit tab filtered them out, the ship desk queue only holds
+  // pre-dispatch parcels, and the board draws orders. Marking a package
+  // delivered therefore removed it from the app entirely — a write with no
+  // corresponding read. Most recent first: "what landed today" is the question
+  // being asked, not "what landed first".
+  get deliveredShipments() {
+    return this.shipments
+      .filter((s) => s.status === 'delivered')
+      .sort(
+        (a, b) =>
+          (b.deliveredAt?.getTime() ?? 0) - (a.deliveredAt?.getTime() ?? 0),
+      );
   }
 
   get exceptions() {
@@ -443,6 +510,18 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
 
   get lateShipments() {
     return this.shipments.filter((s) => s.isLate && s.status !== 'delivered');
+  }
+
+  // The KPI counts what the In transit tab draws in red, which is not the same
+  // as `exceptions`: a shipment three days overdue is flagged there but carries
+  // no exception status, so a KPI reading `exceptions` alone said "1" over a
+  // tab showing three problems.
+  get needsAttention() {
+    let seen = new Set(this.exceptions);
+    for (let s of this.lateShipments) {
+      seen.add(s);
+    }
+    return [...seen];
   }
 
   get lowStock() {
@@ -489,6 +568,174 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
     });
   }
 
+  // ── In transit ───────────────────────────────────────────────────────────
+
+  // `getCards` publishes `isLoading`; nothing in this app read it, so every tab
+  // rendered its empty state during the first fetch — the app asserting "nothing
+  // in transit" about data it had not yet received.
+  get shipmentsLoading() {
+    return Boolean(this.shipmentQuery?.isLoading) && !this.shipments.length;
+  }
+
+  get ordersLoading() {
+    return Boolean(this.orderQuery?.isLoading) && !this.orders.length;
+  }
+
+  // Redundant when the list below is already exactly this set.
+  get showAttentionBanner() {
+    return this.needsAttention.length > 0 && this.transitStatus !== 'attention';
+  }
+
+  // `all` is index 0, as it is on every other badge row in this card. Built last
+  // it ended up last, which put the escape hatch hard against the right edge
+  // where it read as the narrowest bucket rather than the widest. Position is not
+  // selection: the default SELECTED badge is still `transit`, the working set.
+  get transitBadges() {
+    return [
+      { id: 'all' as const, label: 'All', count: this.shipments.length },
+      {
+        id: 'transit' as const,
+        label: 'On the road',
+        count: this.inTransit.length,
+      },
+      {
+        id: 'attention' as const,
+        label: 'Needs attention',
+        count: this.needsAttention.length,
+      },
+      {
+        id: 'delivered' as const,
+        label: 'Delivered',
+        count: this.deliveredShipments.length,
+      },
+    ];
+  }
+
+  // Each badge names exactly the set it draws, so a count can never advertise a
+  // list the tab does not then render.
+  get transitSet(): Shipment[] {
+    switch (this.transitStatus) {
+      case 'delivered':
+        return this.deliveredShipments;
+      case 'attention':
+        return this.needsAttention;
+      case 'all':
+        return this.shipments;
+      default:
+        return this.inTransit;
+    }
+  }
+
+  get transitShipments() {
+    let term = this.transitSearch.trim().toLowerCase();
+    if (!term) {
+      return this.transitSet;
+    }
+    return this.transitSet.filter((s) => {
+      let haystack = [
+        s.shipmentNumber,
+        s.orderNumber,
+        s.carrierLabel,
+        s.serviceLevel,
+        s.trackingNumber?.number,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(term);
+    });
+  }
+
+  // A tracker per row is tall — twelve is already a long scroll and two hundred
+  // is a stall. The cap is stated in the UI rather than applied silently,
+  // because a truncated list that looks complete is worse than a long one.
+  get transitVisible() {
+    return this.transitShipments.slice(0, this.transitLimit);
+  }
+
+  get transitHiddenCount() {
+    return Math.max(0, this.transitShipments.length - this.transitLimit);
+  }
+
+  @action showMoreTransit() {
+    this.transitLimit += TRANSIT_PAGE;
+  }
+
+  @action setTransitStatus(
+    value: 'transit' | 'delivered' | 'attention' | 'all',
+  ) {
+    this.transitStatus = value;
+    // A new filter is a new list; carrying the old page depth over would show
+    // twelve of one set and then twelve more of another.
+    this.transitLimit = TRANSIT_PAGE;
+  }
+
+  @action setTransitSearch(v: string) {
+    this.debouncedTransitSearch(v);
+  }
+
+  get transitEmptyMessage() {
+    if (this.transitSearch.trim()) {
+      return 'No shipments match this search.';
+    }
+    switch (this.transitStatus) {
+      case 'delivered':
+        return 'Nothing delivered yet. Packages appear here once someone marks them delivered.';
+      case 'attention':
+        return 'No shipment is in exception or past its promised window.';
+      case 'all':
+        return 'No shipments yet. One is created when an order is packed.';
+      default:
+        return 'Nothing on the road. Dispatched packages appear here until they land.';
+    }
+  }
+
+  // The manifest claimed this map as a reuse and nothing ever mounted it, while
+  // all three warehouse instances carried real coordinates no template read.
+  // One marker per warehouse that has a point; the popup carries what the tile
+  // beside it carries, so the two cannot tell different stories.
+  //
+  // `@cached` is load-bearing, not an optimisation. MapRender's modifier decides
+  // whether to rebuild its layers with `coordinates !== lastCoordinates` — an
+  // IDENTITY check. An uncached getter hands it a new array on every re-render,
+  // so any stock change in the realm would re-fit the whole map and yank the view
+  // out from under whoever was reading it.
+  @cached
+  get warehousePoints(): Coordinate[] {
+    return this.warehouseSummary
+      .map(({ warehouse, skuCount, value }) => {
+        let lat = warehouse.latitude;
+        let lng = warehouse.longitude;
+        if (lat == null || lng == null) {
+          return undefined;
+        }
+        let label = `${skuCount} ${skuCount === 1 ? 'SKU' : 'SKUs'} · ${money(
+          value,
+        )}`;
+        return {
+          id: warehouse.id ?? warehouse.code ?? '',
+          lat,
+          lng,
+          name: warehouse.warehouseName ?? warehouse.code ?? 'Warehouse',
+          address: label,
+        };
+      })
+      .filter(Boolean) as Coordinate[];
+  }
+
+  get hasWarehouseMap() {
+    return this.warehousePoints.length > 0;
+  }
+
+  mapConfig = {
+    disableMapClick: true,
+    showGoogleMapsLink: true,
+    // Three markers spread across two countries: without a re-fit control, one
+    // pan away from Solingen and the London sites are off screen with no way
+    // back short of a reload.
+    showFitButton: true,
+  };
+
   @action setInventoryStatus(value: 'all' | 'low' | 'out') {
     this.inventoryStatus = value;
   }
@@ -518,16 +765,88 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
 
   // ── Ship desk ────────────────────────────────────────────────────────────
 
-  // Packed orders with no shipment yet — the queue the ship desk works from.
-  get readyToShip() {
-    return this.shipments.filter((s) => s.status === 'label_created');
-  }
-
+  // The queue the ship desk works from: a parcel with a label and no dispatch.
+  // The `?? this.shipments.slice(0, 3)` fallback this used to end with invented
+  // a queue out of three arbitrary shipments whenever the real one was empty —
+  // so the desk offered to dispatch packages that had already landed. An empty
+  // queue is a fact, and the empty state says it.
   get shipDeskQueue() {
-    let queue = this.shipments.filter(
+    return this.shipments.filter(
       (s) => !s.shippedAt || s.status === 'label_created',
     );
-    return queue.length ? queue : this.shipments.slice(0, 3);
+  }
+
+  // Which orders already have a parcel. Read from the shipments rather than from
+  // a flag on the order, because the shipment is the thing that knows.
+  get orderIdsWithShipment() {
+    return new Set(
+      this.shipments.map((s) => s.order?.id).filter(Boolean) as string[],
+    );
+  }
+
+  // The missing link in the pipeline. The board can move an order to `packing`
+  // and then nothing could carry it further: no surface in this app created a
+  // Shipment, so the ship desk's own empty state ("Packed orders appear here
+  // once a shipment exists for them") described a state the app could not reach.
+  // An empty state that names a precondition has to also offer the action that
+  // satisfies it, or it is a dead end wearing an explanation.
+  get ordersAwaitingShipment() {
+    let has = this.orderIdsWithShipment;
+    return this.orders.filter(
+      (o) => o.status === 'packing' && o.id && !has.has(o.id),
+    );
+  }
+
+  // Creates the parcel for a packed order and stops there, deliberately: status
+  // `label_created` is what puts it in the ship desk queue, and the rate is
+  // chosen and stamped by DispatchShipmentCommand afterwards. Copying the line
+  // items is a SNAPSHOT of what went in the box — a later edit to the order must
+  // not rewrite what was packed.
+  @action async createShipmentFor(order: FulfilmentOrder) {
+    let create = (this.args as any).createCard;
+    let realmHref = this.realms?.[0];
+    let realm = realmHref ? new URL(realmHref) : undefined;
+    let ref = identifyCard(Shipment);
+    if (!create || !ref || !realm || !order.id) {
+      return;
+    }
+    let lineItems = (order.lineItems ?? []).filter(Boolean).map((l) => ({
+      sku: l.sku ?? null,
+      productName: l.productName ?? null,
+      quantity: l.quantity ?? null,
+      unitPrice: l.unitPrice?.amount
+        ? {
+            amount: l.unitPrice.amount,
+            currency: { code: l.unitPrice.currency?.code ?? 'GBP' },
+          }
+        : null,
+    }));
+    await create(ref, undefined, {
+      realmURL: realm,
+      doc: {
+        data: {
+          type: 'card',
+          meta: { adoptsFrom: ref },
+          attributes: {
+            status: 'label_created',
+            shipmentNumber: `SHP-${order.orderNumber ?? 'NEW'}`,
+            lineItems,
+          },
+          relationships: {
+            order: { links: { self: order.id } },
+            // The order already knows where it was allocated; carrying the link
+            // over means the ship desk can price a parcel without asking again.
+            ...(order.allocatedWarehouse?.id
+              ? {
+                  originWarehouse: {
+                    links: { self: order.allocatedWarehouse.id },
+                  },
+                }
+              : {}),
+          },
+        },
+      },
+    });
   }
 
   get selectedShipment(): Shipment | undefined {
@@ -609,6 +928,30 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
     return TABS.map((t) => ({ ...t, active: t.key === this.tab }));
   }
 
+  // Arrow keys move between tabs and Home/End jump to the ends, which is what
+  // role='tablist' promises a screen-reader user. Focus follows selection —
+  // correct for a tablist whose panels are cheap to switch.
+  @action onTabKeydown(event: KeyboardEvent) {
+    let keys = ['ArrowRight', 'ArrowLeft', 'Home', 'End'];
+    if (!keys.includes(event.key)) {
+      return;
+    }
+    event.preventDefault();
+    let index = TABS.findIndex((t) => t.key === this.tab);
+    let next =
+      event.key === 'Home'
+        ? 0
+        : event.key === 'End'
+          ? TABS.length - 1
+          : (index + (event.key === 'ArrowRight' ? 1 : -1) + TABS.length) %
+            TABS.length;
+    this.tab = TABS[next].key;
+    let list = (event.currentTarget as HTMLElement)?.closest('[role="tablist"]');
+    list
+      ?.querySelector<HTMLElement>(`[data-tab-key="${TABS[next].key}"]`)
+      ?.focus();
+  }
+
   get statusLegend() {
     return ORDER_STATUSES.filter((s) =>
       BOARD_COLUMNS.some((c) => c.key === s.value),
@@ -641,38 +984,69 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
             <dt>In transit</dt>
             <dd>{{this.inTransit.length}}</dd>
           </div>
-          <div class='{{if this.exceptions.length "alarm"}}'>
-            <dt>Exceptions</dt>
-            <dd>{{this.exceptions.length}}</dd>
+          {{! The alarm state was a colour change and nothing else, which is
+              invisible to anyone who cannot see the hue. The glyph carries the
+              same meaning in form. }}
+          <div class='{{if this.needsAttention.length "alarm"}}'>
+            <dt>{{#if this.needsAttention.length}}<TriangleAlert
+                  class='dt-alarm'
+                  role='presentation'
+                />{{/if}}Needs attention</dt>
+            <dd>{{this.needsAttention.length}}</dd>
           </div>
           <div class='{{if this.outOfStock.length "alarm"}}'>
-            <dt>Out of stock</dt>
+            <dt>{{#if this.outOfStock.length}}<TriangleAlert
+                  class='dt-alarm'
+                  role='presentation'
+                />{{/if}}Out of stock</dt>
             <dd>{{this.outOfStock.length}}</dd>
           </div>
         </dl>
       </header>
 
-      <nav class='tabs' aria-label='Fulfilment sections'>
+      {{! A tablist, not a nav: these switch panels within one page, so
+          aria-current='page' was telling a screen reader the user had navigated
+          somewhere they had not. Roving tabindex plus arrow keys is the pattern
+          the role promises — without it Tab stepped through all five before
+          reaching the toolbar. }}
+      <div class='tabs' role='tablist' aria-label='Fulfilment sections'>
         {{#each this.tabs as |t|}}
+          {{! The arrow-key handler sits on each tab rather than on the tablist:
+              only the buttons are interactive elements, and only the focused tab
+              can receive the key. }}
           <button
             type='button'
+            role='tab'
+            id='ful-tab-{{t.key}}'
             class='tab {{if t.active "tab-active"}}'
-            aria-current={{if t.active 'page'}}
+            aria-selected='{{t.active}}'
+            aria-controls='ful-panel'
+            tabindex={{if t.active '0' '-1'}}
+            data-tab-key={{t.key}}
             {{on 'click' (fn this.setTab t.key)}}
+            {{on 'keydown' this.onTabKeydown}}
           >{{t.label}}</button>
         {{/each}}
-      </nav>
+      </div>
 
       {{#if this.isInteractive}}
-        <section class='panel'>
+        <section
+          class='panel'
+          id='ful-panel'
+          role='tabpanel'
+          aria-labelledby='ful-tab-{{this.tab}}'
+          tabindex='0'
+        >
           {{#if (eq this.tab 'board')}}
             <div class='collection-toolbar'>
               <div class='toolbar-left'>
                 <div class='search'>
                   <BoxelInput
+                    @type='search'
                     @value={{this.boardSearch}}
                     @onInput={{this.setBoardSearch}}
                     @placeholder='Search order number, customer or SKU'
+                    autocomplete='off'
                   />
                 </div>
               </div>
@@ -696,23 +1070,30 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
               @onOpen={{this.openCard}}
               @cardSize='regular-tile'
               @boardLabel='Order fulfilment board'
-              @emptyMessage='No orders in the pipeline. Everything raised so far
-                is shipped, delivered or on hold.'
+              @emptyMessage={{this.boardEmptyMessage}}
             >
               <:card as |order|>
-                <div
-                  class='board-card'
-                  role='button'
-                  tabindex='0'
-                  {{on 'click' (fn this.openCard order)}}
-                >
+                {{! Plain div. It used to carry role='button' and tabindex='0'
+                    with only a click handler: Enter and Space bubbled to the
+                    plane, which starts a keyboard DRAG, so the card could be
+                    focused but never opened from the keyboard — and the always-0
+                    tabindex fought the plane's own rover model, putting a tab
+                    stop on every card. The plane already opens a card on tap via
+                    @onOpen, so that is now the single path in and the click
+                    handler here was also firing openCard a second time. }}
+                <div class='board-card'>
                   <div class='bc-top'>
                     <span class='bc-num'>{{order.orderNumber}}</span>
                     {{#if order.isExpress}}
                       <span class='bc-flash'>{{order.priority}}</span>
                     {{/if}}
                   </div>
-                  <p class='bc-cust'>{{order.customerName}}</p>
+                  {{! A div rather than a p. The original reason — the wrapper
+                      carried role='button', which may not contain semantic
+                      descendants — no longer applies now that the card face is a
+                      plain div, but a card face is a label, not prose, so a div
+                      is still the honest element. }}
+                  <div class='bc-cust'>{{order.customerName}}</div>
                   <div class='bc-meta'>
                     <span>{{order.itemCount}} items</span>
                     <span class='bc-total'>{{money
@@ -758,9 +1139,11 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
               <div class='toolbar-left'>
                 <div class='search'>
                   <BoxelInput
+                    @type='search'
                     @value={{this.inventorySearch}}
                     @onInput={{this.setInventorySearch}}
                     @placeholder='Search SKU, product, bin or warehouse'
+                    autocomplete='off'
                   />
                 </div>
                 <div class='filters'>
@@ -795,6 +1178,15 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
               </div>
             </div>
 
+            {{#if this.hasWarehouseMap}}
+              <div class='wh-map'>
+                <MapRender
+                  @coordinates={{this.warehousePoints}}
+                  @mapConfig={{this.mapConfig}}
+                />
+              </div>
+            {{/if}}
+
             <div class='wh-grid'>
               {{#each this.warehouseSummary as |w|}}
                 <button
@@ -804,7 +1196,8 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
                 >
                   <span class='wh-code'>{{w.warehouse.code}}</span>
                   <span class='wh-name'>{{w.warehouse.warehouseName}}</span>
-                  <span class='wh-stat'>{{w.skuCount}} SKUs ·
+                  <span class='wh-stat'>{{w.skuCount}}
+                    {{if (eq w.skuCount 1) 'SKU' 'SKUs'}} ·
                     {{money w.value}}</span>
                   {{#if w.isVirtual}}
                     <span class='wh-virtual'>Virtual — supplier ships direct</span>
@@ -852,101 +1245,212 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
           {{/if}}
 
           {{#if (eq this.tab 'ship')}}
-            {{#if this.selectedShipment}}
-              <div class='ship'>
-                <div class='ship-parcel'>
-                  <h2>Parcel</h2>
-                  <p class='ship-num'>{{this.selectedShipment.shipmentNumber}}</p>
-                  <p class='muted'>Order
-                    {{this.selectedShipment.orderNumber}}
-                    · from
-                    {{this.selectedShipment.originCode}}</p>
-                  <dl class='kv'>
-                    <div>
-                      <dt>Measured</dt>
-                      <dd>{{this.selectedShipment.parcel.sizeLabel}}</dd>
-                    </div>
-                    <div>
-                      <dt>Weight</dt>
-                      <dd>{{this.selectedShipment.parcel.weight}} kg</dd>
-                    </div>
-                    <div>
-                      <dt>Customer paid</dt>
-                      <dd>{{money this.selectedShipment.customerPaid.amount}}</dd>
-                    </div>
-                  </dl>
-                  {{#if this.shipDeskQueue.length}}
-                    <h3 class='queue-h'>Queue</h3>
-                    <ul class='queue'>
-                      {{#each this.shipDeskQueue as |s|}}
-                        <li>
-                          <button
-                            type='button'
-                            class='queue-btn
-                              {{if (eq s.id this.selectedShipment.id) "on"}}'
-                            {{on 'click' (fn this.selectShipment s.id)}}
-                          >{{s.shipmentNumber}}</button>
-                        </li>
-                      {{/each}}
-                    </ul>
-                  {{/if}}
-                </div>
+            {{! TWO PERSISTENT SECTIONS, not two layouts. The tab used to morph
+                completely: a parcel + rate-comparison workbench when a shipment
+                existed, and a bare list when none did, with nothing to say they
+                were the same surface. Both stages of the desk are now always
+                drawn, each with its own count and its own empty state, so the
+                tab can be learned. The rate comparison is what opens UNDER a
+                selection — it is a detail of one parcel, never the page. }}
+            <p class='desk-note'>Two steps. First a packed order becomes a
+              parcel; then the parcel gets a rate and a carrier.</p>
 
-                <div class='ship-rates'>
-                  <h2>Rate comparison</h2>
-                  <p class='rates-note'>Priced from the services configured on
-                    your carrier cards, against this parcel's billable weight.
-                    No carrier API is called.</p>
-                  <ul class='rate-list'>
-                    {{#each this.rateOptions as |opt|}}
-                      <li
-                        class='rate {{if (eq opt.key this.cheapestOption.key) "best"}}'
+            <section class='sub'>
+              <h2>Step 1 · Packed, needs a parcel
+                <span class='count'>{{this.ordersAwaitingShipment.length}}</span></h2>
+              {{#if this.ordersLoading}}
+                <ul class='rows' aria-busy='true'>
+                  <li class='sk-line'></li>
+                  <li class='sk-line'></li>
+                </ul>
+              {{else}}
+                <ul class='rows'>
+                  {{#each this.ordersAwaitingShipment as |o|}}
+                    <li class='await-row'>
+                      {{! ONE exit per row. The chevron that used to sit here was
+                          a second right-edge affordance immediately beside the
+                          primary button, doing something different — the order
+                          number carries the open action instead. }}
+                      <button
+                        type='button'
+                        class='row-btn await-btn'
+                        {{on 'click' (fn this.openCard o)}}
                       >
-                        <div class='rate-id'>
-                          {{#if (eq opt.key this.cheapestOption.key)}}
-                            <span class='tagline'>Cheapest</span>
-                          {{else if (eq opt.key this.fastestOption.key)}}
-                            <span class='tagline'>Fastest</span>
-                          {{/if}}
-                          <span class='rate-name'>{{opt.carrierName}}
-                            {{opt.serviceName}}</span>
-                          <span class='muted'>{{opt.speed}} ·
-                            {{opt.billable}}
-                            kg billable</span>
+                        <span class='mono strong link'>{{o.orderNumber}}</span>
+                        <span class='muted'>{{o.customerName}}</span>
+                        <span class='muted'>{{o.itemCount}} items</span>
+                        <span class='mono'>{{money
+                            o.total.amount
+                            o.currencyCode
+                          }}</span>
+                        {{! The spacer that holds the trailing `1fr`, so the slack
+                            lands after the last value instead of inside it. }}
+                        <span aria-hidden='true'></span>
+                      </button>
+                      <Button
+                        @kind='primary'
+                        @size='small'
+                        @rectangular={{true}}
+                        class='mk-parcel'
+                        {{on 'click' (fn this.createShipmentFor o)}}
+                      >Create parcel</Button>
+                    </li>
+                  {{else}}
+                    <li class='empty'>No packed order is waiting for a parcel.
+                      Move an order to Packing on the board and it appears
+                      here.</li>
+                  {{/each}}
+                </ul>
+              {{/if}}
+            </section>
+
+            <section class='sub'>
+              <h2>Step 2 · Labelled, ready to dispatch
+                <span class='count'>{{this.shipDeskQueue.length}}</span></h2>
+              {{#if this.shipmentsLoading}}
+                <ul class='rows' aria-busy='true'>
+                  <li class='sk-line'></li>
+                  <li class='sk-line'></li>
+                </ul>
+              {{else if this.shipDeskQueue.length}}
+                <ul class='queue'>
+                  {{#each this.shipDeskQueue as |s|}}
+                    <li>
+                      <button
+                        type='button'
+                        class='queue-btn
+                          {{if (eq s.id this.selectedShipmentId) "on"}}'
+                        aria-pressed='{{eq s.id this.selectedShipmentId}}'
+                        {{on 'click' (fn this.selectShipment s.id)}}
+                      >{{s.shipmentNumber}}</button>
+                    </li>
+                  {{/each}}
+                </ul>
+
+                {{#if this.selectedShipment}}
+                  <div class='ship'>
+                    <div class='ship-parcel'>
+                      <h3>Parcel</h3>
+                      <p class='ship-num'>{{this.selectedShipment.shipmentNumber}}</p>
+                      <p class='muted'>Order
+                        {{this.selectedShipment.orderNumber}}
+                        · from
+                        {{this.selectedShipment.originCode}}</p>
+                      <dl class='kv'>
+                        <div>
+                          <dt>Measured</dt>
+                          <dd>{{this.selectedShipment.parcel.sizeLabel}}</dd>
                         </div>
-                        <div class='rate-nums'>
-                          <span class='rate-cost'>{{money
-                              opt.cost
-                              opt.currency
-                            }}</span>
-                          <span
-                            class='rate-margin {{if (lt opt.margin 0) "neg"}}'
-                          >{{money opt.margin opt.currency}} margin</span>
+                        <div>
+                          <dt>Weight</dt>
+                          <dd>{{this.selectedShipment.parcel.weight}} kg</dd>
                         </div>
-                      </li>
-                    {{else}}
-                      <li class='empty'>No carrier has a priced service yet. Add
-                        one on a Carrier card and it appears here.</li>
-                    {{/each}}
-                  </ul>
-                  <Button
-                    @kind='secondary'
-                    {{on 'click' (fn this.openCard this.selectedShipment)}}
-                  >Open shipment to dispatch</Button>
-                </div>
-              </div>
-            {{else}}
-              <p class='empty'>Nothing waiting at the ship desk. Packed orders
-                appear here once a shipment exists for them.</p>
-            {{/if}}
+                        <div>
+                          <dt>Customer paid</dt>
+                          <dd>{{money
+                              this.selectedShipment.customerPaid.amount
+                            }}</dd>
+                        </div>
+                      </dl>
+
+                      {{! The packer's actual verb, in the first screenful of the
+                          pane and never moving. }}
+                      <Button
+                        @kind='primary'
+                        class='dispatch'
+                        {{on 'click' (fn this.openCard this.selectedShipment)}}
+                      >Open shipment to dispatch</Button>
+                    </div>
+
+                    <div class='ship-rates'>
+                      <h3>Rate comparison</h3>
+                      <p class='rates-note'>Priced from the services configured
+                        on your carrier cards, against this parcel's billable
+                        weight. No carrier API is called.</p>
+                      <ul class='rate-list'>
+                        {{#each this.rateOptions as |opt|}}
+                          <li
+                            class='rate
+                              {{if (eq opt.key this.cheapestOption.key) "best"}}'
+                          >
+                            <div class='rate-id'>
+                              {{#if (eq opt.key this.cheapestOption.key)}}
+                                <span class='tagline'>Cheapest</span>
+                              {{else if (eq opt.key this.fastestOption.key)}}
+                                <span class='tagline'>Fastest</span>
+                              {{/if}}
+                              <span class='rate-name'>{{opt.carrierName}}
+                                {{opt.serviceName}}</span>
+                              <span class='muted'>{{opt.speed}} ·
+                                {{opt.billable}}
+                                kg billable</span>
+                            </div>
+                            <div class='rate-nums'>
+                              <span class='rate-cost'>{{money
+                                  opt.cost
+                                  opt.currency
+                                }}</span>
+                              <span
+                                class='rate-margin
+                                  {{if (lt opt.margin 0) "neg"}}'
+                              >{{money opt.margin opt.currency}} margin</span>
+                            </div>
+                          </li>
+                        {{else}}
+                          <li class='empty'>No carrier has a priced service yet.
+                            Add one on a Carrier card and it appears here.</li>
+                        {{/each}}
+                      </ul>
+                    </div>
+                  </div>
+                {{/if}}
+              {{else}}
+                <ul class='rows'>
+                  <li class='empty'>Nothing has a label yet. Create a parcel
+                    above and it arrives here for rating and dispatch.</li>
+                </ul>
+              {{/if}}
+            </section>
           {{/if}}
 
           {{#if (eq this.tab 'transit')}}
-            {{#if this.exceptions.length}}
+            <div class='collection-toolbar'>
+              <div class='toolbar-left'>
+                <div class='search'>
+                  <BoxelInput
+                    @type='search'
+                    @value={{this.transitSearch}}
+                    @onInput={{this.setTransitSearch}}
+                    @placeholder='Search shipment, order, carrier or tracking number'
+                    autocomplete='off'
+                  />
+                </div>
+                <div class='filters'>
+                  {{#each this.transitBadges as |b|}}
+                    <Pill
+                      @kind='button'
+                      @variant={{if
+                        (eq this.transitStatus b.id)
+                        'primary'
+                        'muted'
+                      }}
+                      aria-pressed='{{eq this.transitStatus b.id}}'
+                      {{on 'click' (fn this.setTransitStatus b.id)}}
+                    >{{b.label}}
+                      <span class='badge-count'>{{b.count}}</span></Pill>
+                  {{/each}}
+                </div>
+              </div>
+            </div>
+
+            {{! Same source as the KPI, so the banner and the header cannot
+                disagree about how many shipments are in trouble. Hidden while
+                the attention filter is on — the list below IS the banner then. }}
+            {{#if this.showAttentionBanner}}
               <section class='alert-box'>
                 <h2>Needs attention</h2>
                 <ul class='rows'>
-                  {{#each this.exceptions as |s|}}
+                  {{#each this.needsAttention as |s|}}
                     <li>
                       <button
                         type='button'
@@ -963,33 +1467,98 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
               </section>
             {{/if}}
 
-            <ul class='transit'>
-              {{#each this.inTransit as |s|}}
-                <li class='transit-card'>
-                  <button
-                    type='button'
-                    class='transit-head'
-                    {{on 'click' (fn this.openCard s)}}
-                  >
-                    <span class='mono strong'>{{s.shipmentNumber}}</span>
-                    <span class='muted'>{{s.carrierName}}
-                      {{s.serviceLevel}}</span>
-                    <StatusChip
-                      @label={{s.statusStyle.label}}
-                      @hue={{s.statusStyle.hue}}
+            {{#if this.shipmentsLoading}}
+              {{! Space is reserved rather than collapsed: an empty message
+                  during the first fetch asserted "nothing in transit" about
+                  data the app had not yet seen. }}
+              <ul class='transit' aria-busy='true'>
+                <li class='transit-card skeleton'><span
+                    class='sk-line sk-head'
+                  ></span><span class='sk-line'></span></li>
+                <li class='transit-card skeleton'><span
+                    class='sk-line sk-head'
+                  ></span><span class='sk-line'></span></li>
+                <li class='transit-card skeleton'><span
+                    class='sk-line sk-head'
+                  ></span><span class='sk-line'></span></li>
+              </ul>
+            {{else}}
+              <ul class='transit'>
+                {{#each this.transitVisible as |s|}}
+                  <li class='transit-card'>
+                    <button
+                      type='button'
+                      class='transit-head'
+                      {{on 'click' (fn this.openCard s)}}
+                    >
+                      <span class='mono strong'>{{s.shipmentNumber}}</span>
+                      <span class='muted'>{{s.carrierLabel}}
+                        {{s.serviceLevel}}</span>
+                      <StatusChip
+                        @label={{s.statusStyle.label}}
+                        @hue={{s.statusStyle.hue}}
+                      />
+                      <ChevronRight
+                        class='transit-open'
+                        role='presentation'
+                      />
+                    </button>
+                    {{! The delivered facts the command has been writing all
+                        along and nothing drew: when it landed, whether that beat
+                        the promise, and who took it. }}
+                    {{#if (eq s.status 'delivered')}}
+                      <dl class='dlv'>
+                        <div>
+                          <dt>Delivered</dt>
+                          <dd>{{stamp s.deliveredAt}}</dd>
+                        </div>
+                        <div>
+                          <dt>Against promise</dt>
+                          {{! No promised window means no verdict. Printing "On
+                              time" there would be the app inventing a promise it
+                              was never given. }}
+                          {{#if s.deliveryWindow.latest}}
+                            <dd class={{if s.isLate 'neg'}}>{{if
+                                s.isLate
+                                'Late'
+                                'On time'
+                              }}</dd>
+                          {{else}}
+                            <dd class='muted'>No promised window</dd>
+                          {{/if}}
+                        </div>
+                        <div class='dlv-pod'>
+                          <dt>Proof of delivery</dt>
+                          <dd>{{if
+                              s.proofOfDelivery
+                              s.proofOfDelivery
+                              'Not recorded'
+                            }}</dd>
+                        </div>
+                      </dl>
+                    {{/if}}
+                    <ShipmentTracker
+                      @status={{s.status}}
+                      @events={{s.trackingEvents}}
+                      @deliveryWindow={{s.deliveryWindow}}
+                      @compact={{true}}
                     />
-                  </button>
-                  <ShipmentTracker
-                    @status={{s.status}}
-                    @events={{s.trackingEvents}}
-                    @deliveryWindow={{s.deliveryWindow}}
-                    @compact={{true}}
-                  />
-                </li>
-              {{else}}
-                <li class='empty'>Nothing in transit.</li>
-              {{/each}}
-            </ul>
+                  </li>
+                {{else}}
+                  <li class='empty'>{{this.transitEmptyMessage}}</li>
+                {{/each}}
+              </ul>
+              {{#if this.transitHiddenCount}}
+                <Button
+                  @size='small'
+                  @rectangular={{true}}
+                  class='more-btn'
+                  {{on 'click' this.showMoreTransit}}
+                >Show
+                  {{this.transitHiddenCount}}
+                  more</Button>
+              {{/if}}
+            {{/if}}
           {{/if}}
 
           {{#if (eq this.tab 'returns')}}
@@ -997,9 +1566,11 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
               <div class='toolbar-left'>
                 <div class='search'>
                   <BoxelInput
+                    @type='search'
                     @value={{this.returnsSearch}}
                     @onInput={{this.setReturnsSearch}}
                     @placeholder='Search RMA, customer, reason or order'
+                    autocomplete='off'
                   />
                 </div>
                 <div class='filters'>
@@ -1058,7 +1629,7 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
                 </div>
               {{/if}}
             {{else}}
-              <p class='empty'>Loading returns…</p>
+              <p class='empty'>No returns match this filter.</p>
             {{/if}}
           {{/if}}
         </section>
@@ -1089,6 +1660,14 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
         --ful-border: var(--border);
         --ful-rule: color-mix(in oklch, var(--foreground) 12%, transparent);
         --ful-perf: color-mix(in oklch, var(--foreground) 22%, transparent);
+        /* State colour through the adapter block, not a literal hex. The semantic
+           token mixed TOWARD --foreground is what keeps it legible on a dark
+           ground as well as a light one: --foreground flips, so the mix flips. */
+        --ful-danger: color-mix(
+          in oklch,
+          var(--destructive, var(--boxel-danger)) 58%,
+          var(--foreground, var(--boxel-dark))
+        );
         --ful-sunk: color-mix(in oklch, var(--foreground) 3%, transparent);
 
         display: flex;
@@ -1160,6 +1739,9 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
         gap: 2px;
       }
       .counters dt {
+        display: flex;
+        align-items: center;
+        gap: 4px;
         font-size: 0.62rem;
         letter-spacing: 0.12em;
         text-transform: uppercase;
@@ -1172,6 +1754,11 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
         font-size: 1.7rem;
         font-weight: 800;
         line-height: 1;
+      }
+      .dt-alarm {
+        width: 11px;
+        height: 11px;
+        flex: none;
       }
       /* A count that needs someone to act reads differently in form, not just
          in number. */
@@ -1215,6 +1802,10 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
         border-bottom-color: var(--ful-perf);
       }
 
+      .panel:focus-visible {
+        outline: 2px solid var(--ring, var(--boxel-highlight));
+        outline-offset: -2px;
+      }
       .panel {
         /* The panel is the query container for the layouts below: the ship
            desk splits in two when there is room for it, regardless of how wide
@@ -1269,6 +1860,22 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
          Basis-as-maximum with no grow gives the same visual size and lets the
          badges sit where they belong. It still shrinks, so reflow step 1 is
          unchanged. */
+      /* `@type='search'` is what draws BoxelInput's magnifier — nothing here can
+         put the glyph in. What it also does is default the field to INVERTED
+         colours (`background: --foreground`), which on this light card paints a
+         black pill. The two custom properties the component publishes are
+         forwarded this app's own semantic tokens, so the field follows the theme
+         in both modes rather than being pinned to a literal light pair. */
+      .search :deep(.search) {
+        --boxel-input-search-background-color: var(
+          --ful-card-bg,
+          var(--boxel-light)
+        );
+        --boxel-input-search-color: var(--ful-fg, var(--boxel-dark));
+      }
+      .search :deep(.search-icon) {
+        --boxel-input-search-icon-color: var(--ful-muted-fg, var(--boxel-500));
+      }
       .toolbar-left .search {
         flex: 0 1 28rem;
         min-width: 8rem;
@@ -1356,9 +1963,24 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
         color: var(--ful-card-fg, var(--boxel-dark));
         text-align: left;
         cursor: pointer;
+        transition: border-color 120ms ease-out;
       }
-      .board-card:focus-visible {
+      /* The board card is no longer focusable itself — the plane's own card
+         wrapper carries the rover tabindex, so that wrapper is what receives
+         keyboard focus. It ships without a focus indicator, so the ring is
+         drawn onto it from here rather than left invisible. */
+      .ofb-host :deep([role='listitem']:focus-visible) {
         outline: 2px solid var(--ring, var(--boxel-highlight));
+        outline-offset: 2px;
+      }
+      /* The plane lifts its own wrapper on hover; this is the card FACE saying
+         the tile opens as well as drags. */
+      .board-card:hover {
+        border-color: var(--ful-perf);
+      }
+      .board-card:hover .bc-num {
+        text-decoration: underline;
+        text-underline-offset: 2px;
       }
       .bc-top {
         display: flex;
@@ -1415,7 +2037,8 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
       }
       .sub h2,
       .alert-box h2,
-      .ship h2 {
+      .ship h2,
+      .ship h3 {
         margin: 0 0 var(--boxel-sp-xs);
         font-size: 0.7rem;
         letter-spacing: 0.12em;
@@ -1597,6 +2220,11 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
         margin: 0;
         font-family: var(--font-mono, ui-monospace, monospace);
       }
+      .dispatch {
+        width: 100%;
+        margin-top: var(--boxel-sp);
+        min-height: 44px;
+      }
       .queue-h {
         margin: var(--boxel-sp) 0 var(--boxel-sp-xxs);
         font-size: 0.7rem;
@@ -1621,6 +2249,10 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
         font-size: 0.72rem;
         color: inherit;
         cursor: pointer;
+      }
+      .queue-btn:hover {
+        background: var(--ful-sunk);
+        border-color: var(--ful-perf);
       }
       .queue-btn.on {
         background: color-mix(in oklch, var(--foreground) 10%, transparent);
@@ -1724,6 +2356,189 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
         padding: var(--boxel-sp-sm);
         border: 1px solid var(--ful-border, var(--boxel-border-color));
         border-radius: 4px;
+        transition:
+          border-color 120ms ease-out,
+          box-shadow 120ms ease-out;
+      }
+      /* The card reacts as a whole even though only its header is the button:
+         a hover state confined to one strip inside a card-shaped box reads as
+         "nothing here is clickable". `:focus-within` gives the keyboard the same
+         feedback the pointer gets, on the same element. */
+      .transit-card:hover,
+      .transit-card:focus-within {
+        border-color: var(--ful-perf);
+        box-shadow: 0 1px 8px -4px
+          color-mix(in oklch, var(--foreground) 30%, transparent);
+      }
+      /* The carrier line takes the slack so the chip and the chevron travel to
+         the right edge together, rather than the chevron alone. */
+      .transit-head .muted {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      /* Hover is not an affordance on its own — it only pays out after the
+         pointer has already arrived, so a row that looks inert never gets
+         hovered in the first place. The chevron is the STATIC cue: visible at
+         rest, it says the row opens something before anyone touches it. */
+      .transit-open {
+        flex: none;
+        width: 16px;
+        height: 16px;
+        color: var(--ful-muted-fg, var(--boxel-500));
+        transition:
+          transform 120ms ease-out,
+          color 120ms ease-out;
+      }
+      .transit-card:hover .transit-open,
+      .transit-card:focus-within .transit-open {
+        color: var(--ful-fg, var(--boxel-dark));
+        transform: translateX(2px);
+      }
+      .transit-card:hover .transit-head .mono,
+      .transit-card:focus-within .transit-head .mono {
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
+      .transit-head:focus-visible {
+        outline: 2px solid var(--ring, var(--boxel-highlight));
+        outline-offset: 2px;
+      }
+      /* The delivered facts, as a definition list rather than a sentence: three
+         labelled values line up across cards, so a column of delivered parcels
+         is scannable down the "Against promise" edge. */
+      .dlv {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 4px var(--boxel-sp-sm);
+        margin: 0;
+        padding: var(--boxel-sp-xs) 0;
+        border-top: 1px solid var(--ful-rule);
+        border-bottom: 1px solid var(--ful-rule);
+      }
+      .dlv-pod {
+        grid-column: 1 / -1;
+      }
+      .dlv dt {
+        font-size: 0.62rem;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--ful-muted-fg, var(--boxel-500));
+      }
+      .dlv dd {
+        margin: 0;
+        font-size: 0.82rem;
+      }
+      .dlv .neg {
+        font-weight: 700;
+        color: var(--ful-danger);
+      }
+      /* Skeletons hold the row height the real cards will take, so the list does
+         not jump when the fetch lands. */
+      .skeleton {
+        gap: var(--boxel-sp-xs);
+      }
+      .sk-line {
+        display: block;
+        height: 12px;
+        border-radius: 3px;
+        background: var(--ful-sunk);
+      }
+      /* `.rows` is a 1px-gap grid because real rows carry their own padding;
+         skeletons do not, so they need the gap back or they read as one bar. */
+      .rows[aria-busy='true'] {
+        gap: 8px;
+        padding: 6px 0;
+      }
+      .sk-head {
+        height: 18px;
+        width: 60%;
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        .sk-line {
+          animation: sk-pulse 1.4s ease-in-out infinite;
+        }
+      }
+      @keyframes sk-pulse {
+        50% {
+          opacity: 0.45;
+        }
+      }
+      .more-btn {
+        align-self: center;
+      }
+      .desk-note {
+        margin: 0;
+        font-size: 0.85rem;
+        color: var(--ful-muted-fg, var(--boxel-500));
+      }
+      /* The count belongs to the heading, not to a badge somewhere else: a
+         section that says how many it holds cannot disagree with its own list. */
+      .sub h2 .count {
+        margin-left: 7px;
+        padding: 1px 6px;
+        border-radius: 999px;
+        font-family: var(--font-mono, ui-monospace, monospace);
+        font-variant-numeric: tabular-nums;
+        letter-spacing: 0;
+        background: var(--ful-sunk);
+        color: var(--ful-fg, var(--boxel-dark));
+      }
+      .await-row {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+      }
+      /* Measured: the shared `.row-btn` grid is `9rem 1fr 1fr auto auto`, which
+         on an 1100px toolbar handed ~400px each to a 15-character name and to
+         "3 items" — the row read as four values marooned in white space. The
+         trailing `1fr` is the fix: `max-content` sizes the money to its digits
+         and the spacer absorbs the slack AFTER it, so the action buttons still
+         line up across rows. */
+      .await-btn {
+        flex: 0 1 46rem;
+        min-width: 0;
+        grid-template-columns:
+          9rem minmax(0, 14rem) minmax(0, 6rem)
+          max-content minmax(0, 1fr);
+      }
+      /* A primary CTA must not break mid-phrase. The 44px minimum is a TOUCH
+         guideline, and inflating a desktop table-row button to meet it was the
+         wrong instrument — it produced a 44px lozenge over a 30px text row. */
+      .mk-parcel {
+        flex: none;
+        white-space: nowrap;
+      }
+      @media (pointer: coarse) {
+        .mk-parcel {
+          min-height: 44px;
+        }
+      }
+      /* The order number is the row's open affordance now that the chevron is
+         gone, so it has to look like one. */
+      .link {
+        text-decoration: underline;
+        text-decoration-color: var(--ful-perf);
+        text-underline-offset: 2px;
+      }
+      .await-btn:hover .link,
+      .await-btn:focus-visible .link {
+        text-decoration-color: currentColor;
+      }
+      /* MapRender fills its host, so the host must state a height or Leaflet
+         initialises against a zero rect. */
+      .wh-map {
+        height: 200px;
+        border-radius: var(--radius, 8px);
+        overflow: hidden;
+        border: 1px solid var(--ful-border, var(--boxel-border-color));
+      }
+      @container ful-panel (width < 560px) {
+        .wh-map {
+          height: 150px;
+        }
       }
       .transit-head {
         display: flex;
@@ -1857,17 +2672,38 @@ export class OrderFulfilmentApp extends CardDef {
     <template>
       <article class='fit'>
         <div class='r-head'>
-          <span class='eyebrow'>Fulfilment</span>
-          <h3 class='headline'>{{@model.operationName}}</h3>
+          {{! The card's OWN icon, the one its isolated view and the type chip
+              already use — fitted-card Rule 2 wants the identity glyph, not a
+              decoration. It survives down to the badge tier, which is where the
+              old template had no anchor at all: `.mark` lived in `.r-body`, and
+              `.r-body` is hidden below 130px, so 8 of the 16 sizes were two
+              lines of text on a bare ground. }}
+          <PackageIcon class='glyph' role='presentation' />
+          <div class='r-id'>
+            <span class='eyebrow'>Fulfilment</span>
+            <h3 class='headline'>{{@model.operationName}}</h3>
+          </div>
         </div>
         <div class='r-body'>
+          {{! Texture, not the anchor. The barcode motif ties the tile back to the
+              isolated masthead; it is now allowed to be purely decorative because
+              the glyph above carries identity. }}
           <div class='mark' aria-hidden='true'>
             <span></span><span></span><span></span><span></span><span></span>
             <span></span><span></span><span></span>
           </div>
         </div>
         <div class='r-meta'>
-          <span>Board · Inventory · Ship · Transit · Returns</span>
+          {{! Was `Board · Inventory · Ship · Transit · Returns` — byte-identical
+              on every instance, so 13 of 16 sizes showed a string that said
+              nothing about THIS operation. The summary is real per-instance copy
+              the card already carries. Falls back to the tab list only when an
+              instance has no summary, so the row is never empty. }}
+          <span class='blurb'>{{if
+              @model.cardInfo.summary
+              @model.cardInfo.summary
+              'Board · Inventory · Ship · Transit · Returns'
+            }}</span>
         </div>
       </article>
 
@@ -1887,7 +2723,7 @@ export class OrderFulfilmentApp extends CardDef {
             min(calc(3px + 2.1cqi + 1cqb - 0.6 * var(--ar)), 10cqb),
             17px
           );
-          --meta-size: max(8px, calc(var(--type-base) / var(--type-ratio)));
+          --meta-size: max(11px, calc(var(--type-base) / var(--type-ratio)));
           --glyph-size: max(11px, min(3cqi, 14cqb));
           --headline-size: max(
             11px,
@@ -1912,6 +2748,33 @@ export class OrderFulfilmentApp extends CardDef {
         .r-meta {
           overflow: hidden;
           min-height: 0;
+        }
+        /* The head is glyph + identity, so the glyph can never steal the row the
+           title needs: it is `flex: none` at a container-scaled size with a px
+           floor, and the text column takes the rest with `min-width: 0`. */
+        .r-head {
+          display: flex;
+          align-items: center;
+          gap: max(5px, 0.8cqi);
+        }
+        .glyph {
+          flex: none;
+          width: var(--glyph-size);
+          height: var(--glyph-size);
+          color: color-mix(in oklch, var(--card-foreground) 62%, transparent);
+        }
+        .r-id {
+          min-width: 0;
+          overflow: hidden;
+        }
+        .blurb {
+          display: -webkit-box;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 2;
+          overflow: hidden;
+          /* The meta row wraps now, so it must not also carry nowrap/ellipsis —
+             those fight the line clamp and produce a single sheared line. */
+          white-space: normal;
         }
         .eyebrow {
           display: block;
@@ -1951,10 +2814,9 @@ export class OrderFulfilmentApp extends CardDef {
         }
         .r-meta {
           font-size: var(--meta-size);
+          line-height: 1.3;
           color: var(--muted-foreground, var(--boxel-500));
-          white-space: nowrap;
           overflow: hidden;
-          text-overflow: ellipsis;
         }
 
         @container fitted-card (height <= 50px) {
@@ -1967,6 +2829,21 @@ export class OrderFulfilmentApp extends CardDef {
           }
           .headline {
             -webkit-line-clamp: 1;
+          }
+        }
+        /* Two lines of summary need the room; in the short bands it drops to one
+           so the row still holds a whole line rather than a clipped one. */
+        @container fitted-card (height <= 130px) {
+          .blurb {
+            -webkit-line-clamp: 1;
+          }
+        }
+        /* The glyph is the first thing dropped when the title would have to share
+           a narrow row with it — Rule 2's own instruction. Queried on width
+           alone, independently of the height tiers. */
+        @container fitted-card (width <= 130px) {
+          .glyph {
+            display: none;
           }
         }
         @container fitted-card (50px < height <= 130px) {
