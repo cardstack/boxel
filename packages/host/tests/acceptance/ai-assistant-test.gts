@@ -438,15 +438,15 @@ module('Acceptance | AI Assistant tests', function (hooks) {
           'person.gts': { Person },
           'pet.gts': { Pet },
           'broken-card.gts': `
-            import { CardDef, field, contains } from '@cardstack/base/card-api';
-            import StringField from '@cardstack/base/string';
-            import { BrokenField } from './does-not-exist';
-            export class BrokenCard extends CardDef {
-              static displayName = 'Broken Card';
-              @field name = contains(StringField);
-              @field broken = contains(BrokenField);
-            }
-          `,
+          import { CardDef, field, contains } from '@cardstack/base/card-api';
+          import StringField from '@cardstack/base/string';
+          import { BrokenField } from './does-not-exist';
+          export class BrokenCard extends CardDef {
+            static displayName = 'Broken Card';
+            @field name = contains(StringField);
+            @field broken = contains(BrokenField);
+          }
+        `,
           'BrokenCard/errored.json': {
             data: {
               attributes: {
@@ -489,12 +489,12 @@ module('Acceptance | AI Assistant tests', function (hooks) {
             friends: [mangoPet],
           }),
           'plant.gts': `
-            import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
-            export class Plant extends CardDef {
-              static displayName = "Plant";
-              @field commonName = contains(StringField);
-            }
-          `,
+          import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
+          export class Plant extends CardDef {
+            static displayName = "Plant";
+            @field commonName = contains(StringField);
+          }
+        `,
           'Plant/highbush-blueberry.json': {
             data: {
               attributes: {
