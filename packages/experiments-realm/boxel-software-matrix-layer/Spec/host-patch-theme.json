@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Patch Theme",
+      "specType": "command",
+      "ref": {
+        "module": "@cardstack/boxel-host/commands/patch-theme",
+        "name": "default"
+      },
+      "readMe": "# Patch Theme\n\n## Summary\nHost command — open the AI assistant to suggest improvements to a theme card and generate a patch.. Available to\ncards and commands via the runtime loader, and to AI assistant rooms as a\ntool.\n\n## Example\n```ts\nimport PatchThemeTool from '@cardstack/boxel-host/commands/patch-theme';\n\nlet result = await new PatchThemeTool(commandContext).execute({\n  /* input fields */\n} as any);\n```\n`commandContext` comes from `@context.commandContext` inside any card\nformat. In an AI room the same tool is invoked by name (action verb: Patch Theme).",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Patch Theme",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Generate Example Cards",
+      "specType": "command",
+      "ref": {
+        "module": "@cardstack/boxel-host/commands/generate-example-cards",
+        "name": "default"
+      },
+      "readMe": "# Generate Example Cards\n\n## Summary\nHost command — create new cards populated with sample data. Available to\ncards and commands via the runtime loader, and to AI assistant rooms as a\ntool.\n\n## Example\n```ts\nimport GenerateExampleCardsTool from '@cardstack/boxel-host/commands/generate-example-cards';\n\nlet result = await new GenerateExampleCardsTool(commandContext).execute({\n  /* input fields */\n} as any);\n```\n`commandContext` comes from `@context.commandContext` inside any card\nformat. In an AI room the same tool is invoked by name (action verb: Generate Example Cards).",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Generate Example Cards",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

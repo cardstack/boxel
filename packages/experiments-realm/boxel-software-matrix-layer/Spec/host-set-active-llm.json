@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Set Active LLM",
+      "specType": "command",
+      "ref": {
+        "module": "@cardstack/boxel-host/commands/set-active-llm",
+        "name": "default"
+      },
+      "readMe": "# Set Active LLM\n\n## Summary\nHost command — the host Set Active LLM tool.. Available to\ncards and commands via the runtime loader, and to AI assistant rooms as a\ntool.\n\n## Example\n```ts\nimport SetActiveLLMTool from '@cardstack/boxel-host/commands/set-active-llm';\n\nlet result = await new SetActiveLLMTool(commandContext).execute({\n  /* input fields */\n} as any);\n```\n`commandContext` comes from `@context.commandContext` inside any card\nformat. In an AI room the same tool is invoked by name (action verb: Set).",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Set Active LLM",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

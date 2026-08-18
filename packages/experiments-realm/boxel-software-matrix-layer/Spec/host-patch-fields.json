@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Patch Fields",
+      "specType": "command",
+      "ref": {
+        "module": "@cardstack/boxel-host/commands/patch-fields",
+        "name": "default"
+      },
+      "readMe": "# Patch Fields\n\n## Summary\nHost command — update specific fields of a card instance. Supports nested field paths using dot notation (e.g., . Available to\ncards and commands via the runtime loader, and to AI assistant rooms as a\ntool.\n\n## Example\n```ts\nimport PatchFieldsTool from '@cardstack/boxel-host/commands/patch-fields';\n\nlet result = await new PatchFieldsTool(commandContext).execute({\n  /* input fields */\n} as any);\n```\n`commandContext` comes from `@context.commandContext` inside any card\nformat. In an AI room the same tool is invoked by name (action verb: Update Fields).",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Patch Fields",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Validate Realm",
+      "specType": "command",
+      "ref": {
+        "module": "@cardstack/boxel-host/commands/validate-realm",
+        "name": "default"
+      },
+      "readMe": "# Validate Realm\n\n## Summary\nHost command — validate that a realm URL is available and normalize it. Available to\ncards and commands via the runtime loader, and to AI assistant rooms as a\ntool.\n\n## Example\n```ts\nimport ValidateRealmTool from '@cardstack/boxel-host/commands/validate-realm';\n\nlet result = await new ValidateRealmTool(commandContext).execute({\n  /* input fields */\n} as any);\n```\n`commandContext` comes from `@context.commandContext` inside any card\nformat. In an AI room the same tool is invoked by name.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Validate Realm",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

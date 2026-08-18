@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Screenshot Card",
+      "specType": "command",
+      "ref": {
+        "module": "@cardstack/boxel-host/commands/screenshot-card",
+        "name": "default"
+      },
+      "readMe": "# Screenshot Card\n\n## Summary\nHost command — screenshot a rendered card and save it as an ImageDef in the card. Available to\ncards and commands via the runtime loader, and to AI assistant rooms as a\ntool.\n\n## Example\n```ts\nimport ScreenshotCardTool from '@cardstack/boxel-host/commands/screenshot-card';\n\nlet result = await new ScreenshotCardTool(commandContext).execute({\n  /* input fields */\n} as any);\n```\n`commandContext` comes from `@context.commandContext` inside any card\nformat. In an AI room the same tool is invoked by name (action verb: Screenshot).",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Screenshot Card",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

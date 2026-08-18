@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Write Text File",
+      "specType": "command",
+      "ref": {
+        "module": "@cardstack/boxel-host/commands/write-text-file",
+        "name": "default"
+      },
+      "readMe": "# Write Text File\n\n## Summary\nHost command — write a text file to a realm, such as a module or a card.. Available to\ncards and commands via the runtime loader, and to AI assistant rooms as a\ntool.\n\n## Example\n```ts\nimport WriteTextFileTool from '@cardstack/boxel-host/commands/write-text-file';\n\nlet result = await new WriteTextFileTool(commandContext).execute({\n  /* input fields */\n} as any);\n```\n`commandContext` comes from `@context.commandContext` inside any card\nformat. In an AI room the same tool is invoked by name (action verb: Write).",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Write Text File",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
