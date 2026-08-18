@@ -555,9 +555,14 @@ export function excelMirr(
   return Math.pow(numerator / denominator, 1 / (values.length - 1)) - 1;
 }
 
+/**
+ * Interest accrued from issue to settlement, which a bond pays a coupon at a
+ * time: `rate / frequency` per quasi-coupon period, earned in proportion to
+ * the share of each period the holding covers.
+ */
 export function excelAccrint(
   issueLike: unknown,
-  _firstInterestLike: unknown,
+  firstInterestLike: unknown,
   settlementLike: unknown,
   rateLike: unknown,
   parLike: unknown,
@@ -565,6 +570,10 @@ export function excelAccrint(
   basisLike = 0,
 ) {
   const issue = parseExcelDate(issueLike);
+  // Parsed for every basis, even though only actual/actual reads the schedule
+  // it anchors: the same arguments must not be an error under one convention
+  // and an answer under another.
+  const firstInterest = parseExcelDate(firstInterestLike);
   const settlement = parseExcelDate(settlementLike);
   const rate = parseExcelNumber(rateLike);
   const par = parseExcelNumber(parLike);
@@ -583,6 +592,20 @@ export function excelAccrint(
     throwExcelError(EXCEL_ERROR.num);
   }
 
+  if (basis === 1) {
+    return (
+      par *
+      (rate / frequency) *
+      accruedCoupons(issue, settlement, firstInterest, frequency)
+    );
+  }
+
+  // Every other basis gives all coupon periods the same nominal length,
+  // year/frequency, so each period's share is the segment's year fraction
+  // times the frequency — and summed over the holding the frequency cancels,
+  // leaving the whole accrual at par * rate * YEARFRAC however the schedule
+  // falls. `first_interest` and `frequency` reach the answer only through the
+  // period lengths, so on these bases they have nothing left to say.
   return par * rate * yearFrac(issue, settlement, basis);
 }
 
@@ -798,22 +821,82 @@ function addMonthsClamped(date: Date, months: number) {
 }
 
 /**
- * A coupon date `months` from maturity. A bond maturing on the last day of a
- * month pays on the last day of every month in its schedule, so clamping the
- * day number is not enough: a February 28th maturity would give an August 28th
- * where the schedule wants the 31st.
+ * A coupon date `months` from `anchor` — a known date on the bond's schedule,
+ * its maturity or its first interest payment. A bond whose anchor is the last
+ * day of a month pays on the last day of every month in its schedule, so
+ * clamping the day number is not enough: a February 28th anchor would give an
+ * August 28th where the schedule wants the 31st.
  */
-function addCouponMonths(maturity: Date, months: number) {
+function addCouponMonths(anchor: Date, months: number) {
   const shifted = new Date(
-    Date.UTC(maturity.getUTCFullYear(), maturity.getUTCMonth() + months, 1),
+    Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth() + months, 1),
   );
-  const endOfMonth = maturity.getUTCDate() === lastDayOfMonth(maturity);
+  const endOfMonth = anchor.getUTCDate() === lastDayOfMonth(anchor);
   shifted.setUTCDate(
     endOfMonth
       ? lastDayOfMonth(shifted)
-      : Math.min(maturity.getUTCDate(), lastDayOfMonth(shifted)),
+      : Math.min(anchor.getUTCDate(), lastDayOfMonth(shifted)),
   );
   return shifted;
+}
+
+/**
+ * How many coupons' worth of interest accrues over `start` → `settlement` on
+ * an actual/actual basis: each quasi-coupon period the holding touches
+ * contributes the share of its own real length the holding covers, and the
+ * shares sum. A holding that spans a period and a half earns one and a half
+ * coupons, and the two halves divide by their own lengths — which is why no
+ * single year fraction over the whole holding can stand in for the sum.
+ *
+ * The periods are the schedule `anchor` — the first interest payment — sits
+ * on, extended in both directions at `frequency` a year, since a bond can be
+ * issued periods before its first payment and still be accruing periods after
+ * it. Every boundary is measured from the anchor rather than from the boundary
+ * before it, so a month-end schedule stays on month ends instead of carrying
+ * February's clamp forward.
+ */
+function accruedCoupons(
+  start: Date,
+  settlement: Date,
+  anchor: Date,
+  frequency: number,
+) {
+  const monthsPerPeriod = 12 / frequency;
+  const couponDate = (periods: number) =>
+    addCouponMonths(anchor, periods * monthsPerPeriod);
+
+  // Counting whole months from the anchor names the period `start` falls in,
+  // to within one: month arithmetic cannot see the day numbers, so a boundary
+  // later in the month than `start` is one the count still claims. It can only
+  // err in that direction — the period after the counted one begins in a later
+  // month than `start`, so it can never have started already — which makes one
+  // step back the whole correction.
+  let periods = Math.floor(
+    ((start.getUTCFullYear() - anchor.getUTCFullYear()) * 12 +
+      start.getUTCMonth() -
+      anchor.getUTCMonth()) /
+      monthsPerPeriod,
+  );
+  if (couponDate(periods).getTime() > start.getTime()) periods--;
+
+  let shares = 0;
+  let periodStart = couponDate(periods);
+  while (periodStart.getTime() < settlement.getTime()) {
+    const periodEnd = couponDate(periods + 1);
+    // The span's own ends bound the first and last periods; the ones between
+    // are covered whole.
+    const segmentStart =
+      periodStart.getTime() > start.getTime() ? periodStart : start;
+    const segmentEnd =
+      periodEnd.getTime() < settlement.getTime() ? periodEnd : settlement;
+    shares +=
+      daysBetween(segmentStart, segmentEnd) /
+      daysBetween(periodStart, periodEnd);
+    periods++;
+    periodStart = periodEnd;
+  }
+
+  return shares;
 }
 
 export function excelCoupdays(

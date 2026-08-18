@@ -364,6 +364,15 @@ export const formulaFinancialCases: CoverageCase[] = [
   },
   // Bills and bonds: date pairs picked for round day counts (90 actual days
   // to April, 181 actual days / 180 on a 30-360 basis to July).
+  //
+  // ACCRINT pays par * (rate / frequency) per quasi-coupon period, earned in
+  // proportion to the share of each period the holding covers — periods on the
+  // schedule first_interest sits on, at the given frequency. On every basis
+  // with a fixed year length a period is exactly year/frequency long, so the
+  // shares sum to frequency * YEARFRAC(issue, settlement) and the frequency
+  // cancels: those bases answer par * rate * YEARFRAC no matter where the
+  // schedule falls. Basis 1 is actual/actual, where a period's own length is
+  // what divides, so it is the basis the schedule reaches.
   {
     covers: 'ACCRINT/6',
     // Settling mid-period rather than on the coupon date, so the accrual is a
@@ -373,24 +382,59 @@ export const formulaFinancialCases: CoverageCase[] = [
     tolerance: 1e-9,
   },
   {
+    covers: 'ACCRINT/6',
+    // A holding that runs past a coupon date, on the basis where the coupons
+    // still sum to the whole span: one full period from 2022-11-15 to
+    // 2023-05-15 plus 76 more 30/360 days is 1000 * 0.1 * 256/360. A frequency
+    // left uncancelled would scale that by 2 or by a half.
+    source: 'ACCRINT("2022-11-15", "2023-05-15", "2023-08-01", 0.1, 1000, 2)',
+    expected: 71.11111111111111,
+    tolerance: 1e-9,
+  },
+  {
     covers: 'ACCRINT/7',
-    // Excel accrues par * (rate / frequency) * the accrued days over the
-    // length of the quasi-coupon period they fall in — periods counted back
-    // from first_interest. Settling 90 days into the period that runs
-    // 2023-01-01 to 2023-07-01 gives 1000 * 0.05 * 90/181.
-    //
-    // On every basis with a fixed year length that reduces to
-    // par * rate * YEARFRAC(issue, settlement), which is why only basis 1
-    // separates the two readings.
+    // Settling 90 actual days into the period that runs 2023-01-01 to
+    // 2023-07-01, which is 181 days long: 1000 * 0.05 * 90/181. Dividing by
+    // the year instead would give 24.657, and reading the period off a
+    // schedule anchored anywhere but 2023-07-01 would give neither.
     source:
       'ACCRINT("2023-01-15", "2023-07-01", "2023-04-15", 0.1, 1000, 2, 1)',
     expected: 24.861878453038674,
     tolerance: 1e-9,
-    knownDefect:
-      'ACCRINT computes par * rate * YEARFRAC(issue, settlement, basis) and ' +
-      'never reads first_interest or frequency, so on basis 1 it divides by ' +
-      "the year rather than by the quasi-coupon period's own length",
-    produces: { expected: 24.65753424657534, tolerance: 1e-9 },
+  },
+  {
+    covers: 'ACCRINT/7',
+    // Held from issue to the first payment, so the holding is one whole
+    // quasi-coupon period and earns exactly one coupon — 1000 * 0.05 — however
+    // many days the calendar put in it. Dividing the 181 days by the year
+    // instead would pay 49.589 for a full period's holding.
+    source:
+      'ACCRINT("2022-11-15", "2023-05-15", "2023-05-15", 0.1, 1000, 2, 1)',
+    expected: 50,
+    tolerance: 1e-9,
+  },
+  {
+    covers: 'ACCRINT/7',
+    // A holding that spans a coupon date earns from both periods, and on
+    // actual/actual the two periods are not the same length: one full coupon
+    // for 2022-11-15 to 2023-05-15, then 78 of the 184 days in 2023-05-15 to
+    // 2023-11-15. No single YEARFRAC over the whole holding produces this,
+    // since the halves divide by 181 and 184 respectively.
+    source:
+      'ACCRINT("2022-11-15", "2023-05-15", "2023-08-01", 0.1, 1000, 2, 1)',
+    expected: 71.19565217391303,
+    tolerance: 1e-9,
+  },
+  {
+    covers: 'ACCRINT/7',
+    // Issued after its first interest payment, so the schedule is the one
+    // extended forward from the anchor rather than counted back from it: the
+    // quarterly dates behind 2023-12-01 are 2023-09-01 and 2023-06-01, and
+    // settlement closes the 91-day period issue opened 9 days into.
+    source:
+      'ACCRINT("2023-09-10", "2023-03-01", "2023-12-01", 0.06, 1000, 4, 1)',
+    expected: 13.516483516483516,
+    tolerance: 1e-9,
   },
   // On the default 30/360 basis a coupon period is 360/frequency days by
   // definition, so the dates are inert here and the frequency is what the
