@@ -832,6 +832,48 @@ function addCouponMonths(anchor: Date, months: number) {
   return shifted;
 }
 
+/** Whether a date is the last day of February, the 28th or the 29th. */
+function isFebruaryMonthEnd(date: Date) {
+  return date.getUTCMonth() === 1 && date.getUTCDate() === lastDayOfMonth(date);
+}
+
+/**
+ * The days from `start` to `end` on the US 30/360 that a bond schedule is
+ * measured with. It carries the day-31 rules `DAYS360` applies and, on top of
+ * them, the last-day-of-February rules: a February month end reads as the 30th
+ * when it opens a span, and when it closes one either the start is a February
+ * month end too or `bothEnds` is set.
+ *
+ * `bothEnds` pulls the closing day back unconditionally, which is how a
+ * quasi-coupon period's own length is measured. Left off, the closing day moves
+ * only once the opening day has already landed on the 30th, which is how the
+ * days a holding covers are counted. The order the rules fire in is load
+ * bearing: a February month end enables neither the day-31 rule nor its own
+ * closing rule until after both have been tested.
+ *
+ * This is deliberately not `days360`. `DAYS360` implements the day-31 rules
+ * alone, because Excel's shipped `DAYS360` parts from the February rules its own
+ * documentation gives, while Excel's bond functions apply them — so the two
+ * counts are separately observed and do not share an implementation.
+ */
+function couponDays360(start: Date, end: Date, bothEnds: boolean) {
+  let startDay = start.getUTCDate();
+  let endDay = end.getUTCDate();
+
+  if (isFebruaryMonthEnd(end) && (isFebruaryMonthEnd(start) || bothEnds)) {
+    endDay = 30;
+  }
+  if (endDay === 31 && (bothEnds || startDay >= 30)) endDay = 30;
+  if (startDay === 31) startDay = 30;
+  if (isFebruaryMonthEnd(start)) startDay = 30;
+
+  return (
+    (end.getUTCFullYear() - start.getUTCFullYear()) * 360 +
+    (end.getUTCMonth() - start.getUTCMonth()) * 30 +
+    (endDay - startDay)
+  );
+}
+
 /**
  * The day counts a basis measures a quasi-coupon schedule with.
  *
@@ -853,9 +895,11 @@ interface AccrualDayCounts {
 function accrualDayCounts(basis: number, frequency: number): AccrualDayCounts {
   const nominalLength = (basis === 3 ? 365 : 360) / frequency;
   const nominal = () => nominalLength;
-  const conditional30360 = (start: Date, end: Date) =>
-    days360(start, end, false);
-  const bothEnds30360 = (start: Date, end: Date) => days360(start, end, true);
+  const conditionalUs = (start: Date, end: Date) =>
+    couponDays360(start, end, false);
+  const bothEndsUs = (start: Date, end: Date) =>
+    couponDays360(start, end, true);
+  const european = (start: Date, end: Date) => days360(start, end, true);
 
   switch (basis) {
     case 1:
@@ -867,7 +911,7 @@ function accrualDayCounts(basis: number, frequency: number): AccrualDayCounts {
     case 2:
       return {
         elapsed: daysBetween,
-        periodLength: conditional30360,
+        periodLength: conditionalUs,
         referenceLength: nominal,
       };
     case 3:
@@ -877,18 +921,21 @@ function accrualDayCounts(basis: number, frequency: number): AccrualDayCounts {
         referenceLength: nominal,
       };
     case 4:
+      // The European 30/360 has no February rules, so `days360` counts it
+      // whole: a day-31 reads as the 30th at both ends and nothing else moves.
       return {
-        elapsed: bothEnds30360,
-        periodLength: bothEnds30360,
+        elapsed: european,
+        periodLength: european,
         referenceLength: nominal,
       };
     default:
-      // The US/NASD reading measures the days a holding covers, but a period's
-      // own length is sized with both ends pulled back, so a period closing on
-      // the 31st is 30 days per month however its start falls.
+      // The US reading measures the days a holding covers with the closing day
+      // conditional, but sizes a period's own length with both ends pulled
+      // back, so a period closing on the 31st or a February month end is 30
+      // days per month however its start falls.
       return {
-        elapsed: conditional30360,
-        periodLength: bothEnds30360,
+        elapsed: conditionalUs,
+        periodLength: bothEndsUs,
         referenceLength: nominal,
       };
   }
@@ -936,9 +983,10 @@ function accruedCoupons(
   const monthsPerPeriod = 12 / frequency;
   const couponDate = (periods: number) => {
     const date = addCouponMonths(anchor, periods * monthsPerPeriod);
-    // A schedule that runs past the last representable date is an
-    // out-of-range date rather than an accrual, the same answer a serial
-    // beyond the calendar's end gets.
+    // A boundary the calendar cannot represent is `#NUM!` rather than a day
+    // count taken from an invalid date. An anchor inside the Excel serial range
+    // never steps that far, so this catches an anchor handed in as a `Date`
+    // near the end of representable time.
     if (Number.isNaN(date.getTime())) {
       throwExcelError(EXCEL_ERROR.num);
     }

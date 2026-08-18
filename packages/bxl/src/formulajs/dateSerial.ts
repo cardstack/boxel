@@ -318,15 +318,17 @@ export function excelDatevalue(textLike: unknown) {
  *
  * A day-31 start always reads as the 30th. `bothEnds` decides the other end:
  * pulled back unconditionally, the count becomes a function of each date on its
- * own and so additive across any split, which is the European 30/360 and how a
- * schedule's own periods are sized. Left conditional — the end moves only once
- * the start has landed on the 30th — the count reads the two ends together and
- * need not be additive: a span between two month ends can come to 178 or 183
- * days where two clean months give 180. That is the US/NASD reading, and what
- * `DAYS360`'s default method counts.
+ * own and so additive across any split, which is the European 30/360. Left
+ * conditional — the end moves only once the start has landed on the 30th — the
+ * count reads the two ends together and need not be additive: a semiannual span
+ * between two month ends can come to 178, 179, 182 or 183 days where two clean
+ * months give 180. That is the US/NASD reading, and what `DAYS360`'s default
+ * method counts.
  *
  * Neither reading carries the last-day-of-February clauses Microsoft documents,
- * which pull a February month end back to the 30th as well.
+ * which pull a February month end back to the 30th as well. Excel's shipped
+ * `DAYS360` parts from those clauses; its bond functions apply them, and count
+ * with their own reading rather than this one.
  */
 export function days360(start: Date, end: Date, bothEnds: boolean): number {
   let startDay = start.getUTCDate();

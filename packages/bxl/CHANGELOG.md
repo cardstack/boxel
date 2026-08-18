@@ -62,8 +62,8 @@ versions may change syntax behavior until `1.0.0`.
   On the jq side: named captures now travel on a match, so `capture`, `sub` and
   `gsub` can read them, and a group that did not participate reports an absent
   capture rather than crashing; `round` ties away from zero; `isinfinite`
-  excludes NaN, and `isfinite` with it; `lgamma_r` returns its `[magnitude,
-sign]` pair; `scalars_or_empty` keeps empty collections; `max_by` breaks ties
+  excludes NaN, and `isfinite` with it; `lgamma_r` returns a magnitude and sign
+  pair; `scalars_or_empty` keeps empty collections; `max_by` breaks ties
   on the last maximum, as jq does; `inputs` yields an empty stream. On the Excel
   side: `PROPER`, `TRIM`, `SEARCH` (wildcards), `SUBSTITUTE` (an occurrence at
   position 0), `TEXT` (date format codes), `NUMBERVALUE` (percent signs and
@@ -95,12 +95,24 @@ sign]` pair; `scalars_or_empty` keeps empty collections; `max_by` breaks ties
   it covers, and settlement's distance from a reference coupon date is a signed
   share of a single period. Measuring the holding as a whole instead, as
   `par * rate * YEARFRAC(issue, settlement)`, is what an implementation that
-  never reads the schedule answers; it agrees only while a holding stays inside
-  one period, and parts by a coupon or more across several, in either direction. A
-  period's own day count is what separates them: an actual/360 semiannual period
-  runs 181 to 184 days against a nominal 180, and a US 30/360 period between two
-  month ends counts 178 or 183. The bases also disagree with each other, so a
-  basis argument now moves the answer where it used to be inert.
+  never reads the schedule answers. The two coincide wherever every period the
+  holding touches measures its nominal `year / frequency`, and part where a
+  period's own day count differs — which is every actual/360 and actual/365
+  period, and a 30/360 one whose boundaries carry different day numbers. An
+  actual/360 semiannual period runs 181 to 184 days against a nominal 180; a US
+  30/360 semiannual period between two month ends counts 178, 179, 182 or 183.
+  The gap is usually a fraction of a coupon and grows with the holding, reaching
+  a coupon or more only over decades. The bases also disagree with each other, so
+  a basis argument now moves the answer where it used to be inert.
+
+- **`ACCRINT`'s 30/360 reads a February month end as the 30th.** The US 30/360 a
+  bond schedule is measured with carries the last-day-of-February rules on top of
+  the day-31 rules: February's month end counts as the 30th when it opens a span,
+  and when it closes one whose start is a February month end too or whose own
+  length is being measured. So a holding from one February month end to the next
+  is a whole year and earns exactly one coupon. `DAYS360` keeps the day-31 rules
+  alone, since Excel's shipped `DAYS360` parts from the February rules its own
+  documentation gives while Excel's bond functions apply them.
 
 ### Removed
 
