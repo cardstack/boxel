@@ -62,9 +62,10 @@ versions may change syntax behavior until `1.0.0`.
   On the jq side: named captures now travel on a match, so `capture`, `sub` and
   `gsub` can read them, and a group that did not participate reports an absent
   capture rather than crashing; `round` ties away from zero; `isinfinite`
-  excludes NaN, and `isfinite` with it; `lgamma_r` returns its `[magnitude,
-sign]` pair; `scalars_or_empty` keeps empty collections; `max_by` breaks ties
-  on the last maximum, as jq does; `inputs` yields an empty stream. On the Excel
+  excludes NaN, and `isfinite` with it; `lgamma_r` returns its
+  `[magnitude, sign]` pair; `scalars_or_empty` keeps empty collections; `max_by`
+  breaks ties on the last maximum, as jq does; `inputs` yields an empty stream.
+  On the Excel
   side: `PROPER`, `TRIM`, `SEARCH` (wildcards), `SUBSTITUTE` (an occurrence at
   position 0), `TEXT` (date format codes), `NUMBERVALUE` (percent signs and
   spaces), `CHAR` (bounded to 1–255), `ISEVEN`/`ISODD` (truncation),
@@ -89,14 +90,25 @@ sign]` pair; `scalars_or_empty` keeps empty collections; `max_by` breaks ties
   single numbers in both readable and canonical-jq syntax, where the tokenizer
   previously ended the literal at the first digit and read the rest as a name.
 
-- **`YEARFRAC` on basis 4 counts the European 30/360 it names.** The convention
-  pulls a day-31 back to the 30th at both ends of the span before differencing;
-  leaving both endpoints where they stand is a raw 30/360, which counted a day
-  too many whenever one end fell on the 31st and the other did not — small, but
-  always in the same direction. Basis 4 reaches `DISC`, `PRICEDISC` and
-  `ACCRINT` as well as `YEARFRAC` itself. Basis 0's US rule is a different
-  convention and keeps its own asymmetry, where the end date moves only once
-  the start has landed on the 30th.
+- **`YEARFRAC` reads a span the way Excel does, on all five bases.** Basis 4 is
+  now the European 30/360 it names: a day-31 endpoint moves onto the 30th at
+  both ends before differencing, where leaving both where they stand is a raw
+  30/360 that lands a day out in whichever direction the 31 sits — a day short
+  when the span opens on the 31st, a day long when it closes on one. Basis 0's US 30/360 counts a February that a span opens on as
+  a whole 30-day month, and closes the same way when the span also ends on the
+  last day of a February. The earlier of the two dates opens the span however
+  the arguments arrived, so a reversed pair measures a length rather than a
+  negative — and on basis 1 a reversed pair produced `NaN`, since the
+  multi-year branch averaged over a year count of zero. A time of day is no
+  part of a day count, so a serial carrying one names the same day as a serial
+  without one, which is how `NOW()` reaches these functions. Each of these
+  carries into `DISC`, `PRICEDISC` and `ACCRINT`, which take a basis and measure
+  their own spans with it.
+
+- **`DISC` and `PRICEDISC` raise `#NUM!` unless settlement precedes maturity**,
+  as the `TBILL` family already did. A transposed pair used to answer a negative
+  discount or a price above redemption, and settling on the maturity date
+  divided by a term of zero.
 
 ### Removed
 

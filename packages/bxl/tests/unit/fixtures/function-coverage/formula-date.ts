@@ -126,43 +126,140 @@ export const formulaDateCases: CoverageCase[] = [
     tolerance: 1e-12,
   },
   // Basis 4 is the European 30/360, which pulls a day-31 back to the 30th at
-  // both ends of the span before counting. Three spans separate it from a raw
-  // 30/360 that leaves the 31st where it stands — a day-31 start, a day-31 end,
-  // and one with both, where the two shifts cancel — and the day-31 end also
-  // separates it from basis 0, whose US rule reaches that end conditionally.
+  // both ends of the span before counting. A day-31 start and a day-31 end each
+  // separate it from a raw 30/360 that leaves the 31st alone, and they separate
+  // in opposite directions: pulling the start back lengthens the span, pulling
+  // the end back shortens it. Day counts are written as their own arithmetic
+  // here, since the fraction they divide into is what the convention is about.
   {
     covers: 'YEARFRAC/3',
-    // 394 days from the 31st of July, where leaving that 31st where it stands
-    // would count 393.
+    // A day-31 start: 394 days, where leaving the 31st of July in place counts
+    // one fewer.
     source: 'YEARFRAC(DATE(2021, 7, 31), DATE(2022, 9, 4), 4)',
-    expected: 1.0944444444444446,
-    tolerance: 1e-12,
+    expected: 394 / 360,
   },
   {
     covers: 'YEARFRAC/3',
-    // 61 days to the 31st of August, from a start earlier than the 30th.
+    // A day-31 end, from a start earlier than the 30th: 61 days, where leaving
+    // the 31st of August in place counts one more.
     source: 'YEARFRAC(DATE(2023, 6, 29), DATE(2023, 8, 31), 4)',
-    expected: 0.16944444444444445,
-    tolerance: 1e-12,
+    expected: 61 / 360,
+  },
+  {
+    covers: 'DAYS360/3',
+    // The same span and the same 61 days read through DAYS360's European
+    // method, which counts by the same rule. The rule is written out in both
+    // functions, so each answer is pinned here rather than derived from the
+    // other.
+    source: 'DAYS360(DATE(2023, 6, 29), DATE(2023, 8, 31), true)',
+    expected: 61,
   },
   {
     covers: 'YEARFRAC/3',
     // The same span on basis 0, the US 30/360, which is where the two
-    // conventions part company: it reaches the end date only once the start
-    // has landed on the 30th, so this August 31st stays where it is and the
-    // span counts 62 days.
+    // conventions part company: it reaches the end date only once the start has
+    // landed on the 30th, so this August 31st stays where it is and the span
+    // counts 62 days.
     source: 'YEARFRAC(DATE(2023, 6, 29), DATE(2023, 8, 31), 0)',
-    expected: 0.17222222222222222,
-    tolerance: 1e-12,
+    expected: 62 / 360,
   },
   {
     covers: 'YEARFRAC/3',
-    // Day 31 at both ends: 210 days, the same answer a raw 30/360 gives, and
-    // one a convention that pulled back a single end would miss by a day in
-    // either direction.
+    // Day 31 at both ends, where the two shifts cancel: 210 days, the answer a
+    // raw 30/360 gives too, and one a convention reaching a single end would
+    // miss by a day in either direction.
     source: 'YEARFRAC(DATE(2023, 1, 31), DATE(2023, 8, 31), 4)',
-    expected: 0.5833333333333334,
-    tolerance: 1e-12,
+    expected: 210 / 360,
+  },
+  {
+    covers: 'YEARFRAC/3',
+    // The rule reads the day number and not the end of the month: February's
+    // 28th is the last day of its month and still counts as a 28th, so this
+    // span is 32 days where a month-end reading would make it 31.
+    source: 'YEARFRAC(DATE(2023, 2, 28), DATE(2023, 3, 31), 4)',
+    expected: 32 / 360,
+  },
+  {
+    covers: 'YEARFRAC/3',
+    // Both ends on a month end and neither on a 31st — a leap February's 29th
+    // and an April 30th — so neither moves, for 61 days.
+    source: 'YEARFRAC(DATE(2024, 2, 29), DATE(2024, 4, 30), 4)',
+    expected: 61 / 360,
+  },
+  // Basis 0 has two rules beyond the day-31 ones, and both are about February:
+  // a span opening on the last day of February counts that February as a whole
+  // 30-day month, and closes the same way only when it also ends on the last
+  // day of a February.
+  {
+    covers: 'YEARFRAC/3',
+    // 552 days from the last day of February, where counting that February at
+    // its own 28 days gives 554.
+    source: 'YEARFRAC(DATE(2025, 2, 28), DATE(2026, 9, 12), 0)',
+    expected: 552 / 360,
+  },
+  {
+    covers: 'YEARFRAC/3',
+    // Both ends on the last day of February, the later one a leap year's 29th:
+    // exactly a year, since each February counts whole.
+    source: 'YEARFRAC(DATE(2023, 2, 28), DATE(2024, 2, 29), 0)',
+    expected: 1,
+  },
+  {
+    covers: 'YEARFRAC/3',
+    // A February start reaches its own month end and no further: the 31st of
+    // March closing the span stays a 31st, for 31 days.
+    source: 'YEARFRAC(DATE(2023, 2, 28), DATE(2023, 3, 31), 0)',
+    expected: 31 / 360,
+  },
+  {
+    covers: 'YEARFRAC/3',
+    // The end date's February rule waits on the start's: closing on the last
+    // day of February from an ordinary start counts 43 days, not the 45 a whole
+    // February would give.
+    source: 'YEARFRAC(DATE(2023, 1, 15), DATE(2023, 2, 28), 0)',
+    expected: 43 / 360,
+  },
+  // A year fraction is how long a span is, so the earlier date opens it however
+  // the arguments arrived. On the bases that read their two endpoints
+  // asymmetrically that decides the count and not merely its sign.
+  {
+    covers: 'YEARFRAC/3',
+    // Reversed, on basis 0: 510 days from the 1st of September to the 31st of
+    // January. Taken in argument order that January 31st would be the start
+    // that moves onto the 30th, costing the span a day it does not lose.
+    source: 'YEARFRAC(DATE(2021, 1, 31), DATE(2019, 9, 1), 0)',
+    expected: 510 / 360,
+  },
+  {
+    covers: 'YEARFRAC/3',
+    // Reversed, on basis 1: 335 days over a 365-day year. The year length
+    // follows from where the span begins, and taken in argument order this pair
+    // reaches the multi-year branch and averages over a year count of zero,
+    // which is a division by zero rather than a wrong answer.
+    source: 'YEARFRAC(DATE(2019, 5, 30), DATE(2018, 6, 29), 1)',
+    expected: 335 / 365,
+  },
+  {
+    covers: 'YEARFRAC/3',
+    // Reversed, on basis 4, whose rule reaches both ends alike so that only the
+    // sign is ever in question: 210 days, and a length is positive.
+    source: 'YEARFRAC(DATE(2023, 8, 31), DATE(2023, 1, 31), 4)',
+    expected: 210 / 360,
+  },
+  // A day count reads calendar days, so a time of day is no part of one — which
+  // is how `NOW()` reaches these functions.
+  {
+    covers: 'YEARFRAC/3',
+    // One day over a 365-day year, not the two that carrying a day and a half
+    // up to the next whole day would give.
+    source: 'YEARFRAC(DATE(2023, 1, 1), DATE(2023, 1, 2) + TIME(12, 0, 0), 1)',
+    expected: 1 / 365,
+  },
+  {
+    covers: 'YEARFRAC/3',
+    // Both ends on the same day: no span at all, whatever the clock says.
+    source: 'YEARFRAC(DATE(2023, 1, 1) + TIME(18, 0, 0), DATE(2023, 1, 1), 1)',
+    expected: 0,
   },
   // Week fields. 2026-04-30 is a Thursday: return type 1, the default,
   // numbers from Sunday = 1, type 2 from Monday = 1.

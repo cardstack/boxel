@@ -474,6 +474,46 @@ export const formulaFinancialCases: CoverageCase[] = [
     expected: 100 * (1 - 0.05 * (181 / 365)),
     tolerance: 1e-9,
   },
+  // The bond functions read their numeric arguments the way the rest of the
+  // package reads them. A basis that is not a number is an error rather than
+  // the default it would coerce to, and a fractional basis or frequency names
+  // the whole one it sits on rather than nothing at all.
+  {
+    covers: 'DISC/5',
+    source: 'DISC("2023-01-01", "2023-07-01", 97.5, 100, "x")',
+    throws: /#VALUE!/,
+  },
+  {
+    covers: 'PRICEDISC/5',
+    source: 'PRICEDISC("2023-01-01", "2023-07-01", 0.05, 100, "x")',
+    throws: /#VALUE!/,
+  },
+  {
+    covers: 'ACCRINT/7',
+    // Frequency 2.9 is semi-annual and basis 4.9 is the European 30/360, where
+    // reading either whole number off the fraction is the difference between an
+    // answer and a #NUM!. Accruing 75 30/360 days of a 10% coupon on 1000 par:
+    // the European rule pulls the January 31st issue onto the 30th.
+    source:
+      'ACCRINT("2023-01-31", "2023-07-01", "2023-04-15", 0.1, 1000, 2.9, 4.9)',
+    expected: 1000 * 0.1 * (75 / 360),
+  },
+  // Settlement has to fall before maturity, which is the term these price over.
+  // A year fraction measures how long a span is rather than which way it runs,
+  // so it cannot report a transposed pair on their behalf.
+  {
+    covers: 'DISC/4',
+    // Transposed, where the discount would otherwise come back negative.
+    source: 'DISC("2023-07-01", "2023-01-01", 97.5, 100)',
+    throws: /#NUM!/,
+  },
+  {
+    covers: 'PRICEDISC/4',
+    // Settling on the maturity date leaves no term to discount over, and a
+    // price for it would be redemption at face value.
+    source: 'PRICEDISC("2023-01-01", "2023-01-01", 0.05, 100)',
+    throws: /#NUM!/,
+  },
   {
     covers: 'TBILLEQ/3',
     source: 'TBILLEQ("2023-01-01", "2023-04-01", 0.04)',

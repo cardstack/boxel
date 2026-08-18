@@ -172,13 +172,31 @@ function isLeapYear(year: number) {
   return new Date(Date.UTC(year, 1, 29)).getUTCMonth() === 1;
 }
 
+/**
+ * Midnight on the day `date` falls in. A day count reads calendar days, so a
+ * serial carrying a time of day names the same day as the serial without one.
+ */
+export function startOfDay(date: Date) {
+  const day = new Date(date.getTime());
+  day.setUTCHours(0, 0, 0, 0);
+  return day;
+}
+
 export function yearFrac(
   startLike: unknown,
   endLike: unknown,
   basisValue = 0,
 ): number {
-  const startDate = parseExcelDate(startLike);
-  const endDate = parseExcelDate(endLike);
+  // A year fraction is how long a span is, so the earlier date opens it
+  // whichever argument carried it. Bases 0 and 1 read their two endpoints
+  // asymmetrically, which makes this the count itself rather than only its
+  // sign: the day that gets pulled onto the 30th, and the year whose length
+  // divides, both follow from which date is the earlier one.
+  const firstDate = startOfDay(parseExcelDate(startLike));
+  const secondDate = startOfDay(parseExcelDate(endLike));
+  const reversed = secondDate.getTime() < firstDate.getTime();
+  const startDate = reversed ? secondDate : firstDate;
+  const endDate = reversed ? firstDate : secondDate;
   const basis = Math.trunc(Number(basisValue) || 0);
 
   let sd = startDate.getUTCDate();
@@ -190,6 +208,12 @@ export function yearFrac(
 
   switch (basis) {
     case 0:
+      // The US 30/360 moves an endpoint onto the 30th under four conditions,
+      // each ruling out the ones below it. A day-31 start always moves. A
+      // day-31 end moves only from a start already on the 30th, which is what
+      // leaves the 31st standing under any earlier start. And a span opening on
+      // the last day of February counts that February as a whole 30-day month,
+      // closing the same way only when it ends on a February month end too.
       if (sd === 31 && ed === 31) {
         sd = 30;
         ed = 30;
@@ -197,6 +221,11 @@ export function yearFrac(
         sd = 30;
       } else if (sd === 30 && ed === 31) {
         ed = 30;
+      } else if (sm === 2 && sd === (isLeapYear(sy) ? 29 : 28)) {
+        sd = 30;
+        if (em === 2 && ed === (isLeapYear(ey) ? 29 : 28)) {
+          ed = 30;
+        }
       }
       return (ed + em * 30 + ey * 360 - (sd + sm * 30 + sy * 360)) / 360;
     case 1: {
