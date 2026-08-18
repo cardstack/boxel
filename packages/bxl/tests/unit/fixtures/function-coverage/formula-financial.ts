@@ -365,28 +365,29 @@ export const formulaFinancialCases: CoverageCase[] = [
   // Bills and bonds: date pairs picked for round day counts (90 actual days
   // to April, 181 actual days / 180 on a 30-360 basis to July).
   //
-  // ACCRINT pays par * (rate / frequency) per quasi-coupon period, earned in
-  // proportion to the share of each period the holding covers — periods on the
-  // schedule first_interest sits on, at the given frequency. On every basis
-  // with a fixed year length a period is exactly year/frequency long, so the
-  // shares sum to frequency * YEARFRAC(issue, settlement) and the frequency
-  // cancels: those bases answer par * rate * YEARFRAC no matter where the
-  // schedule falls. Basis 1 is actual/actual, where a period's own length is
-  // what divides, so it is the basis the schedule reaches.
+  // ACCRINT pays par * (rate / frequency) per quasi-coupon period on the
+  // schedule first_interest sits on, at the given frequency, counted from one
+  // reference boundary: periods behind it the holding covers whole each earn a
+  // coupon, the period the holding opens in earns the share of its own length
+  // it covers, and settlement's distance from the boundary is added as a signed
+  // share of a single period. Every basis reads the schedule, and none of them
+  // reduces to par * rate * YEARFRAC once a holding runs past a coupon date —
+  // the multi-period cases below are what separate the two readings.
   {
     covers: 'ACCRINT/6',
     // Settling mid-period rather than on the coupon date, so the accrual is a
-    // fraction the dates decide: 90 of 360 days on the default 30/360 basis.
+    // fraction the dates decide: 90 of the 180 30/360 days in the period the
+    // holding both opens and closes in, on the default basis.
     source: 'ACCRINT("2023-01-01", "2023-07-01", "2023-04-01", 0.1, 1000, 2)',
     expected: 25,
     tolerance: 1e-9,
   },
   {
     covers: 'ACCRINT/6',
-    // A holding that runs past a coupon date, on the basis where the coupons
-    // still sum to the whole span: one full period from 2022-11-15 to
-    // 2023-05-15 plus 76 more 30/360 days is 1000 * 0.1 * 256/360. A frequency
-    // left uncancelled would scale that by 2 or by a half.
+    // A holding that runs past a coupon date, on a schedule whose periods each
+    // count the nominal 180 30/360 days: two coupons less the 104 days
+    // settlement falls short of 2023-11-15 comes to 1000 * 0.1 * 256/360. A
+    // frequency left uncancelled would scale that by 2 or by a half.
     source: 'ACCRINT("2022-11-15", "2023-05-15", "2023-08-01", 0.1, 1000, 2)',
     expected: 71.11111111111111,
     tolerance: 1e-9,
@@ -452,12 +453,86 @@ export const formulaFinancialCases: CoverageCase[] = [
   },
   {
     covers: 'ACCRINT/6',
-    // The schedule anchor is read on every basis, so a first_interest that is
-    // not a date is an error even where the accrual would not have consulted
-    // the schedule it anchors. The same arguments must not be an error under
-    // one convention and an answer under another.
+    // The schedule anchor is read before any accrual is counted, so a
+    // first_interest that is not a date is an error on every basis rather than
+    // an argument some convention could leave unexamined.
     source: 'ACCRINT("2023-01-01", "not a date", "2023-04-01", 0.1, 1000, 2)',
     throws: /#VALUE!/,
+  },
+  {
+    covers: 'ACCRINT/7',
+    // A fully covered quasi-coupon period earns exactly one coupon, not its own
+    // day count over the nominal length. Two whole semiannual periods of 181
+    // and 184 actual days on actual/360: 1000 * 0.05 * (1 + 184/180). Measuring
+    // the holding as a whole instead would divide its 365 actual days by 360
+    // and pay 101.38888888888889, which is what an implementation that never
+    // reads the schedule answers.
+    source:
+      'ACCRINT("2023-01-01", "2024-01-01", "2024-01-01", 0.1, 1000, 2, 2)',
+    expected: 101.11111111111111,
+    tolerance: 1e-9,
+  },
+  // One holding read on all five bases, against Excel's own answers for it:
+  // 10000 at 7% semiannual, issued 1990-03-04 and settled 1992-03-04 on a
+  // schedule anchored by a 1993-03-31 first payment. The anchor is a month end,
+  // so the schedule is too — 1989-09-30, 1990-03-31, 1990-09-30, 1991-03-31,
+  // 1991-09-30, 1992-03-31, 1992-09-30 — and settlement lands a period and a
+  // half short of the reference boundary at 1992-09-30, which makes the
+  // remainder negative and leaves five whole coupons to carry the balance. The
+  // holding opens 27 days into the period behind 1990-03-31.
+  //
+  // Every basis answers differently and only basis 4 coincides with
+  // par * rate * YEARFRAC, which pays 1400 on basis 0, 1401.917808 on bases 1
+  // and 3, and 1421.388889 on basis 2 — reproduced on LibreOffice, which reads
+  // ACCRINT that way on every basis.
+  {
+    covers: 'ACCRINT/7',
+    // 30/360 US: five coupons, plus 27 of the opening period's 180 days, less
+    // the 206 days settlement falls short — both over the nominal 180.
+    source:
+      'ACCRINT("1990-03-04", "1993-03-31", "1992-03-04", 0.07, 10000, 2, 0)',
+    expected: 1401.9444444444443,
+    tolerance: 1e-9,
+  },
+  {
+    covers: 'ACCRINT/7',
+    // Actual/actual, the one basis that divides by real calendar lengths: the
+    // opening period and the reference period both run 182 days, so it is
+    // 5 + (27 - 210)/182 coupons.
+    source:
+      'ACCRINT("1990-03-04", "1993-03-31", "1992-03-04", 0.07, 10000, 2, 1)',
+    expected: 1398.076923076923,
+    tolerance: 1e-9,
+  },
+  {
+    covers: 'ACCRINT/7',
+    // Actual/360 counts elapsed days on the calendar — 27 and 210 — but sizes
+    // both periods at the nominal 180.
+    source:
+      'ACCRINT("1990-03-04", "1993-03-31", "1992-03-04", 0.07, 10000, 2, 2)',
+    expected: 1394.1666666666667,
+    tolerance: 1e-9,
+  },
+  {
+    covers: 'ACCRINT/7',
+    // Actual/365 is the same shape over a 365-day year, so every period is a
+    // nominal 182.5 days.
+    source:
+      'ACCRINT("1990-03-04", "1993-03-31", "1992-03-04", 0.07, 10000, 2, 3)',
+    expected: 1399.0410958904108,
+    tolerance: 1e-9,
+  },
+  {
+    covers: 'ACCRINT/7',
+    // The European 30/360 reads 1990-03-31 as the 30th, so the opening period
+    // contributes 26 of 180 rather than 27 and the coupons come to exactly
+    // five less one. That the total also equals par * rate * YEARFRAC is a
+    // coincidence of these dates; what the case pins is the day-31 clamp, since
+    // leaving that 31st where it stands pays 1401.65.
+    source:
+      'ACCRINT("1990-03-04", "1993-03-31", "1992-03-04", 0.07, 10000, 2, 4)',
+    expected: 1400,
+    tolerance: 1e-9,
   },
   // On the default 30/360 basis a coupon period is 360/frequency days by
   // definition, so the dates are inert here and the frequency is what the

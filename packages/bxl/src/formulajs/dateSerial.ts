@@ -311,32 +311,51 @@ export function excelDatevalue(textLike: unknown) {
   );
 }
 
+/**
+ * The days from `start` to `end` on a 30/360 schedule, where every month is 30
+ * days long and every year 360. The calendar reaches the count only through the
+ * day numbers the two dates carry.
+ *
+ * A day-31 start always reads as the 30th. `bothEnds` decides the other end:
+ * pulled back unconditionally, the count becomes a function of each date on its
+ * own and so additive across any split, which is the European 30/360 and how a
+ * schedule's own periods are sized. Left conditional — the end moves only once
+ * the start has landed on the 30th — the count reads the two ends together and
+ * need not be additive: a span between two month ends can come to 178 or 183
+ * days where two clean months give 180. That is the US/NASD reading, and what
+ * `DAYS360`'s default method counts.
+ *
+ * Neither reading carries the last-day-of-February clauses Microsoft documents,
+ * which pull a February month end back to the 30th as well.
+ */
+export function days360(start: Date, end: Date, bothEnds: boolean): number {
+  let startDay = start.getUTCDate();
+  const startMonth = start.getUTCMonth() + 1;
+  const startYear = start.getUTCFullYear();
+  let endDay = end.getUTCDate();
+  const endMonth = end.getUTCMonth() + 1;
+  const endYear = end.getUTCFullYear();
+
+  if (startDay === 31) startDay = 30;
+  if (endDay === 31 && (bothEnds || startDay >= 30)) endDay = 30;
+
+  return (
+    (endYear - startYear) * 360 +
+    (endMonth - startMonth) * 30 +
+    (endDay - startDay)
+  );
+}
+
 export function excelDays360(
   startLike: unknown,
   endLike: unknown,
   methodLike: unknown = false,
 ) {
-  const start = parseExcelDate(startLike);
-  const end = parseExcelDate(endLike);
-  const european = Boolean(methodLike);
-
-  let sd = start.getUTCDate();
-  const sm = start.getUTCMonth() + 1;
-  const sy = start.getUTCFullYear();
-  let ed = end.getUTCDate();
-  const em = end.getUTCMonth() + 1;
-  const ey = end.getUTCFullYear();
-
-  if (european) {
-    if (sd === 31) sd = 30;
-    if (ed === 31) ed = 30;
-  } else {
-    // US/NASD method
-    if (sd === 31) sd = 30;
-    if (ed === 31 && sd >= 30) ed = 30;
-  }
-
-  return (ey - sy) * 360 + (em - sm) * 30 + (ed - sd);
+  return days360(
+    parseExcelDate(startLike),
+    parseExcelDate(endLike),
+    Boolean(methodLike),
+  );
 }
 
 export function excelWeeknum(serialLike: unknown, returnTypeLike: unknown = 1) {

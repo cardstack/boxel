@@ -63,7 +63,7 @@ versions may change syntax behavior until `1.0.0`.
   `gsub` can read them, and a group that did not participate reports an absent
   capture rather than crashing; `round` ties away from zero; `isinfinite`
   excludes NaN, and `isfinite` with it; `lgamma_r` returns its `[magnitude,
-  sign]` pair; `scalars_or_empty` keeps empty collections; `max_by` breaks ties
+sign]` pair; `scalars_or_empty` keeps empty collections; `max_by` breaks ties
   on the last maximum, as jq does; `inputs` yields an empty stream. On the Excel
   side: `PROPER`, `TRIM`, `SEARCH` (wildcards), `SUBSTITUTE` (an occurrence at
   position 0), `TEXT` (date format codes), `NUMBERVALUE` (percent signs and
@@ -88,6 +88,19 @@ versions may change syntax behavior until `1.0.0`.
 - **Numeric literals accept an exponent.** `1e3`, `1E-3` and `5e-324` are
   single numbers in both readable and canonical-jq syntax, where the tokenizer
   previously ended the literal at the first digit and read the rest as a name.
+
+- **`ACCRINT` counts quasi-coupon periods on every basis.** Interest accrues per
+  period on the schedule `first_interest` anchors: periods a holding covers whole
+  each earn one coupon, the period it opens in earns the share of its own length
+  it covers, and settlement's distance from a reference coupon date is a signed
+  share of a single period. Measuring the holding as a whole — `par * rate *
+YEARFRAC(issue, settlement)`, which is what an implementation that never reads
+  the schedule answers — agrees only while a holding stays inside one period, and
+  parts from it by a coupon or more across several, in either direction. A
+  period's own day count is what separates them: an actual/360 semiannual period
+  runs 181 to 184 days against a nominal 180, and a US 30/360 period between two
+  month ends counts 178 or 183. The bases also disagree with each other, so a
+  basis argument now moves the answer where it used to be inert.
 
 ### Removed
 
