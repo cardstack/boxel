@@ -17,10 +17,15 @@ import enumField from '@cardstack/base/enum';
 import MarkdownField from '@cardstack/base/markdown';
 import { htmlSafe } from '@ember/template';
 import ReceiptIcon from '@cardstack/boxel-icons/receipt';
+import Clock from '@cardstack/boxel-icons/clock';
+import FileText from '@cardstack/boxel-icons/file-text';
+import List from '@cardstack/boxel-icons/list';
+import MapPin from '@cardstack/boxel-icons/map-pin';
 import { FulfilmentLineItemField } from './fulfilment-line-item';
 import { OrderStatusField, orderStatusStyle, orderProgress } from './order-status';
 import { Warehouse } from './warehouse';
 import StatusChip from './fulfilment-status-chip';
+import { money } from './fulfilment-format';
 
 // Where the order came from. v1 enters orders by hand; the field exists now so
 // that an integration later is a new option rather than a migration.
@@ -227,7 +232,7 @@ export class FulfilmentOrder extends CardDef {
           </div>
           <div>
             <dt>Total</dt>
-            <dd><@fields.total @format='atom' /></dd>
+            <dd>{{money @model.total.amount @model.currencyCode}}</dd>
           </div>
           <div>
             <dt>Warehouse</dt>
@@ -240,23 +245,19 @@ export class FulfilmentOrder extends CardDef {
         </dl>
 
         <section class='sec'>
-          <h2>Line items</h2>
+          <h2><List class='sec-icon' role='presentation' />Line items</h2>
           {{#if @model.lineItems.length}}
             <div class='li-head'>
               <span>Item</span><span>Qty</span><span>Unit</span><span>Total</span>
             </div>
             <@fields.lineItems @format='embedded' />
             <div class='totals'>
-              <div><span>Subtotal</span><@fields.subtotal @format='atom' /></div>
+              <div><span>Subtotal</span>{{money @model.subtotal.amount @model.currencyCode}}</div>
               <div><span>Shipping</span>{{#if
                   @model.shippingCost.amount
-                }}<@fields.shippingCost @format='atom' />{{else}}—{{/if}}</div>
-              <div><span>Tax</span>{{#if @model.tax.amount}}<@fields.tax
-                    @format='atom'
-                  />{{else}}—{{/if}}</div>
-              <div class='grand'><span>Total</span><@fields.total
-                  @format='atom'
-                /></div>
+                }}{{money @model.shippingCost.amount @model.currencyCode}}{{else}}—{{/if}}</div>
+              <div><span>Tax</span>{{#if @model.tax.amount}}{{money @model.tax.amount @model.currencyCode}}{{else}}—{{/if}}</div>
+              <div class='grand'><span>Total</span>{{money @model.total.amount @model.currencyCode}}</div>
             </div>
           {{else}}
             <p class='empty'>No line items. An order with no lines cannot be
@@ -266,11 +267,11 @@ export class FulfilmentOrder extends CardDef {
 
         <div class='cols'>
           <section class='sec'>
-            <h2>Ship to</h2>
+            <h2><MapPin class='sec-icon' role='presentation' />Ship to</h2>
             <@fields.shippingAddress @format='embedded' />
           </section>
           <section class='sec'>
-            <h2>Timeline</h2>
+            <h2><Clock class='sec-icon' role='presentation' />Timeline</h2>
             <dl class='kv'>
               <div>
                 <dt>Placed</dt>
@@ -292,7 +293,7 @@ export class FulfilmentOrder extends CardDef {
 
         {{#if @model.notes}}
           <section class='sec'>
-            <h2>Notes</h2>
+            <h2><FileText class='sec-icon' role='presentation' />Notes</h2>
             <@fields.notes />
           </section>
         {{/if}}
@@ -300,16 +301,53 @@ export class FulfilmentOrder extends CardDef {
 
       <style scoped>
         .ord {
+          /* Type scale, mapped to the house 1.333 modular scale rather than the
+             28 hand-picked rem values these cards used to carry — 44 of which
+             fell below 12px, under the smallest token the design system has. */
+          --t-micro: var(--boxel-font-size-xs);
+          --t-sm: var(--boxel-font-size-sm);
+          --t-body: var(--boxel-font-size);
+          --t-lg: var(--boxel-font-size-lg);
+          --t-xl: var(--boxel-font-size-xl);
+          /* Isolated gets NO container from the host — every ancestor up to the
+             panel is `container-type: normal`, so an `@container` rule here is
+             inert until this declares its own. `inline-size`, not `size`: the
+             card scrolls, and `size` needs a definite block size. */
+          container-type: inline-size;
+          container-name: card-iso;
           --ful-bg: var(--background);
           --ful-fg: var(--foreground);
           --ful-muted-fg: var(--muted-foreground);
           --ful-border: var(--border);
+
+          /* ONE panel primitive. Every full-width tinted block on this card —
+             section, note, alert, callout — takes its ground, inset and radius
+             from here, because a background makes spacing VISIBLE: while
+             sections were separated by whitespace alone, a note padded
+             `sp-sm` and a section padded `sp-lg` looked the same. Tint them
+             both and their text edges no longer line up down the page, and
+             every gap between them reads as a mis-registration rather than a
+             rhythm. The inset is the thing that must agree; the tint only
+             exposed it. */
+          --panel-bg: color-mix(in oklch, var(--foreground) 3%, transparent);
+          --panel-pad: var(--boxel-sp) var(--boxel-sp-lg) var(--boxel-sp-lg);
+          --panel-radius: var(--radius, 8px);
+          /* The ONE vertical rhythm. It used to be `margin-top` on `.sec` plus a
+             `.cols .sec { margin-top: 0 }` override for the side-by-side case —
+             two mechanisms for one relationship, and `.cols` itself had neither,
+             so the measured gap above a two-column group was 0px while the gap
+             above a stacked section was 28.4px. A tinted panel colliding with
+             the text above it is what that 0 looks like. */
+          --panel-gap: var(--boxel-sp-xl);
           --ful-rule: color-mix(in oklch, var(--foreground) 12%, transparent);
           /* Named because no semantic token expresses it: the tear line down a
              shipping label. */
           --ful-perf: color-mix(in oklch, var(--foreground) 22%, transparent);
 
           position: relative;
+          display: flex;
+          flex-direction: column;
+          gap: var(--panel-gap);
           height: 100%;
           overflow-y: auto;
           padding: var(--boxel-sp-lg);
@@ -339,7 +377,7 @@ export class FulfilmentOrder extends CardDef {
           border-bottom: 2px dashed var(--ful-perf);
         }
         .eyebrow {
-          font-size: 0.65rem;
+          font-size: var(--t-micro);
           font-weight: 700;
           letter-spacing: 0.18em;
           text-transform: uppercase;
@@ -348,13 +386,13 @@ export class FulfilmentOrder extends CardDef {
         .num {
           margin: 2px 0 0;
           font-family: var(--font-mono, ui-monospace, monospace);
-          font-size: 2.1rem;
+          font-size: var(--t-xl);
           line-height: 1;
           letter-spacing: -0.01em;
         }
         .cust {
           margin: 8px 0 0;
-          font-size: 0.9rem;
+          font-size: var(--t-sm);
           color: var(--ful-muted-fg, var(--boxel-500));
         }
         .to {
@@ -366,7 +404,7 @@ export class FulfilmentOrder extends CardDef {
           gap: var(--boxel-sp-xs);
         }
         .prio {
-          font-size: 0.7rem;
+          font-size: var(--t-micro);
           font-weight: 700;
           letter-spacing: 0.08em;
           text-transform: uppercase;
@@ -377,7 +415,6 @@ export class FulfilmentOrder extends CardDef {
         }
         .track {
           height: 3px;
-          margin-top: var(--boxel-sp);
           border-radius: 999px;
           background: color-mix(in oklch, var(--foreground) 10%, transparent);
           overflow: hidden;
@@ -391,7 +428,7 @@ export class FulfilmentOrder extends CardDef {
           display: grid;
           grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
           gap: var(--boxel-sp);
-          margin: var(--boxel-sp) 0 0;
+          margin: 0;
         }
         .stats div {
           display: flex;
@@ -399,7 +436,7 @@ export class FulfilmentOrder extends CardDef {
           gap: 2px;
         }
         .stats dt {
-          font-size: 0.65rem;
+          font-size: var(--t-micro);
           letter-spacing: 0.1em;
           text-transform: uppercase;
           color: var(--ful-muted-fg, var(--boxel-500));
@@ -408,22 +445,36 @@ export class FulfilmentOrder extends CardDef {
           margin: 0;
           font-family: var(--font-mono, ui-monospace, monospace);
           font-variant-numeric: tabular-nums;
-          font-size: 1.4rem;
+          font-size: var(--t-lg);
           font-weight: 700;
         }
         .stats .sm {
-          font-size: 0.9rem;
+          font-size: var(--t-sm);
           font-weight: 600;
         }
         .sec {
-          margin-top: var(--boxel-sp-lg);
+          /* A surface, not just a gap. Sections were told apart only by spacing,
+             and their headings were 12px uppercase muted — pixel-identical to
+             every table column label on the card, so "where does a section
+             start" had no answer. The ground is mixed toward --foreground so it
+             follows the theme in both modes rather than being a grey. */
+          padding: var(--panel-pad);
+          border-radius: var(--panel-radius);
+          background: var(--panel-bg);
         }
         .sec h2 {
+          /* The section heading is now the loudest uppercase thing on the card:
+             --foreground against the column labels' --muted-foreground. Weight
+             alone (500 vs 400) was not a readable difference. */
+          display: flex;
+          align-items: center;
+          gap: 7px;
           margin: 0 0 var(--boxel-sp-xs);
-          font-size: 0.72rem;
-          letter-spacing: 0.12em;
+          font-size: var(--t-micro);
+          font-weight: 700;
+          letter-spacing: 0.14em;
           text-transform: uppercase;
-          color: var(--ful-muted-fg, var(--boxel-500));
+          color: var(--ful-fg, var(--foreground, var(--boxel-dark)));
         }
         .li-head {
           display: grid;
@@ -431,7 +482,7 @@ export class FulfilmentOrder extends CardDef {
           gap: var(--boxel-sp-xs);
           padding-bottom: 4px;
           border-bottom: 1px solid var(--ful-border, var(--boxel-border-color));
-          font-size: 0.62rem;
+          font-size: var(--t-micro);
           letter-spacing: 0.1em;
           text-transform: uppercase;
           color: var(--ful-muted-fg, var(--boxel-500));
@@ -451,7 +502,7 @@ export class FulfilmentOrder extends CardDef {
           display: grid;
           grid-template-columns: 6rem 6rem;
           gap: var(--boxel-sp-xs);
-          font-size: 0.85rem;
+          font-size: var(--t-sm);
           text-align: right;
           font-family: var(--font-mono, ui-monospace, monospace);
           font-variant-numeric: tabular-nums;
@@ -463,7 +514,7 @@ export class FulfilmentOrder extends CardDef {
         }
         .grand {
           font-weight: 800;
-          font-size: 1rem;
+          font-size: var(--t-body);
           padding-top: 4px;
           border-top: 1px solid var(--ful-border, var(--boxel-border-color));
         }
@@ -483,16 +534,35 @@ export class FulfilmentOrder extends CardDef {
           gap: var(--boxel-sp-xs);
         }
         .kv dt {
-          font-size: 0.8rem;
+          font-size: var(--t-micro);
           color: var(--ful-muted-fg, var(--boxel-500));
         }
         .kv dd {
           margin: 0;
-          font-size: 0.85rem;
+          font-size: var(--t-sm);
         }
         .empty {
-          font-size: 0.85rem;
+          font-size: var(--t-sm);
           color: var(--ful-muted-fg, var(--boxel-500));
+        }
+      
+        /* Section icons: one size, one muted colour, everywhere. They make the
+           card scannable by shape; they must never compete with the heading. */
+        h2 .sec-icon {
+          width: max(14px, 1em);
+          height: max(14px, 1em);
+          flex: 0 0 auto;
+          color: var(--ful-muted-fg, var(--boxel-500));
+        }
+
+        /* One collapse stop. The card is rendered in a resizable stack panel, so
+           this fires when a second card opens beside it — not only on a phone. */
+        @container card-iso (width < 720px) {
+          .cols,
+          .grid,
+          .two {
+            grid-template-columns: 1fr;
+          }
         }
       </style>
     </template>
@@ -508,11 +578,20 @@ export class FulfilmentOrder extends CardDef {
             @hue={{@model.statusStyle.hue}}
           /></span>
         <span class='o-slot'>{{@model.itemCount}} items</span>
-        <span class='o-slot o-total'><@fields.total @format='atom' /></span>
+        <span class='o-slot o-total'>{{money @model.total.amount @model.currencyCode}}</span>
       </div>
 
       <style scoped>
+        /* A CardDef's embedded template must supply its OWN inset. The host wraps
+           a linksTo render in a CardContainer that draws a rounded boundary and
+           deliberately adds no padding — field-component.gts:513 says so in as
+           many words, because padding there would move the container-query
+           breakpoints the card reasons about. With none on either side the text
+           sits flush against the pill, which is what "Northline Supply" looked
+           like inside Supplied by. FieldDef embeddeds get no boundary and so
+           never showed this. */
         .o-emb {
+          padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
           display: grid;
           grid-template-columns: 8rem minmax(0, 1fr) auto 5rem 5.5rem;
           align-items: center;
@@ -603,7 +682,7 @@ export class FulfilmentOrder extends CardDef {
         <div class='r-meta'>
           <span class='items'>{{@model.itemCount}} items</span>
           <span class='wh'>{{if @model.warehouseCode @model.warehouseCode ''}}</span>
-          <span class='total'><@fields.total @format='atom' /></span>
+          <span class='total'>{{money @model.total.amount @model.currencyCode}}</span>
         </div>
       </article>
 
@@ -623,7 +702,7 @@ export class FulfilmentOrder extends CardDef {
             min(calc(3px + 2.1cqi + 1cqb - 0.6 * var(--ar)), 10cqb),
             17px
           );
-          --meta-size: max(8px, calc(var(--type-base) / var(--type-ratio)));
+          --meta-size: max(11px, calc(var(--type-base) / var(--type-ratio)));
           --glyph-size: max(11px, min(3cqi, 14cqb));
           /* The identifier is a VALUE, so it must render in full. It is capped
              against the inline axis as well as the block axis so a real order /

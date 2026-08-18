@@ -68,6 +68,13 @@ export default class FulfilOrderCommand extends Command<
       isDelivered: e.isDelivered ?? false,
     }));
 
+    // Proof of delivery is only written when this call actually carries one.
+    // Sending `null` for an absent input would erase a note someone already
+    // recorded — "left with neighbour at no. 24" is exactly the sentence a
+    // customer dispute turns on, and a caller that simply did not ask about it
+    // must not be able to delete it.
+    let pod = input.proofOfDelivery?.trim();
+
     await new PatchCardInstanceCommand(this.toolContext, {
       cardType: Shipment,
     }).execute({
@@ -76,7 +83,7 @@ export default class FulfilOrderCommand extends Command<
         attributes: {
           status: 'delivered',
           deliveredAt: now,
-          proofOfDelivery: input.proofOfDelivery?.trim() || null,
+          ...(pod ? { proofOfDelivery: pod } : {}),
           trackingEvents: [
             ...existingEvents,
             {
@@ -113,8 +120,10 @@ export default class FulfilOrderCommand extends Command<
     result.orderNumber = order.orderNumber ?? undefined;
 
     if (order.fulfilledAt) {
-      // Monotonic: already stamped, so the date stands. The order's status is
-      // still moved in case a later shipment arrived after a partial delivery.
+      // Monotonic: already stamped, so the date stands and nothing further is
+      // written. A second parcel landing on an order that already completed
+      // changes no fact about the order — only about its own shipment, which
+      // the patch above has already recorded.
       result.wasAlreadyFulfilled = true;
       result.fulfilledAt = order.fulfilledAt.toISOString();
       return result;

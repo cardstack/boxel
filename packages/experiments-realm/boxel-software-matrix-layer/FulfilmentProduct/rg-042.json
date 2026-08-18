@@ -30,6 +30,10 @@
       "isActive": true,
       "cardInfo": {
         "name": "Brass Drawer Pull"
+      },
+      "image": {
+        "url": "https://images.pexels.com/photos/19052812/pexels-photo-19052812.jpeg?auto=compress&cs=tinysrgb&w=800",
+        "sourceMode": "url"
       }
     },
     "relationships": {

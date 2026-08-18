@@ -7,6 +7,7 @@ import {
 } from '@cardstack/base/card-api';
 import NumberField from '@cardstack/base/number';
 import AmountWithCurrency from '@cardstack/base/amount-with-currency';
+import { money } from './fulfilment-format';
 import CurrencyField from '@cardstack/base/currency';
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 import ListIcon from '@cardstack/boxel-icons/list';
@@ -102,9 +103,14 @@ export class FulfilmentLineItemField extends FieldDef {
           {{/if}}
         </span>
 
+        {{! `money` rather than the AmountWithCurrency atom. The atom renders
+            "£ 42" — a space after the symbol and no minor units — while every
+            other figure on the host card goes through `money` and renders
+            "£6.87". Two money formats on one screen is exactly what that helper
+            exists to prevent, and a row of line items is where it showed. }}
         <span class='li-slot li-price'>
           {{#if @model.unitPrice.amount}}
-            <@fields.unitPrice @format='atom' />
+            {{money @model.unitPrice.amount @model.unitPrice.currency.code}}
           {{else}}
             —
           {{/if}}
@@ -112,7 +118,7 @@ export class FulfilmentLineItemField extends FieldDef {
 
         <span class='li-slot li-total'>
           {{#if @model.lineTotal.amount}}
-            <@fields.lineTotal @format='atom' />
+            {{money @model.lineTotal.amount @model.lineTotal.currency.code}}
           {{else}}
             —
           {{/if}}
@@ -122,7 +128,13 @@ export class FulfilmentLineItemField extends FieldDef {
       <style scoped>
         .li {
           display: grid;
-          grid-template-columns: minmax(0, 1fr) 3rem 5.5rem 6rem;
+          /* 14.5rem of FIXED trailing columns used to sit here. In a 330px
+             column that leaves the name about 3.5rem, so "Stoneware Mug" became
+             "Stonew…" while a 6rem money slot held "£42.00" and a visible hole.
+             Constant-width trailing columns are still right — they are what
+             makes a stack of rows read as a table — they were just budgeted for
+             a card-width container and mounted in a half-width one. */
+          grid-template-columns: minmax(0, 1fr) 2.25rem 4.5rem 5rem;
           align-items: center;
           gap: var(--boxel-sp-xs);
           padding: var(--boxel-sp-xxs) 0;
@@ -157,12 +169,23 @@ export class FulfilmentLineItemField extends FieldDef {
           color: var(--foreground, var(--boxel-dark));
         }
         /* A narrow container drops the unit price before the total: the total
-           is what anyone reading a compressed row is looking for. */
-        @container (width < 340px) {
+           is what anyone reading a compressed row is looking for. The stop moved
+           from 340px to 430px because 340 was measured against the wrong thing —
+           it only fired once the name had already been crushed to an ellipsis.
+           Below 250px the quantity goes too, leaving name + total. */
+        @container (width < 430px) {
           .li {
-            grid-template-columns: minmax(0, 1fr) 2.5rem 5rem;
+            grid-template-columns: minmax(0, 1fr) 2.25rem 5rem;
           }
           .li-price {
+            display: none;
+          }
+        }
+        @container (width < 250px) {
+          .li {
+            grid-template-columns: minmax(0, 1fr) 5rem;
+          }
+          .li-qty {
             display: none;
           }
         }

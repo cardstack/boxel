@@ -59,7 +59,7 @@
         }
       },
       "customerPaid": {
-        "amount": 3.99,
+        "amount": 5.99,
         "currency": {
           "code": "GBP"
         }

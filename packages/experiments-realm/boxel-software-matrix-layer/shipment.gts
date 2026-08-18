@@ -13,11 +13,18 @@ import BooleanField from '@cardstack/base/boolean';
 import DatetimeField from '@cardstack/base/datetime';
 import AmountWithCurrency from '@cardstack/base/amount-with-currency';
 import { htmlSafe } from '@ember/template';
+import { money } from './fulfilment-format';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { tracked } from '@glimmer/tracking';
 import { Button, BoxelInput, BoxelSelect } from '@cardstack/boxel-ui/components';
 import PackageIcon from '@cardstack/boxel-icons/package';
+import CircleCheck from '@cardstack/boxel-icons/circle-check';
+import MapPin from '@cardstack/boxel-icons/map-pin';
+import Receipt from '@cardstack/boxel-icons/receipt';
+import Route from '@cardstack/boxel-icons/route';
+import Truck from '@cardstack/boxel-icons/truck';
+import TriangleAlert from '@cardstack/boxel-icons/triangle-alert';
 import DispatchShipmentCommand from './dispatch-shipment-command';
 import FulfilOrderCommand from './fulfil-order-command';
 import TrackingNumberField from './tracking-number';
@@ -219,6 +226,7 @@ export class Shipment extends CardDef {
 
   static isolated = class Isolated extends Component<typeof Shipment> {
     @tracked trackingInput = '';
+    @tracked podInput = '';
     @tracked selectedService: string | undefined = undefined;
     @tracked busy = false;
     @tracked feedback: string | undefined = undefined;
@@ -258,8 +266,34 @@ export class Shipment extends CardDef {
       return status === 'in_transit' || status === 'out_for_delivery';
     }
 
+    // A package in exception has not finished its journey — it has stopped. It
+    // used to fall through to the "nothing further to record" branch, which
+    // told the operator there was nothing to do about the one shipment the app
+    // paints red. The two real exits are: it moved again (re-dispatch with the
+    // carrier's new tracking number), or it came back (returned to sender).
+    get isStalled() {
+      return this.model.status === 'exception';
+    }
+
+    get deliveredRecord() {
+      let at = this.model.deliveredAt;
+      if (!at) {
+        return undefined;
+      }
+      let promised = this.model.deliveryWindow?.latest;
+      return {
+        at,
+        wasLate: promised ? at.getTime() > promised.getTime() : undefined,
+        promised,
+      };
+    }
+
     @action setTracking(value: string) {
       this.trackingInput = value;
+    }
+
+    @action setPod(value: string) {
+      this.podInput = value;
     }
 
     @action chooseService(option: { code: string }) {
@@ -291,6 +325,55 @@ export class Shipment extends CardDef {
       }
     }
 
+    // Off-path exit. It is a status write plus a scan, not a fulfilment: no
+    // order is closed, because nothing arrived. Kept as a store patch rather
+    // than a command because there is no second fact to derive from it.
+    @action
+    async markReturnedToSender() {
+      let store = this.args.context?.store;
+      if (!store || !this.model.id || this.busy) {
+        return;
+      }
+      this.busy = true;
+      this.failed = false;
+      this.feedback = undefined;
+      try {
+        let now = new Date().toISOString();
+        let events = (this.model.trackingEvents ?? [])
+          .filter(Boolean)
+          .map((e) => ({
+            occurredAt: e.occurredAt ? e.occurredAt.toISOString() : null,
+            statusCode: e.statusCode ?? null,
+            statusDescription: e.statusDescription ?? null,
+            location: e.location ?? null,
+            isDelivered: e.isDelivered ?? false,
+          }));
+        await store.patch(this.model.id, {
+          attributes: {
+            status: 'returned_to_sender',
+            trackingEvents: [
+              ...events,
+              {
+                occurredAt: now,
+                statusCode: 'RTS',
+                statusDescription: 'Returned to sender',
+                location: null,
+                isDelivered: false,
+              },
+            ],
+          },
+        });
+        this.feedback =
+          'Marked returned to sender. It has left the in-transit list; raise a return if the customer is owed a refund.';
+        this.trackingInput = '';
+      } catch (e) {
+        this.failed = true;
+        this.feedback = e instanceof Error ? e.message : String(e);
+      } finally {
+        this.busy = false;
+      }
+    }
+
     @action
     async markDelivered() {
       let toolContext = this.args.context?.toolContext;
@@ -303,7 +386,11 @@ export class Shipment extends CardDef {
       try {
         let result = await new FulfilOrderCommand(toolContext).execute({
           shipmentId: this.model.id,
+          // Empty stays empty: the command omits the attribute entirely rather
+          // than writing null over a note already on the card.
+          proofOfDelivery: this.podInput.trim(),
         });
+        this.podInput = '';
         this.feedback = result.orderNumber
           ? result.wasAlreadyFulfilled
             ? `Delivered. ${result.orderNumber} was already fulfilled, so its fulfilment date stands.`
@@ -376,7 +463,7 @@ export class Shipment extends CardDef {
         {{#if this.canRun}}
           <section class='actions'>
             {{#if this.isDispatchable}}
-              <h2>Dispatch</h2>
+              <h2><Truck class='sec-icon' role='presentation' />Dispatch</h2>
               <p class='act-note'>Choose the service you actually bought and
                 enter the tracking number off the printed label. The rate is
                 quoted from the carrier's own table and stamped onto this
@@ -404,18 +491,84 @@ export class Shipment extends CardDef {
                 >Dispatch</Button>
               </div>
             {{else if this.isDeliverable}}
-              <h2>Delivery</h2>
+              <h2><MapPin class='sec-icon' role='presentation' />Delivery</h2>
               <p class='act-note'>Records the delivery and closes the order,
-                stamping its fulfilment date once.</p>
-              <Button
-                @kind='primary'
-                @disabled={{this.busy}}
-                {{on 'click' this.markDelivered}}
-              >Mark delivered</Button>
+                stamping its fulfilment date once. Where the parcel was left is
+                the detail a disputed delivery turns on, so it is captured here
+                rather than remembered.</p>
+              <div class='act-row'>
+                <BoxelInput
+                  @value={{this.podInput}}
+                  @onInput={{this.setPod}}
+                  @placeholder='Proof of delivery — signed by, or where left (optional)'
+                  class='act-input'
+                />
+                <Button
+                  @kind='primary'
+                  @disabled={{this.busy}}
+                  {{on 'click' this.markDelivered}}
+                >Mark delivered</Button>
+              </div>
+            {{else if this.isStalled}}
+              <h2><TriangleAlert
+                  class='sec-icon'
+                  role='presentation'
+                />Stalled</h2>
+              <p class='act-note'>This package is not moving. If the carrier has
+                issued a new tracking number, re-dispatch it below; if it is on
+                its way back to you, send it to returned-to-sender so it leaves
+                the in-transit list.</p>
+              <div class='act-row'>
+                <BoxelInput
+                  @value={{this.trackingInput}}
+                  @onInput={{this.setTracking}}
+                  @placeholder='New tracking number'
+                  class='act-input'
+                />
+                <Button
+                  @kind='primary'
+                  @disabled={{this.busy}}
+                  {{on 'click' this.dispatch}}
+                >Re-dispatch</Button>
+                <Button
+                  @disabled={{this.busy}}
+                  {{on 'click' this.markReturnedToSender}}
+                >Returned to sender</Button>
+              </div>
             {{else}}
-              <h2>Closed</h2>
-              <p class='act-note'>This shipment has finished its journey. Nothing
-                further to record.</p>
+              <h2><CircleCheck class='sec-icon' role='presentation' />Closed</h2>
+              {{#if this.deliveredRecord}}
+                {{! The delivery was recorded and then withheld: deliveredAt and
+                    proofOfDelivery were both written by the command and drawn
+                    by nothing. This is the read side of Mark delivered. }}
+                <dl class='kv delivered-kv'>
+                  <div>
+                    <dt>Delivered</dt>
+                    <dd><@fields.deliveredAt @format='atom' /></dd>
+                  </div>
+                  {{#if this.deliveredRecord.promised}}
+                    <div>
+                      <dt>Against promise</dt>
+                      <dd class={{if this.deliveredRecord.wasLate 'late-val'}}>
+                        {{#if this.deliveredRecord.wasLate}}
+                          Late — promised
+                          <@fields.deliveryWindow @format='atom' />
+                        {{else}}
+                          On time
+                        {{/if}}
+                      </dd>
+                    </div>
+                  {{/if}}
+                  <div>
+                    <dt>Proof of delivery</dt>
+                    <dd>{{#if @model.proofOfDelivery}}{{@model.proofOfDelivery}}
+                      {{else}}<span class='muted'>Not recorded</span>{{/if}}</dd>
+                  </div>
+                </dl>
+              {{else}}
+                <p class='act-note'>This shipment has finished its journey.
+                  Nothing further to record.</p>
+              {{/if}}
             {{/if}}
 
             {{#if this.feedback}}
@@ -437,7 +590,7 @@ export class Shipment extends CardDef {
         {{/if}}
 
         <section class='sec'>
-          <h2>Journey</h2>
+          <h2><Route class='sec-icon' role='presentation' />Journey</h2>
           <ShipmentTracker
             @status={{@model.status}}
             @events={{@model.trackingEvents}}
@@ -448,7 +601,7 @@ export class Shipment extends CardDef {
 
         <div class='cols'>
           <section class='sec'>
-            <h2>Contents</h2>
+            <h2><PackageIcon class='sec-icon' role='presentation' />Contents</h2>
             {{#if @model.lineItems.length}}
               <@fields.lineItems @format='embedded' />
             {{else}}
@@ -457,25 +610,28 @@ export class Shipment extends CardDef {
           </section>
 
           <section class='sec'>
-            <h2>Cost</h2>
+            <h2><Receipt class='sec-icon' role='presentation' />Cost</h2>
             <dl class='kv'>
               <div>
                 <dt>Carrier charged</dt>
-                <dd>{{#if @model.shippingCost.amount}}<@fields.shippingCost
-                      @format='atom'
-                    />{{else}}—{{/if}}</dd>
+                <dd>{{#if @model.shippingCost.amount}}{{money @model.shippingCost.amount @model.customerPaid.currency.code}}{{else}}—{{/if}}</dd>
               </div>
               <div>
                 <dt>Customer paid</dt>
-                <dd>{{#if @model.customerPaid.amount}}<@fields.customerPaid
-                      @format='atom'
-                    />{{else}}—{{/if}}</dd>
+                <dd>{{#if @model.customerPaid.amount}}{{money @model.customerPaid.amount @model.customerPaid.currency.code}}{{else}}—{{/if}}</dd>
               </div>
               <div>
                 <dt>Margin</dt>
+                {{! `shippingMargin` is a NumberField, so it printed raw: "-1.88"
+                    sat under "£6.87" and "£4.99" — three money values on one
+                    card, one of them missing its symbol. Through `money` like
+                    every other figure in this family. }}
                 <dd class='{{if @model.isMarginNegative "neg"}}'>{{#if
                     @model.shippingMargin
-                  }}{{@model.shippingMargin}}{{else}}—{{/if}}</dd>
+                  }}{{money
+                    @model.shippingMargin
+                    @model.customerPaid.currency.code
+                  }}{{else}}—{{/if}}</dd>
               </div>
             </dl>
           </section>
@@ -484,12 +640,48 @@ export class Shipment extends CardDef {
 
       <style scoped>
         .shp {
+          /* Type scale, mapped to the house 1.333 modular scale rather than the
+             28 hand-picked rem values these cards used to carry — 44 of which
+             fell below 12px, under the smallest token the design system has. */
+          --t-micro: var(--boxel-font-size-xs);
+          --t-sm: var(--boxel-font-size-sm);
+          --t-body: var(--boxel-font-size);
+          --t-lg: var(--boxel-font-size-lg);
+          --t-xl: var(--boxel-font-size-xl);
+          /* Isolated gets NO container from the host — every ancestor up to the
+             panel is `container-type: normal`, so an `@container` rule here is
+             inert until this declares its own. `inline-size`, not `size`: the
+             card scrolls, and `size` needs a definite block size. */
+          container-type: inline-size;
+          container-name: card-iso;
           --ful-bg: var(--background);
           --ful-fg: var(--foreground);
           --ful-muted-fg: var(--muted-foreground);
           --ful-border: var(--border);
           --ful-perf: color-mix(in oklch, var(--foreground) 22%, transparent);
+          /* ONE panel primitive. Every full-width tinted block on this card —
+             section, note, alert, callout — takes its ground, inset and radius
+             from here, because a background makes spacing VISIBLE: while
+             sections were separated by whitespace alone, a note padded
+             `sp-sm` and a section padded `sp-lg` looked the same. Tint them
+             both and their text edges no longer line up down the page, and
+             every gap between them reads as a mis-registration rather than a
+             rhythm. The inset is the thing that must agree; the tint only
+             exposed it. */
+          --panel-bg: color-mix(in oklch, var(--foreground) 3%, transparent);
+          --panel-pad: var(--boxel-sp) var(--boxel-sp-lg) var(--boxel-sp-lg);
+          --panel-radius: var(--radius, 8px);
+          /* The ONE vertical rhythm. It used to be `margin-top` on `.sec` plus a
+             `.cols .sec { margin-top: 0 }` override for the side-by-side case —
+             two mechanisms for one relationship, and `.cols` itself had neither,
+             so the measured gap above a two-column group was 0px while the gap
+             above a stacked section was 28.4px. A tinted panel colliding with
+             the text above it is what that 0 looks like. */
+          --panel-gap: var(--boxel-sp-xl);
 
+          display: flex;
+          flex-direction: column;
+          gap: var(--panel-gap);
           height: 100%;
           overflow-y: auto;
           padding: var(--boxel-sp-lg);
@@ -515,7 +707,7 @@ export class Shipment extends CardDef {
           border-bottom: 2px dashed var(--ful-perf);
         }
         .eyebrow {
-          font-size: 0.62rem;
+          font-size: var(--t-micro);
           font-weight: 700;
           letter-spacing: 0.2em;
           text-transform: uppercase;
@@ -524,7 +716,7 @@ export class Shipment extends CardDef {
         .num {
           margin: 2px 0 0;
           font-family: var(--font-mono, ui-monospace, monospace);
-          font-size: 1.9rem;
+          font-size: var(--t-xl);
           line-height: 1;
         }
         .carrier-block {
@@ -532,12 +724,12 @@ export class Shipment extends CardDef {
         }
         .carrier {
           display: block;
-          font-size: 1.1rem;
+          font-size: var(--t-body);
           font-weight: 800;
           letter-spacing: 0.02em;
         }
         .service {
-          font-size: 0.75rem;
+          font-size: var(--t-micro);
           color: var(--ful-muted-fg, var(--boxel-500));
         }
         .label-mid {
@@ -585,22 +777,26 @@ export class Shipment extends CardDef {
           gap: 3px;
         }
         .cap {
-          font-size: 0.6rem;
+          font-size: var(--t-micro);
           font-weight: 700;
           letter-spacing: 0.16em;
           text-transform: uppercase;
           color: var(--ful-muted-fg, var(--boxel-500));
         }
         .val {
-          font-size: 0.9rem;
+          font-size: var(--t-sm);
           font-weight: 600;
         }
         .mono {
           font-family: var(--font-mono, ui-monospace, monospace);
         }
+        /* A different TINT (it is a warning, not a section) but the same inset
+           and corner — the ground says what kind of block it is, the geometry
+           keeps it registered with everything above and below it. */
         .alert {
           margin: var(--boxel-sp) 0 0;
-          padding: var(--boxel-sp-sm);
+          padding: var(--panel-pad);
+          border-radius: var(--panel-radius);
           border-left: 3px solid
             color-mix(
               in oklch,
@@ -612,25 +808,25 @@ export class Shipment extends CardDef {
             var(--destructive, var(--boxel-danger)) 8%,
             transparent
           );
-          font-size: 0.85rem;
+          font-size: var(--t-sm);
           color: var(--ful-fg, var(--boxel-dark));
         }
         .actions {
           margin-top: var(--boxel-sp-lg);
-          padding: var(--boxel-sp);
+          padding: var(--panel-pad);
           border: 1px solid var(--ful-border, var(--boxel-border-color));
           border-radius: 4px;
         }
         .actions h2 {
           margin: 0 0 var(--boxel-sp-xxs);
-          font-size: 0.72rem;
+          font-size: var(--t-micro);
           letter-spacing: 0.12em;
           text-transform: uppercase;
           color: var(--ful-muted-fg, var(--boxel-500));
         }
         .act-note {
           margin: 0 0 var(--boxel-sp-sm);
-          font-size: 0.8rem;
+          font-size: var(--t-micro);
           max-width: 60ch;
           color: var(--ful-muted-fg, var(--boxel-500));
         }
@@ -650,7 +846,7 @@ export class Shipment extends CardDef {
         }
         .act-feedback {
           margin: var(--boxel-sp-sm) 0 0;
-          font-size: 0.82rem;
+          font-size: var(--t-sm);
           font-weight: 600;
           color: var(--ful-fg, var(--boxel-dark));
         }
@@ -667,14 +863,28 @@ export class Shipment extends CardDef {
           grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
         }
         .sec {
-          margin-top: var(--boxel-sp-lg);
+          /* A surface, not just a gap. Sections were told apart only by spacing,
+             and their headings were 12px uppercase muted — pixel-identical to
+             every table column label on the card, so "where does a section
+             start" had no answer. The ground is mixed toward --foreground so it
+             follows the theme in both modes rather than being a grey. */
+          padding: var(--panel-pad);
+          border-radius: var(--panel-radius);
+          background: var(--panel-bg);
         }
         .sec h2 {
+          /* The section heading is now the loudest uppercase thing on the card:
+             --foreground against the column labels' --muted-foreground. Weight
+             alone (500 vs 400) was not a readable difference. */
+          display: flex;
+          align-items: center;
+          gap: 7px;
           margin: 0 0 var(--boxel-sp-xs);
-          font-size: 0.72rem;
-          letter-spacing: 0.12em;
+          font-size: var(--t-micro);
+          font-weight: 700;
+          letter-spacing: 0.14em;
           text-transform: uppercase;
-          color: var(--ful-muted-fg, var(--boxel-500));
+          color: var(--ful-fg, var(--foreground, var(--boxel-dark)));
         }
         .kv {
           display: grid;
@@ -687,12 +897,12 @@ export class Shipment extends CardDef {
           gap: var(--boxel-sp-xs);
         }
         .kv dt {
-          font-size: 0.8rem;
+          font-size: var(--t-micro);
           color: var(--ful-muted-fg, var(--boxel-500));
         }
         .kv dd {
           margin: 0;
-          font-size: 0.85rem;
+          font-size: var(--t-sm);
           font-family: var(--font-mono, ui-monospace, monospace);
           font-variant-numeric: tabular-nums;
         }
@@ -704,9 +914,48 @@ export class Shipment extends CardDef {
             var(--foreground, var(--boxel-dark))
           );
         }
-        .empty {
-          font-size: 0.85rem;
+        /* The delivered record sits inside the actions section, which has no
+           surface of its own, so it needs its own top margin. Prose, not
+           figures: the POD line is a sentence, so it drops the mono. */
+        .delivered-kv {
+          margin-top: var(--boxel-sp-xs);
+        }
+        .delivered-kv dd {
+          font-family: inherit;
+        }
+        .late-val {
+          font-weight: 700;
+          color: color-mix(
+            in oklch,
+            var(--destructive, var(--boxel-danger)) 58%,
+            var(--foreground, var(--boxel-dark))
+          );
+        }
+        .muted {
           color: var(--ful-muted-fg, var(--boxel-500));
+        }
+        .empty {
+          font-size: var(--t-sm);
+          color: var(--ful-muted-fg, var(--boxel-500));
+        }
+
+        /* Section icons: one size, one muted colour, everywhere. They make the
+           card scannable by shape; they must never compete with the heading. */
+        h2 .sec-icon {
+          width: max(14px, 1em);
+          height: max(14px, 1em);
+          flex: 0 0 auto;
+          color: var(--ful-muted-fg, var(--boxel-500));
+        }
+
+        /* One collapse stop. The card is rendered in a resizable stack panel, so
+           this fires when a second card opens beside it — not only on a phone. */
+        @container card-iso (width < 720px) {
+          .cols,
+          .grid,
+          .two {
+            grid-template-columns: 1fr;
+          }
         }
       </style>
     </template>
@@ -815,7 +1064,7 @@ export class Shipment extends CardDef {
             min(calc(3px + 2.1cqi + 1cqb - 0.6 * var(--ar)), 10cqb),
             17px
           );
-          --meta-size: max(8px, calc(var(--type-base) / var(--type-ratio)));
+          --meta-size: max(11px, calc(var(--type-base) / var(--type-ratio)));
           --glyph-size: max(11px, min(3cqi, 14cqb));
           /* The identifier is a VALUE, so it must render in full. It is capped
              against the inline axis as well as the block axis so a real order /

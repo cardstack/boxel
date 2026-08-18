@@ -30,6 +30,10 @@
       "isActive": true,
       "cardInfo": {
         "name": "Stoneware Mug Set of 4"
+      },
+      "image": {
+        "url": "https://images.pexels.com/photos/8063803/pexels-photo-8063803.jpeg?auto=compress&cs=tinysrgb&w=800",
+        "sourceMode": "url"
       }
     },
     "relationships": {

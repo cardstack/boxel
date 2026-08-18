@@ -8,13 +8,13 @@
           "sku": "LM-215",
           "productName": "Linen Lampshade, Large",
           "quantity": 1,
-          "quantityFulfilled": 0,
           "unitPrice": {
             "amount": 52,
             "currency": {
               "code": "GBP"
             }
-          }
+          },
+          "quantityFulfilled": 0
         }
       ],
       "parcel": {
@@ -62,6 +62,13 @@
           "statusDescription": "Out for delivery",
           "location": "Leeds, GB",
           "isDelivered": false
+        },
+        {
+          "occurredAt": "2026-08-18T01:15:30.629Z",
+          "statusCode": "DL",
+          "statusDescription": "Delivered",
+          "location": null,
+          "isDelivered": true
         }
       ],
       "serviceLevel": "Next Day",
@@ -78,14 +85,18 @@
           "code": "GBP"
         }
       },
-      "status": "out_for_delivery",
+      "status": "delivered",
       "shippedAt": "2026-08-13T17:05:00.000Z",
-      "deliveredAt": null,
+      "deliveredAt": "2026-08-18T01:15:30.629Z",
       "proofOfDelivery": null,
       "isDropship": false,
       "cardInfo": {
-        "name": "SHP-2026-0146"
-      }
+        "name": "SHP-2026-0146",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "labelUrl": null
     },
     "relationships": {
       "order": {

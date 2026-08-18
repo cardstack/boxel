@@ -19,7 +19,7 @@
     "relationships": {
       "cardInfo.theme": {
         "links": {
-          "self": null
+          "self": "https://realms-staging.stack.cards/catalog/7af9aa-blog-app/Theme/neon-brutalist"
         }
       }
     }
