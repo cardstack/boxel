@@ -1232,7 +1232,10 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
           flex-direction: column;
           flex: 1;
           min-height: 0;
-          border-radius: calc(var(--boxel-border-radius) - 1px);
+          /* Inset by the 1px border; clamped at 0 so a card that themes
+             `--boxel-border-radius` below 1px doesn't drive the calc negative
+             (which would invalidate the declaration). */
+          border-radius: max(0px, calc(var(--boxel-border-radius) - 1px));
           overflow: clip;
         }
 
