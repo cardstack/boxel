@@ -1,6 +1,6 @@
 {
   "name": "@cardstack/bxl",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "Boxel Expression Language: readable syntax, linter, formatter, and sandboxed evaluator that compiles to canonical jq.",
   "keywords": [
     "bxl",

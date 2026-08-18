@@ -10,6 +10,8 @@ versions may change syntax behavior until `1.0.0`.
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-08-18
+
 ### Added
 
 - **Cycle-guarded lazy card materialization in `expression()`.** The
