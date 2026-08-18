@@ -45,20 +45,36 @@ interface OverlaySignature {
   };
 }
 
+// A per-edge inset large enough to leave that edge effectively unclipped — it
+// extends the clip region a full viewport past the box on that side, well
+// beyond any overlay chrome.
+const UNCLIPPED_EDGE = '-100vmax';
+
 // Returns the `clip-path` that hides the portion of an overlay scrolled behind
 // a sticky header (e.g. the rich-markdown compose toolbar), or '' when the card
 // is clear of the header. `refTop` is the decorated card's viewport top and
 // `headerBottom` the header's viewport bottom, so `headerBottom - refTop` is how
-// far the overlay's top has slid under the header. Negative side/bottom insets
-// keep the adorn box-shadow ring (≤0.25rem spread) visible on the un-clipped
-// edges; '' fully restores the overlay (and its top-overhanging type-label) when
+// far the overlay's top has slid under the header.
+//
+// Only the top edge is clipped; the other three are left unclipped. The header
+// is a horizontal top occluder, so the top clip line (anchored at
+// `headerBottom`) alone hides everything above it — regardless of which edge of
+// the overlay that content sits on. Clipping the sides/bottom would serve no
+// occlusion purpose and would crop chrome that legitimately hangs past the box:
+// the box-shadow ring, and above all a type-label that has flipped below the
+// card (which happens exactly when the card nears the top of its boundary — the
+// same moment this clip engages). A below-flipped label is still hidden while
+// it's above `headerBottom` (the top inset catches it) and shown once it clears
+// the header, which is the correct behavior. '' fully restores the overlay when
 // nothing occludes it. Exported for unit testing.
 export function stickyHeaderClipPath(
   refTop: number,
   headerBottom: number,
 ): string {
   let clipTop = Math.max(0, headerBottom - refTop);
-  return clipTop > 0 ? `inset(${clipTop}px -0.5rem -0.5rem -0.5rem)` : '';
+  return clipTop > 0
+    ? `inset(${clipTop}px ${UNCLIPPED_EDGE} ${UNCLIPPED_EDGE} ${UNCLIPPED_EDGE})`
+    : '';
 }
 
 // Finds the sticky header an overlay should clip against: the nearest

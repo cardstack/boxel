@@ -17,12 +17,12 @@ module('Unit | overlays | stickyHeaderClipPath', function () {
   });
 
   test('clips the strip that has slid behind the header', function (assert) {
-    // Card top (20) is 30px above the header bottom (50): clip the top 30px,
-    // extending the other edges so the box-shadow ring survives on the
-    // still-visible portion.
+    // Card top (20) is 30px above the header bottom (50): clip the top 30px and
+    // leave the other three edges unclipped, so chrome that hangs past the box
+    // (the ring, a below-flipped type-label) survives on the visible portion.
     assert.strictEqual(
       stickyHeaderClipPath(20, 50),
-      'inset(30px -0.5rem -0.5rem -0.5rem)',
+      'inset(30px -100vmax -100vmax -100vmax)',
     );
   });
 
@@ -116,7 +116,7 @@ module('Unit | overlays | applyStickyHeaderClip', function (hooks) {
   test('clears the clip once the card scrolls clear of the header', function (assert) {
     let card = mountCard(100); // card top 100 is below the header bottom (50)
     let floating = document.createElement('div');
-    floating.style.clipPath = 'inset(30px -0.5rem -0.5rem -0.5rem)'; // stale clip
+    floating.style.clipPath = 'inset(30px -100vmax -100vmax -100vmax)'; // stale clip
 
     applyStickyHeaderClip(card, floating);
 
@@ -130,7 +130,7 @@ module('Unit | overlays | applyStickyHeaderClip', function (hooks) {
   test('clears the clip for a card outside any marked container', function (assert) {
     let card = document.createElement('div');
     let floating = document.createElement('div');
-    floating.style.clipPath = 'inset(30px -0.5rem -0.5rem -0.5rem)'; // stale clip
+    floating.style.clipPath = 'inset(30px -100vmax -100vmax -100vmax)'; // stale clip
 
     applyStickyHeaderClip(card, floating);
 
