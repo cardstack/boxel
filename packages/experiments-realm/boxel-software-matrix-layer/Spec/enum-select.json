@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Enum Select",
+      "specType": "component",
+      "ref": {
+        "module": "https://cardstack.com/base/enum",
+        "name": "default"
+      },
+      "readMe": "# Enum Select\n\n## Summary\nThe edit-format component that ships inside the field — a dropdown constrained to the declared options. Declaring\nthe field is all it takes; the editor renders wherever the card is edited.\n\n## Example\n```ts\nimport enumField from 'https://cardstack.com/base/enum';\n\nconst Lane = enumField(StringField, { options: ['A', 'B'] });\n@field lane = contains(Lane);\n```\nCustom editors replace it by overriding the field's `edit` format; the\nvalue-attribute + input-event binding pattern applies.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Enum Select",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

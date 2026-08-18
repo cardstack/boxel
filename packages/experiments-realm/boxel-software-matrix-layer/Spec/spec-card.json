@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Spec",
+      "specType": "card",
+      "ref": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      },
+      "readMe": "# Spec\n\n## Summary\nThe card that documents a code export: a `ref` (module + export name), a\n`specType` (card | field | component | command | app), a markdown `readMe`,\nand examples (contained for field values, linked for card instances). Specs\nare how a realm declares \"this export is a supported, documented surface\" —\nthis very tracker verifies concepts by resolving their Specs' refs.\n\n## Invariants\n- `ref.module` may be relative (resolved against the Spec's location) or an\n  absolute URL; the search index always reports it resolved-absolute.\n- `containedExamples` entries must be typed FieldDef values (primitives are\n  rejected at validation).\n\n## Example\n```ts\nimport { Spec } from 'https://cardstack.com/base/spec';\n```\n```json\n{\n  \"attributes\": {\n    \"specType\": \"field\",\n    \"ref\": { \"module\": \"../score-field\", \"name\": \"default\" },\n    \"readMe\": \"# Score …\"\n  },\n  \"meta\": { \"adoptsFrom\": { \"module\": \"https://cardstack.com/base/spec\", \"name\": \"Spec\" } }\n}\n```",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Spec",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

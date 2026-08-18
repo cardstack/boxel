@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "M4A File",
+      "specType": "card",
+      "ref": {
+        "module": "https://cardstack.com/base/m4a-audio-def",
+        "name": "M4aDef"
+      },
+      "readMe": "# M4A File\n\n## Summary\nThe FileDef specialization for AAC audio in an MPEG-4 container. An instance is an uploaded realm\nfile with card semantics: the binary lives at the file URL, the card\ncarries metadata and renders with audio-aware formats.\n\n## Example\n```ts\nimport { M4aDef } from 'https://cardstack.com/base/m4a-audio-def';\n\n@field attachment = linksTo(M4aDef);\n```\nInstances are created by upload (`createFileDef` wires the type from the\nMIME type). Live examples need uploaded fixtures — same fixture pass as the\nFile renderer specs.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "M4A File",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

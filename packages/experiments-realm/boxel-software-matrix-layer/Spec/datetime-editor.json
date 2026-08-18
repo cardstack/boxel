@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "DateTime Editor",
+      "specType": "component",
+      "ref": {
+        "module": "https://cardstack.com/base/datetime",
+        "name": "default"
+      },
+      "readMe": "# DateTime Editor\n\n## Summary\nThe edit-format component that ships inside the field — a combined date + time picker writing ISO instants. Declaring\nthe field is all it takes; the editor renders wherever the card is edited.\n\n## Example\n```ts\nimport DateTimeField from 'https://cardstack.com/base/datetime';\n\n@field value = contains(DateTimeField);\n```\nCustom editors replace it by overriding the field's `edit` format; the\nvalue-attribute + input-event binding pattern applies.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "DateTime Editor",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

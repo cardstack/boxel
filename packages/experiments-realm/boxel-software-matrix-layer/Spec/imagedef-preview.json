@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "ImageDef Preview",
+      "specType": "component",
+      "ref": {
+        "module": "https://cardstack.com/base/image-file-def",
+        "name": "RasterImageDef"
+      },
+      "readMe": "# ImageDef Preview\n\n## Summary\nThe display formats that ship with raster image defs: dimension-aware\nrendering where fitted FILLS its container and embedded letterboxes —\nthe image counterpart of a field's built-in editor.\n\n## Example\n```ts\nimport { RasterImageDef } from 'https://cardstack.com/base/image-file-def';\n\n@field photo = linksTo(RasterImageDef);\n```\n```gts\n<@fields.photo @format='fitted' />  {{! fills }}\n<@fields.photo @format='embedded' /> {{! letterboxes }}\n```",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "ImageDef Preview",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

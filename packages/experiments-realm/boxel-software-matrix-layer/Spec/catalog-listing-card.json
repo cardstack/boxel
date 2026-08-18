@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Catalog Listing",
+      "specType": "card",
+      "ref": {
+        "module": "https://realms-staging.stack.cards/catalog/catalog-app/listing/listing",
+        "name": "Listing"
+      },
+      "readMe": "# Catalog Listing\n\n## Summary\nThe catalog's packaging card: one Listing bundles an app or block's specs,\nexamples, screenshots, skills and install metadata into the unit the\ncatalog browses, installs and remixes. `AppListing` (same module) is the\napp-flavored subclass.\n\n## Example\n```ts\nimport { Listing } from 'https://realms-staging.stack.cards/catalog/catalog-app/listing/listing';\n```\nA listing instance links its Specs and example instances relatively within\nits listing folder; the install flow copies that closure into the target\nrealm.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Catalog Listing",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

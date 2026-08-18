@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Address Editor",
+      "specType": "component",
+      "ref": {
+        "module": "https://cardstack.com/base/address",
+        "name": "default"
+      },
+      "readMe": "# Address Editor\n\n## Summary\nThe edit-format component that ships inside the field — the full postal form including the country picker. Declaring\nthe field is all it takes; the editor renders wherever the card is edited.\n\n## Example\n```ts\nimport AddressField from 'https://cardstack.com/base/address';\n\n@field value = contains(AddressField);\n```\nCustom editors replace it by overriding the field's `edit` format; the\nvalue-attribute + input-event binding pattern applies.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Address Editor",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

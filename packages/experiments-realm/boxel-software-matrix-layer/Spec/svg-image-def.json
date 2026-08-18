@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "SVG File",
+      "specType": "card",
+      "ref": {
+        "module": "https://cardstack.com/base/svg-image-def",
+        "name": "SvgDef"
+      },
+      "readMe": "# SVG File\n\n## Summary\nThe FileDef specialization for SVG vector images. An instance is an uploaded realm\nfile with card semantics: the binary lives at the file URL, the card\ncarries metadata and renders with image-aware formats.\n\n## Example\n```ts\nimport { SvgDef } from 'https://cardstack.com/base/svg-image-def';\n\n@field attachment = linksTo(SvgDef);\n```\nInstances are created by upload (`createFileDef` wires the type from the\nMIME type). Live examples need uploaded fixtures — same fixture pass as the\nFile renderer specs.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "SVG File",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

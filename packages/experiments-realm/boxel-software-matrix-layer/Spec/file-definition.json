@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "File Definition",
+      "specType": "card",
+      "ref": {
+        "module": "https://cardstack.com/base/file-api",
+        "name": "FileDef"
+      },
+      "readMe": "# File Definition\n\n## Summary\n`FileDef` is the base class of file-backed cards — the file counterpart of\nCardDef. Every typed file def (PNG, MP3, CSV, …) adopts it; the binary\ncontent lives at the instance's file URL while the card carries name, size,\ncontent type and rendering behavior.\n\n## Invariants\n- Instances are realm files first: deleting the file deletes the card.\n- `createFileDef` picks the concrete subclass from the MIME type — uploads\n  never need to name a type by hand.\n- Renderers (File Image/Audio/Video/Object components) take any\n  FileDef-backed model.\n\n## Example\n```ts\nimport { FileDef, createFileDef } from 'https://cardstack.com/base/file-api';\n\nlet file = await createFileDef({ file: upload, realm });\n@field attachment = linksTo(FileDef);\n```",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "File Definition",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

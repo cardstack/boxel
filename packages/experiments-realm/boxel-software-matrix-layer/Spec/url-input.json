@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "URL Input",
+      "specType": "component",
+      "ref": {
+        "module": "https://cardstack.com/base/url",
+        "name": "default"
+      },
+      "readMe": "# URL Input\n\n## Summary\nThe edit-format component that ships inside the field — a URL input with validation and link rendering. Declaring\nthe field is all it takes; the editor renders wherever the card is edited.\n\n## Example\n```ts\nimport UrlField from 'https://cardstack.com/base/url';\n\n@field value = contains(UrlField);\n```\nCustom editors replace it by overriding the field's `edit` format; the\nvalue-attribute + input-event binding pattern applies.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "URL Input",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

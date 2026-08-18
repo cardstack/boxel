@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Country",
+      "specType": "card",
+      "ref": {
+        "module": "https://cardstack.com/base/country",
+        "name": "Country"
+      },
+      "readMe": "# Country\n\n## Summary\nThe card form of a country — for realms that want countries as linkable,\nshared instances (one card per country, referenced everywhere) rather than\ninline values. The same module's `CountryField` covers the inline case.\n\n## Example\n```ts\nimport { Country } from 'https://cardstack.com/base/country';\n\n@field homeCountry = linksTo(Country);\n```\nChoose the field for per-card values, the card for a shared country list.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Country",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

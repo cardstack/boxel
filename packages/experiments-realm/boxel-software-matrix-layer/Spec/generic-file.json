@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Generic File",
+      "specType": "card",
+      "ref": {
+        "module": "https://cardstack.com/base/file-api",
+        "name": "default"
+      },
+      "readMe": "# Generic File\n\n## Summary\nThe untyped file card — what an upload becomes when no typed FileDef claims\nits MIME type. Carries the universal file facts (name, size, content type,\nURL) and renders with the generic file chrome.\n\n## Example\n```ts\nimport FileDef from 'https://cardstack.com/base/file-api';\n\n@field attachment = linksTo(FileDef);\n```\nPrefer the typed defs (PNG File, MP3 File, …) when the format is known —\nthey add format-aware rendering; this is the safe fallback.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Generic File",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

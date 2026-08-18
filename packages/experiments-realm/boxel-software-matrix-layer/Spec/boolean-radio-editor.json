@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Boolean Radio Editor",
+      "specType": "component",
+      "ref": {
+        "module": "https://cardstack.com/base/boolean",
+        "name": "default"
+      },
+      "readMe": "# Boolean Radio Editor\n\n## Summary\nThe edit-format component that ships inside the field — a yes/no radio pair (unset stays distinct from false). Declaring\nthe field is all it takes; the editor renders wherever the card is edited.\n\n## Example\n```ts\nimport BooleanField from 'https://cardstack.com/base/boolean';\n\n@field value = contains(BooleanField);\n```\nCustom editors replace it by overriding the field's `edit` format; the\nvalue-attribute + input-event binding pattern applies.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Boolean Radio Editor",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

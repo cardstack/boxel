@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Time Editor",
+      "specType": "component",
+      "ref": {
+        "module": "https://cardstack.com/base/time",
+        "name": "default"
+      },
+      "readMe": "# Time Editor\n\n## Summary\nThe edit-format component that ships inside the field — a time-of-day input writing { value: 'HH:MM' }. Declaring\nthe field is all it takes; the editor renders wherever the card is edited.\n\n## Example\n```ts\nimport TimeField from 'https://cardstack.com/base/time';\n\n@field value = contains(TimeField);\n```\nCustom editors replace it by overriding the field's `edit` format; the\nvalue-attribute + input-event binding pattern applies.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Time Editor",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
