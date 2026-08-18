@@ -214,6 +214,8 @@ export function yearFrac(
       // leaves the 31st standing under any earlier start. And a span opening on
       // the last day of February counts that February as a whole 30-day month,
       // closing the same way only when it ends on a February month end too.
+      // `couponDays360` in `financial.ts` reads a bond schedule by these same
+      // rules; `DAYS360` carries the day-31 pair alone.
       if (sd === 31 && ed === 31) {
         sd = 30;
         ed = 30;
@@ -271,13 +273,11 @@ export function yearFrac(
     case 3:
       return daysBetween(startDate, endDate) / 365;
     case 4:
-      // The European 30/360 pulls a day-31 back to the 30th at both ends of
-      // the span, where basis 0 above only reaches the end date once the start
-      // has already landed on the 30th. It counts the same days as DAYS360's
-      // European method.
-      if (sd === 31) sd = 30;
-      if (ed === 31) ed = 30;
-      return (ed + em * 30 + ey * 360 - (sd + sm * 30 + sy * 360)) / 360;
+      // The European 30/360 pulls a day-31 back to the 30th at both ends of the
+      // span, where basis 0 above reaches the end date only once the start has
+      // landed on the 30th. That is `DAYS360`'s European method exactly, so it
+      // is counted by the same code rather than by a second copy of the rule.
+      return days360(startDate, endDate, true) / 360;
     default:
       throwExcelError(EXCEL_ERROR.num);
   }
