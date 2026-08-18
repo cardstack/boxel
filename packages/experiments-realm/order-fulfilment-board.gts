@@ -55,7 +55,15 @@ export class OrderFulfilmentBoard<T> extends GlimmerComponent<Signature<T>> {
   // happens behind it. Without this the card snaps back to its old column for
   // as long as the save takes, which reads as a failed drag.
   @tracked private localPlacements: KanbanPlacement[] | undefined = undefined;
+  // The card-set the overlay was built against. A KanbanPlacement addresses its
+  // card by ARRAY INDEX, so the overlay is only meaningful for the exact array
+  // it came from.
+  @tracked private localSignature: string | undefined = undefined;
   @tracked private moving = false;
+
+  private get cardSignature(): string {
+    return (this.args.cards ?? []).map((c: any) => c?.id ?? '?').join('|');
+  }
 
   get columnConfigs(): KanbanColumnConfig[] {
     return (this.args.columns ?? []).map((c, i) => ({
@@ -95,25 +103,26 @@ export class OrderFulfilmentBoard<T> extends GlimmerComponent<Signature<T>> {
   }
 
   get placements(): KanbanPlacement[] {
-    return this.localPlacements ?? this.derivedPlacements;
+    // Deleting a card shortens `cards`, shifting every index after it by one —
+    // but the overlay still holds the OLD indices, so the plane drew the wrong
+    // card in the wrong column until a reload. It read as two cards swapping
+    // places. The overlay is therefore only honoured while the card set it was
+    // built from is still the one being rendered.
+    if (this.localPlacements && this.localSignature === this.cardSignature) {
+      return this.localPlacements;
+    }
+    return this.derivedPlacements;
   }
 
   get isEmpty() {
     return this.placements.length === 0;
   }
 
-  get counts(): Record<string, number> {
-    let counts: Record<string, number> = {};
-    for (let p of this.placements) {
-      counts[p.columnId] = (counts[p.columnId] ?? 0) + 1;
-    }
-    return counts;
-  }
-
   @action
   async handleChange(next: KanbanPlacement[]) {
     let before = new Map(this.placements.map((p) => [p.index, p.columnId]));
     this.localPlacements = next;
+    this.localSignature = this.cardSignature;
 
     let moved = next.filter((p) => before.get(p.index) !== p.columnId);
     if (!moved.length || !this.args.onMove) {
@@ -134,6 +143,7 @@ export class OrderFulfilmentBoard<T> extends GlimmerComponent<Signature<T>> {
       // where it actually is.
       console.error('Board move failed; reverting', e);
       this.localPlacements = undefined;
+      this.localSignature = undefined;
     } finally {
       this.moving = false;
     }

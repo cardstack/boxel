@@ -432,7 +432,7 @@ export class PickList extends CardDef {
         {{/if}}
 
         <section class='sec'>
-          <h2 class='sec-h'>Route</h2>
+          <h2 class='sec-h'><RouteIcon class='sec-icon' role='presentation' />Route</h2>
           <div class='pi-head'>
             <span>Bin</span><span>Item</span><span>Picked</span><span></span>
           </div>
@@ -454,12 +454,48 @@ export class PickList extends CardDef {
 
       <style scoped>
         .pl {
+          /* Type scale, mapped to the house 1.333 modular scale rather than the
+             28 hand-picked rem values these cards used to carry — 44 of which
+             fell below 12px, under the smallest token the design system has. */
+          --t-micro: var(--boxel-font-size-xs);
+          --t-sm: var(--boxel-font-size-sm);
+          --t-body: var(--boxel-font-size);
+          --t-lg: var(--boxel-font-size-lg);
+          --t-xl: var(--boxel-font-size-xl);
+          /* Isolated gets NO container from the host — every ancestor up to the
+             panel is `container-type: normal`, so an `@container` rule here is
+             inert until this declares its own. `inline-size`, not `size`: the
+             card scrolls, and `size` needs a definite block size. */
+          container-type: inline-size;
+          container-name: card-iso;
           --ful-bg: var(--background);
           --ful-fg: var(--foreground);
           --ful-muted-fg: var(--muted-foreground);
           --ful-border: var(--border);
           --ful-perf: color-mix(in oklch, var(--foreground) 22%, transparent);
+          /* ONE panel primitive. Every full-width tinted block on this card —
+             section, note, alert, callout — takes its ground, inset and radius
+             from here, because a background makes spacing VISIBLE: while
+             sections were separated by whitespace alone, a note padded
+             `sp-sm` and a section padded `sp-lg` looked the same. Tint them
+             both and their text edges no longer line up down the page, and
+             every gap between them reads as a mis-registration rather than a
+             rhythm. The inset is the thing that must agree; the tint only
+             exposed it. */
+          --panel-bg: color-mix(in oklch, var(--foreground) 3%, transparent);
+          --panel-pad: var(--boxel-sp) var(--boxel-sp-lg) var(--boxel-sp-lg);
+          --panel-radius: var(--radius, 8px);
+          /* The ONE vertical rhythm. It used to be `margin-top` on `.sec` plus a
+             `.cols .sec { margin-top: 0 }` override for the side-by-side case —
+             two mechanisms for one relationship, and `.cols` itself had neither,
+             so the measured gap above a two-column group was 0px while the gap
+             above a stacked section was 28.4px. A tinted panel colliding with
+             the text above it is what that 0 looks like. */
+          --panel-gap: var(--boxel-sp-xl);
 
+          display: flex;
+          flex-direction: column;
+          gap: var(--panel-gap);
           height: 100%;
           overflow-y: auto;
           padding: var(--boxel-sp-lg);
@@ -475,7 +511,7 @@ export class PickList extends CardDef {
           align-items: flex-start;
         }
         .eyebrow {
-          font-size: 0.62rem;
+          font-size: var(--t-micro);
           font-weight: 700;
           letter-spacing: 0.2em;
           text-transform: uppercase;
@@ -484,12 +520,12 @@ export class PickList extends CardDef {
         .num {
           margin: 2px 0 0;
           font-family: var(--font-mono, ui-monospace, monospace);
-          font-size: 1.8rem;
+          font-size: var(--t-lg);
           line-height: 1;
         }
         .sub {
           margin: 6px 0 0;
-          font-size: 0.85rem;
+          font-size: var(--t-sm);
           color: var(--ful-muted-fg, var(--boxel-500));
         }
         .count {
@@ -500,12 +536,12 @@ export class PickList extends CardDef {
           font-variant-numeric: tabular-nums;
         }
         .count-num {
-          font-size: 2.4rem;
+          font-size: var(--t-xl);
           font-weight: 800;
           line-height: 1;
         }
         .count-of {
-          font-size: 0.9rem;
+          font-size: var(--t-sm);
           color: var(--ful-muted-fg, var(--boxel-500));
         }
         .track {
@@ -522,16 +558,20 @@ export class PickList extends CardDef {
         }
         /* The next-item card is deliberately oversized: it is read at arm's
            length, in a warehouse aisle, by someone who is not looking for it. */
+        /* The hero callout keeps its solid card ground and its heavy border — it
+           is deliberately the loudest block — but the inset and the corner come
+           from the panel primitive, so it registers with the sections under it
+           instead of sitting at a 4px radius among 8px ones. */
         .next {
           margin-top: var(--boxel-sp-lg);
-          padding: var(--boxel-sp-lg);
+          padding: var(--panel-pad);
           border: 2px solid var(--ful-perf);
-          border-radius: 4px;
+          border-radius: var(--panel-radius);
           background: var(--card, var(--boxel-light));
           color: var(--card-foreground, var(--boxel-dark));
         }
         .cap {
-          font-size: 0.62rem;
+          font-size: var(--t-micro);
           font-weight: 700;
           letter-spacing: 0.2em;
           text-transform: uppercase;
@@ -547,27 +587,27 @@ export class PickList extends CardDef {
         }
         .item-name {
           margin: var(--boxel-sp-sm) 0 0;
-          font-size: 1.3rem;
+          font-size: var(--t-lg);
           line-height: 1.15;
         }
         .item-sku {
           margin: 2px 0 0;
           font-family: var(--font-mono, ui-monospace, monospace);
-          font-size: 0.9rem;
+          font-size: var(--t-sm);
           letter-spacing: 0.08em;
           color: var(--ful-muted-fg, var(--boxel-500));
         }
         .take {
           margin: var(--boxel-sp-sm) 0 0;
-          font-size: 1.1rem;
+          font-size: var(--t-body);
         }
         .take strong {
           font-family: var(--font-mono, ui-monospace, monospace);
-          font-size: 1.6rem;
+          font-size: var(--t-lg);
         }
         .for {
           margin: var(--boxel-sp-xs) 0 0;
-          font-size: 0.8rem;
+          font-size: var(--t-micro);
           color: var(--ful-muted-fg, var(--boxel-500));
         }
         .ord {
@@ -579,7 +619,7 @@ export class PickList extends CardDef {
         }
         .feedback {
           margin: var(--boxel-sp-xs) 0 0;
-          font-size: 0.82rem;
+          font-size: var(--t-sm);
           font-weight: 600;
           color: color-mix(
             in oklch,
@@ -595,20 +635,27 @@ export class PickList extends CardDef {
         }
         .readonly {
           margin: var(--boxel-sp) 0 0;
-          font-size: 0.82rem;
+          font-size: var(--t-sm);
           color: var(--ful-muted-fg, var(--boxel-500));
         }
         .done-msg {
           margin: 0;
-          font-size: 1.05rem;
+          font-size: var(--t-body);
           font-weight: 600;
         }
         .sec {
-          margin-top: var(--boxel-sp-lg);
+          /* A surface, not just a gap. Sections were told apart only by spacing,
+             and their headings were 12px uppercase muted — pixel-identical to
+             every table column label on the card, so "where does a section
+             start" had no answer. The ground is mixed toward --foreground so it
+             follows the theme in both modes rather than being a grey. */
+          padding: var(--panel-pad);
+          border-radius: var(--panel-radius);
+          background: var(--panel-bg);
         }
         .sec-h {
           margin: 0 0 var(--boxel-sp-xs);
-          font-size: 0.72rem;
+          font-size: var(--t-micro);
           letter-spacing: 0.12em;
           text-transform: uppercase;
           color: var(--ful-muted-fg, var(--boxel-500));
@@ -623,7 +670,7 @@ export class PickList extends CardDef {
         .pi-head {
           padding-bottom: 4px;
           border-bottom: 1px solid var(--ful-border, var(--boxel-border-color));
-          font-size: 0.62rem;
+          font-size: var(--t-micro);
           letter-spacing: 0.1em;
           text-transform: uppercase;
           color: var(--ful-muted-fg, var(--boxel-500));
@@ -635,7 +682,7 @@ export class PickList extends CardDef {
           padding: 5px 0;
           border-bottom: 1px solid
             color-mix(in oklch, var(--foreground) 6%, transparent);
-          font-size: 0.85rem;
+          font-size: var(--t-sm);
         }
         .row-done {
           opacity: 0.5;
@@ -646,7 +693,7 @@ export class PickList extends CardDef {
           font-weight: 700;
         }
         .r-bin {
-          font-size: 0.8rem;
+          font-size: var(--t-micro);
         }
         .r-id {
           display: flex;
@@ -654,10 +701,10 @@ export class PickList extends CardDef {
           min-width: 0;
         }
         .r-sku {
-          font-size: 0.75rem;
+          font-size: var(--t-micro);
         }
         .r-name {
-          font-size: 0.75rem;
+          font-size: var(--t-micro);
           color: var(--ful-muted-fg, var(--boxel-500));
           overflow: hidden;
           text-overflow: ellipsis;
@@ -671,7 +718,7 @@ export class PickList extends CardDef {
         }
         .r-flag {
           text-align: right;
-          font-size: 0.68rem;
+          font-size: var(--t-micro);
           text-transform: uppercase;
           letter-spacing: 0.08em;
           color: color-mix(
@@ -679,6 +726,25 @@ export class PickList extends CardDef {
             var(--destructive, var(--boxel-danger)) 60%,
             var(--foreground, var(--boxel-dark))
           );
+        }
+      
+        /* Section icons: one size, one muted colour, everywhere. They make the
+           card scannable by shape; they must never compete with the heading. */
+        h2 .sec-icon {
+          width: max(14px, 1em);
+          height: max(14px, 1em);
+          flex: 0 0 auto;
+          color: var(--ful-muted-fg, var(--boxel-500));
+        }
+
+        /* One collapse stop. The card is rendered in a resizable stack panel, so
+           this fires when a second card opens beside it — not only on a phone. */
+        @container card-iso (width < 720px) {
+          .cols,
+          .grid,
+          .two {
+            grid-template-columns: 1fr;
+          }
         }
       </style>
     </template>
@@ -779,7 +845,7 @@ export class PickList extends CardDef {
             min(calc(3px + 2.1cqi + 1cqb - 0.6 * var(--ar)), 10cqb),
             17px
           );
-          --meta-size: max(8px, calc(var(--type-base) / var(--type-ratio)));
+          --meta-size: max(11px, calc(var(--type-base) / var(--type-ratio)));
           --glyph-size: max(11px, min(3cqi, 14cqb));
           /* The identifier is a VALUE, so it must render in full. It is capped
              against the inline axis as well as the block axis so a real order /

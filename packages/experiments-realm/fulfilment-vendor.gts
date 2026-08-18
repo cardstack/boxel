@@ -4,6 +4,7 @@ import {
   StringField,
   contains,
   field,
+  realmURL,
 } from '@cardstack/base/card-api';
 import NumberField from '@cardstack/base/number';
 import BooleanField from '@cardstack/base/boolean';
@@ -11,6 +12,18 @@ import AddressField from '@cardstack/base/address';
 import EmailField from '@cardstack/base/email';
 import AmountWithCurrency from '@cardstack/base/amount-with-currency';
 import FactoryIcon from '@cardstack/boxel-icons/building-factory';
+import MapPin from '@cardstack/boxel-icons/map-pin';
+import User from '@cardstack/boxel-icons/user';
+import { money } from './fulfilment-format';
+import { identifyCard, type getCards } from '@cardstack/runtime-common';
+import type Owner from '@ember/owner';
+import { action } from '@ember/object';
+import { on } from '@ember/modifier';
+import { fn } from '@ember/helper';
+import Package from '@cardstack/boxel-icons/package';
+// Cyclic with fulfilment-product.gts (it links to this vendor); the binding is
+// only read inside the constructor, never at module evaluation.
+import { FulfilmentProduct } from './fulfilment-product';
 
 // Vendor (Ve) — a supplier. Two jobs, and it matters that they are separate:
 // restocking your own shelves (lead time, minimum order), and dropshipping
@@ -51,6 +64,67 @@ export class FulfilmentVendor extends CardDef {
   // Vendor Workspace (VW): everything you need before placing a restock or
   // handing a dropship order over, on one surface.
   static isolated = class Isolated extends Component<typeof FulfilmentVendor> {
+    // "What do we buy from them" is the question, and the answer lives on the
+    // products pointing at this vendor.
+    private productQuery: ReturnType<getCards> | undefined;
+
+    constructor(owner: Owner, args: any) {
+      super(owner, args);
+      this.productQuery = this.args.context?.getCards(
+        this,
+        () => {
+          let ref = identifyCard(FulfilmentProduct);
+          let id = this.args.model?.id;
+          if (!ref || !id) {
+            return undefined;
+          }
+          return { filter: { on: ref, every: [{ eq: { 'vendor.id': id } }] } };
+        },
+        () => this.realms,
+        { isLive: true },
+      );
+    }
+
+    // A live query resolving AFTER first paint is why this card asserted "no
+    // products" about data it had not received. `getCards` publishes `isLoading`
+    // and nothing here read it. Guarded on emptiness too, so a background
+    // refresh of an already-populated list does not flash a skeleton.
+    get isQueryLoading() {
+      let q = this.productQuery as any;
+      return Boolean(q?.isLoading) && !(q?.instances ?? []).filter(Boolean).length;
+    }
+
+    private get realms(): string[] | undefined {
+      let url = (this.args.model as any)?.[realmURL];
+      return url ? [url.href] : undefined;
+    }
+
+    // `getCards` returns a SearchResource, whose `errors` the exported duck type
+    // omits — so it is reached by cast. Without reading it a failed query is
+    // indistinguishable from an empty realm, and the section would assert
+    // "there are none" when the truth is "we could not look".
+    // Rows name real cards; opening them is the next step of the task, and a
+    // <button> gets the keyboard path and focus ring for free.
+    @action open(card: any) {
+      (this.args as any).viewCard?.(card, 'isolated');
+    }
+
+    get queryError(): string | undefined {
+      let entries = (this.productQuery as any)?.errors as any[] | undefined;
+      if (!entries?.length) {
+        return undefined;
+      }
+      return entries[0]?.error?.message ?? 'The query failed.';
+    }
+
+    get products(): any[] {
+      return (this.productQuery?.instances ?? []).filter(Boolean);
+    }
+
+    get dropshipCount() {
+      return this.products.filter((p) => p.isDropship).length;
+    }
+
     <template>
       <article class='vendor'>
         <header class='hd'>
@@ -72,21 +146,21 @@ export class FulfilmentVendor extends CardDef {
           </div>
           <div>
             <dt>Minimum order</dt>
-            <dd>{{#if @model.minimumOrder.amount}}<@fields.minimumOrder
-                  @format='atom'
-                />{{else}}—{{/if}}</dd>
+            <dd>{{#if @model.minimumOrder.amount}}{{money @model.minimumOrder.amount @model.minimumOrder.currency.code}}{{else}}—{{/if}}</dd>
           </div>
           <div>
             <dt>Dropship fee</dt>
-            <dd>{{#if @model.dropshipFee.amount}}<@fields.dropshipFee
-                  @format='atom'
-                />{{else}}—{{/if}}</dd>
+            <dd>{{#if @model.dropshipFee.amount}}{{money @model.dropshipFee.amount @model.dropshipFee.currency.code}}{{else}}—{{/if}}</dd>
+          </div>
+          <div>
+            <dt>Products supplied</dt>
+            <dd>{{this.products.length}}</dd>
           </div>
         </dl>
 
         <div class='cols'>
           <section class='sec'>
-            <h2>Contact</h2>
+            <h2><User class='sec-icon' role='presentation' />Contact</h2>
             <dl class='kv'>
               <div>
                 <dt>Email</dt>
@@ -99,10 +173,59 @@ export class FulfilmentVendor extends CardDef {
             </dl>
           </section>
           <section class='sec'>
-            <h2>Ships from</h2>
+            <h2><MapPin class='sec-icon' role='presentation' />Ships from</h2>
             <@fields.address @format='embedded' />
           </section>
         </div>
+
+        <section class='sec'>
+          <h2><Package class='sec-icon' role='presentation' />Products supplied</h2>
+          {{#if this.queryError}}
+            <p class='q-error' role='alert'>Could not read this vendor's products.
+              {{this.queryError}}</p>
+          {{! Loading is not empty. Space is reserved so the section does not
+              jump when the query lands. }}
+          {{else if this.isQueryLoading}}
+            <ul class='sk-rows' aria-busy='true'>
+              <li class='sk-line'></li>
+              <li class='sk-line'></li>
+              <li class='sk-line'></li>
+            </ul>
+          {{else if this.products.length}}
+            <ul class='vp-rows'>
+              {{#each this.products as |p|}}
+                <li class='vp-row-li'>
+                  <button
+                    type='button'
+                    class='vp-row'
+                    {{on 'click' (fn this.open p)}}
+                  >
+                  {{#if p.image.resolvedUrl}}
+                    <img class='vp-thumb' src={{p.image.resolvedUrl}} alt='' loading='lazy' />
+                  {{else}}
+                    <span class='vp-thumb vp-blank'></span>
+                  {{/if}}
+                  <span class='vp-sku'>{{if p.sku p.sku '—'}}</span>
+                  <span class='vp-name'>{{if p.productName p.productName ''}}</span>
+                  <span class='vp-vsku'>{{if p.vendorSku p.vendorSku ''}}</span>
+                  <span class='vp-cost'>{{#if p.cost.amount}}{{money
+                        p.cost.amount
+                        p.cost.currency.code
+                      }}{{else}}—{{/if}}</span>
+                </button>
+                </li>
+              {{/each}}
+            </ul>
+            {{#if this.dropshipCount}}
+              <p class='hint'>{{this.dropshipCount}}
+                of these ship direct from this vendor rather than from your own
+                shelves.</p>
+            {{/if}}
+          {{else}}
+            <p class='hint'>No products name this vendor yet. Set a product's
+              supplier to see it here.</p>
+          {{/if}}
+        </section>
 
         {{#unless @model.supportsDropship}}
           <p class='note'>
@@ -114,12 +237,72 @@ export class FulfilmentVendor extends CardDef {
 
       <style scoped>
         .vendor {
+          /* Type scale, mapped to the house 1.333 modular scale rather than the
+             28 hand-picked rem values these cards used to carry — 44 of which
+             fell below 12px, under the smallest token the design system has. */
+          --t-micro: var(--boxel-font-size-xs);
+          --t-sm: var(--boxel-font-size-sm);
+          --t-body: var(--boxel-font-size);
+          --t-lg: var(--boxel-font-size-lg);
+          --t-xl: var(--boxel-font-size-xl);
+          /* Isolated gets NO container from the host — every ancestor up to the
+             panel is `container-type: normal`, so an `@container` rule here is
+             inert until this declares its own. `inline-size`, not `size`: the
+             card scrolls, and `size` needs a definite block size. */
+          container-type: inline-size;
+          container-name: card-iso;
           --ful-bg: var(--background);
           --ful-fg: var(--foreground);
           --ful-muted-fg: var(--muted-foreground);
           --ful-border: var(--border);
+
+          /* ONE panel primitive. Every full-width tinted block on this card —
+             section, note, alert, callout — takes its ground, inset and radius
+             from here, because a background makes spacing VISIBLE: while
+             sections were separated by whitespace alone, a note padded
+             `sp-sm` and a section padded `sp-lg` looked the same. Tint them
+             both and their text edges no longer line up down the page, and
+             every gap between them reads as a mis-registration rather than a
+             rhythm. The inset is the thing that must agree; the tint only
+             exposed it. */
+          /* State colours through the adapter block, not as literal hex. These
+             were `#b91c1c` / `#b45309` / `#15803d` written straight into `color:`
+             declarations — a text colour no theme can move, and the exact thing
+             boxel-theming C1 forbids. Each is now the semantic state token mixed
+             TOWARD `--foreground`, which is what keeps it legible on a dark ground
+             as well as a light one: --foreground flips, so the mix flips with it.
+             `--warning` is `initial` in some themes, hence a `--boxel-*` fallback
+             on every one. */
+          --ful-danger: color-mix(
+            in oklch,
+            var(--destructive, var(--boxel-danger)) 58%,
+            var(--foreground, var(--boxel-dark))
+          );
+          --ful-warn: color-mix(
+            in oklch,
+            var(--warning, var(--boxel-warning)) 58%,
+            var(--foreground, var(--boxel-dark))
+          );
+          --ful-ok: color-mix(
+            in oklch,
+            var(--success, var(--boxel-success)) 58%,
+            var(--foreground, var(--boxel-dark))
+          );
+          --panel-bg: color-mix(in oklch, var(--foreground) 3%, transparent);
+          --panel-pad: var(--boxel-sp) var(--boxel-sp-lg) var(--boxel-sp-lg);
+          --panel-radius: var(--radius, 8px);
+          /* The ONE vertical rhythm. It used to be `margin-top` on `.sec` plus a
+             `.cols .sec { margin-top: 0 }` override for the side-by-side case —
+             two mechanisms for one relationship, and `.cols` itself had neither,
+             so the gap above a two-column group measured 0px while the gap above
+             a stacked section measured 28.4px. A tinted panel colliding with the
+             text above it is what that 0 looks like. */
+          --panel-gap: var(--boxel-sp-xl);
           --ful-rule: color-mix(in oklch, var(--foreground) 12%, transparent);
 
+          display: flex;
+          flex-direction: column;
+          gap: var(--panel-gap);
           height: 100%;
           overflow-y: auto;
           padding: var(--boxel-sp-lg);
@@ -138,19 +321,19 @@ export class FulfilmentVendor extends CardDef {
         }
         .code {
           font-family: var(--font-mono, ui-monospace, monospace);
-          font-size: 0.72rem;
+          font-size: var(--t-micro);
           font-weight: 700;
           letter-spacing: 0.16em;
           color: var(--ful-muted-fg, var(--boxel-500));
         }
         .name {
           margin: 0.1rem 0 0;
-          font-size: 1.9rem;
+          font-size: var(--t-xl);
           line-height: 1.05;
           font-family: var(--font-heading, inherit);
         }
         .badge {
-          font-size: 0.7rem;
+          font-size: var(--t-micro);
           font-weight: 700;
           letter-spacing: 0.08em;
           text-transform: uppercase;
@@ -167,7 +350,7 @@ export class FulfilmentVendor extends CardDef {
           display: flex;
           flex-wrap: wrap;
           gap: var(--boxel-sp-xl);
-          margin: var(--boxel-sp) 0 0;
+          margin: 0;
         }
         .stats div {
           display: flex;
@@ -175,7 +358,7 @@ export class FulfilmentVendor extends CardDef {
           gap: 2px;
         }
         .stats dt {
-          font-size: 0.65rem;
+          font-size: var(--t-micro);
           letter-spacing: 0.1em;
           text-transform: uppercase;
           color: var(--ful-muted-fg, var(--boxel-500));
@@ -184,11 +367,11 @@ export class FulfilmentVendor extends CardDef {
           margin: 0;
           font-family: var(--font-mono, ui-monospace, monospace);
           font-variant-numeric: tabular-nums;
-          font-size: 1.3rem;
+          font-size: var(--t-lg);
           font-weight: 700;
         }
         .unit {
-          font-size: 0.8rem;
+          font-size: var(--t-micro);
           color: var(--ful-muted-fg, var(--boxel-500));
         }
         .cols {
@@ -197,14 +380,28 @@ export class FulfilmentVendor extends CardDef {
           grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
         }
         .sec {
-          margin-top: var(--boxel-sp-lg);
+          /* A surface, not just a gap. Sections were told apart only by spacing,
+             and their headings were 12px uppercase muted — pixel-identical to
+             every table column label on the card, so "where does a section
+             start" had no answer. The ground is mixed toward --foreground so it
+             follows the theme in both modes rather than being a grey. */
+          padding: var(--panel-pad);
+          border-radius: var(--panel-radius);
+          background: var(--panel-bg);
         }
         .sec h2 {
+          /* The section heading is now the loudest uppercase thing on the card:
+             --foreground against the column labels' --muted-foreground. Weight
+             alone (500 vs 400) was not a readable difference. */
+          display: flex;
+          align-items: center;
+          gap: 7px;
           margin: 0 0 var(--boxel-sp-xs);
-          font-size: 0.72rem;
-          letter-spacing: 0.12em;
+          font-size: var(--t-micro);
+          font-weight: 700;
+          letter-spacing: 0.14em;
           text-transform: uppercase;
-          color: var(--ful-muted-fg, var(--boxel-500));
+          color: var(--ful-fg, var(--foreground, var(--boxel-dark)));
         }
         .kv {
           display: grid;
@@ -217,22 +414,149 @@ export class FulfilmentVendor extends CardDef {
           gap: var(--boxel-sp-xs);
         }
         .kv dt {
-          font-size: 0.8rem;
+          font-size: var(--t-micro);
           color: var(--ful-muted-fg, var(--boxel-500));
         }
         .kv dd {
           margin: 0;
-          font-size: 0.85rem;
+          font-size: var(--t-sm);
         }
         .mono {
           font-family: var(--font-mono, ui-monospace, monospace);
         }
+        /* Measured before: padL 12.0 / radius 0 / no ground, against panels at
+           padL 21.3 / radius 10 / 3% tint. Same page, two insets — so its text
+           started 9px left of every heading above it. It keeps its quiet voice
+           (no ground) but takes the panel geometry so it registers. */
         .note {
-          margin: var(--boxel-sp-lg) 0 0;
-          padding: var(--boxel-sp-sm);
+          margin: 0;
+          padding: var(--panel-pad);
+          border-radius: var(--panel-radius);
           border-left: 3px solid var(--ful-border, var(--boxel-border-color));
-          font-size: 0.85rem;
+          font-size: var(--t-sm);
           color: var(--ful-muted-fg, var(--boxel-500));
+        }
+      
+        /* Section icons: one size, one muted colour, everywhere. They make the
+           card scannable by shape; they must never compete with the heading. */
+        h2 .sec-icon {
+          width: max(14px, 1em);
+          height: max(14px, 1em);
+          flex: 0 0 auto;
+          color: var(--ful-muted-fg, var(--boxel-500));
+        }
+
+        /* One collapse stop. The card is rendered in a resizable stack panel, so
+           this fires when a second card opens beside it — not only on a phone. */
+        @container card-iso (width < 720px) {
+          .cols,
+          .grid,
+          .two {
+            grid-template-columns: 1fr;
+          }
+        }
+      
+        .vp-rows {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+        .vp-row {
+          display: grid;
+          grid-template-columns: 34px 6rem minmax(0, 1fr) 7rem 5rem;
+          align-items: center;
+          gap: var(--boxel-sp-xs);
+          padding: 6px 0;
+          border-top: 1px solid var(--ful-rule, var(--boxel-border-color));
+          font-size: var(--t-sm);
+        }
+        .vp-thumb {
+          width: 34px;
+          height: 34px;
+          object-fit: cover;
+          border-radius: 4px;
+        }
+        .vp-blank {
+          background: color-mix(in oklch, var(--foreground) 8%, transparent);
+        }
+        .vp-sku,
+        .vp-vsku,
+        .vp-cost {
+          font-family: var(--font-mono, ui-monospace, monospace);
+          font-variant-numeric: tabular-nums;
+        }
+        .vp-name {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .vp-vsku {
+          font-size: var(--t-micro);
+          color: var(--ful-muted-fg, var(--boxel-500));
+        }
+        .vp-cost {
+          text-align: right;
+          font-weight: 700;
+        }
+      
+        .vp-row-li {
+          list-style: none;
+        }
+        /* The row became a button: strip the chrome, keep the grid, and give it a
+           real affordance. 160ms sits inside the 150-300ms micro-interaction
+           window; `prefers-reduced-motion` removes it rather than shortening it. */
+        button.vp-row {
+          width: 100%;
+          border: 0;
+          border-top: 1px solid var(--ful-rule, var(--boxel-border-color));
+          background: none;
+          font: inherit;
+          color: inherit;
+          text-align: left;
+          cursor: pointer;
+          transition: background-color 160ms ease-out;
+        }
+        button.vp-row:hover {
+          background: color-mix(in oklch, var(--foreground) 5%, transparent);
+        }
+        button.vp-row:focus-visible {
+          outline: 2px solid var(--ring, var(--boxel-highlight));
+          outline-offset: -2px;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          button.vp-row {
+            transition: none;
+          }
+        }
+        /* Skeleton rows hold the height the real rows will take. Motion is
+           opt-in via prefers-reduced-motion; the shape is not. */
+        .sk-rows {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+          display: grid;
+          gap: 8px;
+        }
+        .sk-line {
+          height: 14px;
+          border-radius: 3px;
+          background: color-mix(in oklch, var(--foreground) 7%, transparent);
+        }
+        @media (prefers-reduced-motion: no-preference) {
+          .sk-line {
+            animation: sk-pulse 1.4s ease-in-out infinite;
+          }
+        }
+        @keyframes sk-pulse {
+          50% {
+            opacity: 0.45;
+          }
+        }
+        .q-error {
+          margin: 0;
+          padding: var(--boxel-sp-xs) 0;
+          font-size: var(--t-sm);
+          color: var(--ful-danger);
         }
       </style>
     </template>
@@ -248,7 +572,16 @@ export class FulfilmentVendor extends CardDef {
       </div>
 
       <style scoped>
+        /* A CardDef's embedded template must supply its OWN inset. The host wraps
+           a linksTo render in a CardContainer that draws a rounded boundary and
+           deliberately adds no padding — field-component.gts:513 says so in as
+           many words, because padding there would move the container-query
+           breakpoints the card reasons about. With none on either side the text
+           sits flush against the pill, which is what "Northline Supply" looked
+           like inside Supplied by. FieldDef embeddeds get no boundary and so
+           never showed this. */
         .v-emb {
+          padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
           display: grid;
           grid-template-columns: 5.5rem minmax(0, 1fr) 7rem 5.5rem;
           align-items: baseline;
@@ -330,7 +663,7 @@ export class FulfilmentVendor extends CardDef {
             min(calc(3px + 2.1cqi + 1cqb - 0.6 * var(--ar)), 10cqb),
             17px
           );
-          --meta-size: max(8px, calc(var(--type-base) / var(--type-ratio)));
+          --meta-size: max(11px, calc(var(--type-base) / var(--type-ratio)));
           --glyph-size: max(11px, min(3cqi, 14cqb));
           --headline-size: max(
             11px,

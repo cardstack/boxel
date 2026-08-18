@@ -8,13 +8,13 @@
           "sku": "WD-880",
           "productName": "Walnut Desk Riser",
           "quantity": 1,
-          "quantityFulfilled": 0,
           "unitPrice": {
             "amount": 96,
             "currency": {
               "code": "GBP"
             }
-          }
+          },
+          "quantityFulfilled": 0
         }
       ],
       "parcel": {
@@ -62,6 +62,13 @@
           "statusDescription": "Delivery attempted — nobody home",
           "location": "Cardiff, GB",
           "isDelivered": false
+        },
+        {
+          "occurredAt": "2026-08-18T02:13:37.294Z",
+          "statusCode": "RTS",
+          "statusDescription": "Returned to sender",
+          "location": null,
+          "isDelivered": false
         }
       ],
       "serviceLevel": "eCommerce",
@@ -78,14 +85,18 @@
           "code": "GBP"
         }
       },
-      "status": "exception",
+      "status": "returned_to_sender",
       "shippedAt": "2026-08-10T18:20:00.000Z",
       "deliveredAt": null,
       "proofOfDelivery": null,
       "isDropship": true,
       "cardInfo": {
-        "name": "SHP-2026-0142"
-      }
+        "name": "SHP-2026-0142",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "labelUrl": null
     },
     "relationships": {
       "order": {

@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "binLocation": null,
+      "quantityOnHand": null,
+      "quantityReserved": null,
+      "quantityIncoming": null,
+      "reorderPoint": null,
+      "reorderQuantity": null,
+      "lastCountedAt": null,
+      "lastMovementAt": null,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../inventory-stock",
+        "name": "InventoryStock"
+      }
+    }
+  }
+}

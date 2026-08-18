@@ -9,8 +9,26 @@ import {
 import BooleanField from '@cardstack/base/boolean';
 import AmountWithCurrency from '@cardstack/base/amount-with-currency';
 import PackageIcon from '@cardstack/boxel-icons/package';
+import Barcode from '@cardstack/boxel-icons/barcode';
+import Boxes from '@cardstack/boxel-icons/boxes';
+import Building from '@cardstack/boxel-icons/building';
+import Ruler from '@cardstack/boxel-icons/ruler';
+import { eq } from '@cardstack/boxel-ui/helpers';
+// The catalog's image field rather than a bare url string: it accepts either a
+// pasted URL or a file uploaded into the realm and resolves both to one
+// `resolvedUrl`, so a consumer never has to know which way the photo arrived.
+import ImageSourceField from '@cardstack/catalog/fields/image-source/image-source';
 import ParcelDimensionsField from './parcel-dimensions';
 import { FulfilmentVendor } from './fulfilment-vendor';
+// Cyclic with inventory-stock.gts (it links TO this card), which ES modules
+// tolerate because the binding is only read inside the constructor, never at
+// module-evaluation time.
+import { InventoryStock } from './inventory-stock';
+import { htmlSafe } from '@ember/template';
+import { money } from './fulfilment-format';
+import { identifyCard, type getCards } from '@cardstack/runtime-common';
+import { realmURL } from '@cardstack/base/card-api';
+import type Owner from '@ember/owner';
 
 // Product (Pr) — a SKU as fulfilment sees it. Deliberately not the retail
 // product card: this one carries the things you need to *move* an item (weight,
@@ -26,7 +44,7 @@ export class FulfilmentProduct extends CardDef {
   @field productName = contains(StringField);
   @field category = contains(StringField);
   @field barcode = contains(StringField);
-  @field imageUrl = contains(StringField);
+  @field image = contains(ImageSourceField);
 
   // Second consumer for the parcel block: a product's shipping profile is the
   // same shape as a parcel's, so the packing station can pre-fill from it.
@@ -56,50 +74,134 @@ export class FulfilmentProduct extends CardDef {
   }
 
   static isolated = class Isolated extends Component<typeof FulfilmentProduct> {
+    // The reason someone opens a product card in a fulfilment app is to find out
+    // whether there is any. InventoryStock links TO the product, so the answer
+    // is a reverse query rather than a field on this card.
+    private stockQuery: ReturnType<getCards> | undefined;
+
+    constructor(owner: Owner, args: any) {
+      super(owner, args);
+      this.stockQuery = this.args.context?.getCards(
+        this,
+        () => {
+          let ref = identifyCard(InventoryStock);
+          let id = this.args.model?.id;
+          if (!ref || !id) {
+            return undefined;
+          }
+          return { filter: { on: ref, every: [{ eq: { 'product.id': id } }] } };
+        },
+        () => this.realms,
+        { isLive: true },
+      );
+    }
+
+    // A live query resolving AFTER first paint is why this card asserted "no
+    // stock rows" about data it had not received. `getCards` publishes `isLoading`
+    // and nothing here read it. Guarded on emptiness too, so a background
+    // refresh of an already-populated list does not flash a skeleton.
+    get isQueryLoading() {
+      let q = this.stockQuery as any;
+      return Boolean(q?.isLoading) && !(q?.instances ?? []).filter(Boolean).length;
+    }
+
+    private get realms(): string[] | undefined {
+      let url = (this.args.model as any)?.[realmURL];
+      return url ? [url.href] : undefined;
+    }
+
+    // `getCards` returns a SearchResource, whose `errors` the exported duck type
+    // omits — so it is reached by cast. Without reading it a failed query is
+    // indistinguishable from an empty realm, and the section would assert
+    // "there are none" when the truth is "we could not look".
+    get queryError(): string | undefined {
+      let entries = (this.stockQuery as any)?.errors as any[] | undefined;
+      if (!entries?.length) {
+        return undefined;
+      }
+      return entries[0]?.error?.message ?? 'The query failed.';
+    }
+
+    get stockRows(): any[] {
+      return (this.stockQuery?.instances ?? []).filter(Boolean);
+    }
+
+    get totalAvailable() {
+      return this.stockRows.reduce(
+        (n, r) => n + (r.quantityAvailable ?? 0),
+        0,
+      );
+    }
+
     <template>
       <article class='prod'>
         <header class='hd'>
+          {{#if @model.image.resolvedUrl}}
+            <img class='hero' src={{@model.image.resolvedUrl}} alt='' />
+          {{/if}}
           <div class='hd-id'>
             <span class='sku'>{{@model.sku}}</span>
             <h1 class='name'>{{@model.productName}}</h1>
             {{#if @model.category}}
               <p class='cat'>{{@model.category}}</p>
             {{/if}}
+
+            {{! Measured: this column was 529.3px wide holding 69px of content
+                beside a 212px hero — a fill ratio of 0.33 and 143.1px of dead
+                height. The three numbers used to sit in a full-width band below,
+                which was 757.4px wide to show 200.6px of content: 74% of that
+                row was empty. One pool of dead space filled with the other, and
+                a whole horizontal band deleted. They also belong here on the
+                merits — cost, price and margin are what identifies a product
+                commercially, so they read with its name rather than after it. }}
+            <dl class='stats'>
+              <div>
+                <dt>Cost</dt>
+                {{! `money` rather than the field atom: the atom drops trailing
+                    zeros, so £11.50 rendered as "£ 11.5" — not a price. }}
+                <dd>{{#if @model.cost.amount}}{{money
+                      @model.cost.amount
+                      @model.cost.currency.code
+                    }}{{else}}—{{/if}}</dd>
+              </div>
+              <div>
+                <dt>Price</dt>
+                <dd>{{#if @model.price.amount}}{{money
+                      @model.price.amount
+                      @model.price.currency.code
+                    }}{{else}}—{{/if}}</dd>
+              </div>
+              <div class='q-ratio'>
+                <dt>Margin</dt>
+                <dd>{{#if @model.marginPercent}}{{@model.marginPercent}}%{{else}}—{{/if}}</dd>
+                {{! Margin is the one figure here that IS a proportion — 0–100%
+                    of the price — so it gets a length as well as a number. Cost
+                    and price are absolute amounts with nothing to be a
+                    proportion OF, which is why they stay figures. }}
+                {{#if @model.marginPercent}}
+                  <span class='m-rail' aria-hidden='true'><span
+                      class='m-fill'
+                      style={{marginBar @model.marginPercent}}
+                    ></span></span>
+                {{/if}}
+              </div>
+            </dl>
           </div>
           {{#if @model.isDropship}}
             <span class='badge'>Dropship — no stock held</span>
           {{/if}}
         </header>
 
-        <dl class='stats'>
-          <div>
-            <dt>Cost</dt>
-            <dd>{{#if @model.cost.amount}}<@fields.cost
-                  @format='atom'
-                />{{else}}—{{/if}}</dd>
-          </div>
-          <div>
-            <dt>Price</dt>
-            <dd>{{#if @model.price.amount}}<@fields.price
-                  @format='atom'
-                />{{else}}—{{/if}}</dd>
-          </div>
-          <div>
-            <dt>Margin</dt>
-            <dd>{{#if @model.marginPercent}}{{@model.marginPercent}}%{{else}}—{{/if}}</dd>
-          </div>
-        </dl>
-
         <div class='cols'>
           <section class='sec'>
-            <h2>Shipping profile</h2>
+            <h2><Ruler class='sec-icon' role='presentation' />Shipping profile</h2>
             <@fields.shippingProfile @format='embedded' />
             <p class='hint'>Pre-fills the packing station when this item is the
               only thing in the box.</p>
           </section>
 
           <section class='sec'>
-            <h2>Identifiers</h2>
+            <h2><Barcode class='sec-icon' role='presentation' />Identifiers</h2>
             <dl class='kv'>
               <div>
                 <dt>Barcode</dt>
@@ -113,22 +215,127 @@ export class FulfilmentProduct extends CardDef {
           </section>
         </div>
 
+        <section class='sec'>
+          <h2><Boxes class='sec-icon' role='presentation' />Stock</h2>
+          {{#if this.queryError}}
+            <p class='q-error' role='alert'>Could not read stock for this product.
+              {{this.queryError}}</p>
+          {{! Loading is not empty. Space is reserved so the section does not
+              jump when the query lands. }}
+          {{else if this.isQueryLoading}}
+            <ul class='sk-rows' aria-busy='true'>
+              <li class='sk-line'></li>
+              <li class='sk-line'></li>
+              <li class='sk-line'></li>
+            </ul>
+          {{else if this.stockRows.length}}
+            <p class='stock-total'>
+              <strong>{{this.totalAvailable}}</strong>
+              available across
+              {{this.stockRows.length}}
+              {{if (eq this.stockRows.length 1) 'location' 'locations'}}
+            </p>
+            <ul class='stock-list'>
+              {{#each this.stockRows as |row|}}
+                <li class='stock-row'>
+                  <span class='st-wh'>{{if
+                      row.warehouseCode
+                      row.warehouseCode
+                      '—'
+                    }}</span>
+                  <span class='st-bin'>{{if row.binLocation row.binLocation ''}}</span>
+                  <span class='st-qty'>{{row.quantityAvailable}}</span>
+                  <span class='st-state st-{{row.stockState}}'>{{row.stockState}}</span>
+                </li>
+              {{/each}}
+            </ul>
+          {{else}}
+            <p class='hint'>No stock rows reference this product yet. Add one from
+              the Inventory tab to start tracking it.</p>
+          {{/if}}
+        </section>
+
         {{#if @model.vendor}}
           <section class='sec'>
-            <h2>Supplied by</h2>
-            <@fields.vendor @format='embedded' />
+            <h2><Building class='sec-icon' role='presentation' />Supplied by</h2>
+            {{! The section already IS the surface — it has a ground and an inset.
+                Letting the host draw its bordered card boundary in here as well
+                put a pill inside a panel: two nested containers for one vendor,
+                the inner one stretched full width. Passing displayContainer as
+                false drops the boundary and keeps the content. }}
+            <@fields.vendor @format='embedded' @displayContainer={{false}} />
           </section>
         {{/if}}
       </article>
 
       <style scoped>
         .prod {
+          /* Type scale, mapped to the house 1.333 modular scale rather than the
+             28 hand-picked rem values these cards used to carry — 44 of which
+             fell below 12px, under the smallest token the design system has. */
+          --t-micro: var(--boxel-font-size-xs);
+          --t-sm: var(--boxel-font-size-sm);
+          --t-body: var(--boxel-font-size);
+          --t-lg: var(--boxel-font-size-lg);
+          --t-xl: var(--boxel-font-size-xl);
+          /* Isolated gets NO container from the host — every ancestor up to the
+             panel is `container-type: normal`, so an `@container` rule here is
+             inert until this declares its own. `inline-size`, not `size`: the
+             card scrolls, and `size` needs a definite block size. */
+          container-type: inline-size;
+          container-name: card-iso;
           --ful-bg: var(--background);
           --ful-fg: var(--foreground);
           --ful-muted-fg: var(--muted-foreground);
           --ful-border: var(--border);
+
+          /* ONE panel primitive. Every full-width tinted block on this card —
+             section, note, alert, callout — takes its ground, inset and radius
+             from here, because a background makes spacing VISIBLE: while
+             sections were separated by whitespace alone, a note padded
+             `sp-sm` and a section padded `sp-lg` looked the same. Tint them
+             both and their text edges no longer line up down the page, and
+             every gap between them reads as a mis-registration rather than a
+             rhythm. The inset is the thing that must agree; the tint only
+             exposed it. */
+          /* State colours through the adapter block, not as literal hex. These
+             were `#b91c1c` / `#b45309` / `#15803d` written straight into `color:`
+             declarations — a text colour no theme can move, and the exact thing
+             boxel-theming C1 forbids. Each is now the semantic state token mixed
+             TOWARD `--foreground`, which is what keeps it legible on a dark ground
+             as well as a light one: --foreground flips, so the mix flips with it.
+             `--warning` is `initial` in some themes, hence a `--boxel-*` fallback
+             on every one. */
+          --ful-danger: color-mix(
+            in oklch,
+            var(--destructive, var(--boxel-danger)) 58%,
+            var(--foreground, var(--boxel-dark))
+          );
+          --ful-warn: color-mix(
+            in oklch,
+            var(--warning, var(--boxel-warning)) 58%,
+            var(--foreground, var(--boxel-dark))
+          );
+          --ful-ok: color-mix(
+            in oklch,
+            var(--success, var(--boxel-success)) 58%,
+            var(--foreground, var(--boxel-dark))
+          );
+          --panel-bg: color-mix(in oklch, var(--foreground) 3%, transparent);
+          --panel-pad: var(--boxel-sp) var(--boxel-sp-lg) var(--boxel-sp-lg);
+          --panel-radius: var(--radius, 8px);
+          /* The ONE vertical rhythm. It used to be `margin-top` on `.sec` plus a
+             `.cols .sec { margin-top: 0 }` override for the side-by-side case —
+             two mechanisms for one relationship, and `.cols` itself had neither,
+             so the measured gap above a two-column group was 0px while the gap
+             above a stacked section was 28.4px. A tinted panel colliding with
+             the text above it is what that 0 looks like. */
+          --panel-gap: var(--boxel-sp-xl);
           --ful-rule: color-mix(in oklch, var(--foreground) 12%, transparent);
 
+          display: flex;
+          flex-direction: column;
+          gap: var(--panel-gap);
           height: 100%;
           overflow-y: auto;
           padding: var(--boxel-sp-lg);
@@ -145,26 +352,56 @@ export class FulfilmentProduct extends CardDef {
           padding-bottom: var(--boxel-sp);
           border-bottom: 2px solid var(--ful-rule);
         }
+        .hero {
+          /* Was a 132px thumbnail inside a 150px header — the most identifying
+             thing on the card rendered smaller than the title. */
+          width: min(240px, 28%);
+          height: auto;
+          aspect-ratio: 1;
+          flex: 0 0 auto;
+          object-fit: cover;
+          border-radius: 6px;
+          border: 1px solid var(--ful-rule);
+          background: color-mix(in oklch, var(--foreground) 6%, transparent);
+        }
+        .hd-id {
+          flex: 1 1 14rem;
+          min-width: 0;
+          /* The column carries the stats now, so it owns its own rhythm and
+             stretches to the hero's height — `align-self` beats the parent's
+             `align-items: flex-start`, and `margin-top: auto` on the stats then
+             seats the figures on the image's bottom edge instead of leaving them
+             floating mid-column above 143px of nothing. */
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-xs);
+          align-self: stretch;
+        }
+        .hd-id .stats {
+          margin-top: auto;
+          padding-top: var(--boxel-sp-xs);
+          border-top: 1px solid var(--ful-rule);
+        }
         .sku {
           font-family: var(--font-mono, ui-monospace, monospace);
-          font-size: 0.72rem;
+          font-size: var(--t-micro);
           font-weight: 700;
           letter-spacing: 0.16em;
           color: var(--ful-muted-fg, var(--boxel-500));
         }
         .name {
           margin: 0.1rem 0 0;
-          font-size: 1.9rem;
+          font-size: var(--t-xl);
           line-height: 1.05;
           font-family: var(--font-heading, inherit);
         }
         .cat {
           margin: 4px 0 0;
-          font-size: 0.85rem;
+          font-size: var(--t-sm);
           color: var(--ful-muted-fg, var(--boxel-500));
         }
         .badge {
-          font-size: 0.7rem;
+          font-size: var(--t-micro);
           font-weight: 700;
           letter-spacing: 0.08em;
           text-transform: uppercase;
@@ -177,11 +414,13 @@ export class FulfilmentProduct extends CardDef {
             transparent
           );
         }
+        /* Inside the header column now, so the gap tightens: `sp-xl` was spacing
+           for a 757px band and here it would push Margin off the end. */
         .stats {
           display: flex;
           flex-wrap: wrap;
-          gap: var(--boxel-sp-xl);
-          margin: var(--boxel-sp) 0 0;
+          gap: var(--boxel-sp-lg);
+          margin: 0;
         }
         .stats div {
           display: flex;
@@ -189,7 +428,7 @@ export class FulfilmentProduct extends CardDef {
           gap: 2px;
         }
         .stats dt {
-          font-size: 0.65rem;
+          font-size: var(--t-micro);
           letter-spacing: 0.1em;
           text-transform: uppercase;
           color: var(--ful-muted-fg, var(--boxel-500));
@@ -198,27 +437,140 @@ export class FulfilmentProduct extends CardDef {
           margin: 0;
           font-family: var(--font-mono, ui-monospace, monospace);
           font-variant-numeric: tabular-nums;
-          font-size: 1.3rem;
+          font-size: var(--t-lg);
           font-weight: 700;
+        }
+        /* A ratio is not an amount — one step quieter so the two money figures
+           read as the pair they are. */
+        /* A proportion drawn as a length. Deliberately quiet — a second reading
+           of a number already printed, not a competing element. */
+        .m-rail {
+          display: block;
+          height: 3px;
+          margin-top: 4px;
+          border-radius: 999px;
+          background: color-mix(in oklch, var(--foreground) 10%, transparent);
+          overflow: hidden;
+        }
+        .m-fill {
+          display: block;
+          height: 100%;
+          background: color-mix(in oklch, var(--foreground) 45%, transparent);
+        }
+        .stats .q-ratio dd {
+          font-size: var(--t-body);
+          font-weight: 600;
+          color: var(--ful-muted-fg, var(--boxel-500));
+        }
+
+        .stock-total {
+          margin: 0 0 var(--boxel-sp-xs);
+          font-size: var(--t-body);
+        }
+        .stock-total strong {
+          font-family: var(--font-mono, ui-monospace, monospace);
+          font-size: var(--t-lg);
+          font-weight: 800;
+        }
+        .stock-list {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+          display: grid;
+          gap: 2px;
+        }
+        .stock-row {
+          display: grid;
+          grid-template-columns: 6rem minmax(0, 1fr) 4rem 5rem;
+          align-items: baseline;
+          gap: var(--boxel-sp-xs);
+          padding: 6px 0;
+          border-top: 1px solid var(--ful-rule);
+          font-size: var(--t-sm);
+        }
+        .st-wh,
+        .st-bin,
+        .st-qty {
+          font-family: var(--font-mono, ui-monospace, monospace);
+          font-variant-numeric: tabular-nums;
+        }
+        .st-bin {
+          color: var(--ful-muted-fg, var(--boxel-500));
+        }
+        .st-qty {
+          text-align: right;
+          font-weight: 700;
+        }
+        .st-state {
+          font-size: var(--t-micro);
+          font-weight: 700;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          text-align: right;
+          color: var(--ful-muted-fg, var(--boxel-500));
+        }
+        .st-out {
+          color: var(--ful-danger);
+        }
+        .st-low {
+          color: var(--ful-warn);
         }
         .cols {
           display: grid;
           gap: var(--boxel-sp-lg);
-          grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+          /* `auto-fit` with a max keeps a two-line column from being handed the
+             same 368px as a paragraph one. */
+          grid-template-columns: repeat(auto-fit, minmax(240px, max-content));
         }
         .sec {
-          margin-top: var(--boxel-sp-lg);
+          /* A surface, not just a gap. Sections were told apart only by spacing,
+             and their headings were 12px uppercase muted — pixel-identical to
+             every table column label on the card, so "where does a section
+             start" had no answer. The ground is mixed toward --foreground so it
+             follows the theme in both modes rather than being a grey. */
+          padding: var(--panel-pad);
+          border-radius: var(--panel-radius);
+          background: var(--panel-bg);
         }
         .sec h2 {
+          /* The section heading is now the loudest uppercase thing on the card:
+             --foreground against the column labels' --muted-foreground. Weight
+             alone (500 vs 400) was not a readable difference. */
+          display: flex;
+          align-items: center;
+          gap: 7px;
           margin: 0 0 var(--boxel-sp-xs);
-          font-size: 0.72rem;
-          letter-spacing: 0.12em;
+          font-size: var(--t-micro);
+          font-weight: 700;
+          letter-spacing: 0.14em;
           text-transform: uppercase;
-          color: var(--ful-muted-fg, var(--boxel-500));
+          color: var(--ful-fg, var(--foreground, var(--boxel-dark)));
+        }
+        .sk-rows {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+          display: grid;
+          gap: 8px;
+        }
+        .sk-line {
+          height: 14px;
+          border-radius: 3px;
+          background: color-mix(in oklch, var(--foreground) 7%, transparent);
+        }
+        @media (prefers-reduced-motion: no-preference) {
+          .sk-line {
+            animation: sk-pulse 1.4s ease-in-out infinite;
+          }
+        }
+        @keyframes sk-pulse {
+          50% {
+            opacity: 0.45;
+          }
         }
         .hint {
           margin: var(--boxel-sp-xs) 0 0;
-          font-size: 0.75rem;
+          font-size: var(--t-micro);
           color: var(--ful-muted-fg, var(--boxel-500));
         }
         .kv {
@@ -232,15 +584,34 @@ export class FulfilmentProduct extends CardDef {
           gap: var(--boxel-sp-xs);
         }
         .kv dt {
-          font-size: 0.8rem;
+          font-size: var(--t-micro);
           color: var(--ful-muted-fg, var(--boxel-500));
         }
         .kv dd {
           margin: 0;
-          font-size: 0.85rem;
+          font-size: var(--t-sm);
         }
         .mono {
           font-family: var(--font-mono, ui-monospace, monospace);
+        }
+      
+        /* Section icons: one size, one muted colour, everywhere. They make the
+           card scannable by shape; they must never compete with the heading. */
+        h2 .sec-icon {
+          width: max(14px, 1em);
+          height: max(14px, 1em);
+          flex: 0 0 auto;
+          color: var(--ful-muted-fg, var(--boxel-500));
+        }
+
+        /* One collapse stop. The card is rendered in a resizable stack panel, so
+           this fires when a second card opens beside it — not only on a phone. */
+        @container card-iso (width < 720px) {
+          .cols,
+          .grid,
+          .two {
+            grid-template-columns: 1fr;
+          }
         }
       </style>
     </template>
@@ -249,6 +620,9 @@ export class FulfilmentProduct extends CardDef {
   static embedded = class Embedded extends Component<typeof FulfilmentProduct> {
     <template>
       <div class='p-emb'>
+        {{#if @model.image.resolvedUrl}}
+          <img class='p-thumb' src={{@model.image.resolvedUrl}} alt='' />
+        {{/if}}
         <span class='p-sku'>{{@model.sku}}</span>
         <span class='p-name'>{{@model.productName}}</span>
         <span class='p-slot'>{{#if @model.price.amount}}<@fields.price
@@ -257,12 +631,29 @@ export class FulfilmentProduct extends CardDef {
       </div>
 
       <style scoped>
+        /* A CardDef's embedded template must supply its OWN inset. The host wraps
+           a linksTo render in a CardContainer that draws a rounded boundary and
+           deliberately adds no padding — field-component.gts:513 says so in as
+           many words, because padding there would move the container-query
+           breakpoints the card reasons about. With none on either side the text
+           sits flush against the pill, which is what "Northline Supply" looked
+           like inside Supplied by. FieldDef embeddeds get no boundary and so
+           never showed this. */
         .p-emb {
+          padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
           display: grid;
-          grid-template-columns: 6rem minmax(0, 1fr) 5.5rem;
-          align-items: baseline;
+          /* `auto` for the thumb column so the row keeps its shape when a
+             product has no photo — no reserved empty gutter. */
+          grid-template-columns: auto 6rem minmax(0, 1fr) 5.5rem;
+          align-items: center;
           gap: var(--boxel-sp-xs);
           font-size: 0.9rem;
+        }
+        .p-thumb {
+          width: 34px;
+          height: 34px;
+          object-fit: cover;
+          border-radius: 4px;
         }
         .p-sku {
           font-family: var(--font-mono, ui-monospace, monospace);
@@ -308,7 +699,7 @@ export class FulfilmentProduct extends CardDef {
   // reason this fitted is hand-rolled rather than a FittedCard.
   static fitted = class Fitted extends Component<typeof FulfilmentProduct> {
     <template>
-      <article class='fit'>
+      <article class='fit {{if @model.image.resolvedUrl "has-photo"}}'>
         <div class='r-head'>
           <div class='eyebrow'>
             <PackageIcon class='glyph' />
@@ -317,10 +708,22 @@ export class FulfilmentProduct extends CardDef {
           <h3 class='headline'>{{@model.productName}}</h3>
         </div>
         <div class='r-body'>
-          <div class='bars' aria-hidden='true'>
-            <span></span><span></span><span></span><span></span><span></span>
-            <span></span><span></span><span></span><span></span><span></span>
-          </div>
+          {{#if @model.image.resolvedUrl}}
+            {{! Rule 2's first choice: a real photo outranks the drawn glyph.
+                The bars stay as the no-photo state so a product without one is
+                still anchored rather than showing an empty grey tile. }}
+            <img
+              class='photo'
+              src={{@model.image.resolvedUrl}}
+              alt=''
+              loading='lazy'
+            />
+          {{else}}
+            <div class='bars' aria-hidden='true'>
+              <span></span><span></span><span></span><span></span><span></span>
+              <span></span><span></span><span></span><span></span><span></span>
+            </div>
+          {{/if}}
           {{#if @model.barcode}}
             <p class='barcode'>{{@model.barcode}}</p>
           {{/if}}
@@ -349,7 +752,7 @@ export class FulfilmentProduct extends CardDef {
             min(calc(3px + 2.1cqi + 1cqb - 0.6 * var(--ar)), 10cqb),
             17px
           );
-          --meta-size: max(8px, calc(var(--type-base) / var(--type-ratio)));
+          --meta-size: max(11px, calc(var(--type-base) / var(--type-ratio)));
           --glyph-size: max(11px, min(3cqi, 14cqb));
           /* The identifier is a VALUE, so it must render in full. It is capped
              against the inline axis as well as the block axis so a real order /
@@ -432,6 +835,24 @@ export class FulfilmentProduct extends CardDef {
           -webkit-line-clamp: 2;
           overflow: hidden;
         }
+        /* The photo fills whatever the body row was given rather than claiming a
+           fixed height, so it grows with the tile and never pushes the SKU or
+           the price out of their rows. */
+        .photo {
+          display: block;
+          width: 100%;
+          height: 100%;
+          min-height: 0;
+          object-fit: cover;
+          border-radius: 4px;
+          background: color-mix(in oklch, var(--card-foreground) 8%, transparent);
+        }
+        .has-photo .r-body {
+          display: grid;
+          grid-template-rows: minmax(0, 1fr) auto;
+          gap: 4px;
+          margin-top: 5px;
+        }
         .bars {
           display: flex;
           align-items: stretch;
@@ -508,3 +929,7 @@ export class FulfilmentProduct extends CardDef {
 }
 
 export default FulfilmentProduct;
+
+function marginBar(pct: number | undefined) {
+  return htmlSafe(`width: ${Math.max(0, Math.min(100, pct ?? 0))}%`);
+}
