@@ -2,16 +2,23 @@ import { click, fillIn } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
-import { testRealmURL, visitOperatorMode } from '../../helpers';
+import {
+  setupRealmCacheTeardown,
+  testRealmURL,
+  visitOperatorMode,
+} from '../../helpers';
 import { setupInteractSubmodeTests } from '../../helpers/interact-submode-setup';
 
 module('Acceptance | interact submode | no stacks tests', function (hooks) {
   setupInteractSubmodeTests(hooks, {
-    reuseIndexAcrossTests: 'interactNoStacks',
     setRealm() {},
   });
 
-  module('0 stacks', function () {
+  module('0 stacks', function (hooks) {
+    // The helper's realm-building beforeEach runs for these tests too, and
+    // caches under this module's name, which the outer prefix cannot match.
+    setupRealmCacheTeardown(hooks);
+
     test('Clicking card in search panel opens card on a new stack', async function (assert) {
       await visitOperatorMode({});
 

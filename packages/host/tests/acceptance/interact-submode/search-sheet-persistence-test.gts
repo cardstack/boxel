@@ -12,18 +12,25 @@ import { module, test } from 'qunit';
 
 import { rri } from '@cardstack/runtime-common';
 
-import { testRealmURL, visitOperatorMode } from '../../helpers';
+import {
+  setupRealmCacheTeardown,
+  testRealmURL,
+  visitOperatorMode,
+} from '../../helpers';
 import { setupInteractSubmodeTests } from '../../helpers/interact-submode-setup';
 
 module(
   'Acceptance | interact submode | search sheet persistence tests',
   function (hooks) {
     setupInteractSubmodeTests(hooks, {
-      reuseIndexAcrossTests: 'interactSearchSheetPersistence',
       setRealm() {},
     });
 
-    module('search sheet persistence', function () {
+    module('search sheet persistence', function (hooks) {
+      // The helper's realm-building beforeEach runs for these tests too, and
+      // caches under this module's name, which the outer prefix cannot match.
+      setupRealmCacheTeardown(hooks);
+
       test('restores the query, view, and results after a close/reopen', async function (assert) {
         await visitOperatorMode({});
 

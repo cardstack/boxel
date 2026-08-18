@@ -224,7 +224,9 @@ def repeat(exp):
      def _repeat:
          exp, _repeat;
      _repeat;
-def inputs: try repeat(input) catch if .=="break" then empty else error end;
+# inputs is native here, not repeat(input): the sandbox has no input stream at
+# all, so input/0 raises rather than signalling end-of-input for the catch to
+# absorb. See builtinNativeFilters.ts.
 # ensure the output of debug(m1,m2) is kept together:
 def debug(msgs): (msgs | debug | empty), .;
 # like ruby's downcase - only characters A to Z are affected

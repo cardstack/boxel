@@ -510,13 +510,48 @@ interface JqRegExpMatch {
   captures: {
     offset: number;
     length: number;
-    string: string;
+    string: string | null;
     name: string | null;
   }[];
 }
 
-export function transformRegExpMatch(match: RegExpMatchArray): JqRegExpMatch {
-  const indices: [number, number][] | undefined = (match as any).indices;
+/**
+ * The name of each capture group by group index, read off the pattern source.
+ * A match exposes its named groups only as a name-to-value map, which cannot
+ * say which group index a name belongs to: `(?<a>(?<b>x))` gives both names
+ * the same span and the same text.
+ */
+export function captureGroupNames(pattern: string): (string | null)[] {
+  const names: (string | null)[] = [];
+  let inCharacterClass = false;
+  for (let i = 0; i < pattern.length; i++) {
+    const char = pattern[i];
+    if (char === '\\') {
+      i++;
+    } else if (inCharacterClass) {
+      if (char === ']') inCharacterClass = false;
+    } else if (char === '[') {
+      inCharacterClass = true;
+    } else if (char === '(') {
+      if (pattern[i + 1] !== '?') {
+        names.push(null);
+        continue;
+      }
+      // `(?<name>` opens a capture group; `(?:`, `(?=`, `(?!`, `(?<=`, `(?<!`
+      // and inline-flag groups do not.
+      const named = /^\(\?<(?![=!])([^>]*)>/.exec(pattern.slice(i));
+      if (named) names.push(named[1]);
+    }
+  }
+  return names;
+}
+
+export function transformRegExpMatch(
+  match: RegExpMatchArray,
+  captureNames: (string | null)[] = [],
+): JqRegExpMatch {
+  const indices: ([number, number] | undefined)[] | undefined = (match as any)
+    .indices;
   if (match.index === undefined || indices === undefined)
     throw new JqEvaluateError('RegExp match item transformation error');
   const offset = match.index;
@@ -524,11 +559,17 @@ export function transformRegExpMatch(match: RegExpMatchArray): JqRegExpMatch {
     offset,
     length: match[0].length,
     string: match[0],
-    captures: match.slice(1).map((item, i) => ({
-      offset: indices[i + 1][0],
-      length: item.length,
-      string: item,
-      name: null,
-    })),
+    captures: match.slice(1).map((item, i) => {
+      const name = captureNames[i] ?? null;
+      // An optional group that did not participate has no text and no span.
+      if (item === undefined)
+        return { offset: -1, length: 0, string: null, name };
+      return {
+        offset: indices[i + 1]![0],
+        length: item.length,
+        string: item,
+        name,
+      };
+    }),
   };
 }
