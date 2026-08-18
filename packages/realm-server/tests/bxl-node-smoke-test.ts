@@ -10,23 +10,26 @@ import {
 } from '@cardstack/bxl';
 
 // BXL is an isomorphic package: the host bundles it through Vite and serves
-// it to card code, while platform code reaches it from node. Cards can't run
-// in node, so node-side coverage is deliberately a smoke suite over plain
-// JS objects — enough to prove the runtime is the same one the browser gets,
-// not a second implementation.
+// it to card code, and it is meant to be importable from node so platform
+// code can reach it directly. Nothing on the server does yet, which is
+// exactly why this suite is here — it keeps that direction working before
+// the first consumer depends on it.
 //
-// What only node can break is the delivery: the package ships raw `.ts` with
-// `.ts` import specifiers and pulls its heavy formula families in through
-// dynamic import, so it runs here under node's native type stripping with no
-// bundler to rewrite anything. A specifier the stripper can't follow, or a
-// chunk that only a bundler could resolve, fails here and nowhere else.
+// Two things can only break from outside the package. The bare specifier
+// `@cardstack/bxl` has to resolve through the package's `exports` map from
+// a sibling workspace package and land on raw `.ts` that node's native type
+// stripping accepts, with no bundler to rewrite anything. And a formula
+// family the caller never named has to arrive on its own through the async
+// entry point's dynamic import. The package's own suite covers the library
+// from the inside and holds the exhaustive function matrix; card-level
+// behavior lives in the host suites. Cards can't run in node at all, so
+// this stays a smoke suite over plain JS objects.
 //
-// The expressions below are the ones the host's BXL card fixtures compute
-// (packages/host/tests/helpers/cards/bxl-tracking.ts), evaluated against the
-// plain-object equivalent of those cards' field values and asserted to the
-// same answers — so a divergence between the two environments shows up as a
-// number that stops matching. The exhaustive function matrix lives in the
-// bxl package's own suite; card-level behavior lives in the host suites.
+// The expressions are lifted from the host's BXL card fixtures
+// (packages/host/tests/helpers/cards/bxl-tracking.ts) and asserted to the
+// same answers, so the two environments can be compared by reading them
+// side by side. The values are copies, not imports — nothing enforces that
+// they stay in step.
 module(basename(import.meta.filename), function () {
   test('the package loads under node and reports its build identity', function (assert) {
     assert.strictEqual(
@@ -118,11 +121,15 @@ module(basename(import.meta.filename), function () {
     );
     assert.deepEqual(run.outputs, [1032.8], 'Policy.monthlyPayment');
 
-    // Auto-loading only widens the library set for that one async call —
-    // the default set a synchronous caller gets still holds just the eager
+    // Auto-loading widens the library set for that one async call only; the
+    // default set a synchronous caller gets still holds just the eager
     // core. Folding the chunks into that default set is a separate,
     // explicit step, and it's what lets a host serve a `computeVia` that
-    // cannot await an import mid-compute.
+    // cannot await an import mid-compute. That the async path leaves the
+    // default set alone can only be observed in a fresh process, so it is
+    // pinned by the bxl package's own smoke suite rather than here — the
+    // fold below is global and irreversible, and this file shares a node
+    // process with every other realm-server test.
     await loadAllFormulaExtensions();
     assert.strictEqual(
       evaluateBxl(
