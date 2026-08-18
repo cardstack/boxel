@@ -1491,7 +1491,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: 'Click [here](https://example.com) for details',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
         onSelectionChange: (info) => {
           selectionInfo = info;
         },
@@ -2000,7 +2000,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: 'Hello World',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -2037,7 +2037,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: 'Click [here](https://example.com) for details',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
