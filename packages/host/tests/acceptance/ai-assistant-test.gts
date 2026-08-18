@@ -1981,12 +1981,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         endLine: 1,
         endColumn: 1,
       },
-      // The value is in the message because the TAP reporter renders a failed
-      // deepEqual's operands as `[object Object]`, and a shard that fails
-      // uploads no test-report artifact to read them from.
-      `Context sent with message contains correct selectionRange (got ${JSON.stringify(
-        contextSent.codeMode!.selectionRange,
-      )})`,
+      'Context sent with message contains correct selectionRange',
     );
     assert.strictEqual(
       contextSent.codeMode!.moduleInspectorPanel,
@@ -2074,9 +2069,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         endLine: 3,
         endColumn: 45,
       },
-      `Context sent with message contains correct selectionRange (got ${JSON.stringify(
-        contextSent.codeMode!.selectionRange,
-      )})`,
+      'Context sent with message contains correct selectionRange',
     );
     assert.strictEqual(
       contextSent.codeMode!.moduleInspectorPanel,
@@ -2233,9 +2226,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         endLine: 6,
         endColumn: 1,
       },
-      `Context sent with message contains correct selectionRange (got ${JSON.stringify(
-        contextSent.codeMode!.selectionRange,
-      )})`,
+      'Context sent with message contains correct selectionRange',
     );
     assert.strictEqual(
       contextSent.codeMode!.moduleInspectorPanel,
