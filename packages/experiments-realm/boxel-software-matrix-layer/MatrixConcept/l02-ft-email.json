@@ -21,7 +21,7 @@
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/email-field",
       "specTarget": "base realm",
       "consumers": "account, contact, lead",
-      "consumerExamples": "{\"account\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Account/acme-industries\", \"contact\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Contact/farah-zulkifli\"}",
+      "consumerExamples": "{\"account\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Account/acme-industries\", \"contact\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Contact/dev-okafor\"}",
       "catalogDisposition": null,
       "cardInfo": {
         "name": null,

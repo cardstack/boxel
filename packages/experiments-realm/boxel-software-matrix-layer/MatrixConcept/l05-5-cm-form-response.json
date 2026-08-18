@@ -20,8 +20,8 @@
       "notes": "App 4: Club Membership & Ticketing — extracted from catalog listing b6ac3a-survey",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/form-response",
       "specTarget": "shared block",
-      "consumers": "isolated-template",
-      "consumerExamples": null,
+      "consumers": "club-membership, isolated-template",
+      "consumerExamples": "{\"club-membership\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/ClubMembership/northbridge-fc\"}",
       "catalogDisposition": null,
       "cardInfo": {
         "name": null,

@@ -21,7 +21,7 @@
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/loyalty-tier-field",
       "specTarget": "shared block",
       "consumers": "club-membership, member, record-attendance, loyalty-dashboard, loyalty-account",
-      "consumerExamples": "{\"club-membership\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/ClubMembership/northbridge-fc\", \"loyalty-account\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/LoyaltyAccount/jason-lim\", \"member\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Member/marcus-obi\"}",
+      "consumerExamples": "{\"club-membership\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/ClubMembership/northbridge-fc\", \"loyalty-account\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/PointsTransaction/7177a7d6-c2c4-4395-a841-6b507c3334ff\", \"member\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/LoyaltyAccount/jason-lim\"}",
       "catalogDisposition": null,
       "cardInfo": {
         "name": null,
