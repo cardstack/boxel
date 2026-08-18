@@ -166,6 +166,16 @@ module('Integration | RichMarkdownField', function (hooks) {
       'clip',
       'the wrapper clips its overflow',
     );
+    // The clip only rounds the toolbar's corners because the wrapper itself
+    // carries a radius — delete that declaration and the clip has nothing to
+    // round off, and the reported square-corner bug returns with every other
+    // assertion here still green. Assert it is non-zero rather than a specific
+    // px, since the radius token is themeable per card.
+    assert.notStrictEqual(
+      getComputedStyle(wrapper).borderRadius,
+      '0px',
+      'the wrapper is rounded, so the clip has corners to round off',
+    );
     // Toolbar + mount live inside the wrapper (so they get clipped)…
     assert
       .dom('[data-test-markdown-toolbar]', wrapper)
@@ -182,7 +192,7 @@ module('Integration | RichMarkdownField', function (hooks) {
       );
   });
 
-  test('the Add-embed dropdown opens inside the clipping wrapper (it is intentionally clipped to the editor)', async function (assert) {
+  test('the Add-embed dropdown escapes the corner-clipping wrapper so it stays visible when the toolbar docks at the bottom', async function (assert) {
     class TestCard extends CardDef {
       @field body = contains(RichMarkdownField);
       static edit = class Edit extends Component<typeof this> {
@@ -203,18 +213,22 @@ module('Integration | RichMarkdownField', function (hooks) {
     let root = await renderCard(loader, card, 'edit');
     await waitFor('[data-test-codemirror-body]', { timeout: 5000 });
 
-    let wrapper = root.querySelector(
-      '[data-test-codemirror-body]',
-    ) as HTMLElement;
-
     // No embed is referenced yet, so the toolbar shows the Add-embed trigger.
     await click('[data-test-toolbar="add-embed"]');
-    assert
-      .dom('[data-test-toolbar-embed-popover]', wrapper)
-      .exists(
-        'the Add-embed dropdown lives inside the clipping wrapper — it drops ' +
-          'into the tall editor mount so the clip is invisible in practice',
-      );
+    let popover = root.querySelector(
+      '[data-test-toolbar-embed-popover]',
+    ) as HTMLElement;
+    assert.dom(popover).exists('the Add-embed dropdown opens');
+    // The dropdown must not be swallowed by `.codemirror-body`'s `overflow:
+    // clip`: when the toolbar docks at the bottom there is zero room below it
+    // inside that box. `position: fixed` roots the dropdown to the viewport —
+    // a box the clip cannot reach — so it stays visible and clickable. An
+    // absolute dropdown (its containing block inside the clip) would be cut off.
+    assert.strictEqual(
+      getComputedStyle(popover).position,
+      'fixed',
+      'the Add-embed dropdown is fixed-positioned so the corner clip cannot swallow it',
+    );
   });
 
   test('renders with null content without error', async function (assert) {

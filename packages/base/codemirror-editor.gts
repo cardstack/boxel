@@ -527,14 +527,53 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
   // ── Markdown embed chooser (toolbar) ────────────────────────────────────
 
   @tracked _embedPopoverOpen = false;
+  // Inline style pinning the popover under its trigger. The popover is
+  // `position: fixed` (see below) so it escapes the `.codemirror-body` corner
+  // clip, which means it needs explicit viewport coordinates rather than the
+  // `top: 100%` an in-flow absolute box would get for free.
+  @tracked _embedPopoverStyle = '';
+  _embedTriggerEl: HTMLElement | null = null;
 
   get _currentBfmRef(): BfmRefRange | undefined {
     return this._selectionInfo?.currentRef;
   }
 
-  _toggleEmbedPopover = () => {
-    this._embedPopoverOpen = !this._embedPopoverOpen;
+  // Pin the popover directly under the trigger, in viewport coordinates. The
+  // trigger is inside a sticky toolbar, so this is recomputed on scroll/resize
+  // (see `_trackEmbedPopover`) to keep the two glued together.
+  _positionEmbedPopover = () => {
+    let trigger = this._embedTriggerEl;
+    if (!trigger) return;
+    let r = trigger.getBoundingClientRect();
+    this._embedPopoverStyle = `position: fixed; top: ${r.bottom + 4}px; left: ${r.left}px;`;
   };
+
+  _toggleEmbedPopover = (e: Event) => {
+    if (this._embedPopoverOpen) {
+      this._embedPopoverOpen = false;
+      return;
+    }
+    this._embedTriggerEl = e.currentTarget as HTMLElement;
+    this._positionEmbedPopover();
+    this._embedPopoverOpen = true;
+  };
+
+  // While the popover is open, keep it pinned under the trigger as the outer
+  // panel scrolls or the window resizes. Installed on the popover element, so
+  // its lifecycle tracks the popover's presence in the DOM.
+  _trackEmbedPopover = modifier(() => {
+    this._positionEmbedPopover();
+    let reposition = () => this._positionEmbedPopover();
+    window.addEventListener('scroll', reposition, {
+      capture: true,
+      passive: true,
+    });
+    window.addEventListener('resize', reposition);
+    return () => {
+      window.removeEventListener('scroll', reposition, { capture: true });
+      window.removeEventListener('resize', reposition);
+    };
+  });
 
   _openEmbedChooser = async (defaultTab: 'card' | 'file') => {
     this._embedPopoverOpen = false;
@@ -993,7 +1032,9 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
                 {{#if this._embedPopoverOpen}}
                   <div
                     class='toolbar-embed-popover'
+                    style={{htmlSafe this._embedPopoverStyle}}
                     data-test-toolbar-embed-popover
+                    {{this._trackEmbedPopover}}
                   >
                     <button
                       type='button'
@@ -1176,11 +1217,16 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
            corners clip the toolbar's square bottom corners when it docks at
            the bottom on scroll. `overflow: clip` (not `hidden`) does this
            without establishing a scroll container, so the toolbar keeps
-           sticking to the outer scroll panel. The Add-embed dropdown lives
-           inside this wrapper with the toolbar and is intentionally clipped
-           to it: it drops down into the tall editor mount, so the clip is
-           invisible in practice. The radius is inset by the 1px border so it
-           hugs the border's inner curve. */
+           sticking to the outer scroll panel. The radius is inset by the 1px
+           border so it hugs the border's inner curve.
+
+           The toolbar's two menus must escape this clip: when the toolbar
+           docks at the bottom there is zero room below it inside the box, so a
+           menu rendered here would be swallowed while its trigger still looks
+           normal. Both are kept out — the mode selector wormholes out of place
+           (BoxelSelect without `renderInPlace`) and the Add-embed popover is
+           `position: fixed` (its containing block is the viewport, so this
+           clip can't reach it). */
         .codemirror-body {
           display: flex;
           flex-direction: column;
@@ -1504,11 +1550,13 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
           position: relative;
           display: inline-flex;
         }
+        /* `position: fixed` (coordinates set inline from the trigger's rect)
+           so the popover escapes the `.codemirror-body` corner clip — its
+           containing block is the viewport, which that clip can't reach. An
+           absolute popover here would be swallowed once the toolbar docks at
+           the bottom, where there is no room left below it inside the clip. */
         .toolbar-embed-popover {
-          position: absolute;
-          top: 100%;
-          left: 0;
-          margin-top: 4px;
+          position: fixed;
           min-width: 140px;
           background: var(--boxel-light);
           color: var(--boxel-dark);
