@@ -41,7 +41,6 @@ export const formulaStatisticalCases: CoverageCase[] = [
     expected: 4,
     tolerance: 1e-9,
   },
-  // C(3,1)/2^3 = 3/8.
   {
     covers: 'BINOM_DIST/4',
     // p away from 0.5, so p and 1-p are not interchangeable and a
@@ -107,17 +106,15 @@ export const formulaStatisticalCases: CoverageCase[] = [
     expected: 0.979981992270027,
     tolerance: 1e-8,
   },
-  // The t quantile with 1 degree of freedom is tan(pi*(p - 1/2)), so alpha
-  // 0.5 gives t = tan(pi/4) = 1, leaving sd/sqrt(n) = 1/sqrt(2).
   {
     covers: 'CONFIDENCE_T/3',
     // T.INV.2T(0.05, 4) / sqrt(5), where the two-tailed t quantile is
     // 2.7764451051977944 — solved in closed form, since for four degrees of
     // freedom the Student-t CDF integrates to 1/2 + (3/4)(s - s^3/3) with
     // s = t/sqrt(t^2 + 4). The normal quantile in its place would answer
-    // 0.877, so the tolerance has three hundred million times the room it
-    // needs to separate them, and is set by the ~1e-8 accuracy of the
-    // underlying t inverse rather than by anything about this case.
+    // 0.877, three and a half million tolerances away, so the tolerance is
+    // set by the ~1e-8 accuracy of the underlying t inverse rather than by
+    // anything this case needs to tell apart.
     source: 'CONFIDENCE_T(0.05, 1, 5)',
     expected: 1.2416639982037645,
     tolerance: 1e-7,
@@ -355,9 +352,9 @@ export const formulaStatisticalCases: CoverageCase[] = [
     expected: 0.03558886402450434,
     tolerance: 1e-12,
   },
-  // One-tailed upper-tail test against the hypothesized mean. With x equal
-  // to the sample mean, z = 0 and p is exactly 1/2; giving sigma = 2 with
-  // n = 4 and a mean one unit above x makes z = 1, the upper normal tail.
+  // One-tailed upper-tail test against the hypothesized mean. The
+  // three-argument form takes the population sigma instead of estimating it,
+  // so sigma = 2 over n = 4 with a mean one unit above x makes z = 1.
   {
     covers: 'Z_TEST/2',
     // A hypothesized mean away from the sample mean: at x = 3 the statistic

@@ -232,8 +232,9 @@ export const formulaEngineeringCases: CoverageCase[] = [
   { covers: 'DELTA/2', source: 'DELTA(5, 4)', expected: 0 },
   { covers: 'GESTEP/1', source: 'GESTEP(-1)', expected: 0 },
   { covers: 'GESTEP/2', source: 'GESTEP(5, 4)', expected: 1 },
-  // erf tolerances are loose because the usual rational approximation is
-  // only accurate to about 1e-7.
+  // Excel's ERF and ERFC are computed to full double precision through the
+  // regularized incomplete gamma, not the rational approximation that jq's
+  // own `erf` uses, so these tolerances are tight rather than loose.
   {
     covers: 'ERF/1',
     source: 'ERF(1)',

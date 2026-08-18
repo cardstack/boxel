@@ -176,7 +176,7 @@ export const validationCases: CoverageCase[] = [
   },
   // Without `returnScore` the default is a checklist, not a threshold: at
   // least one lowercase, uppercase, digit and symbol, and eight characters.
-  // This one clears the length and fails the other three.
+  // This one has the length and the lowercase, and none of the other three.
   {
     covers: 'isStrongPassword/1',
     source: 'isStrongPassword("password")',

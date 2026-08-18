@@ -102,7 +102,6 @@ export const formulaFinancialCases: CoverageCase[] = [
     expected: -400 / 7,
     tolerance: 1e-9,
   },
-  // Type 1 pays at the period start, so the first period accrues no interest.
   // Period 2 rather than period 1: with payments at the start of the period,
   // period 1's interest is zero, and zero is what a constant, a dropped rate
   // or a dropped principal would all return.
@@ -136,7 +135,6 @@ export const formulaFinancialCases: CoverageCase[] = [
     expected: -3200 / 21,
     tolerance: 1e-9,
   },
-  // Principal repaid over the full term is the whole loan.
   {
     covers: 'CUMPRINC/6',
     // Two periods of three, not the whole term: cumulative principal over a
@@ -220,7 +218,6 @@ export const formulaFinancialCases: CoverageCase[] = [
     expected: 0.2,
     tolerance: 1e-7,
   },
-  // Equal 10% finance and reinvest rates collapse MIRR to (121/100)^(1/2)-1.
   {
     covers: 'MIRR/3',
     // The finance rate discounts the negative flows and the reinvestment rate

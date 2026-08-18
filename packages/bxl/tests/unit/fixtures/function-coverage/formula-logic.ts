@@ -10,10 +10,13 @@ export const formulaLogicCases: CoverageCase[] = [
   // The blank guard on each condition keeps these programs on the builtin
   // route, which is also where a non-scalar formula lands in production.
   //
-  // These two are the suite's only single-polarity boolean cases, and they
-  // stay that way: a constant is what they are. Everything else that answers
-  // a boolean is asserted in both polarities, because "accepts everything" is
-  // how a predicate most often fails and a one-sided case cannot see it.
+  // Everything in the suite that answers a boolean is asserted in both
+  // polarities, because "accepts everything" is how a predicate most often
+  // fails and a one-sided case cannot see it. Five entries are exempt, and
+  // each says so where it is defined: these two, because a constant is what
+  // they are; `have_decnum` and `have_literal_numbers`, which report build
+  // configuration; and `isByteLength/1`, which upstream compares against an
+  // undefined minimum.
   { covers: 'TRUE/0', source: 'TRUE()', expected: true },
   { covers: 'FALSE/0', source: 'FALSE()', expected: false },
   {

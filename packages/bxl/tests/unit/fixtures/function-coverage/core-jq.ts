@@ -635,7 +635,10 @@ export const coreJqCases: CoverageCase[] = jqCases([
   // In the set a card resolves against, Excel's INDEX wins the `INDEX/2` key,
   // and jq's one-argument form delegates to whichever `INDEX/2` resolved — so
   // it reaches Excel's positional lookup and rejects the string key. The
-  // linter reports the collision as jq-index-shadowed-by-excel.
+  // linter's jq-index-shadowed-by-excel warning fires on the two-argument
+  // call, where the name is unambiguously the one Excel took; at one argument
+  // the spelling is jq's own index-of and reads as intentional, so this shape
+  // arrives as a runtime error with nothing to explain it.
   {
     covers: 'INDEX/1',
     source: 'INDEX(.id)',
