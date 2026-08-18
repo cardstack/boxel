@@ -226,9 +226,17 @@ export const formulaFinancialCases: CoverageCase[] = [
     // The finance rate discounts the negative flows and the reinvestment rate
     // compounds the positive ones, so the series needs an outflow after
     // period 0 for the first rate to reach anything, and the two rates have
-    // to differ for the case to tell them apart.
+    // to differ for the case to tell them apart. The sign change mid-series
+    // is also what makes the flows' time slots matter: on a series whose only
+    // outflow is period 0, dropping the slots and mis-scaling the horizon
+    // cancel exactly, and every answer stays correct by accident.
+    //
+    // The value is the geometric mean between the two ends the rate joins:
+    // the positives carried to the final period at 12%, over the negatives
+    // brought back to period zero at 8%, annualised across the four periods
+    // between them.
     source: 'MIRR([-1000, 300, -200, 500, 400], 0.08, 0.12)',
-    expected: 0.06007250208242665,
+    expected: 0.04208570671566214,
     tolerance: 1e-9,
   },
   // Dated flows a whole non-leap year apart make the discount exponent 1.
@@ -369,12 +377,23 @@ export const formulaFinancialCases: CoverageCase[] = [
   },
   {
     covers: 'ACCRINT/7',
-    // Basis 1 counts the real calendar, so a day either way moves the answer;
-    // bases 0 and 3 divide by a fixed year length instead.
+    // Excel accrues par * (rate / frequency) * the accrued days over the
+    // length of the quasi-coupon period they fall in — periods counted back
+    // from first_interest. Settling 90 days into the period that runs
+    // 2023-01-01 to 2023-07-01 gives 1000 * 0.05 * 90/181.
+    //
+    // On every basis with a fixed year length that reduces to
+    // par * rate * YEARFRAC(issue, settlement), which is why only basis 1
+    // separates the two readings.
     source:
       'ACCRINT("2023-01-15", "2023-07-01", "2023-04-15", 0.1, 1000, 2, 1)',
-    expected: 24.65753424657534,
+    expected: 24.861878453038674,
     tolerance: 1e-9,
+    knownDefect:
+      'ACCRINT computes par * rate * YEARFRAC(issue, settlement, basis) and ' +
+      'never reads first_interest or frequency, so on basis 1 it divides by ' +
+      "the year rather than by the quasi-coupon period's own length",
+    produces: { expected: 24.65753424657534, tolerance: 1e-9 },
   },
   // On the default 30/360 basis a coupon period is 360/frequency days by
   // definition, so the dates are inert here and the frequency is what the

@@ -111,12 +111,16 @@ export const formulaStatisticalCases: CoverageCase[] = [
   // 0.5 gives t = tan(pi/4) = 1, leaving sd/sqrt(n) = 1/sqrt(2).
   {
     covers: 'CONFIDENCE_T/3',
-    // A 95% interval on 5 observations, where Student's t is 2.776 against
-    // the normal's 1.960 — far enough apart that reaching for the normal
-    // quantile instead fails. At alpha = 0.5 the two agree to within 1e-6.
+    // T.INV.2T(0.05, 4) / sqrt(5), where the two-tailed t quantile is
+    // 2.7764451051977944 — solved in closed form, since for four degrees of
+    // freedom the Student-t CDF integrates to 1/2 + (3/4)(s - s^3/3) with
+    // s = t/sqrt(t^2 + 4). The normal quantile in its place would answer
+    // 0.877, so the tolerance has three hundred million times the room it
+    // needs to separate them, and is set by the ~1e-8 accuracy of the
+    // underlying t inverse rather than by anything about this case.
     source: 'CONFIDENCE_T(0.05, 1, 5)',
-    expected: 1.2416639951243025,
-    tolerance: 1e-9,
+    expected: 1.2416639982037645,
+    tolerance: 1e-7,
   },
   // Density lambda*exp(-lambda*x) = 2/e^2.
   {
