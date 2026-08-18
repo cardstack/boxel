@@ -4794,23 +4794,37 @@ function cardThunk<CardT extends BaseDefConstructor>(
   // value came from isn't knowable here — by the time the value reaches us
   // the import has already evaluated to undefined — so the message names the
   // two ways that happens instead.
-  fieldContext?: { fieldName: string; ownerPrototype: BaseDef },
+  fieldContext: { fieldName: string; ownerPrototype: BaseDef },
 ): () => CardT {
-  if (!cardOrThunk) {
-    let fieldDescription = fieldContext
-      ? `field '${fieldContext.fieldName}' on '${
-          fieldContext.ownerPrototype.constructor?.name ?? 'unknown card'
-        }'`
-      : 'a field';
-    throw new Error(
-      `The card class for ${fieldDescription} was ${cardOrThunk}. Two common causes:
+  // `||` rather than `??`: an anonymous class's `.name` is `''`, not nullish.
+  let fieldDescription = `field '${fieldContext.fieldName}' on '${
+    fieldContext.ownerPrototype.constructor?.name || 'unknown card'
+  }'`;
+  let causes = `Two common causes:
       (1) the import doesn't match the module's export shape — e.g. \`import X from '…'\` where the module only has a named export; use \`import { X } from '…'\`;
-      (2) a cyclic dependency between cards — use the thunk form in all cards in the cycle, e.g. '@field friend = linksTo(() => Person)'.`,
+      (2) a cyclic dependency between cards — use the thunk form in all cards in the cycle, e.g. '@field friend = linksTo(() => Person)'.`;
+  if (!cardOrThunk) {
+    throw new Error(
+      `The card class for ${fieldDescription} was ${cardOrThunk}. ${causes}`,
     );
   }
-  return (
-    'baseDef' in cardOrThunk ? () => cardOrThunk : cardOrThunk
-  ) as () => CardT;
+  if ('baseDef' in cardOrThunk) {
+    return () => cardOrThunk as CardT;
+  }
+  // The thunk form fails the same two ways the eager form does, just later —
+  // at the first `field.card` read instead of at decoration. The accessors
+  // re-invoke the thunk on every read (nothing is memoized), so this adds a
+  // truthiness check per read, not an extra call.
+  let thunk = cardOrThunk as () => CardT;
+  return () => {
+    let card = thunk();
+    if (!card) {
+      throw new Error(
+        `The card class thunk for ${fieldDescription} returned ${card}. ${causes}`,
+      );
+    }
+    return card;
+  };
 }
 
 export type SignatureFor<CardT extends BaseDefConstructor> = {

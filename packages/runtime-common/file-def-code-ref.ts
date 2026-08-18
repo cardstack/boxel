@@ -15,7 +15,9 @@ function baseModule(name: string): RealmResourceIdentifier {
   return `${baseRealm.url}${name}` as RealmResourceIdentifier;
 }
 
-export const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
+export const FILEDEF_CODE_REF_BY_EXTENSION: Readonly<
+  Record<string, ResolvedCodeRef>
+> = {
   // TODO: Replace with realm metadata configuration.
   '.markdown': { module: baseModule('markdown-file-def'), name: 'MarkdownDef' },
   '.md': { module: baseModule('markdown-file-def'), name: 'MarkdownDef' },
