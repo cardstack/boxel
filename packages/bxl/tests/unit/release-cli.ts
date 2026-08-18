@@ -12,6 +12,9 @@ import { deepStrictEqual, strictEqual, throws } from 'node:assert';
 import {
   classifyBumpFromTitle,
   computeRelease,
+  diffTouchesCatalogEntries,
+  nextManualUnstableVersion,
+  resolveStableBase,
   touchesPublishedSurface,
   unstableCounters,
   type BumpLevel,
@@ -115,9 +118,11 @@ function release(
   currentVersion: string,
   prereleaseCounter = 0,
   lastStableBase = stableBase,
+  catalogAffectsDependencies = false,
 ) {
   checks++;
   return computeRelease({
+    catalogAffectsDependencies,
     changedFiles,
     currentVersion,
     lastStableBase,
@@ -129,16 +134,19 @@ function release(
 
 // From a stable version, the first prerelease of the bumped base.
 deepStrictEqual(release('feat: add ROUNDBANK', shipping, '0.5.1'), {
+  bootstrapStableTag: null,
   bump: 'minor',
   nextVersion: '0.6.0-unstable.0',
   prereleaseCounter: 0,
 });
 deepStrictEqual(release('fix: correct NORM.DIST', shipping, '0.5.1'), {
+  bootstrapStableTag: null,
   bump: 'patch',
   nextVersion: '0.5.2-unstable.0',
   prereleaseCounter: 0,
 });
 deepStrictEqual(release('feat!: drop the legacy tag', shipping, '0.5.1'), {
+  bootstrapStableTag: null,
   bump: 'major',
   nextVersion: '1.0.0-unstable.0',
   prereleaseCounter: 0,
@@ -147,11 +155,13 @@ deepStrictEqual(release('feat!: drop the legacy tag', shipping, '0.5.1'), {
 // A bumpable prefix that ships nothing, and a shipping change that doesn't ask
 // for a release, both publish nothing.
 deepStrictEqual(release('feat: add a test helper', notShipping, '0.5.1'), {
+  bootstrapStableTag: null,
   bump: 'none',
   nextVersion: null,
   prereleaseCounter: 0,
 });
 deepStrictEqual(release('chore: reword a comment', shipping, '0.5.1'), {
+  bootstrapStableTag: null,
   bump: 'none',
   nextVersion: null,
   prereleaseCounter: 0,
@@ -161,11 +171,13 @@ deepStrictEqual(release('chore: reword a comment', shipping, '0.5.1'), {
 // last stable release, so a same-or-smaller bump holds it steady and only the
 // counter moves.
 deepStrictEqual(release('fix: another fix', shipping, '0.5.2-unstable.0', 1), {
+  bootstrapStableTag: null,
   bump: 'patch',
   nextVersion: '0.5.2-unstable.1',
   prereleaseCounter: 1,
 });
 deepStrictEqual(release('fix: a third fix', shipping, '0.6.0-unstable.4', 5), {
+  bootstrapStableTag: null,
   bump: 'patch',
   nextVersion: '0.6.0-unstable.5',
   prereleaseCounter: 5,
@@ -175,12 +187,14 @@ deepStrictEqual(release('fix: a third fix', shipping, '0.6.0-unstable.4', 5), {
 deepStrictEqual(
   release('feat: add ROUNDBANK', shipping, '0.5.2-unstable.2', 3),
   {
+    bootstrapStableTag: null,
     bump: 'minor',
     nextVersion: '0.6.0-unstable.3',
     prereleaseCounter: 3,
   },
 );
 deepStrictEqual(release('feat!: breaking', shipping, '0.6.0-unstable.1', 2), {
+  bootstrapStableTag: null,
   bump: 'major',
   nextVersion: '1.0.0-unstable.2',
   prereleaseCounter: 2,
@@ -191,6 +205,7 @@ deepStrictEqual(release('feat!: breaking', shipping, '0.6.0-unstable.1', 2), {
 deepStrictEqual(
   release('fix: a fix', shipping, '1.0.0-unstable.7', 8, '0.9.3'),
   {
+    bootstrapStableTag: null,
     bump: 'patch',
     nextVersion: '1.0.0-unstable.8',
     prereleaseCounter: 8,
@@ -202,6 +217,82 @@ throws(
   () => release('feat: add ROUNDBANK', shipping, 'not-a-version'),
   /Invalid semver/,
   'an unparseable current version fails loudly rather than guessing',
+);
+
+// --- the workspace catalog as published surface ---
+
+// A catalog entry this package depends on resolves into the published manifest,
+// so it releases even though no file under the package changed.
+deepStrictEqual(
+  release('fix: pick up the validator fix', [], '0.5.1', 0, stableBase, true),
+  {
+    bootstrapStableTag: null,
+    bump: 'patch',
+    nextVersion: '0.5.2-unstable.0',
+    prereleaseCounter: 0,
+  },
+);
+// Still gated by the prefix, like any other change.
+deepStrictEqual(
+  release('chore: bump the catalog', [], '0.5.1', 0, stableBase, true),
+  {
+    bootstrapStableTag: null,
+    bump: 'none',
+    nextVersion: null,
+    prereleaseCounter: 0,
+  },
+);
+
+const catalogDiff = (lines: string[]) =>
+  ['--- a/pnpm-workspace.yaml', '+++ b/pnpm-workspace.yaml', ...lines].join(
+    '\n',
+  );
+const bxlDeps = ['bessel', 'jstat', 'validator'];
+
+checks++;
+strictEqual(
+  diffTouchesCatalogEntries(
+    catalogDiff(['-  validator: ^13.15.35', '+  validator: ^13.16.0']),
+    bxlDeps,
+  ),
+  true,
+);
+checks++;
+strictEqual(
+  diffTouchesCatalogEntries(
+    catalogDiff(["-  'jstat': ^1.9.6", "+  'jstat': ^1.9.7"]),
+    bxlDeps,
+  ),
+  true,
+  'a quoted key is the same entry',
+);
+// Someone else's dependency moving changes nothing about what this package
+// ships, and the catalog holds a few hundred of them.
+checks++;
+strictEqual(
+  diffTouchesCatalogEntries(
+    catalogDiff(['-  eslint: ^8.57.1', '+  eslint: ^9.0.0']),
+    bxlDeps,
+  ),
+  false,
+);
+// The `---`/`+++` file headers name the file, not an entry.
+checks++;
+strictEqual(diffTouchesCatalogEntries(catalogDiff([]), bxlDeps), false);
+// A name appearing as a substring of another entry is not that entry.
+checks++;
+strictEqual(
+  diffTouchesCatalogEntries(
+    catalogDiff(['+  validator-extra: ^1.0.0', '+  "@types/jstat": ^1.0.0']),
+    bxlDeps,
+  ),
+  false,
+);
+checks++;
+strictEqual(
+  diffTouchesCatalogEntries(catalogDiff(['+  bessel: ^1.0.3']), []),
+  false,
+  'a package with no dependencies has no catalog entries to watch',
 );
 
 // --- prerelease counters already taken on npm ---
@@ -246,6 +337,91 @@ deepStrictEqual(
 // A stable release and a differently-tagged prerelease are not counters.
 checks++;
 deepStrictEqual(unstableCounters('0.5.1', ['0.5.1', '0.5.1-beta.0']), []);
+
+// --- the stable release a prerelease series builds on ---
+
+// Tagged releases are the record, and the highest stable one wins regardless of
+// the order tags come back in.
+checks++;
+deepStrictEqual(
+  resolveStableBase(
+    ['bxl-v0.4.2', 'bxl-v0.5.1', 'bxl-v0.5.0', 'bxl-v0.6.0-unstable.3'],
+    '0.6.0-unstable.4',
+  ),
+  { base: '0.5.1', tagged: true },
+);
+checks++;
+deepStrictEqual(
+  resolveStableBase(['bxl-v0.9.0', 'bxl-v0.10.0'], '0.10.1-unstable.0'),
+  { base: '0.10.0', tagged: true },
+  '0.10.0 is later than 0.9.0 — compared as versions, not as strings',
+);
+// Tags for other packages share the repo and must not be read as this one's.
+checks++;
+deepStrictEqual(
+  resolveStableBase(['boxel-cli-v1.2.3', 'bxl-v0.5.1'], '0.5.2-unstable.0'),
+  { base: '0.5.1', tagged: true },
+);
+
+// Before the first release there is no tag, and the manifest still holds the
+// base — but nothing records it, so the workflow is asked to tag it.
+checks++;
+deepStrictEqual(resolveStableBase([], '0.5.1'), {
+  base: '0.5.1',
+  tagged: false,
+});
+// A prerelease tag is not a release, so it does not answer the question either.
+checks++;
+deepStrictEqual(resolveStableBase(['bxl-v0.6.0-unstable.0'], '0.5.1'), {
+  base: '0.5.1',
+  tagged: false,
+});
+
+// The state that has no answer: prereleases have moved the manifest off the base
+// and no tag kept it. Guessing here would either ratchet the version on every
+// merge or silently under-bump, so it stops instead.
+checks++;
+throws(
+  () => resolveStableBase(['bxl-v0.6.0-unstable.0'], '0.6.0-unstable.0'),
+  /stable base it builds on is\s+unknowable/,
+);
+checks++;
+throws(() => resolveStableBase([], '0.6.0-unstable.1'), /unknowable/);
+
+// --- the version a manual republish takes ---
+
+// Mid-series: the base holds and the counter advances past what npm has.
+checks++;
+strictEqual(
+  nextManualUnstableVersion('0.6.0-unstable.3', [
+    '0.5.1',
+    '0.6.0-unstable.0',
+    '0.6.0-unstable.3',
+  ]),
+  '0.6.0-unstable.4',
+);
+// From a stable manifest that was never published, the base is free to use.
+checks++;
+strictEqual(nextManualUnstableVersion('0.5.1', []), '0.5.1-unstable.0');
+
+// Directly after a promotion the manifest holds a released version. Publishing
+// `0.6.0-unstable.4` then would order the `unstable` tag *below* `latest`, since
+// a prerelease sorts before the release it names — so move to the next patch.
+checks++;
+strictEqual(
+  nextManualUnstableVersion('0.6.0', [
+    '0.6.0',
+    '0.6.0-unstable.0',
+    '0.6.0-unstable.3',
+  ]),
+  '0.6.1-unstable.0',
+);
+checks++;
+strictEqual(
+  nextManualUnstableVersion('0.6.0', ['0.6.0', '0.6.1-unstable.0']),
+  '0.6.1-unstable.1',
+  'and it keeps counting from whatever that next base already published',
+);
 
 // --- stamping the version into the entry module ---
 

@@ -1116,7 +1116,16 @@ version comes from the merged PR's title: a conventional-commit prefix
 change (`chore:`, `docs:`, `test:`, …) publish nothing. Neither does a merge
 that leaves everything the tarball ships untouched, whatever its title —
 `scripts/compute-release.ts` holds both rules, and `scripts/release-prefixes.json`
-is the prefix list the pre-merge title check reads too.
+is the prefix list the pre-merge title check reads too. One shipped thing lives
+outside this directory: the workspace catalog, which resolves the `catalog:`
+dependency specifiers into the published manifest, so moving an entry this
+package depends on counts as a change to what it ships.
+
+Publishing authenticates through npm Trusted Publishing — a rule on npmjs.com
+naming this repository and `bxl-publish.yml`, exchanged for a short-lived
+credential at publish time, with no token held anywhere. Such a rule can only be
+added to a package that already exists, so the first version of a package is
+published by hand and everything after it comes from the workflow.
 
 Cutting a stable release is a separate, manual act: run the `bxl publish`
 workflow with `confirm = promote`. It strips the `-unstable.<n>` suffix, closes

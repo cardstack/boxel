@@ -30,15 +30,30 @@ name: bxl publish
 #     suspenders).
 #
 # Concurrency:
-#   - `group: package-release` is shared with boxel-cli's publish workflow. Both
-#     commit and push to main, and one PR can touch both packages — a shared
-#     group serializes those pushes instead of letting one lose the race.
+#   - `group: bxl-release` serializes this package's own releases so two runs
+#     can't pick the same prerelease counter or tag.
+#   - `queue: max` keeps the queued ones. A group holds a single pending run by
+#     default and cancels it when a newer one arrives, so back-to-back merges
+#     would silently discard a release that nothing ever retries. `queue: max`
+#     lets up to 100 wait their turn instead. It cannot be combined with
+#     `cancel-in-progress: true`, which is not wanted here anyway.
+#   - The group is deliberately *not* shared with the boxel-cli publish workflow.
+#     Serializing across packages would make each one's releases wait on the
+#     other's, and every wait is a checkout of a main that has moved on. The
+#     races that sharing would prevent — two workflows pushing a release commit
+#     at once — are handled where they happen, by replaying the commit onto a
+#     moved main (see the push below).
 
 on:
   push:
     branches: [main]
     paths:
       - "packages/bxl/**"
+      # The catalog resolves this package's `catalog:` dependency specifiers
+      # into the published manifest, so a change to one of its entries changes
+      # what ships. compute-release.ts decides whether the entries that moved
+      # are ones bxl depends on.
+      - "pnpm-workspace.yaml"
   workflow_dispatch:
     inputs:
       confirm:
@@ -52,8 +67,9 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: package-release
+  group: bxl-release
   cancel-in-progress: false
+  queue: max
 
 jobs:
   unstable:
@@ -128,12 +144,21 @@ jobs:
         env:
           PR_TITLE: ${{ steps.pr.outputs.title }}
           PR_BODY: ${{ steps.pr.outputs.body }}
+          # The commits this push introduced. The checkout above is of `main`,
+          # whose tip may already have moved past this push — a run that waited
+          # its turn in the concurrency group, or one that started while another
+          # merge was landing, sees the newer commits. Without these, the
+          # changed-file check would describe someone else's commit and skip this
+          # release.
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           RESULT=$(NODE_NO_WARNINGS=1 node scripts/compute-release.ts)
           echo "Compute result: $RESULT"
           echo "bump=$(echo "$RESULT" | jq -r '.bump')" >> "$GITHUB_OUTPUT"
           echo "nextVersion=$(echo "$RESULT" | jq -r '.nextVersion // ""')" >> "$GITHUB_OUTPUT"
+          echo "bootstrapStableTag=$(echo "$RESULT" | jq -r '.bootstrapStableTag // ""')" >> "$GITHUB_OUTPUT"
 
       - name: Read the tag this release follows
         id: previous
@@ -152,30 +177,66 @@ jobs:
             echo "tag=" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Stamp the version, commit, and tag
+      - name: Stamp the version, commit, tag, and push
         id: commit
         if: github.event_name == 'push' && steps.pr.outputs.skip != 'true' && steps.release.outputs.bump != 'none'
         env:
+          BOOTSTRAP_TAG: ${{ steps.release.outputs.bootstrapStableTag }}
           NEXT_VERSION: ${{ steps.release.outputs.nextVersion }}
         run: |
           set -euo pipefail
           TAG="bxl-v${NEXT_VERSION}"
-          # Guard against an orphan tag from a prior failed publish. If the tag
-          # exists, an earlier run pushed it but failed before publishing — the
-          # orphan needs deleting (`git push origin :refs/tags/$TAG`) and npm
-          # state checking before this can be re-run.
-          if git rev-parse --verify --quiet "refs/tags/$TAG" >/dev/null; then
-            echo "::error::Tag $TAG already exists. A prior publish likely failed mid-flight. Delete the orphan tag and verify npm state before re-running."
-            exit 1
-          fi
+          # An existing tag means an earlier run pushed it and then failed before
+          # publishing. The orphan needs deleting
+          # (`git push origin :refs/tags/<tag>`) and npm state checking before
+          # this can be re-run.
+          for existing in "$TAG" ${BOOTSTRAP_TAG:+"$BOOTSTRAP_TAG"}; do
+            if git rev-parse --verify --quiet "refs/tags/$existing" >/dev/null; then
+              echo "::error::Tag $existing already exists. A prior publish likely failed mid-flight. Delete the orphan tag and verify npm state before re-running."
+              exit 1
+            fi
+          done
+
+          # Where the base version still stands, before the bump — the commit the
+          # bootstrap tag belongs on, when one is needed. It stays an ancestor of
+          # main through any replay below.
+          BASE_SHA=$(git rev-parse HEAD)
+
           node packages/bxl/scripts/set-version.ts "$NEXT_VERSION"
           git add packages/bxl/package.json packages/bxl/src/index.ts
           git commit -m "chore(release): bxl v${NEXT_VERSION} [skip ci]"
-          # Annotated tag so `git push --follow-tags` actually pushes it — a
-          # lightweight tag is silently skipped, which would leave it on the
-          # runner only and fail `gh release create`.
+
+          # Push the commit before creating any tag. An ordinary merge can land
+          # on main while this run works, and pushing tags alongside a rejected
+          # branch update would leave tags naming a commit main never received.
+          # Replaying is safe: the commit rewrites version strings and nothing
+          # else.
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main; then
+              break
+            fi
+            if [ "$attempt" = 3 ]; then
+              echo "::error::main moved under this run three times; nothing was published."
+              exit 1
+            fi
+            echo "main moved; replaying the release commit onto it and retrying."
+            git fetch origin main
+            git rebase origin/main
+          done
+
+          # Annotated tags: they carry a message, and `--follow-tags` skips
+          # lightweight ones silently.
           git tag -a "$TAG" -m "$TAG"
-          git push origin main --follow-tags
+          if [ -n "$BOOTSTRAP_TAG" ]; then
+            # Nothing recorded the stable version this prerelease series builds
+            # on, and the manifest no longer holds it after the commit above.
+            git tag -a "$BOOTSTRAP_TAG" \
+              -m "$BOOTSTRAP_TAG — the version this prerelease series builds on" \
+              "$BASE_SHA"
+            git push origin "$TAG" "$BOOTSTRAP_TAG"
+          else
+            git push origin "$TAG"
+          fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Resolve the next unstable version
@@ -193,10 +254,16 @@ jobs:
         id: publish
         if: github.event_name == 'workflow_dispatch' || (steps.pr.outputs.skip != 'true' && steps.release.outputs.bump != 'none')
         working-directory: packages/bxl
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -euo pipefail
+          # Authentication is npm Trusted Publishing. The `id-token: write`
+          # permission above lets the publish exchange a GitHub OIDC token for a
+          # short-lived npm credential, against a rule registered on npmjs.com
+          # for this package that names this repository and this workflow file —
+          # which is why both publish paths live here. No npm token is involved.
+          # A rule can only be added to a package that exists, so the very first
+          # version is published by hand; every one after it comes from here.
+          #
           # `prepack` builds dist/ — the tarball carries JavaScript, since Node
           # will not strip types inside node_modules. See scripts/build.ts.
           # --no-git-checks because the commit and tag above are already pushed;
@@ -300,13 +367,28 @@ jobs:
           fi
           git add packages/bxl/package.json packages/bxl/src/index.ts packages/bxl/CHANGELOG.md
           git commit -m "Release @cardstack/bxl v${VERSION} [skip ci]"
+
+          # Push the commit before tagging, and replay it if an ordinary merge
+          # landed on main first — same reasoning as the unstable job's push.
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main; then
+              break
+            fi
+            if [ "$attempt" = 3 ]; then
+              echo "::error::main moved under this run three times; nothing was published."
+              exit 1
+            fi
+            echo "main moved; replaying the release commit onto it and retrying."
+            git fetch origin main
+            git rebase origin/main
+          done
+
           git tag -a "$TAG" -m "$TAG"
-          git push origin main --follow-tags
+          git push origin "$TAG"
 
       - name: Publish to npm under latest
         working-directory: packages/bxl
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        # Authenticated by npm Trusted Publishing, as in the unstable job.
         run: pnpm publish --access public --provenance --no-git-checks
 
       - name: Create GitHub Release
