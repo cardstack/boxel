@@ -909,17 +909,67 @@ jobs:
       cancel-in-progress: true
     needs: [host-test, check-percy]
     runs-on: ubuntu-latest
+    # Job-level so the reject step can test for their presence in its `if:` —
+    # a step's own `env:` block is not in scope for that step's condition.
+    env:
+      BROWSERSTACK_USERNAME: ${{ secrets.BROWSERSTACK_USERNAME }}
+      BROWSERSTACK_ACCESS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
 
       - name: Finalise Percy
-        run: npx percy build:finalize
+        id: finalize
+        run: |
+          set -eo pipefail
+          npx percy build:finalize 2>&1 | tee /tmp/percy-finalize.log
+          # Percy build URLs are https://percy.io/<org>/<product>/<project>/builds/<id>.
+          # Allow 1-3 segments before /builds so a change to that structure
+          # doesn't break the parse, and tolerate no match — the reject step
+          # is gated on a non-empty build id anyway.
+          BUILD_URL=$(grep -oE 'https://percy\.io/[A-Za-z0-9_-]+(/[A-Za-z0-9_-]+){1,3}/builds/[0-9]+' /tmp/percy-finalize.log | tail -1) || true
+          echo "build_id=${BUILD_URL##*/}" >> "$GITHUB_OUTPUT"
+          echo "build_url=$BUILD_URL" >> "$GITHUB_OUTPUT"
+          if [ -z "$BUILD_URL" ]; then
+            echo "::warning::Could not parse the Percy build id from finalize output; the reject step will be skipped."
+          fi
         working-directory: packages/host
         env:
           PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
           PERCY_PARALLEL_NONCE: ${{ github.run_id }}-${{ github.run_attempt }}
+
+      # A shard that dies contributes no snapshots, but finalize still seals
+      # the build. On `main`, where the project's auto-approve-branch-filter
+      # promotes builds without review, that partial set becomes the baseline
+      # every later branch is compared against — and the snapshots the dead
+      # shard would have produced resurface as diffs on unrelated PRs.
+      # Rejecting the build keeps it from becoming a baseline.
+      #
+      # `percy build:reject` authenticates with BrowserStack account
+      # credentials rather than the project token: @percy/cli-build reads
+      # BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY (see
+      # fetchCredentials in @percy/cli-build). Until those secrets exist the
+      # step skips itself rather than failing the job.
+      - name: Reject the Percy build when a host shard failed
+        if: >-
+          needs.host-test.result != 'success'
+          && steps.finalize.outputs.build_id != ''
+          && env.BROWSERSTACK_USERNAME != ''
+        run: |
+          set -eo pipefail
+          npx percy build:reject "${{ steps.finalize.outputs.build_id }}"
+          echo "::warning::Rejected Percy build ${{ steps.finalize.outputs.build_url }} — host-test finished as '${{ needs.host-test.result }}', so its snapshot set is incomplete and must not become a baseline."
+        working-directory: packages/host
+        env:
+          PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
+
+      - name: Note that an incomplete build was left unrejected
+        if: >-
+          needs.host-test.result != 'success'
+          && env.BROWSERSTACK_USERNAME == ''
+        run: |
+          echo "::warning::host-test finished as '${{ needs.host-test.result }}', so this Percy build's snapshot set is incomplete, but BROWSERSTACK_USERNAME / BROWSERSTACK_ACCESS_KEY are not configured — the build could not be rejected and may be auto-approved into the baseline."
 
   host-merge-reports-and-publish:
     name: Merge Host reports and publish
