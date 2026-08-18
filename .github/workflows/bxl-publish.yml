@@ -1,0 +1,362 @@
+name: bxl publish
+
+# Owns both publish paths for @cardstack/bxl:
+#
+#   • `unstable` job
+#       - On push to main touching `packages/bxl/**` — decide the version bump
+#         from the merged PR's title (conventional-commit prefix) and whether
+#         the push moved anything the tarball ships, stamp the new version into
+#         package.json and src/index.ts, commit it back to main, tag, and
+#         publish `@cardstack/bxl@<v>-unstable.<n>` under dist-tag `unstable`.
+#       - Via "Run workflow" with the `confirm` field left blank — republish
+#         main as it stands, skipping the PR-driven bump/commit/tag dance. The
+#         next free `-unstable.<n>` comes from npm (npm is the authority; the
+#         bump is not committed back to main), so a manual publish can neither
+#         clobber an existing version nor collide with the push path, which
+#         resolves its counter the same way.
+#
+#   • `stable` job — "Run workflow" with `confirm = promote`. Strips
+#     `-unstable.<n>` from the current version, closes out the CHANGELOG's
+#     `[Unreleased]` section under that version, and publishes the clean semver
+#     under dist-tag `latest`. The deliberate "cut a release" step.
+#
+# Both flows live in one file so they share a single npm Trusted-Publisher rule
+# (registered against this filename). Splitting them into separate workflow
+# files would require a second rule on npmjs.com.
+#
+# Loop safety (unstable job):
+#   - Bot commits end with [skip ci] so GitHub does not re-trigger workflows.
+#   - The job guards with `if: github.actor != 'github-actions[bot]'` (belt +
+#     suspenders).
+#
+# Concurrency:
+#   - `group: package-release` is shared with boxel-cli's publish workflow. Both
+#     commit and push to main, and one PR can touch both packages — a shared
+#     group serializes those pushes instead of letting one lose the race.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/bxl/**"
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Leave blank to publish current main as unstable. Type 'promote' to strip -unstable.N and publish as latest."
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  id-token: write
+  pull-requests: read
+
+concurrency:
+  group: package-release
+  cancel-in-progress: false
+
+jobs:
+  unstable:
+    name: Publish unstable
+    # Manual runs are restricted to "Use workflow from: main", so the YAML
+    # interpreting a publish is always main's (defense in depth — the checkout
+    # below also pins `ref: main`).
+    if: >-
+      github.actor != 'github-actions[bot]'
+      && (
+        github.event_name == 'push'
+        || (inputs.confirm == '' && github.ref == 'refs/heads/main')
+      )
+    runs-on: ubuntu-latest
+    outputs:
+      # Whether this run actually published, so the verify job skips when the
+      # push path no-op'd (no PR, or nothing the tarball ships) instead of
+      # re-testing a version from some earlier run.
+      published: ${{ steps.publish.outputs.published }}
+      # The exact version published. The verify job installs THIS version rather
+      # than the `unstable` dist-tag — a dist-tag already resolves to a prior
+      # release, so waiting on it can't detect the new one propagating and could
+      # smoke-test the previous artifact.
+      version: ${{ steps.publish.outputs.version }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: main
+          fetch-depth: 0
+          # fetch-tags so compute-release.ts can read bxl-v* tags.
+          fetch-tags: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: ./.github/actions/init
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch PR title from merge SHA
+        id: pr
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          PR_JSON=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/pulls" --jq '.[0] // empty')
+          if [ -z "$PR_JSON" ]; then
+            echo "No PR associated with ${{ github.sha }} — likely a direct push. Skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          PR_TITLE=$(echo "$PR_JSON" | jq -r '.title')
+          PR_BODY=$(echo "$PR_JSON" | jq -r '.body // ""')
+          # Multiline-safe output via heredoc delimiter (GitHub Actions docs).
+          {
+            echo "title<<__PR_EOF__"
+            echo "$PR_TITLE"
+            echo "__PR_EOF__"
+            echo "body<<__PR_EOF__"
+            echo "$PR_BODY"
+            echo "__PR_EOF__"
+          } >> "$GITHUB_OUTPUT"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "PR title: $PR_TITLE"
+
+      - name: Compute release
+        id: release
+        if: github.event_name == 'push' && steps.pr.outputs.skip != 'true'
+        working-directory: packages/bxl
+        env:
+          PR_TITLE: ${{ steps.pr.outputs.title }}
+          PR_BODY: ${{ steps.pr.outputs.body }}
+        run: |
+          set -euo pipefail
+          RESULT=$(NODE_NO_WARNINGS=1 node scripts/compute-release.ts)
+          echo "Compute result: $RESULT"
+          echo "bump=$(echo "$RESULT" | jq -r '.bump')" >> "$GITHUB_OUTPUT"
+          echo "nextVersion=$(echo "$RESULT" | jq -r '.nextVersion // ""')" >> "$GITHUB_OUTPUT"
+
+      - name: Read the tag this release follows
+        id: previous
+        if: github.event_name == 'push' && steps.pr.outputs.skip != 'true' && steps.release.outputs.bump != 'none'
+        run: |
+          set -euo pipefail
+          # The nearest bxl-v* tag reachable from HEAD, which scopes the
+          # auto-generated release notes to just this release's commits. Nothing
+          # has been tagged yet at this point in the run, so HEAD is the right
+          # starting ref. Absent on the first release.
+          if TAG=$(git describe --tags --abbrev=0 --match 'bxl-v*' HEAD 2>/dev/null); then
+            echo "Previous tag: $TAG"
+            echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          else
+            echo "No prior bxl-v* tag (first release); notes will cover the full history."
+            echo "tag=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Stamp the version, commit, and tag
+        id: commit
+        if: github.event_name == 'push' && steps.pr.outputs.skip != 'true' && steps.release.outputs.bump != 'none'
+        env:
+          NEXT_VERSION: ${{ steps.release.outputs.nextVersion }}
+        run: |
+          set -euo pipefail
+          TAG="bxl-v${NEXT_VERSION}"
+          # Guard against an orphan tag from a prior failed publish. If the tag
+          # exists, an earlier run pushed it but failed before publishing — the
+          # orphan needs deleting (`git push origin :refs/tags/$TAG`) and npm
+          # state checking before this can be re-run.
+          if git rev-parse --verify --quiet "refs/tags/$TAG" >/dev/null; then
+            echo "::error::Tag $TAG already exists. A prior publish likely failed mid-flight. Delete the orphan tag and verify npm state before re-running."
+            exit 1
+          fi
+          node packages/bxl/scripts/set-version.ts "$NEXT_VERSION"
+          git add packages/bxl/package.json packages/bxl/src/index.ts
+          git commit -m "chore(release): bxl v${NEXT_VERSION} [skip ci]"
+          # Annotated tag so `git push --follow-tags` actually pushes it — a
+          # lightweight tag is silently skipped, which would leave it on the
+          # runner only and fail `gh release create`.
+          git tag -a "$TAG" -m "$TAG"
+          git push origin main --follow-tags
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve the next unstable version
+        # Manual path only. The push path already has its version from
+        # compute-release.ts; this gives the manual path the same guarantee that
+        # the version is free on npm, without committing the bump.
+        if: github.event_name == 'workflow_dispatch'
+        working-directory: packages/bxl
+        run: |
+          set -euo pipefail
+          VERSION=$(NODE_NO_WARNINGS=1 node scripts/next-unstable-version.ts)
+          node scripts/set-version.ts "$VERSION"
+
+      - name: Publish to npm under unstable
+        id: publish
+        if: github.event_name == 'workflow_dispatch' || (steps.pr.outputs.skip != 'true' && steps.release.outputs.bump != 'none')
+        working-directory: packages/bxl
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          # `prepack` builds dist/ — the tarball carries JavaScript, since Node
+          # will not strip types inside node_modules. See scripts/build.ts.
+          # --no-git-checks because the commit and tag above are already pushed;
+          # pnpm's git-state check would otherwise object.
+          pnpm publish --tag unstable --access public --provenance --no-git-checks
+          echo "published=true" >> "$GITHUB_OUTPUT"
+          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release (prerelease)
+        if: github.event_name == 'push' && steps.commit.outputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEXT_VERSION: ${{ steps.release.outputs.nextVersion }}
+          PREVIOUS_TAG: ${{ steps.previous.outputs.tag }}
+          TAG: ${{ steps.commit.outputs.tag }}
+        run: |
+          set -euo pipefail
+          ARGS=(--title "@cardstack/bxl v${NEXT_VERSION}" --generate-notes --prerelease)
+          if [ -n "$PREVIOUS_TAG" ]; then
+            ARGS+=(--notes-start-tag "$PREVIOUS_TAG")
+          fi
+          gh release create "$TAG" "${ARGS[@]}"
+
+  stable:
+    name: Promote latest unstable to stable
+    # Any non-empty `confirm` routes here so the validation step can fail loudly
+    # on a typo. Gating on `confirm == 'promote'` would make a typo skip both
+    # jobs and read as a successful no-op run.
+    if: github.event_name == 'workflow_dispatch' && inputs.confirm != ''
+    runs-on: ubuntu-latest
+    outputs:
+      # The promoted version, so the verify job installs it directly rather than
+      # the `latest` dist-tag (which resolves to the prior release until the new
+      # one propagates). Same reasoning as the unstable job's `version`.
+      version: ${{ steps.strip.outputs.version }}
+    steps:
+      - name: Validate confirmation
+        run: |
+          if [ "${{ inputs.confirm }}" != "promote" ]; then
+            echo "::error::Pass 'promote' as the confirm input to proceed."
+            exit 1
+          fi
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: main
+          fetch-depth: 0
+          fetch-tags: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: ./.github/actions/init
+
+      - name: Configure git
+        run: |
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
+
+      - name: Strip -unstable.N from the version
+        id: strip
+        working-directory: packages/bxl
+        run: |
+          set -euo pipefail
+          CURRENT=$(node -p "require('./package.json').version")
+          echo "Current version: $CURRENT"
+          # A version with no prerelease suffix is already stable — refuse
+          # rather than republish identical bits under a new tag.
+          if [[ "$CURRENT" != *-unstable.* ]]; then
+            echo "::error::Version $CURRENT is already stable; nothing to promote."
+            exit 1
+          fi
+          STABLE="${CURRENT%-unstable.*}"
+          echo "Promoting to: $STABLE"
+          node scripts/set-version.ts "$STABLE"
+          echo "version=$STABLE" >> "$GITHUB_OUTPUT"
+
+      - name: Close out the CHANGELOG
+        id: notes
+        working-directory: packages/bxl
+        env:
+          CHANGELOG_NOTES_FILE: ${{ runner.temp }}/release-notes.md
+          VERSION: ${{ steps.strip.outputs.version }}
+        run: |
+          set -euo pipefail
+          # The date is passed in rather than read from the clock inside the
+          # script, so the same inputs always produce the same file.
+          node scripts/promote-changelog.ts "$VERSION" "$(date -u +%F)"
+          echo "body_file=$CHANGELOG_NOTES_FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Commit and tag stable
+        env:
+          VERSION: ${{ steps.strip.outputs.version }}
+        run: |
+          set -euo pipefail
+          TAG="bxl-v${VERSION}"
+          # An existing tag means a prior promotion pushed it and then failed
+          # before publishing. Delete the orphan and check npm state before
+          # re-running.
+          if git rev-parse --verify --quiet "refs/tags/$TAG" >/dev/null; then
+            echo "::error::Tag $TAG already exists. A prior promotion likely failed mid-flight. Delete the orphan tag and verify npm state before re-running."
+            exit 1
+          fi
+          git add packages/bxl/package.json packages/bxl/src/index.ts packages/bxl/CHANGELOG.md
+          git commit -m "Release @cardstack/bxl v${VERSION} [skip ci]"
+          git tag -a "$TAG" -m "$TAG"
+          git push origin main --follow-tags
+
+      - name: Publish to npm under latest
+        working-directory: packages/bxl
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: pnpm publish --access public --provenance --no-git-checks
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NOTES_BODY_FILE: ${{ steps.notes.outputs.body_file }}
+          VERSION: ${{ steps.strip.outputs.version }}
+        run: |
+          set -euo pipefail
+          gh release create "bxl-v${VERSION}" \
+            --title "@cardstack/bxl v${VERSION}" \
+            --notes-file "$NOTES_BODY_FILE"
+
+  # ---------------------------------------------------------------------------
+  # Post-publish verification: install the version just published from the
+  # registry, as a consumer would with npm's hoisted node_modules, and check it
+  # from outside the monorepo — every published subpath loads under plain Node,
+  # a formula evaluates, a lazy formula chunk resolves, and a consumer's
+  # compiler finds declarations for the whole surface.
+  #
+  # This is the only place the published artifact itself is exercised. Every
+  # pre-merge suite reads `src/`, so none of them can tell whether the tarball's
+  # exports map, `files` list, or emitted JavaScript is right.
+  verify-unstable:
+    name: Verify published unstable install
+    needs: unstable
+    if: needs.unstable.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: main
+      - uses: ./.github/actions/init
+      - name: Verify the published artifact
+        working-directory: packages/bxl
+        run: NODE_NO_WARNINGS=1 node scripts/verify-package.ts --source published --version "${{ needs.unstable.outputs.version }}"
+
+  verify-stable:
+    name: Verify published stable install
+    needs: stable
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: main
+      - uses: ./.github/actions/init
+      - name: Verify the published artifact
+        working-directory: packages/bxl
+        run: NODE_NO_WARNINGS=1 node scripts/verify-package.ts --source published --version "${{ needs.stable.outputs.version }}"

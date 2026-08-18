@@ -52,7 +52,17 @@ If you've been stitching together Ajv + jq + Formula.js + a custom rule engine, 
 
 ## Install
 
-Inside this monorepo, depend on the workspace package:
+From npm:
+
+```sh
+npm install @cardstack/bxl
+```
+
+Releases go out under two dist-tags: `unstable`, published as changes land, and
+`latest`, cut deliberately from one of those prereleases.
+`npm install @cardstack/bxl@unstable` follows the former.
+
+Inside this monorepo, depend on the workspace package instead:
 
 ```jsonc
 // package.json
@@ -61,7 +71,13 @@ Inside this monorepo, depend on the workspace package:
 }
 ```
 
-Requires Node `>=24` — the package ships raw erasable TypeScript that Node runs via type stripping. The default entry keeps heavyweight Formula.js dependencies in lazy chunks; the `./linter` sub-entry gives editor tooling parser-only diagnostics without the formula helpers.
+Requires Node `>=24`. The two forms differ in what they resolve to: the
+published package serves compiled JavaScript with declarations, while the
+workspace one serves the raw erasable TypeScript sources — Node runs those
+directly via type stripping, and the host bundles them. Either way the imports
+are the same. The default entry keeps heavyweight Formula.js dependencies in
+lazy chunks; the `./linter` sub-entry gives editor tooling parser-only
+diagnostics without the formula helpers.
 
 ---
 
@@ -1076,12 +1092,36 @@ For the canonical reference on jq vs fx vs plain-string mode, see [`docs/syntax-
 pnpm test              # every suite under tests/unit, tests/smoke, tests/boxel
 pnpm test tests/boxel  # one directory
 pnpm lint              # lint:js (ESLint + prettier) and lint:types (tsc --noEmit)
+pnpm verify:package    # pack the npm artifact and check it from outside the repo
 ```
 
-There is no build step. The package ships raw erasable TypeScript with `.ts`
-import specifiers: Node runs the sources directly and the host bundles them.
-A suite is a standalone entry point, so `node tests/unit/linter-cli.ts` runs
-exactly one.
+Development needs no build. The sources are erasable TypeScript with `.ts`
+import specifiers: Node runs them directly and the host bundles them, so
+nothing here is generated and no `dist/` can go stale. A suite is a standalone
+entry point, so `node tests/unit/linter-cli.ts` runs exactly one.
+
+Publishing does need a build, because an installed package sits inside
+`node_modules` where Node refuses to strip types. `pnpm build` emits JavaScript
+and declarations into `dist/`, which `publishConfig.exports` points the
+published package at — see [`scripts/build.ts`](./scripts/build.ts). The
+version lives in two places, `package.json` and `VERSION` in `src/index.ts`;
+`pnpm exec node scripts/set-version.ts <version>` sets both.
+
+### Releasing
+
+Merging to main publishes a prerelease under the `unstable` dist-tag. The
+version comes from the merged PR's title: a conventional-commit prefix
+(`feat:` minor, `fix:` / `perf:` / `refactor:` patch, a `!` or a
+`BREAKING CHANGE:` footer major), and prefixes that describe no consumer-visible
+change (`chore:`, `docs:`, `test:`, …) publish nothing. Neither does a merge
+that leaves everything the tarball ships untouched, whatever its title —
+`scripts/compute-release.ts` holds both rules, and `scripts/release-prefixes.json`
+is the prefix list the pre-merge title check reads too.
+
+Cutting a stable release is a separate, manual act: run the `bxl publish`
+workflow with `confirm = promote`. It strips the `-unstable.<n>` suffix, closes
+out the CHANGELOG's `[Unreleased]` section under the new version, and publishes
+that version under `latest` — so keep `[Unreleased]` current as changes land.
 
 ### Layout
 

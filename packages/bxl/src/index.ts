@@ -168,7 +168,7 @@ export const VERSION = '0.5.1';
  *
  * console.log(BXL_BUILD_INFO);
  * // {
- * //   version: '0.5.1',
+ * //   version: <the installed package version>,
  * //   features: ['null-tolerance', 'jq-fx-tags', 'as-materialize',
  * //              'pascalcase-fallback', 'jq-keywords-guard', ...],
  * // }

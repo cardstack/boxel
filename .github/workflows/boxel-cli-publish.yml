@@ -28,9 +28,10 @@ name: boxel-cli publish
 #   - The job guards with `if: github.actor != 'github-actions[bot]'` (belt + suspenders).
 #
 # Concurrency:
-#   - `group: boxel-cli-release, cancel-in-progress: false` serializes back-to-back
+#   - `group: package-release, cancel-in-progress: false` serializes back-to-back
 #     merges and any concurrent manual promotion so prerelease counters and stable
-#     tags can't race.
+#     tags can't race. The group is shared with bxl's publish workflow: both
+#     commit and push to main, and one PR can touch both packages.
 
 on:
   push:
@@ -50,7 +51,7 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: boxel-cli-release
+  group: package-release
   cancel-in-progress: false
 
 jobs:
