@@ -197,6 +197,9 @@ jobs:
     name: Live Tests (realm)
     if: github.event.action != 'ready_for_review'
     runs-on: ubuntu-latest
+    # See the note on host-test's timeout. This job has never taken more than
+    # ~10 minutes when healthy.
+    timeout-minutes: 25
     needs: [test-web-assets, check-index-cache]
     concurrency:
       group: boxel-live-test-${{ github.head_ref || github.run_id }}
@@ -234,10 +237,15 @@ jobs:
       # the realm-server's prerender workers), which aborts every in-flight
       # h2 stream with ERR_NETWORK_CHANGED and leaves wait-for-host-standby
       # stuck waiting for #standby-ready that never lands.
+      # Unlike mkcert, these are genuinely absent from the runner image, so
+      # this step has to talk to Ubuntu's mirrors. Bound it: apt retries a
+      # degraded mirror with long internal timeouts, so without a ceiling an
+      # upstream archive outage hangs the job rather than failing it.
       - name: Install D-Bus helpers
+        timeout-minutes: 5
         run: |
-          sudo apt-get update
-          sudo apt-get install -y dbus-x11 upower
+          sudo apt-get update -o Acquire::Retries=3
+          sudo apt-get install -y -o Acquire::Retries=3 dbus-x11 upower
           sudo service dbus restart
           sudo service upower restart
 
@@ -428,6 +436,12 @@ jobs:
   host-test:
     name: Host Tests
     runs-on: ubuntu-latest
+    # Without this a wedged shard inherits GitHub's 360-minute default and
+    # holds a runner for six hours doing nothing, which starves the pool for
+    # every other PR in the repo. A healthy shard has never exceeded ~19
+    # minutes, so this fails a genuinely stuck one fast while leaving ample
+    # headroom for a slow-but-working run.
+    timeout-minutes: 35
     needs: [test-web-assets, check-percy, check-index-cache]
     strategy:
       fail-fast: false
@@ -489,10 +503,15 @@ jobs:
       # the realm-server's prerender workers), which aborts every in-flight
       # h2 stream with ERR_NETWORK_CHANGED and leaves wait-for-host-standby
       # stuck waiting for #standby-ready that never lands.
+      # Unlike mkcert, these are genuinely absent from the runner image, so
+      # this step has to talk to Ubuntu's mirrors. Bound it: apt retries a
+      # degraded mirror with long internal timeouts, so without a ceiling an
+      # upstream archive outage hangs the job rather than failing it.
       - name: Install D-Bus helpers
+        timeout-minutes: 5
         run: |
-          sudo apt-get update
-          sudo apt-get install -y dbus-x11 upower
+          sudo apt-get update -o Acquire::Retries=3
+          sudo apt-get install -y -o Acquire::Retries=3 dbus-x11 upower
           sudo service dbus restart
           sudo service upower restart
 

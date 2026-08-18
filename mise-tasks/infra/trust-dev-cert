@@ -20,11 +20,16 @@ set -euo pipefail
 
 if ! command -v mkcert >/dev/null 2>&1; then
   cat >&2 <<'EOF'
-[trust-dev-cert] mkcert is not installed. Install it first:
+[trust-dev-cert] mkcert is not installed. It is declared in .mise.toml, so
+the usual fix is to let mise provide it:
 
-  Linux (Debian/Ubuntu): sudo apt install -y mkcert libnss3-tools
-  Linux (Fedora/RHEL):   sudo dnf install -y mkcert nss-tools
-  macOS (Homebrew):      brew install mkcert nss
+  mise install
+
+If you would rather use a system package, these also work:
+
+  Linux (Debian/Ubuntu): sudo apt install -y mkcert
+  Linux (Fedora/RHEL):   sudo dnf install -y mkcert
+  macOS (Homebrew):      brew install mkcert
 
 Then re-run `mise run infra:trust-dev-cert`.
 EOF
