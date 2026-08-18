@@ -85,6 +85,20 @@ export const PRIVATE_BUILTINS = new Map<string, string>([
   ['_strindices/1', 'the string half of `indices`'],
 ]);
 
+/**
+ * jq definitions one library deliberately hides from another, keyed
+ * `NAME/arity: loser -> winner`. Resolution is last-wins, so the entry names
+ * which spelling of a shared name the platform answers to.
+ */
+export const SHADOWED_JQ_DEFINITIONS = new Map<string, string>([
+  [
+    'INDEX/2: core -> formula',
+    "Excel's INDEX wins over jq's object-builder for the card audience, which " +
+      "also rewires jq's `INDEX/1` — it delegates to whichever `INDEX/2` " +
+      'resolved. The linter reports the collision as jq-index-shadowed-by-excel.',
+  ],
+]);
+
 /** Every name a program can reach, public or private, across `libraries`. */
 export function reachableNames(libraries: BuiltinLibraryName[]): Set<string> {
   const resolved = resolveBuiltinRegistry(libraries);
@@ -127,24 +141,30 @@ export function registryGateFailures(
   }
 
   // A manifest is the auto-loader's promise that naming one of these
-  // functions is worth fetching the chunk. The chunk has to deliver it.
+  // functions is worth fetching the chunk. The chunk has to deliver it, and
+  // deliver it itself: the auto-loader adds only the family the manifest
+  // matched, so a name some other family happens to register is still absent
+  // from the set the program ends up resolving against. Ask the library
+  // directly rather than resolving a registry around it.
   for (const [library, manifest] of LAZY_FAMILY_MANIFESTS) {
-    const exposed = reachableNames([...cardLibraries, library]);
+    const owned = BXL_REGISTRY[library] ?? { jq: {}, native: {} };
     const undelivered = [...manifest]
-      .filter((name) => !exposed.has(name))
+      .filter((name) => !(name in owned.jq) && !(name in owned.native))
       .sort();
     if (undelivered.length > 0) {
       failures.push(
-        `the ${library} manifest lists function(s) its chunk does not ` +
-          `register, so auto-loading them would fetch the chunk and still ` +
+        `the ${library} manifest lists function(s) that library does not ` +
+          'register, so auto-loading them would fetch the chunk and still ' +
           `fail\n    ${undelivered.join(', ')}`,
       );
     }
   }
 
-  // Every callable-but-unlisted name has to carry a reason. `publicNames` is
-  // what the gate enumerates from, so a name that quietly falls off it would
-  // take its coverage requirement with it.
+  // Every callable-but-unlisted name has to carry a reason. The gate
+  // enumerates from what a program can reach rather than from `publicNames`,
+  // so a name falling off the public list keeps its coverage requirement and
+  // surfaces here instead — as a name callable without being advertised,
+  // which is a decision rather than an accident.
   for (const libraries of [cardLibraries, AUTHORIZATION_LIBRARIES]) {
     const resolved = resolveBuiltinRegistry(libraries);
     const published = new Set(resolved.publicNames);
@@ -175,6 +195,31 @@ export function registryGateFailures(
           'a jq definition of the same key permanently hides; delete the ' +
           `native or rename it as a private worker\n    ${shadowed.join(', ')}`,
       );
+    }
+  }
+
+  // The same hazard one level over: `resolveRegistry` is last-wins on the jq
+  // definitions too, so a later library's `def X` hides an earlier one's. The
+  // key survives, so coverage still credits it — from whichever definition
+  // won, which may not be the one a caller means. Each collision is a
+  // decision about which spelling of a name the platform answers to, so each
+  // has to be recorded.
+  for (const libraries of [cardLibraries, AUTHORIZATION_LIBRARIES]) {
+    const owner = new Map<string, string>();
+    for (const library of libraries) {
+      for (const name of Object.keys(BXL_REGISTRY[library]?.jq ?? {})) {
+        const previous = owner.get(name);
+        const collision = `${name}: ${previous} -> ${library}`;
+        if (previous && !SHADOWED_JQ_DEFINITIONS.has(collision)) {
+          failures.push(
+            `resolving [${libraries.join(', ')}] lets ${library}'s \`${name}\` ` +
+              `definition hide ${previous}'s; record which one the platform ` +
+              'answers to in SHADOWED_JQ_DEFINITIONS, or rename one of them' +
+              `\n    ${collision}`,
+          );
+        }
+        owner.set(name, library);
+      }
     }
   }
 

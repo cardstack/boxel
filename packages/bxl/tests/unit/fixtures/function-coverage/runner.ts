@@ -72,15 +72,21 @@ function zoneContext(zone: string): ZoneContext {
       }).formatToParts(instant);
       const field = (type: string) =>
         Number(parts.find((part) => part.type === type)!.value);
-      const local = Date.UTC(
-        field('year'),
-        field('month') - 1,
-        field('day'),
-        field('hour') % 24,
-        field('minute'),
-        field('second'),
+      // Assign the year separately: `Date.UTC` reads a year of 0-99 as
+      // 1900 + year, which would put any instant in the first century a
+      // couple of millennia away from where the formatter placed it.
+      const local = new Date(
+        Date.UTC(
+          2000,
+          field('month') - 1,
+          field('day'),
+          field('hour') % 24,
+          field('minute'),
+          field('second'),
+        ),
       );
-      return Math.round((local - instant.getTime()) / 60_000);
+      local.setUTCFullYear(field('year'));
+      return Math.round((local.getTime() - instant.getTime()) / 60_000);
     },
   };
 }

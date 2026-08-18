@@ -632,6 +632,16 @@ export const coreJqCases: CoverageCase[] = jqCases([
     libraries: ['core'],
     expected: { a: { id: 'a', n: 1 }, b: { id: 'b', n: 2 } },
   },
+  // In the set a card resolves against, Excel's INDEX wins the `INDEX/2` key,
+  // and jq's one-argument form delegates to whichever `INDEX/2` resolved — so
+  // it reaches Excel's positional lookup and rejects the string key. The
+  // linter reports the collision as jq-index-shadowed-by-excel.
+  {
+    covers: 'INDEX/1',
+    source: 'INDEX(.id)',
+    input: [{ id: 'a' }, { id: 'b' }],
+    throws: /Cannot index array with string/,
+  },
   { covers: 'IN/1', source: '2 | IN(1,2,3)', expected: true },
   { covers: 'IN/1', source: '9 | IN(1,2,3)', expected: false },
   { covers: 'IN/2', source: 'IN(1,2,3; 2)', expected: true },
