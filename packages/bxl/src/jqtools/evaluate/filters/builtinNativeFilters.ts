@@ -600,22 +600,6 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
         .sort((a, b) => compare(a.ref, b.ref))
         .map(({ item }) => item);
     },
-    *'_unique_by_impl/1'(input: any[], ref: any[][]) {
-      const items = input
-        .map((value, i) => ({ value, ref: ref[i] }))
-        .sort((a, b) => compare(a.ref, b.ref));
-
-      const output: any[] = [];
-      let previousRef: any[] | undefined;
-      for (const item of items) {
-        if (!previousRef || compare(previousRef, item.ref) !== 0) {
-          output.push(item.value);
-          previousRef = item.ref;
-        }
-      }
-
-      yield output;
-    },
     *'_strindices/1'(input: string, needle: string) {
       yield indices(input, needle);
     },
@@ -651,31 +635,6 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
     },
     *'atanh/0'(input: unknown) {
       yield applyUnaryMath(input, Math.atanh);
-    },
-    *'bsearch/1'(input: unknown, target: unknown) {
-      if (typeOf(input) !== Type.array) {
-        throw new JqArgumentError('Expected an array');
-      }
-
-      const values = input as unknown[];
-      let low = 0;
-      let high = values.length - 1;
-
-      while (low <= high) {
-        const mid = Math.floor((low + high) / 2);
-        const direction = compare(values[mid], target);
-        if (direction === 0) {
-          yield mid;
-          return;
-        }
-        if (direction < 0) {
-          low = mid + 1;
-        } else {
-          high = mid - 1;
-        }
-      }
-
-      yield -1 - low;
     },
     *'builtins/0'() {
       // The names this reports depend on which libraries a program resolved,
@@ -1300,22 +1259,6 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
         );
       }
       yield new TextEncoder().encode(input as string).length;
-    },
-    *'unique/0'(input: unknown) {
-      if (typeOf(input) !== Type.array) {
-        throw new JqArgumentError('Expected an array');
-      }
-      const sorted = [...(input as unknown[])].sort(compare);
-      const output: unknown[] = [];
-      for (const value of sorted) {
-        if (
-          output.length === 0 ||
-          compare(output[output.length - 1], value) !== 0
-        ) {
-          output.push(value);
-        }
-      }
-      yield output;
     },
     *'trunc/0'(input: unknown) {
       yield Math.trunc(assertNumber(input));

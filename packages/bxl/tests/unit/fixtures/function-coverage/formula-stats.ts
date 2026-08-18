@@ -57,7 +57,9 @@ export const formulaStatsCases: CoverageCase[] = [
   },
   {
     covers: 'SMALL/2',
-    source: 'SMALL([3, 5, 3, 8, 1], 2)',
+    // Distinct values, so k and k+1 give different answers and an off-by-one
+    // in the rank shows up.
+    source: 'SMALL([3, 5, 8, 1, 9], 2)',
     expected: 3,
   },
   // Sample vs population spread: Σ(x−x̄)² = 32 for this set, so the sample

@@ -116,13 +116,15 @@ export const coreMathCases: CoverageCase[] = jqCases([
   { covers: 'exp10/0', source: 'exp10', input: 2, expected: 100 },
   { covers: 'pow10/0', source: 'pow10', input: 3, expected: 1000 },
   // exp(1e-10) - 1 computed naively loses the low bits (8e-18 off); expm1
-  // keeps them, which is the whole point of the function.
+  // keeps them, which is the whole point of the function. The term being
+  // kept is x^2/2 = 5e-21, so the tolerance has to sit below that: anything
+  // wider also admits an implementation that just returns x.
   {
     covers: 'expm1/0',
     source: 'expm1',
     input: 1e-10,
     expected: 1.00000000005e-10,
-    tolerance: 1e-20,
+    tolerance: 1e-25,
   },
   {
     covers: 'log/0',
@@ -133,13 +135,15 @@ export const coreMathCases: CoverageCase[] = jqCases([
   },
   { covers: 'log2/0', source: 'log2', input: 8, expected: 3 },
   { covers: 'log10/0', source: 'log10', input: 1000, expected: 3 },
-  // log(1 + 1e-10) = 1e-10 - 5e-21 + ...; naive log(1+x) is 8e-18 off.
+  // log(1 + 1e-10) = 1e-10 - 5e-21 + ...; naive log(1+x) is 8e-18 off. As
+  // with expm1, the tolerance sits below the 5e-21 term rather than merely
+  // below the naive form's error, so returning x unchanged fails too.
   {
     covers: 'log1p/0',
     source: 'log1p',
     input: 1e-10,
     expected: 9.9999999995e-11,
-    tolerance: 1e-20,
+    tolerance: 1e-25,
   },
   // Roots and powers
   {
@@ -149,6 +153,11 @@ export const coreMathCases: CoverageCase[] = jqCases([
     expected: 1.4142136,
     tolerance: 1e-7,
   },
+  // Every other case in this table takes jq's answer as the contract; this
+  // one does not. Real jq answers 3.0000000000000004 here, which is its
+  // libm's rounding of the cube root, while V8's Math.cbrt lands exactly on
+  // 3. The exact answer is the one worth asserting — a card author computing
+  // a cube root of a perfect cube should get the integer.
   { covers: 'cbrt/0', source: 'cbrt', input: 27, expected: 3 },
   // pow's unary form reads the base from the input: 2^5, not 5^2.
   { covers: 'pow/1', source: 'pow(5)', input: 2, expected: 32 },
@@ -235,6 +244,7 @@ export const coreMathCases: CoverageCase[] = jqCases([
     },
   },
   { covers: 'isnan/0', source: 'nan | isnan', expected: true },
+  { covers: 'isnan/0', source: 'isnan', input: 1, expected: false },
   { covers: 'isinfinite/0', source: 'infinite | isinfinite', expected: true },
   // NaN is not an infinity: C isinf(NaN) and jq's isinfinite are false.
   {
@@ -253,6 +263,7 @@ export const coreMathCases: CoverageCase[] = jqCases([
   },
   // 1e-320 is subnormal: finite and nonzero, but below the normal threshold.
   { covers: 'isnormal/0', source: 'isnormal', input: 1e-320, expected: false },
+  { covers: 'isnormal/0', source: 'isnormal', input: 1, expected: true },
   // Gamma and error functions
   // gamma is true Γ (Γ(5) = 4! = 24), not the historical POSIX log-Γ alias.
   {

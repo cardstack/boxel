@@ -1484,9 +1484,6 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   *'EXP/1'(_input, value) {
     yield checkedMathResult(Math.exp(parseExcelNumber(value)));
   },
-  *'FALSE/0'() {
-    yield false;
-  },
   *'FIND/2'(_input, findText, withinText) {
     const found = parseExcelString(withinText).indexOf(
       parseExcelString(findText),
@@ -1538,12 +1535,10 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
       rangeLookup,
     );
   },
-  *'INDEX/2'(_input, array, rowNum) {
-    yield indexValue(array, rowNum);
-  },
-  *'INDEX/3'(_input, array, rowNum, columnNum) {
-    yield indexValue(array, rowNum, columnNum);
-  },
+  // Excel's INDEX reaches this through `def INDEX` in formula-contrib-jq,
+  // which needs a differently named worker: a jq definition wins over a
+  // native of the same key, so a native called INDEX/2 could never run and
+  // a definition calling INDEX/2 would only recurse into itself.
   *'_EXCEL_INDEX/2'(_input, array, rowNum) {
     yield indexValue(array, rowNum);
   },
@@ -1826,9 +1821,6 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   },
   *'TRUNC/2'(_input, value, digits) {
     yield truncValue(value, digits);
-  },
-  *'TRUE/0'() {
-    yield true;
   },
   *'TYPE/1'(_input, value) {
     if (typeof value === 'number' && Number.isFinite(value)) {
