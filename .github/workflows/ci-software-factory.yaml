@@ -20,6 +20,7 @@ on:
       - "packages/software-factory/**"
       - "package.json"
       - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
       # CI boot path: see comment on the equivalent block in ci.yaml.
       - ".mise.toml"
       - ".github/actions/**"
