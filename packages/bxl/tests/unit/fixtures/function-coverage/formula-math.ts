@@ -262,9 +262,12 @@ export const formulaMathCases: CoverageCase[] = [
         'every RANDBETWEEN(5, 10) draw is an integer in [5, 10]',
       );
       // Excel's bounds are inclusive at both ends, which range membership
-      // cannot show. Missing any one of the six values across 200 draws has
-      // probability (5/6)^200, about 2e-16.
-      deepStrictEqual([...new Set(draws)].sort(), [10, 5, 6, 7, 8, 9]);
+      // cannot show. Missing at least one of the six values across 200 draws
+      // has probability under 6 * (5/6)^200, about 9e-16.
+      deepStrictEqual(
+        [...new Set(draws)].sort((left, right) => left - right),
+        [5, 6, 7, 8, 9, 10],
+      );
     },
   },
   // Numeral systems.

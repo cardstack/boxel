@@ -77,6 +77,10 @@ export const validationCases: CoverageCase[] = [
     source: 'isEmpty("  ", {ignore_whitespace: false})',
     expected: false,
   },
+  // The minimum defaults to zero here, so every string passes and the only
+  // false this arity has is a non-string. Upstream throws on one; the bridge
+  // answers false, which is the tolerance a card author relies on — a
+  // computed field must not take the whole card down over a bad input.
   { covers: 'isLength/1', source: 'isLength("hello")', expected: true },
   { covers: 'isLength/1', source: 'isLength(42)', expected: false },
   // Length counts code points, so two astral emoji measure 2 and fall short of
@@ -93,11 +97,14 @@ export const validationCases: CoverageCase[] = [
   },
   // Upstream validator.js reads the minimum as `arguments[1]` with no `|| 0`
   // fallback, so the one-argument form compares a length against `undefined`
-  // and no string can satisfy it. The bridge is faithful to that, which leaves
-  // the non-string guard as the only assertion this arity supports — and
-  // makes it the one validator here with a single polarity, because false is
-  // the only answer it has.
-  { covers: 'isByteLength/1', source: 'isByteLength(42)', expected: false },
+  // and no string can satisfy it. The bridge is faithful to that, which makes
+  // this the one validator here with a single polarity: false is the only
+  // answer it has, for a string or anything else.
+  {
+    covers: 'isByteLength/1',
+    source: 'isByteLength("héllo")',
+    expected: false,
+  },
   // Byte length counts UTF-8 bytes: "héllo" is five characters, six bytes.
   {
     covers: 'isByteLength/2',
@@ -167,7 +174,9 @@ export const validationCases: CoverageCase[] = [
     source: 'isStrongPassword("Aa1!aaaa")',
     expected: true,
   },
-  // One character class and no length to spare scores below the default 50.
+  // Without `returnScore` the default is a checklist, not a threshold: at
+  // least one lowercase, uppercase, digit and symbol, and eight characters.
+  // This one clears the length and fails the other three.
   {
     covers: 'isStrongPassword/1',
     source: 'isStrongPassword("password")',
@@ -440,9 +449,10 @@ export const validationCases: CoverageCase[] = [
     source: 'isBoolean("yes", {loose: true})',
     expected: true,
   },
+  // Same subject, opposite option, so `loose` is what decides the answer.
   {
     covers: 'isBoolean/2',
-    source: 'isBoolean("maybe", {loose: true})',
+    source: 'isBoolean("yes", {loose: false})',
     expected: false,
   },
 
@@ -816,7 +826,7 @@ export const validationCases: CoverageCase[] = [
   },
   {
     covers: 'isISO31661Alpha2/2',
-    source: 'isISO31661Alpha2("XY", {userAssignedCodes: ["XX"]})',
+    source: 'isISO31661Alpha2("XX", {userAssignedCodes: []})',
     expected: false,
   },
   {
@@ -836,7 +846,7 @@ export const validationCases: CoverageCase[] = [
   },
   {
     covers: 'isISO31661Alpha3/2',
-    source: 'isISO31661Alpha3("XXY", {userAssignedCodes: ["XXX"]})',
+    source: 'isISO31661Alpha3("XXX", {userAssignedCodes: []})',
     expected: false,
   },
   {
