@@ -49,7 +49,10 @@ import {
   MapRender,
   type Coordinate,
 } from '@cardstack/catalog/components/map-render';
-import { OrderFulfilmentBoard, type BoardColumn } from './order-fulfilment-board';
+import {
+  OrderFulfilmentBoard,
+  type BoardColumn,
+} from './order-fulfilment-board';
 import { ShipmentTracker } from './shipment-tracker';
 import StatusChip from './fulfilment-status-chip';
 import { money, stamp } from './fulfilment-format';
@@ -140,12 +143,42 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
     let ctx = this.args.context;
     let realms = () => this.realms;
     let live = { isLive: true } as const;
-    this.orderQuery = ctx?.getCards(this, () => byType(FulfilmentOrder), realms, live);
-    this.shipmentQuery = ctx?.getCards(this, () => byType(Shipment), realms, live);
-    this.stockQuery = ctx?.getCards(this, () => byType(InventoryStock), realms, live);
-    this.warehouseQuery = ctx?.getCards(this, () => byType(Warehouse), realms, live);
-    this.carrierQuery = ctx?.getCards(this, () => byType(Carrier), realms, live);
-    this.returnQuery = ctx?.getCards(this, () => byType(ProductReturn), realms, live);
+    this.orderQuery = ctx?.getCards(
+      this,
+      () => byType(FulfilmentOrder),
+      realms,
+      live,
+    );
+    this.shipmentQuery = ctx?.getCards(
+      this,
+      () => byType(Shipment),
+      realms,
+      live,
+    );
+    this.stockQuery = ctx?.getCards(
+      this,
+      () => byType(InventoryStock),
+      realms,
+      live,
+    );
+    this.warehouseQuery = ctx?.getCards(
+      this,
+      () => byType(Warehouse),
+      realms,
+      live,
+    );
+    this.carrierQuery = ctx?.getCards(
+      this,
+      () => byType(Carrier),
+      realms,
+      live,
+    );
+    this.returnQuery = ctx?.getCards(
+      this,
+      () => byType(ProductReturn),
+      realms,
+      live,
+    );
     this.pickQuery = ctx?.getCards(this, () => byType(PickList), realms, live);
   }
 
@@ -200,7 +233,10 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
     // `Your filter refers to a nonexistent field "stockState" on type CardDef`.
     let filter: Filter = status
       ? {
-          every: [textFilter, { on: ref, eq: { [status.field]: status.value } }],
+          every: [
+            textFilter,
+            { on: ref, eq: { [status.field]: status.value } },
+          ],
         }
       : textFilter;
     return {
@@ -301,7 +337,9 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
   }
 
   get shipments(): Shipment[] {
-    return ((this.shipmentQuery?.instances ?? []) as Shipment[]).filter(Boolean);
+    return ((this.shipmentQuery?.instances ?? []) as Shipment[]).filter(
+      Boolean,
+    );
   }
 
   get stock(): InventoryStock[] {
@@ -474,7 +512,8 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
 
   get expressCount() {
     return this.orders.filter(
-      (o) => o.isExpress && !['delivered', 'cancelled'].includes(o.status ?? ''),
+      (o) =>
+        o.isExpress && !['delivered', 'cancelled'].includes(o.status ?? ''),
     ).length;
   }
 
@@ -555,7 +594,8 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
     return this.warehouses.map((w) => {
       let rows = this.stock.filter((s) => s.warehouseCode === w.code);
       let value = rows.reduce(
-        (sum, r) => sum + (r.quantityOnHand ?? 0) * (r.product?.cost?.amount ?? 0),
+        (sum, r) =>
+          sum + (r.quantityOnHand ?? 0) * (r.product?.cost?.amount ?? 0),
         0,
       );
       return {
@@ -854,9 +894,7 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
     if (!list.length) {
       return undefined;
     }
-    return (
-      list.find((s) => s.id === this.selectedShipmentId) ?? list[0]
-    );
+    return list.find((s) => s.id === this.selectedShipmentId) ?? list[0];
   }
 
   // Rate shopping over the rates configured on the Carrier cards. There is no
@@ -946,7 +984,9 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
           : (index + (event.key === 'ArrowRight' ? 1 : -1) + TABS.length) %
             TABS.length;
     this.tab = TABS[next].key;
-    let list = (event.currentTarget as HTMLElement)?.closest('[role="tablist"]');
+    let list = (event.currentTarget as HTMLElement)?.closest(
+      '[role="tablist"]',
+    );
     list
       ?.querySelector<HTMLElement>(`[data-tab-key="${TABS[next].key}"]`)
       ?.focus();
@@ -1125,7 +1165,9 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
                             class='bar-fill'
                             style={{pct pl.progressPercent}}
                           ></span></span>
-                        <span class='mono'>{{pl.doneCount}}/{{pl.route.length}}</span>
+                        <span
+                          class='mono'
+                        >{{pl.doneCount}}/{{pl.route.length}}</span>
                       </button>
                     </li>
                   {{/each}}
@@ -1197,7 +1239,8 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
                   <span class='wh-code'>{{w.warehouse.code}}</span>
                   <span class='wh-name'>{{w.warehouse.warehouseName}}</span>
                   <span class='wh-stat'>{{w.skuCount}}
-                    {{if (eq w.skuCount 1) 'SKU' 'SKUs'}} ·
+                    {{if (eq w.skuCount 1) 'SKU' 'SKUs'}}
+                    ·
                     {{money w.value}}</span>
                   {{#if w.isVirtual}}
                     <span class='wh-virtual'>Virtual — supplier ships direct</span>
@@ -1257,7 +1300,9 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
 
             <section class='sub'>
               <h2>Step 1 · Packed, needs a parcel
-                <span class='count'>{{this.ordersAwaitingShipment.length}}</span></h2>
+                <span
+                  class='count'
+                >{{this.ordersAwaitingShipment.length}}</span></h2>
               {{#if this.ordersLoading}}
                 <ul class='rows' aria-busy='true'>
                   <li class='sk-line'></li>
@@ -1297,8 +1342,7 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
                     </li>
                   {{else}}
                     <li class='empty'>No packed order is waiting for a parcel.
-                      Move an order to Packing on the board and it appears
-                      here.</li>
+                      Move an order to Packing on the board and it appears here.</li>
                   {{/each}}
                 </ul>
               {{/if}}
@@ -1331,7 +1375,9 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
                   <div class='ship'>
                     <div class='ship-parcel'>
                       <h3>Parcel</h3>
-                      <p class='ship-num'>{{this.selectedShipment.shipmentNumber}}</p>
+                      <p
+                        class='ship-num'
+                      >{{this.selectedShipment.shipmentNumber}}</p>
                       <p class='muted'>Order
                         {{this.selectedShipment.orderNumber}}
                         · from
@@ -1371,7 +1417,10 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
                         {{#each this.rateOptions as |opt|}}
                           <li
                             class='rate
-                              {{if (eq opt.key this.cheapestOption.key) "best"}}'
+                              {{if
+                                (eq opt.key this.cheapestOption.key)
+                                "best"
+                              }}'
                           >
                             <div class='rate-id'>
                               {{#if (eq opt.key this.cheapestOption.key)}}
@@ -1381,7 +1430,8 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
                               {{/if}}
                               <span class='rate-name'>{{opt.carrierName}}
                                 {{opt.serviceName}}</span>
-                              <span class='muted'>{{opt.speed}} ·
+                              <span class='muted'>{{opt.speed}}
+                                ·
                                 {{opt.billable}}
                                 kg billable</span>
                             </div>
@@ -1458,7 +1508,9 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
                         {{on 'click' (fn this.openCard s)}}
                       >
                         <span class='mono strong'>{{s.shipmentNumber}}</span>
-                        <span class='muted'>{{s.latestEvent.statusDescription}}</span>
+                        <span
+                          class='muted'
+                        >{{s.latestEvent.statusDescription}}</span>
                         <span class='muted'>{{s.latestEvent.location}}</span>
                       </button>
                     </li>
@@ -1498,10 +1550,7 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
                         @label={{s.statusStyle.label}}
                         @hue={{s.statusStyle.hue}}
                       />
-                      <ChevronRight
-                        class='transit-open'
-                        role='presentation'
-                      />
+                      <ChevronRight class='transit-open' role='presentation' />
                     </button>
                     {{! The delivered facts the command has been writing all
                         along and nothing drew: when it landed, whether that beat
@@ -2522,6 +2571,7 @@ class Isolated extends Component<typeof OrderFulfilmentApp> {
         text-decoration: underline;
         text-decoration-color: var(--ful-perf);
         text-underline-offset: 2px;
+        color: var(--ful-fg, var(--boxel-dark));
       }
       .await-btn:hover .link,
       .await-btn:focus-visible .link {
@@ -2803,7 +2853,11 @@ export class OrderFulfilmentApp extends CardDef {
         }
         .mark span {
           display: block;
-          background: color-mix(in oklch, var(--card-foreground) 70%, transparent);
+          background: color-mix(
+            in oklch,
+            var(--card-foreground) 70%,
+            transparent
+          );
         }
         .mark span:nth-child(odd) {
           width: 2px;
