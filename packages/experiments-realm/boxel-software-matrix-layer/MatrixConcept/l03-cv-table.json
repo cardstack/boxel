@@ -20,8 +20,8 @@
       "notes": "v1 · Built — experiments-realm/table.gts, POC tier",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/table",
       "specTarget": "shared block",
-      "consumers": "revenue-os, table-demo",
-      "consumerExamples": "{\"revenue-os\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/RevenueOs/main\", \"table-demo\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/InvoiceTableDemo/invoice-tracker\"}",
+      "consumers": "order-fulfilment-app, revenue-os, table-demo",
+      "consumerExamples": "{\"order-fulfilment-app\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/OrderFulfilmentApp/northlight\", \"revenue-os\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/RevenueOs/main\", \"table-demo\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/InvoiceTableDemo/invoice-tracker\"}",
       "catalogDisposition": null,
       "cardInfo": {
         "name": null,
