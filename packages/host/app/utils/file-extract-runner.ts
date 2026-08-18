@@ -54,6 +54,7 @@ export async function runFileExtract({
   network,
   authGuard,
   owner,
+  fileSizeLimitBytes,
 }: {
   fileURL: string;
   renderOptions: RenderRouteOptions;
@@ -61,6 +62,7 @@ export async function runFileExtract({
   network: NetworkService;
   authGuard: AuthErrorGuard;
   owner: Owner;
+  fileSizeLimitBytes?: number;
 }): Promise<FileDefExtractResult> {
   let fileDefCodeRef = renderOptions.fileDefCodeRef ?? baseFileRef;
   let contentHash: string | undefined = renderOptions.fileContentHash;
@@ -82,6 +84,7 @@ export async function runFileExtract({
     baseFileDefCodeRef: baseFileRef,
     contentHash,
     contentSize,
+    fileSizeLimitBytes,
     buildError: buildFileExtractError,
     toolContext,
   });

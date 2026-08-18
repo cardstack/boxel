@@ -66,6 +66,16 @@ export class FileEmbeddedShell extends GlimmerComponent<FileEmbeddedShellSignatu
     if (kind === 'html') {
       return 'html-document';
     }
+    // A paged document renders in a native viewer that needs real reading height
+    // inline, not the default bounded box.
+    if (kind === 'pdf') {
+      return 'document-page';
+    }
+    // An Office document renders its extracted structure (text flow, slide grid,
+    // sheet) and needs real reading height inline, not the default bounded box.
+    if (kind === 'word' || kind === 'presentation' || kind === 'spreadsheet') {
+      return 'office-document';
+    }
     if (kind === 'svg' || kind === 'gif') {
       return 'square-visual';
     }
@@ -259,6 +269,17 @@ export class FileEmbeddedShell extends GlimmerComponent<FileEmbeddedShellSignatu
       }
       .emb[data-embed-shape='html-document'] .emb-body {
         height: clamp(320px, 56vw, 520px);
+        background: var(--card);
+      }
+      .emb[data-embed-shape='document-page'] .emb-body {
+        /* Tall enough to read a page; the native viewer scrolls within it. */
+        height: clamp(360px, 60vw, 560px);
+        background: var(--fd-stage, var(--muted, #eceef1));
+      }
+      .emb[data-embed-shape='office-document'] .emb-body {
+        /* Tall enough to read a page, browse a deck, or scan a sheet; the
+           preview scrolls within it. */
+        height: clamp(360px, 60vw, 560px);
         background: var(--card);
       }
       @container embedded-card (max-width: 360px) {

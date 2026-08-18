@@ -42,12 +42,17 @@ const DEFAULT_WORKER_START_TIMEOUT_MS = 90_000;
 // Absolute backstop for the realm-server-ready wait. `ready` fires once the
 // server is listening with its realms mounted — the boot-time from-scratch
 // index of every mounted realm (test + skills + base, ~600 files) then runs on
-// a single worker and legitimately takes ~2 minutes on a loaded CI runner. The
-// harness waits that index out separately, after `ready`, via _readiness-check
-// (see the gate below). The progress-aware watchdog below is the real guard for
-// the ready wait; this cap only catches a pathological slow-drip that keeps
-// emitting output without ever finishing.
-const DEFAULT_REALM_SERVER_START_TIMEOUT_MS = 300_000;
+// a single worker. On a loaded CI runner the slowest shard's boot has been
+// measured at roughly five minutes, so this is generous rather than tight: it
+// is not a performance assertion, and a boot that merely runs long must not
+// fail here.
+//
+// The progress-aware watchdog below is the real guard for the ready wait — it
+// fails a boot that goes silent within 90s, independently of this cap — so
+// raising this ceiling does not delay detection of a genuine hang. This cap
+// only catches a pathological slow-drip that keeps emitting output without ever
+// finishing, which is why it sits well clear of any observed healthy boot.
+const DEFAULT_REALM_SERVER_START_TIMEOUT_MS = 600_000;
 // Fail the boot only when it goes silent: if neither the worker's
 // indexing-progress stream nor the realm server's lifecycle output advances
 // for this long, treat the boot as stalled. Comfortably larger than the

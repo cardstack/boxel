@@ -54,7 +54,7 @@ export default class RadioInput extends Component<Signature> {
 
   <template>
     <style scoped>
-      @layer {
+      @layer boxelComponentL1 {
         .boxel-radio-fieldset {
           --boxel-radio-gap: var(--boxel-sp);
           --boxel-radio-input-option-padding: var(--boxel-sp);

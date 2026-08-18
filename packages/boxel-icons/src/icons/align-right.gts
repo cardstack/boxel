@@ -16,7 +16,7 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
     class='lucide lucide-align-right'
     viewBox='0 0 24 24'
     ...attributes
-  ><path d='M21 6H3M21 12H9M21 18H7' /></svg>
+  ><path d='M21 5H3M21 12H9M21 19H7' /></svg>
 </template>;
 
 // @ts-expect-error this is the only way to set a name on a Template Only Component currently

@@ -134,7 +134,7 @@ export default class Menu extends Component<Signature> {
       {{/if}}
     </ul>
     <style scoped>
-      @layer {
+      @layer boxelComponentL1 {
         .boxel-menu {
           --boxel-menu-border-radius: var(--boxel-border-radius);
           --boxel-menu-color: var(--boxel-light);

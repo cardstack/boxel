@@ -17,6 +17,30 @@ TypeScript, so there is no loader hook or transpile step.
 - `authorization/` — OpenFGA conformance fixtures and the harness that drives
   them (see [`authorization/README.md`](./authorization/README.md))
 
+## Function coverage
+
+`unit/function-coverage-cli.ts` holds every function BXL exposes to one case
+with an asserted result — jq's builtins, the Excel helpers including the lazily
+chunked families, the validator.js helpers, and the authorization builtins. It
+reads the list of functions to cover out of the resolved builtin registry, so
+**adding a builtin without a case fails the suite**. Add yours to the matching
+family table under `unit/fixtures/function-coverage/`.
+
+Two things about that suite are worth knowing before you write a case:
+
+- Coverage is credited by **observed invocation**, not by what a case declares.
+  A case naming `ROUND/2` whose program never reaches `ROUND/2` fails, as does
+  one that only names it inside a branch that never runs.
+- A case touching a date must set `zones`, which evaluates it under a spread of
+  time zones and requires the same answer in all of them. Indexing runs
+  server-side in UTC while a browser runs in the viewer's zone, and CI's zone is
+  neither, so a date result that shifts with the host is both a flaky test and a
+  product bug.
+
+A function that diverges from its specification keeps the correct assertion and
+takes a `knownDefect` note: the suite then requires the case to keep failing,
+and reports it the moment it starts passing so the fix promotes the case.
+
 ## Running
 
 ```sh
