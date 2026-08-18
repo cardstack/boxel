@@ -3,7 +3,9 @@ import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { Header } from '@cardstack/boxel-ui/components';
+import ChevronLeft from '@cardstack/boxel-icons/chevron-left';
+
+import { Button, Header } from '@cardstack/boxel-ui/components';
 
 import { DropdownArrowFilled } from '@cardstack/boxel-ui/icons';
 
@@ -24,7 +26,7 @@ interface Signature {
     headerIcon: [];
     headerDetail: [];
     content: [];
-    footer: [];
+    contentActions: [];
   };
 }
 
@@ -32,7 +34,8 @@ export default class PillMenu extends Component<Signature> {
   <template>
     {{#if this.isExpanded}}
       <div
-        class='pill-menu {{if (has-block "footer") "has-footer"}}'
+        class='pill-menu
+          {{if (has-block "contentActions") "has-content-actions"}}'
         ...attributes
       >
         <Header class='menu-header' data-test-pill-menu-header>
@@ -54,24 +57,25 @@ export default class PillMenu extends Component<Signature> {
               class='header-button'
               data-test-pill-menu-button
             >
-              <DropdownArrowFilled width='8px' height='8px' />
+              <ChevronLeft class='collapse-icon' width='16' height='16' />
             </button>
           </:detail>
         </Header>
-        {{#if (has-block 'content')}}
-          <div class='menu-content'>
+        <div class='menu-content'>
+          <div class='menu-content-scroll'>
             {{yield to='content'}}
-          </div>
-        {{/if}}
 
-        {{#if (has-block 'footer')}}
-          <footer class='menu-footer'>
-            {{yield to='footer'}}
-          </footer>
-        {{/if}}
+            {{#if (has-block 'contentActions')}}
+              <div class='menu-content-actions'>
+                {{yield to='contentActions'}}
+              </div>
+            {{/if}}
+          </div>
+        </div>
       </div>
     {{else}}
-      <button
+      <Button
+        @kind='secondary'
         {{on 'click' this.expandMenu}}
         class='pill-menu-button'
         data-test-pill-menu-button
@@ -80,7 +84,7 @@ export default class PillMenu extends Component<Signature> {
         {{yield to='headerIcon'}}
         {{yield to='headerDetail'}}
         <DropdownArrowFilled class='minimized-arrow' width='8px' height='8px' />
-      </button>
+      </Button>
     {{/if}}
     <style scoped>
       .pill-menu {
@@ -91,9 +95,10 @@ export default class PillMenu extends Component<Signature> {
         --button-outline: 2px;
         --boxel-header-min-height: fit-content;
         --pill-menu-gradient-height: 5px;
+        --pill-menu-content-max-height: 18.75rem;
 
         display: grid;
-        grid-template-rows: auto 1fr auto;
+        grid-template-rows: auto 1fr;
         max-height: 100%;
         min-height: max-content;
         width: var(--boxel-pill-menu-width, 100%);
@@ -104,31 +109,20 @@ export default class PillMenu extends Component<Signature> {
         letter-spacing: var(--boxel-lsp);
         box-shadow: var(--boxel-box-shadow);
         transition: width 0.2s ease-in;
-
-        timeline-scope: --pill-menu-content-scroll-timeline;
       }
       .pill-menu-button {
-        display: flex;
-        align-items: center;
-        font: 700 var(--boxel-font-xs);
-        gap: var(--boxel-sp-xxs);
-        padding: var(
-          --boxel-pill-menu-button-padding,
-          var(--pill-menu-spacing)
-        );
-        border: none;
-        white-space: nowrap;
-        background-color: transparent;
-        border: 1px solid transparent;
-        border-radius: var(--boxel-border-radius-xl);
+        --boxel-button-font: 600 var(--boxel-font-xs);
+        --boxel-button-secondary-border: transparent;
+        --boxel-button-secondary-active-border: var(--boxel-400);
+        --boxel-button-border-radius: var(--boxel-border-radius-pill);
+        padding-inline: var(--boxel-sp-sm);
+        gap: var(--boxel-sp-2xs);
         width: fit-content;
-      }
-      .pill-menu-button:hover {
-        border: 1px solid var(--boxel-400);
+        white-space: nowrap;
       }
       .menu-header {
         overflow: hidden;
-        padding: var(--chat-input-area-bottom-padding);
+        padding: var(--boxel-sp-sm);
         font: 700 var(--boxel-font-xs);
       }
       .menu-header :deep(.title) {
@@ -149,6 +143,9 @@ export default class PillMenu extends Component<Signature> {
       .header-button:focus:focus-visible {
         outline-color: var(--boxel-highlight);
       }
+      .collapse-icon {
+        color: var(--icon-color, var(--boxel-dark));
+      }
 
       .detail-close-button {
         border: none;
@@ -165,20 +162,36 @@ export default class PillMenu extends Component<Signature> {
         text-transform: uppercase;
       }
       .menu-content {
-        padding: 0 var(--chat-input-area-bottom-padding);
+        /* Non-scrolling wrapper: the edge shadows are its pseudo-elements and
+           it is their containing block, so they stay pinned to the visible
+           edges while .menu-content-scroll scrolls underneath them. */
+        position: relative;
+        display: grid;
+        min-height: 0;
+
+        timeline-scope: --pill-menu-content-scroll-timeline;
+      }
+
+      .menu-content-scroll {
+        padding: 0 var(--boxel-sp-sm);
         display: grid;
         gap: var(--pill-menu-spacing);
         overflow-y: auto;
         min-height: 0;
+        max-height: var(--pill-menu-content-max-height);
+
+        /* The scroll region and the timeline the edge shadows animate on are
+           the same element, so a consumer capping the height here gets the
+           shadows for free — no inner list should scroll on its own. */
+        scroll-timeline: --pill-menu-content-scroll-timeline;
       }
 
-      .pill-menu:not(:has(.menu-footer)) .menu-content {
-        padding-bottom: var(--chat-input-area-bottom-padding);
+      .pill-menu:not(:has(.menu-content-actions > *)) .menu-content-scroll {
+        padding-bottom: var(--boxel-sp-sm);
       }
 
       .menu-content::before,
-      .menu-content::after,
-      .menu-footer::before {
+      .menu-content::after {
         content: '';
         display: block;
         width: 100%;
@@ -190,6 +203,7 @@ export default class PillMenu extends Component<Signature> {
       }
 
       .menu-content::before {
+        top: 0;
         background: linear-gradient(
           to bottom,
           rgba(0, 0, 0, 0.25) 0%,
@@ -198,10 +212,6 @@ export default class PillMenu extends Component<Signature> {
 
         animation: scroll-pill-menu-content linear forwards;
         animation-timeline: --pill-menu-content-scroll-timeline;
-      }
-
-      .pill-menu.has-footer .menu-content::after {
-        display: none;
       }
 
       .menu-content::after {
@@ -214,32 +224,19 @@ export default class PillMenu extends Component<Signature> {
         animation: scroll-pill-menu-content reverse linear backwards;
         animation-timeline: --pill-menu-content-scroll-timeline;
 
-        bottom: var(--chat-input-area-bottom-padding);
+        bottom: 0;
       }
 
-      .menu-footer {
-        padding: var(--chat-input-area-bottom-padding);
+      .menu-content-actions {
+        border-top: 1px solid var(--boxel-200);
+        padding-block: var(--boxel-sp-xs);
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--boxel-sp-3xs);
       }
 
-      .menu-footer::before {
-        background: linear-gradient(
-          to top,
-          rgba(0, 0, 0, 0.25) 0%,
-          transparent 100%
-        );
-
-        animation: scroll-pill-menu-content reverse linear backwards;
-        animation-timeline: --pill-menu-content-scroll-timeline;
-
-        transform: translateY(
-          calc(
-            -1 *
-              (
-                var(--pill-menu-gradient-height) +
-                  var(--chat-input-area-bottom-padding)
-              )
-          )
-        );
+      .menu-content-actions:not(:has(*)) {
+        display: none;
       }
 
       .pill-menu :deep(.menu-header .detail) {

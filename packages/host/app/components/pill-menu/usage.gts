@@ -42,9 +42,9 @@ export default class PillMenuUsage extends Component {
           <:content>
             This is the content of the pill menu.
           </:content>
-          <:footer>
-            This is the footer of the pill menu.
-          </:footer>
+          <:contentActions>
+            These are the content actions for the pill menu.
+          </:contentActions>
         </PillMenu>
       </:example>
       <:api as |Args|>

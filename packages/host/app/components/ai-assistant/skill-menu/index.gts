@@ -70,11 +70,12 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
           {{/each}}
         </ul>
       </:content>
-      <:footer>
+      <:contentActions>
         <Button
           class='attach-button'
-          @kind='primary'
+          @kind='secondary'
           @size='extra-small'
+          @pill={{true}}
           {{on 'click' this.attachSkillCard}}
           @disabled={{this.doAttachSkillCard.isRunning}}
           @loading={{this.isAttachingSkill}}
@@ -83,13 +84,14 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
           {{#if this.isAttachingSkill}}
             Adding Skill
           {{else}}
-            Choose a Skill to add
+            Choose a Skill to Add
           {{/if}}
         </Button>
         <Button
           class='attach-button'
-          @kind='primary'
+          @kind='secondary'
           @size='extra-small'
+          @pill={{true}}
           {{on 'click' this.attachSkillMarkdown}}
           @disabled={{this.doAttachSkillMarkdown.isRunning}}
           @loading={{this.isAttachingSkillMarkdown}}
@@ -98,10 +100,10 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
           {{#if this.isAttachingSkillMarkdown}}
             Adding Skill
           {{else}}
-            Choose a skill file to add
+            Choose a Skill File to Add
           {{/if}}
         </Button>
-      </:footer>
+      </:contentActions>
     </PillMenu>
     <style scoped>
       .skill-menu {
@@ -110,14 +112,10 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
       }
       .skill-list {
         display: grid;
-        gap: var(--boxel-sp-xxxs);
+        gap: var(--boxel-sp-3xs);
         list-style-type: none;
         padding: 0;
         margin: 0;
-        overflow-y: auto;
-        max-height: 300px;
-
-        scroll-timeline: --pill-menu-content-scroll-timeline;
       }
 
       .skill-list :deep(.card-content) {
@@ -126,24 +124,12 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
       }
       .attach-button {
         --boxel-button-font: 600 var(--boxel-font-xs);
-        --boxel-button-border: 1px solid var(--boxel-400);
-        --boxel-button-color: var(--boxel-dark);
         --boxel-button-padding: var(--boxel-sp-5xs) var(--boxel-sp-sm);
-        --boxel-button-min-height: unset;
+        --boxel-button-disabled-background: none;
+        --boxel-button-disabled-opacity: 1;
 
-        gap: var(--boxel-sp-xs);
-        background: none;
-      }
-      .attach-button:hover:not(:disabled),
-      .attach-button:focus:not(:disabled) {
-        --icon-color: var(--boxel-600);
-        color: var(--boxel-600);
-        background: none;
-        box-shadow: none;
-      }
-      .attach-button:disabled {
-        --boxel-button-text-color: var(--boxel-300);
-        --boxel-button-border: 1px solid var(--boxel-300);
+        justify-content: flex-start;
+        text-wrap: balance;
       }
       .attach-button > :deep(svg > path) {
         stroke: none;

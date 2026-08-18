@@ -334,35 +334,35 @@ export default class Room extends Component<Signature> {
                     @onExpand={{fn this.setSelectedBottomAction 'llm-select'}}
                     @onCollapse={{fn this.setSelectedBottomAction undefined}}
                   >
-                    <:footer>
-                      <li class='llm-select-footer'>
-                        {{#if this.systemCardId}}
-                          <BoxelButton
-                            @kind='text-only'
-                            @size='extra-small'
-                            class='llm-select-footer-action'
-                            {{on 'click' this.goToSystemCard}}
-                            data-test-go-to-system-card
-                          >
-                            Go to current system card
-                          </BoxelButton>
-                        {{/if}}
-                        {{#unless this.isDefaultSystemCard}}
-                          <BoxelButton
-                            @kind='text-only'
-                            @size='extra-small'
-                            class='llm-select-footer-action'
-                            {{on
-                              'click'
-                              (perform this.restoreDefaultSystemCardTask)
-                            }}
-                            data-test-restore-default-system-card
-                          >
-                            Restore default system card
-                          </BoxelButton>
-                        {{/unless}}
-                      </li>
-                    </:footer>
+                    <:menuActions>
+                      {{#if this.systemCardId}}
+                        <BoxelButton
+                          @kind='secondary'
+                          @size='extra-small'
+                          @pill={{true}}
+                          class='llm-select-footer-action'
+                          {{on 'click' this.goToSystemCard}}
+                          data-test-go-to-system-card
+                        >
+                          Go to Current System Card
+                        </BoxelButton>
+                      {{/if}}
+                      {{#unless this.isDefaultSystemCard}}
+                        <BoxelButton
+                          @kind='secondary'
+                          @size='extra-small'
+                          @pill={{true}}
+                          class='llm-select-footer-action'
+                          {{on
+                            'click'
+                            (perform this.restoreDefaultSystemCardTask)
+                          }}
+                          data-test-restore-default-system-card
+                        >
+                          Restore Default System Card
+                        </BoxelButton>
+                      {{/unless}}
+                    </:menuActions>
                   </LLMSelect>
                 {{/if}}
                 {{#if this.displayLLMModeSelect}}
@@ -565,24 +565,14 @@ export default class Room extends Component<Signature> {
         width: 100%;
       }
 
-      .llm-select-footer {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-xxxs);
-        border-top: 1px solid var(--boxel-200);
-        padding-top: var(--boxel-sp-xxxs);
-      }
-
       .llm-select-footer-action {
-        --boxel-button-padding: var(--boxel-sp-xxxs) var(--boxel-sp-sm);
-        --boxel-button-min-height: unset;
-        justify-content: flex-start;
-        font: 500 var(--boxel-font-xs);
-        color: var(--boxel-500);
-      }
+        --boxel-button-font: 600 var(--boxel-font-xs);
+        --boxel-button-padding: var(--boxel-sp-5xs) var(--boxel-sp-sm);
+        --boxel-button-disabled-background: none;
+        --boxel-button-disabled-opacity: 1;
 
-      .llm-select-footer-action:hover {
-        color: var(--boxel-dark);
+        justify-content: flex-start;
+        text-wrap: balance;
       }
 
       .chat-input-area :deep(.minimized-arrow) {
