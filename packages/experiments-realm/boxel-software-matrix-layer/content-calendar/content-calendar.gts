@@ -182,6 +182,26 @@ class ContentCalendarConsole extends GlimmerComponent<ConsoleSignature> {
     return ((this.ideaQuery?.instances ?? []) as ContentIdea[]).filter(Boolean);
   }
 
+  private get scheduledIdeaIds(): Set<string> {
+    let ids = new Set<string>();
+    for (let piece of this.pieces) {
+      let id = piece.sourceIdea?.id;
+      if (id) {
+        ids.add(id);
+      }
+    }
+    return ids;
+  }
+
+  get unscheduledIdeas(): ContentIdea[] {
+    let scheduled = this.scheduledIdeaIds;
+    return this.ideas.filter((i) => !i.id || !scheduled.has(i.id));
+  }
+
+  get scheduledIdeaCount(): number {
+    return this.ideas.length - this.unscheduledIdeas.length;
+  }
+
   get seriesList(): ContentSeries[] {
     return ((this.seriesQuery?.instances ?? []) as ContentSeries[]).filter(
       Boolean,
@@ -342,6 +362,8 @@ class ContentCalendarConsole extends GlimmerComponent<ConsoleSignature> {
     status?: string;
     scheduledAt?: Date;
     brief?: string;
+    sourceIdea?: ContentIdea;
+    series?: ContentSeries;
   }): Promise<boolean> {
     let commandContext = this.args.context?.commandContext;
     if (!commandContext || !this.args.realm) {
@@ -467,6 +489,7 @@ class ContentCalendarConsole extends GlimmerComponent<ConsoleSignature> {
           platform: idea.hunchPlatform ?? undefined,
           status: 'planned',
           scheduledAt: when,
+          sourceIdea: idea,
         });
       } finally {
         this.busyId = undefined;
@@ -491,6 +514,7 @@ class ContentCalendarConsole extends GlimmerComponent<ConsoleSignature> {
           platform: series.platform ?? undefined,
           status: 'planned',
           scheduledAt: slot,
+          series,
         });
         if (!ok) {
           break;
@@ -1070,15 +1094,19 @@ class ContentCalendarConsole extends GlimmerComponent<ConsoleSignature> {
               <div class='pane-text'>
                 <h2>Idea backlog</h2>
                 <p class='byline'>Unscheduled. Drag one onto the calendar, or
-                  schedule it for today.</p>
+                  schedule it for today.{{#if this.scheduledIdeaCount}}
+                    <span class='byline-note'>{{this.scheduledIdeaCount}}
+                      already planned — open the piece it became to find it
+                      again.</span>
+                  {{/if}}</p>
               </div>
               <Button type='button' @kind='primary' {{on 'click' this.newIdea}}>
                 Capture idea
               </Button>
             </div>
-            {{#if this.ideas.length}}
+            {{#if this.unscheduledIdeas.length}}
               <ul class='rows'>
-                {{#each this.ideas as |idea|}}
+                {{#each this.unscheduledIdeas as |idea|}}
                   <li
                     class='row idea-row'
                     draggable='true'
@@ -1105,6 +1133,10 @@ class ContentCalendarConsole extends GlimmerComponent<ConsoleSignature> {
                   </li>
                 {{/each}}
               </ul>
+            {{else if this.scheduledIdeaCount}}
+              <p class='empty'>Backlog clear — all
+                {{this.scheduledIdeaCount}}
+                captured ideas are on the calendar.</p>
             {{else}}
               <p class='empty'>Nothing captured yet.</p>
             {{/if}}
@@ -1366,6 +1398,10 @@ class ContentCalendarConsole extends GlimmerComponent<ConsoleSignature> {
         margin: 0.15rem 0 0;
         font-size: 0.75rem;
         color: var(--muted-foreground, var(--boxel-450));
+      }
+      .byline-note {
+        display: block;
+        font-weight: 600;
       }
       .filter {
         min-width: 13rem;
