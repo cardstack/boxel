@@ -2397,10 +2397,10 @@ export function containsMany<FieldT extends FieldDefConstructor>(
   options?: Options,
 ): BaseInstanceType<FieldT>[] {
   return {
-    setupField(fieldName: string, _ownerPrototype: BaseDef) {
+    setupField(fieldName: string, ownerPrototype: BaseDef) {
       let { computeVia, searchable } = options ?? {};
       let instance = new ContainsMany({
-        cardThunk: cardThunk(field),
+        cardThunk: cardThunk(field, { fieldName, ownerPrototype }),
         computeVia,
         name: fieldName,
         searchable,
@@ -2417,10 +2417,10 @@ export function contains<FieldT extends FieldDefConstructor>(
   options?: Options,
 ): BaseInstanceType<FieldT> {
   return {
-    setupField(fieldName: string, _ownerPrototype: BaseDef) {
+    setupField(fieldName: string, ownerPrototype: BaseDef) {
       let { computeVia, searchable } = options ?? {};
       let instance = new Contains({
-        cardThunk: cardThunk(field),
+        cardThunk: cardThunk(field, { fieldName, ownerPrototype }),
         computeVia,
         name: fieldName,
         searchable,
@@ -2439,7 +2439,10 @@ export function linksTo<CardT extends LinkableDefConstructor>(
   return {
     setupField(fieldName: string, ownerPrototype: BaseDef) {
       let { computeVia, searchable, query } = options ?? {};
-      let fieldCardThunk = cardThunk(cardOrThunk);
+      let fieldCardThunk = cardThunk(cardOrThunk, {
+        fieldName,
+        ownerPrototype,
+      });
       if (query) {
         validateRelationshipQuery(ownerPrototype, fieldName, query);
       }
@@ -2465,7 +2468,10 @@ export function linksToMany<CardT extends LinkableDefConstructor>(
   return {
     setupField(fieldName: string, ownerPrototype: BaseDef) {
       let { computeVia, searchable, query } = options ?? {};
-      let fieldCardThunk = cardThunk(cardOrThunk);
+      let fieldCardThunk = cardThunk(cardOrThunk, {
+        fieldName,
+        ownerPrototype,
+      });
       if (query) {
         validateRelationshipQuery(ownerPrototype, fieldName, query);
       }
@@ -4783,17 +4789,42 @@ function notifySubscribers(
 
 function cardThunk<CardT extends BaseDefConstructor>(
   cardOrThunk: CardT | (() => CardT),
+  // Where the field lives, so the thrown error can name the exact field
+  // instead of leaving the author to bisect their schema. The module the bad
+  // value came from isn't knowable here — by the time the value reaches us
+  // the import has already evaluated to undefined — so the message names the
+  // two ways that happens instead.
+  fieldContext: { fieldName: string; ownerPrototype: BaseDef },
 ): () => CardT {
+  // `||` rather than `??`: an anonymous class's `.name` is `''`, not nullish.
+  let fieldDescription = `field '${fieldContext.fieldName}' on '${
+    fieldContext.ownerPrototype.constructor?.name || 'unknown card'
+  }'`;
+  let causes = `Two common causes:
+      (1) the import doesn't match the module's export shape — e.g. \`import X from '…'\` where the module only has a named export; use \`import { X } from '…'\`;
+      (2) a cyclic dependency between cards — use the thunk form in all cards in the cycle, e.g. '@field friend = linksTo(() => Person)'.`;
   if (!cardOrThunk) {
     throw new Error(
-      `cardOrThunk was ${cardOrThunk}. There might be a cyclic dependency in one of your fields.
-      Use '() => CardName' format for the fields with the cycle in all related cards.
-      e.g.: '@field friend = linksTo(() => Person)'`,
+      `The card class for ${fieldDescription} was ${cardOrThunk}. ${causes}`,
     );
   }
-  return (
-    'baseDef' in cardOrThunk ? () => cardOrThunk : cardOrThunk
-  ) as () => CardT;
+  if ('baseDef' in cardOrThunk) {
+    return () => cardOrThunk as CardT;
+  }
+  // The thunk form fails the same two ways the eager form does, just later —
+  // at the first `field.card` read instead of at decoration. The accessors
+  // re-invoke the thunk on every read (nothing is memoized), so this adds a
+  // truthiness check per read, not an extra call.
+  let thunk = cardOrThunk as () => CardT;
+  return () => {
+    let card = thunk();
+    if (!card) {
+      throw new Error(
+        `The card class thunk for ${fieldDescription} returned ${card}. ${causes}`,
+      );
+    }
+    return card;
+  };
 }
 
 export type SignatureFor<CardT extends BaseDefConstructor> = {
