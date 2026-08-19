@@ -114,21 +114,6 @@ export class FilePreviewStage extends GlimmerComponent<StageSignature> {
     return this.showGenericDetail ? '44' : '30';
   }
 
-  get srcTag() {
-    return (this.model?.previewSource ?? '').toUpperCase();
-  }
-
-  // Provenance is only meaningful for the families that actually render
-  // something; a generic pane has nothing to attribute.
-  get showSrcTag() {
-    return (
-      this.showReal &&
-      Boolean(this.args.preview) &&
-      Boolean(this.model?.previewSource) &&
-      this.model?.previewSource !== 'fallback'
-    );
-  }
-
   <template>
     <div
       class='stage'
@@ -189,9 +174,10 @@ export class FilePreviewStage extends GlimmerComponent<StageSignature> {
         {{#if (eq this.state 'malformed')}}
           <div class='malformed-banner'>Partial · some content unreadable</div>
         {{/if}}
-        {{#if this.showSrcTag}}
-          <span class='src-tag'>{{this.srcTag}}</span>
-        {{/if}}
+        {{! No provenance overlay: a tag floated over the render lands on
+        whatever the family draws in that corner — a prose preview's title, an
+        archive tree's first row — and provenance already has a home in the
+        isolated shell's metadata chrome. }}
       {{else if (eq this.state 'loading')}}
         <div class='state-pane'>
           <div class='skeleton-bar'></div>
@@ -366,19 +352,6 @@ export class FilePreviewStage extends GlimmerComponent<StageSignature> {
         text-transform: uppercase;
         color: var(--fd-warn, #e8710a);
         text-align: left;
-      }
-      .src-tag {
-        position: absolute;
-        top: 8px;
-        left: 8px;
-        font-family: var(--font-mono);
-        font-size: 0.4375rem;
-        letter-spacing: 0.06em;
-        color: var(--muted-foreground);
-        background: rgb(255 255 255 / 62%);
-        padding: 2px 4px;
-        border-radius: 2px;
-        text-transform: uppercase;
       }
       @keyframes fd-shimmer {
         0% {
