@@ -1454,12 +1454,11 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       `Expected at least 10 rooms, got ${initialRoomCount}`,
     );
 
-    let pastSessionsElement = document.querySelector(
-      '[data-test-past-sessions] .body ul',
-    );
-    if (pastSessionsElement) {
-      pastSessionsElement.scrollTop = pastSessionsElement.scrollHeight;
-    }
+    let pastSessionsElement = (await waitFor(
+      '[data-test-past-sessions] [data-test-panel-popover-body]',
+    )) as HTMLElement;
+    pastSessionsElement.scrollTop = pastSessionsElement.scrollHeight;
+    await triggerEvent(pastSessionsElement, 'scroll');
     await waitUntil(() => {
       return (
         document.querySelectorAll('[data-test-joined-room]').length >=

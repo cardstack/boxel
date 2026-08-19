@@ -558,6 +558,7 @@ export default class WorkspaceChooser extends Component<Signature> {
           <div class='sort-controls'>
             <BoxelSelect
               class='sort-select'
+              @dropdownClass='workspace-chooser-sort-dropdown'
               @options={{this.sortOptions}}
               @selected={{this.selectedSortOption}}
               @onChange={{this.onSortChange}}
@@ -758,13 +759,26 @@ export default class WorkspaceChooser extends Component<Signature> {
       }
       .sort-select {
         flex-shrink: 0;
-        --boxel-select-background-color: rgb(42 32 64 / 90%);
-        --boxel-select-border-color: rgba(255 255 255 / 25%);
+        --boxel-select-background-color: var(--boxel-800);
         --boxel-select-text-color: var(--boxel-light);
-        --boxel-select-focus-border-color: rgba(255 255 255 / 50%);
+        --boxel-select-border-color: var(--boxel-light-25);
+        --boxel-select-focus-border-color: var(--boxel-light-50);
         --icon-color: var(--boxel-light);
-        font: 400 var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp);
+      }
+      :global(.boxel-select__dropdown.workspace-chooser-sort-dropdown) {
+        --boxel-dropdown-background-color: var(--boxel-650);
+        --boxel-dropdown-border-color: var(--boxel-light-25);
+        --boxel-dropdown-text-color: var(--boxel-light);
+        --boxel-dropdown-selected-text-color: var(--boxel-light);
+        --boxel-dropdown-hover-color: var(--boxel-700);
+        --boxel-dropdown-highlight-color: var(--boxel-650);
+        --boxel-dropdown-highlight-hover-color: var(--boxel-700);
+        --boxel-dropdown-selected-highlighted-color: var(--boxel-700);
+        --boxel-dropdown-selected-hover-color: var(--boxel-700);
+      }
+      :global(.workspace-chooser-sort-dropdown .boxel-select-option-checkmark) {
+        --icon-color: var(--boxel-highlight);
+        color: var(--boxel-highlight);
       }
       .workspace-chooser__content {
         display: flex;
@@ -839,7 +853,7 @@ export default class WorkspaceChooser extends Component<Signature> {
         max-width: 40rem;
         padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
         border-radius: var(--boxel-border-radius);
-        background-color: rgba(255 255 255 / 10%);
+        background-color: var(--boxel-light-10);
         color: var(--boxel-light);
         font: 400 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);

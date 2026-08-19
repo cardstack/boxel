@@ -223,6 +223,11 @@ export default class InputUsage extends Component {
           @description='Used to set the min-height of the field'
         />
         <Css.Basic
+          @name='--boxel-input-outline'
+          @type='outline'
+          @description='Outline of the field (defaults to 1px solid transparent; the focused field sets its own outline color)'
+        />
+        <Css.Basic
           @name='--boxel-input-search-color'
           @type='color'
           @description='Search input text color'

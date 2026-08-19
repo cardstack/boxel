@@ -13,6 +13,18 @@ import type { SessionRoomData } from '../../services/ai-assistant-panel-service'
 
 import type MatrixService from '../../services/matrix-service';
 
+function findScrollContainer(element: HTMLElement): HTMLElement {
+  let candidate: HTMLElement | null = element;
+  while (candidate) {
+    let { overflowY } = getComputedStyle(candidate);
+    if (overflowY === 'auto' || overflowY === 'scroll') {
+      return candidate;
+    }
+    candidate = candidate.parentElement;
+  }
+  return element;
+}
+
 interface Signature {
   Args: {
     sessions: SessionRoomData[];
@@ -27,8 +39,12 @@ export default class AiAssistantPastSessionsList extends Component<Signature> {
   @service declare matrixService: MatrixService;
 
   checkScroll = modifier((element: HTMLElement) => {
+    // The list itself does not scroll — the popover's body clips it, and
+    // scroll events do not bubble, so listen on whichever element actually
+    // scrolls.
+    let scroller = findScrollContainer(element);
     let checkScrollPosition = () => {
-      let { scrollHeight, scrollTop, clientHeight } = element;
+      let { scrollHeight, scrollTop, clientHeight } = scroller;
       let isAtBottom = Math.abs(scrollHeight - scrollTop - clientHeight) <= 1;
       let hasNoScroll = scrollHeight <= clientHeight;
 
@@ -39,10 +55,10 @@ export default class AiAssistantPastSessionsList extends Component<Signature> {
 
     checkScrollPosition();
 
-    element.addEventListener('scroll', checkScrollPosition);
+    scroller.addEventListener('scroll', checkScrollPosition);
 
     return () => {
-      element.removeEventListener('scroll', checkScrollPosition);
+      scroller.removeEventListener('scroll', checkScrollPosition);
     };
   });
 
@@ -91,9 +107,6 @@ export default class AiAssistantPastSessionsList extends Component<Signature> {
         padding: 0;
         margin: 0;
         margin-bottom: var(--boxel-sp-xs);
-        max-height: 400px;
-        overflow-y: auto;
-        scroll-timeline: --past-sessions-scroll-timeline block;
       }
       .empty-collection {
         padding: var(--boxel-sp-sm);
