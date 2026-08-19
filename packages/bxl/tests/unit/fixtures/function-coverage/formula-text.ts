@@ -1,10 +1,13 @@
-import { TIMEZONES, type CoverageCase } from './case.ts';
+import type { CoverageCase } from './case.ts';
 
 export const formulaTextCases: CoverageCase[] = [
   // Character codes. CHAR maps a single-byte code back to its character,
   // while UNICODE reads a whole code point — an astral character is two
   // UTF-16 units long but reports the code point, not the lead surrogate.
   { covers: 'CHAR/1', source: 'CHAR(65)', expected: 'A' },
+  // 255 is the top of that byte, so anything above it is out of range rather
+  // than the Unicode code point of the same number.
+  { covers: 'CHAR/1', source: 'CHAR(256)', throws: /#VALUE!/ },
   { covers: 'CODE/1', source: 'CODE("A")', expected: 65 },
   { covers: 'UNICODE/1', source: 'UNICODE(.)', input: '😀', expected: 128512 },
   {
@@ -31,10 +34,6 @@ export const formulaTextCases: CoverageCase[] = [
     covers: 'PROPER/1',
     source: 'PROPER("2-way street")',
     expected: '2-Way Street',
-    knownDefect:
-      'the /\\w\\S*/g tokenizer treats "2-way" as one word and uppercases ' +
-      'only its first character, so letters after a non-letter stay lower',
-    produces: { expected: '2-way Street' },
   },
   // TRIM collapses runs of spaces between words as well as stripping the
   // ends, which a plain JavaScript trim does not do.
@@ -50,10 +49,6 @@ export const formulaTextCases: CoverageCase[] = [
     source: 'TRIM(.)',
     input: 'Acme\u00a0Legal',
     expected: 'Acme\u00a0Legal',
-    knownDefect:
-      'the implementation collapses /\\s+/, whose character class includes ' +
-      'U+00A0 as well as tabs and newlines that Excel leaves for CLEAN',
-    produces: { expected: 'Acme Legal' },
   },
   { covers: 'LEN/1', source: 'LEN("Phoenix, AZ")', expected: 11 },
   { covers: 'REPT/2', source: 'REPT("*-", 3)', expected: '*-*-*-' },
@@ -83,13 +78,27 @@ export const formulaTextCases: CoverageCase[] = [
     covers: 'SEARCH/2',
     source: 'SEARCH("Mc*n", "Miriam McGovern")',
     expected: 8,
-    knownDefect:
-      'SEARCH is a lowercased indexOf, so only the case-insensitivity half ' +
-      'of the FIND/SEARCH distinction exists; wildcards match literally and ' +
-      'this raises #VALUE!. SEARCH/3 shares the code path',
-    produces: { throws: /#VALUE!/ },
+  },
+  // `?` stands for exactly one character, and `~` makes a wildcard literal.
+  {
+    covers: 'SEARCH/3',
+    source: 'SEARCH("M?G", "Miriam McGovern", 3)',
+    expected: 8,
+  },
+  { covers: 'SEARCH/2', source: 'SEARCH("~*", "3 * 4")', expected: 3 },
+  // A start position past the end of the text is an error, even for a pattern
+  // that can match nothing.
+  { covers: 'SEARCH/3', source: 'SEARCH("*", "abc", 5)', throws: /#VALUE!/ },
+  // Stars are matched by walking the text once, not by a backtracking regex, so
+  // a pattern full of them answers in linear time instead of exponential.
+  {
+    covers: 'SEARCH/2',
+    source:
+      'SEARCH("*a*a*a*a*a*a*a*a*b", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")',
+    throws: /#VALUE!/,
   },
   { covers: 'EXACT/2', source: 'EXACT("Word", "word")', expected: false },
+  { covers: 'EXACT/2', source: 'EXACT("word", "word")', expected: true },
   // Substitution. SUBSTITUTE matches text, REPLACE matches a position span,
   // and REPLACE's new text comes last, after the start and length.
   {
@@ -108,11 +117,13 @@ export const formulaTextCases: CoverageCase[] = [
     covers: 'SUBSTITUTE/4',
     source: 'SUBSTITUTE("a-a-a", "a", "b", 1)',
     expected: 'b-a-a',
-    knownDefect:
-      'replaceNth searches from index + 1 starting at index 0, so a match at ' +
-      'position 0 is never counted and every instance number shifts by one ' +
-      'whenever the string opens with old_text',
-    produces: { expected: 'a-b-a' },
+  },
+  // Occurrences do not overlap: "aaa" holds one "aa", not two, so there is no
+  // second instance to replace and the text comes back whole.
+  {
+    covers: 'SUBSTITUTE/4',
+    source: 'SUBSTITUTE("aaa", "aa", "X", 2)',
+    expected: 'aaa',
   },
   {
     covers: 'REPLACE/4',
@@ -148,12 +159,75 @@ export const formulaTextCases: CoverageCase[] = [
     covers: 'TEXT/2',
     source: 'TEXT(DATE(2026, 4, 30), "yyyy-mm-dd")',
     expected: '2026-04-30',
-    zones: TIMEZONES,
-    knownDefect:
-      'only numeric format codes are implemented; a date code falls through ' +
-      'and TEXT returns the bare serial as a string ("46142"), so a card ' +
-      'formatting a date this way shows a five-digit number',
-    produces: { expected: '46142' },
+  },
+  // Month and weekday names come from the run length: three letters abbreviate,
+  // four or more spell it out.
+  {
+    covers: 'TEXT/2',
+    source: 'TEXT(DATE(2026, 4, 30), "dddd d mmm yy")',
+    expected: 'Thursday 30 Apr 26',
+  },
+  // Five m's is the single-letter month, one more than the full name.
+  {
+    covers: 'TEXT/2',
+    source: 'TEXT(DATE(2026, 4, 30), "mmmmm")',
+    expected: 'A',
+  },
+  // `mm` is minutes next to an hour or a second, and months anywhere else, so
+  // one format code carries both readings.
+  {
+    covers: 'TEXT/2',
+    source: 'TEXT(DATE(2026, 4, 30) + TIME(14, 5, 9), "mm/dd h:mm:ss AM/PM")',
+    expected: '04/30 2:05:09 PM',
+  },
+  // Minutes only where the clock puts them — after an hour, or before seconds.
+  // A month run that merely precedes an hour is still a month.
+  {
+    covers: 'TEXT/2',
+    source: 'TEXT(DATE(2026, 4, 30) + TIME(14, 5, 9), "d mmm h:mm")',
+    expected: '30 Apr 14:05',
+  },
+  {
+    covers: 'TEXT/2',
+    source: 'TEXT(DATE(2026, 4, 30) + TIME(14, 5, 9), "mm hh")',
+    expected: '04 14',
+  },
+  // A bracketed run is a colour, a condition or a locale, so a `d` inside one
+  // does not make a number format a date format.
+  {
+    covers: 'TEXT/2',
+    source: 'TEXT(1234.5, "[Red]#,##0.0")',
+    expected: '1,234.5',
+  },
+  {
+    covers: 'TEXT/2',
+    source: 'TEXT(DATE(2026, 4, 30), "[$-409]yyyy-mm-dd")',
+    expected: '2026-04-30',
+  },
+  // The bracketed clock codes are the exception: they ask for elapsed time, so
+  // a day and a half is 36 hours and the minutes beside them are the clock's.
+  {
+    covers: 'TEXT/2',
+    source: 'TEXT(1.5, "[h]:mm")',
+    expected: '36:00',
+  },
+  {
+    covers: 'TEXT/2',
+    source: 'TEXT(1.5, "[mm]")',
+    expected: '2160',
+  },
+  // A time of day below the 1970 epoch reads the same as one above it: the
+  // serial is a fraction that lands a hair under the second it names, and
+  // truncating it would drop that second on one side of the epoch only.
+  {
+    covers: 'TEXT/2',
+    source: 'TEXT(TIME(12, 30, 0), "hh:mm:ss")',
+    expected: '12:30:00',
+  },
+  {
+    covers: 'TEXT/2',
+    source: 'TEXT(DATE(2023, 1, 1) + TIME(12, 30, 0), "hh:mm:ss")',
+    expected: '12:30:00',
   },
   { covers: 'FIXED/1', source: 'FIXED(1234.567)', expected: '1,234.57' },
   // Negative decimals round to the left of the point.
@@ -171,10 +245,13 @@ export const formulaTextCases: CoverageCase[] = [
     covers: 'NUMBERVALUE/1',
     source: 'NUMBERVALUE("3.5%")',
     expected: 0.035,
-    knownDefect:
-      'only separators are stripped before Number(), so a percent sign — and ' +
-      'likewise the embedded spaces Excel ignores — yields NaN and #VALUE!',
-    produces: { throws: /#VALUE!/ },
+  },
+  // Percent signs stack, and spaces are ignored wherever they fall.
+  { covers: 'NUMBERVALUE/1', source: 'NUMBERVALUE("9%%")', expected: 0.0009 },
+  {
+    covers: 'NUMBERVALUE/1',
+    source: 'NUMBERVALUE(" 3 500 ")',
+    expected: 3500,
   },
   {
     covers: 'NUMBERVALUE/2',

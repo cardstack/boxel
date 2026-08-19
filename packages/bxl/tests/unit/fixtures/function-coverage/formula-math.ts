@@ -1,4 +1,4 @@
-import { ok, strictEqual } from 'node:assert';
+import { deepStrictEqual, ok, strictEqual } from 'node:assert';
 import type { CoverageCase } from './case.ts';
 
 export const formulaMathCases: CoverageCase[] = [
@@ -218,31 +218,55 @@ export const formulaMathCases: CoverageCase[] = [
     source: 'SERIESSUM(3, 2, 1, [2, 4])',
     expected: 126,
   },
-  // Nondeterministic: assert the contract (range, integrality), not a value.
+  // Nondeterministic, so the assertion is over a sample rather than a value.
+  // Range membership alone would be satisfied by a constant, which is the one
+  // way a random number generator most obviously fails, so each case draws
+  // enough times to insist the answers actually vary.
   {
     covers: 'RAND/0',
-    source: 'RAND()',
+    source: '[range(200) | RAND]',
+    readableSyntax: false,
     check(outputs) {
-      strictEqual(outputs.length, 1, 'RAND() emits one value');
-      const value = outputs[0];
+      const draws = outputs[0] as number[];
+      strictEqual(draws.length, 200);
       ok(
-        typeof value === 'number' && value >= 0 && value < 1,
-        `RAND() lands in [0, 1), got ${value}`,
+        draws.every(
+          (draw) => typeof draw === 'number' && draw >= 0 && draw < 1,
+        ),
+        'every RAND() draw lands in [0, 1)',
+      );
+      // Two independent uniform draws collide with probability ~2^-53, so a
+      // near-perfect distinct count is expected and a repeat-heavy generator
+      // is not.
+      ok(
+        new Set(draws).size >= 190,
+        `expected ~200 distinct draws, got ${new Set(draws).size}`,
+      );
+      ok(
+        draws.some((draw) => draw < 0.5) && draws.some((draw) => draw >= 0.5),
+        'draws reach both halves of the range',
       );
     },
   },
   {
     covers: 'RANDBETWEEN/2',
-    source: 'RANDBETWEEN(5, 10)',
+    source: '[range(200) | RANDBETWEEN(5; 10)]',
+    readableSyntax: false,
     check(outputs) {
-      strictEqual(outputs.length, 1, 'RANDBETWEEN emits one value');
-      const value = outputs[0];
+      const draws = outputs[0] as number[];
+      strictEqual(draws.length, 200);
       ok(
-        typeof value === 'number' &&
-          Number.isInteger(value) &&
-          value >= 5 &&
-          value <= 10,
-        `RANDBETWEEN(5, 10) yields an integer in [5, 10], got ${value}`,
+        draws.every(
+          (draw) => Number.isInteger(draw) && draw >= 5 && draw <= 10,
+        ),
+        'every RANDBETWEEN(5, 10) draw is an integer in [5, 10]',
+      );
+      // Excel's bounds are inclusive at both ends, which range membership
+      // cannot show. Missing at least one of the six values across 200 draws
+      // has probability under 6 * (5/6)^200, about 9e-16.
+      deepStrictEqual(
+        [...new Set(draws)].sort((left, right) => left - right),
+        [5, 6, 7, 8, 9, 10],
       );
     },
   },

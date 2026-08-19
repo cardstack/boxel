@@ -463,3 +463,5 @@ export class CsvFileDef extends FileDef {
     };
   }
 }
+
+export default CsvFileDef;

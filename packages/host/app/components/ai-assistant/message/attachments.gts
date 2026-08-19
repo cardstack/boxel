@@ -106,6 +106,7 @@ export default class Attachments extends Component<Signature> {
                   @showErrorIcon={{true}}
                   @urlForRealmLookup={{this.cardErrorRealm cardError}}
                   title={{cardError.id}}
+                  data-theme='light'
                   data-test-attached-card-error={{cardError.id}}
                 />
               </li>

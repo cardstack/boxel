@@ -12,3 +12,5 @@ export class GtsFileDef extends TsFileDef {
   // GTS adds, so the inherited CodePreview renders a `.gts` file correctly.
   static fileKind = 'Glimmer TS';
 }
+
+export default GtsFileDef;

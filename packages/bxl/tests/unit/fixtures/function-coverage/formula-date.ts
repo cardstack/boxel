@@ -1,21 +1,23 @@
 import { ok, strictEqual } from 'node:assert';
-import { dateCases, type CoverageCase } from './case.ts';
+import type { CoverageCase } from './case.ts';
 
-// Every case here runs under each of `TIMEZONES` and has to give the same
-// answer in all of them: a serial names a calendar day, not an instant, and
-// indexing evaluates these in UTC while the author's browser does not.
-export const formulaDateCases: CoverageCase[] = dateCases([
+// A serial names a calendar day, not an instant, and indexing evaluates these
+// in UTC while the author's browser does not — so the runner's zone sweep
+// matters more here than anywhere else in the suite.
+export const formulaDateCases: CoverageCase[] = [
   // Serial 1 is 1900-01-01, and Excel's deliberate 1900 leap-year bug slips a
   // phantom 1900-02-29 in, so every later date sits one above a true day
   // count from the epoch. 2026-04-30 is the anchor the rest of the table
   // measures against.
   { covers: 'DATE/3', source: 'DATE(2026, 4, 30)', expected: 46142 },
-  // A month past 12 carries into the following year.
-  {
-    covers: 'DATE/3',
-    source: 'DATE(2026, 13, 1) == DATE(2027, 1, 1)',
-    expected: true,
-  },
+  // A month past 12 carries into the following year, month 0 carries back
+  // into the previous one, and a day past the month's end carries too. Each
+  // is asserted against the serial rather than against another DATE call —
+  // comparing two calls to the same function proves it is deterministic, not
+  // that it carries.
+  { covers: 'DATE/3', source: 'DATE(2026, 13, 1)', expected: 46388 },
+  { covers: 'DATE/3', source: 'DATE(2026, 0, 1)', expected: 45992 },
+  { covers: 'DATE/3', source: 'DATE(2026, 4, 31)', expected: 46143 },
   // YEAR, MONTH and DAY read back the three components DATE packed in.
   { covers: 'YEAR/1', source: 'YEAR(DATE(2026, 4, 30))', expected: 2026 },
   { covers: 'MONTH/1', source: 'MONTH(DATE(2026, 4, 30))', expected: 4 },
@@ -77,18 +79,18 @@ export const formulaDateCases: CoverageCase[] = dateCases([
     source: 'DATEVALUE("Thu Apr 30 2026")',
     expected: 46142,
   },
-  // Month arithmetic. EDATE clamps the day of month to the target month's
-  // last day rather than letting it overflow, so one month past January 31
-  // is February 28, not March 3.
-  {
-    covers: 'EDATE/2',
-    source: 'EDATE(DATE(2026, 1, 31), 1) == DATE(2026, 2, 28)',
-    expected: true,
-  },
+  // Month arithmetic, asserted on the serial rather than against another
+  // call: a comparison of two functions is satisfied by any pair that agrees,
+  // including two that are wrong together. EDATE clamps the day of month to
+  // the target month's last day rather than letting it overflow, so one month
+  // past January 31 is February 28 (serial 46081), not March 3.
+  { covers: 'EDATE/2', source: 'EDATE(DATE(2026, 1, 31), 1)', expected: 46081 },
+  // EOMONTH ignores the day entirely and answers the last day of the month
+  // the offset lands on: 2026-03-31.
   {
     covers: 'EOMONTH/2',
-    source: 'EOMONTH(DATE(2026, 2, 5), 1) == DATE(2026, 3, 31)',
-    expected: true,
+    source: 'EOMONTH(DATE(2026, 2, 5), 1)',
+    expected: 46112,
   },
   // The unit decides what the difference counts. "YM" is the month remainder
   // after whole years, so both the 2 years and the trailing 26 days drop out.
@@ -127,15 +129,29 @@ export const formulaDateCases: CoverageCase[] = dateCases([
   // numbers from Sunday = 1, type 2 from Monday = 1.
   { covers: 'WEEKDAY/1', source: 'WEEKDAY(DATE(2026, 4, 30))', expected: 5 },
   { covers: 'WEEKDAY/2', source: 'WEEKDAY(DATE(2026, 4, 30), 2)', expected: 4 },
-  // Type 11 is the same Monday = 1 numbering as type 2.
+  // Type 11 is the same Monday = 1 numbering as type 2. Types 12 through 17
+  // walk the start of the week forward a day at a time, so 17 opens it on
+  // Sunday again and agrees with type 1.
   {
     covers: 'WEEKDAY/2',
     source: 'WEEKDAY(DATE(2026, 4, 30), 11)',
     expected: 4,
-    knownDefect:
-      'only return types 1, 2 and 3 are branched on, so 11 through 17 fall ' +
-      'through to the Sunday = 1 default',
-    produces: { expected: 5 },
+  },
+  {
+    covers: 'WEEKDAY/2',
+    source: 'WEEKDAY(DATE(2026, 4, 30), 16)',
+    expected: 6,
+  },
+  {
+    covers: 'WEEKDAY/2',
+    source: 'WEEKDAY(DATE(2026, 4, 30), 17)',
+    expected: 5,
+  },
+  // A return type outside the set is an error, not the default numbering.
+  {
+    covers: 'WEEKDAY/2',
+    source: 'WEEKDAY(DATE(2026, 4, 30), 5)',
+    throws: /#NUM!/,
   },
   // 2026-04-26 is a Sunday, which is exactly where the two start-of-week
   // conventions disagree: it opens week 18 counting weeks from Sunday and
@@ -146,15 +162,42 @@ export const formulaDateCases: CoverageCase[] = dateCases([
     source: 'WEEKNUM(DATE(2026, 4, 26), 2)',
     expected: 17,
   },
+  // Types 11 through 17 name the weekday the week opens on, the same ladder
+  // WEEKDAY uses: 11 is Monday, so this Sunday closes week 17.
+  {
+    covers: 'WEEKNUM/2',
+    source: 'WEEKNUM(DATE(2026, 4, 26), 11)',
+    expected: 17,
+  },
+  {
+    covers: 'WEEKNUM/2',
+    source: 'WEEKNUM(DATE(2026, 4, 26), 17)',
+    expected: 18,
+  },
   // Return type 21 is the ISO-8601 week, the one ISOWEEKNUM reports.
   {
     covers: 'WEEKNUM/2',
     source: 'WEEKNUM(DATE(2026, 4, 26), 21)',
     expected: 17,
-    knownDefect:
-      'return type 2 is the only one branched on, so 11 through 17 and the ' +
-      'ISO 21 all fall through to the Sunday-start week',
-    produces: { expected: 18 },
+  },
+  // 2026-04-26 is a Sunday, so a week opening on Wednesday puts it in the week
+  // that began on the 22nd — the 17th of the year.
+  {
+    covers: 'WEEKNUM/2',
+    source: 'WEEKNUM(DATE(2026, 4, 26), 13)',
+    expected: 17,
+  },
+  {
+    covers: 'WEEKNUM/2',
+    source: 'WEEKNUM(DATE(2026, 4, 26), 5)',
+    throws: /#NUM!/,
+  },
+  // Zero is out of range like any other unknown type, not a stand-in for the
+  // default.
+  {
+    covers: 'WEEKNUM/2',
+    source: 'WEEKNUM(DATE(2026, 4, 26), 0)',
+    throws: /#NUM!/,
   },
   // 2026-06-15 is the Monday that opens ISO week 25 of 2026.
   {
@@ -168,11 +211,19 @@ export const formulaDateCases: CoverageCase[] = dateCases([
     covers: 'ISOWEEKNUM/1',
     source: 'ISOWEEKNUM(DATE(2027, 1, 1))',
     expected: 53,
-    knownDefect:
-      'the week arithmetic has no year-boundary branch, so an early-January ' +
-      'date belonging to the previous ISO year reports week 0 instead of that ' +
-      "year's 52nd or 53rd week",
-    produces: { expected: 0 },
+  },
+  // 2022-01-01 is a Saturday, closing ISO year 2021's 52nd week. 2021-01-04
+  // is the Monday that opens ISO week 1 of 2021, the shortest way to say the
+  // count restarts rather than continuing.
+  {
+    covers: 'ISOWEEKNUM/1',
+    source: 'ISOWEEKNUM(DATE(2022, 1, 1))',
+    expected: 52,
+  },
+  {
+    covers: 'ISOWEEKNUM/1',
+    source: 'ISOWEEKNUM(DATE(2021, 1, 4))',
+    expected: 1,
   },
   // Working days. April 2026 runs Wednesday the 1st to Thursday the 30th and
   // holds eight weekend days, leaving 22 of its 30 days.
@@ -255,11 +306,11 @@ export const formulaDateCases: CoverageCase[] = dateCases([
     covers: 'TIMEVALUE/1',
     source: 'TIMEVALUE("2:24 PM")',
     expected: 0.6,
-    knownDefect:
-      'the parse reads only the digit groups of `h:mm:ss` and drops the AM/PM ' +
-      'suffix, so every afternoon time comes back twelve hours early',
-    produces: { expected: 0.1 },
   },
+  // The twelve o'clock hours are the ones the convention treats specially:
+  // 12 AM opens the day and 12 PM is noon.
+  { covers: 'TIMEVALUE/1', source: 'TIMEVALUE("12:00 AM")', expected: 0 },
+  { covers: 'TIMEVALUE/1', source: 'TIMEVALUE("12:00 PM")', expected: 0.5 },
   // The clock functions have no fixed answer, so they assert what holds
   // whenever they run: TODAY is the serial of the current UTC date, computed
   // here from Date.UTC so the expectation is derived rather than restated
@@ -303,4 +354,4 @@ export const formulaDateCases: CoverageCase[] = dateCases([
       strictEqual(floored, today, 'flooring NOW must land on TODAY');
     },
   },
-]);
+];

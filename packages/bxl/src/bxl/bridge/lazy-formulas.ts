@@ -1,6 +1,8 @@
 import type { AstNode } from './native.ts';
 import {
+  BXL_REGISTRY,
   DEFAULT_BUILTIN_LIBRARIES,
+  LAZY_BUILTIN_LIBRARIES,
   registerBuiltinLibrary,
   type BuiltinLibraryName,
 } from '../registry/index.ts';
@@ -273,13 +275,6 @@ export async function resolveLazyBuiltinLibrariesForExpressions(
   return next;
 }
 
-const ALL_LAZY_LIBRARIES: BuiltinLibraryName[] = [
-  'formula-statistical',
-  'formula-bessel',
-  ...EXTRAS_LIBRARIES,
-  'validation',
-];
-
 /**
  * Load every lazy formula extension and fold it into
  * `DEFAULT_BUILTIN_LIBRARIES`, so synchronous evaluation — most
@@ -302,7 +297,20 @@ export async function loadAllFormulaExtensions(): Promise<void> {
     ensureExtrasBundleLoaded(),
     ensureValidationLoaded(),
   ]);
-  for (const name of ALL_LAZY_LIBRARIES) {
+  // The work list is the registry's own roster of lazy libraries, not a copy
+  // of it, so a family added there without a loader above fails here instead
+  // of going missing: nothing would ever register it, and every name it owns
+  // would simply be absent from the function surface.
+  const missing = LAZY_BUILTIN_LIBRARIES.filter(
+    (name) => !(name in BXL_REGISTRY),
+  );
+  if (missing.length > 0) {
+    throw new Error(
+      `loadAllFormulaExtensions registered no library for ${missing.join(', ')} — ` +
+        'add a chunk loader for it above',
+    );
+  }
+  for (const name of LAZY_BUILTIN_LIBRARIES) {
     if (!DEFAULT_BUILTIN_LIBRARIES.includes(name)) {
       DEFAULT_BUILTIN_LIBRARIES.push(name);
     }

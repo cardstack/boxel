@@ -344,20 +344,31 @@ export class Tokenizer {
 
   private readNumber(): Token {
     let hasDot = false;
-    return {
-      type: 'num',
-      value: Number(
-        this.readWhile((c) => {
-          if (c === '.') {
-            if (hasDot) return false;
-            hasDot = true;
-            return true;
-          }
-
-          return Tokenizer.isDigit(c);
-        }),
-      ),
-    };
+    let hasExponent = false;
+    let previous = '';
+    // Digits, then at most one dot, then at most one `e` exponent with an
+    // optional sign: 1e3, 1E-3 and 5e-324 are single numbers. The exponent is
+    // taken only when a digit follows it, so the `e` opening an identifier is
+    // left to the tokenizer's next pass.
+    const literal = this.readWhile((c) => {
+      let accepted: boolean;
+      if (c === '.') {
+        accepted = !hasDot && !hasExponent;
+        hasDot ||= accepted;
+      } else if (c === 'e' || c === 'E') {
+        const signed = ['+', '-'].includes(this.input.peek(1));
+        accepted =
+          !hasExponent && Tokenizer.isDigit(this.input.peek(signed ? 2 : 1));
+        hasExponent ||= accepted;
+      } else if (c === '+' || c === '-') {
+        accepted = previous === 'e' || previous === 'E';
+      } else {
+        accepted = Tokenizer.isDigit(c);
+      }
+      if (accepted) previous = c;
+      return accepted;
+    });
+    return { type: 'num', value: Number(literal) };
   }
 
   private static isWhitespace(c: string) {

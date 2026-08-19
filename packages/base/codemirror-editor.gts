@@ -925,10 +925,26 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
 
   <template>
     {{#if this.cm}}
-      <div class='codemirror-editor' data-test-codemirror-editor ...attributes>
+      {{! `data-overlay-clip-container` / `data-overlay-clip-header` mark the
+          scroll scope and its sticky header so an overlay layer can clip a
+          decorated card's overlay behind the header: adorn overlays drawn over
+          embedded compose-preview cards are cut off where a card scrolls behind
+          the sticky toolbar, so the outline no longer paints on top of it. This
+          is a data-attribute contract — the consumer finds these markers by
+          attribute, not by importing this module. }}
+      <div
+        class='codemirror-editor'
+        data-overlay-clip-container
+        data-test-codemirror-editor
+        ...attributes
+      >
         {{! ── Docked toolbar ── }}
         {{! template-lint-disable no-pointer-down-event-binding }}
-        <div class='codemirror-toolbar' data-test-markdown-toolbar>
+        <div
+          class='codemirror-toolbar'
+          data-overlay-clip-header
+          data-test-markdown-toolbar
+        >
           {{yield to='leadingControls'}}
           {{#if (has-block 'leadingControls')}}
             <span class='toolbar-divider'></span>

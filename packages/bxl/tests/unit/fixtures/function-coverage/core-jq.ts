@@ -1,4 +1,27 @@
-import { jqCases, TIMEZONES, type CoverageCase } from './case.ts';
+import { deepStrictEqual } from 'node:assert';
+import { jqCases, type CoverageCase } from './case.ts';
+
+/** jq's broken-down time: the eight fields `gmtime` and `localtime` yield. */
+function brokenDownTime(wallClock: Date) {
+  return [
+    wallClock.getUTCFullYear(),
+    wallClock.getUTCMonth(),
+    wallClock.getUTCDate(),
+    wallClock.getUTCHours(),
+    wallClock.getUTCMinutes(),
+    wallClock.getUTCSeconds(),
+    wallClock.getUTCDay(),
+    Math.floor(
+      (Date.UTC(
+        wallClock.getUTCFullYear(),
+        wallClock.getUTCMonth(),
+        wallClock.getUTCDate(),
+      ) -
+        Date.UTC(wallClock.getUTCFullYear(), 0, 1)) /
+        86_400_000,
+    ),
+  ];
+}
 
 export const coreJqCases: CoverageCase[] = jqCases([
   // Type filters: each keeps the inputs of one jq type and drops the rest.
@@ -39,11 +62,6 @@ export const coreJqCases: CoverageCase[] = jqCases([
     // empty array and object as well as a populated one.
     source: '[(1, [2], [], {}) | scalars_or_empty]',
     expected: [1, [], {}],
-    knownDefect:
-      'the implementation is `if (isScalar(input)) yield input`, making it a ' +
-      'byte-identical copy of scalars/0 — empty collections are dropped ' +
-      'rather than kept',
-    produces: { expected: [1] },
   },
   { covers: 'finites/0', source: '[(1, infinite) | finites]', expected: [1] },
   // Zero is finite but subnormal-or-zero, so it is not "normal".
@@ -55,6 +73,7 @@ export const coreJqCases: CoverageCase[] = jqCases([
     expected: [2, 3],
   },
   { covers: 'not/0', source: 'false | not', expected: true },
+  { covers: 'not/0', source: 'true | not', expected: false },
   { covers: 'type/0', source: '[] | type', expected: 'array' },
   { covers: 'length/0', source: 'length', input: { a: 1, b: 2 }, expected: 2 },
   { covers: 'length/0', source: 'null | length', expected: 0 },
@@ -73,7 +92,9 @@ export const coreJqCases: CoverageCase[] = jqCases([
     expected: ['b', 'a'],
   },
   { covers: 'has/1', source: 'has("a")', input: { a: 1 }, expected: true },
+  { covers: 'has/1', source: 'has("b")', input: { a: 1 }, expected: false },
   { covers: 'in/1', source: '"a" | in({"a":1})', expected: true },
+  { covers: 'in/1', source: '"b" | in({"a":1})', expected: false },
   {
     covers: 'to_entries/0',
     source: 'to_entries',
@@ -160,7 +181,14 @@ export const coreJqCases: CoverageCase[] = jqCases([
     input: ['foobar', 'baz'],
     expected: true,
   },
+  {
+    covers: 'contains/1',
+    source: 'contains(["nope"])',
+    input: ['foobar', 'baz'],
+    expected: false,
+  },
   { covers: 'inside/1', source: '"bar" | inside("foobar")', expected: true },
+  { covers: 'inside/1', source: '"baz" | inside("foobar")', expected: false },
   {
     covers: 'indices/1',
     source: 'indices([1,2])',
@@ -306,15 +334,46 @@ export const coreJqCases: CoverageCase[] = jqCases([
     input: [{ v: 4 }, { v: 2 }],
     expected: { v: 2 },
   },
+  // The two disagree on ties: max_by keeps the last item holding the winning
+  // key, min_by the first. Asserted because either could plausibly be picked.
+  {
+    covers: 'max_by/1',
+    source: 'max_by(.v)',
+    input: [
+      { v: 2, i: 0 },
+      { v: 2, i: 1 },
+    ],
+    expected: { v: 2, i: 1 },
+  },
+  {
+    covers: 'min_by/1',
+    source: 'min_by(.v)',
+    input: [
+      { v: 2, i: 0 },
+      { v: 2, i: 1 },
+    ],
+    expected: { v: 2, i: 0 },
+  },
+  // An empty array has a null extreme rather than no answer at all, matching
+  // what max/0 and min/0 report.
+  { covers: 'max_by/1', source: '[] | max_by(.)', expected: null },
+  { covers: 'min_by/1', source: '[] | min_by(.)', expected: null },
   // bsearch returns the hit index, or -1 - insertionPoint when the target is absent.
   { covers: 'bsearch/1', source: '[1,3,5] | bsearch(4)', expected: -3 },
   { covers: 'all/0', source: 'all', input: [true, false], expected: false },
+  { covers: 'all/0', source: 'all', input: [true, true], expected: true },
   { covers: 'all/1', source: 'all(. > 0)', input: [1, 2], expected: true },
+  { covers: 'all/1', source: 'all(. > 0)', input: [1, -1], expected: false },
   { covers: 'all/2', source: 'all(range(3); . < 2)', expected: false },
+  { covers: 'all/2', source: 'all(range(3); . < 3)', expected: true },
   { covers: 'any/0', source: 'any', input: [false, true], expected: true },
+  { covers: 'any/0', source: 'any', input: [false, false], expected: false },
   { covers: 'any/1', source: 'any(. > 1)', input: [1, 2], expected: true },
+  { covers: 'any/1', source: 'any(. > 1)', input: [0, 1], expected: false },
   { covers: 'any/2', source: 'any(range(3); . == 2)', expected: true },
+  { covers: 'any/2', source: 'any(range(3); . == 5)', expected: false },
   { covers: 'isempty/1', source: 'isempty(empty)', expected: true },
+  { covers: 'isempty/1', source: 'isempty(1)', expected: false },
 
   // Generators and control flow.
   { covers: 'empty/0', source: '1, empty, 2', outputs: [1, 2] },
@@ -368,9 +427,19 @@ export const coreJqCases: CoverageCase[] = jqCases([
     expected: true,
   },
   {
+    covers: 'startswith/1',
+    source: '"foobar" | startswith("bar")',
+    expected: false,
+  },
+  {
     covers: 'endswith/1',
     source: '"foobar" | endswith("bar")',
     expected: true,
+  },
+  {
+    covers: 'endswith/1',
+    source: '"foobar" | endswith("foo")',
+    expected: false,
   },
   {
     covers: 'ltrimstr/1',
@@ -420,42 +489,53 @@ export const coreJqCases: CoverageCase[] = jqCases([
     source: '"abc" | match("b")',
     expected: { offset: 1, length: 1, string: 'b', captures: [] },
   },
-  // The capture name on a match is the root the capture/sub/gsub defects all
-  // grow from, so it is pinned here rather than only through them — patching
-  // `capture` alone would promote those cases and leave this one failing.
+  // A named group carries its name onto the match, which is where `capture`,
+  // `sub` and `gsub` all read it from — so it is asserted at that root as
+  // well as through each of them.
   {
     covers: 'match/1',
     source: '"abc123" | match("(?<num>[0-9]+)") | .captures[0].name',
     expected: 'num',
-    knownDefect:
-      'transformRegExpMatch hardcodes name: null on every capture and never ' +
-      "reads the match's groups",
-    produces: { expected: null },
   },
   {
     covers: 'match/2',
     source: '"aA" | [match("a"; "gi") | .offset]',
     expected: [0, 1],
   },
+  // An optional group that did not take part still occupies its slot, with no
+  // text and no position.
+  {
+    covers: 'match/1',
+    source: '"abc" | match("(x)?(b)") | .captures[0]',
+    expected: { offset: -1, length: 0, string: null, name: null },
+  },
+  // Capture names are read off the pattern by counting group openings, so the
+  // count has to skip the parentheses that are not groups: one inside a
+  // character class, and the one opening a lookbehind.
+  {
+    covers: 'match/1',
+    source: '"a(b" | match("[(](?<x>b)") | .captures[0].name',
+    expected: 'x',
+  },
+  {
+    covers: 'match/1',
+    source: '"ab" | match("(?<=a)(?<x>b)") | .captures[0].name',
+    expected: 'x',
+  },
   { covers: 'test/1', source: '"abc" | test("b.")', expected: true },
+  { covers: 'test/1', source: '"abc" | test("z.")', expected: false },
   { covers: 'test/2', source: '"ABC" | test("abc"; "i")', expected: true },
+  // The same pattern without the ignore-case flag does not match.
+  { covers: 'test/2', source: '"ABC" | test("abc"; "g")', expected: false },
   {
     covers: 'capture/1',
     source: '"abc123" | capture("(?<num>[0-9]+)")',
     expected: { num: '123' },
-    knownDefect:
-      'transformRegExpMatch hardcodes name: null on every capture and never ' +
-      "reads the match's groups, so capture's select(.name != null) rejects " +
-      'everything and yields {}. sub/gsub replacement captures are empty for ' +
-      'the same reason',
-    produces: { expected: {} },
   },
   {
     covers: 'capture/2',
     source: '"XYZ" | capture("(?<low>xyz)"; "i")',
     expected: { low: 'XYZ' },
-    knownDefect: 'named captures are discarded, as for capture/1',
-    produces: { expected: {} },
   },
   {
     covers: 'scan/1',
@@ -473,18 +553,11 @@ export const coreJqCases: CoverageCase[] = jqCases([
     covers: 'sub/2',
     source: '"abc" | sub("(?<x>b)"; "[" + .x + "]")',
     expected: 'a[b]c',
-    knownDefect:
-      'the replacement sees no named captures, for the same reason capture/1 ' +
-      'yields {} — transformRegExpMatch never reads the match groups — so the ' +
-      'interpolation substitutes nothing',
-    produces: { expected: 'a[]c' },
   },
   {
     covers: 'gsub/2',
     source: '"abc" | gsub("(?<x>b)"; "<" + .x + ">")',
     expected: 'a<b>c',
-    knownDefect: 'named captures are discarded, as for sub/2',
-    produces: { expected: 'a<>c' },
   },
   { covers: 'gsub/3', source: '"aBa" | gsub("b"; "-"; "i")', expected: 'a-a' },
   {
@@ -512,6 +585,7 @@ export const coreJqCases: CoverageCase[] = jqCases([
   },
   { covers: 'tonumber/0', source: '"3.5" | tonumber', expected: 3.5 },
   { covers: 'toboolean/0', source: '"true" | toboolean', expected: true },
+  { covers: 'toboolean/0', source: '"false" | toboolean', expected: false },
   {
     covers: 'tojson/0',
     source: 'tojson',
@@ -558,8 +632,23 @@ export const coreJqCases: CoverageCase[] = jqCases([
     libraries: ['core'],
     expected: { a: { id: 'a', n: 1 }, b: { id: 'b', n: 2 } },
   },
+  // In the set a card resolves against, Excel's INDEX wins the `INDEX/2` key,
+  // and jq's one-argument form delegates to whichever `INDEX/2` resolved — so
+  // it reaches Excel's positional lookup and rejects the string key. The
+  // linter's jq-index-shadowed-by-excel warning fires on the two-argument
+  // call, where the name is unambiguously the one Excel took; at one argument
+  // the spelling is jq's own index-of and reads as intentional, so this shape
+  // arrives as a runtime error with nothing to explain it.
+  {
+    covers: 'INDEX/1',
+    source: 'INDEX(.id)',
+    input: [{ id: 'a' }, { id: 'b' }],
+    throws: /Cannot index array with string/,
+  },
   { covers: 'IN/1', source: '2 | IN(1,2,3)', expected: true },
+  { covers: 'IN/1', source: '9 | IN(1,2,3)', expected: false },
   { covers: 'IN/2', source: 'IN(1,2,3; 2)', expected: true },
+  { covers: 'IN/2', source: 'IN(1,2,3; 9)', expected: false },
   {
     covers: 'JOIN/2',
     source: 'JOIN({"a":1}; .k)',
@@ -583,95 +672,70 @@ export const coreJqCases: CoverageCase[] = jqCases([
     covers: 'gmtime/0',
     source: '1425599507 | gmtime',
     expected: [2015, 2, 5, 23, 51, 47, 4, 63],
-    zones: TIMEZONES,
   },
   {
     covers: 'mktime/0',
     source: '[2015,2,5,23,51,47,4,63] | mktime',
     expected: 1425599507,
-    zones: TIMEZONES,
   },
   {
     covers: 'strftime/1',
     source: '1425599507 | strftime("%Y-%m-%dT%H:%M:%SZ")',
     expected: '2015-03-05T23:51:47Z',
-    zones: TIMEZONES,
   },
   {
     covers: 'strptime/1',
     source: '"2015-03-05T23:51:47Z" | strptime("%Y-%m-%dT%H:%M:%SZ")',
     expected: [2015, 2, 5, 23, 51, 47, 4, 63],
-    zones: TIMEZONES,
   },
   {
     covers: 'todate/0',
     source: '1425599507 | todate',
     expected: '2015-03-05T23:51:47Z',
-    zones: TIMEZONES,
   },
   {
     covers: 'todateiso8601/0',
     source: '86400 | todateiso8601',
     expected: '1970-01-02T00:00:00Z',
-    zones: TIMEZONES,
   },
   {
     covers: 'fromdate/0',
     source: '"2015-03-05T23:51:47Z" | fromdate',
     expected: 1425599507,
-    zones: TIMEZONES,
   },
   {
     covers: 'fromdateiso8601/0',
     source: '"1970-01-02T00:00:00Z" | fromdateiso8601',
     expected: 86400,
-    zones: TIMEZONES,
   },
   {
     covers: 'localtime/0',
-    // Reading the host zone is the whole point of localtime, so the assertion
-    // is the shape plus the one calendar day the epoch can land on anywhere.
+    // Reading the host zone is the whole point of localtime, so the answer is
+    // pinned to the epoch moved by exactly the offset that zone was on at the
+    // epoch — which for several of them is not the offset they are on now:
+    // Kathmandu ran +5:30 until 1986 and Kiritimati -10:40 until 1979. A
+    // `gmtime` in disguise disagrees in every zone but UTC.
     source: '0 | localtime',
-    check: (outputs) => {
-      const [parts] = outputs as number[][];
-      if (!Array.isArray(parts) || parts.length !== 8) {
-        throw new Error(
-          `expected 8 broken-down fields, got ${JSON.stringify(parts)}`,
-        );
-      }
-      if (!parts.every((part) => typeof part === 'number')) {
-        throw new Error(
-          `expected numeric fields, got ${JSON.stringify(parts)}`,
-        );
-      }
-      const [year, , , , , second] = parts;
-      if (year !== 1969 && year !== 1970) {
-        throw new Error(
-          `expected the epoch to fall in 1969 or 1970, got ${year}`,
-        );
-      }
-      if (second !== 0) {
-        throw new Error(
-          `expected the epoch to land on a whole minute, got ${second}`,
-        );
-      }
+    check: (outputs, { offsetMinutes }) => {
+      const epoch = new Date(0);
+      deepStrictEqual(
+        outputs[0],
+        brokenDownTime(new Date(offsetMinutes(epoch) * 60_000)),
+      );
     },
-    zones: TIMEZONES,
   },
   {
     covers: 'strflocaltime/1',
-    // Same host-zone dependence as localtime: any zone puts the epoch on one
-    // of two adjacent dates.
-    source: '0 | strflocaltime("%Y-%m-%d")',
-    check: (outputs) => {
-      const [formatted] = outputs as string[];
-      if (formatted !== '1969-12-31' && formatted !== '1970-01-01') {
-        throw new Error(
-          `expected the epoch date in some zone, got ${JSON.stringify(formatted)}`,
-        );
-      }
+    // Same host-zone dependence as localtime, pinned the same way: the epoch
+    // rendered at the zone's own wall clock, down to the minute, so a
+    // `strftime` in disguise fails everywhere but UTC.
+    source: '0 | strflocaltime("%Y-%m-%dT%H:%M:%S")',
+    check: (outputs, { offsetMinutes }) => {
+      const wallClock = new Date(offsetMinutes(new Date(0)) * 60_000);
+      deepStrictEqual(outputs, [
+        wallClock.toISOString().replace(/\.\d+Z$/, ''),
+      ]);
     },
-    zones: TIMEZONES,
   },
   {
     covers: 'now/0',
@@ -690,7 +754,6 @@ export const coreJqCases: CoverageCase[] = jqCases([
         );
       }
     },
-    zones: TIMEZONES,
   },
 
   // Failure and termination.
@@ -713,16 +776,11 @@ export const coreJqCases: CoverageCase[] = jqCases([
   },
   {
     covers: 'inputs/0',
-    // jq defines inputs as repeat(input) with the end-of-input break caught,
-    // so a runtime with no further inputs yields an empty stream rather than
-    // raising. That input/0 itself is unimplemented is documented; inputs
-    // failing hard is a downstream consequence that is not.
+    // `inputs` is every remaining input, and a runtime whose inputs are
+    // exhausted — as this one's always are — has none, so it yields an empty
+    // stream where `input` raises.
     source: '[inputs]',
     expected: [],
-    knownDefect:
-      'the unimplemented input/0 raises instead of signalling break, so the ' +
-      'catch in the jq definition never runs and the error escapes',
-    produces: { throws: /Feature 'input\/0' is not implemented/ },
   },
   {
     covers: 'input_filename/0',
@@ -759,6 +817,10 @@ export const coreJqCases: CoverageCase[] = jqCases([
         if (!names.includes(name))
           throw new Error(`expected ${name} in the list`);
       }
+      // `env` is callable but blocked, so it must not be advertised either.
+      if (names.includes('env/0')) {
+        throw new Error('env/0 is sandbox-blocked and must not be listed');
+      }
       const sorted = [...names].sort();
       if (names.some((name, index) => name !== sorted[index])) {
         throw new Error('expected the list to be sorted');
@@ -776,10 +838,128 @@ export const coreJqCases: CoverageCase[] = jqCases([
     source: 'get_prog_origin',
     expected: 'native-inline',
   },
+  // Build-configuration constants, so one polarity is the whole answer:
+  // BXL's numbers are IEEE doubles, with no decNumber and no preserved
+  // literal text. Every other predicate in the suite is asserted both ways.
   { covers: 'have_decnum/0', source: 'have_decnum', expected: false },
   {
     covers: 'have_literal_numbers/0',
     source: 'have_literal_numbers',
     expected: false,
+  },
+
+  // Private helpers: callable, but kept out of what `builtins` reports —
+  // jq hides its own the same way. Each is the worker a public definition
+  // delegates to, so its own contract is worth pinning rather than leaving
+  // to whatever the wrapper happens to exercise. See PRIVATE_BUILTINS in
+  // ../gate.ts for why each one is unlisted.
+  {
+    covers: 'env/0',
+    // The sandbox blocks it by name, which is the point: a card expression
+    // must not be able to read the process environment.
+    source: 'env',
+    throws: /env is not available in the public BXL sandbox/,
+  },
+  // `_assign` and `_modify` are what jq's grammar desugars `=` and `|=` into.
+  // BXL's evaluator applies both operators directly, so these run only when a
+  // program names one — which a jq program ported from upstream may.
+  {
+    covers: '_assign/2',
+    source: '_assign(.a, .b; 9)',
+    input: { a: 1, b: 2 },
+    expected: { a: 9, b: 9 },
+  },
+  {
+    covers: '_modify/2',
+    source: '_modify(.a, .b; . + 1)',
+    input: { a: 1, b: 2 },
+    expected: { a: 2, b: 3 },
+  },
+  // Likewise unary minus.
+  { covers: '_negate/0', source: '_negate', input: 5, expected: -5 },
+  // `_flatten` takes the remaining depth, so 1 flattens one level and leaves
+  // the nesting below it alone.
+  {
+    covers: '_flatten/1',
+    source: '_flatten(1)',
+    input: [[1, [2]], [3]],
+    expected: [1, [2], 3],
+  },
+  // The string half of `indices`: every start offset of the needle, counted
+  // in code points.
+  {
+    covers: '_strindices/1',
+    source: '_strindices("ab")',
+    input: 'abcab',
+    expected: [0, 3],
+  },
+  // `match`, `test` and `capture` all funnel here. The third argument is the
+  // test flag: true reports only whether the regex matched.
+  {
+    covers: '_match_impl/3',
+    source: '_match_impl("b(c)"; null; false)',
+    input: 'abc',
+    expected: [
+      {
+        offset: 1,
+        length: 2,
+        string: 'bc',
+        captures: [{ offset: 2, length: 1, string: 'c', name: null }],
+      },
+    ],
+  },
+  {
+    covers: '_match_impl/3',
+    source: '_match_impl("z"; null; true)',
+    input: 'abc',
+    expected: false,
+  },
+  {
+    covers: '_match_impl/3',
+    source: '_match_impl("b"; null; true)',
+    input: 'abc',
+    expected: true,
+  },
+  // `_nwise` chunks a stream; the two-argument form takes the array to chunk
+  // as its first argument rather than reading it from the input.
+  {
+    covers: '_nwise/2',
+    source: '[_nwise([1, 2, 3, 4, 5]; 2)]',
+    expected: [[1, 2], [3, 4], [5]],
+  },
+  {
+    covers: '_nwise/1',
+    source: '[_nwise(2)]',
+    input: [1, 2, 3, 4, 5],
+    expected: [[1, 2], [3, 4], [5]],
+  },
+  // The `_*_by_impl` family shares one protocol: the caller passes
+  // `map([f])`, so the key expression is evaluated once per element and the
+  // worker compares keys rather than whole items. A key array shorter than
+  // the input would leave later elements keyless, which is why each case
+  // uses a key that disagrees with the item's own ordering.
+  {
+    covers: '_sort_by_impl/1',
+    source: '_sort_by_impl(map([-.n]))',
+    input: [{ n: 1 }, { n: 3 }, { n: 2 }],
+    expected: [{ n: 3 }, { n: 2 }, { n: 1 }],
+  },
+  {
+    covers: '_group_by_impl/1',
+    source: '_group_by_impl(map([.n % 2]))',
+    input: [{ n: 1 }, { n: 2 }, { n: 3 }],
+    expected: [[{ n: 2 }], [{ n: 1 }, { n: 3 }]],
+  },
+  {
+    covers: '_min_by_impl/1',
+    source: '_min_by_impl(map([-.n]))',
+    input: [{ n: 1 }, { n: 3 }, { n: 2 }],
+    expected: { n: 3 },
+  },
+  {
+    covers: '_max_by_impl/1',
+    source: '_max_by_impl(map([-.n]))',
+    input: [{ n: 1 }, { n: 3 }, { n: 2 }],
+    expected: { n: 1 },
   },
 ]);

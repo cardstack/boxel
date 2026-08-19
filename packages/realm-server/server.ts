@@ -1109,8 +1109,15 @@ export class RealmServer {
       .use(
         cors({
           origin: '*',
+          // Range/If-Range are here for native media playback: <audio>/<video>
+          // elements cannot attach Authorization, so the host's auth service
+          // worker re-issues their requests as mode:'cors' with the token
+          // injected. That rewrite turns the media element's Range header into
+          // an author header needing preflight approval — without Range in
+          // this list the preflight fails and the player errors before any
+          // bytes flow.
           allowHeaders:
-            'Authorization, Content-Type, If-Match, If-None-Match, X-Requested-With, X-Boxel-Client-Request-Id, X-Boxel-Assume-User, X-HTTP-Method-Override, X-Boxel-Disable-Module-Cache, X-Filename, X-Boxel-During-Prerender, X-Boxel-Consuming-Realm, X-Boxel-Job-Id, X-Boxel-Job-Priority, X-Boxel-Logging-Correlation-Id, X-Grafana-Device-Id, X-Grafana-Action',
+            'Authorization, Content-Type, If-Match, If-None-Match, If-Range, Range, X-Requested-With, X-Boxel-Client-Request-Id, X-Boxel-Assume-User, X-HTTP-Method-Override, X-Boxel-Disable-Module-Cache, X-Filename, X-Boxel-During-Prerender, X-Boxel-Consuming-Realm, X-Boxel-Job-Id, X-Boxel-Job-Priority, X-Boxel-Logging-Correlation-Id, X-Grafana-Device-Id, X-Grafana-Action',
           // Without an explicit expose list, @koa/cors only emits the
           // CORS-safelisted response headers (cache-control, content-*,
           // expires, last-modified, pragma). ETag is not on that list,
@@ -1121,7 +1128,11 @@ export class RealmServer {
           // protocol invisible to JS. Location/Retry-After are likewise
           // non-safelisted; expose them so a cross-origin client can read
           // the async-publish status monitor target off the 202 response.
-          exposeHeaders: 'ETag, Location, Retry-After',
+          // Content-Range/Accept-Ranges are what a cross-origin caller needs
+          // to reason about a 206 byte-range response (Content-Length is
+          // safelisted, but is listed for symmetry with the range pair).
+          exposeHeaders:
+            'ETag, Location, Retry-After, Content-Range, Accept-Ranges, Content-Length',
           allowMethods: 'GET,HEAD,PUT,POST,DELETE,PATCH,OPTIONS,QUERY',
           // Cache the preflight response for 24 h. Without this @koa/cors
           // omits Access-Control-Max-Age and Chrome falls back to its
