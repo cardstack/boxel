@@ -33,12 +33,14 @@ import { existsSync, readFileSync } from 'node:fs';
 import { deepStrictEqual, ok, strictEqual } from 'node:assert';
 import { join } from 'node:path';
 import {
+  BXL_DERIVE_DENIED_CALLS,
   evaluateBxl,
   expression,
   fx,
   jq,
   loadAllFormulaExtensions,
 } from '../../src/index.ts';
+import { categoryForBxlFunction } from '../../src/bxl/profiles/function-safety.ts';
 
 // The host folds every lazy formula family into the default library set before
 // serving `@cardstack/bxl` to card code, so a card reaches `NPV` and `isEmail`
@@ -242,8 +244,9 @@ check('the diagnostic the skill quotes is the one the factory throws', () => {
 
 check('every call the skill lists as refused is refused', () => {
   shows(
-    'Refused: volatile calls (`TODAY`, `NOW`, `RAND`, `RANDBETWEEN`) · request,',
+    'Refused: volatile calls (`TODAY`, `NOW`, `RAND`, `RANDBETWEEN`, and the two clock-reading validator helpers `isAfter` / `isBefore`)',
   );
+  shows('Compare two stored dates with the operators instead');
   // Each entry: the names it covers in the skill's list, a source that reaches
   // them, and the diagnostic code the factory must answer with.
   const refused: Array<[string | string[], () => unknown, string]> = [
@@ -285,6 +288,16 @@ check('every call the skill lists as refused is refused', () => {
     ['halt', () => expression(jq`halt`), 'derive-call-banned'],
     ['input', () => expression(jq`input`), 'derive-call-banned'],
     ['builtins', () => expression(jq`builtins | length`), 'derive-call-banned'],
+    [
+      'isAfter',
+      () => expression(fx`isAfter(StartDate, EndDate)`),
+      'derive-call-banned',
+    ],
+    [
+      'isBefore',
+      () => expression(fx`isBefore(StartDate, EndDate)`),
+      'derive-call-banned',
+    ],
   ];
   listsExactly(
     REFUSED_LEAD,
@@ -293,6 +306,57 @@ check('every call the skill lists as refused is refused', () => {
   for (const [names, make, code] of refused) {
     strictEqual(rejectionCode(make), code, `${names} should be ${code}`);
   }
+});
+
+/**
+ * Call names the `derive` profile bans that the skill deliberately does not
+ * name, each with the category its refusal falls under. The skill states those
+ * categories — "control and side-effect calls", "runtime metadata" — and names
+ * the members an author might plausibly reach for; these are the rest.
+ *
+ * This list exists so the case below can be anchored to the engine instead of
+ * to this suite. Comparing the skill's list against the cases above alone is a
+ * closed loop: a ban neither of them enumerated is invisible to both, which is
+ * how `isAfter` / `isBefore` stayed missing from a page that blessed the
+ * validator helpers they sit among.
+ */
+const REFUSALS_NOT_WORTH_NAMING = new Map<string, string>([
+  ['HALT_ERROR', 'controlOrSideEffect'],
+  ['INPUT_FILENAME', 'controlOrSideEffect'],
+  ['INPUT_LINE_NUMBER', 'controlOrSideEffect'],
+  ['GET_JQ_ORIGIN', 'metadata'],
+  ['GET_PROG_ORIGIN', 'metadata'],
+  ['GET_SEARCH_LIST', 'metadata'],
+  // Not a name a card author can even reach: the parser rejects it as an
+  // unexpected keyword before the profile gets a say.
+  ['MODULEMETA', 'metadata'],
+]);
+
+check('the skill accounts for every call the derive profile bans', () => {
+  const listed = new Set(
+    listedNames(REFUSED_LEAD).map((name) => name.toUpperCase()),
+  );
+  const unaccounted: string[] = [];
+  for (const denied of BXL_DERIVE_DENIED_CALLS) {
+    if (listed.has(denied)) continue;
+    const waived = REFUSALS_NOT_WORTH_NAMING.get(denied);
+    if (waived) {
+      // A waiver is only honest while the ban really falls under the category
+      // the skill describes it by.
+      strictEqual(
+        categoryForBxlFunction(denied),
+        waived,
+        `${denied} is waived as ${waived} but the engine classes it otherwise`,
+      );
+      continue;
+    }
+    unaccounted.push(denied);
+  }
+  deepStrictEqual(
+    unaccounted,
+    [],
+    `the derive profile bans these and the skill neither names nor waives them: ${unaccounted.join(', ')}`,
+  );
 });
 
 check(
@@ -308,6 +372,7 @@ check(
       cashFlows: [-100, 60, 60],
       email: 'ops@example.com',
       items: [1, 2, 3],
+      startDate: '2026-04-30',
       status: 'Open',
       a: 7,
     };
@@ -328,6 +393,7 @@ check(
         3.7566,
       ],
       ['isEmail', () => expression(fx`isEmail(Email)`).call(card), true],
+      ['isDate', () => expression(fx`isDate(StartDate)`).call(card), true],
       [
         'LET',
         () => expression(fx`LET(t, SUM([Claims[].Paid]), t > 100)`).call(card),
@@ -357,8 +423,8 @@ check(
         () => expression(jq`[.claims[] | .paid] | unique | length`).call(card),
         2,
       ],
-      ['to_entries', () => expression(jq`to_entries | length`).call(card), 7],
-      ['keys', () => expression(jq`keys | length`).call(card), 7],
+      ['to_entries', () => expression(jq`to_entries | length`).call(card), 8],
+      ['keys', () => expression(jq`keys | length`).call(card), 8],
       ['tojson', () => expression(jq`tojson | length > 0`).call(card), true],
     ];
     listsExactly(
