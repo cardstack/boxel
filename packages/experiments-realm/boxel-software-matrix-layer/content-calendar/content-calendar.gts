@@ -326,6 +326,38 @@ class ContentCalendarConsole extends GlimmerComponent<ConsoleSignature> {
 
   // ── Creating ───────────────────────────────────────────────────────────
 
+  /**
+   * Make a piece without opening it. `createCard` deliberately opens the new
+   * card in edit format, which is right for "new blank thing, go fill it in"
+   * and wrong for scheduling — the person is working the backlog and expects to
+   * stay there. Series materialisation would otherwise open one stack item per
+   * occurrence.
+   */
+  private async createPieceSilently(attrs: {
+    title?: string;
+    platform?: string;
+    status?: string;
+    scheduledAt?: Date;
+    brief?: string;
+  }): Promise<boolean> {
+    let commandContext = this.args.context?.commandContext;
+    if (!commandContext || !this.args.realm) {
+      this.actionProblem = 'Commands are unavailable in this mode.';
+      return false;
+    }
+    this.actionProblem = undefined;
+    try {
+      await new SaveCardCommand(commandContext).execute({
+        card: new ContentPiece(attrs as never),
+        realm: this.args.realm,
+      } as never);
+      return true;
+    } catch (error: unknown) {
+      this.actionProblem = (error as Error)?.message ?? String(error);
+      return false;
+    }
+  }
+
   private async create(
     module: string,
     name: string,
@@ -426,12 +458,12 @@ class ContentCalendarConsole extends GlimmerComponent<ConsoleSignature> {
       try {
         let when = new Date(date);
         when.setHours(9, 0, 0, 0);
-        await this.create('./content-calendar/content-piece', 'ContentPiece', {
+        await this.createPieceSilently({
           title: idea.cardTitle ?? 'Untitled piece',
           brief: idea.thought ?? undefined,
           platform: idea.hunchPlatform ?? undefined,
           status: 'planned',
-          scheduledAt: when.toISOString(),
+          scheduledAt: when,
         });
       } finally {
         this.busyId = undefined;
@@ -451,12 +483,15 @@ class ContentCalendarConsole extends GlimmerComponent<ConsoleSignature> {
     try {
       let slots = nextOccurrences(series, new Date(), MATERIALISE_COUNT);
       for (let slot of slots) {
-        await this.create('./content-calendar/content-piece', 'ContentPiece', {
+        let ok = await this.createPieceSilently({
           title: series.cardTitle ?? 'Series occurrence',
           platform: series.platform ?? undefined,
           status: 'planned',
-          scheduledAt: slot.toISOString(),
+          scheduledAt: slot,
         });
+        if (!ok) {
+          break;
+        }
       }
     } finally {
       this.busyId = undefined;
@@ -570,11 +605,6 @@ class ContentCalendarConsole extends GlimmerComponent<ConsoleSignature> {
   }[] {
     let map = this.rhythmStatusMap;
     let days = this.rhythmDayCount;
-    let now = new Date();
-    let cursorIsNow =
-      now.getFullYear() === this.rhythmCursor.getFullYear() &&
-      now.getMonth() === this.rhythmCursor.getMonth();
-    let today = cursorIsNow ? now.getDate() : -1;
     return PLATFORMS.filter((p) =>
       Array.from(map.keys()).some((k) => k.startsWith(`${p.value}|`)),
     ).map((p) => ({
@@ -583,16 +613,33 @@ class ContentCalendarConsole extends GlimmerComponent<ConsoleSignature> {
       cells: Array.from({ length: days }, (_, i) => {
         let d = i + 1;
         let status = map.get(`${p.value}|${d}`);
-        let cls = 'beat';
-        if (status) {
-          cls += ` is-${status}`;
-        }
-        if (d === today) {
-          cls += ' is-today';
-        }
-        return { key: `${p.value}|${d}`, cls };
+        return {
+          key: `${p.value}|${d}`,
+          cls: status ? `beat is-${status}` : 'beat',
+        };
       }),
     }));
+  }
+
+  // Zero-based column for today, or undefined when the cursor is off this
+  // month — the playhead only exists when there is a today to point at.
+  get todayIndex(): number | undefined {
+    let now = new Date();
+    if (
+      now.getFullYear() !== this.rhythmCursor.getFullYear() ||
+      now.getMonth() !== this.rhythmCursor.getMonth()
+    ) {
+      return undefined;
+    }
+    return now.getDate() - 1;
+  }
+
+  get hasToday(): boolean {
+    return this.todayIndex !== undefined;
+  }
+
+  get rhythmColumnCount(): number {
+    return this.rhythmDayCount;
   }
 
   get rhythmDayMarks(): { key: number; label: string; isToday: boolean }[] {
@@ -604,8 +651,9 @@ class ContentCalendarConsole extends GlimmerComponent<ConsoleSignature> {
     let today = cursorIsNow ? now.getDate() : -1;
     return Array.from({ length: days }, (_, i) => {
       let d = i + 1;
-      let label = d === 1 || d % 5 === 0 ? String(d) : '';
-      return { key: d, label, isToday: d === today };
+      let isToday = d === today;
+      let label = isToday || d === 1 || d % 5 === 0 ? String(d) : '';
+      return { key: d, label, isToday };
     });
   }
 
@@ -708,6 +756,26 @@ class ContentCalendarConsole extends GlimmerComponent<ConsoleSignature> {
     this.sectionId = id;
   };
 
+  // Nothing anywhere. Distinct from "this pane is empty": the person has no
+  // foothold at all, so the app owes them a first move rather than six empty
+  // tabs.
+  get isFirstRun(): boolean {
+    if (!this.isInteractive || this.isLoadingData) {
+      return false;
+    }
+    return (
+      this.pieces.length === 0 &&
+      this.ideas.length === 0 &&
+      this.seriesList.length === 0 &&
+      this.bundles.length === 0 &&
+      this.freelancers.length === 0
+    );
+  }
+
+  get hasNoPieces(): boolean {
+    return this.pieces.length === 0;
+  }
+
   get tabs() {
     return SECTIONS.map((s) => ({ tabId: s.id, displayName: s.label }));
   }
@@ -755,6 +823,62 @@ class ContentCalendarConsole extends GlimmerComponent<ConsoleSignature> {
           <p class='problem' role='alert'>{{this.actionProblem}}</p>
         {{/if}}
 
+        {{#if this.isFirstRun}}
+          <section class='onboard'>
+            <p class='onboard-eyebrow'>Nothing here yet</p>
+            <h2 class='onboard-title'>Three moves and this calendar starts
+              working for you.</h2>
+            <ol class='steps'>
+              <li class='step'>
+                <span class='step-n'>1</span>
+                <div class='step-body'>
+                  <h3>Set up what repeats</h3>
+                  <p>Your class reminder, your Monday post — the content that
+                    holds an audience. Give it a cadence once and the calendar
+                    fills itself in.</p>
+                  <Button
+                    type='button'
+                    @kind='primary'
+                    {{on 'click' this.newSeries}}
+                  >Add a recurring series</Button>
+                </div>
+              </li>
+              <li class='step'>
+                <span class='step-n'>2</span>
+                <div class='step-body'>
+                  <h3>Empty your head into the backlog</h3>
+                  <p>Ideas arrive mid-class, not at a desk. Capture them with
+                    just a title now; pick the day later.</p>
+                  <Button
+                    type='button'
+                    @kind='secondary'
+                    {{on 'click' this.newIdea}}
+                  >Capture an idea</Button>
+                </div>
+              </li>
+              <li class='step'>
+                <span class='step-n'>3</span>
+                <div class='step-body'>
+                  <h3>Plan one drop end to end</h3>
+                  <p>A bundle is a video plus every post promoting it, counted
+                    so you can see what is still missing before the day
+                    arrives.</p>
+                  <Button
+                    type='button'
+                    @kind='secondary'
+                    {{on 'click' this.newBundle}}
+                  >Start a bundle</Button>
+                </div>
+              </li>
+            </ol>
+            <p class='onboard-foot'>Prefer to dive in? Open
+              <strong>Calendar</strong>
+              and press
+              <strong>+</strong>
+              on any day.</p>
+          </section>
+        {{/if}}
+
         {{#if (eq this.sectionId 'calendar')}}
           <section class='pane'>
             <div class='pane-head'>
@@ -771,6 +895,11 @@ class ContentCalendarConsole extends GlimmerComponent<ConsoleSignature> {
                 @onChange={{this.setPlatformFilter}}
               />
             </div>
+            {{#if this.hasNoPieces}}
+              <p class='empty'>Nothing scheduled yet. Press
+                <strong>+</strong>
+                on any day below, or drag an idea in from the Backlog.</p>
+            {{/if}}
             <Calendar
               @events={{this.calendarEvents}}
               @kindColors={{this.platformColors}}
@@ -842,6 +971,16 @@ class ContentCalendarConsole extends GlimmerComponent<ConsoleSignature> {
 
             {{#if this.rhythmRows.length}}
               <div class='sequencer'>
+                {{#if this.hasToday}}
+                  <span
+                    class='playhead'
+                    style={{cssVar
+                      today-i=this.todayIndex
+                      day-n=this.rhythmColumnCount
+                    }}
+                    aria-hidden='true'
+                  ></span>
+                {{/if}}
                 {{#each this.rhythmRows as |row|}}
                   <div class='lane' style={{cssVar beat-hue=row.hue}}>
                     <span class='lane-label'>
@@ -861,7 +1000,7 @@ class ContentCalendarConsole extends GlimmerComponent<ConsoleSignature> {
                     {{#each this.rhythmDayMarks key='key' as |mark|}}
                       <span
                         class='mark {{if mark.isToday "is-today"}}'
-                      >{{if mark.isToday '▲' mark.label}}</span>
+                      >{{mark.label}}</span>
                     {{/each}}
                   </div>
                 </div>
@@ -1409,14 +1548,53 @@ class ContentCalendarConsole extends GlimmerComponent<ConsoleSignature> {
         font-weight: 650;
       }
       .sequencer {
+        --lane-label-w: 8.5rem;
+        --lane-gap: 0.75rem;
+        --beat-gap: 2px;
+        position: relative;
         display: grid;
         gap: 0.375rem;
       }
       .lane {
         display: grid;
-        grid-template-columns: 8.5rem minmax(0, 1fr);
+        grid-template-columns: var(--lane-label-w) minmax(0, 1fr);
         align-items: center;
-        gap: 0.75rem;
+        gap: var(--lane-gap);
+      }
+      /* A sequencer's playhead. Today used to be drawn as a ring on each cell
+         in the column, which is the same shape "planned" uses — so an empty
+         lane on today read as scheduled content. One line across every lane
+         says "here" without claiming anything is in the cell. The arithmetic
+         mirrors the flex row above it: N equal cells separated by --beat-gap. */
+      .playhead {
+        position: absolute;
+        top: -0.15rem;
+        bottom: 1.15rem;
+        width: 2px;
+        pointer-events: none;
+        background: var(--primary, var(--boxel-purple));
+        left: calc(
+          var(--lane-label-w) + var(--lane-gap) +
+            (
+                (100% - var(--lane-label-w) - var(--lane-gap)) -
+                  (var(--day-n) - 1) * var(--beat-gap)
+              ) / var(--day-n) * var(--today-i) + var(--beat-gap) *
+            var(--today-i) +
+            (
+                (100% - var(--lane-label-w) - var(--lane-gap)) -
+                  (var(--day-n) - 1) * var(--beat-gap)
+              ) / var(--day-n) / 2 - 1px
+        );
+      }
+      .playhead::before {
+        content: '';
+        position: absolute;
+        top: -3px;
+        left: -3px;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--primary, var(--boxel-purple));
       }
       .lane-label {
         display: inline-flex;
@@ -1473,15 +1651,6 @@ class ContentCalendarConsole extends GlimmerComponent<ConsoleSignature> {
       .beat.is-done {
         background: var(--beat-hue, var(--boxel-450));
       }
-      .beat.is-today {
-        outline: 1.5px solid
-          color-mix(
-            in oklch,
-            var(--foreground, var(--boxel-dark)) 55%,
-            transparent
-          );
-        outline-offset: 1px;
-      }
       .beat.demo {
         flex: none;
         width: 18px;
@@ -1499,7 +1668,8 @@ class ContentCalendarConsole extends GlimmerComponent<ConsoleSignature> {
         color: var(--muted-foreground, var(--boxel-450));
       }
       .mark.is-today {
-        color: var(--foreground, var(--boxel-dark));
+        font-weight: 800;
+        color: var(--primary, var(--boxel-purple));
       }
       .legend {
         display: flex;
@@ -1513,6 +1683,82 @@ class ContentCalendarConsole extends GlimmerComponent<ConsoleSignature> {
         display: inline-flex;
         align-items: center;
         gap: 0.4rem;
+      }
+      .onboard {
+        display: grid;
+        gap: var(--boxel-sp);
+        padding: var(--boxel-sp-lg);
+        border-top: 2px solid var(--foreground, var(--boxel-dark));
+        border-bottom: 1px solid var(--border, var(--boxel-200));
+        background: var(--card, var(--boxel-light));
+      }
+      .onboard-eyebrow {
+        margin: 0;
+        font-size: 0.625rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        color: var(--muted-foreground, var(--boxel-450));
+      }
+      .onboard-title {
+        margin: 0;
+        max-width: 34ch;
+        font-family: var(
+          --font-display,
+          var(--font-sans, var(--boxel-font-family))
+        );
+        font-size: 1.75rem;
+        font-weight: 400;
+        line-height: 1.12;
+        letter-spacing: -0.02em;
+      }
+      .steps {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+        gap: var(--boxel-sp-lg);
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .step {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        gap: 0.75rem;
+        align-items: start;
+      }
+      .step-n {
+        font-family: var(
+          --font-display,
+          var(--font-sans, var(--boxel-font-family))
+        );
+        font-size: 1.5rem;
+        font-weight: 700;
+        line-height: 1;
+        color: var(--primary, var(--boxel-purple));
+        font-variant-numeric: tabular-nums;
+      }
+      .step-body {
+        display: grid;
+        gap: 0.35rem;
+        justify-items: start;
+      }
+      .step-body h3 {
+        margin: 0;
+        font-size: 0.875rem;
+        font-weight: 650;
+      }
+      .step-body p {
+        margin: 0;
+        font-size: 0.8125rem;
+        line-height: 1.5;
+        color: var(--muted-foreground, var(--boxel-450));
+      }
+      .onboard-foot {
+        margin: 0;
+        padding-top: var(--boxel-sp);
+        border-top: 1px solid var(--border, var(--boxel-200));
+        font-size: 0.8125rem;
+        color: var(--muted-foreground, var(--boxel-450));
       }
       .empty,
       .shell-note {
