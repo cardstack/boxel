@@ -308,7 +308,7 @@ export default class SearchSheet extends Component<Signature> {
       {{repositionDropdownsOnTransitionEnd}}
       {{onClickOutside
         this.onBlur
-        exceptSelector='.add-card-to-neighbor-stack,.boxel-picker__dropdown,.picker-before-options-with-search,.picker-option-row,.search-sheet-header,.search-sheet-section-header,.variant-default'
+        exceptSelector='.add-card-to-neighbor-stack,.boxel-dropdown__content,.boxel-picker__dropdown,.boxel-select__dropdown,.picker-before-options-with-search,.picker-option-row,.search-sheet-header,.search-sheet-section-header'
       }}
     >
       {{#if (eq @mode 'closed')}}

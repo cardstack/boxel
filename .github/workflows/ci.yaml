@@ -54,6 +54,7 @@ jobs:
               - 'packages/runtime-common/**'
               - 'package.json'
               - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
               # CI boot path. Each gated suite runs `./.github/actions/init`
               # (which calls `jdx/mise-action`, sourcing `.mise.toml` for tool
               # versions) and then `mise run test-services:*` (which sources

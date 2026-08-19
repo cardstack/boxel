@@ -14,8 +14,10 @@
 
 // Upper bounds (inclusive) for the blended $/M cost of each dollar tier. Fixed,
 // human-round thresholds — not quantiles — so a model's badge stays stable as
-// the catalog churns. Grounded in the live OpenRouter price distribution.
-export const COST_TIER_UPPER_BOUNDS = [1, 5, 20] as const; // $, $$, $$$ (>20 => $$$$)
+// the catalog churns. Grounded in the live OpenRouter price distribution; the
+// top bound sits below premium-priced frontier models (blended $20/M and up)
+// so they read as $$$$ rather than sharing $$$ with standard Opus-tier pricing.
+export const COST_TIER_UPPER_BOUNDS = [1, 5, 15] as const; // $, $$, $$$ (>15 => $$$$)
 
 const DOLLAR_LABELS = ['$', '$$', '$$$', '$$$$'] as const;
 
@@ -59,7 +61,12 @@ export function blendedCostPerMillion(
     (3 * (prompt === 'absent' ? 0 : prompt) +
       (completion === 'absent' ? 0 : completion)) /
     4;
-  return perToken * 1_000_000;
+  // Round to a micro-dollar per million tokens. The blend of per-token decimal
+  // strings picks up binary float noise (e.g. $10/$30 blends to
+  // 15.000000000000002), which would tip a price sitting exactly on an
+  // inclusive tier bound into the tier above. No real price distinction lives
+  // below $0.000001/M, so rounding here only removes representation error.
+  return Math.round(perToken * 1_000_000 * 1_000_000) / 1_000_000;
 }
 
 // Maps OpenRouter pricing to a cost tier, or `undefined` when pricing is

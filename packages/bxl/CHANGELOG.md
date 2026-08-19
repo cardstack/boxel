@@ -116,6 +116,29 @@ versions may change syntax behavior until `1.0.0`.
   alone, since Excel's shipped `DAYS360` parts from the February rules its own
   documentation gives while Excel's bond functions apply them.
 
+- **`YEARFRAC` reads a span the way Excel does, on all five bases.** Basis 4 is
+  now the European 30/360 it names: a day-31 endpoint moves onto the 30th at both
+  ends before differencing, where leaving both where they stand is a raw 30/360
+  that lands a day out in whichever direction the 31 sits — a day short when the
+  span opens on the 31st, a day long when it closes on one. Basis 0's US 30/360
+  counts a February that a span opens on as a whole 30-day month, and closes the
+  same way when the span also ends on the last day of a February. The earlier of
+  the two dates opens the span however the arguments arrived, so a reversed pair
+  measures a length rather than a negative — and on basis 1 a reversed pair
+  produced `NaN`, since the multi-year branch averaged over a year count of zero.
+  A time of day is no part of a day count, so a serial carrying one names the
+  same day as a serial without one, which is how `NOW()` reaches these functions.
+  `DISC` and `PRICEDISC` divide by this fraction and inherit all four; `ACCRINT`
+  counts its own schedule and is reached by none of them.
+
+- **`DISC` and `PRICEDISC` raise `#NUM!` unless settlement precedes maturity**,
+  as the `TBILL` family already did. A transposed pair used to answer a negative
+  discount or a price above redemption, and settling on the maturity date divided
+  by a term of zero. Both also parse their basis rather than coercing it, so a
+  basis that is not a number is an error instead of a silent US 30/360, and
+  `ACCRINT` truncates its frequency and basis as every other function taking
+  them does.
+
 ### Removed
 
 - **`BXL_BUILD_INFO.buildTime`.** Only a bundling step ever set it; the const

@@ -39,3 +39,5 @@ export class AvifDef extends RasterImageDef {
     };
   }
 }
+
+export default AvifDef;

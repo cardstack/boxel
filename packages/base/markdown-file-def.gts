@@ -558,3 +558,5 @@ export class MarkdownDef extends FileDef {
     return attributes;
   }
 }
+
+export default MarkdownDef;
