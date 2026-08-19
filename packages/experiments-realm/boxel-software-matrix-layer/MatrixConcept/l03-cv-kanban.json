@@ -17,7 +17,7 @@
       "domainKit": null,
       "owner": null,
       "workState": null,
-      "notes": null,
+      "notes": "content-calendar renders its idea backlog as navigation rows rather than mounting Kanban \u2014 a bespoke remainder. Drag-to-schedule targets the Calendar, not a column, so the board affordance did not fit; revisit if the backlog gains stages.",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/kanban",
       "specTarget": "shared block",
       "consumers": "board-demo, revenue-os",

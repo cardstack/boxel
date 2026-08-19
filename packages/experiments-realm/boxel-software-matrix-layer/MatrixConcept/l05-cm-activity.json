@@ -17,7 +17,7 @@
       "domainKit": null,
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1 · Built — experiments-realm/activity.gts, typed timeline entry, POC tier",
+      "notes": "v1 \u00b7 Built \u2014 experiments-realm/activity.gts, typed timeline entry, POC tier | content-calendar has no status-change feed yet, so Activity is unexercised by it despite one-click status changes being the app's most frequent mutation. Recorded as the obvious next consumer.",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/activity",
       "specTarget": "shared block",
       "consumers": "revenue-os",
