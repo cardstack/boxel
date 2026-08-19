@@ -465,19 +465,29 @@ export default class ToolService extends Service {
           continue;
         }
 
-        let message = roomResource.messages.find((m) => m.eventId === eventId);
+        // Resolve through the continuation chain: an answer long enough to
+        // be split arrives as several events, its tool requests can ride any
+        // of them, and only the head of the chain is exposed in
+        // roomResource.messages (a plain messages.find on a continuation's
+        // event id never matches, so its tools were dropped without ever
+        // getting a terminal result — a spinner that never clears).
+        // Message.tools on the head chases the chain, so the head carries
+        // every request downstream code needs.
+        let message = roomResource.messageForEventId(eventId!);
         // Events are only queued once their content is finalized
         // (isStreamingFinished), but the room resource folds that content
         // into its Message asynchronously — at drain time the Message may
         // not exist yet, or may still hold a streaming snapshot whose tool
         // arguments are partial or unparsed. Validating that snapshot posts
         // a spurious 'invalid' result for a request that is actually fine
-        // (CS-12103). Requeue until the Message reports the finalized state;
-        // bounded so a message that never catches up still falls through
-        // and resolves with a real (terminal) validation result.
+        // (CS-12103). Requeue until the Message reports the finalized state
+        // — chain-aware, so a head whose continuation is still streaming
+        // keeps waiting; bounded so a message that never catches up still
+        // falls through and resolves with a real (terminal) validation
+        // result.
         if (
           !message ||
-          (!message.isStreamingOfEventFinished && !message.isCanceled)
+          (message.isStreamingFinished !== true && !message.isCanceled)
         ) {
           let compoundKey = `${roomId}|${eventId}`;
           let retries = this.toolFinalizationRetries.get(compoundKey) ?? 0;
@@ -694,7 +704,9 @@ export default class ToolService extends Service {
     roomId: string,
     eventId: string,
   ) {
-    let message = roomResource.messages.find((m) => m.eventId === eventId);
+    // Chain-aware for the same reason as the drain's lookup: the queued
+    // event may be a continuation, and only the head is in messages.
+    let message = roomResource.messageForEventId(eventId);
     if (!message) {
       return;
     }

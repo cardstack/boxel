@@ -1659,6 +1659,68 @@ ${REPLACE_MARKER}
       .exists('the patch applies even though it was split across two events');
   });
 
+  test('a tool request on a continuation event is executed and gets a terminal result', async function (assert) {
+    // Only the head of a continuation chain is exposed in
+    // roomResource.messages, but the tool drain queues the event that
+    // actually carries the request — the continuation. Resolving that event
+    // id with a plain messages.find never matches, so the request was
+    // silently dropped: no execution, no terminal result, a spinner that
+    // never clears.
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}hello.txt`,
+    });
+    await click('[data-test-open-ai-assistant]');
+    let roomId = getRoomIds().pop()!;
+
+    await click('[data-test-llm-mode-option="act"]');
+
+    let agentId = getService('matrix-service').agentId;
+    let headEventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'A very long answer that had to be split; the tool call rides the continuation.',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY]: true,
+      data: { context: { agentId } },
+    });
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'Once applied, let me open the card so you can see it.',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_CONTINUATION_OF_CONTENT_KEY]: headEventId,
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+        {
+          id: 'tool-on-continuation',
+          name: 'patchCardInstance',
+          arguments: JSON.stringify({
+            attributes: {
+              cardId: `${testRealmURL}index`,
+              patch: { attributes: {} },
+            },
+          }),
+        },
+      ],
+      data: { context: { agentId } },
+    });
+
+    await waitUntil(
+      () =>
+        getRoomEvents(roomId).some(
+          (event) =>
+            event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+            event.content['m.relates_to']?.key === 'applied' &&
+            event.content.commandRequestId === 'tool-on-continuation',
+        ),
+      { timeout: 5000 },
+    );
+    assert.ok(
+      true,
+      'the tool request on the continuation event auto-ran to an applied result',
+    );
+  });
+
   test('LLM mode for a message is resolved by room order, not just timestamp', async function (assert) {
     // Matrix origin_server_ts has millisecond resolution, so a message and a
     // mode transition can share a timestamp. The active mode for a message must
