@@ -1,6 +1,6 @@
 ---
 name: bxl-engine
-description: Architecture of the BXL expression engine (`packages/bxl`) — how a formula gets from readable syntax to a value, how the builtin registry resolves libraries, and the invariants a change must preserve. Leads with the ones that fail silently rather than turning a test red: a coverage recorder that keeps passing while exercising a different dispatch route than production, a second `IF`/`IFS` implementation that registry-enumerated coverage structurally cannot see, a fast-path allowlist that truncates multi-output filters, and execution-profile safety lists that nothing checks against the registry. Use when editing or reviewing anything under `packages/bxl/src`, adding or fixing a builtin, writing or changing function-coverage cases, or working out why a formula behaves differently in the suite than it does in a card.
+description: Architecture of the BXL expression engine (`packages/bxl`) — how a formula gets from readable syntax to a value, how the builtin registry resolves libraries, and the invariants a change must preserve. Leads with the ones that fail silently rather than turning a test red — a coverage recorder that keeps passing while exercising a different dispatch route than production, a second `IF`/`IFS` implementation that registry-enumerated coverage structurally cannot see, a fast-path allowlist that truncates multi-output filters, and execution-profile safety lists that nothing checks against the registry. Use when editing or reviewing anything under `packages/bxl/src`, adding or fixing a builtin, writing or changing function-coverage cases, or working out why a formula behaves differently in the suite than it does in a card.
 ---
 
 # BXL engine — architecture and the invariants a change must preserve
@@ -250,16 +250,17 @@ suites; they prove the plumbing, not the zone matrix.
 (`aggregate`, `volatile`, `controlOrSideEffect`, `metadata`,
 `predicateLowerable`, `boundedScalar`, `authorization`) and
 `BXL_PROFILE_FUNCTION_POLICIES` turns those into per-profile decisions. The
-`predicate` profile uses an **allowlist**, so an unlisted name is denied there.
-Every other profile — `derive`, `mutation`, `policy`, `authorization` — uses a
-**denylist**, and an unclassified name comes back `unclassified`, which every
-profile validator in `src/bxl/ast/index.ts` treats as no issue at all.
+`predicate` profile uses an **allowlist**, and `validatePredicateNode` bans any
+call that does not come back `allow` — so an unlisted name, `unclassified`
+included, is denied there. Every other profile — `derive`, `mutation`, `policy`,
+`authorization` — uses a **denylist**, and their validators in
+`src/bxl/ast/index.ts` raise nothing at all for an `unclassified` name.
 
 That is the right default for the large majority of names (a pure scalar like
 `ABS` needs no entry), and it is why nothing enumerates the registry against
 these lists. The cost is that a **newly added volatile, aggregate,
-side-effecting or metadata-reading function is permitted in every profile until
-someone adds it to the right set** — including `derive`, which is what
+side-effecting or metadata-reading function is permitted in every denylist
+profile until someone adds it to the right set** — including `derive`, which is what
 `computeVia` runs under, where a volatile call means a computed field that
 changes on every index. Classification is by base name, case-folded and without
 arity, so jq's `now` and Excel's `NOW` are one entry.
