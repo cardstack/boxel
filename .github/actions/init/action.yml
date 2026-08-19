@@ -87,8 +87,20 @@ runs:
     - name: Install mkcert
       shell: bash
       run: |
-        timeout 5m sudo apt-get update -o Acquire::Retries=3
-        timeout 5m sudo apt-get install -y -o Acquire::Retries=3 mkcert libnss3-tools
+        # Try the indexes the runner image already ships with. A refresh costs
+        # 11.3 MB across 34 requests — Ubuntu's four suites in main, universe,
+        # restricted and multiverse, plus Microsoft's azure-cli and prod
+        # repositories and Google's Chrome one, including arm64 and armhf index
+        # files this runner cannot use — to obtain a single 1.4 MB package. Each
+        # of those requests is a separate chance to stall on a degraded mirror,
+        # which is why this step is where jobs wedge.
+        if timeout 2m sudo apt-get install -y -o Acquire::Retries=3 mkcert libnss3-tools; then
+          exit 0
+        fi
+        # Only if the shipped indexes cannot satisfy it: refresh and retry.
+        echo "mkcert not installable from the shipped indexes; refreshing"
+        timeout 3m sudo apt-get update -o Acquire::Retries=3
+        timeout 3m sudo apt-get install -y -o Acquire::Retries=3 mkcert libnss3-tools
 
     - name: Provision dev TLS cert
       shell: bash
