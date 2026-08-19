@@ -1,13 +1,13 @@
 import {
-  BooleanField,
   CardDef,
   Component,
   contains,
   field,
-  NumberField,
   StringField,
 } from '@cardstack/base/card-api';
+import BooleanField from '@cardstack/base/boolean';
 import enumField from '@cardstack/base/enum';
+import NumberField from '@cardstack/base/number';
 import RepeatIcon from '@cardstack/boxel-icons/repeat';
 
 import {
