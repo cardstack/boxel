@@ -549,7 +549,7 @@ export const bxlFormulaExamples: BxlFormulaExample[] = [
     level: '06 date finance engineering',
     name: 'base conversion',
     expression: 'BASE(255, 16)',
-    expected: 'ff',
+    expected: 'FF',
   },
   {
     id: 76,

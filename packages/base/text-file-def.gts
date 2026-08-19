@@ -243,3 +243,5 @@ export class TextFileDef extends FileDef {
     };
   }
 }
+
+export default TextFileDef;

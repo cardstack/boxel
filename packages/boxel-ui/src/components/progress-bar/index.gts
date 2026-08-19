@@ -77,7 +77,7 @@ export default class ProgressBar extends Component<Signature> {
     </div>
 
     <style scoped>
-      @layer {
+      @layer boxelComponentL1 {
         .boxel-progress-bar {
           /* Track height. Defaults to the em-relative height this component
              has always had, so a caller that sets nothing is unaffected; a

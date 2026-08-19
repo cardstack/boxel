@@ -278,6 +278,7 @@ export default class Room extends Component<Signature> {
               {{on 'dragenter' this.handleChatInputDragEnter}}
               {{on 'dragleave' this.handleChatInputDragLeave}}
               {{on 'drop' this.handleChatInputDrop}}
+              data-theme='light'
             >
               {{#if this.isDropZoneActive}}
                 <div
@@ -1747,6 +1748,7 @@ export default class Room extends Component<Signature> {
       baseFileDefCodeRef: baseFileRef,
       contentHash: undefined,
       contentSize: bytes.byteLength,
+      fileSizeLimitBytes: ENV.fileSizeLimitBytes,
       fileBytes: bytes,
       buildError: (errorUrl, error) => {
         let errorJSONAPI = formattedError(errorUrl, error).errors[0];

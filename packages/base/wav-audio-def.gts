@@ -75,3 +75,5 @@ export class WavDef extends AudioDef {
     };
   }
 }
+
+export default WavDef;

@@ -13,11 +13,11 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
     stroke-linecap='round'
     stroke-linejoin='round'
     stroke-width='2'
-    class='icon icon-tabler icons-tabler-outline icon-tabler-arrow-right-square'
+    class='lucide lucide-arrow-right-square'
     viewBox='0 0 24 24'
     ...attributes
-  ><path stroke='none' d='M0 0h24v24H0z' /><path
-      d='M7 12h14M18 15l3-3-3-3M3 10h4v4H3z'
+  ><rect width='18' height='18' x='3' y='3' rx='2' /><path
+      d='M8 12h8M12 16l4-4-4-4'
     /></svg>
 </template>;
 

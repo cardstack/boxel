@@ -52,7 +52,7 @@ export default class RealmIcon extends Component<Signature> {
     />
 
     <style scoped>
-      @layer {
+      @layer boxelComponentL1 {
         .realm-icon-img {
           --border-radius: var(
             --boxel-realm-icon-border-radius,

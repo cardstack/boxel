@@ -1,15 +1,10 @@
-import 'ember-power-select/styles';
-
 import Check from '@cardstack/boxel-icons/check';
 import { eq } from '@cardstack/boxel-ui/helpers';
-import { registerDestructor } from '@ember/destroyable';
-import { concat } from '@ember/helper';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { get } from '@ember/object';
 import { action } from '@ember/object';
 import { guidFor } from '@ember/object/internals';
-import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 import type { ComponentLike } from '@glint/template';
 import PowerSelect, {
@@ -90,7 +85,6 @@ export interface BoxelSelectArgs<ItemT> extends Omit<
   ) => void;
   options: ItemT[];
   selected?: ItemT | Promise<ItemT | undefined> | null;
-  variant?: 'primary' | 'secondary' | 'muted' | 'destructive' | 'default';
 }
 
 interface Signature<ItemT = any> {
@@ -104,13 +98,7 @@ interface Signature<ItemT = any> {
 export default class BoxelSelect<ItemT = any> extends Component<
   Signature<ItemT>
 > {
-  private themeObserver?: MutationObserver | null = null;
   private selectId = `boxel-select-${guidFor(this)}`;
-
-  constructor(owner: Owner, args: Signature<ItemT>['Args']) {
-    super(owner, args);
-    registerDestructor(this, () => this.stopObservingTheme());
-  }
 
   get selectEl(): HTMLElement | null {
     return document.getElementById(this.selectId);
@@ -156,6 +144,8 @@ export default class BoxelSelect<ItemT = any> extends Component<
       '--boxel-dropdown-focus-border-color',
       '--boxel-dropdown-highlight-color',
       '--boxel-dropdown-highlight-hover-color',
+      '--boxel-dropdown-selected-highlighted-color',
+      '--boxel-dropdown-selected-hover-color',
       '--boxel-dropdown-hover-color',
       '--boxel-form-control-border-radius',
     ];
@@ -172,52 +162,45 @@ export default class BoxelSelect<ItemT = any> extends Component<
     });
   }
 
-  private startObservingTheme() {
-    if (!this.selectEl) {
+  // One-shot copy of the trigger's computed theme onto the shared wormhole.
+  // Every open re-syncs before the content's first paint, so a theme that
+  // changes while a dropdown is open corrects itself on the next open —
+  // no mutation observation needed. Skipped for renderInPlace, where the
+  // dropdown inherits the theme naturally through CSS.
+  private syncTheme() {
+    if (!this.selectEl || this.args.renderInPlace) {
       return;
     }
-
-    // Don't set up theme observation when renderInPlace is true
-    // as the dropdown will inherit styles naturally through CSS
-    if (this.args.renderInPlace) {
-      return;
-    }
-
     this.syncCustomProps();
     this.detectAndSetThemeColors();
-
-    this.stopObservingTheme();
-    this.themeObserver = new MutationObserver(() => {
-      this.syncCustomProps();
-      this.detectAndSetThemeColors();
-    });
-    this.themeObserver.observe(this.selectEl, {
-      attributes: true,
-      attributeFilter: ['style', 'class'],
-      subtree: false,
-    });
-  }
-
-  private stopObservingTheme() {
-    this.themeObserver?.disconnect();
-    this.themeObserver = null;
   }
 
   @action
-  onOpen() {
-    // Only start theme observation if not rendering in place
-    if (!this.args.renderInPlace) {
-      this.startObservingTheme();
-    }
-  }
-
-  @action
-  onClose(
-    select: Parameters<NonNullable<Signature<ItemT>['Args']['onClose']>>[0],
+  onOpen(
+    select: Parameters<NonNullable<Signature<ItemT>['Args']['onOpen']>>[0],
     event?: Event,
   ) {
-    this.stopObservingTheme();
-    return this.args.onClose?.(select, event);
+    if (this.args.onOpen?.(select, event as Event) === false) {
+      return false;
+    }
+    // Sync theme vars onto the shared wormhole now, before the dropdown
+    // content renders, so its first paint already carries the trigger's
+    // theme. The focus handler alone is not enough: opens that don't move
+    // focus (keyboard reopen, an already-focused trigger) never refire it.
+    this.syncTheme();
+    return true;
+  }
+
+  @action
+  onFocus(
+    select: Parameters<NonNullable<Signature<ItemT>['Args']['onFocus']>>[0],
+    event: FocusEvent,
+  ) {
+    // Fallback for focus without an open transition (e.g. tabbing to the
+    // trigger of an already-open select), and re-syncs after another
+    // dropdown's sync overwrote the shared wormhole vars.
+    this.syncTheme();
+    this.args.onFocus?.(select, event);
   }
 
   // null↔undefined translation for the no-selection value (see
@@ -257,32 +240,9 @@ export default class BoxelSelect<ItemT = any> extends Component<
 
     const hasThemeVariables = hasBackground || hasForeground || parentHasTheme;
 
-    const variant = this.args.variant || 'default';
-    const variantColors = {
-      default: {
-        bg: 'var(--background, var(--boxel-light))',
-        fg: 'var(--foreground, var(--boxel-dark))',
-      },
-      primary: {
-        bg: 'var(--primary, var(--boxel-600))',
-        fg: 'var(--primary-foreground, var(--boxel-dark))',
-      },
-      secondary: {
-        bg: 'var(--secondary, var(--boxel-400))',
-        fg: 'var(--secondary-foreground, var(--boxel-dark))',
-      },
-      muted: {
-        bg: 'var(--muted, var(--boxel-200))',
-        fg: 'var(--muted-foreground, var(--boxel-dark))',
-      },
-      destructive: {
-        bg: 'var(--destructive, var(--boxel-danger))',
-        fg: 'var(--destructive-foreground, var(--boxel-light))',
-      },
-    };
-
     if (hasThemeVariables) {
-      const { bg, fg } = variantColors[variant];
+      const bg = 'var(--background, var(--boxel-light))';
+      const fg = 'var(--foreground, var(--boxel-dark))';
       const themeVars = {
         '--theme-highlight': `color-mix(in oklch, ${bg} 92%, ${fg})`,
         '--theme-highlight-hover': `color-mix(in oklch, ${bg} 88%, ${fg})`,
@@ -304,10 +264,7 @@ export default class BoxelSelect<ItemT = any> extends Component<
     {{! template-lint-disable no-autofocus-attribute }}
     <PowerSelect
       id={{this.selectId}}
-      class={{cn
-        'boxel-select'
-        (if @variant (concat 'variant-' @variant) 'variant-default')
-      }}
+      class='boxel-select'
       @options={{@options}}
       @searchField={{@searchField}}
       @selected={{this.selectedForPowerSelect}}
@@ -315,16 +272,13 @@ export default class BoxelSelect<ItemT = any> extends Component<
       @placeholder={{@placeholder}}
       @onChange={{this.handleChange}}
       @onBlur={{@onBlur}}
-      @onClose={{this.onClose}}
+      @onClose={{@onClose}}
       @renderInPlace={{@renderInPlace}}
       @verticalPosition={{@verticalPosition}}
-      @dropdownClass={{cn
-        'boxel-select__dropdown'
-        @dropdownClass
-        (if @variant (concat 'variant-' @variant) 'variant-default')
-      }}
+      @dropdownClass={{cn 'boxel-select__dropdown' @dropdownClass}}
       @loadingMessage={{@loadingMessage}}
-      @onFocus={{this.onOpen}}
+      @onOpen={{this.onOpen}}
+      @onFocus={{this.onFocus}}
       @ariaLabel={{@ariaLabel}}
       @ariaLabelledBy={{@ariaLabelledBy}}
       @ariaDescribedBy={{@ariaDescribedBy}}
@@ -338,9 +292,7 @@ export default class BoxelSelect<ItemT = any> extends Component<
         @triggerComponent
         (toTriggerComponent
           (component
-            BoxelSelectDefaultTrigger
-            invertIcon=(eq @verticalPosition 'above')
-            variant=@variant
+            BoxelSelectDefaultTrigger invertIcon=(eq @verticalPosition 'above')
           )
         )
       }}
@@ -383,9 +335,10 @@ export default class BoxelSelect<ItemT = any> extends Component<
           --boxel-select-placeholder-color,
           var(--muted-foreground, var(--boxel-450))
         );
-        --select-focus-border-color: var(
+        /* "--boxel-select-focus-border-color" refers to the hover color, NOT focus color */
+        --select-hover-border-color: var(
           --boxel-select-focus-border-color,
-          var(--primary, var(--boxel-dark))
+          currentColor
         );
 
         position: relative;
@@ -407,112 +360,17 @@ export default class BoxelSelect<ItemT = any> extends Component<
 
       .boxel-select:not([aria-disabled='true']):hover {
         cursor: pointer;
-        border-color: var(--select-focus-border-color);
+        border-color: var(--select-hover-border-color);
       }
 
       .boxel-select:focus-visible {
-        outline: 2px solid var(--ring, var(--boxel-highlight-hover));
+        outline: 2px solid var(--ring);
       }
 
       .boxel-select :deep(.boxel-trigger) {
         padding: var(
           --boxel-select-trigger-padding,
           var(--boxel-sp-xs) calc(var(--boxel-sp-xxxs) + var(--boxel-sp-xxs))
-        );
-      }
-
-      .variant-default {
-        --select-background-color: var(
-          --boxel-select-background-color,
-          var(--background, var(--boxel-light))
-        );
-        --select-border-color: var(
-          --boxel-select-border-color,
-          var(--border, var(--boxel-border-color))
-        );
-        --select-text-color: var(
-          --boxel-select-text-color,
-          var(--foreground, var(--boxel-dark))
-        );
-        --select-focus-border-color: var(
-          --boxel-select-focus-border-color,
-          var(--primary, var(--boxel-dark))
-        );
-      }
-
-      .variant-primary {
-        --select-background-color: var(
-          --boxel-select-background-color,
-          var(--primary, var(--boxel-600))
-        );
-        --select-border-color: var(
-          --boxel-select-border-color,
-          var(--primary, var(--boxel-600))
-        );
-        --select-text-color: var(
-          --boxel-select-text-color,
-          var(--primary-foreground, var(--boxel-light))
-        );
-        --select-focus-border-color: var(
-          --boxel-select-focus-border-color,
-          var(--primary, var(--boxel-600))
-        );
-      }
-
-      .variant-secondary {
-        --select-background-color: var(
-          --boxel-select-background-color,
-          var(--secondary, var(--boxel-400))
-        );
-        --select-border-color: var(
-          --boxel-select-border-color,
-          var(--secondary, var(--boxel-400))
-        );
-        --select-text-color: var(
-          --boxel-select-text-color,
-          var(--secondary-foreground, var(--boxel-dark))
-        );
-        --select-focus-border-color: var(
-          --boxel-select-focus-border-color,
-          var(--secondary, var(--boxel-400))
-        );
-      }
-
-      .variant-muted {
-        --select-background-color: var(
-          --boxel-select-background-color,
-          var(--muted, var(--boxel-200))
-        );
-        --select-border-color: var(
-          --boxel-select-border-color,
-          var(--muted, var(--boxel-200))
-        );
-        --select-text-color: var(
-          --boxel-select-text-color,
-          var(--muted-foreground, var(--boxel-dark))
-        );
-        --select-focus-border-color: var(
-          --boxel-select-focus-border-color,
-          var(--muted, var(--boxel-200))
-        );
-      }
-
-      .variant-destructive {
-        --select-background-color: var(
-          --boxel-select-background-color,
-          var(--destructive, var(--boxel-600))
-        );
-        --select-border-color: var(
-          --boxel-select-border-color,
-          var(--destructive, var(--boxel-600))
-        );
-        --select-text-color: var(
-          --boxel-select-text-color,
-          var(--destructive-foreground, var(--boxel-light))
-        );
-        --select-focus-border-color: var(
-          --boxel-select-focus-border-color,
-          var(--destructive, var(--boxel-danger))
         );
       }
 
@@ -525,242 +383,164 @@ export default class BoxelSelect<ItemT = any> extends Component<
     </style>
     {{! template-lint-disable require-scoped-style }}
     <style>
-      .boxel-select__dropdown.ember-power-select-dropdown {
-        --dropdown-background-color: var(
-          --boxel-dropdown-background-color,
-          var(--background, var(--boxel-light))
-        );
-        --dropdown-border-color: var(
-          --boxel-dropdown-border-color,
-          var(--border, var(--boxel-border-color))
-        );
-        --dropdown-text-color: var(
-          --boxel-dropdown-text-color,
-          var(--foreground, var(--boxel-dark))
-        );
-        --dropdown-highlight-color: var(
-          --boxel-dropdown-highlight-color,
-          var(--theme-highlight, var(--boxel-highlight))
-        );
-        --dropdown-highlight-hover-color: var(
-          --boxel-dropdown-hover-color,
-          var(--theme-highlight-hover, var(--boxel-highlight))
-        );
-        --dropdown-hover-color: var(
-          --boxel-dropdown-hover-color,
-          var(--theme-hover, var(--boxel-light-100))
-        );
-        --dropdown-focus-border-color: var(
-          --boxel-dropdown-focus-border-color,
-          var(--ring, var(--boxel-highlight-hover))
-        );
-        --dropdown-selected-text-color: var(
-          --boxel-dropdown-selected-text-color,
-          var(--foreground, var(--boxel-dark))
-        );
+      /* Unscoped because the dropdown renders in a wormhole outside this
+         component. See "CSS layers" in ../../../README.md. */
+      @layer boxelComponentL1 {
+        .boxel-select__dropdown.ember-power-select-dropdown {
+          --dropdown-background-color: var(
+            --boxel-dropdown-background-color,
+            var(--background, var(--boxel-light))
+          );
+          --dropdown-border-color: var(
+            --boxel-dropdown-border-color,
+            var(--border, var(--boxel-border-color))
+          );
+          --dropdown-text-color: var(
+            --boxel-dropdown-text-color,
+            var(--foreground, var(--boxel-dark))
+          );
+          --dropdown-highlight-color: var(
+            --boxel-dropdown-highlight-color,
+            var(--theme-highlight, var(--boxel-highlight))
+          );
+          --dropdown-highlight-hover-color: var(
+            --boxel-dropdown-highlight-hover-color,
+            var(
+              --boxel-dropdown-hover-color,
+              var(--theme-highlight-hover, var(--boxel-highlight-hover))
+            )
+          );
+          --dropdown-hover-color: var(
+            --boxel-dropdown-hover-color,
+            var(--theme-hover, var(--boxel-light-100))
+          );
+          --dropdown-focus-border-color: var(
+            --boxel-dropdown-focus-border-color,
+            var(--ring, var(--boxel-highlight-hover))
+          );
+          --dropdown-selected-text-color: var(
+            --boxel-dropdown-selected-text-color,
+            var(--foreground, var(--boxel-dark))
+          );
+          --dropdown-selected-highlighted-color: var(
+            --boxel-dropdown-selected-highlighted-color,
+            color-mix(
+              in oklab,
+              var(--dropdown-highlight-color) 95%,
+              var(--dropdown-selected-text-color)
+            )
+          );
+          --dropdown-selected-hover-color: var(
+            --boxel-dropdown-selected-hover-color,
+            var(
+              --boxel-dropdown-highlight-hover-color,
+              color-mix(
+                in oklab,
+                var(--dropdown-highlight-color) 95%,
+                var(--dropdown-selected-text-color)
+              )
+            )
+          );
 
-        box-shadow: var(--boxel-box-shadow);
-        border-radius: var(--boxel-form-control-border-radius);
-        background-color: var(--dropdown-background-color);
-        border: 1px solid var(--dropdown-border-color);
-        z-index: var(--boxel-layer-modal-urgent);
-        max-height: var(--boxel-select-max-height, 12.5rem);
-        overflow: hidden;
-        font-family: inherit;
-      }
+          box-shadow: var(--boxel-box-shadow);
+          border-radius: var(--boxel-form-control-border-radius);
+          background-color: var(--dropdown-background-color);
+          border: 1px solid var(--dropdown-border-color);
+          z-index: var(--boxel-layer-modal-urgent);
+          max-height: var(--boxel-select-max-height, 12.5rem);
+          overflow: hidden;
+          font-family: inherit;
+        }
 
-      .boxel-select__dropdown:not(.ember-basic-dropdown-content--above) {
-        margin-top: 4px;
-        margin-bottom: 0;
-      }
+        .boxel-select__dropdown:not(.ember-basic-dropdown-content--above) {
+          margin-top: 4px;
+          margin-bottom: 0;
+        }
 
-      .boxel-select__dropdown ul {
-        list-style: none;
-        padding: var(--boxel-sp-xxxs);
-        margin: 0;
-        overflow: auto;
-        max-height: inherit;
-        font-family: inherit;
-      }
+        .boxel-select__dropdown ul {
+          list-style: none;
+          padding: var(--boxel-sp-xxxs);
+          margin: 0;
+          overflow: auto;
+          max-height: inherit;
+          font-family: inherit;
+        }
 
-      .boxel-select__dropdown .ember-power-select-option {
-        padding: var(--boxel-sp-xxs);
-        background-color: var(--dropdown-background-color);
-        color: var(--dropdown-text-color);
-        transition: background-color var(--boxel-transition);
-        border-radius: var(--boxel-border-radius-sm);
-        cursor: pointer;
-        border: none;
-        width: 100%;
-        text-align: left;
-        font-family: inherit;
-        font-size: var(--boxel-font-size-sm);
-        letter-spacing: var(--boxel-lsp-sm);
-        margin-bottom: 2px;
-      }
+        .boxel-select__dropdown .ember-power-select-option {
+          padding: var(--boxel-sp-xxs);
+          background-color: var(--dropdown-background-color);
+          color: var(--dropdown-text-color);
+          transition: background-color var(--boxel-transition);
+          border-radius: var(--boxel-border-radius-sm);
+          cursor: pointer;
+          border: none;
+          width: 100%;
+          text-align: left;
+          font-family: inherit;
+          font-size: var(--boxel-font-size-sm);
+          letter-spacing: var(--boxel-lsp-sm);
+          margin-bottom: 2px;
+        }
 
-      .boxel-select__dropdown .ember-power-select-option[aria-selected='true'] {
-        background-color: var(--dropdown-highlight-color);
-        color: var(--dropdown-selected-text-color);
-      }
+        .boxel-select__dropdown
+          .ember-power-select-option[aria-selected='true'] {
+          background-color: var(--dropdown-highlight-color);
+          color: var(--dropdown-selected-text-color);
+        }
 
-      .boxel-select__dropdown
-        .ember-power-select-option[aria-selected='true']:hover {
-        background-color: var(--dropdown-highlight-hover-color);
-        color: var(--dropdown-selected-text-color);
-      }
+        .boxel-select__dropdown
+          .ember-power-select-option[aria-selected='true']:hover {
+          background-color: var(--dropdown-highlight-hover-color);
+          color: var(--dropdown-selected-text-color);
+        }
 
-      .boxel-select__dropdown .ember-power-select-option:hover {
-        background-color: var(--dropdown-hover-color);
-        color: var(--dropdown-selected-text-color);
-      }
+        .boxel-select__dropdown .ember-power-select-option:hover {
+          background-color: var(--dropdown-hover-color);
+          color: var(--dropdown-selected-text-color);
+        }
 
-      .boxel-select__dropdown .ember-power-select-option:focus {
-        outline: none;
-        background-color: var(--dropdown-highlight-color);
-        color: var(--dropdown-selected-text-color);
-      }
+        .boxel-select__dropdown .ember-power-select-option:focus {
+          outline: none;
+          background-color: var(--dropdown-highlight-color);
+          color: var(--dropdown-selected-text-color);
+        }
 
-      .boxel-select__dropdown .ember-power-select-search {
-        padding: var(--boxel-sp-xs);
-        border-bottom: 1px solid var(--dropdown-border-color);
-      }
+        .boxel-select__dropdown .ember-power-select-search {
+          padding: var(--boxel-sp-xs);
+          border-bottom: 1px solid var(--dropdown-border-color);
+        }
 
-      .boxel-select__dropdown .ember-power-select-search-input {
-        background-color: var(--dropdown-background-color);
-        color: var(--dropdown-text-color);
-        border: 1px solid var(--dropdown-border-color);
-        border-radius: var(--boxel-border-radius-xs);
-        padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
-        font-family: inherit;
-        font-size: var(--boxel-font-size-sm);
-        letter-spacing: var(--boxel-lsp-sm);
-        width: 100%;
-        box-sizing: border-box;
-      }
+        .boxel-select__dropdown .ember-power-select-search-input {
+          background-color: var(--dropdown-background-color);
+          color: var(--dropdown-text-color);
+          border: 1px solid var(--dropdown-border-color);
+          border-radius: var(--boxel-border-radius-xs);
+          padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
+          font-family: inherit;
+          font-size: var(--boxel-font-size-sm);
+          letter-spacing: var(--boxel-lsp-sm);
+          width: 100%;
+          box-sizing: border-box;
+        }
 
-      .boxel-select__dropdown .ember-power-select-search-input:focus {
-        border: 1px solid var(--dropdown-focus-border-color);
-        box-shadow: 0 0 0 1px var(--dropdown-focus-border-color);
-        outline: none;
-      }
+        .boxel-select__dropdown .ember-power-select-search-input:focus {
+          border: 1px solid var(--dropdown-focus-border-color);
+          box-shadow: 0 0 0 1px var(--dropdown-focus-border-color);
+          outline: none;
+        }
 
-      .boxel-select__dropdown .ember-power-select-option--no-matches-message {
-        padding: var(--boxel-sp-sm);
-        color: var(--dropdown-text-color);
-        font-style: italic;
-        text-align: center;
-      }
+        .boxel-select__dropdown .ember-power-select-option--no-matches-message {
+          padding: var(--boxel-sp-sm);
+          color: var(--dropdown-text-color);
+          font-style: italic;
+          text-align: center;
+        }
 
-      .boxel-select__dropdown .ember-power-select-option--loading-message {
-        padding: var(--boxel-sp-sm);
-        color: var(--dropdown-text-color);
-        text-align: center;
-      }
-
-      /* All variants use the same reusable theme variables */
-      .boxel-select__dropdown[class*='variant-'] {
-        --dropdown-highlight-color: var(
-          --boxel-dropdown-highlight-color,
-          var(--theme-highlight, var(--boxel-highlight))
-        );
-        --dropdown-highlight-hover-color: var(
-          --boxel-dropdown-hover-color,
-          var(--theme-highlight-hover, var(--boxel-highlight-hover))
-        );
-        --dropdown-hover-color: var(
-          --boxel-dropdown-hover-color,
-          var(--theme-hover, var(--boxel-light-100))
-        );
-      }
-
-      .boxel-select__dropdown.variant-primary {
-        --dropdown-highlight-color: var(
-          --boxel-dropdown-highlight-color,
-          var(--primary, var(--boxel-600))
-        );
-        --dropdown-highlight-hover-color: var(
-          --boxel-dropdown-hover-color,
-          var(--primary, var(--boxel-600))
-        );
-        --dropdown-hover-color: var(
-          --boxel-dropdown-hover-color,
-          var(--theme-hover, var(--boxel-500))
-        );
-        --dropdown-selected-text-color: var(
-          --primary-foreground,
-          var(--foreground, var(--boxel-light))
-        );
-        --dropdown-focus-border-color: var(
-          --primary,
-          var(--boxel-outline-color)
-        );
-      }
-
-      .boxel-select__dropdown.variant-secondary {
-        --dropdown-highlight-color: var(
-          --boxel-dropdown-highlight-color,
-          var(--secondary, var(--boxel-400))
-        );
-        --dropdown-highlight-hover-color: var(
-          --boxel-dropdown-hover-color,
-          var(--secondary, var(--boxel-400))
-        );
-        --dropdown-hover-color: var(
-          --boxel-dropdown-hover-color,
-          var(--theme-hover, var(--boxel-light-100))
-        );
-        --dropdown-selected-text-color: var(
-          --secondary-foreground,
-          var(--foreground, var(--boxel-dark))
-        );
-        --dropdown-focus-border-color: var(
-          --secondary,
-          var(--boxel-outline-color)
-        );
-      }
-
-      .boxel-select__dropdown.variant-muted {
-        --dropdown-highlight-color: var(
-          --boxel-dropdown-highlight-color,
-          var(--muted, var(--boxel-200))
-        );
-        --dropdown-highlight-hover-color: var(
-          --boxel-dropdown-hover-color,
-          var(--muted, var(--boxel-200))
-        );
-        --dropdown-hover-color: var(
-          --boxel-dropdown-hover-color,
-          var(--theme-hover, var(--boxel-light-100))
-        );
-        --dropdown-selected-text-color: var(
-          --muted-foreground,
-          var(--foreground, var(--boxel-dark))
-        );
-        --dropdown-focus-border-color: var(--muted, var(--boxel-outline-color));
-      }
-
-      .boxel-select__dropdown.variant-destructive {
-        --dropdown-highlight-color: var(
-          --boxel-dropdown-highlight-color,
-          var(--destructive, var(--boxel-danger))
-        );
-        --dropdown-highlight-hover-color: var(
-          --boxel-dropdown-hover-color,
-          var(--destructive, var(--boxel-danger))
-        );
-        --dropdown-hover-color: var(
-          --boxel-dropdown-hover-color,
-          var(--theme-hover, var(--boxel-light-100))
-        );
-        --dropdown-selected-text-color: var(
-          --destructive-foreground,
-          var(--foreground, var(--boxel-dark))
-        );
-        --dropdown-focus-border-color: var(
-          --destructive,
-          var(--boxel-outline-color)
-        );
+        .boxel-select__dropdown .ember-power-select-option--loading-message {
+          padding: var(--boxel-sp-sm);
+          color: var(--dropdown-text-color);
+          text-align: center;
+        }
       }
 
       :global(#select-dropdown-overlay) {
@@ -834,16 +614,14 @@ export class BoxelSelectOptions extends PowerSelectOptions {
     >
       {{#each @options as |option index|}}
         <li
+          {{! `ember-power-select-option` stays: the addon's stylesheet and its
+          `selectChoose` test helper both key off it. The selected/highlighted
+          state is ours to name — the addon never reads those modifiers. }}
           class={{cn
             'boxel-select-option-item'
             'ember-power-select-option'
-            (if
-              (eq option @select.selected) 'ember-power-select-option--selected'
-            )
-            (if
-              (eq option @select.highlighted)
-              'ember-power-select-option--highlighted'
-            )
+            is-selected=(eq option @select.selected)
+            is-highlighted=(eq option @select.highlighted)
           }}
           id='{{@select.uniqueId}}-{{@groupIndex}}{{index}}'
           data-option-index='{{@groupIndex}}{{index}}'
@@ -919,23 +697,24 @@ export class BoxelSelectOptions extends PowerSelectOptions {
         cursor: pointer;
       }
 
-      .boxel-select-option-item.ember-power-select-option--highlighted {
+      .boxel-select-option-item.is-highlighted {
         background-color: var(--dropdown-hover-color);
         color: var(--dropdown-selected-text-color);
       }
 
-      .boxel-select-option-item.ember-power-select-option--selected {
+      .boxel-select-option-item.is-selected {
         background-color: var(--dropdown-highlight-color);
         color: var(--dropdown-selected-text-color);
       }
 
-      .boxel-select-option-item.ember-power-select-option--selected.ember-power-select-option--highlighted,
-      .boxel-select-option-item.ember-power-select-option--selected:hover {
-        background-color: color-mix(
-          in oklab,
-          var(--dropdown-highlight-color) 95%,
-          var(--dropdown-selected-text-color)
-        );
+      .boxel-select-option-item.is-selected.is-highlighted {
+        background-color: var(--dropdown-selected-highlighted-color);
+      }
+
+      /* Pointer state is declared after the keyboard state so it wins when both
+         apply — hovering an option also highlights it. */
+      .boxel-select-option-item.is-selected:hover {
+        background-color: var(--dropdown-selected-hover-color);
       }
 
       .boxel-select-option-item[aria-disabled='true'] {

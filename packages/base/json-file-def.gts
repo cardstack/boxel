@@ -594,3 +594,5 @@ export class JsonFileDef extends FileDef {
     };
   }
 }
+
+export default JsonFileDef;

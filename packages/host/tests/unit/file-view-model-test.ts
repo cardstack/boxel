@@ -259,9 +259,12 @@ module('Unit | file-formats', function (hooks) {
     });
 
     // Resampling has to sample across the whole signal: returning the first N
-    // bars would show only the opening seconds of the waveform.
+    // bars would show only the opening seconds of the waveform. Stored bars
+    // are 0..1 amplitudes; the projection scales them to the 0–100 range the
+    // renderers draw from.
     test('resamples the waveform across the whole envelope', function (assert) {
-      let bars = Array.from({ length: 1000 }, (_, i) => i % 101);
+      // Quarter steps stay exact through the x100 scaling.
+      let bars = Array.from({ length: 1000 }, (_, i) => (i % 5) / 4);
       let model = {
         name: 'take.wav',
         waveform: { barsJson: JSON.stringify(bars) },
@@ -272,10 +275,10 @@ module('Unit | file-formats', function (hooks) {
         fitted.waveformBars.length,
         FITTED_WAVEFORM_BAR_BUDGET,
       );
-      assert.strictEqual(fitted.waveformBars[0], bars[0]);
+      assert.strictEqual(fitted.waveformBars[0], bars[0]! * 100);
       assert.strictEqual(
         fitted.waveformBars.at(-1),
-        bars.at(-1),
+        bars.at(-1)! * 100,
         'the last bar comes from the end of the signal, not from bar 64',
       );
 
@@ -285,13 +288,28 @@ module('Unit | file-formats', function (hooks) {
       );
     });
 
-    test('leaves a waveform shorter than the budget untouched', function (assert) {
-      let bars = [1, 2, 3, 4];
+    test('a waveform shorter than the budget is scaled but not resampled', function (assert) {
+      let bars = [0.25, 0.5, 0.75, 1];
       let vm = fileViewModel(
         { name: 'blip.wav', waveform: { barsJson: JSON.stringify(bars) } },
         'fitted',
       );
-      assert.deepEqual(vm.waveformBars, bars);
+      assert.deepEqual(vm.waveformBars, [25, 50, 75, 100]);
+    });
+
+    // The producers' contract is 0..1 (RMS amplitudes; MP3's peak-normalized
+    // envelope). A full-scale bar must project to full height — this is the
+    // difference between a waveform and a flat line of minimum-height slivers
+    // — and out-of-range values clamp rather than distort the scale.
+    test('amplitude bars project to the renderer percentage scale', function (assert) {
+      let vm = fileViewModel(
+        {
+          name: 'loud.mp3',
+          waveform: { barsJson: JSON.stringify([0, 0.5, 1, 1.2, -0.5]) },
+        },
+        'fitted',
+      );
+      assert.deepEqual(vm.waveformBars, [0, 50, 100, 100, 0]);
     });
 
     test('survives waveform data that is not parseable', function (assert) {

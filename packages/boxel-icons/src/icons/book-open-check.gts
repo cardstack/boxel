@@ -16,8 +16,8 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
     class='lucide lucide-book-open-check'
     viewBox='0 0 24 24'
     ...attributes
-  ><path d='M12 21V7M16 12l2 2 4-4' /><path
-      d='M22 6V4a1 1 0 0 0-1-1h-5a4 4 0 0 0-4 4 4 4 0 0 0-4-4H3a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1h6a3 3 0 0 1 3 3 3 3 0 0 1 3-3h6a1 1 0 0 0 1-1v-1.3'
+  ><path d='M12 5v16M16 12l2 2 4-4' /><path
+      d='M22 6V5a2 2 0 0 0-1.999-2L16 3.002A5 5 0 0 0 12 5a5 5 0 0 0-4-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 1.999 2H8a5 5 0 0 1 4 2 5 5 0 0 1 4-2h4.001A2 2 0 0 0 22 17v-1.344'
     /></svg>
 </template>;
 

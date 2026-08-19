@@ -451,6 +451,25 @@ function lintFunctionDispatchStyle(
     if (next?.type === 'punc' && next.value === '(') {
       const call = analyzeReadableFunctionCall(tokens, index);
       if (!call) continue;
+      // Excel's positional INDEX takes the two-argument name from jq's, which
+      // builds an object keyed by an expression over a stream. Excel wins —
+      // spreadsheet authors are this surface's audience — but the jq call
+      // shape then fails with "Cannot index array with string", naming nothing
+      // that explains it. Only that shape collides: at one argument the name
+      // is jq's own index-of, and jq has no three-argument INDEX.
+      if (
+        lower === 'index' &&
+        call.explicitArity === 2 &&
+        call.separator === 'semicolon'
+      ) {
+        addIssue(issues, {
+          code: 'jq-index-shadowed-by-excel',
+          severity: 'warning',
+          message: `INDEX resolves to Excel's positional lookup, not jq's INDEX.`,
+          suggestion:
+            'Excel INDEX(array, row) owns this name. To key rows by a field as jq INDEX does, use reduce Rows[] as $row ({}; .[$row.id] = $row), or map to {key, value} pairs and from_entries.',
+        });
+      }
       if (call.dispatch.dialect === 'bxl-helper') {
         const helperName = call.dispatch.name;
         if (name !== helperName) {

@@ -79,7 +79,7 @@ export function runTests() {
         assert.strictEqual(modelCostTierLabel('0.000003 USD', '0'), undefined);
       });
 
-      test('maps blended cost across the 1/5/20 tier bounds', function (assert) {
+      test('maps blended cost across the 1/5/15 tier bounds', function (assert) {
         // Encode a target blended $/M as a completion-only per-token price:
         // blended = (completion/4)*1e6 => completion = blended*4/1e6. Values are
         // kept off the exact bounds so floating-point wobble can't flip a tier.
@@ -89,17 +89,24 @@ export function runTests() {
         assert.strictEqual(byBlended(1.1), '$$', 'just above $1/M');
         assert.strictEqual(byBlended(4.9), '$$', 'just below $5/M');
         assert.strictEqual(byBlended(5.1), '$$$', 'just above $5/M');
-        assert.strictEqual(byBlended(19), '$$$', 'just below $20/M');
-        assert.strictEqual(byBlended(21), '$$$$', 'just above $20/M');
-        assert.strictEqual(byBlended(200), '$$$$', 'well above $20/M');
+        assert.strictEqual(byBlended(14), '$$$', 'just below $15/M');
+        assert.strictEqual(byBlended(16), '$$$$', 'just above $15/M');
+        assert.strictEqual(byBlended(200), '$$$$', 'well above $15/M');
       });
 
-      test('bounds are inclusive: exactly 1/5/20 land in the lower tier', function (assert) {
+      test('bounds are inclusive: exactly 1/5/15 land in the lower tier', function (assert) {
         // Completion-only prices whose blended $/M is float-exact at each bound:
-        // (completion/4)*1e6 with 0.000004 / 0.00002 / 0.00008 => 1 / 5 / 20.
+        // (completion/4)*1e6 with 0.000004 / 0.00002 / 0.00006 => 1 / 5 / 15.
         assert.strictEqual(modelCostTierLabel('0', '0.000004'), '$');
         assert.strictEqual(modelCostTierLabel('0', '0.00002'), '$$');
-        assert.strictEqual(modelCostTierLabel('0', '0.00008'), '$$$');
+        assert.strictEqual(modelCostTierLabel('0', '0.00006'), '$$$');
+      });
+
+      test('float noise cannot tip an exact-bound price into the tier above', function (assert) {
+        // gpt-4-turbo: in $10/M out $30/M => blended exactly 15, but the raw
+        // float math yields 15.000000000000002. The blend rounds that noise
+        // away, so the price lands on the inclusive bound and stays $$$.
+        assert.strictEqual(modelCostTierLabel('0.00001', '0.00003'), '$$$');
       });
 
       test('classifies representative frontier models (tier + label)', function (assert) {
@@ -117,6 +124,11 @@ export function runTests() {
         assert.deepEqual(modelCostTier('0.000003', '0.000015'), {
           tier: 3,
           label: '$$$',
+        });
+        // claude-fable-5: in $10/M out $50/M => blended 20 => $$$$
+        assert.deepEqual(modelCostTier('0.00001', '0.00005'), {
+          tier: 4,
+          label: '$$$$',
         });
         // o1: in $15/M out $60/M => blended 26.25 => $$$$
         assert.deepEqual(modelCostTier('0.000015', '0.00006'), {

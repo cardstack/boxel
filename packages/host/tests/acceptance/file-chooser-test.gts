@@ -20,7 +20,6 @@ import { setupInteractSubmodeTests } from '../helpers/interact-submode-setup';
 
 module('Acceptance | file chooser tests', function (hooks) {
   setupInteractSubmodeTests(hooks, {
-    reuseIndexAcrossTests: 'fileChooser',
     setRealm() {},
   });
 
@@ -489,7 +488,6 @@ module('Acceptance | file chooser tests', function (hooks) {
 
 module('Acceptance | file chooser keyboard tests', function (hooks) {
   setupInteractSubmodeTests(hooks, {
-    reuseIndexAcrossTests: 'fileChooserKeyboard',
     setRealm() {},
   });
 
@@ -1061,7 +1059,6 @@ module('Acceptance | file chooser tests | upload size limit', function (hooks) {
   let AUDIO_SIZE_LIMIT = 4096;
 
   setupInteractSubmodeTests(hooks, {
-    reuseIndexAcrossTests: 'fileChooserUploadSizeLimit',
     setRealm() {},
     fileSizeLimitBytes: FILE_SIZE_LIMIT,
     audioSizeLimitBytes: AUDIO_SIZE_LIMIT,

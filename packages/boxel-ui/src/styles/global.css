@@ -1,17 +1,22 @@
-/* Note on css layers: css @layer rules are used to create a layering system for the css.
-   The order of the layers is important as it determines the precedence of the styles.
-   The layers are defined in the following order:
-   1. reset: for resetting default browser styles
-   2. utilities: for utility classes that can be used throughout the application
-   3. boxelComponentL1: for base component styles
-   4. boxelComponentL2: for component styles that build on top of base styles
-   5. boxelComponentL3: for component styles that build on top of L2 styles
-   This layering system allows for easier overrides and customizations of styles at different levels.
-   More info: https://developer.mozilla.org/en-US/docs/Web/CSS/@layer
-*/
-@import url('./ember-basic-dropdown.css');
+/* The tiers are load-bearing. A wrapper that passes its own class onto the
+   wrapped component's root shares one element with it, so both are single-class
+   selectors that tie on specificity — only the tier breaks it. Sit one tier
+   above the highest component you pass a class to; L1 if none. Button L1 →
+   IconButton L2 → ContextButton L3 → CardHeader L4.
 
-@layer reset, utilities, boxelComponentL1, boxelComponentL2, boxelComponentL3;
+   This statement does not survive bundling — see "CSS layers" in
+   ../../README.md. Every app entry repeats it in an inline <style> at the top
+   of <head>, and that copy is the one that decides the order. Keep them in
+   sync. */
+@layer vendor, reset, utilities, boxelComponentL1, boxelComponentL2,
+  boxelComponentL3, boxelComponentL4;
+
+/* Vendor stylesheets belong here, in the lowest layer. A JS `import` in a
+   component arrives unlayered and wins instead. */
+@import url('./ember-basic-dropdown.css') layer(vendor);
+@import url('ember-power-select/vendor/ember-power-select.css') layer(vendor);
+@import url('ember-power-calendar/vendor/ember-power-calendar.css')
+layer(vendor);
 
 @layer reset {
   * {

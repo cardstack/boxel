@@ -15,7 +15,9 @@ function baseModule(name: string): RealmResourceIdentifier {
   return `${baseRealm.url}${name}` as RealmResourceIdentifier;
 }
 
-const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
+export const FILEDEF_CODE_REF_BY_EXTENSION: Readonly<
+  Record<string, ResolvedCodeRef>
+> = {
   // TODO: Replace with realm metadata configuration.
   '.markdown': { module: baseModule('markdown-file-def'), name: 'MarkdownDef' },
   '.md': { module: baseModule('markdown-file-def'), name: 'MarkdownDef' },
@@ -35,6 +37,9 @@ const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
   '.json': { module: baseModule('json-file-def'), name: 'JsonFileDef' },
   '.csv': { module: baseModule('csv-file-def'), name: 'CsvFileDef' },
   '.pdf': { module: baseModule('pdf-file-def'), name: 'PdfDef' },
+  '.docx': { module: baseModule('docx-file-def'), name: 'DocxDef' },
+  '.pptx': { module: baseModule('pptx-file-def'), name: 'PptxDef' },
+  '.xlsx': { module: baseModule('xlsx-file-def'), name: 'XlsxDef' },
   '.mp3': { module: baseModule('mp3-audio-def'), name: 'Mp3Def' },
   '.wav': { module: baseModule('wav-audio-def'), name: 'WavDef' },
   '.ogg': { module: baseModule('ogg-audio-def'), name: 'OggDef' },
@@ -52,6 +57,10 @@ const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
   '.m4v': { module: baseModule('mp4-video-def'), name: 'Mp4Def' },
   '.mov': { module: baseModule('mov-video-def'), name: 'MovDef' },
   '.webm': { module: baseModule('webm-video-def'), name: 'WebmDef' },
+  // 3D model formats. STL is raw triangle geometry; 3MF is a zipped OPC package.
+  // Both extend ThreeDModelDef, which renders a live client-side WebGL viewer.
+  '.stl': { module: baseModule('stl-model-def'), name: 'StlDef' },
+  '.3mf': { module: baseModule('three-mf-def'), name: 'ThreeMfDef' },
   '.zip': { module: baseModule('zip-file-def'), name: 'ZipDef' },
   '.woff2': { module: baseModule('woff2-font-def'), name: 'Woff2Def' },
   '.woff': { module: baseModule('woff-font-def'), name: 'WoffDef' },

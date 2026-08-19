@@ -108,24 +108,49 @@ If you need log-Γ, use the unambiguous spellings — they compute the same thin
 | true Γ(x) | `x \| gamma` (== `tgamma`) | `GAMMA(x)`     |
 | log Γ(x)  | `x \| lgamma`              | `GAMMALN(x)`   |
 
+#### `INDEX` — Excel's positional lookup takes the name
+
+jq has an `INDEX` of its own: `INDEX(stream; key_expr)` builds an object keyed
+by an expression, and `INDEX(key_expr)` is the same over `.[]`. Excel's
+`INDEX(array, row)` claims the two-argument name here, and it wins — spreadsheet
+authors are this surface's audience and the formula library loads by default for
+cards. So the object-building `INDEX` is out of reach in both arities: the
+two-argument form resolves to Excel's positional lookup and fails with
+`Cannot index array with string`, and the one-argument form is jq's own
+`index` — index-of — in readable BXL, or a delegation to the shadowed
+two-argument form in canonical jq.
+
+The linter says so rather than leaving that message to explain itself: a
+two-argument `INDEX` written with jq's semicolon reports
+`jq-index-shadowed-by-excel` at warning severity. One argument is not flagged,
+since index-of is a function in its own right, and jq has no three-argument
+`INDEX` to shadow. The substitutes are ordinary jq:
+
+```text
+reduce Rows[] as $row ({}; .[$row.id] = $row)   -- key rows by a field
+Rows | map({key: .id, value: .}) | from_entries -- the same, via pairs
+INDEX(.names, 2)                                -- Excel: second name
+```
+
 #### Quick reference: collisions and resolutions
 
 > Spelling reminder: prefer the **UPPERCASE** form for any name that ends up at an Excel function. Lowercase still resolves but the linter emits an info-level `excel-name-uppercase-preferred` nudge — see [Linter style nudges](#linter-style-nudges).
 
-| Function                                   | BXL behaviour                                         | Notes                                                                                               |
-| ------------------------------------------ | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `MATCH(value, array)` / `match(re; flags)` | Excel lookup with comma; jq regex with semicolon      | `match(re)` is jq by arity; `MATCH(value, array, 0)` is Excel by arity.                             |
-| `INDEX(array, row)` / `index(value)`       | Excel lookup with 2-3 args; jq index-of with 1 arg    | Excel rows are one-based; jq index result is zero-based.                                            |
-| `TYPE(value)` / `type`                     | Excel numeric type code vs jq type string             | Parenthesized one-arg call is Excel; bare pipe filter is jq.                                        |
-| `LOG(x)` / `log`                           | Excel base-10 log vs jq natural log                   | Arity decides. `LOG(x, base)` is Excel.                                                             |
-| `NOW()` / `now`                            | Excel date serial vs jq epoch seconds                 | Call shape decides. `now()` is Excel and formats to `NOW()`. Bare `NOW` is jq and formats to `now`. |
-| `TRIM(text)` / `trim`                      | Excel collapse whitespace vs jq outer trim            | Arity decides.                                                                                      |
-| `ATAN2(x, y)` / `atan2(y; x)`              | Excel order with comma; jq/POSIX order with semicolon | Separator decides the two-arg collision.                                                            |
-| `GAMMA(x)` / `gamma`                       | true Γ                                                | Same math; use `lgamma` or `GAMMALN` for log-Γ.                                                     |
-| `fmod` vs `MOD`                            | independent functions                                 | `fmod` dividend-signed (C); `MOD` divisor-signed (Excel)                                            |
-| `fmax`/`fmin` vs `MAX`/`MIN`               | independent functions                                 | `fmax`/`fmin` skip NaN; `MAX`/`MIN` propagate errors                                                |
-| `jn`/`yn` vs `BESSELJ`/`BESSELY`           | independent functions                                 | `jn(n; x)` (C order); `BESSELJ(x, n)` (Excel order)                                                 |
-| `pow` vs `POWER`                           | independent functions                                 | Same param order in both, no impedance                                                              |
+| Function                                   | BXL behaviour                                                | Notes                                                                                               |
+| ------------------------------------------ | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| `MATCH(value, array)` / `match(re; flags)` | Excel lookup with comma; jq regex with semicolon             | `match(re)` is jq by arity; `MATCH(value, array, 0)` is Excel by arity.                             |
+| `INDEX(array, row)` / `index(value)`       | Excel lookup with 2-3 args; jq index-of with 1 arg           | Excel rows are one-based; jq index result is zero-based.                                            |
+| `INDEX(array, row)` / `INDEX(stream; key)` | Excel lookup wins; jq's object-building INDEX is unreachable | Not a dispatch: both spell `INDEX/2`. The linter reports `jq-index-shadowed-by-excel`.              |
+| `TYPE(value)` / `type`                     | Excel numeric type code vs jq type string                    | Parenthesized one-arg call is Excel; bare pipe filter is jq.                                        |
+| `LOG(x)` / `log`                           | Excel base-10 log vs jq natural log                          | Arity decides. `LOG(x, base)` is Excel.                                                             |
+| `NOW()` / `now`                            | Excel date serial vs jq epoch seconds                        | Call shape decides. `now()` is Excel and formats to `NOW()`. Bare `NOW` is jq and formats to `now`. |
+| `TRIM(text)` / `trim`                      | Excel collapse whitespace vs jq outer trim                   | Arity decides.                                                                                      |
+| `ATAN2(x, y)` / `atan2(y; x)`              | Excel order with comma; jq/POSIX order with semicolon        | Separator decides the two-arg collision.                                                            |
+| `GAMMA(x)` / `gamma`                       | true Γ                                                       | Same math; use `lgamma` or `GAMMALN` for log-Γ.                                                     |
+| `fmod` vs `MOD`                            | independent functions                                        | `fmod` dividend-signed (C); `MOD` divisor-signed (Excel)                                            |
+| `fmax`/`fmin` vs `MAX`/`MIN`               | independent functions                                        | `fmax`/`fmin` skip NaN; `MAX`/`MIN` propagate errors                                                |
+| `jn`/`yn` vs `BESSELJ`/`BESSELY`           | independent functions                                        | `jn(n; x)` (C order); `BESSELJ(x, n)` (Excel order)                                                 |
+| `pow` vs `POWER`                           | independent functions                                        | Same param order in both, no impedance                                                              |
 
 > **Why no runtime dialect flag?** Earlier drafts considered an `expression(jq\`…\`)` mode. BXL does not need it: arity/call shape and separators preserve the intent that users paste from Excel or jq, while casing stays a formatter/linter convention.
 
@@ -271,7 +296,7 @@ BXL absorbs five Excel-specific idioms so a formula from a spreadsheet works ver
 | `&` string concat                 | Rewrite to `((a\|tostring) + (b\|tostring))` — Excel-style coercion.       | `"Invoice-" & "Invoice Number"` |
 | Unknown characters                | Caught by the linter as `untokenizable-character`; never crashes solidify. | —                               |
 
-> **Paste test:** Sampled FormulaJS cases across math/trig, text, logical, statistical, engineering, information, date/time, and financial formulas work unchanged in the async compatibility runtime. Known paste gap: `MODE` is not implemented. `AND` / `OR` / `XOR` use array-style arguments, and `DEC2HEX` returns lowercase.
+> **Paste test:** Sampled FormulaJS cases across math/trig, text, logical, statistical, engineering, information, date/time, and financial formulas work unchanged in the async compatibility runtime. Known paste gap: `MODE` is not implemented, and `AND` / `OR` / `XOR` use array-style arguments.
 
 ## Interesting Patterns
 
@@ -1193,16 +1218,16 @@ INDEX(.names, MATCH("target", .ids, 0))
 
 ### Conditionals
 
-| Function                      | Description                                                                                                                    | Example                                                        |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------- |
-| `IF(test, then, else)`        | Excel-style conditional                                                                                                        | `IF(.score >= 90, "A", "B")`                                   |
-| `IFERROR(val, fallback)`      | Catch any error                                                                                                                | `IFERROR(.x / .y, 0)`                                          |
-| `IFNA(val, fallback)`         | Catch only #N/A                                                                                                                | `IFNA(VLOOKUP(...), "missing")`                                |
-| `IFS(c1, v1, c2, v2, ...)`    | Multiple conditions (2--4 pairs)                                                                                               | `IFS(.x > 90, "A", .x > 80, "B", true, "C")`                   |
-| `LET(name, value, expr)`      | Excel-style local binding lowered to jq `as $name`                                                                             | `LET(limit, 10000, .amount > limit)`                           |
-| `SWITCH([expr, v1, r1, ...])` | Value-based dispatch (commas inside array)                                                                                     | `SWITCH([.status, "A", "Active", "I", "Inactive", "Unknown"])` |
-| `when(p, q)`                  | **BXL** — implication shortcut. Equivalent to `IF(p, q, TRUE)`. Useful for "if this applies, then this must hold" constraints. | `when(Payment = "Credit card", present("Bill To".Zip))`        |
-| `implies(p, q)`               | **BXL** — alias for `when`. Preferred when the expression reads as logic.                                                      | `implies(Status = "shipped", "Tracking Number" != null)`       |
+| Function                      | Description                                                                                                                                                           | Example                                                        |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `IF(test, then, else)`        | Excel-style conditional. The test is read with jq truthiness: only `null` and `false` are false, so `IF(0, …)` takes the true branch where Excel takes the false one. | `IF(.score >= 90, "A", "B")`                                   |
+| `IFERROR(val, fallback)`      | Catch any error                                                                                                                                                       | `IFERROR(.x / .y, 0)`                                          |
+| `IFNA(val, fallback)`         | Catch only #N/A                                                                                                                                                       | `IFNA(VLOOKUP(...), "missing")`                                |
+| `IFS(c1, v1, c2, v2, ...)`    | Multiple conditions (2--4 pairs)                                                                                                                                      | `IFS(.x > 90, "A", .x > 80, "B", true, "C")`                   |
+| `LET(name, value, expr)`      | Excel-style local binding lowered to jq `as $name`                                                                                                                    | `LET(limit, 10000, .amount > limit)`                           |
+| `SWITCH([expr, v1, r1, ...])` | Value-based dispatch (commas inside array)                                                                                                                            | `SWITCH([.status, "A", "Active", "I", "Inactive", "Unknown"])` |
+| `when(p, q)`                  | **BXL** — implication shortcut. Equivalent to `IF(p, q, TRUE)`. Useful for "if this applies, then this must hold" constraints.                                        | `when(Payment = "Credit card", present("Bill To".Zip))`        |
+| `implies(p, q)`               | **BXL** — alias for `when`. Preferred when the expression reads as logic.                                                                                             | `implies(Status = "shipped", "Tracking Number" != null)`       |
 
 ### Boolean Functions
 
@@ -1268,98 +1293,98 @@ rule is one of its familiar predicates. Sanitizers and converters such as
 `trim`, `escape`, `normalizeEmail`, `toInt`, and `toDate` are not part of the
 validation extension.
 
-| Function               | validator.js shape                           | Typical use                                                                                                       |
-| ---------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `contains`             | `contains(value, seed[, options])`           | String containment with validator.js options. `value \| contains(seed)` remains jq.                               |
-| `equals`               | `equals(value, comparison)`                  | Exact string comparison.                                                                                          |
-| `matches`              | `matches(value, pattern[, modifiers])`       | Regex predicate with validator.js shape. One-arg `matches(query)` remains BXL's predicate-profile full-text hook. |
-| `isEmail`              | `isEmail(value[, options])`                  | Email address.                                                                                                    |
-| `isURL`                | `isURL(value[, options])`                    | URL; commonly `isURL(Website, {require_protocol:true})`.                                                          |
-| `isFQDN`               | `isFQDN(value[, options])`                   | Domain / host name.                                                                                               |
-| `isIP`                 | `isIP(value[, version])`                     | IPv4 or IPv6 address.                                                                                             |
-| `isIPRange`            | `isIPRange(value[, version])`                | CIDR IP range.                                                                                                    |
-| `isMobilePhone`        | `isMobilePhone(value[, locale[, options]])`  | Locale-aware mobile phone number.                                                                                 |
-| `isPostalCode`         | `isPostalCode(value, locale)`                | Locale-aware postal / ZIP code.                                                                                   |
-| `isMailtoURI`          | `isMailtoURI(value[, options])`              | `mailto:` URI.                                                                                                    |
-| `isMagnetURI`          | `isMagnetURI(value)`                         | Magnet URI.                                                                                                       |
-| `isDataURI`            | `isDataURI(value)`                           | Data URI.                                                                                                         |
-| `isJWT`                | `isJWT(value)`                               | JWT token shape.                                                                                                  |
-| `isUUID`               | `isUUID(value[, version])`                   | UUID.                                                                                                             |
-| `isULID`               | `isULID(value)`                              | ULID.                                                                                                             |
-| `isMongoId`            | `isMongoId(value)`                           | MongoDB ObjectId.                                                                                                 |
-| `isAbaRouting`         | `isAbaRouting(value)`                        | US ABA routing number.                                                                                            |
-| `isBIC`                | `isBIC(value)`                               | SWIFT/BIC code.                                                                                                   |
-| `isIBAN`               | `isIBAN(value[, options])`                   | IBAN.                                                                                                             |
-| `isCreditCard`         | `isCreditCard(value[, options])`             | Credit card number.                                                                                               |
-| `isCurrency`           | `isCurrency(value[, options])`               | Currency amount string.                                                                                           |
-| `isEthereumAddress`    | `isEthereumAddress(value)`                   | Ethereum address.                                                                                                 |
-| `isBtcAddress`         | `isBtcAddress(value)`                        | Bitcoin address.                                                                                                  |
-| `isEAN`                | `isEAN(value)`                               | EAN code.                                                                                                         |
-| `isIMEI`               | `isIMEI(value[, options])`                   | IMEI.                                                                                                             |
-| `isISBN`               | `isISBN(value[, version])`                   | ISBN-10 or ISBN-13.                                                                                               |
-| `isISIN`               | `isISIN(value)`                              | Securities identifier.                                                                                            |
-| `isISRC`               | `isISRC(value)`                              | Recording code.                                                                                                   |
-| `isISSN`               | `isISSN(value[, options])`                   | Serial publication code.                                                                                          |
-| `isISO6346`            | `isISO6346(value)`                           | Shipping container ID.                                                                                            |
-| `isFreightContainerID` | `isFreightContainerID(value)`                | Alias-style container ID validator.                                                                               |
-| `isISO6391`            | `isISO6391(value)`                           | ISO 639-1 language code.                                                                                          |
-| `isISO15924`           | `isISO15924(value)`                          | ISO 15924 script code.                                                                                            |
-| `isISO31661Alpha2`     | `isISO31661Alpha2(value[, options])`         | ISO 3166-1 alpha-2 country code.                                                                                  |
-| `isISO31661Alpha3`     | `isISO31661Alpha3(value[, options])`         | ISO 3166-1 alpha-3 country code.                                                                                  |
-| `isISO31661Numeric`    | `isISO31661Numeric(value)`                   | ISO 3166-1 numeric country code.                                                                                  |
-| `isISO4217`            | `isISO4217(value)`                           | ISO 4217 currency code.                                                                                           |
-| `isIdentityCard`       | `isIdentityCard(value, locale)`              | Locale-aware national identity card number; use `"any"` to check all supported locales.                           |
-| `isLicensePlate`       | `isLicensePlate(value, locale)`              | Locale-aware license plate.                                                                                       |
-| `isPassportNumber`     | `isPassportNumber(value, countryCode)`       | Passport number.                                                                                                  |
-| `isTaxID`              | `isTaxID(value[, locale])`                   | Tax ID.                                                                                                           |
-| `isVAT`                | `isVAT(value, countryCode)`                  | VAT number.                                                                                                       |
-| `isAlpha`              | `isAlpha(value[, locale[, options]])`        | Letters only.                                                                                                     |
-| `isAlphanumeric`       | `isAlphanumeric(value[, locale[, options]])` | Letters and numbers only.                                                                                         |
-| `isAscii`              | `isAscii(value)`                             | ASCII-only string.                                                                                                |
-| `isBase32`             | `isBase32(value[, options])`                 | Base32 string.                                                                                                    |
-| `isBase58`             | `isBase58(value)`                            | Base58 string.                                                                                                    |
-| `isBase64`             | `isBase64(value[, options])`                 | Base64 string.                                                                                                    |
-| `isBoolean`            | `isBoolean(value[, options])`                | Boolean string.                                                                                                   |
-| `isByteLength`         | `isByteLength(value[, options])`             | UTF-8 byte length range.                                                                                          |
-| `isDecimal`            | `isDecimal(value[, options])`                | Decimal number string.                                                                                            |
-| `isDivisibleBy`        | `isDivisibleBy(value, number)`               | Numeric string divisible by number.                                                                               |
-| `isEmpty`              | `isEmpty(value[, options])`                  | Empty string.                                                                                                     |
-| `isFloat`              | `isFloat(value[, options])`                  | Float string with optional range.                                                                                 |
-| `isFullWidth`          | `isFullWidth(value)`                         | Contains full-width characters.                                                                                   |
-| `isHalfWidth`          | `isHalfWidth(value)`                         | Contains half-width characters.                                                                                   |
-| `isHash`               | `isHash(value, algorithm)`                   | Hash by algorithm.                                                                                                |
-| `isHexadecimal`        | `isHexadecimal(value)`                       | Hexadecimal string.                                                                                               |
-| `isHexColor`           | `isHexColor(value[, options])`               | CSS hex color.                                                                                                    |
-| `isHSL`                | `isHSL(value)`                               | CSS HSL color.                                                                                                    |
-| `isIn`                 | `isIn(value, values)`                        | Membership in allowed values.                                                                                     |
-| `isInt`                | `isInt(value[, options])`                    | Integer string with optional range.                                                                               |
-| `isJSON`               | `isJSON(value[, options])`                   | JSON string.                                                                                                      |
-| `isLatLong`            | `isLatLong(value[, options])`                | Latitude/longitude string.                                                                                        |
-| `isLength`             | `isLength(value[, options])`                 | Character length range.                                                                                           |
-| `isLocale`             | `isLocale(value)`                            | Locale string.                                                                                                    |
-| `isLowercase`          | `isLowercase(value)`                         | Lowercase string.                                                                                                 |
-| `isLuhnNumber`         | `isLuhnNumber(value)`                        | Luhn checksum.                                                                                                    |
-| `isMACAddress`         | `isMACAddress(value[, options])`             | MAC address.                                                                                                      |
-| `isMD5`                | `isMD5(value)`                               | MD5 hash.                                                                                                         |
-| `isMimeType`           | `isMimeType(value)`                          | MIME type.                                                                                                        |
-| `isMultibyte`          | `isMultibyte(value)`                         | Contains multibyte characters.                                                                                    |
-| `isNumeric`            | `isNumeric(value[, options])`                | Numeric string.                                                                                                   |
-| `isOctal`              | `isOctal(value)`                             | Octal string.                                                                                                     |
-| `isPort`               | `isPort(value)`                              | Port number string.                                                                                               |
-| `isRgbColor`           | `isRgbColor(value[, options])`               | CSS RGB/RGBA color.                                                                                               |
-| `isSemVer`             | `isSemVer(value)`                            | Semantic version.                                                                                                 |
-| `isSlug`               | `isSlug(value)`                              | Slug string.                                                                                                      |
-| `isStrongPassword`     | `isStrongPassword(value[, options])`         | Password strength boolean or score.                                                                               |
-| `isSurrogatePair`      | `isSurrogatePair(value)`                     | Contains surrogate-pair characters.                                                                               |
-| `isTime`               | `isTime(value[, options])`                   | Time string.                                                                                                      |
-| `isUppercase`          | `isUppercase(value)`                         | Uppercase string.                                                                                                 |
-| `isVariableWidth`      | `isVariableWidth(value)`                     | Mixture of full/half-width characters.                                                                            |
-| `isWhitelisted`        | `isWhitelisted(value, chars)`                | Only characters from `chars`.                                                                                     |
-| `isDate`               | `isDate(value[, options])`                   | Date string.                                                                                                      |
-| `isAfter`              | `isAfter(value[, options])`                  | Date after comparison date; volatile without `comparisonDate`.                                                    |
-| `isBefore`             | `isBefore(value[, options])`                 | Date before comparison date; volatile without `comparisonDate`.                                                   |
-| `isRFC3339`            | `isRFC3339(value)`                           | RFC 3339 timestamp.                                                                                               |
-| `isISO8601`            | `isISO8601(value[, options])`                | ISO 8601 date/time.                                                                                               |
+| Function               | validator.js shape                           | Typical use                                                                                                                                                                                                                        |
+| ---------------------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `contains`             | `contains(value, seed[, options])`           | String containment with validator.js options. `value \| contains(seed)` remains jq.                                                                                                                                                |
+| `equals`               | `equals(value, comparison)`                  | Exact string comparison.                                                                                                                                                                                                           |
+| `matches`              | `matches(value, pattern[, modifiers])`       | Regex predicate with validator.js shape. One-arg `matches(query)` remains BXL's predicate-profile full-text hook.                                                                                                                  |
+| `isEmail`              | `isEmail(value[, options])`                  | Email address.                                                                                                                                                                                                                     |
+| `isURL`                | `isURL(value[, options])`                    | URL; commonly `isURL(Website, {require_protocol:true})`.                                                                                                                                                                           |
+| `isFQDN`               | `isFQDN(value[, options])`                   | Domain / host name.                                                                                                                                                                                                                |
+| `isIP`                 | `isIP(value[, version])`                     | IPv4 or IPv6 address.                                                                                                                                                                                                              |
+| `isIPRange`            | `isIPRange(value[, version])`                | CIDR IP range.                                                                                                                                                                                                                     |
+| `isMobilePhone`        | `isMobilePhone(value[, locale[, options]])`  | Locale-aware mobile phone number.                                                                                                                                                                                                  |
+| `isPostalCode`         | `isPostalCode(value, locale)`                | Locale-aware postal / ZIP code.                                                                                                                                                                                                    |
+| `isMailtoURI`          | `isMailtoURI(value[, options])`              | `mailto:` URI.                                                                                                                                                                                                                     |
+| `isMagnetURI`          | `isMagnetURI(value)`                         | Magnet URI.                                                                                                                                                                                                                        |
+| `isDataURI`            | `isDataURI(value)`                           | Data URI.                                                                                                                                                                                                                          |
+| `isJWT`                | `isJWT(value)`                               | JWT token shape.                                                                                                                                                                                                                   |
+| `isUUID`               | `isUUID(value[, version])`                   | UUID.                                                                                                                                                                                                                              |
+| `isULID`               | `isULID(value)`                              | ULID.                                                                                                                                                                                                                              |
+| `isMongoId`            | `isMongoId(value)`                           | MongoDB ObjectId.                                                                                                                                                                                                                  |
+| `isAbaRouting`         | `isAbaRouting(value)`                        | US ABA routing number.                                                                                                                                                                                                             |
+| `isBIC`                | `isBIC(value)`                               | SWIFT/BIC code.                                                                                                                                                                                                                    |
+| `isIBAN`               | `isIBAN(value[, options])`                   | IBAN.                                                                                                                                                                                                                              |
+| `isCreditCard`         | `isCreditCard(value[, options])`             | Credit card number.                                                                                                                                                                                                                |
+| `isCurrency`           | `isCurrency(value[, options])`               | Currency amount string.                                                                                                                                                                                                            |
+| `isEthereumAddress`    | `isEthereumAddress(value)`                   | Ethereum address.                                                                                                                                                                                                                  |
+| `isBtcAddress`         | `isBtcAddress(value)`                        | Bitcoin address.                                                                                                                                                                                                                   |
+| `isEAN`                | `isEAN(value)`                               | EAN code.                                                                                                                                                                                                                          |
+| `isIMEI`               | `isIMEI(value[, options])`                   | IMEI.                                                                                                                                                                                                                              |
+| `isISBN`               | `isISBN(value[, version])`                   | ISBN-10 or ISBN-13.                                                                                                                                                                                                                |
+| `isISIN`               | `isISIN(value)`                              | Securities identifier.                                                                                                                                                                                                             |
+| `isISRC`               | `isISRC(value)`                              | Recording code.                                                                                                                                                                                                                    |
+| `isISSN`               | `isISSN(value[, options])`                   | Serial publication code.                                                                                                                                                                                                           |
+| `isISO6346`            | `isISO6346(value)`                           | Shipping container ID.                                                                                                                                                                                                             |
+| `isFreightContainerID` | `isFreightContainerID(value)`                | Alias-style container ID validator.                                                                                                                                                                                                |
+| `isISO6391`            | `isISO6391(value)`                           | ISO 639-1 language code.                                                                                                                                                                                                           |
+| `isISO15924`           | `isISO15924(value)`                          | ISO 15924 script code.                                                                                                                                                                                                             |
+| `isISO31661Alpha2`     | `isISO31661Alpha2(value[, options])`         | ISO 3166-1 alpha-2 country code.                                                                                                                                                                                                   |
+| `isISO31661Alpha3`     | `isISO31661Alpha3(value[, options])`         | ISO 3166-1 alpha-3 country code.                                                                                                                                                                                                   |
+| `isISO31661Numeric`    | `isISO31661Numeric(value)`                   | ISO 3166-1 numeric country code.                                                                                                                                                                                                   |
+| `isISO4217`            | `isISO4217(value)`                           | ISO 4217 currency code.                                                                                                                                                                                                            |
+| `isIdentityCard`       | `isIdentityCard(value, locale)`              | Locale-aware national identity card number; use `"any"` to check all supported locales.                                                                                                                                            |
+| `isLicensePlate`       | `isLicensePlate(value, locale)`              | Locale-aware license plate.                                                                                                                                                                                                        |
+| `isPassportNumber`     | `isPassportNumber(value, countryCode)`       | Passport number.                                                                                                                                                                                                                   |
+| `isTaxID`              | `isTaxID(value[, locale])`                   | Tax ID.                                                                                                                                                                                                                            |
+| `isVAT`                | `isVAT(value, countryCode)`                  | VAT number.                                                                                                                                                                                                                        |
+| `isAlpha`              | `isAlpha(value[, locale[, options]])`        | Letters only.                                                                                                                                                                                                                      |
+| `isAlphanumeric`       | `isAlphanumeric(value[, locale[, options]])` | Letters and numbers only.                                                                                                                                                                                                          |
+| `isAscii`              | `isAscii(value)`                             | ASCII-only string.                                                                                                                                                                                                                 |
+| `isBase32`             | `isBase32(value[, options])`                 | Base32 string.                                                                                                                                                                                                                     |
+| `isBase58`             | `isBase58(value)`                            | Base58 string.                                                                                                                                                                                                                     |
+| `isBase64`             | `isBase64(value[, options])`                 | Base64 string.                                                                                                                                                                                                                     |
+| `isBoolean`            | `isBoolean(value[, options])`                | Boolean string.                                                                                                                                                                                                                    |
+| `isByteLength`         | `isByteLength(value, options)`               | UTF-8 byte length range. Pass the options: upstream validator.js reads the minimum with no fallback, so the one-argument form compares against `undefined` and is false for every string. Its sibling `isLength` has the fallback. |
+| `isDecimal`            | `isDecimal(value[, options])`                | Decimal number string.                                                                                                                                                                                                             |
+| `isDivisibleBy`        | `isDivisibleBy(value, number)`               | Numeric string divisible by number.                                                                                                                                                                                                |
+| `isEmpty`              | `isEmpty(value[, options])`                  | Empty string.                                                                                                                                                                                                                      |
+| `isFloat`              | `isFloat(value[, options])`                  | Float string with optional range.                                                                                                                                                                                                  |
+| `isFullWidth`          | `isFullWidth(value)`                         | Contains full-width characters.                                                                                                                                                                                                    |
+| `isHalfWidth`          | `isHalfWidth(value)`                         | Contains half-width characters.                                                                                                                                                                                                    |
+| `isHash`               | `isHash(value, algorithm)`                   | Hash by algorithm.                                                                                                                                                                                                                 |
+| `isHexadecimal`        | `isHexadecimal(value)`                       | Hexadecimal string.                                                                                                                                                                                                                |
+| `isHexColor`           | `isHexColor(value[, options])`               | CSS hex color.                                                                                                                                                                                                                     |
+| `isHSL`                | `isHSL(value)`                               | CSS HSL color.                                                                                                                                                                                                                     |
+| `isIn`                 | `isIn(value, values)`                        | Membership in allowed values.                                                                                                                                                                                                      |
+| `isInt`                | `isInt(value[, options])`                    | Integer string with optional range.                                                                                                                                                                                                |
+| `isJSON`               | `isJSON(value[, options])`                   | JSON string.                                                                                                                                                                                                                       |
+| `isLatLong`            | `isLatLong(value[, options])`                | Latitude/longitude string.                                                                                                                                                                                                         |
+| `isLength`             | `isLength(value[, options])`                 | Character length range.                                                                                                                                                                                                            |
+| `isLocale`             | `isLocale(value)`                            | Locale string.                                                                                                                                                                                                                     |
+| `isLowercase`          | `isLowercase(value)`                         | Lowercase string.                                                                                                                                                                                                                  |
+| `isLuhnNumber`         | `isLuhnNumber(value)`                        | Luhn checksum.                                                                                                                                                                                                                     |
+| `isMACAddress`         | `isMACAddress(value[, options])`             | MAC address.                                                                                                                                                                                                                       |
+| `isMD5`                | `isMD5(value)`                               | MD5 hash.                                                                                                                                                                                                                          |
+| `isMimeType`           | `isMimeType(value)`                          | MIME type.                                                                                                                                                                                                                         |
+| `isMultibyte`          | `isMultibyte(value)`                         | Contains multibyte characters.                                                                                                                                                                                                     |
+| `isNumeric`            | `isNumeric(value[, options])`                | Numeric string.                                                                                                                                                                                                                    |
+| `isOctal`              | `isOctal(value)`                             | Octal string.                                                                                                                                                                                                                      |
+| `isPort`               | `isPort(value)`                              | Port number string.                                                                                                                                                                                                                |
+| `isRgbColor`           | `isRgbColor(value[, options])`               | CSS RGB/RGBA color.                                                                                                                                                                                                                |
+| `isSemVer`             | `isSemVer(value)`                            | Semantic version.                                                                                                                                                                                                                  |
+| `isSlug`               | `isSlug(value)`                              | Slug string.                                                                                                                                                                                                                       |
+| `isStrongPassword`     | `isStrongPassword(value[, options])`         | Password strength boolean or score.                                                                                                                                                                                                |
+| `isSurrogatePair`      | `isSurrogatePair(value)`                     | Contains surrogate-pair characters.                                                                                                                                                                                                |
+| `isTime`               | `isTime(value[, options])`                   | Time string.                                                                                                                                                                                                                       |
+| `isUppercase`          | `isUppercase(value)`                         | Uppercase string.                                                                                                                                                                                                                  |
+| `isVariableWidth`      | `isVariableWidth(value)`                     | Mixture of full/half-width characters.                                                                                                                                                                                             |
+| `isWhitelisted`        | `isWhitelisted(value, chars)`                | Only characters from `chars`.                                                                                                                                                                                                      |
+| `isDate`               | `isDate(value[, options])`                   | Date string.                                                                                                                                                                                                                       |
+| `isAfter`              | `isAfter(value[, options])`                  | Date after comparison date; volatile without `comparisonDate`.                                                                                                                                                                     |
+| `isBefore`             | `isBefore(value[, options])`                 | Date before comparison date; volatile without `comparisonDate`.                                                                                                                                                                    |
+| `isRFC3339`            | `isRFC3339(value)`                           | RFC 3339 timestamp.                                                                                                                                                                                                                |
+| `isISO8601`            | `isISO8601(value[, options])`                | ISO 8601 date/time.                                                                                                                                                                                                                |
 
 ### Type Checking & Error Detection
 
@@ -1460,28 +1485,28 @@ _Date difference in days_
 
 ### Other Financial
 
-| Function                                               | Description                          |
-| ------------------------------------------------------ | ------------------------------------ |
-| `CUMIPMT(rate, nper, pv, start, end, type)`            | Cumulative interest between periods  |
-| `CUMPRINC(rate, nper, pv, start, end, type)`           | Cumulative principal between periods |
-| `EFFECT(nominal, npery)`                               | Effective annual rate                |
-| `NOMINAL(effective, npery)`                            | Nominal annual rate                  |
-| `SLN(cost, salvage, life)`                             | Straight-line depreciation           |
-| `SYD(cost, salvage, life, per)`                        | Sum-of-years depreciation            |
-| `ACCRINT(issue, first, settle, rate, par, freq)`       | Accrued interest                     |
-| `DB(cost, salvage, life, period, month)`               | Declining balance depreciation       |
-| `DDB(cost, salvage, life, period, factor)`             | Double declining balance             |
-| `ISPMT(rate, per, nper, pv)`                           | Interest for straight-line payments  |
-| `PDURATION(rate, pv, fv)`                              | Periods to reach target value        |
-| `RRI(nper, pv, fv)`                                    | Required rate of return              |
-| `DOLLARDE(frac, denom)`                                | Fractional dollar to decimal         |
-| `DOLLARFR(dec, denom)`                                 | Decimal dollar to fractional         |
-| `DISC(settle, maturity, pr, redemption, basis)`        | Discount rate of a security          |
-| `PRICEDISC(settle, maturity, disc, redemption, basis)` | Price of discounted security         |
-| `COUPDAYS(settle, maturity, freq, basis)`              | Days in coupon period                |
-| `TBILLEQ(settle, maturity, discount)`                  | T-bill bond-equivalent yield         |
-| `TBILLPRICE(settle, maturity, discount)`               | T-bill price per $100                |
-| `TBILLYIELD(settle, maturity, price)`                  | T-bill yield                         |
+| Function                                                | Description                                                    |
+| ------------------------------------------------------- | -------------------------------------------------------------- |
+| `CUMIPMT(rate, nper, pv, start, end, type)`             | Cumulative interest between periods                            |
+| `CUMPRINC(rate, nper, pv, start, end, type)`            | Cumulative principal between periods                           |
+| `EFFECT(nominal, npery)`                                | Effective annual rate                                          |
+| `NOMINAL(effective, npery)`                             | Nominal annual rate                                            |
+| `SLN(cost, salvage, life)`                              | Straight-line depreciation                                     |
+| `SYD(cost, salvage, life, per)`                         | Sum-of-years depreciation                                      |
+| `ACCRINT(issue, first, settle, rate, par, freq, basis)` | Accrued interest over the quasi-coupon periods `first` anchors |
+| `DB(cost, salvage, life, period, month)`                | Declining balance depreciation                                 |
+| `DDB(cost, salvage, life, period, factor)`              | Double declining balance                                       |
+| `ISPMT(rate, per, nper, pv)`                            | Interest for straight-line payments                            |
+| `PDURATION(rate, pv, fv)`                               | Periods to reach target value                                  |
+| `RRI(nper, pv, fv)`                                     | Required rate of return                                        |
+| `DOLLARDE(frac, denom)`                                 | Fractional dollar to decimal                                   |
+| `DOLLARFR(dec, denom)`                                  | Decimal dollar to fractional                                   |
+| `DISC(settle, maturity, pr, redemption, basis)`         | Discount rate of a security                                    |
+| `PRICEDISC(settle, maturity, disc, redemption, basis)`  | Price of discounted security                                   |
+| `COUPDAYS(settle, maturity, freq, basis)`               | Days in coupon period                                          |
+| `TBILLEQ(settle, maturity, discount)`                   | T-bill bond-equivalent yield                                   |
+| `TBILLPRICE(settle, maturity, discount)`                | T-bill price per $100                                          |
+| `TBILLYIELD(settle, maturity, price)`                   | T-bill yield                                                   |
 
 _Monthly car payment_
 

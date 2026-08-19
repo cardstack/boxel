@@ -64,6 +64,10 @@ contributed upstream:
 - `sort/0` sorts a copy instead of calling `input.sort()` in place —
   upstream mutates the caller's array, which corrupts live inputs (card
   arrays with change subscribers, read-only lazy views).
+- `cbrt/0` answers `Math.cbrt`, which is exact on perfect cubes where a
+  libm `cbrt` is not: `27|cbrt` is 3 here and 3.0000000000000004 in
+  jq 1.7. The exact answer is the one a card author expects, so this is
+  the rare place the fork prefers its own result to jq's.
 
 ## Additions (new files, no upstream equivalent)
 
@@ -119,14 +123,12 @@ adds the binary entries:
   is NaN, returns the other. Excel `MAX`/`MIN` (different name) propagate
   errors instead.
 - `copysign/2(x; y)` — magnitude of x with sign of y.
-- `atan2/2(x; y)` — **Excel argument order** (`x` first), NOT vanilla-jq
-  (`y; x`). The lowercase `atan2` and uppercase `ATAN2` resolve to the same
-  case-folded registry name, so BXL picks one canonical signature; Excel
-  order wins because it's the spreadsheet contract. `atan2(0; 0)` returns
-  `0` (POSIX-compat), not `#DIV/0!`. The realm-side compiler may upgrade
-  `atan2` → `ATAN2` (formula bridge) for readable BXL — that path keeps
-  Excel's `#DIV/0!`. Code reaching this jq-side filter (via the
-  `jq\`…\`` template form) gets the POSIX behaviour.
+- `atan2/2(y; x)` — jq/POSIX argument order. Excel's `ATAN2(x, y)` reverses
+  it, and the two are separate live registry entries rather than one canonical
+  signature: `atan2/2` here, `ATAN2/2` in the formula bridge, which the
+  readable compiler routes between by the name that was written. This filter
+  returns `0` for `atan2(0; 0)` (POSIX-compat) where `ATAN2` raises Excel's
+  `#DIV/0!`.
 
 ### 33 stubs filled with libm-equivalent implementations
 
@@ -144,10 +146,10 @@ adds the binary entries:
 | `nearbyint/0`, `rint/0`           | `roundHalfToEven`                         | Banker's rounding.                                                                                                                                                    |
 | `pow10/0`                         | `Math.pow(10, x)`                         |                                                                                                                                                                       |
 | `expm1/0`                         | `Math.expm1`                              |                                                                                                                                                                       |
-| `scalars_or_empty/0`              | yield-or-empty                            | Trivial.                                                                                                                                                              |
-| `erf/0`, `erfc/0`                 | Abramowitz & Stegun 7.1.26                | ~1.5e-7 max error.                                                                                                                                                    |
+| `scalars_or_empty/0`              | scalars, plus empty collections           | The empty array and empty object are what separate it from `scalars/0`.                                                                                               |
+| `erf/0`, `erfc/0`                 | Abramowitz & Stegun 7.1.26                | ~1.5e-7 max error, where a libm `erf` is exact to the last bit. Excel's `ERF`/`ERFC` in the formula bridge are computed to full double precision instead.             |
 | `gamma/0`, `tgamma/0`             | Lanczos g=7, n=9                          | **True Γ** (Excel-canonical). POSIX `gamma()` was historically log-Γ on Linux, true Γ on BSD — BXL picks the modern interpretation. Use `lgamma`/`GAMMALN` for log-Γ. |
-| `lgamma/0`, `lgamma_r/0`          | Lanczos log form                          | `lgamma_r` returns just the log magnitude (jq has no pointer args for the sign).                                                                                      |
+| `lgamma/0`, `lgamma_r/0`          | Lanczos log form                          | `lgamma_r` yields the `[ln \|Γ(x)\|, sign of Γ(x)]` pair jq does; the sign follows from ⌊x⌋'s parity, and is reported as positive at the poles.                       |
 | `j0/0`, `j1/0`, `y0/0`, `y1/0`    | Numerical Recipes polynomial+asymptotic   | Bessel functions of integer orders 0 and 1; J/Y.                                                                                                                      |
 | `jn/2`, `yn/2`                    | Recurrence on top of `j0`/`j1`, `y0`/`y1` | C/POSIX argument order: `jn(n; x)`. Excel's `BESSELJ(x, n)` (different name, swapped order) lives in the formula bridge.                                              |
 
@@ -158,6 +160,26 @@ adds the binary entries:
 loader, which BXL doesn't (and won't) implement — BXL evaluates a single
 expression against a single input value, with no input stream and no `import`
 path resolution.
+
+`inputs/0` is native here rather than jq's `repeat(input)`, and yields an empty
+stream. jq's definition absorbs the end-of-input signal `input` raises when the
+stream runs out; `input/0` above raises a different error, which that `catch`
+would let escape. A runtime with no input stream is permanently out of inputs,
+so the empty stream is the answer jq would give. Restore the jq-source
+definition if `input/0` ever reads a real stream.
+
+### Sentinels standing in for host facts
+
+`get_search_list/0`, `get_jq_origin/0` and `get_prog_origin/0` answer with
+BXL-invented values — `[]`, `"bxl://jq-origin"`, `"native-inline"` — because
+the module search path and program origin they report are jq CLI concepts with
+no BXL equivalent. They are stubs like the four above, but ones that return
+rather than raise, since a caller asking where a program came from can be given
+an answer.
+
+`builtins/0` returns its names sorted, where jq's order is unspecified. Sorted
+is the BXL contract, and the list is built from the libraries a program actually
+resolved, so it changes with the library set.
 
 ### Cross-references
 

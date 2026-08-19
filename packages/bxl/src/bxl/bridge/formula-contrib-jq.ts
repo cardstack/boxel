@@ -6,6 +6,11 @@ def FALSE: false;
 def NA: "#N/A" | error;
 def INDEX(array; row): _EXCEL_INDEX(array; row);
 def INDEX(array; row; column): _EXCEL_INDEX(array; row; column);
+# IF and IFS carry a second implementation in the compiled-scalar fast path,
+# jqtools/evaluate/compiledScalar.ts, which answers any formula that compiles
+# wholly to scalars — so these definitions run only for the rest. Keep the two
+# in step. Both read a condition with jq truthiness: only null and false are
+# false, so the number 0 takes the true branch where Excel takes the false one.
 def IF(test; value_if_true; value_if_false):
   . as $xl_in
   | if ($xl_in | test)

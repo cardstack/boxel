@@ -37,7 +37,7 @@ const BoxelDropdownTrigger: TemplateOnlyComponent<Signature> = <template>
     />
   </BoxelButton>
   <style scoped>
-    @layer {
+    @layer boxelComponentL2 {
       .boxel-dropdown-trigger {
         border: 0;
         padding: 0;

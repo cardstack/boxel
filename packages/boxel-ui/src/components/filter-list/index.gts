@@ -38,7 +38,7 @@ const FilterList: TemplateOnlyComponent<Signature> = <template>
     {{/each}}
   </ul>
   <style scoped>
-    @layer boxelComponentL2 {
+    @layer boxelComponentL3 {
       .filter-list {
         display: flex;
         flex-direction: column;

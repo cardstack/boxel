@@ -188,7 +188,11 @@ export async function waveformFor(
   }
   try {
     let bytes = await byteStreamToUint8Array(await getStream());
-    return await extractAudioWaveform(bytes);
+    // The container's stated rate sizes the decoding context, so the decode
+    // isn't resampled before analysis.
+    return await extractAudioWaveform(bytes, {
+      sampleRateHz: budget.sampleRateHz,
+    });
   } catch (error) {
     // A stream that won't re-read is not a reason to fail the whole extract; the
     // header-derived facts are already gathered.

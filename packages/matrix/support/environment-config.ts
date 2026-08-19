@@ -60,10 +60,19 @@ export function getSynapseContainerName(): string {
   return 'boxel-synapse';
 }
 
-export function getSynapseURL(synapse?: {
+// Resolve Synapse's base URL, or `undefined` when it is not yet knowable.
+//
+// Outside environment mode Synapse always binds the fixed host port 8008, so
+// the answer is a constant. Inside environment mode `synapseStart` publishes it
+// on a dynamically chosen free port so that concurrent environments do not
+// collide, and that port is only discoverable by asking Docker about a
+// container that has to already exist. Callers that may run before the
+// container is up — a readiness gate, most of all — need to tell "not yet" from
+// a real address, so this returns `undefined` rather than guessing.
+export function tryGetSynapseURL(synapse?: {
   baseUrl?: string;
   port?: number;
-}): string {
+}): string | undefined {
   if (synapse?.baseUrl) {
     return synapse.baseUrl;
   }
@@ -77,15 +86,36 @@ export function getSynapseURL(synapse?: {
   try {
     let output = execSync(`docker port ${containerName} 8008/tcp`, {
       encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'ignore'],
     }).trim();
     // Output is like "0.0.0.0:55123" or "[::]:55123" — take the first line
     let firstLine = output.split('\n')[0];
     let port = firstLine.split(':').pop();
+    if (!port) {
+      return undefined;
+    }
     return `http://localhost:${port}`;
   } catch {
-    // Fallback if container isn't running yet
-    return 'http://localhost:8008';
+    // The container does not exist yet (or has no published port). There is no
+    // correct URL to return here: in environment mode 8008 belongs to whatever
+    // else happens to be listening, never to this Synapse.
+    return undefined;
   }
+}
+
+export function getSynapseURL(synapse?: {
+  baseUrl?: string;
+  port?: number;
+}): string {
+  let url = tryGetSynapseURL(synapse);
+  if (!url) {
+    throw new Error(
+      `Cannot determine the Synapse URL: container ${getSynapseContainerName()} is not running, ` +
+        `so its dynamically published host port cannot be read. If you are waiting for Synapse ` +
+        `to come up, poll with tryGetSynapseURL() instead.`,
+    );
+  }
+  return url;
 }
 
 export function registerSynapseWithTraefik(hostPort: number): void {

@@ -13,9 +13,7 @@ import { renderComponent } from '../../helpers/render-component';
 import { setupOperatorModeTests } from './operator-mode/setup';
 
 module('Integration | components | create-listing-modal', function (hooks) {
-  let ctx = setupOperatorModeTests(hooks, {
-    reuseIndexAcrossTests: 'createListingModal',
-  });
+  let ctx = setupOperatorModeTests(hooks);
 
   let noop = () => {};
 

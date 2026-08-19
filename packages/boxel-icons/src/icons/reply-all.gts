@@ -16,8 +16,8 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
     class='lucide lucide-reply-all'
     viewBox='0 0 24 24'
     ...attributes
-  ><path d='m7 17-5-5 5-5M12 17l-5-5 5-5' /><path
-      d='M22 18v-2a4 4 0 0 0-4-4H7'
+  ><path d='m12 17-5-5 5-5' /><path
+      d='M22 18v-2a4 4 0 0 0-4-4H7M7 17l-5-5 5-5'
     /></svg>
 </template>;
 

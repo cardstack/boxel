@@ -45,7 +45,7 @@ export default class TagList extends Component<TagListSignature> {
     </div>
 
     <style scoped>
-      @layer {
+      @layer boxelComponentL2 {
         .tag-list {
           display: flex;
           flex-wrap: wrap;

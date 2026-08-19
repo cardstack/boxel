@@ -26,6 +26,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import type CardService from '@cardstack/host/services/card-service';
+import type EnvironmentService from '@cardstack/host/services/environment-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type NetworkService from '@cardstack/host/services/network';
 import type RenderStoreService from '@cardstack/host/services/render-store';
@@ -140,6 +141,8 @@ const SEARCHABLE_MODULE_URL = 'https://cardstack.com/base/searchable';
 
 export default class RenderMetaRoute extends Route<Model> {
   @service declare cardService: CardService;
+  @service('environment-service')
+  declare private environmentService: EnvironmentService;
   @service declare private loaderService: LoaderService;
   @service declare private network: NetworkService;
   @service('render-store') declare private store: RenderStoreService;
@@ -412,6 +415,7 @@ export default class RenderMetaRoute extends Route<Model> {
         network: this.network,
         authGuard: this.#authGuard,
         owner: getOwner(this)!,
+        fileSizeLimitBytes: this.environmentService.fileSizeLimitBytes,
       });
     } finally {
       this.#authGuard.unregister();

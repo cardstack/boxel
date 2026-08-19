@@ -303,3 +303,5 @@ export class TsFileDef extends FileDef {
     };
   }
 }
+
+export default TsFileDef;

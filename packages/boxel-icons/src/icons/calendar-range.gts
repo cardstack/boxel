@@ -16,8 +16,8 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
     class='lucide lucide-calendar-range'
     viewBox='0 0 24 24'
     ...attributes
-  ><rect width='18' height='18' x='3' y='4' rx='2' /><path
-      d='M16 2v4M3 10h18M8 2v4M17 14h-6M13 18H7M7 14h.01M17 18h.01'
+  ><rect width='18' height='18' x='3' y='3' rx='2' /><path
+      d='M16 2v3M3 9h18M8 2v3M17 13h-6M13 17H7M7 13h.01M17 17h.01'
     /></svg>
 </template>;
 

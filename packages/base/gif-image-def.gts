@@ -43,3 +43,5 @@ export class GifDef extends RasterImageDef {
     };
   }
 }
+
+export default GifDef;
