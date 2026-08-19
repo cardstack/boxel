@@ -453,6 +453,74 @@ ${REPLACE_MARKER}
       .doesNotExist('the block is not left in a loading state');
   });
 
+  // The other arm of the same early return. A load that failed must be left
+  // alone too: retrying it on every invalidation is a request storm against
+  // exactly the URL that was already failing, and clearing the message with it
+  // leaves the block with nothing to show for the failure.
+  test('a failed load is not retried on every invalidation, and its message survives', async function (assert) {
+    let getSourceCallCount = 0;
+    cardService.getSource = async () => {
+      getSourceCallCount++;
+      throw new Error('realm unavailable');
+    };
+
+    let monacoSDK = await monacoService.getMonacoContext();
+    let component: any = null;
+
+    class TestComponent extends Component {
+      @tracked htmlParts = [];
+
+      constructor(owner: Owner, args: any) {
+        super(owner, args);
+        component = this;
+      }
+
+      <template>
+        <FormattedAiBotMessage
+          @monacoSDK={{monacoSDK}}
+          @htmlParts={{this.htmlParts}}
+          @roomId='!abcd'
+          @eventId='1234'
+          @isStreaming={{false}}
+          @isLastAssistantMessage={{true}}
+        />
+      </template>
+    }
+
+    await renderComponent(TestComponent);
+    if (!component) {
+      throw new Error('Component not found');
+    }
+
+    let codeBlockHtml = `<pre data-code-language="typescript">
+https://example.com/file.ts
+${SEARCH_MARKER}
+let a = 1;
+${SEPARATOR_MARKER}
+let a = 2;
+${REPLACE_MARKER}
+</pre>`;
+
+    component.htmlParts = parseHtmlContent(codeBlockHtml, roomId, eventId);
+    await settled();
+    await waitFor('[data-test-error-message]');
+    assert.strictEqual(getSourceCallCount, 1, 'the file is fetched once');
+
+    for (let i = 0; i < 5; i++) {
+      component.htmlParts = parseHtmlContent(codeBlockHtml, roomId, eventId);
+      await settled();
+    }
+
+    assert.strictEqual(
+      getSourceCallCount,
+      1,
+      'a failing load is not retried on every invalidation',
+    );
+    assert
+      .dom('[data-test-error-message]')
+      .exists('and its message is still on screen');
+  });
+
   // Cancelling the task does not cancel the request behind it, so a superseded
   // load has to be stopped explicitly or its work still reaches the realm.
   test('a superseded load aborts its request rather than leaving it running', async function (assert) {
