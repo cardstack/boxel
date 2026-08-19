@@ -47,3 +47,5 @@ export class JpgDef extends RasterImageDef {
     };
   }
 }
+
+export default JpgDef;

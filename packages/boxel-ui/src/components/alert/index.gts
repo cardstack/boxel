@@ -43,9 +43,13 @@ const Messages: TemplateOnlyComponent<MessagesSignature> = <template>
   {{#each @messages as |message i|}}
     <div class='alert'>
       {{#if (eq @type 'error')}}
-        <FailureBordered class='alert-icon failure-icon' />
+        <FailureBordered
+          class='alert-icon failure-icon'
+          width='24'
+          height='24'
+        />
       {{else if (eq @type 'warning')}}
-        <Warning class='alert-icon' />
+        <Warning class='alert-icon' width='20' height='20' />
       {{/if}}
       <p
         class='message'
@@ -65,13 +69,7 @@ const Messages: TemplateOnlyComponent<MessagesSignature> = <template>
       margin-top: var(--boxel-sp-lg);
     }
     .alert-icon {
-      min-width: 20px;
-      height: 20px;
-      --icon-background-color: var(--boxel-error-400);
-    }
-    .failure-icon {
-      --icon-background-color: var(--boxel-error-400);
-      --icon-color: var(--boxel-light);
+      flex-shrink: 0;
     }
     .message {
       align-self: center;

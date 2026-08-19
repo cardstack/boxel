@@ -17,14 +17,14 @@ const AiAssistantPanelPopover: TemplateOnlyComponent<Signature> = <template>
       position: absolute;
       top: 1.5rem;
       right: 1.875rem;
+      left: 1.875rem;
       margin-top: var(--boxel-sp-sm);
-      max-width: 20rem;
       min-height: 12.5rem;
       max-height: 75vh;
-      background: var(--ai-assistant-menu-background);
-      border: 1px solid var(--past-sessions-divider-color);
+      background-color: var(--ai-assistant-menu-background);
+      border: 1px solid var(--ai-assistant-menu-border);
       border-radius: var(--boxel-border-radius);
-      color: var(--boxel-light);
+      color: var(--ai-assistant-menu-foreground);
       box-shadow: 0 5px 15px 0 rgba(0, 0, 0, 0.5);
       z-index: var(--host-ai-panel-popover-z-index);
       display: flex;
@@ -51,9 +51,8 @@ const AiAssistantPanelPopover: TemplateOnlyComponent<Signature> = <template>
       position: relative;
       padding: var(--boxel-sp-xs);
       color: var(--boxel-200);
-      font-weight: 700;
-      letter-spacing: var(--boxel-lsp-xs);
-      line-height: 1.2;
+      font: 700 var(--boxel-font-sm);
+      letter-spacing: var(--boxel-lsp-sm);
 
       box-shadow: var(--box-shadow-start);
 
@@ -70,6 +69,7 @@ const AiAssistantPanelPopover: TemplateOnlyComponent<Signature> = <template>
     .body {
       overflow-y: auto;
       flex-grow: 1;
+      scroll-timeline: --past-sessions-scroll-timeline block;
     }
 
     @keyframes scroll-past-sessions {
@@ -93,7 +93,7 @@ const AiAssistantPanelPopover: TemplateOnlyComponent<Signature> = <template>
     <header class='header'>
       {{yield to='header'}}
     </header>
-    <div class='body' tabindex='0'>
+    <div class='body' tabindex='0' data-test-panel-popover-body>
       {{yield to='body'}}
     </div>
   </div>
