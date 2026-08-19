@@ -1,12 +1,14 @@
 ---
 name: pr-review
-description: Review a GitHub pull request thoroughly and post the findings as one inline-first pending review. Builds subsystem context before judging, verifies every claim empirically against the checked-out branch, classifies each finding (regression / pre-existing / follow-up / confirmation), and writes comments with enough mechanism and background that an author unfamiliar with that part of the codebase can act on them without a follow-up question. Use whenever asked to review a PR, give feedback on a pull request, or re-review after the author pushes changes. For the local working diff use the built-in code-review skill (a Claude Code built-in, not a repo skill); for a local guided tour without posting anything, use review-branch.
+description: Review a GitHub pull request thoroughly and post the findings as one inline-first pending review. Builds subsystem context before judging, verifies every claim empirically against the checked-out branch, classifies each finding (regression / pre-existing / follow-up), and writes comments with enough mechanism and background that an author unfamiliar with that part of the codebase can act on them without a follow-up question. The output is critique only — verification that comes back clean stays out of the threads. Use whenever asked to review a PR, give feedback on a pull request, or re-review after the author pushes changes. For the local working diff use the built-in code-review skill (a Claude Code built-in, not a repo skill); for a local guided tour without posting anything, use review-branch.
 allowed-tools: Read, Grep, Bash(gh pr view *, gh pr diff *, gh api *, git fetch *, git log *, git diff *, git worktree *), mcp__github__pull_request_review_write, mcp__github__add_comment_to_pending_review, mcp__github__add_reply_to_pull_request_comment
 ---
 
 # PR Review
 
 A review here is a teaching document as much as a quality gate. The author may not know the subsystem their change lands in, so every comment carries the claim, the mechanism behind it, the evidence, and a concrete way out — written for a reader who has never opened the file. Thoroughness means tracing and verifying, not accumulating nits.
+
+The output is critique. Every comment asks the author for something — a change, a decision, or an answer — because a comment that asks for nothing is one more thing to read past on the way to the ones that do. Verification stays exhaustive; it is what earns the right to make a claim, and most of it never becomes a comment.
 
 ## Contracts that bind every review
 
@@ -47,7 +49,8 @@ Every finding states its class explicitly — this is what lets the author act o
 - **Regression** — introduced by this PR. The fix belongs in this PR.
 - **Pre-existing, now load-bearing** — the bug predates the PR, but the PR builds on it or widens its blast radius. Say both halves: "not this PR's bug" and "this PR now depends on it". The fix is usually a follow-up; the PR may still need a wording or scoping change to avoid cementing the bug as intended behavior.
 - **Follow-up** — a real improvement outside this PR's scope. Say so plainly ("that's a follow-up, not this PR") and describe it concretely enough to file.
-- **Confirmation** — the change is right, and the comment documents *why* it is safe plus the conditions under which it would stop being safe. Confirmations are findings too: they are the guard rails the next editor reads. "Nothing to change" is a valid, useful comment.
+
+A verification that comes back clean is not a finding. Reading the whole path and concluding the change is safe is the work; posting that conclusion inline hands the author something to read and nothing to do, and it buries the comments that do ask for a change. The one thing worth extracting from a clean verification is a missing guard: where the change is only safe because of an invariant nothing enforces, the finding is the executable check, assertion, or comment that would pin it — an ask, not an endorsement.
 
 Also mark blocking vs. non-blocking in prose. The submitted review event is always COMMENT — approve / request-changes is the human's call — so the words must carry the verdict.
 
@@ -55,7 +58,7 @@ Also mark blocking vs. non-blocking in prose. The submitted review event is alwa
 
 Anatomy of an inline comment, in order:
 
-1. **The claim, first sentence.** What is wrong (or right) and what it costs.
+1. **The claim, first sentence.** What is wrong and what it costs.
 2. **The mechanism.** Walk the code path with real names: which function, in which file, takes which branch.
 3. **The evidence.** The repro, the query plan, the enumerated call sites — whatever was actually run or read.
 4. **The way out.** A snippet when the fix is small; options with a recommendation when it isn't. GitHub ```suggestion blocks only for mechanical one-liners where the diff is the whole message.
@@ -78,11 +81,10 @@ Reference code by path and symbol name (`packages/runtime-common/expression.ts`,
 The body is the layer above the threads:
 
 1. **Opening sentence: the lens.** What this review focused on and why that is the right lens for this PR.
-2. **Bottom line, bolded.** The verdict in one or two sentences — including "no blocking issues" when true.
-3. **What lands right.** Mechanistic engagement with the design's strengths, not courtesy praise — it tells the author which parts of the design to defend later.
-4. **Answers to open discussion questions**, decided by mechanical facts rather than preference.
-5. **Numbered recommendations**, each one line plus a pointer to the inline thread that carries the detail.
-6. **Adjacent, out of scope** — nearby rot noticed along the way, flagged for whoever touches it next, explicitly not asked of this PR.
+2. **Bottom line, bolded.** The verdict in one or two sentences — including "no blocking issues" when that is the finding. This sentence is the whole of the review's "this holds": never a tour of the design's strengths, and never repeated per thread.
+3. **Answers to open discussion questions**, decided by mechanical facts rather than preference.
+4. **Numbered recommendations**, each one line plus a pointer to the inline thread that carries the detail.
+5. **Adjacent, out of scope** — nearby rot noticed along the way, flagged for whoever touches it next, explicitly not asked of this PR.
 
 ## Phase 6 — Post
 
@@ -101,6 +103,7 @@ Pre-submit self-check over every comment and the body:
 - Evergreen: no ticket IDs, no PR numbers, no journey narration in your prose.
 - Every claim either carries its evidence or states that it was verified and how.
 - Every finding carries its class and blocking-ness.
+- Every comment asks for something — a change, a decision, or an answer. Anything that only records that the code is correct comes out.
 
 Then report back to the user: the bottom line, the finding count by class, and a link to the review.
 
@@ -112,6 +115,6 @@ Replies and new pushes re-open the loop. A re-review's job is continuity: critiq
 2. **Verify each fix as a change, not as compliance.** Read the actual commits; don't trust the reply's description of them. A response can fix the symptom while missing the mechanism the thread named, introduce its own regression, or land on only one of the twins. The response gets the same Phase 2 rigor the original code got.
 3. **Continue in the author's thread.** Critique of a change made in response to an existing comment lands as a threaded reply on that comment (`mcp__github__add_reply_to_pull_request_comment`, or `gh api repos/{owner}/{repo}/pulls/{n}/comments/{id}/replies`) — the thread carries the context and the history. A new inline comment is reserved for a genuinely new finding no existing thread covers; those post through the Phase 6 pending-review flow.
 4. **Don't repeat the background.** The thread already explains why the machinery exists. When a change lands in an area an earlier comment covered, pick up at the thread's altitude — claim, what the new code does, evidence, verdict. Phase 4's background paragraph is for first contact with an area, not for every exchange about it.
-5. **State each thread's disposition plainly.** "This resolves it", "resolves the X half; Y is still open", or "the fix introduces a new issue: …" — the author should never have to infer whether a thread is done. Answer every author response, even when the answer is only confirmation.
+5. **State each thread's disposition plainly.** "This resolves it", "resolves the X half; Y is still open", or "the fix introduces a new issue: …" — the author should never have to infer whether a thread is done. Answer every author response, including the ones where the fix simply lands — closing a thread the author is waiting on is an answer they need, not a note added for completeness.
 
 When many threads move at once, a short review body summarizing dispositions (resolved / still open / new findings) saves the author a thread-by-thread hunt; the detail stays in the threads.
