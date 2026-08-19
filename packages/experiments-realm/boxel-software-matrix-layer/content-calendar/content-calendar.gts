@@ -18,7 +18,7 @@ import {
   type getCards,
 } from '@cardstack/runtime-common';
 import { Button, TabbedHeader } from '@cardstack/boxel-ui/components';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { cssVar, eq } from '@cardstack/boxel-ui/helpers';
 import CalendarIcon from '@cardstack/boxel-icons/calendar';
 import { consume } from 'ember-provide-consume-context';
 import { restartableTask } from 'ember-concurrency';
@@ -26,6 +26,7 @@ import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
 
 import { Calendar, type CalendarEvent } from '../components/calendar';
 import { EnumSelect } from '../components/enum-select';
+import { monthTitle } from '../utils/index';
 import StatePill from '../components/state-pill';
 import { ContentBundle } from './content-bundle';
 import {
@@ -41,15 +42,32 @@ import { ContentPiece } from './content-piece';
 import { ContentSeries, nextOccurrences } from './content-series';
 import { Freelancer } from './freelancer';
 
-type SectionId = 'calendar' | 'bundles' | 'backlog' | 'series' | 'bench';
+type SectionId =
+  | 'calendar'
+  | 'rhythm'
+  | 'bundles'
+  | 'backlog'
+  | 'series'
+  | 'bench';
 
 const SECTIONS: { id: SectionId; label: string }[] = [
   { id: 'calendar', label: 'Calendar' },
+  { id: 'rhythm', label: 'Rhythm' },
   { id: 'bundles', label: 'Bundles' },
   { id: 'backlog', label: 'Backlog' },
   { id: 'series', label: 'Series' },
   { id: 'bench', label: 'Bench' },
 ];
+
+const STATUS_RANK: Record<string, number> = {
+  planned: 1,
+  in_progress: 2,
+  done: 3,
+};
+
+function dayKey(d: Date): string {
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
 
 const ALL_PLATFORMS = 'All platforms';
 
@@ -501,6 +519,170 @@ class ContentCalendarConsole extends GlimmerComponent<ConsoleSignature> {
     return this.pieces.filter((p) => p.handedTo && p.status !== 'done').length;
   }
 
+  // ── Rhythm (the posting-consistency sequencer) ─────────────────────────
+
+  @tracked rhythmCursor = new Date();
+
+  shiftRhythmMonth = (delta: number) => {
+    this.rhythmCursor = new Date(
+      this.rhythmCursor.getFullYear(),
+      this.rhythmCursor.getMonth() + delta,
+      1,
+    );
+  };
+
+  get rhythmMonthTitle(): string {
+    return monthTitle(this.rhythmCursor);
+  }
+
+  private get rhythmDayCount(): number {
+    let c = this.rhythmCursor;
+    return new Date(c.getFullYear(), c.getMonth() + 1, 0).getDate();
+  }
+
+  // Strongest status per (platform, day) in the cursor month — a day with a
+  // done reel and a planned story beats as done in the reel lane only.
+  private get rhythmStatusMap(): Map<string, string> {
+    let c = this.rhythmCursor;
+    let map = new Map<string, string>();
+    for (let piece of this.pieces) {
+      if (!piece.scheduledAt || !piece.platform) {
+        continue;
+      }
+      let at = new Date(piece.scheduledAt as unknown as string);
+      if (at.getFullYear() !== c.getFullYear() || at.getMonth() !== c.getMonth()) {
+        continue;
+      }
+      let key = `${piece.platform}|${at.getDate()}`;
+      let status = piece.status ?? 'planned';
+      let held = map.get(key);
+      if (!held || (STATUS_RANK[status] ?? 0) > (STATUS_RANK[held] ?? 0)) {
+        map.set(key, status);
+      }
+    }
+    return map;
+  }
+
+  get rhythmRows(): {
+    platform: (typeof PLATFORMS)[number];
+    hue: string;
+    cells: { key: string; cls: string }[];
+  }[] {
+    let map = this.rhythmStatusMap;
+    let days = this.rhythmDayCount;
+    let now = new Date();
+    let cursorIsNow =
+      now.getFullYear() === this.rhythmCursor.getFullYear() &&
+      now.getMonth() === this.rhythmCursor.getMonth();
+    let today = cursorIsNow ? now.getDate() : -1;
+    return PLATFORMS.filter((p) =>
+      Array.from(map.keys()).some((k) => k.startsWith(`${p.value}|`)),
+    ).map((p) => ({
+      platform: p,
+      hue: PLATFORM_COLORS[p.value].ring,
+      cells: Array.from({ length: days }, (_, i) => {
+        let d = i + 1;
+        let status = map.get(`${p.value}|${d}`);
+        let cls = 'beat';
+        if (status) {
+          cls += ` is-${status}`;
+        }
+        if (d === today) {
+          cls += ' is-today';
+        }
+        return { key: `${p.value}|${d}`, cls };
+      }),
+    }));
+  }
+
+  get rhythmDayMarks(): { key: number; label: string; isToday: boolean }[] {
+    let days = this.rhythmDayCount;
+    let now = new Date();
+    let cursorIsNow =
+      now.getFullYear() === this.rhythmCursor.getFullYear() &&
+      now.getMonth() === this.rhythmCursor.getMonth();
+    let today = cursorIsNow ? now.getDate() : -1;
+    return Array.from({ length: days }, (_, i) => {
+      let d = i + 1;
+      let label = d === 1 || d % 5 === 0 ? String(d) : '';
+      return { key: d, label, isToday: d === today };
+    });
+  }
+
+  // Days (any lane) with at least one DONE piece — the streak's raw material.
+  private get doneDayKeys(): Set<string> {
+    let set = new Set<string>();
+    for (let piece of this.pieces) {
+      if (piece.status !== 'done' || !piece.scheduledAt) {
+        continue;
+      }
+      set.add(dayKey(new Date(piece.scheduledAt as unknown as string)));
+    }
+    return set;
+  }
+
+  // Consecutive posting days ending today — or yesterday, so a streak isn't
+  // "broken" by a day that isn't over yet.
+  get currentStreak(): number {
+    let done = this.doneDayKeys;
+    let cursor = new Date();
+    if (!done.has(dayKey(cursor))) {
+      cursor.setDate(cursor.getDate() - 1);
+    }
+    let streak = 0;
+    while (done.has(dayKey(cursor))) {
+      streak++;
+      cursor.setDate(cursor.getDate() - 1);
+    }
+    return streak;
+  }
+
+  get bestStreakThisMonth(): number {
+    let done = this.doneDayKeys;
+    let c = this.rhythmCursor;
+    let best = 0;
+    let run = 0;
+    for (let d = 1; d <= this.rhythmDayCount; d++) {
+      if (done.has(dayKey(new Date(c.getFullYear(), c.getMonth(), d)))) {
+        run++;
+        best = Math.max(best, run);
+      } else {
+        run = 0;
+      }
+    }
+    return best;
+  }
+
+  get monthDoneCount(): number {
+    let count = 0;
+    for (let status of this.rhythmStatusMap.values()) {
+      if (status === 'done') {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  get topLane(): string {
+    let counts = new Map<string, number>();
+    for (let [key, status] of this.rhythmStatusMap) {
+      if (status !== 'done') {
+        continue;
+      }
+      let platform = key.split('|')[0];
+      counts.set(platform, (counts.get(platform) ?? 0) + 1);
+    }
+    let top: string | undefined;
+    let max = 0;
+    for (let [platform, n] of counts) {
+      if (n > max) {
+        max = n;
+        top = platform;
+      }
+    }
+    return top ? platformStyle(top).label : '—';
+  }
+
   bundleHue = (bundle: ContentBundle) => {
     let total = bundle?.pieceCount ?? 0;
     return total > 0 && (bundle?.doneCount ?? 0) === total ? 'green' : 'amber';
@@ -609,6 +791,97 @@ class ContentCalendarConsole extends GlimmerComponent<ConsoleSignature> {
                 </span>
               </:chip>
             </Calendar>
+          </section>
+        {{/if}}
+
+        {{#if (eq this.sectionId 'rhythm')}}
+          <section class='pane'>
+            <div class='pane-head'>
+              <div class='pane-text'>
+                <h2>Posting rhythm</h2>
+                <p class='byline'>Every lane, every day. Consistency is the
+                  choreography that grows an account.</p>
+              </div>
+              <div class='rhythm-nav'>
+                <button
+                  type='button'
+                  class='nav-btn'
+                  aria-label='Previous month'
+                  {{on 'click' (fn this.shiftRhythmMonth -1)}}
+                >‹</button>
+                <span class='rhythm-month'>{{this.rhythmMonthTitle}}</span>
+                <button
+                  type='button'
+                  class='nav-btn'
+                  aria-label='Next month'
+                  {{on 'click' (fn this.shiftRhythmMonth 1)}}
+                >›</button>
+              </div>
+            </div>
+
+            <div class='streak-slab'>
+              <div class='streak-hero'>
+                <span class='streak-n'>{{this.currentStreak}}</span>
+                <span class='streak-unit'>day streak</span>
+              </div>
+              <dl class='streak-facts'>
+                <div class='sf'>
+                  <dt>Best this month</dt>
+                  <dd>{{this.bestStreakThisMonth}} days</dd>
+                </div>
+                <div class='sf'>
+                  <dt>Posted this month</dt>
+                  <dd>{{this.monthDoneCount}}</dd>
+                </div>
+                <div class='sf'>
+                  <dt>Loudest lane</dt>
+                  <dd>{{this.topLane}}</dd>
+                </div>
+              </dl>
+            </div>
+
+            {{#if this.rhythmRows.length}}
+              <div class='sequencer'>
+                {{#each this.rhythmRows as |row|}}
+                  <div class='lane' style={{cssVar beat-hue=row.hue}}>
+                    <span class='lane-label'>
+                      <span class='lane-dot'></span>
+                      <span class='lane-name'>{{row.platform.label}}</span>
+                    </span>
+                    <div class='beats'>
+                      {{#each row.cells key='key' as |cell|}}
+                        <span class={{cell.cls}}></span>
+                      {{/each}}
+                    </div>
+                  </div>
+                {{/each}}
+                <div class='lane marks-lane'>
+                  <span class='lane-label'></span>
+                  <div class='beats'>
+                    {{#each this.rhythmDayMarks key='key' as |mark|}}
+                      <span
+                        class='mark {{if mark.isToday "is-today"}}'
+                      >{{if mark.isToday '▲' mark.label}}</span>
+                    {{/each}}
+                  </div>
+                </div>
+              </div>
+              <p class='legend'>
+                <span class='legend-item'><span class='beat is-done demo'></span>
+                  posted</span>
+                <span class='legend-item'><span
+                    class='beat is-in_progress demo'
+                  ></span>
+                  in progress</span>
+                <span class='legend-item'><span
+                    class='beat is-planned demo'
+                  ></span>
+                  planned</span>
+              </p>
+            {{else}}
+              <p class='empty'>Nothing scheduled this month — the lanes are
+                silent.</p>
+            {{/if}}
           </section>
         {{/if}}
 
@@ -870,8 +1143,14 @@ class ContentCalendarConsole extends GlimmerComponent<ConsoleSignature> {
       }
       h1 {
         margin: 0;
-        font-size: 1.375rem;
-        line-height: 1.2;
+        font-family: var(
+          --font-display,
+          var(--font-sans, var(--boxel-font-family))
+        );
+        font-size: 1.5rem;
+        font-weight: 500;
+        line-height: 1.15;
+        letter-spacing: -0.015em;
       }
       .stats {
         display: flex;
@@ -884,9 +1163,14 @@ class ContentCalendarConsole extends GlimmerComponent<ConsoleSignature> {
         justify-items: start;
       }
       .stat-n {
-        font-size: 1.375rem;
-        font-weight: 700;
+        font-family: var(
+          --font-display,
+          var(--font-sans, var(--boxel-font-family))
+        );
+        font-size: 1.5rem;
+        font-weight: 650;
         line-height: 1;
+        letter-spacing: -0.015em;
         font-variant-numeric: tabular-nums;
       }
       .stat-l {
@@ -925,7 +1209,14 @@ class ContentCalendarConsole extends GlimmerComponent<ConsoleSignature> {
       }
       .pane-text h2 {
         margin: 0;
-        font-size: 1rem;
+        font-family: var(
+          --font-display,
+          var(--font-sans, var(--boxel-font-family))
+        );
+        font-size: 1.375rem;
+        font-weight: 400;
+        line-height: 1.15;
+        letter-spacing: -0.015em;
       }
       .byline {
         margin: 0.15rem 0 0;
@@ -1041,6 +1332,187 @@ class ContentCalendarConsole extends GlimmerComponent<ConsoleSignature> {
         background: var(--muted, var(--boxel-100));
         font-size: 0.6875rem;
         font-variant-numeric: tabular-nums;
+      }
+      .rhythm-nav {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+      .rhythm-month {
+        min-width: 9rem;
+        text-align: center;
+        font: 600 0.8125rem/1.4 var(--font-sans, var(--boxel-font-family));
+      }
+      .nav-btn {
+        border: 1px solid var(--border, var(--boxel-200));
+        border-radius: var(--boxel-border-radius-sm);
+        padding: 0.15rem 0.6rem;
+        background: var(--card, var(--boxel-light));
+        color: var(--foreground, var(--boxel-dark));
+        font-size: 0.875rem;
+        cursor: pointer;
+      }
+      .nav-btn:hover {
+        border-color: var(--studio-band);
+      }
+      .streak-slab {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 2rem;
+        padding: var(--boxel-sp) 0;
+        border-top: 2px solid var(--foreground, var(--boxel-dark));
+        border-bottom: 1px solid var(--border, var(--boxel-200));
+      }
+      .streak-hero {
+        display: flex;
+        align-items: baseline;
+        gap: 0.6rem;
+      }
+      .streak-n {
+        font-family: var(--font-display, var(--font-sans, var(--boxel-font-family)));
+        font-size: 4rem;
+        font-weight: 750;
+        line-height: 0.9;
+        letter-spacing: -0.02em;
+        color: var(--primary, var(--boxel-purple));
+        font-variant-numeric: tabular-nums;
+      }
+      .streak-unit {
+        font-size: 0.6875rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        color: var(--muted-foreground, var(--boxel-450));
+      }
+      .streak-facts {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 2rem;
+        margin: 0;
+      }
+      .sf {
+        display: grid;
+        gap: 0.15rem;
+      }
+      .sf dt {
+        font-size: 0.625rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.09em;
+        color: var(--muted-foreground, var(--boxel-450));
+      }
+      .sf dd {
+        margin: 0;
+        font-family: var(--font-display, var(--font-sans, var(--boxel-font-family)));
+        font-size: 1.125rem;
+        font-weight: 650;
+      }
+      .sequencer {
+        display: grid;
+        gap: 0.375rem;
+      }
+      .lane {
+        display: grid;
+        grid-template-columns: 8.5rem minmax(0, 1fr);
+        align-items: center;
+        gap: 0.75rem;
+      }
+      .lane-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        min-width: 0;
+      }
+      .lane-dot {
+        width: 8px;
+        height: 8px;
+        flex: none;
+        border-radius: 50%;
+        background: var(--beat-hue, var(--muted-foreground, var(--boxel-450)));
+      }
+      .lane-name {
+        font-size: 0.6875rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: var(--muted-foreground, var(--boxel-450));
+      }
+      .beats {
+        display: flex;
+        gap: 2px;
+      }
+      .beat {
+        flex: 1;
+        min-width: 0;
+        height: 18px;
+        border-radius: 3px;
+        background: color-mix(
+          in oklch,
+          var(--foreground, var(--boxel-dark)) 4%,
+          transparent
+        );
+      }
+      .beat.is-planned {
+        background: transparent;
+        border: 1px solid
+          color-mix(in oklch, var(--beat-hue, var(--boxel-450)) 45%, transparent);
+      }
+      .beat.is-in_progress {
+        background: color-mix(
+          in oklch,
+          var(--beat-hue, var(--boxel-450)) 30%,
+          transparent
+        );
+        border: 1px solid
+          color-mix(in oklch, var(--beat-hue, var(--boxel-450)) 55%, transparent);
+      }
+      .beat.is-done {
+        background: var(--beat-hue, var(--boxel-450));
+      }
+      .beat.is-today {
+        outline: 1.5px solid
+          color-mix(
+            in oklch,
+            var(--foreground, var(--boxel-dark)) 55%,
+            transparent
+          );
+        outline-offset: 1px;
+      }
+      .beat.demo {
+        flex: none;
+        width: 18px;
+        --beat-hue: var(--muted-foreground, var(--boxel-450));
+      }
+      .marks-lane {
+        margin-top: -0.125rem;
+      }
+      .mark {
+        flex: 1;
+        min-width: 0;
+        text-align: center;
+        font-size: 0.5625rem;
+        font-weight: 600;
+        color: var(--muted-foreground, var(--boxel-450));
+      }
+      .mark.is-today {
+        color: var(--foreground, var(--boxel-dark));
+      }
+      .legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1.25rem;
+        margin: 0;
+        font-size: 0.6875rem;
+        color: var(--muted-foreground, var(--boxel-450));
+      }
+      .legend-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
       }
       .empty,
       .shell-note {
