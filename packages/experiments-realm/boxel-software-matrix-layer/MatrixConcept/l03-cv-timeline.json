@@ -17,7 +17,7 @@
       "domainKit": null,
       "owner": null,
       "workState": null,
-      "notes": null,
+      "notes": "content-calendar bespoke remainder: its Rhythm view is a month x platform beat sequencer (a filled cell = published, outlined = planned, per-lane). Timeline is chronological-single-track and does not cover this shape, and neither do the charts \u2014 so the sequencer is a candidate for a new Structures component rather than a Timeline consumer.",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/timeline",
       "specTarget": "base realm",
       "consumers": null,
