@@ -17,7 +17,7 @@ import {
   type CardCrudFunctions,
   type getCards,
 } from '@cardstack/runtime-common';
-import { Button } from '@cardstack/boxel-ui/components';
+import { Button, TabbedHeader } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import CalendarIcon from '@cardstack/boxel-icons/calendar';
 import { consume } from 'ember-provide-consume-context';
@@ -526,8 +526,8 @@ class ContentCalendarConsole extends GlimmerComponent<ConsoleSignature> {
     this.sectionId = id;
   };
 
-  get sections() {
-    return SECTIONS;
+  get tabs() {
+    return SECTIONS.map((s) => ({ tabId: s.id, displayName: s.label }));
   }
 
   get statusLabels() {
@@ -536,47 +536,38 @@ class ContentCalendarConsole extends GlimmerComponent<ConsoleSignature> {
 
   <template>
     <section class='studio' ...attributes>
-      <header class='masthead'>
-        <div class='brand'>
-          <span class='crest'><CalendarIcon class='crest-icon' /></span>
-          <div class='brand-text'>
-            <p class='eyebrow'>Content calendar</p>
-            <h1>{{if @studioName @studioName 'My content calendar'}}</h1>
-          </div>
-        </div>
-        {{#if this.isInteractive}}
-          <div class='stats'>
-            <div class='stat'>
-              <span class='stat-n'>{{this.thisWeekCount}}</span>
-              <span class='stat-l'>this week</span>
-            </div>
-            <div class='stat'>
-              <span class='stat-n'>{{this.inProgressCount}}</span>
-              <span class='stat-l'>in progress</span>
-            </div>
-            <div class='stat'>
-              <span class='stat-n'>{{this.handedOutCount}}</span>
-              <span class='stat-l'>with someone</span>
-            </div>
-            <div class='stat'>
-              <span class='stat-n'>{{this.openBundleCount}}</span>
-              <span class='stat-l'>open bundles</span>
-            </div>
-          </div>
-        {{/if}}
-      </header>
-
       {{#if this.isInteractive}}
-        <nav class='sections' aria-label='Sections'>
-          {{#each this.sections as |section|}}
-            <button
-              type='button'
-              class='section-btn'
-              aria-current={{if (eq this.sectionId section.id) 'page' 'false'}}
-              {{on 'click' (fn this.setSection section.id)}}
-            >{{section.label}}</button>
-          {{/each}}
-        </nav>
+        <TabbedHeader
+          class='studio-header'
+          @headerTitle={{if @studioName @studioName 'My content calendar'}}
+          @tabs={{this.tabs}}
+          @activeTabId={{this.sectionId}}
+          @setActiveTab={{this.setSection}}
+        >
+          <:headerIcon>
+            <span class='crest'><CalendarIcon class='crest-icon' /></span>
+          </:headerIcon>
+          <:sideContent>
+            <div class='stats'>
+              <div class='stat'>
+                <span class='stat-n'>{{this.thisWeekCount}}</span>
+                <span class='stat-l'>this week</span>
+              </div>
+              <div class='stat'>
+                <span class='stat-n'>{{this.inProgressCount}}</span>
+                <span class='stat-l'>in progress</span>
+              </div>
+              <div class='stat'>
+                <span class='stat-n'>{{this.handedOutCount}}</span>
+                <span class='stat-l'>with someone</span>
+              </div>
+              <div class='stat'>
+                <span class='stat-n'>{{this.openBundleCount}}</span>
+                <span class='stat-l'>open bundles</span>
+              </div>
+            </div>
+          </:sideContent>
+        </TabbedHeader>
 
         {{#if this.actionProblem}}
           <p class='problem' role='alert'>{{this.actionProblem}}</p>
@@ -823,6 +814,13 @@ class ContentCalendarConsole extends GlimmerComponent<ConsoleSignature> {
           </section>
         {{/if}}
       {{else}}
+        <header class='shell-head'>
+          <span class='crest'><CalendarIcon class='crest-icon' /></span>
+          <div>
+            <p class='eyebrow'>Content calendar</p>
+            <h1>{{if @studioName @studioName 'My content calendar'}}</h1>
+          </div>
+        </header>
         <p class='shell-note'>Open this calendar in the app to plan content,
           group bundles and hand work to your bench.</p>
       {{/if}}
@@ -846,20 +844,8 @@ class ContentCalendarConsole extends GlimmerComponent<ConsoleSignature> {
         color: var(--foreground, var(--boxel-dark));
         font-family: var(--font-sans, var(--boxel-font-family));
       }
-      .masthead {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--boxel-sp);
-        padding-bottom: var(--boxel-sp);
-        border-bottom: 2px solid var(--studio-band);
-      }
-      .brand {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-      }
+      
+      
       .crest {
         display: grid;
         place-items: center;
@@ -910,28 +896,10 @@ class ContentCalendarConsole extends GlimmerComponent<ConsoleSignature> {
         letter-spacing: 0.06em;
         color: var(--muted-foreground, var(--boxel-450));
       }
-      .sections {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.25rem;
-      }
-      .section-btn {
-        border: 1px solid transparent;
-        border-radius: var(--boxel-border-radius-sm);
-        padding: 0.35rem 0.7rem;
-        background: transparent;
-        color: var(--muted-foreground, var(--boxel-450));
-        font: 600 0.75rem/1.4 var(--font-sans, var(--boxel-font-family));
-        cursor: pointer;
-      }
-      .section-btn:hover {
-        background: var(--muted, var(--boxel-100));
-      }
-      .section-btn[aria-current='page'] {
-        border-color: var(--border, var(--boxel-200));
-        background: var(--card, var(--boxel-light));
-        color: var(--foreground, var(--boxel-dark));
-      }
+      
+      
+      
+      
       .problem {
         margin: 0;
         border-radius: var(--boxel-border-radius-sm);

@@ -9,6 +9,7 @@ import {
 } from '@cardstack/base/card-api';
 import NumberField from '@cardstack/base/number';
 import LayersIcon from '@cardstack/boxel-icons/layers';
+import { ProgressBar } from '@cardstack/boxel-ui/components';
 
 import { Campaign } from '../campaign';
 import StatePill from '../components/state-pill';
@@ -112,6 +113,13 @@ export class ContentBundle extends CardDef {
             @hue={{if this.isComplete 'green' 'amber'}}
           />
         </header>
+        {{#if @model.pieceCount}}
+          <ProgressBar
+            class='bundle-progress {{if this.isComplete "is-complete"}}'
+            @value={{@model.doneCount}}
+            @max={{@model.pieceCount}}
+          />
+        {{/if}}
         {{#if this.pieces.length}}
           <ul class='pieces'>
             {{#each this.pieces as |piece|}}
@@ -154,6 +162,12 @@ export class ContentBundle extends CardDef {
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
+        }
+        .bundle-progress {
+          --boxel-progress-bar-fill-color: var(--boxel-warning);
+        }
+        .bundle-progress.is-complete {
+          --boxel-progress-bar-fill-color: var(--boxel-success);
         }
         .pieces {
           display: grid;
