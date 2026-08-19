@@ -1,14 +1,6 @@
 [tools]
 node = "24.17.0"
 "npm:pnpm" = "11.0.9"
-# Provides the `mkcert` used by infra:ensure-dev-cert and infra:trust-dev-cert.
-# Sourced here rather than from a distro package so that provisioning the dev
-# cert depends only on mise's own cached tool store: CI installs this on every
-# job, and an apt install would put Ubuntu's archive mirrors on the critical
-# path of every job in the repo, where an upstream outage hangs rather than
-# fails. The companion `libnss3-tools` is already present on both the CI runner
-# image and a typical dev machine.
-mkcert = "1.4.4"
 
 [env]
 _.source = "./mise-tasks/lib/env-vars.sh"

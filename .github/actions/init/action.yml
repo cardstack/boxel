@@ -40,13 +40,22 @@ runs:
     # at mkcert's root. See packages/realm-server/server.ts and
     # mise-tasks/infra/ensure-dev-cert.
     #
-    # mkcert itself comes from mise (see `[tools]` in .mise.toml), installed
-    # by the mise-action step above. It is deliberately not an apt install:
-    # every job in the repo runs this action, so an apt install here makes
-    # Ubuntu's archive mirrors a hard dependency of all of CI, and apt
-    # retries a degraded mirror with long timeouts — the job hangs until its
-    # timeout rather than failing fast. mkcert's only companion,
-    # libnss3-tools, is already present on the runner image.
+    # Every job in the repo runs this action, so Ubuntu's archive mirrors are a
+    # dependency of all of CI. apt retries a degraded mirror with long internal
+    # timeouts, so an upstream outage makes this hang rather than fail, and an
+    # unbounded hang holds a runner until the job's own ceiling — which is how a
+    # single archive incident wedged jobs across seven branches for as long as
+    # 47 minutes each.
+    #
+    # `timeout-minutes` is not supported on a composite action's steps, so the
+    # ceiling is applied per command instead. `timeout` exits 124 when it fires,
+    # which fails the step under the default `-e` shell.
+    - name: Install mkcert
+      shell: bash
+      run: |
+        timeout 5m sudo apt-get update -o Acquire::Retries=3
+        timeout 5m sudo apt-get install -y -o Acquire::Retries=3 mkcert libnss3-tools
+
     - name: Provision dev TLS cert
       shell: bash
       run: mise run infra:ensure-dev-cert
