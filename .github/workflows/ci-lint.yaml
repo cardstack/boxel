@@ -27,7 +27,14 @@ permissions:
 jobs:
   lint:
     name: Lint
-    runs-on: ubuntu-latest
+    # A larger runner, which draws from a concurrency pool separate from the
+    # standard one. This job runs `init`, whose apt call has been stalling for
+    # tens of minutes at a time and holding a standard runner while it does, so
+    # lint feedback on a CI fix ends up queued behind the very problem the fix
+    # addresses. Note that larger runners are billed per minute even on a public
+    # repository, where standard ones are free — worth keeping to short,
+    # single-instance jobs like this one.
+    runs-on: ubuntu-latest-m
     timeout-minutes: 25
     concurrency:
       group: lint-${{ github.head_ref || github.run_id }}
