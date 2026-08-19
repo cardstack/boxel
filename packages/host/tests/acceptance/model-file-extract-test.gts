@@ -66,6 +66,33 @@ const CUBE_GLTF = JSON.stringify({
   nodes: [{}, {}, {}],
 });
 
+// A GLB whose bytes announce the binary container (magic + a JSON chunk) but
+// whose version is 1, so the header reader can't summarize it — the stand-in for
+// a real-but-unreadable `.glb` (glTF 1.0, truncated, chunks out of order). It
+// should keep its 3D card, not fall back to a plain FileDef.
+function buildUnreadableGlb(): Uint8Array {
+  let jsonBytes = new TextEncoder().encode(
+    JSON.stringify({ asset: { version: '1.0' } }),
+  );
+  let pad = (4 - (jsonBytes.length % 4)) % 4;
+  let chunkLength = jsonBytes.length + pad;
+  let total = 12 + 8 + chunkLength;
+  let bytes = new Uint8Array(total);
+  let view = new DataView(bytes.buffer);
+  view.setUint32(0, 0x46546c67, true); // 'glTF' magic
+  view.setUint32(4, 1, true); // version 1 — unreadable by the 2.0 reader
+  view.setUint32(8, total, true);
+  view.setUint32(12, chunkLength, true);
+  view.setUint32(16, 0x4e4f534a, true); // 'JSON'
+  bytes.set(jsonBytes, 20);
+  for (let i = 0; i < pad; i++) {
+    bytes[20 + jsonBytes.length + i] = 0x20;
+  }
+  return bytes;
+}
+
+const UNREADABLE_GLB = buildUnreadableGlb();
+
 const CUBE_MODEL_XML = `<?xml version="1.0" encoding="UTF-8"?>
 <model unit="millimeter" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
   <metadata name="Title">Round-trip Cube</metadata>
@@ -162,6 +189,7 @@ module('Acceptance | model file-extract', function (hooks) {
           'cube.stl': CUBE_STL,
           'cube.3mf': CUBE_3MF,
           'cube.gltf': CUBE_GLTF,
+          'unreadable.glb': UNREADABLE_GLB,
           'notmodel.stl': 'this is not an STL file',
         },
       });
@@ -258,5 +286,22 @@ module('Acceptance | model file-extract', function (hooks) {
     assert.strictEqual(result.status, 'ready', 'still indexes as base file');
     assert.true(result.mismatch, 'sets mismatch flag');
     assert.strictEqual(doc?.model3d, undefined, 'no 3D metadata on fallback');
+  });
+
+  test('an unreadable-but-real .glb keeps the 3D card instead of falling back', async function (assert) {
+    await visit(
+      renderPath(fileURL('unreadable.glb'), {
+        fileExtract: true,
+        fileDefCodeRef: baseFileDefCodeRef('GlbDef'),
+      }),
+    );
+    let result = await captureFileExtractResult('ready');
+    let doc = result.searchDoc as Record<string, any>;
+    assert.strictEqual(result.status, 'ready');
+    // The bytes announce a GLB container, so — unlike the non-STL bytes above —
+    // the file is not demoted: no mismatch, it stays a GlbDef 3D card. It just
+    // carries no extracted facts, the same as the over-size-cap case.
+    assert.notOk(result.mismatch, 'does not set the mismatch flag');
+    assert.strictEqual(doc?.model3d, undefined, 'no summarized metadata');
   });
 });

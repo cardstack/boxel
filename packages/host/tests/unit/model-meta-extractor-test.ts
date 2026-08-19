@@ -1,4 +1,4 @@
-import { parseGltf } from '@cardstack/base/gltf-meta-extractor';
+import { parseGltf, isGlbContainer } from '@cardstack/base/gltf-meta-extractor';
 import { parseStl } from '@cardstack/base/stl-meta-extractor';
 import { parseThreeMf } from '@cardstack/base/three-mf-meta-extractor';
 import { zipSync, strToU8 } from 'fflate';
@@ -435,17 +435,22 @@ module('Unit | model metadata extractors | parseGltf', function () {
     assert.strictEqual(parseGltf(new Uint8Array(0)), undefined, 'empty buffer');
   });
 
-  test('returns undefined for unreadable GLB containers', function (assert) {
+  test('returns undefined for unreadable GLB containers but still detects the container', function (assert) {
+    // These bytes can't be summarized, yet they announce the GLB magic — so the
+    // call site keeps the 3D card (via isGlbContainer) instead of demoting to a
+    // plain FileDef the way a genuinely non-glTF file does.
     let versionOne = buildGlb(SAMPLE_GLTF);
     new DataView(versionOne.buffer).setUint32(4, 1, true);
     assert.strictEqual(parseGltf(versionOne), undefined, 'version 1 GLB');
+    assert.true(isGlbContainer(versionOne), 'version 1 still a GLB container');
 
-    let truncated = buildGlb(SAMPLE_GLTF);
+    let truncated = buildGlb(SAMPLE_GLTF).slice(0, 24);
     assert.strictEqual(
-      parseGltf(truncated.slice(0, truncated.byteLength - 8)),
+      parseGltf(truncated),
       undefined,
       'JSON chunk longer than the buffer',
     );
+    assert.true(isGlbContainer(truncated), 'truncated still a GLB container');
 
     let binFirst = buildGlb(SAMPLE_GLTF);
     new DataView(binFirst.buffer).setUint32(16, 0x004e4942, true); // 'BIN\0'
@@ -453,6 +458,16 @@ module('Unit | model metadata extractors | parseGltf', function () {
       parseGltf(binFirst),
       undefined,
       'first chunk is not JSON',
+    );
+    assert.true(isGlbContainer(binFirst), 'BIN-first still a GLB container');
+  });
+
+  test('non-glTF bytes are not a GLB container', function (assert) {
+    // The other side of the call-site decision: these demote to a plain FileDef.
+    assert.false(isGlbContainer(gltfJson({ asset: 'hello' })), 'plain JSON');
+    assert.false(
+      isGlbContainer(new TextEncoder().encode('not a model')),
+      'random text',
     );
   });
 });

@@ -43,6 +43,22 @@ export interface GltfMetadata {
 const GLB_MAGIC = 0x46546c67;
 const GLB_JSON_CHUNK = 0x4e4f534a;
 
+// A cheap "is this the binary glTF container?" test: the 4-byte GLB magic at
+// offset 0. True does not mean the container is *readable* (it may be glTF 1.0,
+// truncated, or have its chunks out of order) — only that the bytes announce
+// themselves as a GLB. The call site uses this to tell a real-but-unsummarizable
+// `.glb` (keep the 3D card) apart from bytes that aren't glTF at all (fall back
+// to a plain FileDef).
+export function isGlbContainer(bytes: Uint8Array): boolean {
+  return (
+    bytes.byteLength >= 12 &&
+    new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(
+      0,
+      true,
+    ) === GLB_MAGIC
+  );
+}
+
 // glTF primitive topology modes. Only the triangle families contribute faces;
 // points and lines contribute none.
 const MODE_TRIANGLES = 4;
@@ -364,13 +380,7 @@ export function parseGltf(
 ): { gltfMetadata: GltfMetadata } | undefined {
   let container: 'glb' | 'gltf';
   let doc: unknown;
-  if (
-    bytes.byteLength >= 12 &&
-    new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(
-      0,
-      true,
-    ) === GLB_MAGIC
-  ) {
+  if (isGlbContainer(bytes)) {
     container = 'glb';
     doc = readGlbJson(bytes);
   } else {

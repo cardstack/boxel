@@ -12,7 +12,11 @@ import {
   model3dAttributes,
   type SerializedModel3d,
 } from './three-d-model-def';
-import { parseGltf, type GltfMetadata } from './gltf-meta-extractor';
+import {
+  parseGltf,
+  isGlbContainer,
+  type GltfMetadata,
+} from './gltf-meta-extractor';
 
 // Project the glTF header read onto the shared `model3d` field. A `.glb` is the
 // same glTF document in a binary wrapper, so both leaves share this mapping and
@@ -84,6 +88,14 @@ async function extractGltfAttributes(
   }
   let parsed = parseGltf(bytes);
   if (!parsed) {
+    // A GLB whose bytes announce the container but can't be summarized (glTF
+    // 1.0, truncated, chunks out of order) is still a real 3D file the live
+    // viewer may render — keep the 3D card, mirroring the size-cap branch,
+    // rather than demoting it. Only bytes that aren't a glTF container at all
+    // fall back to a plain FileDef via the mismatch error.
+    if (isGlbContainer(bytes)) {
+      return { ...base };
+    }
     throw new FileContentMismatchError(
       `File does not contain a parseable ${containerLabel}`,
     );
