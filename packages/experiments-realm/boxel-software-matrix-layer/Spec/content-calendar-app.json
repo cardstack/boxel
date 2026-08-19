@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Content Calendar app",
+      "specType": "card",
+      "ref": {
+        "module": "../content-calendar/content-calendar",
+        "name": "ContentCalendar"
+      },
+      "readMe": "# Content Calendar App\n\n## Summary\nA solo creator's multi-platform content plan in one card — a month calendar\nof everything scheduled, bundles that group a video with the posts promoting\nit, an idea backlog, recurring series, and a bench of freelancers work gets\nhanded to. Built as a stage-2 POC at `content-calendar/content-calendar.gts`\nto prove the Calendar / Contact / Tag cluster composes for a single-operator\napp, where the team-shaped concepts (Team, Role, workload) do not apply.\n\n## Composition\n- **Cards**: ContentPiece is the atomic unit; ContentBundle groups an anchor plus supporting pieces and computes its own completion; ContentIdea is the unscheduled backlog; ContentSeries carries a cadence; Freelancer extends Contact with specialties and a rate note. Event is consumed unchanged as what a bundle promotes.\n- **Fields**: Platform and Content Status are option sets, not raw strings — their hues resolve through `stateColor`, so a linked Theme reskins every chip and no brand colour is reproduced as a literal.\n- **Components**: the month Calendar (drag-to-reschedule, kind→colour chips, day overflow, create affordance), StatePill for every state label, EnumSelect for the platform filter. All consumed unchanged.\n- **Upstream**: Calendar gained an optional `onExternalDrop` arg. It could previously only accept drops that began on one of its own chips, so there was no way to drag an unscheduled item in from a backlog elsewhere on the page. Additive — the Talent & Resource Tracker is unaffected.\n- **Theming**: every colour resolves through a semantic token with a `--boxel-*` fallback; the console root declares `--studio-band` as an adapter and never overrides a block's internals.\n\n## Example\nThe linked instance is a solo Zumba instructor's world: two months of\nreal-shaped content across Instagram, TikTok, YouTube and Facebook, two\nrecurring series, six captured ideas, two bundles (one shipped, one in\nflight) and a two-person bench.\n\n## Non-goals\nAuto-publishing, analytics and payments are out of scope by design — this\ntracks, it never posts. Reminders are excluded for a platform reason rather\nthan a product one: the matrix Remind block is audited as blocked on three\nabsent pieces (an identity concept, a card-reachable scheduler, a\nnotification channel), so a reminder that cannot notify would mislead the\nuser. The honest substitute is the handed-to marker plus the waiting-on view.\nTeam assignment and workload belong to the team edition of the spec.\n\n## Known gaps\nRecurring occurrences are materialised on demand, a bounded number at a\ntime, because there is no scheduler a card can reach. The idea backlog\nrenders as rows rather than consuming the Kanban block, and no status-change\nActivity feed is wired yet — both are recorded against their concepts.",
+      "cardInfo": {
+        "name": "Content Calendar App",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../content-calendar/ContentCalendar/main"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
