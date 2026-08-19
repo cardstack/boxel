@@ -12,6 +12,7 @@ import BoxelMenu from './index.gts';
 
 export default class MenuUsage extends Component {
   @tracked isLoading = false;
+  @tracked isRounded = true;
   @tracked menuItems: any[] = [];
 
   @action log(message: string): void {
@@ -60,6 +61,7 @@ export default class MenuUsage extends Component {
             )
           }}
           @loading={{this.isLoading}}
+          @isRounded={{this.isRounded}}
         />
       </:example>
       <:api as |Args|>
@@ -81,7 +83,60 @@ export default class MenuUsage extends Component {
           @onInput={{fn (mut this.isLoading)}}
           @value={{this.isLoading}}
         />
+        <Args.Bool
+          @name='isRounded'
+          @optional={{true}}
+          @description='Rounds the menu and its first/last items (via --boxel-menu-radius). Pass false when the menu fills a container that handles its own rounding.'
+          @onInput={{fn (mut this.isRounded)}}
+          @value={{this.isRounded}}
+          @defaultValue={{true}}
+        />
       </:api>
+      <:cssVars as |Css|>
+        <Css.Basic @name='--boxel-menu-color' @type='background-color' />
+        <Css.Basic @name='--boxel-menu-text-color' @type='color' />
+        <Css.Basic
+          @name='--boxel-menu-current-color'
+          @type='background-color'
+          @description='hovered item'
+        />
+        <Css.Basic
+          @name='--boxel-menu-selected-color'
+          @type='background-color'
+          @description='selected (checked) item'
+        />
+        <Css.Basic
+          @name='--boxel-menu-selected-font-color'
+          @type='color'
+          @description='selected (checked) item'
+        />
+        <Css.Basic
+          @name='--boxel-menu-selected-hover-font-color'
+          @type='color'
+          @description='selected (checked) item on hover'
+        />
+        <Css.Basic
+          @name='--boxel-menu-font'
+          @type='font'
+          @description='(css shorthand property)'
+        />
+        <Css.Basic
+          @name='--boxel-menu-radius'
+          @type='border-radius'
+          @description='applies when @isRounded is true'
+        />
+        <Css.Basic
+          @name='--boxel-menu-item-border-radius'
+          @type='border-radius'
+          @description='per-item border-radius'
+        />
+        <Css.Basic
+          @name='--boxel-menu-item-gap'
+          @type='gap'
+          @description='between an item’s icon and text'
+        />
+        <Css.Basic @name='--boxel-menu-item-content-padding' @type='padding' />
+      </:cssVars>
     </FreestyleUsage>
     <FreestyleUsage @name='Menu (Fetch Use Case)'>
       <:example>

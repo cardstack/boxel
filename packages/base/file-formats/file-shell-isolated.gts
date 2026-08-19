@@ -253,6 +253,27 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
     return Boolean(t?.trackTitle || t?.artist);
   }
 
+  get hasMidi() {
+    // Any extracted sequence fact is worth the group — a file may carry tempo,
+    // key/meter, programs, or a pitch range while reporting zero notes/tracks or
+    // no computed duration (e.g. a SMPTE-timed conductor track).
+    let m = this.args.model?.midi;
+    return Boolean(
+      m?.trackCount ||
+        m?.noteCount ||
+        m?.durationSeconds ||
+        m?.format != null ||
+        m?.ppq ||
+        m?.pitchRange ||
+        m?.hasPercussion ||
+        m?.keySignatures?.length ||
+        m?.timeSignatures?.length ||
+        m?.tempoMap?.length ||
+        m?.programs?.length ||
+        m?.channels?.length,
+    );
+  }
+
   get hasDocInfo() {
     let d = this.args.model?.documentInfo;
     return Boolean(d?.author || d?.pageCount);
@@ -279,6 +300,18 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
 
   get hasArchiveContents() {
     return (this.args.model?.archiveEntryCount ?? 0) > 0;
+  }
+
+  get hasOfficeMetadata() {
+    let m = this.args.model?.officeMetadata;
+    return Boolean(
+      m?.title ||
+        m?.creator ||
+        m?.application ||
+        m?.pageCount != null ||
+        m?.slideCount != null ||
+        m?.sheetCount != null,
+    );
   }
 
   // Values computed from parser output rather than read from it.
@@ -541,7 +574,11 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
           {{/if}}
           {{#if this.hasTags}}
             <h2 class='insp-group'>Tags</h2>
-            <div class='insp-family'><@fields.mediaTags /></div>
+            <div class='insp-family'><@fields.tags /></div>
+          {{/if}}
+          {{#if this.hasMidi}}
+            <h2 class='insp-group'>MIDI sequence</h2>
+            <div class='insp-family'><@fields.midi /></div>
           {{/if}}
           {{#if this.hasDocInfo}}
             <h2 class='insp-group'>Document</h2>
@@ -563,6 +600,10 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
           {{#if this.hasHtmlMetadata}}
             <h2 class='insp-group'>HTML document</h2>
             <div class='insp-family'><@fields.htmlMetadata /></div>
+          {{/if}}
+          {{#if this.hasOfficeMetadata}}
+            <h2 class='insp-group'>Office document</h2>
+            <div class='insp-family'><@fields.officeMetadata /></div>
           {{/if}}
 
           <div class='legend'>
@@ -686,7 +727,10 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
       .iso[data-preview-kind='doc'] .iso-cols,
       .iso[data-preview-kind='code'] .iso-cols,
       .iso[data-preview-kind='json'] .iso-cols,
-      .iso[data-preview-kind='csv'] .iso-cols {
+      .iso[data-preview-kind='csv'] .iso-cols,
+      .iso[data-preview-kind='word'] .iso-cols,
+      .iso[data-preview-kind='presentation'] .iso-cols,
+      .iso[data-preview-kind='spreadsheet'] .iso-cols {
         grid-template-columns: minmax(0, 1fr);
         gap: 24px;
       }
@@ -695,7 +739,10 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
       .iso[data-preview-kind='doc'] .inspector,
       .iso[data-preview-kind='code'] .inspector,
       .iso[data-preview-kind='json'] .inspector,
-      .iso[data-preview-kind='csv'] .inspector {
+      .iso[data-preview-kind='csv'] .inspector,
+      .iso[data-preview-kind='word'] .inspector,
+      .iso[data-preview-kind='presentation'] .inspector,
+      .iso[data-preview-kind='spreadsheet'] .inspector {
         width: 100%;
       }
       @container (max-width: 760px) {
@@ -763,6 +810,15 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
         min-height: 320px;
         max-height: 680px;
         background: var(--fd-slate, var(--foreground));
+      }
+      /* An Office document renders its extracted structure and needs real
+         reading height — a document's text flow, a deck's slide grid, a
+         workbook's sheet — scrolling within the framed hero. */
+      .iso[data-preview-kind='word'] .iso-stage,
+      .iso[data-preview-kind='presentation'] .iso-stage,
+      .iso[data-preview-kind='spreadsheet'] .iso-stage {
+        height: clamp(420px, 64vh, 760px);
+        background: var(--card);
       }
       .prov-row {
         display: flex;

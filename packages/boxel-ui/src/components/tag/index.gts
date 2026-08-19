@@ -30,7 +30,7 @@ const Tag: TemplateOnlyComponent<TagSignature> = <template>
   </Pill>
 
   <style scoped>
-    @layer {
+    @layer boxelComponentL2 {
       .tag-pill {
         --pill-padding: var(--boxel-sp-5xs) var(--boxel-sp-xxxs);
         --pill-font: 500 var(--boxel-font-xs);

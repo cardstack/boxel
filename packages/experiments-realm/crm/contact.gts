@@ -19,7 +19,7 @@ import AvatarGroup from '../components/avatar-group';
 
 import ContactIcon from '@cardstack/boxel-icons/contact';
 import Email from '@cardstack/boxel-icons/mail';
-import Linkedin from '@cardstack/boxel-icons/linkedin';
+import Linkedin from '@cardstack/boxel-icons/brand-linkedin';
 import XIcon from '@cardstack/boxel-icons/brand-x';
 
 import { CrmApp } from '../crm-app';

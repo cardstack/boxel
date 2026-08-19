@@ -14,6 +14,9 @@
 //   - a lazy-chunk formula family (PMT is in the financial chunk), proving
 //     chunk loading works wherever the realm indexes or renders
 //
+// LazyFormulaProbe covers the remaining lazy chunks, which have no natural
+// place in an insurance domain.
+//
 // The realm contents are position-independent: instance links are relative
 // and the query filter derives its type ref from import.meta.url, so any
 // test can mount them at any realm URL. Intended to be shared by the BXL
@@ -31,6 +34,7 @@ export const bxlTrackingCardSource = `
     linksTo,
     linksToMany,
   } from '@cardstack/base/card-api';
+  import BooleanField from '@cardstack/base/boolean';
   import NumberField from '@cardstack/base/number';
   import StringField from '@cardstack/base/string';
   import { expression, fx, jq } from '@cardstack/bxl';
@@ -58,6 +62,38 @@ export const bxlTrackingCardSource = `
   export class Underwriter extends CardDef {
     static displayName = 'Underwriter';
     @field name = contains(StringField);
+  }
+
+  // Each formula family beyond the eager core ships as its own chunk, pulled
+  // in by dynamic import the first time an expression names one of its
+  // functions. computeVia is synchronous and cannot await that import, so the
+  // host has to have every chunk folded into the default library set before a
+  // card module body runs. One computed per remaining family — the insurance
+  // cards below already reach the financial chunk through PMT — is what
+  // proves each chunk actually makes it into the bundle and dispatches.
+  export class LazyFormulaProbe extends CardDef {
+    static displayName = 'LazyFormulaProbe';
+    @field zScore = contains(NumberField);
+    @field binaryCode = contains(StringField);
+    @field contactEmail = contains(StringField);
+    // formula-statistical, the jstat-backed distributions
+    @field standardNormalCdf = contains(NumberField, {
+      computeVia: expression(
+        fx\`ROUND(NORM_S_DIST(ZScore, TRUE) * 10000) / 10000\`,
+      ),
+    });
+    // formula-bessel
+    @field besselFirstKind = contains(NumberField, {
+      computeVia: expression(fx\`ROUND(BESSELJ(1, 0) * 10000) / 10000\`),
+    });
+    // formula-engineering, co-bundled with financial as formula-extras
+    @field decodedBinary = contains(NumberField, {
+      computeVia: expression(fx\`BIN2DEC(BinaryCode)\`),
+    });
+    // validation, the validator.js helpers
+    @field contactEmailValid = contains(BooleanField, {
+      computeVia: expression(fx\`isEmail(ContactEmail)\`),
+    });
   }
 
   export class Claim extends CardDef {
@@ -149,6 +185,19 @@ export const bxlTrackingCardSource = `
       computeVia: expression(
         fx\`ROUND((PaidClaimsTotal + ReservedClaimsTotal) / AnnualPremium * 10000) / 10000\`,
       ),
+    });
+
+    // The claims inverse and each claim's policy link form a true cycle.
+    // Walking the back-edge re-enters this policy, which BXL clips to a
+    // bounded { id } reference — so this reads as one own-id per claim.
+    @field claimPolicyIds = containsMany(StringField, {
+      computeVia: expression(jq\`[.claims[] | .policy.id]\`),
+    });
+    // A structural operation across the cycle: unique compares the claims
+    // by their materialized field values (their back-edges clip), so
+    // distinct claims stay distinct and the comparison terminates.
+    @field distinctClaimCount = contains(NumberField, {
+      computeVia: expression(jq\`[.claims[]] | unique | length\`),
     });
 
     // Excel error sentinels are first-class spreadsheet values; the factory
@@ -296,6 +345,22 @@ export const bxlTrackingRealmContents: Record<
       },
       meta: {
         adoptsFrom: { module: '../tracking', name: 'Claim' },
+      },
+    },
+  },
+  // A z-score of 0 puts the standard-normal CDF at exactly 0.5, and the
+  // binary and email inputs have single unambiguous answers, so every lazy
+  // chunk's computed asserts an exact value rather than a rounded one.
+  'LazyFormulaProbe/probe.json': {
+    data: {
+      type: 'card',
+      attributes: {
+        zScore: 0,
+        binaryCode: '101010',
+        contactEmail: 'ops@acme-freight.example',
+      },
+      meta: {
+        adoptsFrom: { module: '../tracking', name: 'LazyFormulaProbe' },
       },
     },
   },

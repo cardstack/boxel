@@ -77,6 +77,18 @@ function accessStaticStringPath(value: unknown, path: string[]): unknown {
   return current;
 }
 
+/**
+ * IF and IFS are compiled here as well as defined in the formula library's jq
+ * source, because a program that compiles wholly to scalars never reaches the
+ * registry — for a simple formula, these are the live implementations and the
+ * definitions in `bxl/bridge/formula-contrib-jq.ts` are the dead ones. The two
+ * must be kept in step by hand: registry-enumerated coverage cannot see this
+ * copy, so a case has to force the builtin route to reach the other.
+ *
+ * Both decide a branch with jq truthiness, under which only null and false are
+ * false — the number 0 takes the true branch, where Excel would take the false
+ * one.
+ */
 function compileExcelIf(
   args: ExpressionAst[],
 ): CompiledScalarExpression | undefined {

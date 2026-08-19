@@ -1,7 +1,17 @@
 import { parseExcelNumber } from './common.ts';
 import { EXCEL_ERROR, throwExcelError } from './errors.ts';
+import { isoWeekNumber } from './isoWeek.ts';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
+// A date string denotes a calendar day only when it names no zone at all, and
+// only then may its civil fields be re-anchored to UTC. Spotting every way a
+// zone can be written is a losing game — `Z`, `+05:30`, `GMT`, `EST`,
+// `Europe/Paris` — and missing one silently reintroduces host dependence, so
+// recognize the zone-less civil forms instead and leave anything else as the
+// instant the parser produced. Covers `4/30/2026`, `2026/04/30`,
+// `30-Apr-2026`, `April 30, 2026`, each with an optional time of day.
+const ZONELESS_CIVIL_DATE =
+  /^\s*(?:[A-Za-z]{3,},? )?(?:\d{1,4}[/-]\d{1,2}[/-]\d{1,4}|\d{1,2}[ -][A-Za-z]{3,}\.?[ -]\d{2,4}|[A-Za-z]{3,}\.? ?\d{1,2},? ?\d{2,4})(?:[T ]\d{1,2}:\d{2}(?::\d{2})?(?:\.\d+)?(?: ?[AaPp]\.?[Mm]\.?)?)?\s*$/;
 const WEEKEND_TYPES: Record<number, number[]> = {
   1: [0, 6],
   2: [0, 1],
@@ -26,8 +36,11 @@ function utcDate(
   hours = 0,
   minutes = 0,
   seconds = 0,
+  milliseconds = 0,
 ) {
-  return new Date(Date.UTC(year, month, day, hours, minutes, seconds));
+  return new Date(
+    Date.UTC(year, month, day, hours, minutes, seconds, milliseconds),
+  );
 }
 
 export function serialToExcelDate(serial: number): Date {
@@ -93,12 +106,30 @@ export function parseExcelDate(value: unknown): Date {
       return parseExcelDate(numeric);
     }
 
-    const parsed = /^\d{4}-\d\d?-\d\d?$/.test(value)
-      ? new Date(`${value}T00:00:00.000Z`)
-      : new Date(value);
-
-    if (!Number.isNaN(parsed.getTime())) {
-      return parsed;
+    if (/^\d{4}-\d\d?-\d\d?$/.test(value)) {
+      const parsed = new Date(`${value}T00:00:00.000Z`);
+      if (!Number.isNaN(parsed.getTime())) {
+        return parsed;
+      }
+    } else {
+      const parsed = new Date(value);
+      if (!Number.isNaN(parsed.getTime())) {
+        // A date string naming no zone denotes a calendar day, not an
+        // instant, but the runtime resolves it against the host zone. Read
+        // back the civil fields it produced and re-anchor them to UTC, so
+        // the serial names the same day wherever the expression runs.
+        return ZONELESS_CIVIL_DATE.test(value)
+          ? utcDate(
+              parsed.getFullYear(),
+              parsed.getMonth(),
+              parsed.getDate(),
+              parsed.getHours(),
+              parsed.getMinutes(),
+              parsed.getSeconds(),
+              parsed.getMilliseconds(),
+            )
+          : parsed;
+      }
     }
   }
 
@@ -141,13 +172,31 @@ function isLeapYear(year: number) {
   return new Date(Date.UTC(year, 1, 29)).getUTCMonth() === 1;
 }
 
+/**
+ * Midnight on the day `date` falls in. A day count reads calendar days, so a
+ * serial carrying a time of day names the same day as the serial without one.
+ */
+export function startOfDay(date: Date) {
+  const day = new Date(date.getTime());
+  day.setUTCHours(0, 0, 0, 0);
+  return day;
+}
+
 export function yearFrac(
   startLike: unknown,
   endLike: unknown,
   basisValue = 0,
 ): number {
-  const startDate = parseExcelDate(startLike);
-  const endDate = parseExcelDate(endLike);
+  // A year fraction is how long a span is, so the earlier date opens it
+  // whichever argument carried it. Bases 0 and 1 read their two endpoints
+  // asymmetrically, which makes this the count itself rather than only its
+  // sign: the day that gets pulled onto the 30th, and the year whose length
+  // divides, both follow from which date is the earlier one.
+  const firstDate = startOfDay(parseExcelDate(startLike));
+  const secondDate = startOfDay(parseExcelDate(endLike));
+  const reversed = secondDate.getTime() < firstDate.getTime();
+  const startDate = reversed ? secondDate : firstDate;
+  const endDate = reversed ? firstDate : secondDate;
   const basis = Math.trunc(Number(basisValue) || 0);
 
   let sd = startDate.getUTCDate();
@@ -159,6 +208,14 @@ export function yearFrac(
 
   switch (basis) {
     case 0:
+      // The US 30/360 moves an endpoint onto the 30th under four conditions,
+      // each ruling out the ones below it. A day-31 start always moves. A
+      // day-31 end moves only from a start already on the 30th, which is what
+      // leaves the 31st standing under any earlier start. And a span opening on
+      // the last day of February counts that February as a whole 30-day month,
+      // closing the same way only when it ends on a February month end too.
+      // `couponDays360` in `financial.ts` reads a bond schedule by these same
+      // rules; `DAYS360` carries the day-31 pair alone.
       if (sd === 31 && ed === 31) {
         sd = 30;
         ed = 30;
@@ -166,6 +223,11 @@ export function yearFrac(
         sd = 30;
       } else if (sd === 30 && ed === 31) {
         ed = 30;
+      } else if (sm === 2 && sd === (isLeapYear(sy) ? 29 : 28)) {
+        sd = 30;
+        if (em === 2 && ed === (isLeapYear(ey) ? 29 : 28)) {
+          ed = 30;
+        }
       }
       return (ed + em * 30 + ey * 360 - (sd + sm * 30 + sy * 360)) / 360;
     case 1: {
@@ -211,7 +273,11 @@ export function yearFrac(
     case 3:
       return daysBetween(startDate, endDate) / 365;
     case 4:
-      return (ed + em * 30 + ey * 360 - (sd + sm * 30 + sy * 360)) / 360;
+      // The European 30/360 pulls a day-31 back to the 30th at both ends of the
+      // span, where basis 0 above reaches the end date only once the start has
+      // landed on the 30th. That is `DAYS360`'s European method exactly, so it
+      // is counted by the same code rather than by a second copy of the rule.
+      return days360(startDate, endDate, true) / 360;
     default:
       throwExcelError(EXCEL_ERROR.num);
   }
@@ -280,43 +346,83 @@ export function excelDatevalue(textLike: unknown) {
   );
 }
 
+/**
+ * The days from `start` to `end` on a 30/360 schedule, where every month is 30
+ * days long and every year 360. The calendar reaches the count only through the
+ * day numbers the two dates carry.
+ *
+ * A day-31 start always reads as the 30th. `bothEnds` decides the other end:
+ * pulled back unconditionally, the count becomes a function of each date on its
+ * own and so additive across any split, which is the European 30/360. Left
+ * conditional — the end moves only once the start has landed on the 30th — the
+ * count reads the two ends together and need not be additive: a semiannual span
+ * between two month ends can come to 178, 179, 182 or 183 days where two clean
+ * months give 180. That is the US/NASD reading, and what `DAYS360`'s default
+ * method counts.
+ *
+ * Neither reading carries the last-day-of-February clauses Microsoft documents,
+ * which pull a February month end back to the 30th as well. Excel's shipped
+ * `DAYS360` parts from those clauses; its bond functions apply them, and count
+ * with their own reading rather than this one.
+ */
+export function days360(start: Date, end: Date, bothEnds: boolean): number {
+  let startDay = start.getUTCDate();
+  const startMonth = start.getUTCMonth() + 1;
+  const startYear = start.getUTCFullYear();
+  let endDay = end.getUTCDate();
+  const endMonth = end.getUTCMonth() + 1;
+  const endYear = end.getUTCFullYear();
+
+  if (startDay === 31) startDay = 30;
+  if (endDay === 31 && (bothEnds || startDay >= 30)) endDay = 30;
+
+  return (
+    (endYear - startYear) * 360 +
+    (endMonth - startMonth) * 30 +
+    (endDay - startDay)
+  );
+}
+
 export function excelDays360(
   startLike: unknown,
   endLike: unknown,
   methodLike: unknown = false,
 ) {
-  const start = parseExcelDate(startLike);
-  const end = parseExcelDate(endLike);
-  const european = Boolean(methodLike);
-
-  let sd = start.getUTCDate();
-  const sm = start.getUTCMonth() + 1;
-  const sy = start.getUTCFullYear();
-  let ed = end.getUTCDate();
-  const em = end.getUTCMonth() + 1;
-  const ey = end.getUTCFullYear();
-
-  if (european) {
-    if (sd === 31) sd = 30;
-    if (ed === 31) ed = 30;
-  } else {
-    // US/NASD method
-    if (sd === 31) sd = 30;
-    if (ed === 31 && sd >= 30) ed = 30;
-  }
-
-  return (ey - sy) * 360 + (em - sm) * 30 + (ed - sd);
+  return days360(
+    parseExcelDate(startLike),
+    parseExcelDate(endLike),
+    Boolean(methodLike),
+  );
 }
 
 export function excelWeeknum(serialLike: unknown, returnTypeLike: unknown = 1) {
   const date = parseExcelDate(serialLike);
-  const returnType = Math.floor(Number(returnTypeLike) || 1);
+  // Not `Number(x) || 1`: that reads 0 and a non-numeric argument as the
+  // default rather than as the errors they are, which would slip past the
+  // return-type check below.
+  const returnType = Math.floor(parseExcelNumber(returnTypeLike));
+  // Return type 21 asks for the ISO week, which numbers from the week holding
+  // the year's first Thursday rather than from the week holding January 1st.
+  if (returnType === 21) {
+    return isoWeekNumber(date);
+  }
+  // Every other return type says which weekday opens the week: 1 opens it on
+  // Sunday, 2 and 11 on Monday, then 12 through 17 walk the start forward a
+  // day at a time, back around to Sunday.
+  const firstDay =
+    returnType === 1
+      ? 0
+      : returnType === 2 || returnType === 11
+        ? 1
+        : returnType >= 12 && returnType <= 17
+          ? (returnType - 10) % 7
+          : undefined;
+  if (firstDay === undefined) {
+    throwExcelError(EXCEL_ERROR.num);
+  }
   const jan1 = utcDate(date.getUTCFullYear(), 0, 1);
   const dayOfYear = Math.floor((date.getTime() - jan1.getTime()) / MS_PER_DAY);
-  // returnType 1: week starts Sunday, 2: week starts Monday
-  const jan1Dow = jan1.getUTCDay();
-  const startOffset =
-    returnType === 2 ? (jan1Dow === 0 ? 6 : jan1Dow - 1) : jan1Dow;
+  const startOffset = (jan1.getUTCDay() - firstDay + 7) % 7;
   return Math.floor((dayOfYear + startOffset) / 7) + 1;
 }
 

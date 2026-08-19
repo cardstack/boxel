@@ -488,6 +488,83 @@ ${REPLACE_MARKER}
     );
   });
 
+  // A patch is legitimately incomplete for as long as it is arriving, so the
+  // warning has to wait for streaming to finish. Get this wrong in one
+  // direction and it flickers on every valid patch; in the other it never
+  // appears at all.
+  test('the malformed patch warning waits until streaming has finished', async function (assert) {
+    let monacoSDK = await monacoService.getMonacoContext();
+    let component: any = null;
+
+    class TestComponent extends Component {
+      @tracked htmlParts = [];
+      @tracked isStreaming = true;
+
+      constructor(owner: Owner, args: any) {
+        super(owner, args);
+        component = this;
+      }
+
+      <template>
+        <FormattedAiBotMessage
+          @monacoSDK={{monacoSDK}}
+          @htmlParts={{this.htmlParts}}
+          @roomId='!abcd'
+          @eventId='1234'
+          @isStreaming={{this.isStreaming}}
+          @isLastAssistantMessage={{true}}
+        />
+      </template>
+    }
+
+    await renderComponent(TestComponent);
+    if (!component) {
+      throw new Error('Component not found');
+    }
+
+    // A patch that has opened its SEARCH marker but not yet closed the block —
+    // indistinguishable, so far, from one whose markers are wrong.
+    let partial = `<pre data-code-language="typescript">
+https://example.com/file.ts
+${SEARCH_MARKER}
+let a = 1;
+</pre>`;
+
+    component.htmlParts = parseHtmlContent(partial, roomId, eventId);
+    await settled();
+    assert
+      .dom('[data-test-malformed-patch-error]')
+      .doesNotExist('no warning while the patch is still arriving');
+
+    // Streaming ends with the block never completing.
+    component.isStreaming = false;
+    await settled();
+    assert
+      .dom('[data-test-malformed-patch-error]')
+      .exists('the warning appears once nothing more is coming');
+  });
+
+  test('a completed patch shows no malformed warning after streaming', async function (assert) {
+    await renderFormattedAiBotMessage({
+      htmlParts: parseHtmlContent(
+        `<pre data-code-language="typescript">
+https://example.com/file.ts
+${SEARCH_MARKER}
+let a = 1;
+${SEPARATOR_MARKER}
+let a = 2;
+${REPLACE_MARKER}
+</pre>`,
+        roomId,
+        eventId,
+      ),
+      isStreaming: false,
+      isLastAssistantMessage: true,
+    });
+
+    assert.dom('[data-test-malformed-patch-error]').doesNotExist();
+  });
+
   test('it will render an error message when file url is missing', async function (assert) {
     await renderFormattedAiBotMessage({
       htmlParts: parseHtmlContent(

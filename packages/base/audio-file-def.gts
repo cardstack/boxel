@@ -15,18 +15,21 @@ import {
 } from './file-formats/metadata-fields';
 import { markdownAudio } from './markdown-helpers';
 import { decodeSkipReason, extractAudioWaveform } from './audio-waveform';
+import { AudioPreview } from './file-formats/audio-preview';
 import type { AudioEncoding, MediaTags } from './audio-metadata';
 import type { DecodeBudget, WaveformMetadata } from './audio-waveform';
 import type { ByteStream } from './file-api';
-import AudioDefIsolatedTemplate from './default-templates/audio-def-isolated';
-import AudioDefEmbeddedTemplate from './default-templates/audio-def-embedded';
-import AudioDefFittedTemplate from './default-templates/audio-def-fitted';
-import AudioDefAtomTemplate from './default-templates/audio-def-atom';
+import type { FilePreviewComponent } from './file-formats/file-preview-stage';
 
 export class AudioDef extends FileDef {
   static displayName = 'Audio';
   static icon = MusicIcon;
   static acceptTypes = 'audio/*';
+  // An audio file whose content type never arrived still presents as audio
+  // rather than a generic file, so the family is pinned instead of left to
+  // MIME/extension inference — matching how `ImageDef` pins its own family.
+  // `previewKind` stays inferred, since a waveform is the same for every codec.
+  static fileFamily = 'audio';
 
   @field duration = contains(NumberField);
 
@@ -44,10 +47,9 @@ export class AudioDef extends FileDef {
   // synthesizes it.
   @field waveform = contains(WaveformMetadataField);
 
-  static isolated: BaseDefComponent = AudioDefIsolatedTemplate;
-  static embedded: BaseDefComponent = AudioDefEmbeddedTemplate;
-  static fitted: BaseDefComponent = AudioDefFittedTemplate;
-  static atom: BaseDefComponent = AudioDefAtomTemplate;
+  // The four formats come from FileDef's shared shells; the family supplies only
+  // the renderer that draws its waveform and mounts the player.
+  static previewComponent: FilePreviewComponent = AudioPreview;
 
   // Markdown has no native audio syntax, but CommonMark passes raw HTML
   // through, so we emit an inline `<audio controls>` so the Spec preview,
@@ -186,7 +188,11 @@ export async function waveformFor(
   }
   try {
     let bytes = await byteStreamToUint8Array(await getStream());
-    return await extractAudioWaveform(bytes);
+    // The container's stated rate sizes the decoding context, so the decode
+    // isn't resampled before analysis.
+    return await extractAudioWaveform(bytes, {
+      sampleRateHz: budget.sampleRateHz,
+    });
   } catch (error) {
     // A stream that won't re-read is not a reason to fail the whole extract; the
     // header-derived facts are already gathered.

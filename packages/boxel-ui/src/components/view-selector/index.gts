@@ -76,7 +76,7 @@ export default class ViewSelector extends Component<Signature> {
       </RadioInput>
     </div>
     <style scoped>
-      @layer {
+      @layer boxelComponentL2 {
         .view-options-group {
           display: flex;
           flex-wrap: wrap;

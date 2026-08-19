@@ -36,7 +36,7 @@ export default class Switch extends Component<SwitchSiganture> {
     </label>
 
     <style scoped>
-      @layer {
+      @layer boxelComponentL1 {
         .switch {
           --_switch-bg-color: var(--boxel-switch-background, var(--input));
           --_switch-active-color: var(

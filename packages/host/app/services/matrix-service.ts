@@ -39,9 +39,7 @@ import {
   logger,
   Deferred,
   ri,
-  SEARCH_MARKER,
-  REPLACE_MARKER,
-  SEPARATOR_MARKER,
+  containsSearchReplaceMarker,
   isCardErrorJSONAPI,
   stringifyErrorForLog,
 } from '@cardstack/runtime-common';
@@ -1521,6 +1519,14 @@ export default class MatrixService extends Service {
       }
     }
   });
+
+  // Whether the background loop above is still working through its attempts.
+  // It is bounded, so a server can remain unreachable after the loop has given
+  // up and nothing will try again this session. Surfaces that name the failure
+  // read this so they don't keep promising a retry that has stopped.
+  get isRetryingUnreachableRealmServers(): boolean {
+    return this.retryUnreachableRealmServersTask.isRunning;
+  }
 
   async createRealmSession(realmURL: URL) {
     await this.#clientReadyDeferred.promise;
@@ -3051,11 +3057,7 @@ export default class MatrixService extends Service {
       // message, still offered an apply button for them. Whether there is
       // anything to apply is decided later against the whole answer.
       let body = event.content.body as string;
-      if (
-        body.includes(SEARCH_MARKER) ||
-        body.includes(SEPARATOR_MARKER) ||
-        body.includes(REPLACE_MARKER)
-      ) {
+      if (containsSearchReplaceMarker(body)) {
         this.toolService.queueEventForCodePatchProcessing(event);
       }
     }

@@ -43,3 +43,5 @@ export class PngDef extends RasterImageDef {
     };
   }
 }
+
+export default PngDef;

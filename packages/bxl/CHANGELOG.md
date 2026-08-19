@@ -12,6 +12,21 @@ versions may change syntax behavior until `1.0.0`.
 
 ### Added
 
+- **Cycle-guarded lazy card materialization in `expression()`.** The
+  computeVia factory hands the program a lazy view of the card graph:
+  path access materializes only the fields it names, structural
+  operations (`unique`, `==`, `tojson`, `keys`, …) enumerate a card's
+  real field map on demand, and re-entering a value already on the
+  traversal path — card graphs are legitimately cyclic, jq's data model
+  is not — reads as a bounded `{ id }` reference instead of recursing.
+  Cards clip by object identity and by id (mirroring the platform's
+  `queryableValue` clip); ordinary JSON clips by identity alone. A
+  256-hop depth cap fails fast on pathological graphs, and
+  materialization hops count toward the runtime step/time budget.
+  Program outputs are unwrapped back to raw values, so nothing
+  downstream ever holds the lazy view. See the README's "Linked cards,
+  cycles, and bounded references."
+
 - **`loadAllFormulaExtensions()`.** Loads every lazy formula chunk
   (statistical, Bessel, engineering/financial, validation) and folds it into
   `DEFAULT_BUILTIN_LIBRARIES`, so hosts can serve the module to authors whose
@@ -20,6 +35,12 @@ versions may change syntax behavior until `1.0.0`.
   next call retries.
 
 ### Changed
+
+- **`sort` no longer mutates its input.** The builtin sorts a copy;
+  sorting in place mutated the caller's array — on a live card array,
+  its change subscribers fired as a side effect of evaluating an
+  expression. Non-array inputs are rejected with a clear error instead
+  of failing on a missing `sort` method.
 
 - **`{ as: FieldDef }` field-metadata resolution is instance-carried
   first.** Materialization reads the value's own bridge — card-api stamps
@@ -34,6 +55,87 @@ versions may change syntax behavior until `1.0.0`.
   Consumers are Node ≥24 (native type stripping) and bundlers that compile
   TypeScript — `engines.node` is now `>=24`.
 - Relative import specifiers use `.ts` extensions throughout.
+
+### Fixed
+
+- **Twenty functions that answered something other than their specification.**
+  On the jq side: named captures now travel on a match, so `capture`, `sub` and
+  `gsub` can read them, and a group that did not participate reports an absent
+  capture rather than crashing; `round` ties away from zero; `isinfinite`
+  excludes NaN, and `isfinite` with it; `lgamma_r` returns a magnitude and sign
+  pair; `scalars_or_empty` keeps empty collections; `max_by` breaks ties
+  on the last maximum, as jq does; `inputs` yields an empty stream. On the Excel
+  side: `PROPER`, `TRIM`, `SEARCH` (wildcards), `SUBSTITUTE` (an occurrence at
+  position 0), `TEXT` (date format codes), `NUMBERVALUE` (percent signs and
+  spaces), `CHAR` (bounded to 1–255), `ISEVEN`/`ISODD` (truncation),
+  `WEEKDAY`/`WEEKNUM` (every return type), `ISOWEEKNUM`, `TIMEVALUE` (AM/PM),
+  `BASE`/`BIN2HEX`/`DEC2HEX`/`OCT2HEX` (upper-case digits), `COMPLEX` (`-i`),
+  `ERF`/`ERFC` (full double precision), `WEIBULL_DIST` (shape and scale),
+  `T_TEST` (Welch degrees of freedom), `IRR`/`IRR_BY`/`XIRR` (`#NUM!` for a
+  series with no root), the `TBILL` family (maturity within a year) and
+  `COUPDAYS` (a real coupon period under actual/actual). Each is pinned by a
+  case in the function-coverage suite; see `src/*/UPSTREAM-DIFFS.md`.
+
+- **Excel wildcards are matched in linear time.** `SEARCH` and the `COUNTIF`
+  family of criteria share one matcher that walks the text once. Compiling `*`
+  to a regex's `.*` made a pattern carrying several stars exponential — a stray
+  run of asterisks over an ordinary text field took tens of seconds, blocking an
+  indexing worker or the browser's main thread.
+
+- **`max_by`/`min_by` on an empty array yield `null`**, as `max`/`min` already
+  did, rather than an empty stream.
+
+- **Numeric literals accept an exponent.** `1e3`, `1E-3` and `5e-324` are
+  single numbers in both readable and canonical-jq syntax, where the tokenizer
+  previously ended the literal at the first digit and read the rest as a name.
+
+- **`ACCRINT` counts quasi-coupon periods on every basis.** Interest accrues per
+  period on the schedule `first_interest` anchors: periods a holding covers whole
+  each earn one coupon, the period it opens in earns the share of its own length
+  it covers, and settlement's distance from a reference coupon date is a signed
+  share of a single period. Measuring the holding as a whole instead, as
+  `par * rate * YEARFRAC(issue, settlement)`, is what an implementation that
+  never reads the schedule answers. The two coincide wherever every period the
+  holding touches measures its nominal `year / frequency`, and part where a
+  period's own day count differs — which is every actual/360 and actual/365
+  period, and a 30/360 one whose boundaries carry different day numbers. An
+  actual/360 semiannual period runs 181 to 184 days against a nominal 180; a US
+  30/360 semiannual period between two month ends counts 178, 179, 182 or 183.
+  The gap is usually a fraction of a coupon and grows with the holding, reaching
+  a coupon or more only over decades. The bases also disagree with each other, so
+  a basis argument now moves the answer where it used to be inert.
+
+- **`ACCRINT`'s 30/360 reads a February month end as the 30th.** The US 30/360 a
+  bond schedule is measured with carries the last-day-of-February rules on top of
+  the day-31 rules: February's month end counts as the 30th when it opens a span,
+  and when it closes one whose start is a February month end too or whose own
+  length is being measured. So a holding from one February month end to the next
+  is a whole year and earns exactly one coupon. `DAYS360` keeps the day-31 rules
+  alone, since Excel's shipped `DAYS360` parts from the February rules its own
+  documentation gives while Excel's bond functions apply them.
+
+- **`YEARFRAC` reads a span the way Excel does, on all five bases.** Basis 4 is
+  now the European 30/360 it names: a day-31 endpoint moves onto the 30th at both
+  ends before differencing, where leaving both where they stand is a raw 30/360
+  that lands a day out in whichever direction the 31 sits — a day short when the
+  span opens on the 31st, a day long when it closes on one. Basis 0's US 30/360
+  counts a February that a span opens on as a whole 30-day month, and closes the
+  same way when the span also ends on the last day of a February. The earlier of
+  the two dates opens the span however the arguments arrived, so a reversed pair
+  measures a length rather than a negative — and on basis 1 a reversed pair
+  produced `NaN`, since the multi-year branch averaged over a year count of zero.
+  A time of day is no part of a day count, so a serial carrying one names the
+  same day as a serial without one, which is how `NOW()` reaches these functions.
+  `DISC` and `PRICEDISC` divide by this fraction and inherit all four; `ACCRINT`
+  counts its own schedule and is reached by none of them.
+
+- **`DISC` and `PRICEDISC` raise `#NUM!` unless settlement precedes maturity**,
+  as the `TBILL` family already did. A transposed pair used to answer a negative
+  discount or a price above redemption, and settling on the maturity date divided
+  by a term of zero. Both also parse their basis rather than coercing it, so a
+  basis that is not a number is an error instead of a silent US 30/360, and
+  `ACCRINT` truncates its frequency and basis as every other function taking
+  them does.
 
 ### Removed
 

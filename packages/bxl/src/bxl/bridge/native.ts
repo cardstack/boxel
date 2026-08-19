@@ -21,6 +21,10 @@ import {
   type ResolvedBuiltinRegistry,
 } from '../registry/index.ts';
 import { resolveLazyBuiltinLibrariesForAst } from './lazy-formulas.ts';
+import {
+  isMaterializedCardInput,
+  unwrapMaterializedCardInput,
+} from './card-input.ts';
 import type { NativeRuntimeLimits } from '../../jqtools/evaluate/runtimeState.ts';
 import {
   recordRuntimeOutput,
@@ -166,6 +170,9 @@ function runParsedNativeProgram(
 ): NativeDialectRun {
   const outputs: unknown[] = [];
   const compiledScalar = runtimeLimits ? undefined : parsed.compiledScalar;
+  // Lazy card-input views only descend from a wrapped input, so plain
+  // inputs (the general-purpose entry points) skip the output walk.
+  const unwrapOutputs = isMaterializedCardInput(input);
 
   try {
     const runtime = withRuntimeDiagnostics(() => {
@@ -173,8 +180,14 @@ function runParsedNativeProgram(
         ? [compiledScalar(input)]
         : evaluateWithRegistry(parsed.ast, [input], registry);
       for (const value of values) {
-        recordRuntimeOutput(value);
-        outputs.push(value);
+        // Outputs shed the lazy card-input view before anything sees
+        // them — output accounting must cost what the caller receives,
+        // not a full materialization of every card the value touches.
+        const output = unwrapOutputs
+          ? unwrapMaterializedCardInput(value)
+          : value;
+        recordRuntimeOutput(output);
+        outputs.push(output);
       }
     }, runtimeLimits);
 

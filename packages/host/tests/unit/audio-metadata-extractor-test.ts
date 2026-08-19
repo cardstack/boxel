@@ -361,6 +361,7 @@ module('Unit | audio metadata extractors', function (hooks) {
   let analyzeDecodedAudio: typeof AudioWaveformModule.analyzeDecodedAudio;
   let decodeSkipReason: typeof AudioWaveformModule.decodeSkipReason;
   let predictedDecodedBytes: typeof AudioWaveformModule.predictedDecodedBytes;
+  let extractAudioWaveform: typeof AudioWaveformModule.extractAudioWaveform;
   let audioAttributes: typeof AudioFileDefModule.audioAttributes;
   let extractMidiMetadata: typeof MidiModule.extractMidiMetadata;
 
@@ -390,10 +391,14 @@ module('Unit | audio metadata extractors', function (hooks) {
     ({ parseVorbisComments } = await loader.import<typeof VorbisModule>(
       '@cardstack/base/vorbis-comment-parser',
     ));
-    ({ analyzeDecodedAudio, decodeSkipReason, predictedDecodedBytes } =
-      await loader.import<typeof AudioWaveformModule>(
-        '@cardstack/base/audio-waveform',
-      ));
+    ({
+      analyzeDecodedAudio,
+      decodeSkipReason,
+      predictedDecodedBytes,
+      extractAudioWaveform,
+    } = await loader.import<typeof AudioWaveformModule>(
+      '@cardstack/base/audio-waveform',
+    ));
     ({ audioAttributes } = await loader.import<typeof AudioFileDefModule>(
       '@cardstack/base/audio-file-def',
     ));
@@ -1735,6 +1740,78 @@ module('Unit | audio metadata extractors', function (hooks) {
           channels: 2,
         }),
         undefined,
+      );
+    });
+  });
+
+  module('waveform decode (real Web Audio)', function () {
+    // Real 16-bit PCM the browser's own decoder accepts, so these pin the
+    // decoding-context construction contract — OfflineAudioContext requires
+    // its render parameters up front — which a structural fake never
+    // exercises.
+    function pcmWav(seconds: number, sampleRate: number): Uint8Array {
+      let frameCount = Math.round(seconds * sampleRate);
+      let pcm: number[] = [];
+      for (let i = 0; i < frameCount; i++) {
+        // Silent first half, half-scale second half: a shape the envelope
+        // assertions can recognize.
+        let value = i < frameCount / 2 ? 0 : Math.round(0.5 * 32767);
+        pcm.push(...uint16le(value));
+      }
+      let fmtBody = [
+        ...uint16le(1),
+        ...uint16le(1),
+        ...uint32le(sampleRate),
+        ...uint32le(sampleRate * 2),
+        ...uint16le(2),
+        ...uint16le(16),
+      ];
+      let payload = [
+        ...ascii('WAVE'),
+        ...riffChunk('fmt ', fmtBody),
+        ...riffChunk('data', pcm),
+      ];
+      return new Uint8Array([
+        ...ascii('RIFF'),
+        ...uint32le(payload.length),
+        ...payload,
+      ]);
+    }
+
+    test('decodes real bytes through the environment Web Audio implementation', async function (assert) {
+      let result = await extractAudioWaveform(pcmWav(0.5, 8000), {
+        barCount: 8,
+        sampleRateHz: 8000,
+      });
+      assert.strictEqual(
+        result.decodeStatus,
+        'ok',
+        `decode succeeds (${result.decodeError ?? 'no error'})`,
+      );
+      assert.strictEqual(result.barCount, 8);
+      assert.true(
+        Math.abs((result.durationSeconds ?? 0) - 0.5) < 0.05,
+        `duration ~0.5s (got ${result.durationSeconds})`,
+      );
+      let bars = JSON.parse(result.barsJson ?? '[]') as number[];
+      assert.strictEqual(bars.length, 8);
+      assert.true(
+        bars[7]! > bars[0]!,
+        'the loud half reads louder than the silent half',
+      );
+    });
+
+    test('a stated rate outside the Web Audio band still decodes', async function (assert) {
+      // FLAC admits rates up to 655350 Hz; the context clamps to a supported
+      // rate and the decode resamples rather than failing.
+      let result = await extractAudioWaveform(pcmWav(0.25, 8000), {
+        barCount: 4,
+        sampleRateHz: 655350,
+      });
+      assert.strictEqual(
+        result.decodeStatus,
+        'ok',
+        `decode succeeds (${result.decodeError ?? 'no error'})`,
       );
     });
   });

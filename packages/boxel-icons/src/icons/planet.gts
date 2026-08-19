@@ -16,8 +16,10 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
     class='lucide lucide-planet'
     viewBox='0 0 24 24'
     ...attributes
-  ><circle cx='12' cy='12' r='8' /><path
-      d='M4.05 13c-1.7 1.8-2.5 3.5-1.8 4.5 1.1 1.9 6.4 1 11.8-2s8.9-7.1 7.7-9c-.6-1-2.4-1.2-4.7-.7'
+  ><path d='M4.56 14.96a13.63 3.76 135 1 0 10.4-10.4' /><circle
+      cx='12'
+      cy='12'
+      r='8'
     /></svg>
 </template>;
 
