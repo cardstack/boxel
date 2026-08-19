@@ -49,8 +49,9 @@ without materializing a stream.
 `compileScalarExpression` then tries to compile the entire expression into one
 `(input) => unknown` function. It succeeds only if every node compiles;
 anything it does not handle — `if`/`try`/`reduce`/`foreach`, a jq-source
-builtin, a native outside its allowlist — makes the whole program fall back to
-the streaming evaluator. So the fast path is all-or-nothing per program, and a
+builtin other than `IF`/`IFS` (which it intercepts by name; see below), a
+native outside its allowlist — makes the whole program fall back to the
+streaming evaluator. So the fast path is all-or-nothing per program, and a
 formula's route depends on its shape, not on a flag.
 
 `runParsedNativeProgram` picks between them: the compiled scalar runs **only
@@ -189,8 +190,15 @@ Registry-enumerated coverage structurally cannot reach the fast-path copy — a
 case only earns credit by invoking the registry entry, which means forcing the
 builtin route (the coverage cases use a blank guard for exactly this). Someone
 fixing `IFS` in the registry can therefore leave the version that actually runs
-for most card formulas untouched and watch the suite go green. Keep the two in
-step by hand, and pair a registry-route case with a wholly scalar one when the
+for most card formulas untouched and watch the coverage gate go green.
+
+The exposure is one-directional. Changing the compiled copy is caught, because
+other suites assert results from wholly scalar programs and so pin its behavior
+incidentally — inverting the branch in `compileExcelIf` turns
+`bxl-formula-cli`, `excel-paste-cli`, `boxel-runtime`, `boxel-runtime-async`
+and `compiler-readable` red while the coverage gate prints its usual line.
+Changing only the registry copy is what nothing notices. Keep the two in step
+by hand, and pair a registry-route case with a wholly scalar one when the
 behavior matters.
 
 Both copies read a condition with **jq truthiness** — only `null` and `false`
@@ -247,22 +255,23 @@ suites; they prove the plumbing, not the zone matrix.
 ### Execution-profile safety defaults to "allowed"
 
 `src/bxl/profiles/function-safety.ts` classifies function names into categories
-(`aggregate`, `volatile`, `controlOrSideEffect`, `metadata`,
+(`aggregate`, `volatile`, `controlOrSideEffect`, `errorMasking`, `metadata`,
 `predicateLowerable`, `boundedScalar`, `authorization`) and
 `BXL_PROFILE_FUNCTION_POLICIES` turns those into per-profile decisions. The
 `predicate` profile uses an **allowlist**, and `validatePredicateNode` bans any
-call that does not come back `allow` — so an unlisted name, `unclassified`
-included, is denied there. Every other profile — `derive`, `mutation`, `policy`,
-`authorization` — uses a **denylist**, and their validators in
-`src/bxl/ast/index.ts` raise nothing at all for an `unclassified` name.
+call that does not come back `allow` — so a name with no category at all is
+denied there, along with every other unlisted name. Every other profile —
+`derive`, `mutation`, `policy`, `authorization` — uses a **denylist**, and their
+validators in `src/bxl/ast/index.ts` raise nothing at all for a name that comes
+back `unclassified`.
 
 That is the right default for the large majority of names (a pure scalar like
 `ABS` needs no entry), and it is why nothing enumerates the registry against
-these lists. The cost is that a **newly added volatile, aggregate,
-side-effecting or metadata-reading function is permitted in every denylist
-profile until someone adds it to the right set** — including `derive`, which is what
-`computeVia` runs under, where a volatile call means a computed field that
-changes on every index. Classification is by base name, case-folded and without
+these lists. The cost is that a **newly added function in any of those
+categories — volatile, aggregate, side-effecting, error-masking,
+metadata-reading — is permitted in every denylist profile until someone adds it
+to the right set**, including `derive`, which is what `computeVia` runs under,
+where a volatile call means a computed field that changes on every index. Classification is by base name, case-folded and without
 arity, so jq's `now` and Excel's `NOW` are one entry.
 
 ### Vendored divergence is recorded, and the record is prose
