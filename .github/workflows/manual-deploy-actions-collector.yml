@@ -14,6 +14,13 @@ on:
         description: Deployment environment
         required: false
         default: staging
+  # TEMPORARY — remove before merge. A workflow_dispatch workflow can only be
+  # dispatched once its file is on the default branch, so until this merges
+  # there is no way to build the collector, and without a running collector the
+  # dashboard on this PR previews with every panel empty. This trigger closes
+  # that loop so the queries can be checked against real data before merging.
+  push:
+    branches: [cs-12571-make-the-github-actions-backlog-visible-in-grafana]
 
 permissions:
   contents: read
@@ -26,8 +33,8 @@ jobs:
     uses: cardstack/gh-actions/.github/workflows/docker-ecr.yml@main
     secrets: inherit
     with:
-      repository: "boxel-actions-collector-${{ inputs.environment }}"
-      environment: ${{ inputs.environment }}
+      repository: "boxel-actions-collector-${{ inputs.environment || 'staging' }}"
+      environment: ${{ inputs.environment || 'staging' }}
       dockerfile: "packages/observability/collectors/Dockerfile"
 
   deploy-actions-collector:
@@ -37,8 +44,8 @@ jobs:
     secrets: inherit
     with:
       container-name: "boxel-actions-collector"
-      environment: ${{ inputs.environment }}
-      cluster: ${{ inputs.environment }}
-      service-name: "boxel-actions-collector-${{ inputs.environment }}"
+      environment: ${{ inputs.environment || 'staging' }}
+      cluster: ${{ inputs.environment || 'staging' }}
+      service-name: "boxel-actions-collector-${{ inputs.environment || 'staging' }}"
       image: ${{ needs.build-actions-collector.outputs.image }}
       wait-for-service-stability: false
