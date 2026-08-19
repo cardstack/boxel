@@ -2153,6 +2153,141 @@ ${REPLACE_MARKER}
     );
   });
 
+  test("tools on a message auto-run only after its .gts patches' index invalidations settle", async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}test-card.gts`,
+    });
+    await click('[data-test-open-ai-assistant]');
+    let roomId = getRoomIds().pop()!;
+
+    await click('[data-test-llm-mode-option="act"]');
+
+    // The layer past patch settlement: an applied .gts patch means the
+    // write landed, not that the index caught up. The spy on store.patch
+    // records, at the exact moment the tool executes, whether the patched
+    // file's tracked index invalidation was still pending — and that one
+    // was tracked at all, so the pending check cannot pass vacuously.
+    let store = getService('store');
+    let toolService = getService('tool-service') as any;
+    let gtsFileUrl = `${testRealmURL}test-card.gts`;
+    let invalidationTrackedWhenToolRan: boolean | undefined;
+    let pendingWhenToolRan: boolean | undefined;
+    let originalPatch = store.patch.bind(store);
+    store.patch = ((...args: Parameters<typeof originalPatch>) => {
+      let key = toolService.invalidationKey(roomId, gtsFileUrl);
+      invalidationTrackedWhenToolRan =
+        !!toolService.aiAssistantInvalidations.get(key);
+      pendingWhenToolRan = toolService.hasPendingPatchInvalidations(roomId, [
+        gtsFileUrl,
+      ]);
+      return originalPatch(...args);
+    }) as typeof store.patch;
+
+    let codeBlock = `\`\`\`
+${gtsFileUrl}
+${SEARCH_MARKER}
+  static displayName = 'Test Card';
+${SEPARATOR_MARKER}
+  static displayName = 'Sequenced Card';
+${REPLACE_MARKER}
+\`\`\``;
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: codeBlock,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+        {
+          id: 'tool-after-gts-index',
+          name: 'patchCardInstance',
+          arguments: JSON.stringify({
+            attributes: {
+              cardId: `${testRealmURL}index`,
+              patch: { attributes: {} },
+            },
+          }),
+        },
+      ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
+    });
+
+    await waitFor(
+      '[data-test-message-idx="0"] [data-test-apply-state="applied"]',
+    );
+    await waitUntil(
+      () =>
+        getRoomEvents(roomId).some(
+          (event) =>
+            event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+            event.content['m.relates_to']?.key === 'applied' &&
+            event.content.commandRequestId === 'tool-after-gts-index',
+        ),
+      { timeout: 5000 },
+    );
+
+    assert.true(
+      invalidationTrackedWhenToolRan,
+      'an index invalidation was tracked for the patched .gts file',
+    );
+    assert.false(
+      pendingWhenToolRan,
+      'at the moment the tool executed, the tracked index invalidation had settled',
+    );
+  });
+
+  test('a timed-out index wait leaves the tracked invalidation in place for a later waiter', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}hello.txt`,
+    });
+    let roomId = 'a-room-id';
+    let fileUrl = `${testRealmURL}some-card.gts`;
+    let toolService = getService('tool-service') as any;
+
+    let clientRequestId = toolService.trackAiAssistantCardRequest({
+      action: 'patch-code',
+      roomId,
+      fileUrl,
+    });
+    assert.ok(clientRequestId, 'invalidation was tracked');
+    let key = toolService.invalidationKey(roomId, fileUrl);
+
+    // No index event will ever arrive for this synthetic request, so this
+    // bounded wait times out.
+    await toolService.waitForInvalidationAfterAIAssistantRequest(
+      roomId,
+      fileUrl,
+      50,
+    );
+    let entry = toolService.aiAssistantInvalidations.get(key);
+    assert.ok(
+      entry,
+      'a timed-out wait does not consume the tracked invalidation',
+    );
+
+    // A later waiter (e.g. checkCorrectness after the drain gave up) must
+    // still resolve when the invalidation actually lands.
+    let laterWait = toolService.waitForInvalidationAfterAIAssistantRequest(
+      roomId,
+      fileUrl,
+      5000,
+    );
+    entry.settled = true;
+    entry.deferred.fulfill();
+    await laterWait;
+    assert.notOk(
+      toolService.aiAssistantInvalidations.get(key),
+      'a real invalidation consumes the entry',
+    );
+    toolService.cleanupInvalidationWaiter(key);
+  });
+
   test('a tool whose execution fails posts a failed tool result event', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
