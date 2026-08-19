@@ -1,0 +1,44 @@
+name: Manual Deploy [actions-collector]
+
+# Builds and deploys the GitHub Actions queue collector
+# (packages/observability/collectors/actions-queue.ts), whose output feeds the
+# "GitHub Actions Queue" Grafana dashboard.
+#
+# Deliberately not triggered by CI: this samples the Actions queue, so running
+# its own deploy through a busy queue is the situation it exists to measure.
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Deployment environment
+        required: false
+        default: staging
+
+permissions:
+  contents: read
+  deployments: write
+  id-token: write
+
+jobs:
+  build-actions-collector:
+    name: Build actions-collector Docker image
+    uses: cardstack/gh-actions/.github/workflows/docker-ecr.yml@main
+    secrets: inherit
+    with:
+      repository: "boxel-actions-collector-${{ inputs.environment }}"
+      environment: ${{ inputs.environment }}
+      dockerfile: "packages/observability/collectors/Dockerfile"
+
+  deploy-actions-collector:
+    needs: [build-actions-collector]
+    name: Deploy actions-collector to AWS ECS
+    uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
+    secrets: inherit
+    with:
+      container-name: "boxel-actions-collector"
+      environment: ${{ inputs.environment }}
+      cluster: ${{ inputs.environment }}
+      service-name: "boxel-actions-collector-${{ inputs.environment }}"
+      image: ${{ needs.build-actions-collector.outputs.image }}
+      wait-for-service-stability: false

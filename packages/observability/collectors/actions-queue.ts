@@ -93,9 +93,18 @@ function parseArgs(argv: string[]): Options {
     }
   }
 
-  const token = process.env.GITHUB_TOKEN || '';
+  // The hosted task reads a dedicated parameter rather than a bare
+  // GITHUB_TOKEN, because its SSM path is shared with every other boxel
+  // service and a generic name there would be ambiguous. Locally the plain
+  // name is the convenient one, so both are accepted.
+  const token =
+    process.env.ACTIONS_COLLECTOR_GITHUB_TOKEN ||
+    process.env.GITHUB_TOKEN ||
+    '';
   if (!token) {
-    console.error('GITHUB_TOKEN is not set');
+    console.error(
+      'set ACTIONS_COLLECTOR_GITHUB_TOKEN or GITHUB_TOKEN (needs actions: read)',
+    );
     process.exit(2);
   }
   if (!/^[^/]+\/[^/]+$/.test(repo)) {

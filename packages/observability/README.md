@@ -116,6 +116,23 @@ Two constraints are load-bearing:
 The dashboard reads `{service="actions-collector", env="$env"}`, so a hosted
 deployment needs to log under that service name.
 
+#### Hosted
+
+Runs as a small ECS service — `cardstack/infra:configs/boxel-actions-collector`
+— rather than a scheduled task: the signal is standing state sampled every
+couple of minutes, and a per-invocation Fargate task would spend longer
+starting than working. FireLens applies `service=actions-collector`, which is
+what the dashboard selects on.
+
+Before the first apply, put a GitHub token with `actions: read` at
+`/<env>/boxel/ACTIONS_COLLECTOR_GITHUB_TOKEN`. It is deliberately not managed
+by Terraform, like the other secrets on that path. The collector accepts either
+that name or a plain `GITHUB_TOKEN`, which is the convenient one locally.
+
+Build and deploy with the **Manual Deploy [actions-collector]** workflow. It is
+`workflow_dispatch` only — putting the deploy of a queue sampler on a CI
+trigger would make it queue behind the backlog it reports on.
+
 ## Local workflow
 
 ```sh
