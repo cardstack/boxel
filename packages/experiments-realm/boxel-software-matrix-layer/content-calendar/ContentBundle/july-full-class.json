@@ -3,6 +3,7 @@
     "type": "card",
     "attributes": {
       "title": "July full-class drop",
+      "calendarId": "content-calendar/ContentCalendar/main",
       "cardInfo": {
         "name": null,
         "summary": null,

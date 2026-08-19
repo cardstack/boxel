@@ -22,6 +22,15 @@ export class ContentIdea extends CardDef {
   @field thought = contains(TextAreaField);
   @field themes = linksToMany(Tag);
   @field hunchPlatform = contains(PlatformField);
+  /**
+   * Which calendar owns this. A plain key rather than a `linksTo`: the console
+   * lives in the calendar's own module, so a link back to it is a module cycle
+   * that fails with `cardOrThunk was undefined` even in thunk form (verified —
+   * it broke every instance). Scoping is all this needs to do; a calendar
+   * reaches its content by live query, not by traversing a link.
+   */
+  @field calendarId = contains(StringField);
+
 
   @field cardTitle = contains(StringField, {
     computeVia: function (this: ContentIdea) {

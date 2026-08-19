@@ -86,6 +86,7 @@ interface ConsoleSignature {
   Args: {
     studioName?: string;
     realm?: string;
+    calendarId?: string;
     context?: CardContext;
   };
   Element: HTMLElement;
@@ -166,20 +167,49 @@ class ContentCalendarConsole extends GlimmerComponent<ConsoleSignature> {
     ].some((q) => Boolean(q?.isLoading));
   }
 
+  /**
+   * This calendar's owner key, as a realm-relative path.
+   *
+   * Relative, not the absolute id, so the same content is portable between
+   * realms — the demo fixtures read identically served from localhost and from
+   * staging, where the absolute ids differ.
+   */
+  get calendarKey(): string | undefined {
+    let id = this.args.calendarId;
+    if (!id) {
+      return undefined;
+    }
+    let realm = this.args.realm;
+    return realm && id.startsWith(realm) ? id.slice(realm.length) : id;
+  }
+
+  // A realm can hold more than one calendar, so every collection is scoped to
+  // this one. Strictly: content that records no owner belongs to no calendar,
+  // which is what makes a newly created calendar genuinely empty.
+  private mine = <T extends { calendarId?: string | null }>(rows: T[]): T[] => {
+    let me = this.calendarKey;
+    if (!me) {
+      return rows;
+    }
+    return rows.filter((r) => r.calendarId === me);
+  };
+
   get pieces(): ContentPiece[] {
-    return ((this.pieceQuery?.instances ?? []) as ContentPiece[]).filter(
-      Boolean,
+    return this.mine(
+      ((this.pieceQuery?.instances ?? []) as ContentPiece[]).filter(Boolean),
     );
   }
 
   get bundles(): ContentBundle[] {
-    return ((this.bundleQuery?.instances ?? []) as ContentBundle[]).filter(
-      Boolean,
+    return this.mine(
+      ((this.bundleQuery?.instances ?? []) as ContentBundle[]).filter(Boolean),
     );
   }
 
   get ideas(): ContentIdea[] {
-    return ((this.ideaQuery?.instances ?? []) as ContentIdea[]).filter(Boolean);
+    return this.mine(
+      ((this.ideaQuery?.instances ?? []) as ContentIdea[]).filter(Boolean),
+    );
   }
 
   private get scheduledIdeaIds(): Set<string> {
@@ -203,14 +233,14 @@ class ContentCalendarConsole extends GlimmerComponent<ConsoleSignature> {
   }
 
   get seriesList(): ContentSeries[] {
-    return ((this.seriesQuery?.instances ?? []) as ContentSeries[]).filter(
-      Boolean,
+    return this.mine(
+      ((this.seriesQuery?.instances ?? []) as ContentSeries[]).filter(Boolean),
     );
   }
 
   get freelancers(): Freelancer[] {
-    return ((this.freelancerQuery?.instances ?? []) as Freelancer[]).filter(
-      Boolean,
+    return this.mine(
+      ((this.freelancerQuery?.instances ?? []) as Freelancer[]).filter(Boolean),
     );
   }
 
@@ -365,6 +395,7 @@ class ContentCalendarConsole extends GlimmerComponent<ConsoleSignature> {
     sourceIdea?: ContentIdea;
     series?: ContentSeries;
   }): Promise<boolean> {
+    let owned = { ...attrs, calendarId: this.calendarKey };
     let commandContext = this.args.context?.commandContext;
     if (!commandContext || !this.args.realm) {
       this.actionProblem = 'Commands are unavailable in this mode.';
@@ -373,7 +404,7 @@ class ContentCalendarConsole extends GlimmerComponent<ConsoleSignature> {
     this.actionProblem = undefined;
     try {
       await new SaveCardCommand(commandContext).execute({
-        card: new ContentPiece(attrs as never),
+        card: new ContentPiece(owned as never),
         realm: this.args.realm,
       } as never);
       return true;
@@ -397,22 +428,23 @@ class ContentCalendarConsole extends GlimmerComponent<ConsoleSignature> {
     this.actionProblem = undefined;
     let realm = new URL(this.args.realm);
     let ref = { module: new URL(module, this.args.realm).href, name };
+    // Even a blank card gets its owner stamped, or it would show up in every
+    // calendar in the realm the moment it is saved.
+    let owned = { ...(attributes ?? {}), calendarId: this.calendarKey };
     try {
       await createCard(
         ref,
         realm,
-        attributes
-          ? ({
-              realmURL: realm,
-              doc: {
-                data: {
-                  type: 'card',
-                  attributes,
-                  meta: { adoptsFrom: ref },
-                },
-              },
-            } as never)
-          : ({ realmURL: realm } as never),
+        {
+          realmURL: realm,
+          doc: {
+            data: {
+              type: 'card',
+              attributes: owned,
+              meta: { adoptsFrom: ref },
+            },
+          },
+        } as never,
       );
     } catch (error: unknown) {
       this.actionProblem = (error as Error)?.message ?? String(error);
@@ -1837,6 +1869,7 @@ export class ContentCalendar extends CardDef {
       <ContentCalendarConsole
         @studioName={{@model.studioName}}
         @realm={{this.realm}}
+        @calendarId={{@model.id}}
         @context={{@context}}
       />
     </template>

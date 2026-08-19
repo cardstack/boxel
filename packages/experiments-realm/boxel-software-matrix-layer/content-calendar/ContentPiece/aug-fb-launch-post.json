@@ -6,6 +6,7 @@
       "platform": "facebook",
       "scheduledAt": "2026-08-27T01:00:00Z",
       "status": "planned",
+      "calendarId": "content-calendar/ContentCalendar/main",
       "cardInfo": {
         "name": null,
         "summary": null,
