@@ -87,9 +87,10 @@ export default class Workspace extends Component<Signature> {
           {{if this.showSelectionRing "is-selected"}}
           {{if @isFavoritesSection "is-enlarged"}}'
         style={{cssVar favorite-tile-width=@enlargedWidth}}
+        data-theme='dark'
+        {{on 'mouseleave' this.closeHostDropdown}}
         data-test-workspace={{this.name}}
         data-test-workspace-selected={{if @isSelected this.name}}
-        {{on 'mouseleave' this.closeHostDropdown}}
         ...attributes
       >
         {{#if this.reindexError}}
@@ -1165,7 +1166,7 @@ export default class Workspace extends Component<Signature> {
         left: 10px;
         right: 10px;
         height: 1px;
-        background: var(--boxel-200);
+        background: var(--boxel-light-25);
         opacity: 0.75;
       }
       /* The last menu item normally rounds its bottom corners to match the

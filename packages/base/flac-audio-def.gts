@@ -54,3 +54,5 @@ export class FlacDef extends AudioDef {
     };
   }
 }
+
+export default FlacDef;

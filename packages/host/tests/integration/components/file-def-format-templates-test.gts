@@ -184,6 +184,40 @@ module('Integration | FileDef format templates', function (hooks) {
     assert.dom('[data-test-file-no-preview]').doesNotExist();
   });
 
+  // The stage floats no chrome over the family's render: an overlay in the
+  // stage's corner lands on whatever the preview draws there — a prose
+  // preview's title, an archive tree's first row. Provenance lives in the
+  // isolated shell's metadata chrome instead.
+  test('the stage renders no provenance overlay in any format', async function (assert) {
+    const ReportPreview: TemplateOnlyComponent<FilePreviewSignature> =
+      <template>
+        <div data-test-report-preview>{{@model.name}}</div>
+      </template>;
+
+    class ReportDef extends FileDef {
+      static displayName = 'Report';
+      static previewComponent = ReportPreview;
+    }
+
+    let file = new ReportDef({
+      id: 'http://example.com/docs/report.pdf',
+      url: 'http://example.com/docs/report.pdf',
+      sourceUrl: 'http://example.com/docs/report.pdf',
+      name: 'report.pdf',
+      contentType: 'application/pdf',
+    });
+
+    for (let format of ['embedded', 'isolated', 'fitted'] as const) {
+      await renderCard(loader, file, format);
+      assert
+        .dom('[data-test-report-preview]')
+        .exists(`the preview mounts in ${format}`);
+      assert
+        .dom('[data-test-file-preview-stage] > span, .src-tag')
+        .doesNotExist(`${format} floats no tag over the render`);
+    }
+  });
+
   // The shells read the glyph from the class rather than from a family→glyph
   // map, which is what keeps each family's icon module out of card-api's
   // dependency graph — and so out of every card's. If a shell ever goes back to
