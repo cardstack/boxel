@@ -392,6 +392,7 @@ export default class Room extends Component<Signature> {
       }
       .room-actions {
         position: relative;
+        min-width: 0;
         padding: 0 var(--ai-assistant-panel-padding)
           var(--ai-assistant-panel-padding);
         box-shadow: var(--boxel-box-shadow);
@@ -460,10 +461,14 @@ export default class Room extends Component<Signature> {
         display: flex;
         align-items: center;
         padding: var(--chat-input-area-bottom-padding);
-        gap: var(--boxel-sp-sm);
-        background-color: var(--boxel-light-100);
+        gap: var(--boxel-sp-2xs);
+        background-color: var(--boxel-50);
         border-bottom-left-radius: var(--chat-input-area-border-radius);
         border-bottom-right-radius: var(--chat-input-area-border-radius);
+      }
+
+      .chat-input-area__bottom-actions > .llm-select {
+        flex-shrink: 1;
       }
 
       .chat-input-area__bottom-actions:not(:has(.menu-content)) {

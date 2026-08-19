@@ -51,7 +51,7 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
     >
       <:headerDetail>
         <span
-          class='skills-length'
+          class='skills-length boxel-ellipsize'
           data-test-active-skills-count
         >{{this.headerText}}</span>
       </:headerDetail>
@@ -109,6 +109,9 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
       .skill-menu {
         background-color: transparent;
         box-shadow: none;
+      }
+      .skills-length {
+        min-width: 0;
       }
       .skill-list {
         display: grid;
