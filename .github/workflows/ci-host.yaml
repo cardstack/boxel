@@ -238,10 +238,10 @@ jobs:
       # the realm-server's prerender workers), which aborts every in-flight
       # h2 stream with ERR_NETWORK_CHANGED and leaves wait-for-host-standby
       # stuck waiting for #standby-ready that never lands.
-      # Unlike mkcert, these are genuinely absent from the runner image, so
-      # this step has to talk to Ubuntu's mirrors. Bound it: apt retries a
-      # degraded mirror with long internal timeouts, so without a ceiling an
-      # upstream archive outage hangs the job rather than failing it.
+      # These packages are absent from the runner image, so this step has to
+      # reach Ubuntu's mirrors. Bound it: apt retries a degraded mirror with
+      # long internal timeouts, so without a ceiling an upstream archive
+      # outage hangs the job rather than failing it.
       - name: Install D-Bus helpers
         timeout-minutes: 5
         run: |
@@ -507,10 +507,10 @@ jobs:
       # the realm-server's prerender workers), which aborts every in-flight
       # h2 stream with ERR_NETWORK_CHANGED and leaves wait-for-host-standby
       # stuck waiting for #standby-ready that never lands.
-      # Unlike mkcert, these are genuinely absent from the runner image, so
-      # this step has to talk to Ubuntu's mirrors. Bound it: apt retries a
-      # degraded mirror with long internal timeouts, so without a ceiling an
-      # upstream archive outage hangs the job rather than failing it.
+      # These packages are absent from the runner image, so this step has to
+      # reach Ubuntu's mirrors. Bound it: apt retries a degraded mirror with
+      # long internal timeouts, so without a ceiling an upstream archive
+      # outage hangs the job rather than failing it.
       - name: Install D-Bus helpers
         timeout-minutes: 5
         run: |
