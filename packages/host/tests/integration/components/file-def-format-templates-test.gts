@@ -1,4 +1,5 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
+import { find, settled } from '@ember/test-helpers';
 import type { RenderingTestContext } from '@ember/test-helpers';
 
 import GlimmerComponent from '@glimmer/component';
@@ -12,8 +13,10 @@ import { setupBaseRealm } from '../../helpers/base-realm';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
+import type * as AudioDefModule from '@cardstack/base/audio-file-def';
 import type * as CardApiModule from '@cardstack/base/card-api';
 import type { FilePreviewSignature } from '@cardstack/base/file-formats/file-preview-stage';
+import type * as MetadataFieldsModule from '@cardstack/base/file-formats/metadata-fields';
 
 // Stands in for a family's own glyph, which a FileDef subclass declares as
 // `static icon`. Annotated the way the boxel-icons modules are: `ComponentLike`
@@ -281,5 +284,57 @@ module('Integration | FileDef format templates', function (hooks) {
     assert
       .dom('[data-test-file-embedded] img[data-test-image-preview]')
       .exists('the image family renders a native <img> inside the shell');
+  });
+
+  test('the audio waveform shades the played span as playback advances', async function (assert) {
+    let { AudioDef } = await loader.import<typeof AudioDefModule>(
+      `${baseRealm.url}audio-file-def`,
+    );
+    let { WaveformMetadataField } = await loader.import<
+      typeof MetadataFieldsModule
+    >(`${baseRealm.url}file-formats/metadata-fields`);
+
+    let audio = new AudioDef({
+      id: 'http://example.com/audio/take.wav',
+      url: 'http://example.com/audio/take.wav',
+      sourceUrl: 'http://example.com/audio/take.wav',
+      name: 'take.wav',
+      contentType: 'audio/wav',
+      contentSize: 2_646_078,
+      duration: 10,
+      waveform: new WaveformMetadataField({
+        decodeStatus: 'ok',
+        barsJson: JSON.stringify(Array.from({ length: 32 }, () => 0.5)),
+        barCount: 32,
+      }),
+    });
+
+    await renderCard(loader, audio, 'isolated');
+    assert
+      .dom('[data-test-audio-preview] .wave-svg')
+      .exists('the waveform renders');
+    assert
+      .dom('[data-test-audio-waveform-played]')
+      .doesNotExist('a track at rest marks nothing as played');
+
+    let player = find('[data-test-audio-player]') as HTMLAudioElement;
+    // No media loads in this environment (the src 404s), so the element's own
+    // currentTime/duration never become usable. Shadow currentTime with an own
+    // property so the handler reads a definite position and falls back to the
+    // extracted duration, independent of media state.
+    Object.defineProperty(player, 'currentTime', { value: 5 });
+    player.dispatchEvent(new Event('timeupdate'));
+    await settled();
+
+    assert
+      .dom('[data-test-audio-waveform-played]')
+      .exists('playback marks the played span');
+    assert
+      .dom('[data-test-audio-waveform-played]')
+      .hasAttribute(
+        'data-test-audio-waveform-played',
+        '50',
+        '5s into a 10s track clips the played layer at half the waveform',
+      );
   });
 });
