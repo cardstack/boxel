@@ -103,7 +103,7 @@ Pre-submit self-check over every comment and the body:
 - Evergreen: no ticket IDs, no PR numbers, no journey narration in your prose.
 - Every claim either carries its evidence or states that it was verified and how.
 - Every finding carries its class and blocking-ness.
-- Every comment asks for something — a change, a decision, or an answer. Anything that only records that the code is correct comes out.
+- Every comment asks for something — a change, a decision, or an answer. Anything that only records that the code is correct comes out. A reply that closes a thread the author opened is the exception: stating that a fix lands *is* the answer they are waiting on.
 
 Then report back to the user: the bottom line, the finding count by class, and a link to the review.
 
