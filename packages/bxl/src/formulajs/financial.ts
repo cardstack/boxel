@@ -4,6 +4,7 @@ import {
   daysBetween,
   parseExcelDate,
   parseExcelDateArray,
+  startOfDay,
   yearFrac,
 } from './dateSerial.ts';
 import {
@@ -579,8 +580,10 @@ export function excelAccrint(
   const settlement = parseExcelDate(settlementLike);
   const rate = parseExcelNumber(rateLike);
   const par = parseExcelNumber(parLike);
-  const frequency = parseExcelNumber(frequencyLike);
-  const basis = parseExcelNumber(basisLike);
+  // Truncated, as every other function taking these reads them: a fractional
+  // frequency or basis names the whole one it sits on rather than nothing.
+  const frequency = Math.trunc(parseExcelNumber(frequencyLike));
+  const basis = Math.trunc(parseExcelNumber(basisLike));
 
   if (![1, 2, 4].includes(frequency)) {
     throwExcelError(EXCEL_ERROR.num);
@@ -773,14 +776,25 @@ export function excelDisc(
   redemptionLike: unknown,
   basisLike: unknown = 0,
 ) {
-  // Called for validation only — parseExcelDate throws on a malformed date.
-  parseExcelDate(settlementLike);
-  parseExcelDate(maturityLike);
+  const settlement = startOfDay(parseExcelDate(settlementLike));
+  const maturity = startOfDay(parseExcelDate(maturityLike));
   const pr = parseExcelNumber(prLike);
   const redemption = parseExcelNumber(redemptionLike);
-  if (pr <= 0 || redemption <= 0) throwExcelError(EXCEL_ERROR.num);
-  const yf = yearFrac(settlementLike, maturityLike, Number(basisLike));
-  return (redemption - pr) / redemption / yf;
+  // Parsed rather than coerced: a basis that is not a number is an error, where
+  // coercion would read it as the default and answer a US 30/360 for it.
+  const basis = parseExcelNumber(basisLike);
+  // A bill has to mature after it settles, and that span is the term the
+  // discount is quoted over. A year fraction measures how long a span is rather
+  // than which way it runs, so it cannot report a transposed pair on behalf of
+  // the functions that divide by it.
+  if (pr <= 0 || redemption <= 0 || settlement >= maturity) {
+    throwExcelError(EXCEL_ERROR.num);
+  }
+  return (
+    (redemption - pr) /
+    redemption /
+    yearFrac(settlementLike, maturityLike, basis)
+  );
 }
 
 export function excelPricedisc(
@@ -790,10 +804,17 @@ export function excelPricedisc(
   redemptionLike: unknown,
   basisLike: unknown = 0,
 ) {
+  const settlement = startOfDay(parseExcelDate(settlementLike));
+  const maturity = startOfDay(parseExcelDate(maturityLike));
   const disc = parseExcelNumber(discLike);
   const redemption = parseExcelNumber(redemptionLike);
-  const yf = yearFrac(settlementLike, maturityLike, Number(basisLike));
-  return redemption * (1 - disc * yf);
+  const basis = parseExcelNumber(basisLike);
+  if (settlement >= maturity) {
+    throwExcelError(EXCEL_ERROR.num);
+  }
+  return (
+    redemption * (1 - disc * yearFrac(settlementLike, maturityLike, basis))
+  );
 }
 
 /** The last day of the month `date` falls in. */

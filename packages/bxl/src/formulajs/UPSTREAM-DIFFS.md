@@ -128,13 +128,27 @@ regression rather than a port detail.
 | `TBILLEQ`, `TBILLPRICE`, `TBILLYIELD`   | Raise `#NUM!` for a maturity more than a year past settlement.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `COUPDAYS`                              | Measures the real coupon period containing settlement under basis 1, actual/actual, with the schedule measured from maturity and sticky to month ends — a bond maturing on the last day of a month pays on the last day of every month. The other bases give every period the same nominal length, but all of them validate the dates.                                                                                                                                                                                                                                                                                                                              |
 | `ACCRINT`                               | Counts the quasi-coupon periods the holding touches on the schedule `first_interest` anchors, on every basis: periods covered whole each earn one coupon, the period the holding opens in earns the share of its own length it covers, and settlement's distance from a reference coupon date is a signed share of one period. Upstream answers `par * rate * YEARFRAC(issue, settlement)` and never reads `first_interest`. The two coincide wherever every period the holding touches measures its nominal `year / frequency`, and part where a period's own day count differs. Its 30/360 also reads a February month end as the 30th, which `DAYS360` does not. |
+| `YEARFRAC`                              | Reads a span the way Excel does on every basis. The earlier of the two dates opens it whichever argument carried it, and a time of day is no part of a day count. Basis 0's US 30/360 counts a February a span opens on as a whole 30-day month, and closes the same way only when the span also ends on the last day of a February. Basis 4 is the European 30/360, which moves a day-31 endpoint onto the 30th at both ends. Upstream reads the two arguments in the order given — a reversed span answers a negative fraction, and `NaN` on basis 1 — leaves both endpoints where they stand on basis 4, and has no February rule at all. |
+| `DISC`, `PRICEDISC`                     | Raise `#NUM!` unless settlement precedes maturity, as the `TBILL` family does. A year fraction measures a length rather than a direction, so it cannot report a transposed pair on their behalf.                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 
 `DAYS360`'s US/NASD method implements the day-31 rule but not the
 last-day-of-February rule Microsoft documents, which is left alone: Excel's own
 shipped behavior is known to diverge from that doc text, so matching the text
 would mean diverging from Excel. Excel's bond functions do apply those clauses,
-so `ACCRINT` counts with its own 30/360 rather than sharing `DAYS360`'s — the two
-readings are separately observed and deliberately not one implementation.
+so `ACCRINT` counts with its own 30/360 rather than sharing `DAYS360`'s, and
+`YEARFRAC`'s basis 0 applies them as well — three readings of one nominal
+convention, separately observed and deliberately not one implementation.
+LibreOffice draws the same line, omitting the February clauses from its
+`DAYS360` while applying them in its `YEARFRAC`, and its analysis add-in's third
+30/360 count reads a February start a third way again.
+
+Reading these day counts off LibreOffice is worth one caution: on basis 4 its
+`getDisc` divides by the clamped `GetYearFrac` while its `getPricedisc` and
+`getAccrint` multiply by the unclamped `GetYearDiff`, so one nominal basis means
+two different day counts inside one file. A differential will show `PRICEDISC`
+and `ACCRINT` parting from it on basis 4 for that reason.
+`fsprojects/ExcelFinancialFunctions` counts with its clamped `dateDiff360Eu`
+throughout, which is the shape here.
 
 ## Bringing in new upstream functions
 
