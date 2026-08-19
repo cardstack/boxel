@@ -50,7 +50,7 @@ Every finding states its class explicitly — this is what lets the author act o
 - **Pre-existing, now load-bearing** — the bug predates the PR, but the PR builds on it or widens its blast radius. Say both halves: "not this PR's bug" and "this PR now depends on it". The fix is usually a follow-up; the PR may still need a wording or scoping change to avoid cementing the bug as intended behavior.
 - **Follow-up** — a real improvement outside this PR's scope. Say so plainly ("that's a follow-up, not this PR") and describe it concretely enough to file.
 
-A verification that comes back clean is not a finding. Reading the whole path and concluding the change is safe is the work; posting that conclusion inline hands the author something to read and nothing to do, and it buries the comments that do ask for a change. The one thing worth extracting from a clean verification is a missing guard: where the change is only safe because of an invariant nothing enforces, the finding is the executable check, assertion, or comment that would pin it — an ask, not an endorsement.
+A verification that comes back clean is not a finding. Reading the whole path and concluding the change is safe is the work; posting that conclusion inline hands the author something to read and nothing to do, and it buries the comments that do ask for a change. The one thing worth extracting from a clean verification is a missing guard: where the change is only safe because of an invariant nothing enforces, the finding is the executable check, assertion, or code comment that would pin it — an ask, not an endorsement.
 
 Also mark blocking vs. non-blocking in prose. The submitted review event is always COMMENT — approve / request-changes is the human's call — so the words must carry the verdict.
 
@@ -58,7 +58,7 @@ Also mark blocking vs. non-blocking in prose. The submitted review event is alwa
 
 Anatomy of an inline comment, in order:
 
-1. **The claim, first sentence.** What is wrong and what it costs.
+1. **The claim, first sentence.** What is wrong and what it costs — or, where the ask is a decision or an answer rather than a fix, what is unresolved and what turns on it.
 2. **The mechanism.** Walk the code path with real names: which function, in which file, takes which branch.
 3. **The evidence.** The repro, the query plan, the enumerated call sites — whatever was actually run or read.
 4. **The way out.** A snippet when the fix is small; options with a recommendation when it isn't. GitHub ```suggestion blocks only for mechanical one-liners where the diff is the whole message.
