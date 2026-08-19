@@ -6,9 +6,9 @@ import {
   sendResponseForSystemError,
   sendResponseForUnprocessableEntity,
   setContextResponse,
-} from '../middleware';
-import type { RealmServerTokenClaim } from '../utils/jwt';
-import type { CreateRoutesArgs } from '../routes';
+} from '../middleware/index.ts';
+import type { RealmServerTokenClaim } from '../utils/jwt.ts';
+import type { CreateRoutesArgs } from '../routes.ts';
 
 export default function handleDeleteBoxelClaimedDomainRequest({
   dbAdapter,

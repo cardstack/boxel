@@ -1,6 +1,6 @@
-# `boxel-cli` Claude Code plugin
+# `boxel-cli` agent plugin
 
-Claude Code skills for working with Boxel realms via [`@cardstack/boxel-cli`](https://www.npmjs.com/package/@cardstack/boxel-cli).
+Agent skills for working with Boxel realms via [`@cardstack/boxel-cli`](https://www.npmjs.com/package/@cardstack/boxel-cli). Packaged for both Claude Code (`.claude-plugin/`) and OpenAI Codex (`.codex-plugin/`); the two manifests share the same `skills/` directory.
 
 ## Prerequisites
 
@@ -20,16 +20,14 @@ The plugin documents commands in `@cardstack/boxel-cli >= 0.0.1`. Newer plugin v
 
 ## Install
 
-### External users (marketplace)
+### Claude Code
 
 ```text
 /plugin marketplace add cardstack/boxel
 /plugin install boxel-cli
 ```
 
-### Internal / development (`--plugin-dir`)
-
-From a checkout of `cardstack/boxel`:
+For internal development, from a checkout of `cardstack/boxel`:
 
 ```bash
 claude --plugin-dir packages/boxel-cli/plugin
@@ -37,20 +35,76 @@ claude --plugin-dir packages/boxel-cli/plugin
 
 `/reload-plugins` picks up local edits without restarting Claude Code.
 
+### OpenAI Codex
+
+Codex discovers the plugin through the marketplace manifest at
+`.agents/plugins/marketplace.json` in the repo root:
+
+```text
+/plugin marketplace add cardstack/boxel
+/plugin install boxel-cli@cardstack-boxel
+```
+
+In Codex the skills are namespaced `boxel-cli:<name>` — invoke one with the `$`
+prefix (`$boxel`, `$realm-sync`, …), or let Codex pick it up by description
+match. The `/boxel-cli:<name>` form in the tables below is Claude Code's.
+
+Without installing the plugin, a checkout also works directly: Codex reads
+skills from `~/.agents/skills` (or a project's `.agents/skills`), expecting
+`<name>/SKILL.md` one level down. Copy each skill in — Codex does not follow
+symlinked skill directories:
+
+```bash
+mkdir -p ~/.agents/skills
+cp -R /path/to/boxel/packages/boxel-cli/plugin/skills/*/ ~/.agents/skills/
+```
+
 ## What you get
 
-Skills appear under the `/boxel-cli:` namespace.
+Skills appear under the `boxel-cli` namespace — written `/boxel-cli:<name>`
+below, which is how Claude Code invokes them. Two surfaces:
 
-| Skill | Use it for |
-|---|---|
-| `/boxel-cli:boxel-development` | Authoring `.gts` card definitions and `.json` instances. The high-level Boxel patterns guide. Generated from [`cardstack/boxel-skills`](https://github.com/cardstack/boxel-skills). |
-| `/boxel-cli:boxel-design` | Design-discovery prompts for distinctive Boxel UI. Generated from [`cardstack/boxel-skills`](https://github.com/cardstack/boxel-skills). |
-| `/boxel-cli:boxel-file-structure` | File and directory naming rules, `adoptsFrom` module paths, link relationship semantics. |
-| `/boxel-cli:realm-sync` | `boxel realm sync/watch/push/pull/create/remove/list` — moving files between local disk and a realm. |
-| `/boxel-cli:realm-history` | `boxel realm history/wait-for-ready/cancel-indexing` — inspecting and steering realm indexing. |
-| `/boxel-cli:file-ops` | `boxel file read/write/list/delete/lint/touch` — single-file operations against a realm. |
-| `/boxel-cli:search` | `boxel search` — federated search across realms. |
-| `/boxel-cli:profile` | `boxel profile list/add/switch/remove/migrate` — managing realm-server credentials. |
+### CLI command skills
+
+Hand-authored / generated from the Commander tree by `pnpm build:plugin`. These document the `boxel` CLI itself.
+
+| Skill                             | Use it for                                                                                           |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `/boxel-cli:boxel-file-structure` | File and directory naming rules, `adoptsFrom` module paths, link relationship semantics.             |
+| `/boxel-cli:realm-sync`           | `boxel realm sync/watch/push/pull/create/remove/list` — moving files between local disk and a realm. |
+| `/boxel-cli:realm-history`        | `boxel realm history/wait-for-ready/cancel-indexing` — inspecting and steering realm indexing.       |
+| `/boxel-cli:file-ops`             | `boxel file read/write/list/delete/lint/touch` — single-file operations against a realm.             |
+| `/boxel-cli:search`               | `boxel search` — federated search across realms.                                                     |
+| `/boxel-cli:profile`              | `boxel profile list/add/switch/remove/migrate` — managing realm-server credentials.                  |
+
+### Skills from `cardstack/boxel-skills`
+
+Authored upstream in [`cardstack/boxel-skills`](https://github.com/cardstack/boxel-skills) and packaged here by `pnpm build:skills`. The table below is regenerated from the pinned tag — do not hand-edit between the markers.
+
+<!-- BEGIN AUTO-GENERATED: boxel-skills (run `pnpm build:skills` to update) -->
+
+_Copied from [`cardstack/boxel-skills@v0.1.0`](https://github.com/cardstack/boxel-skills/tree/v0.1.0) by_ `pnpm build:skills`. _Edit upstream, not here._
+
+| Skill                                       | Use it for                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/boxel-cli:boxel`                          | Use whenever creating, reading, or editing Boxel cards (.gts files), card instances (.json), fields, templates, queries, or anything in a Boxel realm. Required for any Boxel coding work — covers CardDef, FieldDef, contains/linksTo, templates, formats, queries, and core patterns. Companion skills - boxel-design (visual decisions), boxel-ui-guidelines (template UI), source-code-editing (SEARCH/REPLACE), boxel-environment (running the Boxel app).                                                                                                   |
+| `/boxel-cli:boxel-create-edit-cards`        | Use when choosing the right Boxel host command combination to create new cards or edit existing instances from the AI assistant.                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `/boxel-cli:boxel-design`                   | Use when DECIDING a Boxel card's visual language — mood, palette, typography direction, asset direction, one visual signature, the design-playbook process. This is the taste/decision layer. NOT for implementing tokens or CSS inside templates (that's boxel-ui-guidelines) and NOT for creating/editing Theme, StyleReference, or BrandGuide card artifacts (that's boxel-theme-development).                                                                                                                                                                 |
+| `/boxel-cli:boxel-environment`              | Use when running, navigating, or orchestrating tasks inside the live Boxel application — switching between Code Mode and Interact Mode, calling host commands (search-cards, switch-submode, show-card, patch-fields, apply-markdown-edit, reindex, etc.), or any operation that drives the Boxel UI. Activates for Boxel-app runtime work, not for writing card definitions (see boxel for that).                                                                                                                                                                |
+| `/boxel-cli:boxel-file-def`                 | Use when adding or working with file-typed fields (FileDef, ImageDef, MarkdownDef, PngDef, CsvFileDef). Activates when a card needs to reference an image, document, or other file asset.                                                                                                                                                                                                                                                                                                                                                                         |
+| `/boxel-cli:boxel-flavored-markdown`        | Use when authoring or editing Boxel Flavored Markdown (BFM) content — content fields rendered as rich markdown with :card/::card directives, mermaid diagrams, etc.                                                                                                                                                                                                                                                                                                                                                                                               |
+| `/boxel-cli:boxel-markdown-format`          | Use when authoring a `markdown` template (static markdown format) on a CardDef or FieldDef — defaults, markdownEscape, and markdown helpers.                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `/boxel-cli:boxel-patterns`                 | Use when the user names an outcome ("show a chart", "let users pick a color", "build a dashboard", "summarize comments", "embed AI image generation", "lay out a moodboard") and you need a working code example to start from. This skill is the bridge between user intent and the existing patterns in Boxel realms. Index your search by what the user wants to DO, not by which CardDef/FieldDef class to extend. Activates when the user asks "do we have a pattern for…", "how is X typically done", or names a feature outcome that isn't in core syntax. |
+| `/boxel-cli:boxel-skill-authoring`          | Use when creating or editing a user-authored Boxel skill — a markdown file whose `boxel.kind: skill` frontmatter makes it loadable by AI assistant rooms. Covers the SKILL.md format contract, the frontmatter schema, tool declarations (codeRef forms, requiresApproval), placement conventions, and how to verify the skill indexed correctly. Activates for "write me a skill", "add a tool to my skill", or a skill that isn't showing up in the skill chooser.                                                                                              |
+| `/boxel-cli:boxel-theme-development`        | Use when the deliverable is a theme ARTIFACT — creating, converting, auditing, or patching Theme, StructuredTheme, StyleReference, DetailedStyleReference, or BrandGuide cards; importing/exporting Google DESIGN.md design-system briefs; logo/mark usage and functional palettes. NOT for deciding a card's visual language (boxel-design) and NOT for applying tokens inside card templates (boxel-ui-guidelines).                                                                                                                                             |
+| `/boxel-cli:boxel-ui-component-discovery`   | MANDATORY before writing any UI in a `.gts` template. Search the catalog for a boxel-ui component Spec and reuse it. Fall back to raw HTML only when no matching spec exists, and surface the gap when you do.                                                                                                                                                                                                                                                                                                                                                    |
+| `/boxel-cli:boxel-ui-guidelines`            | Use when IMPLEMENTING UI in Boxel templates — applying var(--\*) theme tokens in <style scoped>, choosing between @fields and @model, using boxel-ui components (Button, Pill, Avatar, BoxelSelect), controlling embedded-card chrome, or fixing layout/overflow issues. This is the template-implementation layer. Visual-language decisions belong to boxel-design; the Theme card artifact itself belongs to boxel-theme-development.                                                                                                                          |
+| `/boxel-cli:boxel-workspace-cardinal-rules` | Silent-failure traps in Boxel card authoring — rules that pass lint and often indexing, then corrupt the realm index, crash at render, or drop data with no error (DateField vs DateTimeField formats, external URLs in relationship links, and more). Check every card and field against this list before finishing.                                                                                                                                                                                                                                             |
+| `/boxel-cli:catalog-listing`                | Use when installing, browsing, remixing, updating, or submitting catalog listings (Apps, Cards, Fields, Skills, Themes) from a Boxel catalog realm. Includes the submission workflow that creates a SubmissionWorkflowCard and GitHub PR.                                                                                                                                                                                                                                                                                                                         |
+| `/boxel-cli:ember-best-practices`           | Ember.js performance optimization and accessibility guidelines. This skill should be used when writing, reviewing, or refactoring Ember.js code to ensure optimal performance patterns and accessibility. Triggers on tasks involving Ember components, routes, data fetching, bundle optimization, or accessibility improvements.                                                                                                                                                                                                                                |
+| `/boxel-cli:source-code-editing`            | Use when editing existing .gts or .json files via SEARCH/REPLACE blocks. Defines exact block format, matching rules, and recovery from failed matches. Required before issuing any code edit.                                                                                                                                                                                                                                                                                                                                                                     |
+
+<!-- END AUTO-GENERATED: boxel-skills -->
 
 ## Versioning
 
@@ -62,12 +116,12 @@ Both `package.json` (the npm package) and `plugin.json` (this plugin) bump autom
 
 PRs touching `packages/boxel-cli/**` must have a title that matches the conventional-commit grammar. The on-`main` workflow reads the merged PR's title and decides the bump level:
 
-| Prefix | Bump level |
-|---|---|
-| `feat!:` / `fix!:` / body contains `BREAKING CHANGE:` | major |
-| `feat:` | minor |
-| `fix:` / `perf:` / `refactor:` | patch |
-| `chore:` / `docs:` / `test:` / `build:` / `ci:` / `style:` | none |
+| Prefix                                                     | Bump level |
+| ---------------------------------------------------------- | ---------- |
+| `feat!:` / `fix!:` / body contains `BREAKING CHANGE:`      | major      |
+| `feat:`                                                    | minor      |
+| `fix:` / `perf:` / `refactor:`                             | patch      |
+| `chore:` / `docs:` / `test:` / `build:` / `ci:` / `style:` | none       |
 
 Scopes are allowed and ignored for bump-level purposes (`feat(profile): …` → minor).
 
@@ -78,15 +132,15 @@ Each version file only bumps if the PR touched its surface:
 - **`package.json` (npm)** bumps if the PR touched `src/`, `api.ts`, `scripts/build.ts`, or `package.json`.
 - **`plugin.json`** bumps if the PR touched `plugin/`, `scripts/build-plugin.ts`, or `scripts/build-skills.ts`, **or if the on-`main` regen step produced a diff in `plugin/skills/`** (e.g. a new CLI command added in `src/` triggers a synopsis regen, which counts as a plugin-surface change).
 
-| Change | `package.json` | `plugin.json` |
-|---|---|---|
-| New / changed CLI command (e.g. `feat:` in `src/commands/`) | bump (minor) | bump (synopsis regenerates → minor) |
-| Plugin README or prose (`fix:` in `plugin/README.md`) | — | bump (patch) |
-| CLI bug fix without Commander surface change (`fix:` in `src/lib/`) | bump (patch) | — |
-| Upstream `cardstack/boxel-skills` update via `BOXEL_SKILLS_VERSION` | — | bump (regen produces `plugin/skills/` diff) |
-| `chore:` / `docs:` housekeeping | — | — |
+| Change                                                              | `package.json` | `plugin.json`                               |
+| ------------------------------------------------------------------- | -------------- | ------------------------------------------- |
+| New / changed CLI command (e.g. `feat:` in `src/commands/`)         | bump (minor)   | bump (synopsis regenerates → minor)         |
+| Plugin README or prose (`fix:` in `plugin/README.md`)               | —              | bump (patch)                                |
+| CLI bug fix without Commander surface change (`fix:` in `src/lib/`) | bump (patch)   | —                                           |
+| Upstream `cardstack/boxel-skills` update via `BOXEL_SKILLS_VERSION` | —              | bump (regen produces `plugin/skills/` diff) |
+| `chore:` / `docs:` housekeeping                                     | —              | —                                           |
 
-> ⚠️ **`BOXEL_SKILLS_VERSION` bumps must NOT use `chore:`.** Bumping the pinned upstream skills version regenerates `plugin/skills/boxel-development/` and `plugin/skills/boxel-design/`, but a `chore:` prefix says "no bump" — the new content would land on `main` without a `plugin.json` bump, so the marketplace cache (keyed on `plugin.json` `version`) wouldn't refresh for users. Use `fix(skills):` for routine refreshes or `feat(skills):` for content that adds capabilities.
+> ⚠️ **`BOXEL_SKILLS_VERSION` bumps must NOT use `chore:`.** Bumping the pinned upstream skills version regenerates every skill under `plugin/skills/` that is derived from `cardstack/boxel-skills` (see the auto-generated table above), but a `chore:` prefix says "no bump" — the new content would land on `main` without a `plugin.json` bump, so the marketplace cache (keyed on `plugin.json` `version`) wouldn't refresh for users. Use `fix(skills):` for routine refreshes or `feat(skills):` for content that adds capabilities.
 
 ## Releasing
 

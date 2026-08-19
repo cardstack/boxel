@@ -1,6 +1,6 @@
-#!/usr/bin/env ts-node
-import { registerRealmUser } from './register-realm-user-using-api';
-import { realmPassword } from '../helpers/realm-credentials';
+#!/usr/bin/env -S node
+import { registerRealmUser } from './register-realm-user-using-api.ts';
+import { realmPassword } from '../helpers/realm-credentials.ts';
 
 // Registers a GitHub webhook as the submission_realm user.
 //
@@ -202,7 +202,9 @@ async function main() {
   const username = 'submission_realm';
   const seed = process.env.REALM_SECRET_SEED;
   if (!seed) {
-    throw new Error('REALM_SECRET_SEED must be set to derive submission_realm password');
+    throw new Error(
+      'REALM_SECRET_SEED must be set to derive submission_realm password',
+    );
   }
   process.env.MATRIX_USERNAME = username;
   process.env.MATRIX_PASSWORD = await realmPassword(username, seed);
@@ -272,7 +274,7 @@ async function main() {
   console.log('='.repeat(70));
 }
 
-if (require.main === module) {
+if (import.meta.main) {
   main()
     .then(() => {
       console.log('✓ GitHub webhook registration complete');

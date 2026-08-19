@@ -1,11 +1,11 @@
 import { resolve } from 'node:path';
 
-import { expect, test } from './fixtures';
+import { expect, test } from './fixtures.ts';
 
-import { EvalValidationStep } from '../src/validators/eval-step';
-import type { EvalValidationDetails } from '../src/validators/eval-step';
-import { buildTestClient } from './helpers/test-client';
-import { createTestWorkspace } from './helpers/workspace-fixture';
+import { EvalValidationStep } from '../src/validators/eval-step.ts';
+import type { EvalValidationDetails } from '../src/validators/eval-step.ts';
+import { buildTestClient } from './helpers/test-client.ts';
+import { createTestWorkspace } from './helpers/workspace-fixture.ts';
 
 const fixtureRealmDir = resolve(
   process.cwd(),
@@ -18,8 +18,8 @@ const VALID_MODULE_GTS = `import {
   CardDef,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 
 export class ValidCard extends CardDef {
   static displayName = 'Valid Card';
@@ -33,7 +33,7 @@ const BROKEN_MODULE_GTS = `import {
   CardDef,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import { Foo } from './does-not-exist';
 
 export class BrokenCard extends CardDef {

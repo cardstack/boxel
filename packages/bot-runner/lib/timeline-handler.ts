@@ -5,9 +5,10 @@ import {
   query,
 } from '@cardstack/runtime-common';
 import * as Sentry from '@sentry/node';
-import { CommandRunner, makeEnqueueRunCommand } from './command-runner';
-import { PrListingWorkflowHandler } from './pr-listing/pr-listing-workflow-handler';
-import type { GitHubClient } from './github';
+import { CommandRunner, makeEnqueueRunCommand } from './command-runner.ts';
+import { makeLintSubmissionFiles } from './pr-listing/lint-submission-files.ts';
+import { PrListingWorkflowHandler } from './pr-listing/pr-listing-workflow-handler.ts';
+import type { GitHubClient } from './github.ts';
 import type { DBAdapter, QueuePublisher } from '@cardstack/runtime-common';
 import type { MatrixEvent, Room } from 'matrix-js-sdk';
 
@@ -37,6 +38,7 @@ export function onTimelineEvent({
     submissionBotUserId: authUserId,
     enqueueRunCommand: makeEnqueueRunCommand(queuePublisher, dbAdapter),
     githubClient,
+    lintSubmissionFiles: makeLintSubmissionFiles(queuePublisher),
   });
   let commandRunner = new CommandRunner(dbAdapter, queuePublisher, [
     workflowHandler,

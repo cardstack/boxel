@@ -1,7 +1,7 @@
-import type { LocalPath, RealmPaths } from '../paths';
-import { executableExtensions } from '../index';
+import type { LocalPath, RealmPaths } from '../paths.ts';
+import { executableExtensions } from '../index.ts';
 import { parse as babelParse } from '@babel/parser';
-import { getBabelOptions } from '../babel-options';
+import { getBabelOptions } from '../babel-options.ts';
 
 export interface CachedModuleDependencyEntry {
   canonicalPath: LocalPath;

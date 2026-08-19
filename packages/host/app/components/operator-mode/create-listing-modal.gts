@@ -1,4 +1,4 @@
-import { fn, hash } from '@ember/helper';
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
@@ -19,35 +19,38 @@ import {
 import { IconX, IconPlus } from '@cardstack/boxel-ui/icons';
 
 import {
+  baseCardRef,
   chooseCard,
   isResolvedCodeRef,
-  removeFileExtension,
   rri,
-  type CommandContext,
+  type ToolContext,
   type ResolvedCodeRef,
+  type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
 import { SelectedTypePill } from '@cardstack/host/components/operator-mode/create-file-modal';
-import PrerenderedCardSearch from '@cardstack/host/components/prerendered-card-search';
+import SearchResults from '@cardstack/host/components/search/search-results';
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 
-import type CommandService from '@cardstack/host/services/command-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
+import type ToolService from '@cardstack/host/services/tool-service';
+import { removeCardJsonExtension } from '@cardstack/host/utils/search/types';
 
 interface Signature {
   Args: {};
 }
 
 export default class CreateListingModal extends Component<Signature> {
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private loaderService: LoaderService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
 
   @tracked private _selectedExampleURLs: string[] | null = null;
+  @tracked private _selectedSupportingCardURLs: string[] | null = null;
 
   private get payload() {
     return this.operatorModeStateService.createListingModalPayload;
@@ -90,14 +93,28 @@ export default class CreateListingModal extends Component<Signature> {
     return (this.payload?.declarationKind ?? 'card') === 'card';
   }
 
-  private get selectedExampleCardUrls(): string[] {
-    return this.selectedExampleURLs.map((url) =>
-      url.endsWith('.json') ? url : `${url}.json`,
+  private get selectedSupportingCardURLs(): string[] {
+    return (
+      this._selectedSupportingCardURLs ?? this.payload?.supportingCardIds ?? []
     );
   }
 
-  private get selectedExampleRealms(): string[] {
-    let realms = this.selectedExampleURLs.flatMap((cardUrl) => {
+  private get hasSelectedSupportingCards(): boolean {
+    return this.selectedSupportingCardURLs.length > 0;
+  }
+
+  // The `entry` query for a row's selected cards: scoped to the chosen card
+  // URLs (matched by index file URL, hence the `.json` suffixing) and their
+  // realms, with the `atom` rendering bound through the filter's `htmlQuery`
+  // (the way to select a prerendered format). The engine lifts the htmlQuery
+  // binding out of the eq (which then dissolves). `scope: 'cards'` pins the
+  // instance row, dropping each card's dual-indexed `.json` file row that
+  // shares its `cardUrls` URL.
+  private atomSearchQuery(cardURLs: string[]): SearchEntryWireQuery {
+    let cardUrls = cardURLs.map((url) =>
+      url.endsWith('.json') ? url : `${url}.json`,
+    );
+    let realms = cardURLs.flatMap((cardUrl) => {
       try {
         let realmURL = this.realm.realmOf(rri(cardUrl));
         return realmURL ? [realmURL] : [];
@@ -105,7 +122,24 @@ export default class CreateListingModal extends Component<Signature> {
         return [];
       }
     });
-    return [...new Set(realms)];
+    return {
+      cardUrls,
+      realms: [...new Set(realms)],
+      scope: 'cards',
+      filter: {
+        eq: {
+          htmlQuery: { eq: { format: 'atom' } },
+        },
+      },
+    };
+  }
+
+  private get exampleSearchQuery(): SearchEntryWireQuery {
+    return this.atomSearchQuery(this.selectedExampleURLs);
+  }
+
+  private get supportingCardSearchQuery(): SearchEntryWireQuery {
+    return this.atomSearchQuery(this.selectedSupportingCardURLs);
   }
 
   private chooseExamples = task(async () => {
@@ -131,9 +165,34 @@ export default class CreateListingModal extends Component<Signature> {
   });
 
   @action private removeSelectedExample(urlToRemove: string) {
-    let normalizedUrlToRemove = removeFileExtension(urlToRemove);
+    let normalizedUrlToRemove = removeCardJsonExtension(urlToRemove);
     this._selectedExampleURLs = this.selectedExampleURLs.filter(
-      (url) => removeFileExtension(url) !== normalizedUrlToRemove,
+      (url) => removeCardJsonExtension(url) !== normalizedUrlToRemove,
+    );
+  }
+
+  private chooseSupportingCards = task(async () => {
+    let consumingRealm = this.payload?.targetRealm
+      ? new URL(this.payload.targetRealm)
+      : undefined;
+    let selected = await chooseCard(
+      { filter: { type: baseCardRef } },
+      {
+        multiSelect: true,
+        consumingRealm,
+        preselectConsumingRealm: true,
+        preselectedCardUrls: this.selectedSupportingCardURLs,
+      },
+    );
+    if (selected) {
+      this._selectedSupportingCardURLs = selected;
+    }
+  });
+
+  @action private removeSelectedSupportingCard(urlToRemove: string) {
+    let normalizedUrlToRemove = removeCardJsonExtension(urlToRemove);
+    this._selectedSupportingCardURLs = this.selectedSupportingCardURLs.filter(
+      (url) => removeCardJsonExtension(url) !== normalizedUrlToRemove,
     );
   }
 
@@ -150,6 +209,7 @@ export default class CreateListingModal extends Component<Signature> {
 
     let targetRealm = payload.targetRealm;
     let openCardIds = this.selectedExampleURLs;
+    let supportingCardIds = this.selectedSupportingCardURLs;
 
     // Load listing-create from the catalog realm at runtime so we pick up
     // whatever version is shipped in the realm content, not a stale
@@ -161,15 +221,16 @@ export default class CreateListingModal extends Component<Signature> {
     // runtime. Vite/Embroider has no equivalent alias and the host doesn't
     // depend on `@cardstack/catalog`, so a static import would fail to
     // resolve at build time. The realm content also imports things like
-    // `@cardstack/boxel-host/commands/...` which are likewise loader-only
+    // `@cardstack/boxel-host/tools/...` which are likewise loader-only
     // specifiers, so the catalog file isn't independently buildable. Going
     // through the loader is the only path that resolves both correctly.
     let module = await this.loaderService.loader.import<{
-      default: new (commandContext: CommandContext) => {
+      default: new (toolContext: ToolContext) => {
         execute: (input: {
           codeRef: ResolvedCodeRef;
           targetRealm: string;
           openCardIds: string[];
+          supportingCardIds: string[];
         }) => Promise<{
           listing?: { id?: string };
           backgroundWork?: Promise<unknown>;
@@ -179,11 +240,12 @@ export default class CreateListingModal extends Component<Signature> {
     let ListingCreateCommand = module.default;
 
     let result = await new ListingCreateCommand(
-      this.commandService.commandContext,
+      this.toolService.toolContext,
     ).execute({
       codeRef,
       targetRealm,
       openCardIds,
+      supportingCardIds,
     });
 
     // Navigate to the listing in code mode with isolated preview
@@ -192,7 +254,7 @@ export default class CreateListingModal extends Component<Signature> {
       if (this.operatorModeStateService.workspaceChooserOpened) {
         this.operatorModeStateService.closeWorkspaceChooser();
       }
-      await this.operatorModeStateService.updateSubmode(Submodes.Code);
+      this.operatorModeStateService.updateSubmode(Submodes.Code);
       await this.operatorModeStateService.updateCodePath(
         new URL(cardUrl + '.json'),
         'preview',
@@ -207,11 +269,13 @@ export default class CreateListingModal extends Component<Signature> {
     }
 
     this._selectedExampleURLs = null;
+    this._selectedSupportingCardURLs = null;
     this.operatorModeStateService.dismissCreateListingModal();
   });
 
   @action private onClose() {
     this._selectedExampleURLs = null;
+    this._selectedSupportingCardURLs = null;
     this.operatorModeStateService.dismissCreateListingModal();
   }
 
@@ -259,52 +323,46 @@ export default class CreateListingModal extends Component<Signature> {
                 data-test-create-listing-examples
               >
                 {{#if this.hasSelectedExamples}}
-                  <div
-                    class='selected-examples-list'
-                    data-test-selected-examples
-                  >
-                    <PrerenderedCardSearch
-                      @query={{hash}}
-                      @cardUrls={{this.selectedExampleCardUrls}}
-                      @format='atom'
-                      @realms={{this.selectedExampleRealms}}
-                      @isLive={{false}}
+                  <div class='selected-cards-list' data-test-selected-examples>
+                    <SearchResults
+                      @query={{this.exampleSearchQuery}}
+                      @mode='none'
+                      as |results|
                     >
-                      <:loading>
-                        <div class='selected-example-loading'>
+                      {{#if results.isLoading}}
+                        <div class='selected-card-loading'>
                           <LoadingIndicator />
                         </div>
-                      </:loading>
-                      <:response as |cards|>
-                        {{#each cards key='url' as |card|}}
+                      {{else}}
+                        {{#each results.entries key='id' as |entry|}}
                           <div
-                            class='selected-example-atom'
-                            data-test-selected-example={{card.url}}
+                            class='selected-card-atom'
+                            data-test-selected-example={{entry.id}}
                             data-test-card-format='atom'
                           >
-                            <card.component />
+                            <entry.component />
                             <IconButton
-                              class='selected-example-remove-button'
+                              class='selected-card-remove-button'
                               @icon={{IconX}}
                               @height='10'
                               @width='10'
                               aria-label='Remove example'
                               {{on
                                 'click'
-                                (fn this.removeSelectedExample card.url)
+                                (fn this.removeSelectedExample entry.id)
                               }}
-                              data-test-selected-example-remove={{card.url}}
+                              data-test-selected-example-remove={{entry.id}}
                             />
                           </div>
                         {{/each}}
-                      </:response>
-                    </PrerenderedCardSearch>
+                      {{/if}}
+                    </SearchResults>
                   </div>
                 {{else}}
-                  <span class='no-examples-message'>No examples selected</span>
+                  <span class='no-cards-message'>No examples selected</span>
                 {{/if}}
                 <Button
-                  class='add-examples-button'
+                  class='add-cards-button'
                   @size='small'
                   @kind='muted'
                   @loading={{this.chooseExamples.isRunning}}
@@ -313,6 +371,73 @@ export default class CreateListingModal extends Component<Signature> {
                 >
                   <IconPlus width='12px' height='12px' />
                   Add Examples
+                </Button>
+              </div>
+            </FieldContainer>
+
+            <FieldContainer
+              @label='Supporting Cards'
+              class='field examples-field-container'
+            >
+              <div
+                class='field-contents examples-field'
+                data-test-create-listing-supporting-cards
+              >
+                <p class='field-hint'>
+                  Installed with the listing, but not shown on the listing page.
+                </p>
+                {{#if this.hasSelectedSupportingCards}}
+                  <div
+                    class='selected-cards-list'
+                    data-test-selected-supporting-cards
+                  >
+                    <SearchResults
+                      @query={{this.supportingCardSearchQuery}}
+                      @mode='none'
+                      as |results|
+                    >
+                      {{#if results.isLoading}}
+                        <div class='selected-card-loading'>
+                          <LoadingIndicator />
+                        </div>
+                      {{else}}
+                        {{#each results.entries key='id' as |entry|}}
+                          <div
+                            class='selected-card-atom'
+                            data-test-selected-supporting-card={{entry.id}}
+                            data-test-card-format='atom'
+                          >
+                            <entry.component />
+                            <IconButton
+                              class='selected-card-remove-button'
+                              @icon={{IconX}}
+                              @height='10'
+                              @width='10'
+                              aria-label='Remove supporting card'
+                              {{on
+                                'click'
+                                (fn this.removeSelectedSupportingCard entry.id)
+                              }}
+                              data-test-selected-supporting-card-remove={{entry.id}}
+                            />
+                          </div>
+                        {{/each}}
+                      {{/if}}
+                    </SearchResults>
+                  </div>
+                {{else}}
+                  <span class='no-cards-message'>No supporting cards selected</span>
+                {{/if}}
+                <Button
+                  class='add-cards-button'
+                  @size='small'
+                  @kind='muted'
+                  @loading={{this.chooseSupportingCards.isRunning}}
+                  {{on 'click' (perform this.chooseSupportingCards)}}
+                  data-test-choose-supporting-cards-button
+                >
+                  <IconPlus width='12px' height='12px' />
+                  Add Supporting Cards
                 </Button>
               </div>
             </FieldContainer>
@@ -377,12 +502,17 @@ export default class CreateListingModal extends Component<Signature> {
         flex-direction: column;
         gap: var(--boxel-sp-xs);
       }
-      .add-examples-button {
+      .field-hint {
+        font: var(--boxel-font-xs);
+        color: var(--boxel-450);
+        margin: 0;
+      }
+      .add-cards-button {
         --boxel-button-padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
         align-self: flex-start;
         gap: var(--boxel-sp-xxxs);
       }
-      .no-examples-message {
+      .no-cards-message {
         font: var(--boxel-font-sm);
         color: var(--boxel-500);
         display: flex;
@@ -394,7 +524,7 @@ export default class CreateListingModal extends Component<Signature> {
         min-height: 3rem;
         width: 100%;
       }
-      .selected-examples-list {
+      .selected-cards-list {
         display: flex;
         flex-wrap: wrap;
         gap: var(--boxel-sp-xs);
@@ -405,28 +535,28 @@ export default class CreateListingModal extends Component<Signature> {
         width: 100%;
         align-items: start;
       }
-      .selected-example-atom {
+      .selected-card-atom {
         position: relative;
         min-width: 0;
         display: inline-flex;
         align-items: center;
       }
-      .selected-example-atom
+      .selected-card-atom
         :deep(.field-component-card.atom-format.display-container-true) {
         min-width: 0;
       }
-      .selected-example-atom
+      .selected-card-atom
         :deep(.field-component-card.atom-format.display-container-true) {
         padding-right: calc(
           var(--boxel-sp-xs) + var(--boxel-icon-sm) + var(--boxel-sp-6xs)
         );
       }
-      .selected-example-atom :deep(.card) {
+      .selected-card-atom :deep(.card) {
         border: none;
         box-shadow: none;
         background: transparent;
       }
-      .selected-example-remove-button {
+      .selected-card-remove-button {
         --icon-color: var(--boxel-700);
         --icon-bg: transparent;
         --icon-border: transparent;
@@ -439,14 +569,14 @@ export default class CreateListingModal extends Component<Signature> {
         border-radius: 999px;
         opacity: 0.72;
       }
-      .selected-example-remove-button:hover,
-      .selected-example-remove-button:focus-visible {
+      .selected-card-remove-button:hover,
+      .selected-card-remove-button:focus-visible {
         --icon-bg: var(--boxel-200);
         --icon-border: var(--boxel-200);
         --icon-color: var(--boxel-900);
         opacity: 1;
       }
-      .selected-example-loading {
+      .selected-card-loading {
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -455,7 +585,7 @@ export default class CreateListingModal extends Component<Signature> {
         width: 100%;
       }
       :deep(.create-listing) {
-        height: 30rem;
+        height: 34rem;
       }
       .footer-loading-message {
         font: var(--boxel-font-sm);

@@ -4,9 +4,9 @@ import type {
   LooseSingleResourceDocument,
 } from '@cardstack/runtime-common';
 
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-
 import StoreService from './store';
+
+import type { FileDef } from '@cardstack/base/file-api';
 
 export default class RenderStoreService extends StoreService {
   protected override isRenderStore = true;

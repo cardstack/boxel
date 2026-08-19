@@ -3,17 +3,9 @@
     "type": "card",
     "attributes": {
       "name": "Lila",
-      "names": [
-        "Evie",
-        "Lila",
-        "Marco"
-      ],
+      "names": ["Evie", "Lila", "Marco"],
       "date": "2024-12-04",
-      "dates": [
-        "2024-12-11",
-        "2024-12-25",
-        "2024-12-31"
-      ],
+      "dates": ["2024-12-11", "2024-12-25", "2024-12-31"],
       "trip": {
         "cardTitle": "Trip 1"
       },
@@ -93,22 +85,22 @@
       },
       "trip.country": {
         "links": {
-          "self": "https://localhost:4201/experiments/Country/argentina"
+          "self": "../Country/argentina"
         }
       },
       "trip.countries.0": {
         "links": {
-          "self": "https://localhost:4201/experiments/Country/brazil"
+          "self": "../Country/brazil"
         }
       },
       "trip.countries.1": {
         "links": {
-          "self": "https://localhost:4201/experiments/Country/4"
+          "self": "../Country/4"
         }
       },
       "trip.countries.2": {
         "links": {
-          "self": "https://localhost:4201/experiments/Country/1"
+          "self": "../Country/1"
         }
       },
       "trips.0.country": {

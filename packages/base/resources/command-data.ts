@@ -1,20 +1,20 @@
 import { tracked } from '@glimmer/tracking';
 
-import {
-  type CommandInvocation,
-  type Command,
-  type CardInstance,
+import type {
+  CommandInvocation,
+  Command,
+  CardInstance,
 } from '@cardstack/runtime-common';
 
-import { CommandContext } from '@cardstack/runtime-common';
+import type { ToolContext } from '@cardstack/runtime-common';
 
-import { CardContext, CardDefConstructor } from '../card-api';
+import type { CardContext, CardDefConstructor } from '../card-api';
 
 import { resource } from 'ember-resources';
 
-export class CommandExecutionState<CardResultType extends CardDefConstructor>
-  implements CommandInvocation<CardResultType>
-{
+export class CommandExecutionState<
+  CardResultType extends CardDefConstructor,
+> implements CommandInvocation<CardResultType> {
   @tracked status: 'pending' | 'success' | 'error' = 'pending';
   @tracked cardResult: CardInstance<CardResultType> | null = null;
   @tracked error: Error | null = null;
@@ -53,13 +53,13 @@ export class CommandExecutionState<CardResultType extends CardDefConstructor>
  * // call example no input
  * allRealmsInfoResource = commandData<typeof GetAllRealmMetasResult>(
  *   this,
- *   GetAllRealmMetasCommand,
+ *   GetAllRealmMetasTool,
  * );
  * // call example with reactive arg
  * searchResource = commandData<
  *   typeof SearchCardsByTypeAndTitleInput,
  *   typeof SearchCardsResult
- * >(this, SearchCardsByTypeAndTitleCommand, () => {
+ * >(this, SearchCardsByTypeAndTitleTool, () => {
  *   return {
  *     title: this.args.model.cardTitleSearch,
  *   };
@@ -69,7 +69,7 @@ export class CommandExecutionState<CardResultType extends CardDefConstructor>
 export function commandData<CardResultType extends CardDefConstructor>(
   parent: { args: { context?: CardContext | undefined } },
   commandClass: new (
-    context: CommandContext,
+    context: ToolContext,
   ) => Command<undefined, CardResultType>,
 ): CommandExecutionState<CardResultType>;
 export function commandData<
@@ -78,7 +78,7 @@ export function commandData<
 >(
   parent: { args: { context?: CardContext | undefined } },
   commandClass: new (
-    context: CommandContext,
+    context: ToolContext,
   ) => Command<CardInputType, CardResultType>,
   executeArgs: () => Parameters<
     Command<CardInputType, CardResultType>['execute']
@@ -90,7 +90,7 @@ export function commandData<
 >(
   parent: { args: { context?: CardContext | undefined } },
   commandClass: new (
-    context: CommandContext,
+    context: ToolContext,
   ) => Command<CardInputType, CardResultType>,
   executeArgs?: () => Parameters<
     Command<CardInputType, CardResultType>['execute']
@@ -100,13 +100,13 @@ export function commandData<
     const state = new CommandExecutionState<
       CardResultType extends CardDefConstructor ? CardResultType : never
     >();
-    let commandContext = parent.args.context?.commandContext;
-    if (!commandContext) {
+    let toolContext = parent.args.context?.toolContext;
+    if (!toolContext) {
       state.setError(new Error('no context'));
       return state;
     }
 
-    const command = new commandClass(commandContext);
+    const command = new commandClass(toolContext);
 
     state.setLoading();
     (executeArgs ? command.execute(executeArgs()) : command.execute())

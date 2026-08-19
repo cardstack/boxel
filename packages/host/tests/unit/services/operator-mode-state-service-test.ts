@@ -134,12 +134,21 @@ module('Unit | Service | operator-mode-state-service', function (hooks) {
     );
   });
 
-  test('URL with no aiAssistantOpen key falls back to localStorage (open default)', function (assert) {
-    // no localStorage seeded — first-ever visit
+  test('URL with no aiAssistantOpen key falls back to localStorage (remembered open)', function (assert) {
+    window.localStorage.setItem(AiAssistantOpen, 'true');
     service.restore({ stacks: [] });
     assert.true(
       service.aiAssistantOpen,
-      'panel opens by default when neither URL nor localStorage carry a preference',
+      'panel reopens when URL state omits the key but localStorage remembers open',
+    );
+  });
+
+  test('closed by default when neither URL nor localStorage carry a preference', function (assert) {
+    // no localStorage seeded — first-ever visit
+    service.restore({ stacks: [] });
+    assert.false(
+      service.aiAssistantOpen,
+      'panel stays closed by default when neither URL nor localStorage carry a preference',
     );
   });
 

@@ -1,6 +1,7 @@
 import {
   click,
   fillIn,
+  settled,
   triggerEvent,
   waitFor,
   waitUntil,
@@ -11,9 +12,20 @@ import { module, test } from 'qunit';
 
 import { TrackedObject } from 'tracked-built-ins';
 
-import { Deferred, baseRealm, param, query } from '@cardstack/runtime-common';
+import {
+  Deferred,
+  baseRealm,
+  param,
+  query,
+  type PublishProgress,
+} from '@cardstack/runtime-common';
+
+import ENV from '@cardstack/host/config/environment';
+import type RealmService from '@cardstack/host/services/realm';
 
 import {
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
   getDbAdapter,
   setupLocalIndexing,
   setupOnSave,
@@ -22,7 +34,18 @@ import {
   SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
   testRealmInfo,
+  realmConfigCardJSON,
 } from '../helpers';
+
+// Per-user published-realm URL host. Standard mode: `localhost:4201`;
+// env mode: `realm-server.<slug>.localhost`. The publishing UI builds
+// URLs of the form `https://<username>.<host>/<realm>/` (or
+// `<custom-subdomain>.<host>/` for boxel-site claims), so the
+// assertions need to derive the host the same way the UI does.
+// publishedRealmBoxelSpaceDomain and publishedRealmBoxelSiteDomain are
+// distinct in the host config, but in this test environment they
+// resolve to the same value, so one const covers both.
+const publishedSpaceHost = ENV.publishedRealmBoxelSpaceDomain;
 
 import { CardsGrid, setupBaseRealm } from '../helpers/base-realm';
 
@@ -31,8 +54,8 @@ import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
 const personCardSource = `
-  import { contains, containsMany, field, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { contains, containsMany, field, linksToMany, CardDef, Component } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
 
   export class Person extends CardDef {
     static displayName = 'Person';
@@ -73,6 +96,23 @@ function withUpdatedTestRealmInfo(
   };
 }
 
+// Stubs the realm-server `allocateUnlistedPath` method (which normally hits the
+// server that owns the random slug), returning the given slug(s) — successive
+// calls walk the list and then stick on the last entry, so passing two slugs
+// covers the initial load + a "New link" regenerate. Returns a restore function.
+function stubUnlistedPath(slugs: string | string[]): () => void {
+  let realmServer = getService('realm-server') as any;
+  let original = realmServer.allocateUnlistedPath;
+  let queue = Array.isArray(slugs) ? [...slugs] : [slugs];
+  realmServer.allocateUnlistedPath = async (sourceRealmURL: string) => {
+    let slug = queue.length > 1 ? queue.shift()! : queue[0];
+    return { sourceRealmURL, slug };
+  };
+  return () => {
+    realmServer.allocateUnlistedPath = original;
+  };
+}
+
 module('Acceptance | host submode', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -91,12 +131,12 @@ module('Acceptance | host submode', function (hooks) {
     realmContents = {
       ...SYSTEM_CARD_FIXTURE_CONTENTS,
       'index.json': new CardsGrid(),
-      '.realm.json': {
+      'realm.json': realmConfigCardJSON({
         name: 'Test Workspace B',
         backgroundURL:
           'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
         iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-      },
+      }),
       'person.gts': personCardSource,
       'view-card-demo.gts': viewCardDemoCardSource,
       'Person/1.json': {
@@ -192,12 +232,109 @@ module('Acceptance | host submode', function (hooks) {
     };
   });
 
-  module('with a realm that is not publishable', function (hooks) {
+  module('with a dangling host routing rule', function (hooks) {
+    // Each snapshot this module's tests create stays attached until it is
+    // deleted, and SQLite caps attached databases per connection. The prefix is
+    // derived from the running module's name, and nested modules have distinct
+    // names, so every scope that runs tests registers its own teardown.
+    setupRealmCacheTeardown(hooks);
+
     hooks.beforeEach(async function () {
-      await setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        contents: realmContents,
+      let dbAdapter = await getDbAdapter();
+      await query(dbAdapter, [
+        `INSERT INTO realm_metadata (url, publishable) VALUES (`,
+        param(testRealmURL),
+        `,`,
+        param(true),
+        `) ON CONFLICT (url) DO UPDATE SET publishable = true`,
+      ]);
+      // A `/` routing rule whose target card was never created, so the
+      // `instance` link dangles.
+      realmContents['realm.json'] = {
+        data: {
+          type: 'card',
+          attributes: {
+            cardInfo: { name: 'Test Workspace B' },
+            hostRoutingRules: [{ path: '/' }],
+          },
+          relationships: {
+            'hostRoutingRules.0.instance': {
+              links: { self: './does-not-exist' },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/realm-config',
+              name: 'RealmConfig',
+            },
+          },
+        },
+      };
+      // Each of these nested modules builds the same realm for every one of its
+      // tests, so the indexed result is cached per module and restored instead
+      // of being rebuilt. The seeded realm_metadata row above is part of what
+      // the snapshot captures, so a restored test starts from the same state.
+      await withCachedRealmSetup(async () => {
+        await setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          contents: realmContents,
+        });
       });
+
+      // `withUpdatedTestRealmInfo` reads the realm service's resource for this
+      // realm, and some tests read it before their own visit. Nothing in the
+      // harness registers it — app components do, incidentally, while rendering
+      // during setup — so ask for it here rather than depend on what the setup
+      // visit happened to render.
+      await (getService('realm') as RealmService).ensureRealmMeta(testRealmURL);
+    });
+
+    test('publish modal warns that a routing rule points to a missing card', async function (assert) {
+      await visitOperatorMode({
+        submode: 'host',
+        trail: [`${testRealmURL}Person/1.json`],
+      });
+
+      await click('[data-test-publish-realm-button]');
+      await waitFor('[data-test-publish-realm-modal]');
+      await waitFor('[data-test-dangling-routing-warning]');
+      assert
+        .dom('[data-test-dangling-routing-warning]')
+        .exists('the dangling-routing warning shows in the publish modal');
+      assert
+        .dom('[data-test-dangling-routing-warning]')
+        .containsText(
+          'does-not-exist',
+          'the warning names the missing routing target',
+        );
+    });
+  });
+
+  module('with a realm that is not publishable', function (hooks) {
+    // Each snapshot this module's tests create stays attached until it is
+    // deleted, and SQLite caps attached databases per connection. The prefix is
+    // derived from the running module's name, and nested modules have distinct
+    // names, so every scope that runs tests registers its own teardown.
+    setupRealmCacheTeardown(hooks);
+
+    hooks.beforeEach(async function () {
+      // Each of these nested modules builds the same realm for every one of its
+      // tests, so the indexed result is cached per module and restored instead
+      // of being rebuilt. The seeded realm_metadata row above is part of what
+      // the snapshot captures, so a restored test starts from the same state.
+      await withCachedRealmSetup(async () => {
+        await setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          contents: realmContents,
+        });
+      });
+
+      // `withUpdatedTestRealmInfo` reads the realm service's resource for this
+      // realm, and some tests read it before their own visit. Nothing in the
+      // harness registers it — app components do, incidentally, while rendering
+      // during setup — so ask for it here rather than depend on what the setup
+      // visit happened to render.
+      await (getService('realm') as RealmService).ensureRealmMeta(testRealmURL);
     });
 
     test('host submode is not available', async function (assert) {
@@ -223,6 +360,12 @@ module('Acceptance | host submode', function (hooks) {
   });
 
   module('with a realm that is publishable', function (hooks) {
+    // Each snapshot this module's tests create stays attached until it is
+    // deleted, and SQLite caps attached databases per connection. The prefix is
+    // derived from the running module's name, and nested modules have distinct
+    // names, so every scope that runs tests registers its own teardown.
+    setupRealmCacheTeardown(hooks);
+
     hooks.beforeEach(async function () {
       // CS-10053: publishable lives in realm_metadata now. Seed the row
       // BEFORE setupAcceptanceTestRealm so parseRealmInfo's first read
@@ -235,10 +378,23 @@ module('Acceptance | host submode', function (hooks) {
         param(true),
         `) ON CONFLICT (url) DO UPDATE SET publishable = true`,
       ]);
-      await setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        contents: realmContents,
+      // Each of these nested modules builds the same realm for every one of its
+      // tests, so the indexed result is cached per module and restored instead
+      // of being rebuilt. The seeded realm_metadata row above is part of what
+      // the snapshot captures, so a restored test starts from the same state.
+      await withCachedRealmSetup(async () => {
+        await setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          contents: realmContents,
+        });
       });
+
+      // `withUpdatedTestRealmInfo` reads the realm service's resource for this
+      // realm, and some tests read it before their own visit. Nothing in the
+      // harness registers it — app components do, incidentally, while rendering
+      // during setup — so ask for it here rather than depend on what the setup
+      // visit happened to render.
+      await (getService('realm') as RealmService).ensureRealmMeta(testRealmURL);
     });
 
     test('host submode is available', async function (assert) {
@@ -449,6 +605,59 @@ module('Acceptance | host submode', function (hooks) {
         .hasAttribute('data-test-view-card-demo-active-tab', 'details');
     });
 
+    // Submode counterpart, through operator-mode-state-service. ViewCardDemo
+    // cycles 1 → 2 → 3 → 1, so 1 above 2 is an "up" link (CS-12434).
+    test('viewing a card already in the trail unwinds to it', async function (assert) {
+      let belowCardId = `${testRealmURL}ViewCardDemo/2`;
+      let topCardId = `${testRealmURL}ViewCardDemo/1`;
+
+      // 3 as primary keeps both stack cards off the root, so this takes the
+      // unwind branch rather than the close-everything one.
+      await visitOperatorMode({
+        submode: 'host',
+        trail: [
+          `${testRealmURL}ViewCardDemo/3.json`,
+          `${belowCardId}.json`,
+          `${topCardId}.json`,
+        ],
+      });
+
+      let topSelector = `[data-test-host-mode-stack-item="${topCardId}"]`;
+      let belowSelector = `[data-test-host-mode-stack-item="${belowCardId}"]`;
+      await waitFor(`${topSelector} [data-test-view-card-demo-button]`);
+
+      await click(`${topSelector} [data-test-view-card-demo-button]`);
+
+      await waitUntil(() => !document.querySelector(topSelector));
+      assert
+        .dom(belowSelector)
+        .exists('unwinds to the targeted card rather than stacking a copy');
+    });
+
+    test('clicking the scrim closes the top card of the trail', async function (assert) {
+      let belowCardId = `${testRealmURL}ViewCardDemo/2`;
+      let topCardId = `${testRealmURL}ViewCardDemo/3`;
+
+      await visitOperatorMode({
+        submode: 'host',
+        trail: [
+          `${testRealmURL}ViewCardDemo/1.json`,
+          `${belowCardId}.json`,
+          `${topCardId}.json`,
+        ],
+      });
+
+      let topSelector = `[data-test-host-mode-stack-item="${topCardId}"]`;
+      await waitFor(topSelector);
+
+      await click('[data-test-host-mode-stack]');
+
+      await waitUntil(() => !document.querySelector(topSelector));
+      assert
+        .dom(`[data-test-host-mode-stack-item="${belowCardId}"]`)
+        .exists('only the top card closes');
+    });
+
     test('breadcrumbs can close stacked cards', async function (assert) {
       let card1Id = `${testRealmURL}Person/1`;
       let card2Id = `${testRealmURL}index`;
@@ -535,8 +744,8 @@ module('Acceptance | host submode', function (hooks) {
         trail: [`${testRealmURL}nonexistent.json`],
       });
 
-      await waitFor('[data-test-card-error]');
-      assert.dom('[data-test-card-error]').exists();
+      await waitFor('[data-test-host-mode-404]');
+      assert.dom('[data-test-host-mode-404]').exists();
     });
 
     test('ai assistant is not displayed in host submode', async function (assert) {
@@ -567,6 +776,27 @@ module('Acceptance | host submode', function (hooks) {
     });
 
     module('publish and unpublish realm', function (hooks) {
+      // This module calls no caching helper of its own, so the registration below
+      // looks superfluous. It isn't. The parent's beforeEach runs for these tests
+      // too and caches the realm it builds under a key from
+      // `getCurrentModuleCacheKey()`, which reads the *running test's* module
+      // name — for a test in here that is the composed
+      // "… > with a realm that is publishable > publish and unpublish realm". So
+      // the parent exports a snapshot under this module's name and leaves it
+      // attached.
+      //
+      // Teardown deletes by `snapshot_${simpleHash(moduleName)}_`, and the hash
+      // of the parent's name is not the hash of this one, so the parent's
+      // registration cannot reach these. Without this line one snapshot database
+      // stays attached for the rest of the shard, against SQLite's per-connection
+      // cap on attached databases.
+      //
+      // A consequence, not a defect: the parent's own tests and these cache the
+      // same realm under two keys, so it is indexed once per scope rather than
+      // shared. That is inherent to keying by module name — don't "deduplicate"
+      // it by dropping a registration.
+      setupRealmCacheTeardown(hooks);
+
       let publishDeferred: Deferred<void>;
       let unpublishDeferred: Deferred<void>;
 
@@ -580,25 +810,35 @@ module('Acceptance | host submode', function (hooks) {
         ) => {
           await publishDeferred.promise;
           return {
-            data: {
-              type: 'published_realm',
-              id: '1',
-              attributes: {
-                sourceRealmURL,
-                publishedRealmURL,
-                lastPublishedAt: new Date().getTime(),
-              },
-            },
+            sourceRealmURL,
+            publishedRealmURL,
+            publishedRealmId: '1',
+            lastPublishedAt: String(new Date().getTime()),
+            status: 'published',
           };
         };
 
-        let unpublishRealm = async (_publishedRealmURL: string) => {
+        let unpublishRealm = async (publishedRealmURL: string) => {
           await unpublishDeferred.promise;
-          return { success: true };
+          return {
+            sourceRealmURL: null,
+            publishedRealmURL,
+            lastPublishedAt: null,
+          };
         };
 
         getService('realm-server').publishRealm = publishRealm;
         getService('realm-server').unpublishRealm = unpublishRealm;
+        // realm.publish polls readiness after the 202; these tests drive
+        // publish timing via publishDeferred, so report ready instantly.
+        getService('realm-server').waitForRealmReady = async () => {};
+        // The publish modal asks the server for the unlisted-link slug on open;
+        // default it so the unlisted card renders a URL (not a stuck "Generating
+        // link…") in tests that don't exercise it. Tests that do use
+        // `stubUnlistedPath` to control the slug.
+        getService('realm-server').allocateUnlistedPath = async (
+          sourceRealmURL: string,
+        ) => ({ sourceRealmURL, slug: 'defaultunlistedab' });
       });
 
       test('can publish realm', async function (assert) {
@@ -634,7 +874,9 @@ module('Acceptance | host submode', function (hooks) {
         assert.dom('.publishing-realm-popover').exists();
         assert
           .dom('.publishing-realm-popover')
-          .containsText(`Publishing to: https://testuser.localhost:4201/test/`);
+          .containsText(
+            `Publishing to: https://testuser.${publishedSpaceHost}/test/`,
+          );
         assert.dom('.publishing-realm-popover').exists();
         assert.dom('.loading-icon').exists();
 
@@ -667,8 +909,106 @@ module('Acceptance | host submode', function (hooks) {
           .dom(
             '[data-test-publish-realm-modal] [data-test-open-boxel-space-button]',
           )
-          .hasAttribute('href', 'https://testuser.localhost:4201/test/')
+          .hasAttribute('href', `https://testuser.${publishedSpaceHost}/test/`)
           .hasAttribute('target', '_blank');
+      });
+
+      // Indexing and prerendering a realm take minutes, and a bare spinner
+      // can't tell slow progress from a hang. The popover is where a publish in
+      // flight is inspected, so it has to name the pass and count through it.
+      test('the publishing popover reports indexing and rendering progress', async function (assert) {
+        let readyDeferred = new Deferred<void>();
+        let reportProgress: ((progress: PublishProgress) => void) | undefined;
+        getService('realm-server').waitForRealmReady = async (_url, opts) => {
+          reportProgress = opts?.onProgress;
+          await readyDeferred.promise;
+        };
+        // The publish itself is accepted immediately here; the wait under test
+        // is the indexing that follows the 202.
+        publishDeferred.fulfill();
+
+        await visitOperatorMode({
+          submode: 'host',
+          trail: [`${testRealmURL}Person/1.json`],
+        });
+
+        await click('[data-test-publish-realm-button]');
+        await click('[data-test-default-domain-checkbox]');
+        await click('[data-test-publish-button]');
+
+        await waitFor('[data-test-publish-realm-button].publishing');
+
+        // The modal stays open over the publish, so it reports the wait too.
+        assert
+          .dom('[data-test-publish-progress-status]')
+          .hasText('Starting…', 'the modal names a pass right away');
+        assert
+          .dom(
+            '[data-test-publish-progress-status] [data-test-boxel-progress-bar]',
+          )
+          .doesNotExist('no bar until the pass reports a total');
+
+        await click('[data-test-publish-realm-button]');
+        await waitFor('.publishing-realm-popover');
+
+        assert
+          .dom('[data-test-publish-progress-phase]')
+          .hasText('Starting', 'names a pass before any reading arrives');
+        assert
+          .dom('[data-test-publish-progress-counts]')
+          .doesNotExist('no counts until the pass reports a total');
+
+        reportProgress!({
+          phase: 'index',
+          filesCompleted: 42,
+          totalFiles: 270,
+        });
+        await settled();
+
+        assert.dom('[data-test-publish-progress-phase]').hasText('Indexing');
+        assert
+          .dom('[data-test-publish-progress-counts]')
+          .hasText('42 of 270 files');
+        assert
+          .dom('[data-test-publish-progress-status]')
+          .hasText('Indexing 42 of 270 files…');
+        // Both surfaces draw a determinate bar once the pass reports a total.
+        for (let scope of [
+          '[data-test-publish-progress-status]',
+          '.publishing-realm-popover',
+        ]) {
+          assert
+            .dom(`${scope} [data-test-boxel-progress-bar]`)
+            .hasAttribute('aria-valuenow', '42');
+          assert
+            .dom(`${scope} [data-test-boxel-progress-bar]`)
+            .hasAttribute('aria-valuemax', '270');
+        }
+
+        reportProgress!({
+          phase: 'render',
+          filesCompleted: 3,
+          totalFiles: 270,
+        });
+        await settled();
+
+        assert
+          .dom('[data-test-publish-progress-phase]')
+          .hasText('Rendering', 'follows the publish into its second pass');
+        assert
+          .dom('[data-test-publish-progress-counts]')
+          .hasText('3 of 270 files');
+
+        readyDeferred.fulfill();
+        await waitUntil(
+          () =>
+            !document.querySelector(
+              '[data-test-publish-realm-button].publishing',
+            ),
+        );
+        assert
+          .dom('.publishing-realm-popover')
+          .doesNotExist('the progress display goes away with the publish');
       });
 
       test('preselects previously published domains on refresh', async function (assert) {
@@ -678,15 +1018,15 @@ module('Acceptance | host submode', function (hooks) {
 
         realmServer.fetchBoxelClaimedDomain = async () => ({
           id: 'claimed-domain-1',
-          hostname: 'custom-site-name.localhost:4201',
+          hostname: `custom-site-name.${publishedSpaceHost}`,
           subdomain: 'custom-site-name',
           sourceRealmURL: testRealmURL,
         });
 
         let restoreRealmInfo = withUpdatedTestRealmInfo({
           lastPublishedAt: {
-            'https://testuser.localhost:4201/test/': String(now),
-            'https://custom-site-name.localhost:4201/': String(now),
+            [`https://testuser.${publishedSpaceHost}/test/`]: String(now),
+            [`https://custom-site-name.${publishedSpaceHost}/`]: String(now),
           },
         });
 
@@ -728,10 +1068,188 @@ module('Acceptance | host submode', function (hooks) {
         assert.dom('[data-test-publish-button]').isDisabled();
       });
 
+      test('can publish an unlisted link', async function (assert) {
+        // The server owns the random slug; the modal just renders what the
+        // `_unlisted-realm-path` endpoint returns.
+        let restoreUnlisted = stubUnlistedPath('k7f3qz9pbcdmnpqr');
+        let unlistedUrl = `https://testuser.${publishedSpaceHost}/k7f3qz9pbcdmnpqr/`;
+        try {
+          await visitOperatorMode({
+            submode: 'host',
+            trail: [`${testRealmURL}Person/1.json`],
+          });
+
+          await click('[data-test-publish-realm-button]');
+          await waitFor('[data-test-publish-realm-modal]');
+          await waitFor('[data-test-unlisted-link-url]');
+
+          // The unlisted link is the user's own space subdomain with the
+          // server-issued slug as the path, not the realm name.
+          assert.dom('[data-test-unlisted-link-url]').hasText(unlistedUrl);
+
+          assert.dom('[data-test-unlisted-link-checkbox]').isNotChecked();
+          await click('[data-test-unlisted-link-checkbox]');
+          assert.dom('[data-test-unlisted-link-checkbox]').isChecked();
+          assert.dom('[data-test-publish-button]').isNotDisabled();
+
+          await click('[data-test-publish-button]');
+          publishDeferred.fulfill();
+          await waitUntil(() => {
+            return !document.querySelector(
+              '[data-test-publish-realm-button].publishing',
+            );
+          });
+
+          await click('[data-test-publish-realm-button]');
+          assert
+            .dom(
+              '[data-test-publish-realm-modal] [data-test-open-unlisted-link-button]',
+            )
+            .hasAttribute('href', unlistedUrl)
+            .hasAttribute('target', '_blank');
+        } finally {
+          restoreUnlisted();
+        }
+      });
+
+      test('unlisted link checkbox can be checked and unchecked', async function (assert) {
+        let restoreUnlisted = stubUnlistedPath('k7f3qz9pbcdmnpqr');
+        try {
+          await visitOperatorMode({
+            submode: 'host',
+            trail: [`${testRealmURL}Person/1.json`],
+          });
+
+          await click('[data-test-publish-realm-button]');
+          await waitFor('[data-test-unlisted-link-url]');
+
+          assert.dom('[data-test-unlisted-link-checkbox]').isNotChecked();
+          assert.dom('[data-test-publish-button]').isDisabled();
+
+          await click('[data-test-unlisted-link-checkbox]');
+          assert.dom('[data-test-unlisted-link-checkbox]').isChecked();
+          assert.dom('[data-test-publish-button]').isNotDisabled();
+
+          await click('[data-test-unlisted-link-checkbox]');
+          assert.dom('[data-test-unlisted-link-checkbox]').isNotChecked();
+          assert.dom('[data-test-publish-button]').isDisabled();
+        } finally {
+          restoreUnlisted();
+        }
+      });
+
+      test('can regenerate the unlisted link before publishing', async function (assert) {
+        let restoreUnlisted = stubUnlistedPath([
+          'firstslug00000000',
+          'secondslug0000000',
+        ]);
+        try {
+          await visitOperatorMode({
+            submode: 'host',
+            trail: [`${testRealmURL}Person/1.json`],
+          });
+
+          await click('[data-test-publish-realm-button]');
+          await waitFor('[data-test-unlisted-link-url]');
+
+          assert
+            .dom('[data-test-unlisted-link-url]')
+            .hasText(
+              `https://testuser.${publishedSpaceHost}/firstslug00000000/`,
+            );
+
+          await click('[data-test-regenerate-unlisted-link-button]');
+
+          assert
+            .dom('[data-test-unlisted-link-url]')
+            .hasText(
+              `https://testuser.${publishedSpaceHost}/secondslug0000000/`,
+            );
+        } finally {
+          restoreUnlisted();
+        }
+      });
+
+      test('shows an error with retry when loading the unlisted link fails', async function (assert) {
+        let realmServer = getService('realm-server') as any;
+        let original = realmServer.allocateUnlistedPath;
+        let shouldFail = true;
+        realmServer.allocateUnlistedPath = async (sourceRealmURL: string) => {
+          if (shouldFail) {
+            throw new Error('allocate failed');
+          }
+          return { sourceRealmURL, slug: 'k7f3qz9pbcdmnpqr' };
+        };
+
+        try {
+          await visitOperatorMode({
+            submode: 'host',
+            trail: [`${testRealmURL}Person/1.json`],
+          });
+
+          await click('[data-test-publish-realm-button]');
+          await waitFor('[data-test-unlisted-link-error]');
+
+          // Errored, not stuck pretending to still be loading.
+          assert.dom('[data-test-unlisted-link-loading]').doesNotExist();
+          assert.dom('[data-test-unlisted-link-checkbox]').isDisabled();
+          assert.dom('[data-test-retry-unlisted-link-button]').exists();
+
+          // Retry recovers once the server responds.
+          shouldFail = false;
+          await click('[data-test-retry-unlisted-link-button]');
+          await waitFor('[data-test-unlisted-link-url]');
+
+          assert.dom('[data-test-unlisted-link-error]').doesNotExist();
+          assert
+            .dom('[data-test-unlisted-link-url]')
+            .hasText(
+              `https://testuser.${publishedSpaceHost}/k7f3qz9pbcdmnpqr/`,
+            );
+          assert.dom('[data-test-unlisted-link-checkbox]').isNotChecked();
+          assert.dom('[data-test-unlisted-link-checkbox]').isNotDisabled();
+        } finally {
+          realmServer.allocateUnlistedPath = original;
+        }
+      });
+
+      test('preselects a previously published unlisted link on refresh', async function (assert) {
+        let now = Date.now();
+        let slug = 'k7f3qz9pbcdmnpqr';
+        let unlistedUrl = `https://testuser.${publishedSpaceHost}/${slug}/`;
+
+        // The server returns the realm's existing slug, so the modal shows the
+        // same URL that was previously published.
+        let restoreUnlisted = stubUnlistedPath(slug);
+        let restoreRealmInfo = withUpdatedTestRealmInfo({
+          lastPublishedAt: {
+            [unlistedUrl]: String(now),
+          },
+        });
+
+        try {
+          await visitOperatorMode({
+            submode: 'host',
+            trail: [`${testRealmURL}Person/1.json`],
+          });
+
+          await click('[data-test-publish-realm-button]');
+          await waitFor('[data-test-publish-realm-modal]');
+          await waitFor('[data-test-unlisted-link-url]');
+
+          assert.dom('[data-test-unlisted-link-url]').hasText(unlistedUrl);
+          assert.dom('[data-test-unlisted-link-checkbox]').isChecked();
+          assert.dom('[data-test-publish-button]').isNotDisabled();
+        } finally {
+          restoreRealmInfo();
+          restoreUnlisted();
+        }
+      });
+
       test('can unpublish realm', async function (assert) {
         let restoreRealmInfo = withUpdatedTestRealmInfo({
           lastPublishedAt: {
-            ['https://testuser.localhost:4201/test/']: (
+            [`https://testuser.${publishedSpaceHost}/test/`]: (
               new Date().getTime() -
               3 * 24 * 60 * 60 * 1000
             ).toString(),
@@ -851,7 +1369,7 @@ module('Acceptance | host submode', function (hooks) {
         assert
           .dom('[data-test-custom-subdomain-details]')
           .includesText(
-            'https://my-boxel-site.localhost:4201/ Not published yet',
+            `https://my-boxel-site.${publishedSpaceHost}/ Not published yet`,
           );
         assert.dom('[data-test-unclaim-custom-subdomain-button]').exists();
         assert.dom('[data-test-custom-subdomain-checkbox]').isChecked();
@@ -926,7 +1444,7 @@ module('Acceptance | host submode', function (hooks) {
         let now = Date.now();
         let restoreRealmInfo = withUpdatedTestRealmInfo({
           lastPublishedAt: {
-            'https://testuser.localhost:4201/test/': String(now),
+            [`https://testuser.${publishedSpaceHost}/test/`]: String(now),
             'https://another-domain.com/realm/': String(now - 1000),
           },
         });
@@ -942,7 +1460,7 @@ module('Acceptance | host submode', function (hooks) {
             .dom('[data-test-open-site-button]')
             .hasAttribute(
               'href',
-              'https://testuser.localhost:4201/test/Person/1',
+              `https://testuser.${publishedSpaceHost}/test/Person/1`,
             )
             .hasAttribute('target', '_blank');
 
@@ -970,7 +1488,7 @@ module('Acceptance | host submode', function (hooks) {
 
           assert
             .dom(
-              '[data-test-published-realm-item="https://testuser.localhost:4201/test/Person/1"]',
+              `[data-test-published-realm-item="https://testuser.${publishedSpaceHost}/test/Person/1"]`,
             )
             .exists();
           assert
@@ -982,11 +1500,11 @@ module('Acceptance | host submode', function (hooks) {
           // Check that popover buttons have correct href attributes
           assert
             .dom(
-              '[data-test-published-realm-item="https://testuser.localhost:4201/test/Person/1"] [data-test-open-site-button]',
+              `[data-test-published-realm-item="https://testuser.${publishedSpaceHost}/test/Person/1"] [data-test-open-site-button]`,
             )
             .hasAttribute(
               'href',
-              'https://testuser.localhost:4201/test/Person/1',
+              `https://testuser.${publishedSpaceHost}/test/Person/1`,
             )
             .hasAttribute('target', '_blank');
 
@@ -1010,7 +1528,7 @@ module('Acceptance | host submode', function (hooks) {
 
         realmServer.fetchBoxelClaimedDomain = async () => ({
           id: 'claimed-domain-1',
-          hostname: 'custom-site-name.localhost:4201',
+          hostname: `custom-site-name.${publishedSpaceHost}`,
           subdomain: 'custom-site-name',
           sourceRealmURL: testRealmURL,
         });
@@ -1030,7 +1548,7 @@ module('Acceptance | host submode', function (hooks) {
           await waitFor('[data-test-publish-realm-modal]');
 
           let customDomainOption =
-            '[data-test-publish-realm-modal] .domain-option:nth-of-type(2)';
+            '[data-test-publish-realm-modal] .domain-option:nth-of-type(3)';
           await waitFor(`${customDomainOption} .realm-icon`);
 
           assert
@@ -1039,7 +1557,7 @@ module('Acceptance | host submode', function (hooks) {
           assert
             .dom(`${customDomainOption} .domain-url`)
             .hasText(
-              'https://custom-site-name.localhost:4201/',
+              `https://custom-site-name.${publishedSpaceHost}/`,
               'shows claimed custom site URL',
             );
           assert
@@ -1070,7 +1588,7 @@ module('Acceptance | host submode', function (hooks) {
           assert
             .dom(`${customDomainOption} .domain-url`)
             .hasText(
-              'https://custom-site-name.localhost:4201/',
+              `https://custom-site-name.${publishedSpaceHost}/`,
               'displays placeholder custom site URL after unclaim',
             );
           assert
@@ -1087,7 +1605,7 @@ module('Acceptance | host submode', function (hooks) {
         let originalFetchClaimed = realmServer.fetchBoxelClaimedDomain;
         realmServer.fetchBoxelClaimedDomain = async () => ({
           id: 'claimed-domain-1',
-          hostname: 'custom-site-name.localhost:4201',
+          hostname: `custom-site-name.${publishedSpaceHost}`,
           subdomain: 'custom-site-name',
           sourceRealmURL: testRealmURL,
         });
@@ -1115,7 +1633,7 @@ module('Acceptance | host submode', function (hooks) {
 
         realmServer.fetchBoxelClaimedDomain = async () => ({
           id: 'claimed-domain-1',
-          hostname: 'custom-site-name.localhost:4201',
+          hostname: `custom-site-name.${publishedSpaceHost}`,
           subdomain: 'custom-site-name',
           sourceRealmURL: testRealmURL,
         });
@@ -1162,7 +1680,7 @@ module('Acceptance | host submode', function (hooks) {
         await click('[data-test-publish-realm-button]');
         assert.dom('[data-test-publish-realm-modal]').exists();
 
-        let defaultUrl = 'https://testuser.localhost:4201/test/';
+        let defaultUrl = `https://testuser.${publishedSpaceHost}/test/`;
         assert
           .dom(`[data-test-domain-publish-error="${defaultUrl}"]`)
           .doesNotExist();
@@ -1193,13 +1711,13 @@ module('Acceptance | host submode', function (hooks) {
 
         realmServer.fetchBoxelClaimedDomain = async () => ({
           id: 'claimed-domain-1',
-          hostname: 'my-custom-site.localhost:4201',
+          hostname: `my-custom-site.${publishedSpaceHost}`,
           subdomain: 'my-custom-site',
           sourceRealmURL: testRealmURL,
         });
 
-        let defaultUrl = 'https://testuser.localhost:4201/test/';
-        let customUrl = 'https://my-custom-site.localhost:4201/';
+        let defaultUrl = `https://testuser.${publishedSpaceHost}/test/`;
+        let customUrl = `https://my-custom-site.${publishedSpaceHost}/`;
 
         // Mock publish to succeed for default, fail for custom
         realmServer.publishRealm = async (
@@ -1211,15 +1729,11 @@ module('Acceptance | host submode', function (hooks) {
             throw new Error('Custom domain validation failed');
           }
           return {
-            data: {
-              type: 'published_realm',
-              id: '1',
-              attributes: {
-                sourceRealmURL: _sourceURL,
-                publishedRealmURL: publishedURL,
-                lastPublishedAt: new Date().getTime(),
-              },
-            },
+            sourceRealmURL: _sourceURL,
+            publishedRealmURL: publishedURL,
+            publishedRealmId: '1',
+            lastPublishedAt: String(new Date().getTime()),
+            status: 'published',
           };
         };
 
@@ -1280,7 +1794,7 @@ module('Acceptance | host submode', function (hooks) {
 
         realmServer.fetchBoxelClaimedDomain = async () => ({
           id: 'claimed-domain-1',
-          hostname: 'my-custom-site.localhost:4201',
+          hostname: `my-custom-site.${publishedSpaceHost}`,
           subdomain: 'my-custom-site',
           sourceRealmURL: testRealmURL,
         });
@@ -1321,7 +1835,7 @@ module('Acceptance | host submode', function (hooks) {
             .containsText('Published');
           assert
             .dom(
-              '[data-test-publish-realm-modal] .domain-option:nth-of-type(2)',
+              '[data-test-publish-realm-modal] .domain-option:nth-of-type(3)',
             )
             .containsText('Published');
 
@@ -1335,7 +1849,10 @@ module('Acceptance | host submode', function (hooks) {
 
           assert
             .dom('[data-test-open-custom-subdomain-button]')
-            .hasAttribute('href', 'https://my-custom-site.localhost:4201/')
+            .hasAttribute(
+              'href',
+              `https://my-custom-site.${publishedSpaceHost}/`,
+            )
             .hasAttribute('target', '_blank');
         } finally {
           realmServer.fetchBoxelClaimedDomain = originalFetchClaimed;
@@ -1348,7 +1865,7 @@ module('Acceptance | host submode', function (hooks) {
 
         realmServer.fetchBoxelClaimedDomain = async () => ({
           id: 'claimed-domain-1',
-          hostname: 'my-custom-site.localhost:4201',
+          hostname: `my-custom-site.${publishedSpaceHost}`,
           subdomain: 'my-custom-site',
           sourceRealmURL: testRealmURL,
         });
@@ -1365,7 +1882,7 @@ module('Acceptance | host submode', function (hooks) {
           assert.dom('[data-test-custom-subdomain-checkbox]').isChecked();
           assert
             .dom(
-              '[data-test-publish-realm-modal] .domain-option:nth-of-type(2)',
+              '[data-test-publish-realm-modal] .domain-option:nth-of-type(3)',
             )
             .containsText('Not published yet');
 
@@ -1383,14 +1900,14 @@ module('Acceptance | host submode', function (hooks) {
 
         realmServer.fetchBoxelClaimedDomain = async () => ({
           id: 'claimed-domain-1',
-          hostname: 'my-custom-site.localhost:4201',
+          hostname: `my-custom-site.${publishedSpaceHost}`,
           subdomain: 'my-custom-site',
           sourceRealmURL: testRealmURL,
         });
 
         let restoreRealmInfo = withUpdatedTestRealmInfo({
           lastPublishedAt: {
-            ['https://my-custom-site.localhost:4201/']: (
+            [`https://my-custom-site.${publishedSpaceHost}/`]: (
               new Date().getTime() -
               2 * 24 * 60 * 60 * 1000
             ).toString(),
@@ -1409,7 +1926,7 @@ module('Acceptance | host submode', function (hooks) {
           // Custom subdomain should show as published
           assert
             .dom(
-              '[data-test-publish-realm-modal] .domain-option:nth-of-type(2) .last-published-at',
+              '[data-test-publish-realm-modal] .domain-option:nth-of-type(3) .last-published-at',
             )
             .containsText('Published 2 days ago');
 
@@ -1431,12 +1948,12 @@ module('Acceptance | host submode', function (hooks) {
           // Should show "Not published yet" after unpublishing
           assert
             .dom(
-              '[data-test-publish-realm-modal] .domain-option:nth-of-type(2) .not-published-yet',
+              '[data-test-publish-realm-modal] .domain-option:nth-of-type(3) .not-published-yet',
             )
             .exists();
           assert
             .dom(
-              '[data-test-publish-realm-modal] .domain-option:nth-of-type(2)',
+              '[data-test-publish-realm-modal] .domain-option:nth-of-type(3)',
             )
             .containsText('Not published yet');
         } finally {

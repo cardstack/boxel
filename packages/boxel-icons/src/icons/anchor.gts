@@ -16,10 +16,10 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
     class='lucide lucide-anchor'
     viewBox='0 0 24 24'
     ...attributes
-  ><path d='M12 22V8M5 12H2a10 10 0 0 0 20 0h-3' /><circle
+  ><path d='M12 6v16M19 13l2-1a9 9 0 0 1-18 0l2 1M9 11h6' /><circle
       cx='12'
-      cy='5'
-      r='3'
+      cy='4'
+      r='2'
     /></svg>
 </template>;
 

@@ -14,7 +14,7 @@
 import { convertJsonSchemaToZod } from 'zod-from-json-schema';
 import { z, type ZodObject, type ZodRawShape } from 'zod';
 
-import type { FactoryTool } from './factory-tool-builder';
+import type { FactoryTool } from './factory-tool-builder.ts';
 
 /**
  * Convert a JSON-Schema parameter block into a Zod raw shape.

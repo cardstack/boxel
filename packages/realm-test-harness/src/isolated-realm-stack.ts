@@ -29,6 +29,7 @@ import {
   DEFAULT_REALM_LOG_LEVELS,
   diagnosePortConflict,
   findAndHoldAvailablePort,
+  holdSpecificPort,
   FIXTURE_REALM_SERVER_URL_PLACEHOLDER,
   FULL_INDEX_REALM_STARTUP_TIMEOUT_MS,
   INCLUDE_SKILLS,
@@ -53,8 +54,8 @@ import {
   type RunningFactoryStack,
   type SpawnedProcess,
   type StartedCompatRealmProxy,
-} from './shared';
-import { startHarnessPrerenderServer } from './support-services';
+} from './shared.ts';
+import { startHarnessPrerenderServer } from './support-services.ts';
 
 const { copySync, ensureDirSync } = fsExtra;
 
@@ -145,21 +146,213 @@ function describeCompatProxyError(error: unknown): string {
   return parts.join(' <- ');
 }
 
-async function startCompatRealmProxy({
+// Snapshot the upstream realm-server's state for a compat-proxy give-up
+// 502 body. Liveness comes straight off the child handle's
+// exitCode/signalCode; `recordedExit` is what the harness's own exit
+// listener saw (covers the clean SIGTERM/SIGINT teardown the listener
+// stays quiet about). Tails the buffered output so the body stays bounded
+// when it rides out in the prerender's captured render error.
+function describeRealmServerHealth(
+  realmServer: { exitCode: number | null; signalCode: NodeJS.Signals | null },
+  recordedExit: { code: number | null; signal: string | null } | null,
+  getServerLogs: () => string,
+): string {
+  let alive = realmServer.exitCode === null && realmServer.signalCode === null;
+  let state = alive
+    ? 'alive but not answering (process up, port refused/unresponsive)'
+    : `exited (exitCode=${realmServer.exitCode ?? recordedExit?.code ?? 'null'}, signal=${
+        realmServer.signalCode ?? recordedExit?.signal ?? 'null'
+      })`;
+  let logs = getServerLogs();
+  let tail = logs ? tailChars(logs, 4000) : '<no buffered output>';
+  return `upstream realm-server health: ${state}\nupstream realm-server recent output:\n${tail}`;
+}
+
+// Keep only the last `max` characters, trimmed to a line boundary so the
+// snapshot doesn't start mid-line.
+function tailChars(text: string, max: number): string {
+  if (text.length <= max) {
+    return text;
+  }
+  let tail = text.slice(text.length - max);
+  let newline = tail.indexOf('\n');
+  return `…${newline >= 0 ? tail.slice(newline + 1) : tail}`;
+}
+
+// Connection-phase upstream failure codes worth retrying. The
+// realm-server this proxy fronts is torn down and restarted on a stable
+// port between tests, so a render's module fetch can land in the brief
+// window where the port has no listener (ECONNREFUSED) or isn't
+// resolvable yet. These errors happen before any request bytes reach the
+// server, so retrying is side-effect-free for every HTTP method.
+const RETRYABLE_CONNECT_CODES = new Set([
+  'ECONNREFUSED',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+]);
+// A reset or broken pipe can surface after the request was already
+// written, so only retry these for methods with no server-side effect.
+const RETRYABLE_IDEMPOTENT_CODES = new Set(['ECONNRESET', 'EPIPE']);
+const IDEMPOTENT_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+// ~2.1s total across the retries — long enough to ride out a realm-server
+// restart's bind gap, short enough not to stall an in-flight render.
+const UPSTREAM_RETRY_BACKOFF_MS = [50, 150, 300, 600, 1000];
+
+function connectErrorCode(error: unknown): string | undefined {
+  let current: unknown = error;
+  while (current instanceof Error) {
+    let code = (current as { code?: unknown }).code;
+    if (typeof code === 'string') {
+      return code;
+    }
+    current = (current as { cause?: unknown }).cause;
+  }
+  return undefined;
+}
+
+function isRetryableUpstreamError(error: unknown, method: string): boolean {
+  let code = connectErrorCode(error);
+  if (!code) {
+    return false;
+  }
+  if (RETRYABLE_CONNECT_CODES.has(code)) {
+    return true;
+  }
+  return IDEMPOTENT_METHODS.has(method) && RETRYABLE_IDEMPOTENT_CODES.has(code);
+}
+
+// Retries connection-phase failures with a bounded backoff before letting
+// the error propagate to the proxy's 502 handler. On give-up it annotates
+// the error with the attempt count and elapsed time so the 502 body can
+// report them — the realm child's logs are buffered out of CI output,
+// while the 502 body surfaces in the prerender's captured render error.
+async function fetchUpstreamWithRetry(
+  upstreamURL: URL,
+  init: RequestInit,
+  method: string,
+): Promise<Response> {
+  let signal = init.signal ?? undefined;
+  let startedAt = Date.now();
+  let attempt = 0;
+  for (;;) {
+    try {
+      return await fetch(upstreamURL, init);
+    } catch (error) {
+      // Once the proxy is stopping its abort signal fires; never retry then.
+      // The retry loop is what keeps the proxy's connections alive against a
+      // torn-down upstream, blocking `server.close()` and the realm stack's
+      // teardown — so a shutdown must short-circuit it immediately.
+      let canRetry =
+        !signal?.aborted &&
+        attempt < UPSTREAM_RETRY_BACKOFF_MS.length &&
+        isRetryableUpstreamError(error, method);
+      if (!canRetry) {
+        if (error instanceof Error) {
+          let annotated = error as Error & {
+            compatProxyAttempts?: number;
+            compatProxyElapsedMs?: number;
+          };
+          annotated.compatProxyAttempts = attempt + 1;
+          annotated.compatProxyElapsedMs = Date.now() - startedAt;
+        }
+        throw error;
+      }
+      let delay = UPSTREAM_RETRY_BACKOFF_MS[attempt];
+      realmLog.info(
+        `startCompatRealmProxy: retrying upstream fetch to ${upstreamURL.href} ` +
+          `(attempt ${attempt + 1}, code=${connectErrorCode(error)}) after ${delay}ms`,
+      );
+      attempt++;
+      // Abortable backoff: a shutdown mid-sleep wakes immediately so the
+      // next iteration sees the aborted signal and bails.
+      await new Promise<void>((resolve) => {
+        let t = setTimeout(resolve, delay);
+        signal?.addEventListener(
+          'abort',
+          () => {
+            clearTimeout(t);
+            resolve();
+          },
+          { once: true },
+        );
+      });
+    }
+  }
+}
+
+export async function startCompatRealmProxy({
   listenPort,
 }: {
   listenPort: number;
 }): Promise<StartedCompatRealmProxy> {
   realmLog.debug(`startCompatRealmProxy: requested listenPort=${listenPort}`);
   let targetPort: number | undefined;
+  // Notifier for `clearTargetPort()` → `setTargetPort()` round-trips. While
+  // `targetPort` is unset, incoming requests `await` this promise instead
+  // of 502-ing against a non-existent upstream. Recreated on each
+  // `clearTargetPort` call so the next `setTargetPort` can resolve a
+  // fresh set of waiters.
+  let targetReady: Promise<void> = Promise.resolve();
+  let resolveTargetReady: (() => void) | undefined;
+  // Cap how long a single request will block waiting for a new target.
+  // 30s is well under Playwright's 300s test timeout and the 240s
+  // metadata-file wait in fixtures.ts.
+  const PROXY_TARGET_WAIT_TIMEOUT_MS = 30_000;
+  // Set alongside the target port: returns a one-shot snapshot of the
+  // upstream realm-server child's liveness and recent buffered output. The
+  // child's stdout/stderr are otherwise only flushed to CI on an
+  // unexpected exit, so when the upstream stops answering while the proxy
+  // is up (the ECONNREFUSED-mid-render flake) the give-up 502 body is the
+  // only place that state reaches CI — it rides out in the prerender's
+  // captured render error.
+  let describeUpstreamHealth: (() => string) | undefined;
+  // Flipped by `stop()`. The signal aborts in-flight upstream fetches (and
+  // their retry backoff); the flag refuses new requests. Together they let
+  // `server.close()` resolve promptly instead of waiting on retry loops
+  // against a torn-down upstream — the thing that otherwise wedges realm
+  // stack teardown and stalls the next test's bring-up.
+  let stopping = false;
+  let stopAbort = new AbortController();
   let actualListenPort = listenPort;
   let server = createServer(
     async (req: IncomingMessage, res: ServerResponse) => {
-      if (targetPort == null) {
+      if (stopping) {
         res.statusCode = 503;
         res.setHeader('content-type', 'text/plain; charset=utf-8');
-        res.end('software-factory compat proxy target is not ready');
+        res.end('software-factory compat proxy stopping');
         return;
+      }
+      if (targetPort == null) {
+        // Per-test realm-server restart in progress. Block briefly so the
+        // prerender's standby refill doesn't pin a broken page-load state
+        // for 90s waiting for `#standby-ready`. Cap with both an explicit
+        // timeout and the proxy's stopAbort signal so a hung handoff
+        // still surfaces a 503 (not an indefinite wait).
+        let timedOut = false;
+        let waitTimer: NodeJS.Timeout | undefined;
+        try {
+          await Promise.race([
+            targetReady,
+            new Promise<void>((resolveTimeout) => {
+              waitTimer = setTimeout(() => {
+                timedOut = true;
+                resolveTimeout();
+              }, PROXY_TARGET_WAIT_TIMEOUT_MS);
+            }),
+          ]);
+        } finally {
+          // Clear the timer whenever `targetReady` wins the race — an
+          // un-cleared 30s timer keeps the event loop (and the Playwright
+          // worker) alive past teardown. Harmless when the timer is the
+          // one that fired.
+          clearTimeout(waitTimer);
+        }
+        if (stopping || timedOut || targetPort == null) {
+          res.statusCode = 503;
+          res.setHeader('content-type', 'text/plain; charset=utf-8');
+          res.end('software-factory compat proxy target is not ready');
+          return;
+        }
       }
       let incomingURL = new URL(
         req.url ?? '/',
@@ -180,12 +373,17 @@ async function startCompatRealmProxy({
           ),
         ) as Record<string, string>;
         headers['x-boxel-forwarded-url'] = incomingURL.href;
-        let response = await fetch(upstreamURL, {
-          method: req.method,
-          headers,
-          body: body as BodyInit | undefined,
-          redirect: 'manual',
-        });
+        let response = await fetchUpstreamWithRetry(
+          upstreamURL,
+          {
+            method: req.method,
+            headers,
+            body: body as BodyInit | undefined,
+            redirect: 'manual',
+            signal: stopAbort.signal,
+          },
+          req.method ?? 'GET',
+        );
 
         let responseHeaders = new Headers(response.headers);
         let location = responseHeaders.get('location');
@@ -211,19 +409,47 @@ async function startCompatRealmProxy({
         res.end(Buffer.from(await response.arrayBuffer()));
       } catch (error) {
         let description = describeCompatProxyError(error);
+        let annotated = error as {
+          compatProxyAttempts?: number;
+          compatProxyElapsedMs?: number;
+        };
+        let suffix =
+          annotated?.compatProxyAttempts != null
+            ? ` after ${annotated.compatProxyAttempts} attempt(s) over ${annotated.compatProxyElapsedMs}ms`
+            : '';
+        let health = describeUpstreamHealth?.() ?? '';
         realmLog.warn(
-          `startCompatRealmProxy: upstream fetch failed for ${upstreamURL.href}: ${description}`,
+          `startCompatRealmProxy: upstream fetch failed for ${upstreamURL.href}${suffix}: ${description}`,
         );
         res.statusCode = 502;
         res.setHeader('content-type', 'text/plain; charset=utf-8');
         res.end(
-          `software-factory compat proxy failed for ${upstreamURL.href}: ${description}`,
+          `software-factory compat proxy failed for ${upstreamURL.href}${suffix}: ${description}` +
+            (health ? `\n${health}` : ''),
         );
       }
     },
   );
   await new Promise<void>((resolve, reject) => {
-    server.once('error', reject);
+    server.once('error', (error: NodeJS.ErrnoException) => {
+      // The public port is supposed to be held from the moment it was
+      // allocated until just before this bind. If it still collides, probe
+      // the contested port so the failed-job log names which interface/pid
+      // holds it instead of failing with an opaque EADDRINUSE.
+      if (error.code === 'EADDRINUSE') {
+        diagnosePortConflict(listenPort)
+          .catch(() => '')
+          .then((diagnostic) => {
+            realmLog.warn(
+              `startCompatRealmProxy: EADDRINUSE binding 127.0.0.1:${listenPort}` +
+                (diagnostic ? `\n${diagnostic}` : ''),
+            );
+            reject(error);
+          });
+        return;
+      }
+      reject(error);
+    });
     server.listen(listenPort, '127.0.0.1', () => resolve());
   });
   let address = server.address();
@@ -234,16 +460,44 @@ async function startCompatRealmProxy({
   realmLog.debug(`startCompatRealmProxy: listening on ${actualListenPort}`);
   return {
     listenPort: actualListenPort,
-    setTargetPort(nextTargetPort: number) {
+    setTargetPort(nextTargetPort: number, nextDescribeUpstreamHealth) {
       targetPort = nextTargetPort;
+      describeUpstreamHealth = nextDescribeUpstreamHealth;
+      // Release any requests that blocked while the previous target was
+      // cleared (per-test realm-server restart window).
+      resolveTargetReady?.();
+      resolveTargetReady = undefined;
       realmLog.debug(
         `startCompatRealmProxy: ${actualListenPort} -> ${nextTargetPort} ready`,
+      );
+    },
+    clearTargetPort() {
+      if (targetPort == null && resolveTargetReady != null) {
+        return; // already in "transitioning" state
+      }
+      targetPort = undefined;
+      targetReady = new Promise<void>((resolveReady) => {
+        resolveTargetReady = resolveReady;
+      });
+      realmLog.debug(
+        `startCompatRealmProxy: ${actualListenPort} -> (transitioning, awaiting next setTargetPort)`,
       );
     },
     async stop() {
       realmLog.debug(
         `startCompatRealmProxy: ${actualListenPort} -> ${targetPort ?? 'unset'} stopping`,
       );
+      // Refuse new requests, abort in-flight upstream fetches + their retry
+      // backoff, and force-close any keep-alive sockets so `server.close()`
+      // can't hang on a request looping against a dead upstream.
+      stopping = true;
+      stopAbort.abort();
+      // Release any requests blocked in `targetReady` so they observe
+      // `stopping=true` and short-circuit to 503 instead of hanging until
+      // PROXY_TARGET_WAIT_TIMEOUT_MS.
+      resolveTargetReady?.();
+      resolveTargetReady = undefined;
+      (server as { closeAllConnections?: () => void }).closeAllConnections?.();
       await new Promise<void>((resolve, reject) => {
         server.close((error) => {
           if (error) {
@@ -335,6 +589,8 @@ export async function startIsolatedRealmStack({
   workerManagerPort: explicitWorkerManagerPort,
   realmServerPort: explicitRealmServerPort,
   prerenderURL: explicitPrerenderURL,
+  noCompatProxy,
+  publicPortReservation: explicitPublicPortReservation,
 }: {
   realms: RealmConfig[];
   realmServerURL: URL;
@@ -356,6 +612,22 @@ export async function startIsolatedRealmStack({
    *  starting a new one. The Playwright harness keeps prerender alive for
    *  the lifetime of a testWorker and passes its URL here. */
   prerenderURL?: string;
+  /** When true, skip creating an in-stack compat proxy. The caller owns
+   *  the proxy out-of-band (e.g., the Playwright worker keeps one alive
+   *  for the whole testWorker's lifetime so the stable
+   *  compat-realm-server port has no listener gap between tests, and
+   *  calls `setTargetPort` on it itself once the realm-server binds).
+   *  The returned stack's `compatProxy` is `undefined` in that case. */
+  noCompatProxy?: boolean;
+  /** Holder for the public (compat-proxy) port, freshly allocated and held
+   *  upstream by `resolveFactoryRealmServerURL` and threaded down through
+   *  the template build. We adopt it (so the sibling worker-manager /
+   *  realm-server allocations below can't steal the number) and release it
+   *  immediately before the compat proxy binds. Omitted whenever the public
+   *  port wasn't freshly allocated with a holder — a reused context, a
+   *  caller-supplied `realmServerURL`, or an explicit `compatRealmServerPort`
+   *  — in which case we hold the specific number ourselves. */
+  publicPortReservation?: PortReservation;
 }): Promise<RunningFactoryStack> {
   if (realms.length === 0) {
     throw new Error('startIsolatedRealmStack requires at least one realm');
@@ -364,28 +636,59 @@ export async function startIsolatedRealmStack({
   let workerManagerMetadataFile = join(rootDir, 'worker-manager.runtime.json');
   let realmServerMetadataFile = join(rootDir, 'realm-server.runtime.json');
 
+  // Hold the public (compat-proxy) port BEFORE allocating the
+  // worker-manager / realm-server child ports below. Those allocations ask
+  // the OS for an ephemeral port-0, and the public port — chosen earlier in
+  // resolveFactoryRealmServerURL — is fair game for the allocator unless
+  // something keeps it bound. Without this hold a sibling allocation can be
+  // handed the public port number and bind it first, so the compat-proxy
+  // bind further down dies with EADDRINUSE. Adopt the caller's reservation
+  // when they freshly allocated and held it upstream; otherwise the port
+  // came from a reused context, so hold the specific number ourselves.
+  // Released right before the compat proxy binds it (mirrors the
+  // worker-manager release-before-spawn handoff). Skipped entirely under
+  // noCompatProxy, where the caller owns the proxy out-of-band.
+  let compatPortHold: PortReservation | undefined;
+  if (noCompatProxy) {
+    // We won't bind the public port here; release any caller-held holder so
+    // it doesn't leak until process exit.
+    await explicitPublicPortReservation?.release().catch(() => {});
+  } else if (explicitPublicPortReservation) {
+    compatPortHold = explicitPublicPortReservation;
+  } else {
+    compatPortHold = await holdSpecificPort(Number(realmServerURL.port));
+  }
+
   // Hold the worker-manager and realm-server ports across the (multi-second)
   // gap between allocation and actual child bind. Without the hold, sibling
   // findAvailablePort() calls inside this same process — for the prerender
   // server, host serve, etc — can be handed back the same port number by
   // the OS port-0 allocator, and the child process eventually races us and
   // dies with EADDRINUSE.
-  let workerManagerPortInfo = await resolvePortReservation(
-    explicitWorkerManagerPort,
-  );
+  let workerManagerPortInfo: ResolvedPortReservation;
+  try {
+    workerManagerPortInfo = await resolvePortReservation(
+      explicitWorkerManagerPort,
+    );
+  } catch (error) {
+    await compatPortHold?.release().catch(() => {});
+    throw error;
+  }
   let realmServerPortInfo: ResolvedPortReservation;
   try {
     realmServerPortInfo = await resolvePortReservation(explicitRealmServerPort);
   } catch (error) {
     await workerManagerPortInfo.releaseHolder();
+    await compatPortHold?.release().catch(() => {});
     throw error;
   }
   let actualWorkerManagerPort = workerManagerPortInfo.port;
   let actualRealmServerPort = realmServerPortInfo.port;
-  // From this point on, any thrown error must release both port holders so
+  // From this point on, any thrown error must release all port holders so
   // they don't leak until process exit. The releases are idempotent: the
-  // happy path releases each holder just before its respective child is
-  // spawned, and the cleanup below is a no-op for already-released holders.
+  // happy path releases each holder just before its respective child binds
+  // (or, for the public port, just before the compat proxy listens), and
+  // the cleanup below is a no-op for already-released holders.
   let releaseHoldersOnFailure = async () => {
     try {
       await workerManagerPortInfo.releaseHolder();
@@ -394,6 +697,11 @@ export async function startIsolatedRealmStack({
     }
     try {
       await realmServerPortInfo.releaseHolder();
+    } catch {
+      // best effort
+    }
+    try {
+      await compatPortHold?.release();
     } catch {
       // best effort
     }
@@ -449,9 +757,18 @@ export async function startIsolatedRealmStack({
         username,
       });
     }
-    let compatProxy = await startCompatRealmProxy({
-      listenPort: Number(realmServerURL.port),
-    });
+    let compatProxy: StartedCompatRealmProxy | undefined;
+    if (noCompatProxy) {
+      compatProxy = undefined;
+    } else {
+      // Release the holder the instant before the proxy binds the same
+      // port. Nothing else allocates a port between here and the bind, so
+      // the OS can't re-hand the number in this window.
+      await compatPortHold?.release();
+      compatProxy = await startCompatRealmProxy({
+        listenPort: Number(realmServerURL.port),
+      });
+    }
     // The software-factory Playwright harness can keep prerender alive for the
     // lifetime of a Playwright testWorker even though the realm stack itself is
     // recreated per test. When provided, reuse that long-lived prerender URL so
@@ -512,15 +829,18 @@ export async function startIsolatedRealmStack({
       LOW_CREDIT_THRESHOLD: '2000',
       LOG_LEVELS: DEFAULT_REALM_LOG_LEVELS,
       BOXEL_TRUST_FORWARDED_URL: 'true',
-      PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: `localhost:${compatProxy.listenPort}`,
-      PUBLISHED_REALM_BOXEL_SITE_DOMAIN: `localhost:${compatProxy.listenPort}`,
+      PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: `localhost:${
+        compatProxy?.listenPort ?? Number(realmServerURL.port)
+      }`,
+      PUBLISHED_REALM_BOXEL_SITE_DOMAIN: `localhost:${
+        compatProxy?.listenPort ?? Number(realmServerURL.port)
+      }`,
       TEST_HARNESS_WORKER_MANAGER_METADATA_FILE: workerManagerMetadataFile,
       TEST_HARNESS_REALM_SERVER_METADATA_FILE: realmServerMetadataFile,
     };
 
     let workerArgs = [
-      '--transpileOnly',
-      'worker-manager',
+      'worker-manager.ts',
       `--port=${actualWorkerManagerPort}`,
       `--matrixURL=${context.matrixURL}`,
       `--prerendererUrl=${prerenderURL}`,
@@ -572,7 +892,7 @@ export async function startIsolatedRealmStack({
       attempt++;
       // Release the worker-manager port holder right before the child binds.
       await workerManagerPortInfo.releaseHolder();
-      workerManager = spawn('ts-node', workerArgs, {
+      workerManager = spawn('node', workerArgs, {
         cwd: realmServerDir,
         env,
         stdio: managedProcessStdio,
@@ -641,8 +961,7 @@ export async function startIsolatedRealmStack({
     }
 
     let serverArgs = [
-      '--transpileOnly',
-      'main',
+      'main.ts',
       `--port=${actualRealmServerPort}`,
       `--serverURL=${realmServerURL.href}`,
       `--matrixURL=${context.matrixURL}`,
@@ -691,13 +1010,21 @@ export async function startIsolatedRealmStack({
 
     // Release the realm-server port holder right before the child binds.
     await realmServerPortInfo.releaseHolder();
-    let realmServer = spawn('ts-node', serverArgs, {
+    let realmServerSpawnedAt = Date.now();
+    let realmServer = spawn('node', serverArgs, {
       cwd: realmServerDir,
       env,
       stdio: managedProcessStdio,
     }) as SpawnedProcess;
     let getServerLogs = captureProcessLogs(realmServer);
+    // Record every exit — including the clean SIGTERM/SIGINT case the warn
+    // below intentionally stays quiet about — so the compat proxy's
+    // upstream-health probe can report whether a mid-render ECONNREFUSED
+    // was the realm-server dying vs. being alive-but-not-listening.
+    let realmServerExit: { code: number | null; signal: string | null } | null =
+      null;
     realmServer.on('exit', (code, signal) => {
+      realmServerExit = { code, signal };
       if (code === 0 || signal === 'SIGTERM' || signal === 'SIGINT') {
         return;
       }
@@ -714,7 +1041,22 @@ export async function startIsolatedRealmStack({
         label: 'realm server',
         process: realmServer,
       });
-      compatProxy.setTargetPort(realmServerRuntime.port);
+      // Time to bind: the realm-server only writes this metadata after it
+      // clears its `smokeTestHostApp` host-readiness wait and calls
+      // `server.listen`. A large value here means the port was refused for
+      // that whole window — the ECONNREFUSED-to-realm-server flake.
+      realmLog.info(
+        `realm server bound port ${realmServerRuntime.port} after ${
+          Date.now() - realmServerSpawnedAt
+        }ms`,
+      );
+      // When the caller owns the proxy externally (`noCompatProxy`), they
+      // call `setTargetPort` themselves after reading the realm-server
+      // port from the metadata file this child writes — so we skip it
+      // here. Otherwise (proxy lives in this stack), repoint it now.
+      compatProxy?.setTargetPort(realmServerRuntime.port, () =>
+        describeRealmServerHealth(realmServer, realmServerExit, getServerLogs),
+      );
       await Promise.race([
         waitForReady(
           realmServer,
@@ -734,14 +1076,21 @@ export async function startIsolatedRealmStack({
         ),
         createProcessExitPromise(workerManager, 'worker manager'),
       ]);
+      realmLog.info(
+        `realm server ready after ${Date.now() - realmServerSpawnedAt}ms total`,
+      );
 
       return {
+        // Undefined when the caller owns the proxy externally (see
+        // `noCompatProxy`); that proxy stays alive across this stack's
+        // teardown so the next stack can rebind the realm-server behind
+        // it without a listener gap on the stable compat port.
         compatProxy,
         prerender,
         realmServer,
         realmServerURL,
         ports: {
-          publicPort: compatProxy.listenPort,
+          publicPort: compatProxy?.listenPort ?? Number(realmServerURL.port),
           realmServerPort: realmServerRuntime.port,
           workerManagerPort: workerManagerRuntime.port,
         },

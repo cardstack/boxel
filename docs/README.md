@@ -17,8 +17,11 @@ The following are important concepts:
 - [Computed Fields](computed-fields.md): Computed fields work too! We can compute on the data that is already contained in a card to build more complex logic.
 - [Indexing](indexing.md): Indexing powers the re-rendering of cards when it's dependencies get updated.
 - [Realm](realm.md): Realms are storage for cards that have their own underlying permissions and indexer.
+- [Realm Resource Identifiers](realm-resource-identifiers.md): How cards, modules, and files are named — including the portable `@cardstack/base/` prefix form and how the VirtualNetwork resolves it.
 - [Search](search.md): Every Card is searchable within and across realms.
 
 ## Operations
 
+- [Realm-server health signals](realm-server-health-signals.md): which check answers which question, why an event-loop-gated failure is honest, and what to do when the loop saturates.
+- Liveness wedge threshold: set `REALM_LIVENESS_WEDGE_MS` (milliseconds) to control how long the realm-server's event loop may go without turning before `/_liveness` reports it wedged; default is 60000 (sized against measured stalls — see the doc), floor 5000. The endpoint is served only when `--livenessPort` is passed.
 - From-scratch indexing timeout: set `FROM_SCRATCH_JOB_TIMEOUT_SEC` (seconds) to control the from-scratch indexing job timeout and the queue worker cap; default is 3600.

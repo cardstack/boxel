@@ -62,16 +62,14 @@ For the full procedure — worktree setup, fast startup with `INDEX_CACHE`, serv
 
 - No tests
 
-### packages/boxel-ui/addon, packages/boxel-ui/test-app
+### packages/boxel-ui, packages/boxel-ui/docs-app
 
-- Addon functionality is tested via sibling test-app directory
-- `cd packages/boxel-ui/addon && pnpm start` to start a process that will watch files and automatically rebuild the addon
-- `cd packages/boxel-ui/test-app && pnpm start` to start a process that will watch files and automatically rebuild the test-app
-- Run all tests
-  `cd packages/boxel-ui/test-app && ember test --path dist`
-- To run a subset of the tests:
-  `ember test --path dist --filter "some text that appears in module name or test name"`  
-  Note that the filter is matched against the module name and test name, not the file name! Try to avoid using pipe characters in the filter, since they can confuse auto-approval tool use filters set up by the user.
+- Component integration/unit tests live in the addon itself (`packages/boxel-ui/tests`); docs-app has only an acceptance test and the boxel-ui type canary
+- `cd packages/boxel-ui && pnpm start` to serve the addon's dev/test environment (vite)
+- Run the addon test suite: `cd packages/boxel-ui && pnpm test`
+- To run a subset interactively: `cd packages/boxel-ui && pnpm start:test`, then use the QUnit filter UI (or `?filter=` in the URL)
+- `cd packages/boxel-ui/docs-app && pnpm start` to run the docs app
+- Run docs-app tests: `cd packages/boxel-ui/docs-app && ember test --path dist` (supports `--filter "text"`)
 
 ### packages/host
 
@@ -102,7 +100,7 @@ For the full procedure — worktree setup, fast startup with `INDEX_CACHE`, serv
 #### CSS Guidance
 
 - Use scalable units such as rem
-- Use CSS variables from packages/boxel-ui/addon/src/styles/variables.css
+- Use CSS variables from packages/boxel-ui/src/styles/variables.css
 
 #### Iterating on host tests with the Chrome MCP server
 
@@ -140,12 +138,12 @@ For the full procedure — worktree setup, fast startup with `INDEX_CACHE`, serv
   `TEST_MODULE=card-endpoints-test.ts pnpm test-module`
 - Run a list of modules:
   `TEST_MODULES=card-endpoints-test.ts|another-module-test.ts pnpm test`
-- Run only specific test *files* (skip parsing the other ~100):
+- Run only specific test _files_ (skip parsing the other ~100):
   `TEST_FILES=sanitize-head-html-test pnpm test`
   `TEST_FILES=realm-endpoints/invalidate-urls-test,server-endpoints/queue-status-test pnpm test`
   Comma-separated paths relative to `tests/`, with or without `./` prefix or `.ts` suffix.
   Use this — not `TEST_MODULES` — when measuring one file's wall time / peak RSS in isolation:
-  `TEST_MODULES` filters which modules *run*, but every file still gets parsed and required, so per-file deltas get masked by the all-files startup baseline.
+  `TEST_MODULES` filters which modules _run_, but every file still gets parsed and required, so per-file deltas get masked by the all-files startup baseline.
 - Measure per-file wall time + peak RSS (median across N runs):
   `./scripts/measure-test-file.sh sanitize-head-html-test [runs]`
   Wraps `TEST_FILES` + `/usr/bin/time -l` with a clean per-file signal. Re-preps test-pg between runs. Used for before/after PR baselines on CS-10009 fixture migrations.
@@ -173,16 +171,27 @@ For the full procedure — worktree setup, fast startup with `INDEX_CACHE`, serv
 
 - Always run `pnpm lint` in modified packages before committing
 
+### Pre-commit autofix hook
+
+A husky `pre-commit` hook runs `lint-staged`, which auto-fixes staged files
+(`eslint --fix` for `.js/.ts/.gjs/.gts`, `ember-template-lint --fix` for
+`.hbs`, `prettier --write` for other formats) and re-stages them. It does
+**not** block the commit: issues that can't be auto-fixed (type errors, unused
+vars, the `data-test-*` ban, etc.) are printed as a warning so you get early
+notice, but the commit still proceeds. CI lint remains the real gate, so still
+fix what the warning reports. Do **not** pass `git commit --no-verify` — that
+skips the autofix and is what lets trivial lint errors waste a CI run.
+
 ### boxel-cli commit prefixes
 
 PRs touching `packages/boxel-cli/**` must use a conventional-commit prefix in the **PR title** (not the commit message — squash isn't used; the on-`main` workflow reads the PR title via `gh api`). The PR-title check (`.github/workflows/boxel-cli-pr-title.yml`) enforces this.
 
-| Prefix | Bump level (per touched surface) |
-|---|---|
-| `feat!:` / `fix!:` / body `BREAKING CHANGE:` | major |
-| `feat:` | minor |
-| `fix:` / `perf:` / `refactor:` | patch |
-| `chore:` / `docs:` / `test:` / `build:` / `ci:` / `style:` | none |
+| Prefix                                                     | Bump level (per touched surface) |
+| ---------------------------------------------------------- | -------------------------------- |
+| `feat!:` / `fix!:` / body `BREAKING CHANGE:`               | major                            |
+| `feat:`                                                    | minor                            |
+| `fix:` / `perf:` / `refactor:`                             | patch                            |
+| `chore:` / `docs:` / `test:` / `build:` / `ci:` / `style:` | none                             |
 
 Scopes are allowed: `feat(profile): …`. Other monorepo packages are unaffected — this only applies when the PR's diff touches `packages/boxel-cli/**`.
 
@@ -195,7 +204,7 @@ Scopes are allowed: `feat(profile): …`. Other monorepo packages are unaffected
 
 ## `.gts` file gotcha: regex literals can break content-tag
 
-The `content-tag` preprocessor (used by glint and ember-eslint-parser to parse `.gts` files) has bugs in its JavaScript lexer that cause it to misparse certain regex literals. When this happens, it fails to recognize `<template>` tags later in the file, producing cascading parse errors. Two known triggers:
+The `content-tag` preprocessor (used by glint and ember-eslint-parser to parse `.gts` files) has bugs in its JavaScript lexer that cause it to misparse certain regex literals. When this happens, it fails to recognize `<template>` tags later in the file, producing cascading parse errors. Three known triggers:
 
 **1. Backticks inside regex literals** — content-tag mistakes them for template literal delimiters:
 
@@ -219,9 +228,21 @@ const HEADING_RE = /^\s*#{1,6}\s+/;
 lines.some((line) => !HEADING_RE.test(line));
 ```
 
+**3. Backtick-wrapped bracket token inside the `<template>` body** — a comment _inside_ the template (e.g. a `<style scoped>` CSS comment) that contains a backtick-wrapped selector like `` `[data-foo]` `` drops the template. The same text in a `//` comment _outside_ `<template>…</template>` is harmless; content-tag only runs its template-mode lexer between the tags.
+
+```hbs
+<template>
+  <style scoped>
+    {{! BROKEN: backtick-wrapped `[data-foo]` in a template-region comment }}{{! FIX: drop the backticks or the brackets, or move the note to a JS comment above the component }}
+  </style>
+</template>
+```
+
+Symptom differs from triggers 1–2: the template body is silently dropped, so type-check can still pass while ESLint reports phantom `no-unused-vars` on imports/consts the template references (e.g. `hash`, yielded consts). ESLint is the canary.
+
 ## Base realm imports
 
-- Only card definitions (files run through the card loader) can use static ESM imports from `https://cardstack.com/base/*`. Host-side modules must load the module at runtime via `loader.import(`${baseRealm.url}...`)`. Static value imports from the HTTPS specifier inside host code trigger build-time `webpackMissingModule` failures. Type imports are OK using static ESM syntax.
+- Only card definitions (files run through the card loader) can use static ESM imports from `@cardstack/base/*`. Host-side modules must load the module at runtime via `loader.import(`${baseRealm.url}...`)`. Static value imports from the HTTPS specifier inside host code trigger build-time `webpackMissingModule` failures. Type imports are OK using static ESM syntax.
 
 ## Linear Ticket Process (Reusable)
 
@@ -290,8 +311,24 @@ This end-to-end workflow can be used as a template for future tickets.
 
 ## Suggested PR body template
 
+A progressive-disclosure structure: orient the reviewer first, then point them at the load-bearing parts, then explain the decisions that aren't obvious from the diff.
+
+Scale the template to the PR. For small PRs (roughly 1-3 files, no tricky decisions), `## Background and Goal` alone is usually enough — omit the other sections rather than padding them. Add `## Where to start` and `## Key decisions and non-obvious mechanics` only when they earn their place: multiple files where reading order matters, or decisions a reviewer couldn't infer from the diff.
+
+```markdown
+## Background and Goal
+
+- 2-3 sentences on the context and what this PR accomplishes.
+
+## Where to start (omit for small PRs)
+
+- A short list of the areas to read first and why they matter — point reviewers at the load-bearing parts before the supporting changes.
+- Example: "Start with `Foo.bar` — that's the new orchestration entry. Then the refactored `Baz` to see how the new contract is consumed."
+
+## Key decisions and non-obvious mechanics (omit for small PRs)
+
+- Major decisions and the "why" behind them. Edge cases handled. Be succinct (3-5 bullets typical).
+- Don't restate what the diff shows; don't recap failed attempts that aren't relevant anymore.
 ```
-## Summary
-- <bullet 1>
-- <bullet 2>
-```
+
+Skip a test-plan section — CI shows test status. Skip tool-attribution footers — commit trailers handle that.

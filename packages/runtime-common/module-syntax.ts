@@ -12,30 +12,27 @@ import {
   type ClassDeclaration,
   type Reexport,
   isInternalReference,
-} from './schema-analysis-plugin';
-import type { Options as RemoveOptions } from './remove-field-plugin';
-import { removeFieldPlugin } from './remove-field-plugin';
+} from './schema-analysis-plugin.ts';
+import type { Options as RemoveOptions } from './remove-field-plugin.ts';
+import { removeFieldPlugin } from './remove-field-plugin.ts';
 import { ImportUtil } from 'babel-import-util';
 import camelCase from 'camelcase';
-import isEqual from 'lodash/isEqual';
+import { isEqual } from 'lodash-es';
 import * as ContentTag from 'content-tag';
 
 import {
-  baseRealm,
-  maybeRelativeReference,
-  trimExecutableExtension,
-  codeRefWithAbsoluteIdentifier,
   baseCardRef,
   baseFieldRef,
+  baseRRI,
+  codeRefWithAbsoluteIdentifier,
+  maybeRelativeReference,
+  trimExecutableExtension,
   type CodeRef,
   type RealmResourceIdentifier,
   type ResolvedCodeRef,
-} from './index';
-import {
-  cardIdToURL,
-  resolveCardReference,
-  rri,
-} from './card-reference-resolver';
+} from './index.ts';
+import { rri } from './realm-identifiers.ts';
+import type { VirtualNetwork } from './virtual-network.ts';
 //@ts-ignore unsure where these types live
 import decoratorsPlugin from '@babel/plugin-syntax-decorators';
 //@ts-ignore unsure where these types live
@@ -43,11 +40,11 @@ import classPropertiesPlugin from '@babel/plugin-syntax-class-properties';
 //@ts-ignore unsure where these types live
 import typescriptPlugin from '@babel/plugin-syntax-typescript';
 
-import { getBabelOptions } from './babel-options';
+import { getBabelOptions } from './babel-options.ts';
 
 import type { types as t } from '@babel/core';
 import type { NodePath } from '@babel/traverse';
-import type { FieldType } from 'https://cardstack.com/base/card-api';
+import type { FieldType } from '@cardstack/base/card-api';
 
 export type {
   PossibleCardOrFieldDeclaration,
@@ -64,9 +61,15 @@ export class ModuleSyntax {
   declare declarations: Declaration[];
   declare private ast: t.File;
   private url: URL;
+  private virtualNetwork: VirtualNetwork;
 
-  constructor(src: string, url: RealmResourceIdentifier | URL) {
-    let normalized = url instanceof URL ? url : cardIdToURL(url);
+  constructor(
+    src: string,
+    url: RealmResourceIdentifier | URL,
+    virtualNetwork: VirtualNetwork,
+  ) {
+    this.virtualNetwork = virtualNetwork;
+    let normalized = url instanceof URL ? url : virtualNetwork.toURL(url);
     this.url = new URL(trimExecutableExtension(rri(normalized.href)));
     this.analyze(src);
   }
@@ -153,6 +156,7 @@ export class ModuleSyntax {
       outgoingRealmURL,
       moduleURL: this.url,
       computedFieldFunctionSourceCode,
+      virtualNetwork: this.virtualNetwork,
     });
 
     let src = this.code();
@@ -321,11 +325,11 @@ export class ModuleSyntax {
     classRef: ClassReference,
   ): PossibleCardOrFieldDeclaration | undefined {
     if (classRef.type === 'external') {
-      if (
-        trimExecutableExtension(
-          rri(resolveCardReference(classRef.module, this.url)),
-        ) === this.url.href
-      ) {
+      let resolvedModule = this.virtualNetwork.resolveURL(
+        classRef.module,
+        this.url,
+      ).href;
+      if (trimExecutableExtension(rri(resolvedModule)) === this.url.href) {
         return this.possibleCardsOrFields.find(
           (c) => c.exportName === classRef.name,
         );
@@ -392,6 +396,7 @@ function makeNewField({
   outgoingRealmURL,
   moduleURL,
   computedFieldFunctionSourceCode,
+  virtualNetwork,
 }: {
   target: NodePath<t.Node>;
   fieldRef: ResolvedCodeRef;
@@ -404,49 +409,96 @@ function makeNewField({
   outgoingRealmURL: URL | undefined;
   moduleURL: URL;
   computedFieldFunctionSourceCode?: string;
+  virtualNetwork: VirtualNetwork;
 }): string {
   let programPath = getProgramPath(target);
   //@ts-ignore ImportUtil doesn't seem to believe our Babel.types is a
   //typeof Babel.types
   let importUtil = new ImportUtil(Babel.types, programPath);
+  // The field decorator (`field`) and the field-type helper (`contains`,
+  // `linksTo`, …) both come from base/card-api, which the edited module
+  // already imports (its card extends a base def). Reuse that existing
+  // card-api import — in whatever specifier form the file uses — so the new
+  // identifiers merge into it instead of emitting a second card-api import in
+  // a different form.
+  let cardApiCanonical = virtualNetwork.unresolveURL(baseRRI('card-api'));
+  let cardApiSource =
+    findEquivalentImportSource(
+      programPath,
+      cardApiCanonical,
+      undefined,
+      virtualNetwork,
+    ) ?? cardApiCanonical;
   let fieldDecorator = importUtil.import(
     // there is some type of mismatch here--importUtil expects the
     // target.parentPath to be non-nullable, but unable to express that in types
     target as NodePath<any>,
-    `${baseRealm.url}card-api`,
+    cardApiSource,
     'field',
   );
 
   let fieldTypeIdentifier = importUtil.import(
     target as NodePath<any>,
-    `${baseRealm.url}card-api`,
+    cardApiSource,
     fieldType,
   );
 
   if (
     (fieldType === 'linksTo' || fieldType === 'linksToMany') &&
     isEqual(
-      codeRefWithAbsoluteIdentifier(fieldRef, moduleURL, {
-        trimExecutableExtension: true,
-      }),
-      codeRefWithAbsoluteIdentifier(cardBeingModified, moduleURL, {
-        trimExecutableExtension: true,
-      }),
+      codeRefWithAbsoluteIdentifier(
+        fieldRef,
+        moduleURL,
+        { trimExecutableExtension: true },
+        virtualNetwork,
+      ),
+      codeRefWithAbsoluteIdentifier(
+        cardBeingModified,
+        moduleURL,
+        { trimExecutableExtension: true },
+        virtualNetwork,
+      ),
     )
   ) {
     // syntax for when a card has a linksTo or linksToMany field to a card with the same type as itself
     return `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(() => ${fieldRef.name});`;
   }
 
+  // Canonicalize `fieldRef.module` to the registered RRI prefix form
+  // (e.g. `@cardstack/base/X`) so generated import lines use the stable
+  // identifier rather than a deployment-specific real URL.
+  let canonicalFieldModule = virtualNetwork.unresolveURL(fieldRef.module);
+
   let relativeFieldModuleRef;
   if (incomingRelativeTo && outgoingRelativeTo) {
+    let resolved = virtualNetwork.resolveURL(
+      canonicalFieldModule,
+      incomingRelativeTo,
+    );
+    let canonical = virtualNetwork.unresolveURL(resolved.href);
     relativeFieldModuleRef = maybeRelativeReference(
-      new URL(resolveCardReference(fieldRef.module, incomingRelativeTo)),
+      canonical,
       outgoingRelativeTo,
       outgoingRealmURL,
     );
   } else {
-    relativeFieldModuleRef = fieldRef.module;
+    relativeFieldModuleRef = canonicalFieldModule;
+  }
+
+  // `ImportUtil` matches existing imports by exact source string. The
+  // file may still use the virtual-alias URL form
+  // (`https://cardstack.com/base/X`) for an equivalent module while the
+  // canonical form is the RRI prefix (`@cardstack/base/X`). Reuse the
+  // existing import specifier when one matches under VN canonicalization
+  // so we merge instead of emitting a duplicate import line.
+  let existingEquivalentSource = findEquivalentImportSource(
+    programPath,
+    relativeFieldModuleRef,
+    incomingRelativeTo,
+    virtualNetwork,
+  );
+  if (existingEquivalentSource) {
+    relativeFieldModuleRef = existingEquivalentSource;
   }
 
   let fieldCardIdentifier = importUtil.import(
@@ -475,6 +527,51 @@ function makeNewField({
   }
 
   return `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(${fieldCardIdentifier.name});`;
+}
+
+// Returns the source string of an existing `ImportDeclaration` that
+// resolves to the same module as `targetSpecifier` under VN
+// canonicalization (RRI prefix vs. registered URL alias), so callers
+// can merge new identifiers into the existing import line rather than
+// emitting a duplicate. Returns undefined when no existing import
+// matches or when the file is being authored against the canonical
+// specifier directly.
+function findEquivalentImportSource(
+  programPath: NodePath<t.Program>,
+  targetSpecifier: string,
+  relativeTo: RealmResourceIdentifier | URL | undefined,
+  virtualNetwork: VirtualNetwork,
+): string | undefined {
+  let targetCanonical: string;
+  try {
+    targetCanonical = virtualNetwork.unresolveURL(
+      virtualNetwork.resolveURL(targetSpecifier, relativeTo).href,
+    );
+  } catch {
+    return undefined;
+  }
+  for (let node of programPath.node.body) {
+    if (node.type !== 'ImportDeclaration') {
+      continue;
+    }
+    let source = node.source.value;
+    if (source === targetSpecifier) {
+      // already exact-match — importUtil will merge without help
+      return undefined;
+    }
+    let sourceCanonical: string;
+    try {
+      sourceCanonical = virtualNetwork.unresolveURL(
+        virtualNetwork.resolveURL(source, relativeTo).href,
+      );
+    } catch {
+      continue;
+    }
+    if (sourceCanonical === targetCanonical) {
+      return source;
+    }
+  }
+  return undefined;
 }
 
 function getProgramPath(path: NodePath<any>): NodePath<t.Program> {

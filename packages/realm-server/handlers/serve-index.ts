@@ -1,13 +1,19 @@
 import type Koa from 'koa';
 import { JSDOM } from 'jsdom';
-import merge from 'lodash/merge';
-import type { DBAdapter, Realm } from '@cardstack/runtime-common';
+import { merge } from 'lodash-es';
+import type {
+  DBAdapter,
+  HostRoutingRule,
+  Realm,
+} from '@cardstack/runtime-common';
 import {
+  foreignQueryParams,
   hasExtension,
+  isRedirectRoutingRule,
   logger,
   param,
   query,
-  RealmPaths,
+  resolveRedirectTarget,
   sanitizeHeadHTMLToString,
 } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
@@ -17,16 +23,18 @@ import {
   injectIsolatedHTML,
   retrieveHeadHTML,
   retrieveIsolatedHTML,
-} from '../lib/index-html-injection';
-import { retrieveScopedCSS } from '../lib/retrieve-scoped-css';
+} from '../lib/index-html-injection.ts';
+import { retrieveScopedCSS } from '../lib/retrieve-scoped-css.ts';
+import { fullRequestURL } from '../middleware/index.ts';
 import {
   findOrMountRealm,
   getPublishedRealmInfo,
   hasPublicPermissions,
   isIndexedCardInstance,
+  matchHostRoutingRule,
   type RealmRoutingDeps,
-} from '../lib/realm-routing';
-import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler';
+} from '../lib/realm-routing.ts';
+import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.ts';
 
 export type ServeIndexDeps = {
   serverURL: URL;
@@ -38,6 +46,8 @@ export type ServeIndexDeps = {
   getIndexHTML: () => Promise<string>;
   cardSizeLimitBytes: number;
   fileSizeLimitBytes: number;
+  audioSizeLimitBytes: number;
+  videoSizeLimitBytes: number;
 };
 
 export type ServeIndexHandlers = {
@@ -63,6 +73,8 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     getIndexHTML,
     cardSizeLimitBytes,
     fileSizeLimitBytes,
+    audioSizeLimitBytes,
+    videoSizeLimitBytes,
   } = deps;
 
   let routingDeps: RealmRoutingDeps = {
@@ -125,6 +137,14 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
             matrixServerName:
               process.env.MATRIX_SERVER_NAME || matrixClient.matrixURL.hostname,
             realmServerURL: serverURL.href,
+            // Stamp the deployed environment the host is running in so client
+            // telemetry (and anything else) can report it, rather than the
+            // Ember build mode. Falls back to whatever the build baked in when
+            // this server has no REALM_SENTRY_ENVIRONMENT (e.g. local dev).
+            hostedEnvironment:
+              process.env.REALM_SENTRY_ENVIRONMENT ||
+              config.hostedEnvironment ||
+              'local',
             resolvedBaseRealmURL: rewriteRealmURL(config.resolvedBaseRealmURL),
             resolvedCatalogRealmURL: rewriteRealmURL(
               config.resolvedCatalogRealmURL,
@@ -139,6 +159,8 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
             defaultFieldSpecId: rewriteRealmURL(config.defaultFieldSpecId),
             cardSizeLimitBytes,
             fileSizeLimitBytes,
+            audioSizeLimitBytes,
+            videoSizeLimitBytes,
             publishedRealmDomainOverrides:
               process.env.PUBLISHED_REALM_DOMAIN_OVERRIDES ??
               config.publishedRealmDomainOverrides,
@@ -195,9 +217,13 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     let includesVndMimeType = lowerAcceptHeader.includes('application/vnd.');
     let includesHtmlMimeType = lowerAcceptHeader.includes('text/html');
 
-    let requestURL = new URL(
-      `${ctxt.protocol}://${ctxt.host}${ctxt.originalUrl}`,
-    );
+    // Derive the request URL via fullRequestURL so the protocol honors
+    // `x-forwarded-proto` from a TLS-terminating proxy (ALB/Traefik), matching
+    // the rest of the request pipeline. Building it from the raw `ctxt.protocol`
+    // yields `http` behind such a proxy, which makes the published-realm module
+    // probe (isIndexedCardInstance → hasExtensionlessSourceModule) throw on the
+    // http-vs-https mismatch and mis-serve a module URL as the HTML page.
+    let requestURL = fullRequestURL(ctxt);
 
     // Track published realm info from routing checks to avoid redundant
     // DB queries in the ETag logic below.
@@ -243,7 +269,26 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
         let cardURL = requestURL;
         let isCardInstance = await isIndexedCardInstance(cardURL, routingDeps);
         if (!isCardInstance) {
-          return next();
+          // A bare routed sub-path (e.g. /pricing) is not itself an indexed
+          // card instance — its host routing rule maps it to a card that
+          // lives elsewhere (e.g. /pages/pricing). Only fall through to the
+          // module resolver (→ 404) when the path also matches no routing
+          // rule. Without this, the bare form 404s while the trailing-slash
+          // form — which skips this gate via isIndexRequest — renders.
+          //
+          // The rule match is additionally gated on public read: consulting
+          // the routing map for a non-public realm would leak which bare
+          // paths are configured routes via the 200-vs-404 difference (a real
+          // route falls through to the generic 200 shell, a non-route 404s).
+          // Requiring public read makes routed and non-routed bare paths
+          // behave identically (both next() → 404) on a non-public realm.
+          let matchedRule = await matchHostRoutingRule(requestURL, routingDeps);
+          if (
+            !matchedRule ||
+            !(await hasPublicPermissions(matchedRule.realm, routingDeps))
+          ) {
+            return next();
+          }
         }
       }
     }
@@ -287,6 +332,17 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
 
     ctxt.type = 'html';
 
+    // Permit the JS Self-Profiling API so client-telemetry's Tier-2 wedge
+    // stack sampling can run. Harmless for documents that never construct a
+    // Profiler, and ignored by browsers that don't support the policy.
+    ctxt.set('Document-Policy', 'js-profiling');
+
+    // Resolve the realm once and reuse it for the permissions check and the
+    // routing-map lookup below. `findOrMountRealm` can fall back to a DB probe
+    // when the in-memory registry is cold, so we don't want to pay that cost
+    // more than necessary on the hot HTML path.
+    let routedRealm = await findOrMountRealm(requestURL, routingDeps);
+
     let cardURL = requestURL;
     let isIndexRequest = requestURL.pathname.endsWith('/');
     if (isIndexRequest) {
@@ -324,11 +380,6 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
         return;
       }
     }
-    // Resolve the realm once and reuse for both the permissions check and
-    // the routing-map lookup below. `findOrMountRealm` can fall back to a
-    // DB probe when the in-memory registry is cold, so we don't want to
-    // pay that cost twice on the hot HTML path.
-    let routedRealm = await findOrMountRealm(requestURL, routingDeps);
     let publicPermissions = await hasPublicPermissions(
       routedRealm,
       routingDeps,
@@ -343,23 +394,70 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     }
 
     // CS-10055: host routing rules in the realm config can map a bare path
-    // (e.g. /whitepaper) to a target card. When the requested path matches
-    // a rule, rewrite cardURL so the head/isolated/scoped CSS fetched
-    // below render the routed target. The same map is also written into
-    // the @cardstack/host/config/environment meta tag further down so the
-    // SPA can resolve the path post-hydration.
-    let routingMap: { path: string; id: string }[] = [];
-    if (routedRealm) {
-      routingMap = await routedRealm.getHostRoutingMap();
-      if (routingMap.length > 0) {
-        let realmURL = new URL(routedRealm.url);
-        realmURL.protocol = requestURL.protocol;
-        let realmPaths = new RealmPaths(realmURL);
-        let pathInRealm = '/' + realmPaths.local(requestURL);
-        let rule = routingMap.find((r) => r.path === pathInRealm);
-        if (rule) {
-          cardURL = new URL(rule.id);
+    // (e.g. /whitepaper) to a target card. This runs AFTER the public-
+    // permission gate above so a non-public realm never has its routing map
+    // consulted — otherwise the canonical redirect below would disclose that
+    // a private routed path exists to an unauthenticated caller. The map is
+    // also written into the @cardstack/host/config/environment meta tag
+    // further down so the SPA can resolve the path post-hydration.
+    let routingMap: HostRoutingRule[] = routedRealm
+      ? await routedRealm.getHostRoutingMap()
+      : [];
+    if (routingMap.length > 0) {
+      // The match and its canonical form live once, in matchHostRoutingRule.
+      let matched = await matchHostRoutingRule(requestURL, routingDeps);
+      if (matched) {
+        if (isRedirectRoutingRule(matched.rule)) {
+          // A declared redirect rule. Redirect straight to the
+          // declared target from either trailing-slash form of the
+          // matched path — canonicalizing first would cost the client a
+          // second hop for no benefit. `resolveRedirectTarget` is shared
+          // with the routing map injected further down, so the URL a
+          // full-page visitor is sent to and the one an in-app
+          // transition resolves cannot drift apart. The request's query
+          // string carries over unless the target declares its own —
+          // minus the host app's own params, which a redirect has no
+          // business handing on: the target may be an external site, and
+          // `sid` / `clientSecret` are password-reset tokens. The SPA
+          // drops the same list on its in-app navigation.
+          let { redirectTo, statusCode } = matched.rule;
+          let target = new URL(
+            resolveRedirectTarget(
+              redirectTo,
+              new URL(matched.realm.url).pathname,
+            ),
+            requestURL,
+          );
+          if (requestURL.search && !target.search) {
+            let forwarded = foreignQueryParams(requestURL.search);
+            if (forwarded) {
+              target.search = forwarded;
+            }
+          }
+          ctxt.redirect(target.href);
+          ctxt.status = statusCode;
+          return;
         }
+        // Canonicalize the URL. A rule declared as '/pricing' matches both
+        // '/pricing' and '/pricing/' (RealmPaths.local strips trailing
+        // slashes); the canonical form is the realm mount pathname joined
+        // with the rule's declared path — so the realm-root rule '/' keeps
+        // its trailing slash while a sub-path rule has none. Redirect any
+        // other form with a 308 so bookmarks, shared links and crawlers
+        // converge on one URL, and so relative links in the served HTML
+        // resolve against a stable document base (a trailing slash shifts
+        // that base and breaks './'-relative hrefs in the prerendered page).
+        if (requestURL.pathname !== matched.canonicalPathname) {
+          ctxt.redirect(
+            new URL(matched.canonicalPathname + requestURL.search, requestURL)
+              .href,
+          );
+          ctxt.status = 308;
+          return;
+        }
+        // Rewrite cardURL so the head/isolated/scoped CSS fetched below
+        // render the routed target.
+        cardURL = new URL(matched.rule.id);
       }
     }
 
@@ -463,10 +561,21 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       // the SPA's path lookup to be a direct equality match, prefix each
       // rule path with the realm's pathname before serializing.
       let realmPathname = new URL(routedRealm.url).pathname;
-      let hostScopedMap = routingMap.map((rule) => ({
-        path: realmPathname + rule.path.replace(/^\//, ''),
-        id: rule.id,
-      }));
+      let hostScopedMap = routingMap.map((rule) => {
+        let path = realmPathname + rule.path.replace(/^\//, '');
+        if (isRedirectRoutingRule(rule)) {
+          // A redirect rule's realm-relative target is prefixed the same
+          // way as its path, so the SPA can hand the value straight to a
+          // location change without knowing the realm's mount point.
+          // Same helper the `Location` header above goes through.
+          return {
+            path,
+            redirectTo: resolveRedirectTarget(rule.redirectTo, realmPathname),
+            statusCode: rule.statusCode,
+          };
+        }
+        return { path, id: rule.id };
+      });
       // Per-request merge into the already-rewritten config meta tag.
       // The retrieveIndexHTML rewrite is cached process-wide because the
       // fields it touches are global; the routing map is per-realm so it

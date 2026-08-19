@@ -17,7 +17,7 @@
       "cardId": "",
       "format": "isolated",
       "roomId": "",
-      "realm": "https://localhost:4201/experiments/",
+      "realm": "",
       "listingId": ""
     },
     "relationships": {

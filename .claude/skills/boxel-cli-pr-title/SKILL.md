@@ -1,0 +1,42 @@
+---
+name: boxel-cli-pr-title
+allowed-tools: Read, Grep, Bash
+description: Decide whether a PR title needs a conventional-commit prefix. PRs touching packages/boxel-cli/** require one (feat/fix/perf/refactor/chore/docs/test/build/ci/style) because it drives the boxel-cli npm publish version bump; PRs that don't touch boxel-cli get a plain descriptive title with no prefix. Use before opening or retitling any PR.
+---
+
+# Boxel-CLI PR Title
+
+A conventional-commit prefix on a PR title is **only** meaningful for changes to `packages/boxel-cli/**`. There it's a binding contract that drives the npm publish version bump. Anywhere else it's noise — use a plain descriptive title.
+
+## The rule
+
+- **PR touches `packages/boxel-cli/**`** → title MUST start with an allowed prefix followed by `:` (e.g. `feat: add --watch flag to sync`).
+- **PR does NOT touch `packages/boxel-cli/**`** → no prefix. Write a plain descriptive title (e.g. `Add evergreen-comments skill`, not `docs: add evergreen-comments skill`).
+
+## Allowed prefixes and their bump level
+
+The prefix determines the `@cardstack/boxel-cli` version bump applied post-merge:
+
+| Prefix | Version bump |
+|--------|--------------|
+| any type with a `!` (e.g. `feat!:`, `fix!:`, `feat(cli)!:`) **or** a `BREAKING CHANGE:` footer in the PR body | **major** |
+| `feat:` | minor |
+| `fix:`, `perf:`, `refactor:` | patch |
+| `chore:`, `docs:`, `test:`, `build:`, `ci:`, `style:` | none |
+
+Pick the prefix from what the change actually does: diagnostics / test-only changes are `test:`, source-behavior bug fixes are `fix:`, new commands or flags are `feat:`. A **breaking** change to the CLI or plugin surface takes a `!` after the type (or scope) — `feat!:`, `fix!:`, `feat(cli)!:` — or a `BREAKING CHANGE:` footer in the body, either of which forces a major bump regardless of the base type. An optional scope in parentheses (`feat(cli): …`) is permitted and does not affect the bump level on its own.
+
+## Why it's boxel-cli-only
+
+`packages/boxel-cli/scripts/release-prefixes.json` is the single source of truth for the allowed prefixes and their non-breaking bump levels; the breaking-change → major rule (`!` marker or `BREAKING CHANGE:` footer) lives in `packages/boxel-cli/scripts/compute-release.ts`. Two workflows drive the flow:
+
+- **Pre-merge:** `.github/workflows/boxel-cli-pr-title.yml` (`PR Title Check [boxel-cli]`) validates the title. It is **path-scoped** to `packages/boxel-cli/**` and does not run for other PRs.
+- **Post-merge:** `boxel-cli-publish.yml` reads the merged PR's title to compute the version bump and publish the new version.
+
+Because the same JSON file gates both, the title is a contract, not cosmetics — for boxel-cli. A PR that doesn't touch boxel-cli never triggers either workflow, so a prefix on it carries no meaning and should be omitted.
+
+## Self-check before opening or retitling a PR
+
+1. Does the diff include any file under `packages/boxel-cli/`?
+   - **Yes** → ensure the title starts with the prefix matching the change's bump level. If the change is **breaking**, add a `!` (e.g. `feat!:`) or a `BREAKING CHANGE:` body footer so it cuts a major version.
+   - **No** → ensure the title has no conventional-commit prefix; use plain prose.

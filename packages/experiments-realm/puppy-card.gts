@@ -1,11 +1,11 @@
-import Base64ImageField from 'https://cardstack.com/base/base64-image';
-import StringField from 'https://cardstack.com/base/string';
+import Base64ImageField from '@cardstack/base/base64-image';
+import StringField from '@cardstack/base/string';
 import {
   MaybeBase64Field,
   CardDef,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import DogIcon from '@cardstack/boxel-icons/dog';
 
 export class PuppyCard extends CardDef {

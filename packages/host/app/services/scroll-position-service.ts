@@ -8,10 +8,10 @@ import { TrackedMap } from 'tracked-built-ins';
 
 import { ScrollPositions } from '../utils/local-storage-keys';
 
-import type ResetService from './reset';
+import type SessionService from './session';
 
 export default class ScrollPositionService extends Service {
-  @service declare private reset: ResetService;
+  @service declare private session: SessionService;
   @tracked declare private keyToScrollPosition: TrackedMap<
     string,
     [string, number]
@@ -20,7 +20,7 @@ export default class ScrollPositionService extends Service {
   constructor(owner: Owner) {
     super(owner);
     this.resetState();
-    this.reset.register(this);
+    this.session.register(this);
     this.extractFromStorage();
   }
 

@@ -1,0 +1,151 @@
+# CS-11449 — ts-node → native-Node ESM codemod
+
+Tooling for migrating the **node-run package cluster** off `ts-node` and onto
+native Node (≥24) TypeScript execution (type-stripping). Native Node ESM is far
+stricter than ts-node / Vite about module resolution, so the swap surfaces a
+predictable set of breakages. This directory automates the mechanical ones.
+
+The host (Vite/Embroider) build **masks** every error below — a green host build
+does not mean a package is node-loadable. Verify by actually `import()`-ing the
+entry under native node.
+
+## Usage
+
+```sh
+# Apply all automated rules across the cluster (idempotent):
+node scripts/esm-codemod/run.mjs
+
+# Preview without writing:
+node scripts/esm-codemod/run.mjs --dry
+```
+
+Individual rules can be run on specific files, e.g.
+`node scripts/esm-codemod/lodash-to-lodash-es.mjs <file>...`.
+
+## The node-run cluster
+
+Packages Node executes directly (NOT bundled by Vite):
+`runtime-common`, `postgres`, `billing`, `realm-server`, `realm-test-harness`,
+`ai-bot`, `bot-runner`, `matrix`, `software-factory`.
+
+## Error taxonomy
+
+Each error was found by `import()`-ing a service entry under native node and
+reading the first failure, then fixing and repeating. Classes marked
+**automated** are handled by `run.mjs`; **manual** ones are listed in the next
+section.
+
+| #   | Symptom                                                                                                                  | Cause                                                                                                                                                                                             | Fix                                                                                                                                                                                                      |                                                                                                                                                    |
+| --- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `ERR_MODULE_NOT_FOUND` resolving a relative import `./foo`                                                               | Node does no extension search or directory-index resolution                                                                                                                                       | append `./foo.ts` / `./foo.gts` / `./foo/index.ts`; bare `'.'` → `'./index.ts'`                                                                                                                          | automated (`add-relative-extensions`)                                                                                                              |
+| 2   | `ERR_MODULE_NOT_FOUND` resolving a workspace pkg subpath (`@cardstack/billing/x`)                                        | workspace package has no `exports` map → Node looks for `index.js`                                                                                                                                | add an `exports` map pointing at `.ts` + `"type":"module"`                                                                                                                                               | **manual**                                                                                                                                         |
+| 3   | `Cannot find module '.../lodash/merge'` (`Did you mean lodash/merge.js?`)                                                | `lodash` is CJS-only with no exports map                                                                                                                                                          | repo-wide switch to `lodash-es` named imports                                                                                                                                                            | automated (`lodash-to-lodash-es`)                                                                                                                  |
+| 4   | `does not provide an export named 'X'` from a CJS pkg (`fs-extra`, `debug`, `qunit`, `jsonwebtoken`)                     | Node can't statically read named exports from these CJS modules                                                                                                                                   | default-import + destructure                                                                                                                                                                             | automated (`cjs-named-to-default`, line-anchored so it skips imports embedded in test-fixture strings) — extend `CJS_PACKAGES` as new ones surface |
+| 5   | `ERR_MODULE_NOT_FOUND` on a CJS pkg deep import (`matrix-js-sdk/lib/x`)                                                  | no exports map; ESM won't add `.js` or pick a file over a same-named dir                                                                                                                          | append `.js`                                                                                                                                                                                             | **manual** (small, package-specific)                                                                                                               |
+| 6   | `Cannot find module '.../scripts/x.js'`                                                                                  | a stray CJS file was renamed `.cjs` (because the pkg is now `type:module`) but the import still says `.js`                                                                                        | update the import to `.cjs`                                                                                                                                                                              | **manual**                                                                                                                                         |
+| 7   | `ReferenceError: __dirname is not defined`                                                                               | CJS globals don't exist under ESM                                                                                                                                                                 | `import.meta.dirname` / `import.meta.filename`                                                                                                                                                           | automated (`dirname-to-import-meta`)                                                                                                               |
+| 8   | wrong path built from `import.meta.url`                                                                                  | `import.meta.url` is a `file://` URL string, not a path                                                                                                                                           | use `import.meta.dirname`                                                                                                                                                                                | **manual** (rare — was a WIP bug)                                                                                                                  |
+| 9   | `ReferenceError: exports is not defined` when a consumer runs the dep via `ts-node`                                      | once a dep ships an `exports` map Node handles its `.ts` natively, colliding with a still-`ts-node` consumer                                                                                      | the dep + all its node-run consumers must drop ts-node in the same change (big-bang)                                                                                                                     | **manual** (coordination)                                                                                                                          |
+| 10  | in-source `spawn('ts-node', ['--transpileOnly', 'entry', …])`                                                            | child processes also need native node                                                                                                                                                             | `spawn('node', ['entry.ts', …])` (or `process.execPath`)                                                                                                                                                 | **manual** (few sites, varied shapes)                                                                                                              |
+| 11  | `ReferenceError: require is not defined in ES module scope`                                                              | `require()` / lazy `require()` don't exist in ESM                                                                                                                                                 | `const require = createRequire(import.meta.url)` shim, OR static/dynamic import. Native `require()` does NO extension search — `require('./x.ts')` works, `require('./x')` and `require('./dir')` do not | **manual** (small set)                                                                                                                             |
+| 12  | a test's `sinon.stub(NS, 'fn')` / `(NS as any).fn = …` silently no-ops                                                   | ES-module namespace objects (`import * as NS`) are sealed; their bindings are read-only                                                                                                           | inject the dependency, or stub through a small mutable indirection module the source calls and the test imports — not the namespace                                                                      | **manual** (per-test; ai-bot Sentry tests now stub `lib/sentry.ts`'s `errorReporter`)                                                              |
+| 13  | `X is not a function` from `import X from 'some-cjs-pkg'` (e.g. `node-pg-migrate`)                                       | CJS pkg authored with transpiled `exports.default = fn`: native ESM binds `X = module.exports` (the whole namespace) and the callable is on `X.default`; ts-node's `esModuleInterop` unwrapped it | `const fn = (X as any).default ?? X`                                                                                                                                                                     | **manual** (surfaces at runtime, not load — verify the export shape)                                                                               |
+| 14  | `module is not defined in ES module scope` loading a `.js` config/script (`.eslintrc.js`, helper scripts run via `node`) | the pkg is now `type:module`, so its CJS `.js` files (using `module.exports`/`require`) are parsed as ESM                                                                                         | rename to `.cjs` (ESLint still auto-discovers `.eslintrc.cjs`) and update any `node x.js` / path references                                                                                              | **manual** (find CJS `.js` in each `type:module` pkg)                                                                                              |
+
+### Invocation sites (automated — `ts-node-to-node`)
+
+`ts-node --transpileOnly <entry>` → `node <entry>.ts` in `package.json` scripts,
+`*.sh`, and `mise-tasks`. The extensionless entry must gain `.ts` because Node
+does no extension search for the CLI entry point. Handles shell line-continuation
+(`exec ts-node \`↵`--transpileOnly main`). Skips (and reports) two forms it can't
+safely rewrite: `qunit --require ts-node/register/transpile-only …` and inline
+`ts-node … -e/--eval …`.
+
+## Not automated — do by hand
+
+These are too package-specific or too coupled for a blind codemod:
+
+1. **`exports` maps + `"type":"module"`** per workspace package (class #2). Each
+   map mirrors that package's directory layout. A wildcard
+   `"./*":["./*.ts","./*/index.ts"]` does **not** work — Node exports won't fall
+   through on file-not-found, so add an explicit entry per directory-index
+   subpath. Never set `--preserve-symlinks` (it breaks type-stripping for
+   pnpm-symlinked workspace deps, which only works because Node resolves to
+   realpath outside `node_modules` first).
+2. **The qunit test-runner bootstrap** (DONE). `qunit --require ts-node/register`
+   has no node equivalent, so each test package now runs `node tests/index.ts`
+   with a `tests/qunit-bootstrap.ts` that turns autostart off, inits the TAP
+   reporter, and sets a failure-based exit code; `index.ts` ends with
+   `QUnit.start()`. Done for `ai-bot`, `bot-runner`, `software-factory`, and
+   `realm-server` (whose `index.ts` also needed the class-#11 `createRequire`
+   shim and `require(`${file}.ts`)` so its sync, order-preserving loader keeps
+   working; the CI JUnit reporter is `--require`d and was renamed `.cjs`).
+3. **Remove the `ts-node` devDependency** (DONE) — dropped from every package now
+   that all invocations and test runners are converted.
+4. **CJS deep imports** needing `.js` (class #5) and **`.cjs` import path fixes**
+   (class #6) — verify against the actual file on disk.
+5. **`require()` shims** (class #11) and **ESM-namespace mock breakage** (class
+   #12) — the latter is genuine per-test work (e.g. ai-bot's Sentry/locking
+   tests fail because they reassign a sealed namespace binding).
+
+## Type-checking (`lint:types`)
+
+All nine node-cluster packages type-check clean under `ember-tsc` (nodenext).
+`"type":"module"` flips nodenext from CJS-mode to ESM-mode resolution, which is
+what surfaces the type errors. Decision: stay on **nodenext** (not `bundler`) so
+the type layer models the native-node runtime; the friction was bounded. Classes
+fixed (see also #11/#13):
+
+- **Base-realm alias** (class #15): under ESM-mode nodenext the extensionless
+  `"https://cardstack.com/base/*": ["../base/*"]` mapping stops resolving. Expand
+  every tsconfig's mapping to `["../base/*.gts","../base/*.ts","../base/*.d.ts","../base/*"]`.
+  Applies to consumers too (host, catalog, …) — they re-type-check runtime-common's
+  now-ESM sources, so the cascade lands there as well.
+- **`import.meta` rejected (TS1470/TS1343)**: a `type:module` (or import.meta-using)
+  package must type-check in ESM-mode — set `module`/`moduleResolution` to
+  `nodenext` and add `skipLibCheck`. Flip ai-bot/bot-runner/software-factory/matrix
+  to `type:module` (they already run as ESM).
+- **CJS interop the nodenext type layer can't model** (runtime is fine): bump the
+  mispackaged dep when a properly-packaged version exists (magic-string
+  0.25→0.30), else re-export once with the right signature (`runtime-common/ignore.ts`)
+  or cast (`node-pg-migrate` via `RunnerOption`).
+- **Types missing from a dep** (`@types/qunit` lacks `.reporters`/`.on`): cast the
+  call site (`(QUnit as any)`), typing any callback param to avoid noImplicitAny.
+
+`@types/lodash` was swapped to `@types/lodash-es` alongside the runtime dep.
+
+## Remaining known gaps
+
+- **ai-bot**: full suite passes (170/170) — the 5 prior failures were class #12
+  (Sentry namespace mocking, fixed via `lib/sentry.ts`) and class #13
+  (`node-pg-migrate` default interop in `postgres`). The locking tests need PG
+  env (`PGHOST`/`PGPORT`/`PGUSER`/`PGPASSWORD`) like the rest of the DB suite.
+- **software-factory**: full node suite passes (452/453). The one failure
+  (port-allocator dual-stack `::` bind) is a macOS-vs-Linux socket-semantics
+  difference, not a migration regression. Unblocked by the `@cardstack/boxel-cli`
+  `exports` map, the `@cardstack/logger` createRequire fix (class #11, shared
+  with `realm-test-harness`), and the `.eslintrc.cjs` rename (class #14).
+- **realm-server**: the full suite needs the dev services stack to run; the
+  bootstrap is validated on standalone unit tests. All known bare/lazy
+  `require()` sites in the cluster are now shimmed (`createRequire`) or
+  dual-mode — every remaining `require()` either has a `const require =
+createRequire(import.meta.url)` in its file or is guarded by
+  `typeof require === 'function'`.
+- **host**: configured for the migration (nodenext + skipLibCheck + the base-path
+  fix, same as catalog which type-checks clean); its full `lint:types` is slow, so
+  CI is the practical confirmation.
+- **experiments-realm**: pre-existing `lint:types` debt unrelated to the migration
+  (`node16` tsconfig, no `skipLibCheck`, ~568 source errors); only its base-path
+  mapping was touched here.
+- **realm-server `testem.js`** is CJS under `type:module` but only loaded by the
+  (now-unused) testem CLI, so it's dormant rather than broken.
+
+## Verifying a package loads
+
+```sh
+cd packages/realm-server
+node --eval 'import("./main.ts").then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)})'
+```
+
+Reaching a runtime error (e.g. "REALM_SERVER_SECRET_SEED not set") means the full
+module graph linked — the migration succeeded for that entry.

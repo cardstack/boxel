@@ -1,11 +1,11 @@
-import { expect, test } from './fixtures';
+import { expect, test } from './fixtures.ts';
 import {
   getJoinedRooms,
   getRoomMembers,
   getRoomRetentionPolicy,
-} from '../docker/synapse';
-import { createSubscribedUser } from '../helpers';
-import { appURL } from '../helpers/isolated-realm-server';
+} from '../support/synapse/index.ts';
+import { createSubscribedUser, openAiAssistant } from '../helpers/index.ts';
+import { appURL } from '../support/isolated-realm-server.ts';
 
 test.describe('Auth rooms', () => {
   // CS-8988 - was flaky before, making it a toPass to attempt to stabilize
@@ -21,6 +21,7 @@ test.describe('Auth rooms', () => {
     await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
     await page.locator('[data-test-login-btn]').click();
 
+    await openAiAssistant(page);
     await page.locator('[data-test-room-settled]').waitFor();
     let realmRoomsByUser = new Map<string, string>();
     expect(async () => {

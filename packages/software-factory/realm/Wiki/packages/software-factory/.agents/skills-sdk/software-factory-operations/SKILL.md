@@ -64,7 +64,7 @@ merged document back — same workspace fs surface as `.gts` files.
 | `Boards/<slug>.json`             | `{module: "<darkfactoryModuleUrl>", name: "IssueTracker"}`     |
 | `Issues/<slug>.json`             | `{module: "<darkfactoryModuleUrl>", name: "Issue"}`            |
 | `Knowledge Articles/<slug>.json` | `{module: "<darkfactoryModuleUrl>", name: "KnowledgeArticle"}` |
-| `Spec/<slug>.json`               | `{module: "https://cardstack.com/base/spec", name: "Spec"}`    |
+| `Spec/<slug>.json`               | `{module: "@cardstack/base/spec", name: "Spec"}`               |
 
 `<darkfactoryModuleUrl>` is named in the system prompt — use that value
 verbatim.
@@ -118,11 +118,11 @@ append a comment:
 ### Catalog Spec card shape
 
 Spec cards (`Spec/<slug>.json`) adopt from
-`https://cardstack.com/base/spec` / `Spec`, **not** from the tracker
+`@cardstack/base/spec` / `Spec`, **not** from the tracker
 module. Fetch the live schema before writing:
 
 ```
-get_card_schema({ module: "https://cardstack.com/base/spec", name: "Spec" })
+get_card_schema({ module: "@cardstack/base/spec", name: "Spec" })
 ```
 
 Use the returned `{ attributes, relationships? }` to shape the document.
@@ -151,7 +151,7 @@ entry-point cards:
 
 The full document envelope is the same as for tracker cards (`data` /
 `type: "card"` / `attributes` / `relationships` / `meta.adoptsFrom`),
-just with the `https://cardstack.com/base/spec` adoptsFrom.
+just with the `@cardstack/base/spec` adoptsFrom.
 
 ## Realm-side reads (via `boxel` CLI)
 
@@ -304,7 +304,7 @@ cardName, error, stackTrace? }`). Without `path`, searches the realm
    catalog specs.**
 4. **Write card instances** (`.json`) into the workspace.
 5. **Write a Catalog Spec card** (`Spec/<card-name>.json`) — adoptsFrom
-   `https://cardstack.com/base/spec` / `Spec`. Link sample instances via
+   `@cardstack/base/spec` / `Spec`. Link sample instances via
    `relationships.linkedExamples`.
 6. **(Optional) Call `run_tests()`** to self-validate before signalling
    done. This returns test results in-memory without writing any realm
@@ -394,7 +394,7 @@ reference.
   realm regenerates the transpiled JS on every write, so any edit
   there is silently discarded.
 - **When in doubt, favor idiomatic card development practices.** The
-  `boxel-development` skill and existing cards in the target realm are
+  `boxel` skill and existing cards in the target realm are
   the right references — not what the compiler happens to emit.
 
 Use the transpiled fetch the way a developer uses a source map: to

@@ -1,5 +1,5 @@
-import '../instrument';
-import '../setup-logger'; // This should be first
+import '../instrument.ts';
+import '../setup-logger.ts'; // This should be first
 import {
   logger,
   systemInitiatedPriority,
@@ -30,7 +30,7 @@ async function main() {
 }
 
 // When run directly as a script
-if (require.main === module) {
+if (import.meta.main) {
   main().catch((err) => {
     console.error(err);
     process.exit(1);
@@ -54,7 +54,7 @@ export async function enqueueSyncOpenRouterModels({
     realmUsername: REALM_USERNAME,
     runAs: REALM_USERNAME,
     command: COMMAND_SPECIFIER,
-    commandInput: { realmUrl: realmURL },
+    commandInput: { realmIdentifier: realmURL },
   };
 
   try {

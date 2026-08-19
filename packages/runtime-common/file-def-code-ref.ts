@@ -1,20 +1,28 @@
-import { baseRealm, baseFileRef } from './constants';
-import type { ResolvedCodeRef } from './code-ref';
-import {
-  resolveCardReference,
-  type RealmResourceIdentifier,
-} from './card-reference-resolver';
+import { baseRealm, baseFileRef } from './constants.ts';
+import { canonicalModuleKey } from './code-ref.ts';
+import type { CodeRef, ResolvedCodeRef } from './code-ref.ts';
+import type { RealmResourceIdentifier } from './realm-identifiers.ts';
+import type { VirtualNetwork } from './virtual-network.ts';
 
 export const BASE_FILE_DEF_CODE_REF = baseFileRef;
 
+// Deliberately URL form, not baseRRI: `resolveFileDefCodeRef` returns these
+// mappings verbatim via its absolute-module (`://`) early return. In prefix
+// form the modules would instead be resolved against the indexed file's URL,
+// making the stamped ref depend on the virtual network's mapping state — and
+// producing a garbage joined URL wherever the base prefix isn't registered.
 function baseModule(name: string): RealmResourceIdentifier {
   return `${baseRealm.url}${name}` as RealmResourceIdentifier;
 }
 
-const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
+export const FILEDEF_CODE_REF_BY_EXTENSION: Readonly<
+  Record<string, ResolvedCodeRef>
+> = {
   // TODO: Replace with realm metadata configuration.
   '.markdown': { module: baseModule('markdown-file-def'), name: 'MarkdownDef' },
   '.md': { module: baseModule('markdown-file-def'), name: 'MarkdownDef' },
+  '.html': { module: baseModule('html-file-def'), name: 'HtmlDef' },
+  '.htm': { module: baseModule('html-file-def'), name: 'HtmlDef' },
   '.png': { module: baseModule('png-image-def'), name: 'PngDef' },
   '.jpg': { module: baseModule('jpg-image-def'), name: 'JpgDef' },
   '.jpeg': { module: baseModule('jpg-image-def'), name: 'JpgDef' },
@@ -28,16 +36,110 @@ const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
   '.text': { module: baseModule('text-file-def'), name: 'TextFileDef' },
   '.json': { module: baseModule('json-file-def'), name: 'JsonFileDef' },
   '.csv': { module: baseModule('csv-file-def'), name: 'CsvFileDef' },
+  '.pdf': { module: baseModule('pdf-file-def'), name: 'PdfDef' },
+  '.docx': { module: baseModule('docx-file-def'), name: 'DocxDef' },
+  '.pptx': { module: baseModule('pptx-file-def'), name: 'PptxDef' },
+  '.xlsx': { module: baseModule('xlsx-file-def'), name: 'XlsxDef' },
+  '.mp3': { module: baseModule('mp3-audio-def'), name: 'Mp3Def' },
+  '.wav': { module: baseModule('wav-audio-def'), name: 'WavDef' },
+  '.ogg': { module: baseModule('ogg-audio-def'), name: 'OggDef' },
+  '.oga': { module: baseModule('ogg-audio-def'), name: 'OggDef' },
+  '.opus': { module: baseModule('ogg-audio-def'), name: 'OggDef' },
+  '.m4a': { module: baseModule('m4a-audio-def'), name: 'M4aDef' },
+  '.flac': { module: baseModule('flac-audio-def'), name: 'FlacDef' },
+  // Symbolic performance data rather than sampled audio, so `MidiDef` extends
+  // FileDef directly instead of AudioDef.
+  '.mid': { module: baseModule('midi-audio-def'), name: 'MidiDef' },
+  '.midi': { module: baseModule('midi-audio-def'), name: 'MidiDef' },
+  // MP4 and MOV are the same ISO BMFF container as .m4a; the extension is what
+  // says whether to expect a picture track, so they route to distinct classes.
+  '.mp4': { module: baseModule('mp4-video-def'), name: 'Mp4Def' },
+  '.m4v': { module: baseModule('mp4-video-def'), name: 'Mp4Def' },
+  '.mov': { module: baseModule('mov-video-def'), name: 'MovDef' },
+  '.webm': { module: baseModule('webm-video-def'), name: 'WebmDef' },
+  // 3D model formats. STL is raw triangle geometry; 3MF is a zipped OPC package.
+  // Both extend ThreeDModelDef, which renders a live client-side WebGL viewer.
+  '.stl': { module: baseModule('stl-model-def'), name: 'StlDef' },
+  '.3mf': { module: baseModule('three-mf-def'), name: 'ThreeMfDef' },
+  '.zip': { module: baseModule('zip-file-def'), name: 'ZipDef' },
+  '.woff2': { module: baseModule('woff2-font-def'), name: 'Woff2Def' },
+  '.woff': { module: baseModule('woff-font-def'), name: 'WoffDef' },
+  '.ttf': { module: baseModule('ttf-font-def'), name: 'TtfDef' },
+  '.otf': { module: baseModule('otf-font-def'), name: 'OtfDef' },
   '.mismatch': {
     module: './filedef-mismatch' as RealmResourceIdentifier,
     name: 'FileDef',
   },
 };
 
-export function resolveFileDefCodeRef(fileURL: URL): ResolvedCodeRef {
-  let name = fileURL.pathname.split('/').pop() ?? '';
+// Whether a code ref targets a file-meta (FileDef) type: the base FileDef ref
+// or one of the known extension-specific subtypes. Used to dispatch a search to
+// the file-meta candidate pool from the query alone — without depending on the
+// server having returned a row to sniff — so an empty-but-complete file-meta
+// search still reconciles locally hydrated FileDefs.
+//
+// The query carries refs in prefix form (e.g. `@cardstack/base/markdown-file-def`)
+// while `FILEDEF_CODE_REF_BY_EXTENSION` is built in full-URL form, so the module
+// strings are compared by their canonical key rather than verbatim — otherwise
+// a subtype ref (`MarkdownDef`, `PngDef`, …) would miss and the file-meta search
+// would skip local reconciliation.
+export function isFileDefCodeRef(
+  ref: CodeRef | undefined,
+  virtualNetwork: VirtualNetwork,
+): boolean {
+  if (
+    !ref ||
+    !('module' in ref) ||
+    typeof ref.module !== 'string' ||
+    typeof ref.name !== 'string'
+  ) {
+    return false;
+  }
+  let refKey = canonicalModuleKey(ref.module, virtualNetwork);
+  let matchesModule = (candidate: string) =>
+    refKey === canonicalModuleKey(candidate, virtualNetwork);
+  if (matchesModule(baseFileRef.module) && ref.name === baseFileRef.name) {
+    return true;
+  }
+  for (let subtype of Object.values(FILEDEF_CODE_REF_BY_EXTENSION)) {
+    if (matchesModule(subtype.module) && ref.name === subtype.name) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function extensionOfName(name: string): string {
   let dot = name.lastIndexOf('.');
-  let extension = dot === -1 ? '' : name.slice(dot).toLowerCase();
+  return dot <= 0 ? '' : name.slice(dot).toLowerCase();
+}
+
+function extensionOf(url: URL): string {
+  return extensionOfName(url.pathname.split('/').pop() ?? '');
+}
+
+// Whether a URL names a file rather than a card, judged by a known FileDef
+// extension on the last path segment. Card ids never end in one (an
+// instance's `.json` is stripped from its id) — but a bare "has a dot"
+// check would misfire on card ids that legitimately contain dots (e.g. a
+// `ModelConfiguration/claude-sonnet-4.6` instance), so only registered
+// file extensions count.
+export function urlNamesFile(url: URL): boolean {
+  return extensionOf(url) in FILEDEF_CODE_REF_BY_EXTENSION;
+}
+
+// Last-path-segment form of `urlNamesFile`, for callers that already hold the
+// segment as a string — the index runner's per-dep classifier stays off URL
+// construction entirely.
+export function segmentNamesFile(name: string): boolean {
+  return extensionOfName(name) in FILEDEF_CODE_REF_BY_EXTENSION;
+}
+
+export function resolveFileDefCodeRef(
+  fileURL: URL,
+  virtualNetwork: VirtualNetwork,
+): ResolvedCodeRef {
+  let extension = extensionOf(fileURL);
   let mapping = extension
     ? FILEDEF_CODE_REF_BY_EXTENSION[extension]
     : undefined;
@@ -49,9 +151,7 @@ export function resolveFileDefCodeRef(fileURL: URL): ResolvedCodeRef {
   }
   return {
     ...mapping,
-    module: resolveCardReference(
-      mapping.module,
-      fileURL,
-    ) as RealmResourceIdentifier,
+    module: virtualNetwork.resolveURL(mapping.module, fileURL)
+      .href as RealmResourceIdentifier,
   };
 }

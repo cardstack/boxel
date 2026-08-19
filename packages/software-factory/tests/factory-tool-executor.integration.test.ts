@@ -1,11 +1,12 @@
 import { createServer, type IncomingMessage, type Server } from 'node:http';
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
-import { ToolExecutor } from '../src/factory-tool-executor';
-import { ToolRegistry } from '../src/factory-tool-registry';
-import { buildTestClient } from './helpers/test-client';
+import { ToolExecutor } from '../src/factory-tool-executor.ts';
+import { ToolRegistry } from '../src/factory-tool-registry.ts';
+import { buildTestClient } from './helpers/test-client.ts';
 
 // ---------------------------------------------------------------------------
 // Test server helpers

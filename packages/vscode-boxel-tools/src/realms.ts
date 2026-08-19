@@ -1,17 +1,26 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import type { RealmAuth } from './realm-auth';
-import type { LocalFileSystem } from './local-file-system';
+import type { RealmAuth } from './realm-auth.ts';
+import type { LocalFileSystem } from './local-file-system.ts';
 
 export class RealmItem extends vscode.TreeItem {
+  public readonly realmName: string;
+  public readonly realmUrl: string;
+  public readonly localPath: string;
+  public readonly isWatched: boolean;
+
   constructor(
-    public readonly realmName: string,
-    public readonly realmUrl: string,
-    public readonly localPath: string,
-    public readonly isWatched: boolean,
+    realmName: string,
+    realmUrl: string,
+    localPath: string,
+    isWatched: boolean,
   ) {
     super(realmName, vscode.TreeItemCollapsibleState.None);
+    this.realmName = realmName;
+    this.realmUrl = realmUrl;
+    this.localPath = localPath;
+    this.isWatched = isWatched;
 
     this.tooltip = `${realmName}\n${realmUrl}\nStored at: ${localPath}`;
     this.description = isWatched ? 'Watching' : '';
@@ -30,11 +39,19 @@ export class RealmProvider implements vscode.TreeDataProvider<RealmItem> {
     RealmItem | undefined | null | void
   > = this._onDidChangeTreeData.event;
 
+  private realmAuth: RealmAuth;
+  private localFileSystem: LocalFileSystem;
+  private userId: string | null = null;
+
   constructor(
-    private realmAuth: RealmAuth,
-    private localFileSystem: LocalFileSystem,
-    private userId: string | null = null,
-  ) {}
+    realmAuth: RealmAuth,
+    localFileSystem: LocalFileSystem,
+    userId: string | null = null,
+  ) {
+    this.realmAuth = realmAuth;
+    this.localFileSystem = localFileSystem;
+    this.userId = userId;
+  }
 
   refresh(): void {
     this._onDidChangeTreeData.fire();

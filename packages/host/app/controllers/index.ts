@@ -1,19 +1,16 @@
 import Controller from '@ember/controller';
 import { tracked } from '@glimmer/tracking';
 
+import { HOST_APP_QUERY_PARAMS } from '@cardstack/runtime-common';
+
+import ENV from '@cardstack/host/config/environment';
+
 export default class IndexController extends Controller {
-  queryParams = [
-    'authRedirect',
-    'hostModeOrigin',
-    'hostModeStack',
-    'operatorModeState',
-    // `sid` and `clientSecret` come from email verification process to reset password
-    'sid',
-    'clientSecret',
-    'card',
-    'cardPath',
-    'debug', // temporary debug param for debugging AI assistant code patches
-  ];
+  // Declared in runtime-common so the realm server reads the same list
+  // when it decides which params a redirect rule may carry onto its
+  // target. `debug` is a temporary param for debugging AI assistant code
+  // patches.
+  queryParams = HOST_APP_QUERY_PARAMS;
 
   @tracked authRedirect: string | null = null;
   @tracked hostModeOrigin: string | null = null;
@@ -22,4 +19,11 @@ export default class IndexController extends Controller {
   @tracked sid: string | null = null;
   @tracked clientSecret: string | null = null;
   @tracked debug = false;
+  // Shows per-message and per-session AI token counts in the assistant
+  // panel. On by default in development (pass showTokens=false to hide);
+  // opt-in everywhere else. The default doubles as the query param's
+  // serialization baseline: the URL only carries the param when the value
+  // differs from it.
+  @tracked showTokens = ENV.environment === 'development';
+  @tracked openProfileSettings: string | null = null;
 }

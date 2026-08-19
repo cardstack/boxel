@@ -1,46 +1,49 @@
-import '../helpers/setup-realm-server';
+import '../helpers/setup-realm-server.ts';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { write } from '../../src/commands/file/write';
-import { createRealm } from '../../src/commands/realm/create';
-import { ProfileManager } from '../../src/lib/profile-manager';
 import {
   startTestRealmServer,
   stopTestRealmServer,
-  createTestProfileDir,
+  createTestHome,
+  reloadProfile,
   setupTestProfile,
-  uniqueRealmName,
-} from '../helpers/integration';
-import { TINY_PNG_BYTES, TINY_PDF_BYTES } from '../helpers/binary-fixtures';
+  createTestRealmViaCli,
+} from '../helpers/integration.ts';
+import { runBoxel } from '../helpers/run-boxel.ts';
+import {
+  TINY_PNG_BYTES,
+  TINY_PDF_BYTES,
+  NON_UTF8_BYTES,
+} from '../helpers/binary-fixtures.ts';
 
-let profileManager: ProfileManager;
+// `boxel file write <path> --realm <url>` reads content from STDIN (text)
+// or `--file <local>` (binary). We drive the installed binary and verify
+// the result by reading the file back from the realm with the profile the
+// CLI wrote to disk — the action goes through the CLI, the assertion is a
+// plain in-process fetch.
+
+let home: string;
 let cleanupProfile: () => void;
 let realmUrl: string;
 
-async function createTestRealm(): Promise<string> {
-  let name = uniqueRealmName();
-  await createRealm(name, `Test ${name}`, { profileManager });
-
-  let realmTokens =
-    profileManager.getActiveProfile()!.profile.realmTokens ?? {};
-  let entry = Object.entries(realmTokens).find(([url]) => url.includes(name));
-  if (!entry) {
-    throw new Error(`No realm JWT stored for ${name}`);
-  }
-  return entry[0];
+async function readBack(relPath: string): Promise<Response> {
+  return reloadProfile(home).authedRealmFetch(`${realmUrl}${relPath}`, {
+    method: 'GET',
+    headers: { Accept: 'application/vnd.card+source' },
+  });
 }
 
 beforeAll(async () => {
   await startTestRealmServer();
 
-  let testProfile = createTestProfileDir();
-  profileManager = testProfile.profileManager;
-  cleanupProfile = testProfile.cleanup;
-  await setupTestProfile(profileManager);
+  let testHome = createTestHome();
+  home = testHome.home;
+  cleanupProfile = testHome.cleanup;
+  await setupTestProfile(testHome.profileManager);
 
-  realmUrl = await createTestRealm();
+  ({ realmUrl } = await createTestRealmViaCli(home));
 });
 
 afterAll(async () => {
@@ -51,16 +54,13 @@ afterAll(async () => {
 describe('file write (integration)', () => {
   it('writes a .gts file and can read it back from the realm', async () => {
     let source = 'export const hello = "world";';
-    let writeResult = await write(realmUrl, 'roundtrip.gts', source, {
-      profileManager,
-    });
-    expect(writeResult.ok).toBe(true);
-
-    // Verify by reading back via the realm
-    let response = await profileManager.authedRealmFetch(
-      `${realmUrl}roundtrip.gts`,
-      { method: 'GET', headers: { Accept: 'application/vnd.card+source' } },
+    let res = await runBoxel(
+      ['file', 'write', 'roundtrip.gts', '--realm', realmUrl],
+      { home, input: source },
     );
+    expect(res.ok, res.stderr).toBe(true);
+
+    let response = await readBack('roundtrip.gts');
     expect(response.ok).toBe(true);
     let content = await response.text();
     expect(content).toContain('hello');
@@ -73,67 +73,149 @@ describe('file write (integration)', () => {
         attributes: { title: 'Written Card' },
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/card-api',
+            module: '@cardstack/base/card-api',
             name: 'CardDef',
           },
         },
       },
     });
-    let writeResult = await write(realmUrl, 'WrittenCard/1.json', card, {
-      profileManager,
-    });
-    expect(writeResult.ok).toBe(true);
-
-    let response = await profileManager.authedRealmFetch(
-      `${realmUrl}WrittenCard/1.json`,
-      { method: 'GET', headers: { Accept: 'application/vnd.card+source' } },
+    let res = await runBoxel(
+      ['file', 'write', 'WrittenCard/1.json', '--realm', realmUrl],
+      { home, input: card },
     );
+    expect(res.ok, res.stderr).toBe(true);
+
+    let response = await readBack('WrittenCard/1.json');
     expect(response.ok).toBe(true);
     let doc = await response.json();
     expect((doc as any).data.attributes.title).toBe('Written Card');
   });
 
   it('writes a PNG byte-identically and reads it back', async () => {
-    let writeResult = await write(realmUrl, 'image.png', TINY_PNG_BYTES, {
-      profileManager,
-    });
-    expect(writeResult.ok, `write failed: ${writeResult.error}`).toBe(true);
+    // Binary content can't ride argv/stdin faithfully, so stage it in a
+    // local file and pass `--file`, the CLI's binary path.
+    let src = path.join(os.tmpdir(), `boxel-write-${Date.now()}.png`);
+    fs.writeFileSync(src, Buffer.from(TINY_PNG_BYTES));
+    try {
+      let res = await runBoxel(
+        ['file', 'write', 'image.png', '--realm', realmUrl, '--file', src],
+        { home },
+      );
+      expect(res.ok, res.stderr).toBe(true);
+    } finally {
+      fs.rmSync(src, { force: true });
+    }
 
-    let response = await profileManager.authedRealmFetch(
-      `${realmUrl}image.png`,
-      { method: 'GET', headers: { Accept: 'application/vnd.card+source' } },
-    );
+    let response = await readBack('image.png');
     expect(response.ok).toBe(true);
     let remote = Buffer.from(await response.arrayBuffer());
     expect(remote.equals(Buffer.from(TINY_PNG_BYTES))).toBe(true);
   });
 
   it('writes a PDF byte-identically', async () => {
-    let writeResult = await write(realmUrl, 'doc.pdf', TINY_PDF_BYTES, {
-      profileManager,
-    });
-    expect(writeResult.ok).toBe(true);
+    let src = path.join(os.tmpdir(), `boxel-write-${Date.now()}.pdf`);
+    fs.writeFileSync(src, Buffer.from(TINY_PDF_BYTES));
+    try {
+      let res = await runBoxel(
+        ['file', 'write', 'doc.pdf', '--realm', realmUrl, '--file', src],
+        { home },
+      );
+      expect(res.ok, res.stderr).toBe(true);
+    } finally {
+      fs.rmSync(src, { force: true });
+    }
 
-    let response = await profileManager.authedRealmFetch(`${realmUrl}doc.pdf`, {
-      method: 'GET',
-      headers: { Accept: 'application/vnd.card+source' },
-    });
+    let response = await readBack('doc.pdf');
     let remote = Buffer.from(await response.arrayBuffer());
     expect(remote.equals(Buffer.from(TINY_PDF_BYTES))).toBe(true);
   });
 
-  it('returns error result when no active profile', async () => {
-    let emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-empty-'));
-    let emptyManager = new ProfileManager(emptyDir);
-
+  it('writes a .bin file byte-identically', async () => {
+    // .bin maps to application/octet-stream, the default for unknown
+    // extensions — the payload's invalid UTF-8 sequences survive only if
+    // that classification routes the upload through the binary path.
+    let src = path.join(os.tmpdir(), `boxel-write-${Date.now()}.bin`);
+    fs.writeFileSync(src, Buffer.from(NON_UTF8_BYTES));
     try {
-      let result = await write(realmUrl, 'test.gts', 'content', {
-        profileManager: emptyManager,
-      });
-      expect(result.ok).toBe(false);
-      expect(result.error).toContain('No active profile');
+      let res = await runBoxel(
+        ['file', 'write', 'blob.bin', '--realm', realmUrl, '--file', src],
+        { home },
+      );
+      expect(res.ok, res.stderr).toBe(true);
     } finally {
-      fs.rmSync(emptyDir, { recursive: true, force: true });
+      fs.rmSync(src, { force: true });
+    }
+
+    let response = await readBack('blob.bin');
+    expect(response.ok).toBe(true);
+    let remote = Buffer.from(await response.arrayBuffer());
+    expect(remote.equals(Buffer.from(NON_UTF8_BYTES))).toBe(true);
+  });
+
+  it('writes a .zip file byte-identically', async () => {
+    let src = path.join(os.tmpdir(), `boxel-write-${Date.now()}.zip`);
+    fs.writeFileSync(src, Buffer.from(NON_UTF8_BYTES));
+    try {
+      let res = await runBoxel(
+        ['file', 'write', 'archive.zip', '--realm', realmUrl, '--file', src],
+        { home },
+      );
+      expect(res.ok, res.stderr).toBe(true);
+    } finally {
+      fs.rmSync(src, { force: true });
+    }
+
+    let response = await readBack('archive.zip');
+    expect(response.ok).toBe(true);
+    let remote = Buffer.from(await response.arrayBuffer());
+    expect(remote.equals(Buffer.from(NON_UTF8_BYTES))).toBe(true);
+  });
+
+  it('writes string content from STDIN to a non-textual path', async () => {
+    // STDIN can only produce a string, so refusing string content at a path
+    // that is binary by extension would make such paths unwritable. The
+    // string is UTF-8 encoded onto the byte path instead, which is lossless.
+    let script = '#!/usr/bin/env python3\nprint("hi")\n';
+    let res = await runBoxel(
+      ['file', 'write', 'scripts/hello.py', '--realm', realmUrl],
+      { home, input: script },
+    );
+    expect(res.ok, res.stderr).toBe(true);
+
+    let response = await readBack('scripts/hello.py');
+    expect(response.ok).toBe(true);
+    let remote = Buffer.from(await response.arrayBuffer());
+    expect(remote.toString('utf8')).toBe(script);
+  });
+
+  it('refuses binary source content at a text destination', async () => {
+    // The destructive direction stays blocked: raw bytes at a text extension
+    // would be served back as text and mangled by the UTF-8 decode.
+    let src = path.join(os.tmpdir(), `boxel-write-${Date.now()}-guard.png`);
+    fs.writeFileSync(src, Buffer.from(TINY_PNG_BYTES));
+    try {
+      let res = await runBoxel(
+        ['file', 'write', 'notes.md', '--realm', realmUrl, '--file', src],
+        { home },
+      );
+      expect(res.exitCode).toBe(1);
+      expect(res.stderr).toContain('Refusing to write');
+    } finally {
+      fs.rmSync(src, { force: true });
+    }
+  });
+
+  it('exits non-zero with a clear error when there is no active profile', async () => {
+    let emptyHome = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-empty-'));
+    try {
+      let res = await runBoxel(
+        ['file', 'write', 'test.gts', '--realm', realmUrl],
+        { home: emptyHome, input: 'content' },
+      );
+      expect(res.exitCode).toBe(1);
+      expect(res.stderr).toContain('No active profile');
+    } finally {
+      fs.rmSync(emptyHome, { recursive: true, force: true });
     }
   });
 });

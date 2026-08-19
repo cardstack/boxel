@@ -1,10 +1,10 @@
 import type { Command } from 'commander';
-import { registerDeleteCommand } from './delete';
-import { registerListCommand } from './list';
-import { registerLintCommand } from './lint';
-import { registerReadCommand } from './read';
-import { registerTouchCommand } from './touch';
-import { registerWriteCommand } from './write';
+import { registerDeleteCommand } from './delete.ts';
+import { registerListCommand } from './list.ts';
+import { registerLintCommand } from './lint.ts';
+import { registerReadCommand } from './read.ts';
+import { registerTouchCommand } from './touch.ts';
+import { registerWriteCommand } from './write.ts';
 
 export function registerFileCommand(program: Command): void {
   let file = program

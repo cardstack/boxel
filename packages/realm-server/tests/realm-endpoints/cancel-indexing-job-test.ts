@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import type { SuperTest, Test } from 'supertest';
 import type {
@@ -8,10 +9,14 @@ import type {
 } from '@cardstack/runtime-common';
 import { Deferred } from '@cardstack/runtime-common';
 import { PgAdapter, PgQueueRunner } from '@cardstack/postgres';
-import { createJWT, setupPermissionedRealmCached, waitUntil } from '../helpers';
+import {
+  createJWT,
+  setupPermissionedRealmCached,
+  waitUntil,
+} from '../helpers/index.ts';
 import type { PgAdapter as TestPgAdapter } from '@cardstack/postgres';
 
-module(`realm-endpoints/${basename(__filename)}`, function () {
+module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
   module(
     'Realm-specific Endpoints | POST _cancel-indexing-job',
     function (hooks) {

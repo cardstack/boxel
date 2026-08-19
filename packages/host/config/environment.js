@@ -6,6 +6,8 @@ const path = require('path');
 const DEFAULT_CARD_RENDER_TIMEOUT_MS = 30_000;
 const DEFAULT_CARD_SIZE_LIMIT_BYTES = 512 * 1024; // 512KB
 const DEFAULT_FILE_SIZE_LIMIT_BYTES = 5 * 1024 * 1024; // 5MB
+const DEFAULT_AUDIO_SIZE_LIMIT_BYTES = 20 * 1024 * 1024; // 20MB
+const DEFAULT_VIDEO_SIZE_LIMIT_BYTES = 50 * 1024 * 1024; // 50MB
 
 let sqlSchema = fs.readFileSync(getLatestSchemaFile(), 'utf8');
 
@@ -67,6 +69,7 @@ function environmentDefaults() {
       catalogRealmURL: 'https://localhost:4201/catalog/',
       skillsRealmURL: 'https://localhost:4201/skills/',
       openRouterRealmURL: 'https://localhost:4201/openrouter/',
+      testRealmURL: 'https://localhost:4202/test/',
     };
   }
   let slug = getEnvSlug();
@@ -87,6 +90,10 @@ function environmentDefaults() {
     catalogRealmURL: `https://${realmHost}/catalog/`,
     skillsRealmURL: `https://${realmHost}/skills/`,
     openRouterRealmURL: `https://${realmHost}/openrouter/`,
+    // mise-tasks/services/test-realms registers the live test realm at
+    // `https://realm-test.${slug}.localhost/test/` in env mode (the
+    // counterpart to standard mode's `https://localhost:4202/test/`).
+    testRealmURL: `https://realm-test.${slug}.localhost/test/`,
   };
 }
 
@@ -97,6 +104,12 @@ module.exports = function (environment) {
   const ENV = {
     modulePrefix: '@cardstack/host',
     environment,
+    // The deployed environment (staging / production / local), distinct from
+    // `environment` above — that is the Ember build mode, which is 'production'
+    // for any minified deploy regardless of where it runs. The realm-server
+    // overwrites this at serve time from its REALM_SENTRY_ENVIRONMENT; the
+    // default covers local dev where the host isn't served through it.
+    hostedEnvironment: 'local',
     rootURL: '/',
     locationType: 'history',
     EmberENV: {
@@ -140,6 +153,12 @@ module.exports = function (environment) {
     fileSizeLimitBytes: Number(
       process.env.FILE_SIZE_LIMIT_BYTES ?? DEFAULT_FILE_SIZE_LIMIT_BYTES,
     ),
+    audioSizeLimitBytes: Number(
+      process.env.AUDIO_SIZE_LIMIT_BYTES ?? DEFAULT_AUDIO_SIZE_LIMIT_BYTES,
+    ),
+    videoSizeLimitBytes: Number(
+      process.env.VIDEO_SIZE_LIMIT_BYTES ?? DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
+    ),
     // In environment mode, use computed Traefik hostname (not env var, which
     // may be stale from mise's shell-activation cache in standard mode).
     iconsURL: process.env.BOXEL_ENVIRONMENT
@@ -165,6 +184,24 @@ module.exports = function (environment) {
       process.env.RESOLVED_SKILLS_REALM_URL || defaults.skillsRealmURL,
     resolvedOpenRouterRealmURL:
       process.env.RESOLVED_OPENROUTER_REALM_URL || defaults.openRouterRealmURL,
+    // The live test realm-server's /test/ realm — used by host tests
+    // that load source modules from it via
+    // `tests/helpers#testModuleRealm`. Derived from BOXEL_ENVIRONMENT via
+    // `defaults.testRealmURL` above (localhost:4202 in standard mode,
+    // realm-test.<slug>.localhost in env mode). Explicit
+    // `REALM_TEST_URL` overrides take precedence for non-CI consumers
+    // that want a custom test realm endpoint. The override accepts
+    // either a base host URL (which gets `/test/` appended) or a value
+    // that already names the `/test` realm — without the latter case
+    // a path like `https://my-host/test/` would become
+    // `https://my-host/test/test/`.
+    resolvedTestRealmURL: (() => {
+      if (!process.env.REALM_TEST_URL) return defaults.testRealmURL;
+      let normalized = process.env.REALM_TEST_URL.replace(/\/$/, '');
+      return normalized.endsWith('/test')
+        ? `${normalized}/`
+        : `${normalized}/test/`;
+    })(),
     featureFlags: {},
   };
 
@@ -190,6 +227,9 @@ module.exports = function (environment) {
 
     // Catalog realms are not available in test environment
     ENV.resolvedCatalogRealmURL = undefined;
+    // Neither is the OpenRouter catalog realm; tests that exercise the model
+    // cost-tier lookup point this at their own test realm explicitly.
+    ENV.resolvedOpenRouterRealmURL = undefined;
     ENV.defaultSystemCardId = 'http://test-realm/test/SystemCard/default';
     ENV.defaultFieldSpecId = 'http://test-realm/test/fields/field';
   }
@@ -217,14 +257,27 @@ function getLatestSchemaFile() {
   const migrationsDir = path.resolve(
     path.join(__dirname, '..', '..', 'postgres', 'migrations'),
   );
-  let migrations = fs.readdirSync(migrationsDir);
+  const removalMigrationsDir = path.resolve(
+    path.join(__dirname, '..', '..', 'postgres', 'migrations-removal'),
+  );
+  // Latest timestamped migration across both phases (additive in migrations/,
+  // destructive in migrations-removal/). Only timestamped migration files count
+  // — ignores non-migration entries such as `package.json` (pins the dir to
+  // type:commonjs) and `.eslintrc.js`.
+  let migrations = [
+    ...fs.readdirSync(migrationsDir),
+    ...fs.readdirSync(removalMigrationsDir),
+  ];
   let lastMigration = migrations
-    .filter((f) => f !== '.eslintrc.js')
+    .filter((f) => /^\d+_/.test(f))
     .sort()
     .pop();
   const schemaDir = path.join(__dirname, 'schema');
   let files = fs.readdirSync(schemaDir);
-  let latestSchemaFile = files.sort().pop();
+  let latestSchemaFile = files
+    .filter((f) => /^\d+_schema\.sql$/.test(f))
+    .sort()
+    .pop();
   if (
     lastMigration.replace(/_.*/, '') !== latestSchemaFile.replace(/_.*/, '') &&
     ['development', 'test'].includes(process.env.EMBER_ENV)

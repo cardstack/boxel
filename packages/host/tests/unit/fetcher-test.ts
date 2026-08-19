@@ -2,8 +2,7 @@ import { module, test } from 'qunit';
 
 import {
   fetcher,
-  registerCardReferencePrefix,
-  unregisterCardReferencePrefix,
+  VirtualNetwork,
   type FetcherMiddlewareHandler,
 } from '@cardstack/runtime-common';
 
@@ -90,22 +89,27 @@ module('Unit | fetcher', function () {
 
   test('resolves a registered scoped prefix before constructing the Request', async function (assert) {
     assert.expect(1);
-    registerCardReferencePrefix(
+    let vn = new VirtualNetwork(globalThis.fetch);
+    vn.addRealmMapping(
       '@cardstack/catalog/',
       'https://app.example.com/catalog/',
     );
     try {
-      let fetch = fetcher(async function (request) {
-        assert.strictEqual(
-          (request as Request).url,
-          'https://app.example.com/catalog/Foo/abc',
-          'scoped id is resolved to its real URL, not joined onto document.baseURI',
-        );
-        return new Response('OK', { status: 200 });
-      }, []);
+      let fetch = fetcher(
+        async function (request) {
+          assert.strictEqual(
+            (request as Request).url,
+            'https://app.example.com/catalog/Foo/abc',
+            'scoped id is resolved to its real URL, not joined onto document.baseURI',
+          );
+          return new Response('OK', { status: 200 });
+        },
+        [],
+        vn,
+      );
       await fetch('@cardstack/catalog/Foo/abc');
     } finally {
-      unregisterCardReferencePrefix('@cardstack/catalog/');
+      vn.removeRealmMapping('@cardstack/catalog/');
     }
   });
 

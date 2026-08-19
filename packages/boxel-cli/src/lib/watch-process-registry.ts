@@ -1,7 +1,7 @@
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
-import { isProcessAlive } from './watch-lock';
+import { isProcessAlive } from './watch-lock.ts';
 
 export interface RegisteredProcess {
   pid: number;

@@ -1,5 +1,5 @@
 import type { PrerenderVisitArgs } from '@cardstack/runtime-common';
-import { toAffinityKey } from './affinity';
+import { toAffinityKey } from './affinity.ts';
 
 // Pure policy function for CS-10758 step 3 `clearCache` batch ownership.
 // Given the incoming visit args and the current owner entry (if any),

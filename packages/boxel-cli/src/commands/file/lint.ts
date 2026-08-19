@@ -4,12 +4,13 @@ import {
   getProfileManager,
   NO_ACTIVE_PROFILE_ERROR,
   type ProfileManager,
-} from '../../lib/profile-manager';
+} from '../../lib/profile-manager.ts';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
-import { FG_GREEN, FG_RED, FG_YELLOW, DIM, RESET } from '../../lib/colors';
-import { cliLog } from '../../lib/cli-log';
-import { write } from './write';
+import { FG_GREEN, FG_RED, FG_YELLOW, DIM, RESET } from '../../lib/colors.ts';
+import { cliLog } from '../../lib/cli-log.ts';
+import { resolveRealmIdentifier } from '../../lib/resolve-realm-identifier.ts';
+import { write } from './write.ts';
 
 export interface LintMessage {
   ruleId: string | null;
@@ -56,6 +57,12 @@ export async function lint(
       error: NO_ACTIVE_PROFILE_ERROR,
     };
   }
+
+  let resolvedRealm = resolveRealmIdentifier(realmUrl, { profileManager: pm });
+  if (!resolvedRealm.ok) {
+    return { ok: false, error: resolvedRealm.error };
+  }
+  realmUrl = resolvedRealm.url;
 
   let lintUrl = `${ensureTrailingSlash(realmUrl)}_lint`;
 

@@ -15,14 +15,19 @@ import {
   defaultSupportMetadataFile,
   type PreparedTemplateMetadata,
   readSupportMetadata,
+  startCompatRealmProxy,
   startHarnessPrerenderServer,
+  type StartedCompatRealmProxy,
 } from '@cardstack/realm-test-harness';
-import { logger } from '../src/logger';
-import { buildBrowserState, installBrowserState } from './helpers/browser-auth';
+import { logger } from '../src/logger.ts';
+import {
+  buildBrowserState,
+  installBrowserState,
+} from './helpers/browser-auth.ts';
 import {
   allocateTestWorkerPortSet,
   type TestWorkerPortReservation,
-} from './helpers/port-allocator';
+} from './helpers/port-allocator.ts';
 
 // Same name `playwright.global-setup.ts` already uses, and already
 // configured at `info` in `playwright.config.ts` so heartbeat lines
@@ -72,6 +77,7 @@ type FactoryRealmWorkerFixtures = {
     url: string;
     stop(): Promise<void>;
   };
+  testWorkerCompatProxy: StartedCompatRealmProxy;
 };
 
 type FactoryRealmTestFixtures = {
@@ -84,7 +90,7 @@ type SharedRealmHandle = {
 };
 
 const packageRoot = resolve(process.cwd());
-const tsNodeBin = resolve(packageRoot, 'node_modules', '.bin', 'ts-node');
+const nodeBin = process.execPath;
 const defaultRealmDir = resolve(
   packageRoot,
   process.env.TEST_HARNESS_REALM_DIR ?? 'test-fixtures/darkfactory-adopter',
@@ -178,10 +184,24 @@ async function waitForMetadataFile<T>(
 ): Promise<T> {
   let startedAt = Date.now();
   let nextHeartbeat = startedAt + METADATA_FILE_HEARTBEAT_MS;
+  let lastParseError: string | undefined;
 
   while (Date.now() - startedAt < timeoutMs) {
     if (existsSync(metadataFile)) {
-      return JSON.parse(readFileSync(metadataFile, 'utf8')) as T;
+      let raw = readFileSync(metadataFile, 'utf8');
+      try {
+        return JSON.parse(raw) as T;
+      } catch (error) {
+        // The writer renames an atomically-written temp file into place,
+        // so a partial payload shouldn't be observable here — but
+        // tolerate a truncated read and keep polling rather than aborting
+        // the run on it. Record what we saw so a genuinely malformed
+        // payload surfaces in the timeout error below instead of hiding
+        // behind a bare timeout.
+        lastParseError = `failed to parse ${metadataFile} (${raw.length} chars): ${
+          error instanceof Error ? error.message : String(error)
+        }`;
+      }
     }
 
     if (child.exitCode !== null) {
@@ -205,7 +225,9 @@ async function waitForMetadataFile<T>(
 
   throw new Error(
     `timed out waiting for software-factory metadata file ${metadataFile} ` +
-      `after ${Math.round((Date.now() - startedAt) / 1000)}s\n${getLogs()}`,
+      `after ${Math.round((Date.now() - startedAt) / 1000)}s` +
+      (lastParseError ? `\nlast parse attempt: ${lastParseError}` : '') +
+      `\n${getLogs()}`,
   );
 }
 
@@ -213,6 +235,7 @@ async function startRealmProcess(
   realmDir = defaultRealmDir,
   testWorkerPortSet: TestWorkerPortReservation,
   testWorkerPrerenderURL: string,
+  testWorkerCompatProxy: StartedCompatRealmProxy,
   permissions?: RealmPermissions,
 ) {
   let tempDir = mkdtempSync(join(tmpdir(), 'software-factory-realm-'));
@@ -271,14 +294,16 @@ async function startRealmProcess(
   };
   try {
     child = spawn(
-      tsNodeBin,
+      nodeBin,
       [
-        '--transpileOnly',
         'src/cli/serve-realm.ts',
         realmDir,
         `--compatRealmServerPort=${testWorkerPortSet.compatRealmServerPort}`,
         `--realmServerPort=${testWorkerPortSet.realmServerPort}`,
         `--prerenderURL=${testWorkerPrerenderURL}`,
+        // Worker fixture owns the compat proxy across per-test
+        // serve-realm restarts; the child must not bind that port.
+        '--no-compat-proxy',
       ],
       {
         cwd: packageRoot,
@@ -337,7 +362,7 @@ async function startRealmProcess(
 
     // Race the metadata-file poll against an early `'error'` from the
     // child. Without this, a spawn-level failure (e.g. ENOENT on the
-    // ts-node binary) leaves waitForMetadataFile polling until its
+    // node binary) leaves waitForMetadataFile polling until its
     // 300-second timeout before the startup error surfaces.
     let earlyError = new Promise<never>((_, reject) => {
       child!.once('error', reject);
@@ -390,8 +415,24 @@ async function startRealmProcess(
   // Narrow `child` for the rest of the function — if we reached here the
   // metadata was read successfully, which means spawn succeeded.
   let runningChild = child;
+
+  // Repoint the worker-scoped compat proxy at this child's realm-server
+  // port. The proxy is already bound on the stable compatRealmServerPort
+  // (from the testWorkerCompatProxy fixture); it just needs to know
+  // where to forward.
+  testWorkerCompatProxy.setTargetPort(metadata.ports.realmServerPort);
+
   let stop = async () => {
     try {
+      // Tell the worker-scoped compat proxy to block (not 502) any
+      // incoming requests from the prerender's standby pool while the
+      // realm-server is being recreated. Without this, refills queued
+      // during the kill→bind window race the dying upstream, cache the
+      // failure as a broken module load, and the standby page sits in
+      // a permanently unusable state until the prerender's 90s render
+      // timeout evicts it. Cleared in `setTargetPort` once the new
+      // realm-server is bound.
+      testWorkerCompatProxy.clearTargetPort();
       if (runningChild.exitCode === null) {
         killProcessGroup(runningChild.pid!, 'SIGTERM');
         await new Promise<void>((resolve, reject) => {
@@ -409,13 +450,15 @@ async function startRealmProcess(
           });
         });
       }
+      // Only wait on the realm-server + worker-manager ports; the
+      // compat port is owned by the worker-scoped proxy and stays bound
+      // across this teardown.
       await Promise.all([
         waitForPortFree(metadata.ports.realmServerPort),
-        waitForPortFree(metadata.ports.publicPort),
         waitForPortFree(metadata.ports.workerManagerPort),
       ]);
-      // Child has fully released its sockets; reclaim our holders on
-      // compat + realm-server before the next test-scoped realm starts.
+      // Child has released the realm-server port; reclaim our holder
+      // before the next test-scoped realm starts.
       await testWorkerPortSet.reacquireRealmServerPorts();
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
@@ -476,6 +519,7 @@ async function acquireSharedRealm(
   realmDir: string,
   testWorkerPortSet: TestWorkerPortReservation,
   testWorkerPrerenderURL: string,
+  testWorkerCompatProxy: StartedCompatRealmProxy,
 ): Promise<StartedFactoryRealm> {
   let existing = sharedRealms.get(key);
   if (!existing) {
@@ -483,6 +527,7 @@ async function acquireSharedRealm(
       realmDir,
       testWorkerPortSet,
       testWorkerPrerenderURL,
+      testWorkerCompatProxy,
     ).then((realm) => ({
       realm,
       refCount: 0,
@@ -560,6 +605,27 @@ export const test = base.extend<
     },
     { scope: 'worker' },
   ],
+  testWorkerCompatProxy: [
+    async ({ browserName: _browserName, testWorkerPortSet }, use) => {
+      // The compat proxy is testWorker-scoped (not test-scoped) so the
+      // stable compatRealmServerPort always has a listener. Per-test
+      // serve-realm children bind a fresh realm-server port and the
+      // worker calls `setTargetPort` to repoint this proxy — there is no
+      // OS-level port-listen gap on the compat port between tests, so
+      // the worker-scoped prerender's standby refills can't hit
+      // ERR_CONNECTION_REFUSED on `<host>/_standby`.
+      await testWorkerPortSet.releaseCompatRealmServerPort();
+      let proxy = await startCompatRealmProxy({
+        listenPort: testWorkerPortSet.compatRealmServerPort,
+      });
+      try {
+        await use(proxy);
+      } finally {
+        await proxy.stop();
+      }
+    },
+    { scope: 'worker' },
+  ],
 
   realm: async (
     {
@@ -569,6 +635,7 @@ export const test = base.extend<
       realmPermissions: permissions,
       testWorkerPortSet,
       testWorkerPrerender,
+      testWorkerCompatProxy,
     },
     use,
     testInfo,
@@ -580,6 +647,7 @@ export const test = base.extend<
         realmDir,
         testWorkerPortSet,
         testWorkerPrerender.url,
+        testWorkerCompatProxy,
       );
       try {
         await use(realm);
@@ -593,6 +661,7 @@ export const test = base.extend<
       realmDir,
       testWorkerPortSet,
       testWorkerPrerender.url,
+      testWorkerCompatProxy,
       permissions,
     );
     try {

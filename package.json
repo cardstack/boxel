@@ -6,18 +6,19 @@
   },
   "scripts": {
     "build:boxel-host": "pnpm run build-common-deps && cd packages/host && NODE_OPTIONS='--max_old_space_size=8192' pnpm build:production",
-    "build-common-deps": "cd packages/boxel-icons && pnpm build && cd ../.. && cd packages/boxel-ui/addon && pnpm build && cd ../../..",
+    "build-common-deps": "cd packages/boxel-icons && pnpm build && cd ../.. && cd packages/boxel-ui && pnpm build && cd ../../..",
     "ci:failures": "node ./scripts/ci-failures.js",
     "clear-caches": "find . -name 'node_modules' -type d -prune -exec rm -rf {} \\; && rm -rf $TMPDIR/embroider",
     "deploy:boxel-host": "pnpm run build-common-deps && cd packages/host && BASE_REALM_HOSTING_DISABLED=true NODE_OPTIONS='--max_old_space_size=8192' pnpm exec ember deploy",
     "deploy:boxel-host:preview-staging": "pnpm run build-common-deps && cd packages/host && BASE_REALM_HOSTING_DISABLED=true NODE_OPTIONS='--max_old_space_size=8192' pnpm exec ember deploy s3-preview-staging --verbose",
     "deploy:boxel-host:preview-production": "pnpm run build-common-deps && cd packages/host && BASE_REALM_HOSTING_DISABLED=true NODE_OPTIONS='--max_old_space_size=8192' pnpm exec ember deploy s3-preview-production --verbose",
-    "deploy:boxel-ui": "pnpm run build-common-deps && cd packages/boxel-ui/test-app && pnpm exec ember deploy",
-    "deploy:boxel-ui:preview-staging": "pnpm run build-common-deps && cd packages/boxel-ui/test-app && pnpm exec ember deploy s3-preview-staging --verbose",
+    "deploy:boxel-ui": "pnpm run build-common-deps && cd packages/boxel-ui/docs-app && pnpm exec ember deploy",
+    "deploy:boxel-ui:preview-staging": "pnpm run build-common-deps && cd packages/boxel-ui/docs-app && pnpm exec ember deploy s3-preview-staging --verbose",
     "lint": "pnpm run --filter './packages/**' --if-present -r lint",
     "lint:fix": "pnpm run --filter './packages/**' --if-present -r lint:fix",
     "openrouter:sync": "OPENROUTER_REALM_URL=${OPENROUTER_REALM_URL:-https://localhost:4201/openrouter/} pnpm --filter @cardstack/realm-server sync-openrouter-models",
-    "prepare-worktree-types": "pnpm --filter @cardstack/boxel-icons build && pnpm --filter @cardstack/boxel-ui build:types"
+    "prepare-worktree-types": "pnpm --filter @cardstack/boxel-icons build && pnpm --filter @cardstack/boxel-ui build",
+    "prepare": "husky"
   },
   "devDependencies": {
     "@actions/core": "catalog:",
@@ -28,6 +29,7 @@
     "@glimmer/component": "catalog:",
     "@glimmer/syntax": "^0.95.0",
     "@glimmer/tracking": "^1.1.2",
+    "@glint/ember-tsc": "catalog:",
     "@playwright/test": "catalog:",
     "@typescript-eslint/eslint-plugin": "catalog:",
     "@typescript-eslint/parser": "catalog:",
@@ -40,12 +42,14 @@
     "eslint-plugin-import": "catalog:",
     "eslint-plugin-prefer-let": "catalog:",
     "eslint-plugin-prettier": "catalog:",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.0.5",
     "prettier": "catalog:",
     "prettier-plugin-ember-template-tag": "catalog:",
-    "typescript": "catalog:",
-    "@glint/ember-tsc": "catalog:"
+    "typescript": "catalog:"
   },
   "engines": {
+    "node": ">=24",
     "pnpm": "^11"
   },
   "dependencies": {
@@ -54,7 +58,10 @@
   "devEngines": {
     "runtime": {
       "name": "node",
-      "version": "24.13.1"
+      "version": "24.17.0"
     }
+  },
+  "volta": {
+    "node": "24.17.0"
   }
 }

@@ -3,10 +3,11 @@ import {
   getProfileManager,
   NO_ACTIVE_PROFILE_ERROR,
   type ProfileManager,
-} from '../../lib/profile-manager';
+} from '../../lib/profile-manager.ts';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
-import { FG_GREEN, FG_RED, RESET } from '../../lib/colors';
-import { cliLog } from '../../lib/cli-log';
+import { FG_GREEN, FG_RED, RESET } from '../../lib/colors.ts';
+import { cliLog } from '../../lib/cli-log.ts';
+import { resolveRealmIdentifier } from '../../lib/resolve-realm-identifier.ts';
 
 export interface CancelIndexingCommandOptions {
   profileManager?: ProfileManager;
@@ -44,6 +45,12 @@ export async function cancelIndexing(
       error: NO_ACTIVE_PROFILE_ERROR,
     };
   }
+
+  let resolvedRealm = resolveRealmIdentifier(realmUrl, { profileManager: pm });
+  if (!resolvedRealm.ok) {
+    return { ok: false, error: resolvedRealm.error };
+  }
+  realmUrl = resolvedRealm.url;
 
   let cancelPending = options?.cancelPending ?? false;
   let cancelUrl = `${ensureTrailingSlash(realmUrl)}_cancel-indexing-job`;

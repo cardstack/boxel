@@ -1,14 +1,15 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import { getUserByMatrixUserId } from '@cardstack/billing/billing-queries';
 import { param, query } from '@cardstack/runtime-common';
-import { realmSecretSeed, testRealmInfo } from '../helpers';
-import { createJWT as createRealmServerJWT } from '../../utils/jwt';
-import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
-import { setupServerEndpointsTest, testRealmURL } from './helpers';
+import { realmSecretSeed, testRealmInfo } from '../helpers/index.ts';
+import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
+import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.ts';
+import { setupServerEndpointsTest, testRealmURL } from './helpers.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
-module(`server-endpoints/${basename(__filename)}`, function () {
+module(`server-endpoints/${basename(import.meta.filename)}`, function () {
   module(
     'Realm Server Endpoints (not specific to one realm)',
     function (hooks) {
@@ -103,18 +104,18 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           .set('Accept', 'application/json');
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
-        assert.deepEqual(response.body, {
-          data: [
-            {
-              type: 'catalog-realm',
-              id: `${testRealmURL}`,
-              attributes: {
-                ...testRealmInfo,
-                showAsCatalog: true,
-              },
+        // `/_catalog-realms` forwards each realm's `/_info` attributes
+        // verbatim, and that route serves the plain RealmInfo.
+        assert.deepEqual(response.body.data, [
+          {
+            type: 'catalog-realm',
+            id: `${testRealmURL}`,
+            attributes: {
+              ...testRealmInfo,
+              showAsCatalog: true,
             },
-          ],
-        });
+          },
+        ]);
       });
 
       test(`returns 200 with empty data if failed to fetch catalog realm's info`, async function (assert) {

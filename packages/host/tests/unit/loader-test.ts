@@ -4,12 +4,7 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import {
-  baseRealm,
-  Loader,
-  registerCardReferencePrefix,
-  unregisterCardReferencePrefix,
-} from '@cardstack/runtime-common';
+import { baseRealm, Loader } from '@cardstack/runtime-common';
 
 import {
   testRealmURL,
@@ -113,8 +108,8 @@ module('Unit | loader', function (hooks) {
           }
         `,
           'person.gts': `
-          import { contains, field, CardDef } from 'https://cardstack.com/base/card-api';
-          import StringField from 'https://cardstack.com/base/string';
+          import { contains, field, CardDef } from '@cardstack/base/card-api';
+          import StringField from '@cardstack/base/string';
           export class Person extends CardDef {
             static displayName = 'Person';
             @field firstName = contains(StringField);
@@ -138,7 +133,7 @@ module('Unit | loader', function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   test('can dynamically load modules with cycles', async function (assert) {
@@ -237,32 +232,93 @@ module('Unit | loader', function (hooks) {
     assert.strictEqual(myLoader(), loader, 'the loader instance is correct');
   });
 
-  // Regression test for CS-10498: after the import-maps change, module
-  // identifiers can be in registered prefix form (e.g. @cardstack/catalog/...).
-  // getConsumedModules passed these directly to new URL() which throws
-  // TypeError: Invalid URL. The fix uses resolveCardReference() first.
+  // Module identifiers can be in registered prefix form (e.g.
+  // @cardstack/catalog/...); the loader accepts either spelling as input and
+  // emits dependency lists in canonical form — the prefix spelling wherever a
+  // realm-prefix mapping is registered.
   test('can determine consumed modules using prefix-form module identifier', async function (assert) {
-    // Card-reference prefixes are global state — without the finally clause
-    // this registration leaks into later modules in the same shard, causing
-    // skill uploads to canonicalize sourceUrls to @test-loader/... and
-    // breaking strict URL matches in tests that consume them.
-    registerCardReferencePrefix('@test-loader/', testRealmURL);
+    // Realm-prefix mappings live on the per-app VirtualNetwork — without
+    // the finally clause this registration leaks into later tests,
+    // causing skill uploads to canonicalize sourceUrls to @test-loader/...
+    // and breaking strict URL matches in tests that consume them.
+    let virtualNetwork = getService('network').virtualNetwork;
+    virtualNetwork.addRealmMapping('@test-loader/', testRealmURL);
     try {
       // Import the module using its regular URL so it's in the loader cache
       await loader.import(`${testRealmURL}f`);
 
-      // Now call getConsumedModules with the prefix-form identifier.
-      // Without the fix, this throws TypeError: Invalid URL because
-      // new URL('@test-loader/f') is not a valid URL.
+      // Call getConsumedModules with the prefix-form identifier. This
+      // requires VN-aware resolution — new URL('@test-loader/f') is not a
+      // valid URL.
       let consumed = await loader.getConsumedModules(`@test-loader/f`);
       assert.deepEqual(
         consumed,
-        [`${testRealmURL}b`, `${testRealmURL}c`, `${testRealmURL}g`],
-        'consumed modules resolved correctly from prefix-form identifier',
+        [`@test-loader/b`, `@test-loader/c`, `@test-loader/g`],
+        'consumed modules come out in canonical prefix form',
+      );
+      assert.deepEqual(
+        await loader.getConsumedModules(`${testRealmURL}f`),
+        consumed,
+        'URL-form input produces the same canonical output',
       );
     } finally {
-      unregisterCardReferencePrefix('@test-loader/');
+      virtualNetwork.removeRealmMapping('@test-loader/');
     }
+  });
+
+  test('a realm-mapping change discards the module cache', async function (assert) {
+    // The loader keys its module cache by canonical RRI form, whose
+    // relationship to a URL is only stable between mapping changes. A mapping
+    // add/remove must therefore discard the cache so an entry can't survive
+    // under a spelling that no longer resolves the same way.
+    let virtualNetwork = getService('network').virtualNetwork;
+    await loader.import(`${testRealmURL}f`);
+    assert.true(
+      loader.isModuleLoaded(`${testRealmURL}f`),
+      'module is cached after import',
+    );
+    virtualNetwork.addRealmMapping('@test-loader-discard/', testRealmURL);
+    try {
+      assert.false(
+        loader.isModuleLoaded(`${testRealmURL}f`),
+        'module is not visible under its pre-mapping spelling after a mapping add',
+      );
+    } finally {
+      virtualNetwork.removeRealmMapping('@test-loader-discard/');
+    }
+    assert.false(
+      loader.isModuleLoaded(`${testRealmURL}f`),
+      'removing a realm mapping also discards the module cache',
+    );
+  });
+
+  test('dispose() unsubscribes a discarded loader from mapping-change notifications', async function (assert) {
+    // LoaderService replaces its loader on every module edit / session
+    // boundary. Each loader subscribes to realm-mapping changes; without
+    // dispose() the VirtualNetwork keeps that subscription — pinning the
+    // loader and its whole module cache indefinitely. After dispose(), a
+    // mapping change must no longer reach this loader.
+    //
+    // Probe with a net-zero add+remove rather than isModuleLoaded straight
+    // after an add: a mapping add shifts the cache-key form itself, so a
+    // still-cached module would fail to look up under its original URL even
+    // when nothing was discarded. Restoring the mapping restores the key
+    // form, so a surviving cache entry is observable again — which it is only
+    // if the loader ignored both notifications.
+    let virtualNetwork = getService('network').virtualNetwork;
+    let discarded = Loader.cloneLoader(loader);
+    await discarded.import(`${testRealmURL}f`);
+    assert.true(
+      discarded.isModuleLoaded(`${testRealmURL}f`),
+      'module is cached after import',
+    );
+    discarded.dispose();
+    virtualNetwork.addRealmMapping('@test-loader-dispose/', testRealmURL);
+    virtualNetwork.removeRealmMapping('@test-loader-dispose/');
+    assert.true(
+      discarded.isModuleLoaded(`${testRealmURL}f`),
+      "a disposed loader's cache survives mapping changes (subscription released)",
+    );
   });
 
   test('isModuleLoaded returns false for a module that has not been imported', function (assert) {
@@ -357,6 +413,11 @@ module('Unit | loader', function (hooks) {
       default: StringField,
     });
 
+    // This Loader is constructed without a `virtualNetwork`, so
+    // `captureIdentitiesOfModuleExports` records the raw shim module
+    // identifier without running it through `vn.unresolveURL`. The
+    // identity stays in URL form. Other test setups that build a VN
+    // alongside the Loader see the RRI canonical form here.
     assert.deepEqual(Loader.identify(StringField), {
       module: `${baseRealm.url}card-api`,
       name: 'StringField',

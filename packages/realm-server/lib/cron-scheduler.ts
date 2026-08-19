@@ -1,18 +1,24 @@
-import { logger } from '@cardstack/runtime-common';
+import { logger, systemInitiatedPriority } from '@cardstack/runtime-common';
 import * as Sentry from '@sentry/node';
 import type { CronJob } from 'cron';
-import { enqueueDailyCreditGrant } from '../scripts/daily-credit-grant';
+import { enqueueDailyCreditGrant } from '../scripts/daily-credit-grant.ts';
 import {
   DAILY_CREDIT_GRANT_CRON_TZ,
   createDailyCreditGrantCronJob,
   parseLowCreditThreshold,
-} from './daily-credit-grant-config';
-import { enqueueSyncOpenRouterModels } from '../scripts/sync-openrouter-models';
+} from './daily-credit-grant-config.ts';
+import { enqueueSyncOpenRouterModels } from '../scripts/sync-openrouter-models.ts';
 import {
   OPENROUTER_SYNC_CRON_TZ,
   createOpenRouterSyncCronJob,
   getOpenRouterRealmURL,
-} from './openrouter-sync-config';
+} from './openrouter-sync-config.ts';
+import { enqueuePrerenderHtmlReconcile } from '../scripts/prerender-html-reconcile.ts';
+import {
+  PRERENDER_HTML_RECONCILE_CRON_SCHEDULE,
+  PRERENDER_HTML_RECONCILE_CRON_TZ,
+  createPrerenderHtmlReconcileCronJob,
+} from './prerender-html-reconcile-config.ts';
 
 let log = logger('cron-scheduler');
 
@@ -27,6 +33,11 @@ export function startCronJobs(): void {
   let openRouterJob = startOpenRouterSyncCron();
   if (openRouterJob) {
     jobs.push(openRouterJob);
+  }
+
+  let prerenderHtmlReconcileJob = startPrerenderHtmlReconcileCron();
+  if (prerenderHtmlReconcileJob) {
+    jobs.push(prerenderHtmlReconcileJob);
   }
 }
 
@@ -47,7 +58,7 @@ function startDailyCreditGrantCron(): CronJob | undefined {
       try {
         await enqueueDailyCreditGrant({
           lowCreditThreshold,
-          priority: 4,
+          priority: systemInitiatedPriority,
         });
       } catch (error) {
         Sentry.captureException(error);
@@ -87,6 +98,26 @@ function startOpenRouterSyncCron(): CronJob | undefined {
   job.start();
   log.info(
     `openrouter-sync cron scheduled for 4:00am ${OPENROUTER_SYNC_CRON_TZ}`,
+  );
+  return job;
+}
+
+function startPrerenderHtmlReconcileCron(): CronJob | undefined {
+  let job = createPrerenderHtmlReconcileCronJob(
+    async () => {
+      try {
+        await enqueuePrerenderHtmlReconcile();
+      } catch (error) {
+        Sentry.captureException(error);
+        log.error('prerender-html-reconcile cron failed to enqueue job', error);
+      }
+    },
+    { runOnInit: false },
+  );
+
+  job.start();
+  log.info(
+    `prerender-html-reconcile cron scheduled for ${PRERENDER_HTML_RECONCILE_CRON_SCHEDULE} ${PRERENDER_HTML_RECONCILE_CRON_TZ}`,
   );
   return job;
 }

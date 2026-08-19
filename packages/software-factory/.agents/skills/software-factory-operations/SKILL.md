@@ -65,7 +65,7 @@ Files that live in the workspace:
 **Inspect before writing.** Read or grep the file you plan to
 change, and glob for sibling files (e.g. existing card definitions
 in the same directory) before creating new ones. The
-`boxel-development` skill has the authoring patterns; this skill
+`boxel` skill has the authoring patterns; this skill
 just covers the loop around them.
 
 ## Tracker-schema cards — write JSON directly
@@ -81,7 +81,7 @@ first, then `Edit` (or `Write` the merged document back) — see
 | `Boards/<slug>.json`             | `{module: "<tracker-module-url>", name: "IssueTracker"}`     |
 | `Issues/<slug>.json`             | `{module: "<tracker-module-url>", name: "Issue"}`            |
 | `Knowledge Articles/<slug>.json` | `{module: "<tracker-module-url>", name: "KnowledgeArticle"}` |
-| `Spec/<slug>.json`               | `{module: "https://cardstack.com/base/spec", name: "Spec"}`  |
+| `Spec/<slug>.json`               | `{module: "@cardstack/base/spec", name: "Spec"}`             |
 
 `<tracker-module-url>` is derived from the target realm's origin
 (`<origin>/software-factory/darkfactory`) — see the
@@ -146,12 +146,12 @@ Issue cards carry a `comments` array on `attributes`. To append:
 ### Catalog Spec card shape
 
 Spec cards (`Spec/<slug>.json`) adopt from
-`https://cardstack.com/base/spec` / `Spec`. Fetch the live schema:
+`@cardstack/base/spec` / `Spec`. Fetch the live schema:
 
 ```bash
 boxel run-command @cardstack/boxel-host/commands/get-card-type-schema/default \
   --realm <target-realm-url> \
-  --input '{"codeRef": {"module": "https://cardstack.com/base/spec", "name": "Spec"}}'
+  --input '{"codeRef": {"module": "@cardstack/base/spec", "name": "Spec"}}'
 ```
 
 What the schema does **not** tell you and you must supply for
@@ -178,7 +178,7 @@ entry-point cards:
 
 The full document envelope is the same as for tracker cards (`data`
 / `type: "card"` / `attributes` / `relationships` / `meta.adoptsFrom`),
-just with the `https://cardstack.com/base/spec` adoptsFrom.
+just with the `@cardstack/base/spec` adoptsFrom.
 
 ## Realm-side reads (via `boxel` CLI)
 
@@ -366,7 +366,7 @@ Same `--json` shape as `evaluate-module`: parse the wrapper's
 
 **Do not** pass a `Spec/...json` path or any card whose
 `adoptsFrom.module` is a base-realm URL
-(`https://cardstack.com/base/...`). Specs adopt from the base
+(`@cardstack/base/...`). Specs adopt from the base
 realm, and the prerender refuses cross-origin module loads with
 "moduleUrl origin does not match realmUrl origin". To validate
 Specs, run `boxel test` (which exercises the Spec's
@@ -414,7 +414,7 @@ QUnit card tests" below.
    instances or Spec cards — it forces the API decisions early.
 4. **Write card instances** (`.json`) into the workspace.
 5. **Write a Catalog Spec card** (`Spec/<card-name>.json`) — adopts
-   from `https://cardstack.com/base/spec` / `Spec`. Link sample
+   from `@cardstack/base/spec` / `Spec`. Link sample
    instances via `relationships.linkedExamples`.
 6. **Pre-flight: `boxel parse` locally — _before_ any push.** From
    inside the workspace dir, run `boxel parse` (no flags — it
@@ -517,6 +517,48 @@ audit trail.
 If you cannot make progress at any step, set the Issue's `status`
 to `"blocked"`, append a comment explaining what's stuck, push, and
 report back to the user. See `software-factory-scheduling`.
+
+## Adjustment issues (adjust flow)
+
+When the Issue you picked up has `issueType: "adjustment"`, you are
+**editing an existing, already-seeded card** — not creating one from
+scratch. The bootstrap step seeded the source card and its
+same-realm dependency graph into the workspace and confirmed a green
+baseline before this Issue existed, so the files named in the
+Issue's description are **already present** (see the "Adjust flow"
+section of `software-factory-bootstrap`).
+
+How adjustment work differs from a greenfield `feature` Issue:
+
+- **Read the seeded files first.** The Issue description names the
+  target file(s). `Read` each one (and `Grep` for siblings) before
+  touching anything — you are modifying working code, not authoring
+  a blank slate. The source-provenance Knowledge Article (linked via
+  `relatedKnowledge`) records where the seed came from and its
+  baseline results.
+- **Apply only the delta.** Use `Edit` for surgical changes to the
+  seeded `.gts` / `.json`. Don't rewrite the card; change exactly
+  what the delta calls for.
+- **Guard the baseline.** The pre-existing tests are part of the
+  contract. Extend `.test.gts` with assertions for the new behavior,
+  but the **existing tests must still pass** — `boxel test` covers
+  both. A delta that breaks a baseline test is not done; fix it, or
+  bail out per "Bailing out" above.
+- **Operate on the seeded artifacts — never create parallel ones.**
+  The delta is applied by editing the existing seeded files: the
+  card module, its tests, its sample instances, and its Spec. If the
+  delta adds or renames a field, update the **existing** sample
+  instances to reflect it (so they demonstrate the new behavior) and
+  keep the Spec's `linkedExamples` pointing at them —
+  instantiate-card and `boxel parse` must stay green. Do **not** add
+  a new instance, module, or Spec to showcase a change; a new card
+  (or instance) is created only when the Issue explicitly calls for
+  one.
+- **Then the standard loop applies unchanged** — the "Required flow
+  per Issue" steps with "write" read as "edit": local `boxel parse`
+  pre-flight, push, run the five validators, write the
+  `Validations/` artifact cards, fix on failure, mark `done` only
+  when everything passes. Same validators, same bail-out limits.
 
 ## Target realm artifact structure
 
@@ -688,7 +730,7 @@ understanding Boxel patterns, and not a general reference.
   realm regenerates the transpiled JS on every write, so any edit
   there is silently discarded.
 - **When in doubt, favor idiomatic card development practices.**
-  The `boxel-development` skill and existing cards in the target
+  The `boxel` skill and existing cards in the target
   realm are the right references — not what the compiler happens to
   emit.
 
@@ -780,7 +822,7 @@ table stakes; without it your tests don't get past validation.
   or base64-encoded content.
 - **Use absolute `adoptsFrom.module` URLs** when referencing
   definitions that live in a different realm (e.g., the source
-  realm's tracker schema or `https://cardstack.com/base/spec`).
+  realm's tracker schema or `@cardstack/base/spec`).
 - **Start small and iterate.** Write the smallest working
   implementation first, then add the test. If tests fail, read the
   failure output carefully before making targeted fixes — don't
@@ -795,7 +837,7 @@ table stakes; without it your tests don't get past validation.
 - `software-factory-bootstrap` — what to do when the Issue's
   `issueType` is `bootstrap` (create Project / IssueTracker /
   Knowledge Articles / implementation Issues from a brief).
-- `boxel-development` — `.gts` card authoring patterns
+- `boxel` — `.gts` card authoring patterns
   (CardDef / FieldDef, fields, formats, templates, common
   pitfalls). The agent-facing reference for "what does the
   `.gts` actually look like".

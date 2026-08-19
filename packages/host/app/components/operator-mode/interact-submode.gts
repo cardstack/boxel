@@ -13,7 +13,7 @@ import perform from 'ember-concurrency/helpers/perform';
 import onKeyMod from 'ember-keyboard/modifiers/on-key';
 import { consume } from 'ember-provide-consume-context';
 
-import get from 'lodash/get';
+import { get } from 'lodash-es';
 import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
 
 import { cn, gt, MenuItem, MenuDivider } from '@cardstack/boxel-ui/helpers';
@@ -48,8 +48,6 @@ import {
   type Filter,
 } from '@cardstack/runtime-common';
 
-import CopyCardToStackCommand from '@cardstack/host/commands/copy-card-to-stack';
-
 import {
   detectStackItemTypeForTarget,
   StackItem,
@@ -57,17 +55,16 @@ import {
 } from '@cardstack/host/lib/stack-item';
 
 import { stackBackgroundsResource } from '@cardstack/host/resources/stack-backgrounds';
+import CopyCardToStackTool from '@cardstack/host/tools/copy-card-to-stack';
 
 import { idFromCardOrURL } from '@cardstack/host/utils/id-from-card-or-url';
 
-import type {
-  CardContext,
-  CardDef,
-  Format,
-} from 'https://cardstack.com/base/card-api';
-import type { Spec } from 'https://cardstack.com/base/spec';
-
 import consumeContext from '../../helpers/consume-context';
+
+import {
+  removeCardJsonExtension,
+  type SearchResultKind,
+} from '../../utils/search/types';
 
 import CopyButton from './copy-button';
 import DeleteModal from './delete-modal';
@@ -85,19 +82,26 @@ import type { CardDefOrId } from './stack-item';
 import type { StackItemComponentAPI } from './stack-item';
 
 import type CardService from '../../services/card-service';
-import type CommandService from '../../services/command-service';
 import type LoaderService from '../../services/loader-service';
+import type NetworkService from '../../services/network';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type Realm from '../../services/realm';
 import type RealmServer from '../../services/realm-server';
 import type RecentCardsService from '../../services/recent-cards-service';
 import type StoreService from '../../services/store';
+import type ToolService from '../../services/tool-service';
+import type { CardContext, CardDef, Format } from '@cardstack/base/card-api';
+import type { Spec } from '@cardstack/base/spec';
 
 const waiter = buildWaiter('operator-mode:interact-submode-waiter');
 
 export type Stack = StackItem[];
 
-const cardSelections = new TrackedWeakMap<StackItem, TrackedSet<CardDef>>();
+// Selections are tracked by card id rather than by loaded instance. Materializing
+// a CardDef for every selected card is expensive (a fetch + deserialize per card
+// that isn't already resident), which made "Select All" over a large grid freeze
+// the UI for seconds. Instances are now loaded lazily, only when a copy is invoked.
+const cardSelections = new TrackedWeakMap<StackItem, TrackedSet<string>>();
 const stackItemComponentAPI = new WeakMap<StackItem, StackItemComponentAPI>();
 
 const CodeSubmodeNewFileOptions: TemplateOnlyComponent = <template>
@@ -136,13 +140,14 @@ export default class InteractSubmode extends Component {
   @consume(CardContextName) declare private cardContext: CardContext;
 
   @service declare private cardService: CardService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private store: StoreService;
   @service declare private realm: Realm;
   @service declare private realmServer: RealmServer;
   @service declare private recentCardsService: RecentCardsService;
   @service declare private loaderService: LoaderService;
+  @service declare private network: NetworkService;
 
   @tracked private searchSheetTrigger: SearchSheetTrigger | null = null;
   @tracked private cardToDelete: CardToDelete | undefined = undefined;
@@ -239,7 +244,12 @@ export default class InteractSubmode extends Component {
       });
     } else {
       let CardKlass = await loadCardDef(
-        codeRefWithAbsoluteIdentifier(ref, relativeTo),
+        codeRefWithAbsoluteIdentifier(
+          ref,
+          relativeTo,
+          undefined,
+          this.network.virtualNetwork,
+        ),
         {
           loader: this.loaderService.loader,
         },
@@ -430,10 +440,7 @@ export default class InteractSubmode extends Component {
         if (!selections) {
           continue;
         }
-        let removedCard = [...selections].find((c: CardDef) => c.id === cardId);
-        if (removedCard) {
-          selections.delete(removedCard);
-        }
+        selections.delete(cardId);
       }
     }
     await this.withTestWaiters(async () => {
@@ -462,7 +469,7 @@ export default class InteractSubmode extends Component {
   // dropTask will ignore any subsequent copy requests until the one in progress is done
   private copy = dropTask(
     async (
-      sources: CardDef[],
+      sourceIds: string[],
       sourceItem: StackItem,
       destinationItem: StackItem,
     ) => {
@@ -484,13 +491,18 @@ export default class InteractSubmode extends Component {
             `destination index card ${destinationIndexCardUrl} is not a card`,
           );
         }
+        // Materialize the selected cards now (lazily, only for a copy) rather
+        // than when they were selected.
+        let sources = (
+          await Promise.all(sourceIds.map((id) => this.store.get(id)))
+        ).filter(isCardInstance) as CardDef[];
         sources.sort((a, b) => a.cardTitle.localeCompare(b.cardTitle));
         let scrollToCardId: string | undefined;
         let newCardId: string | undefined;
         let targetStackIndex = destinationItem.stackIndex;
         for (let [index, card] of sources.entries()) {
-          ({ newCardId } = await new CopyCardToStackCommand(
-            this.commandService.commandContext,
+          ({ newCardId } = await new CopyCardToStackTool(
+            this.toolService.toolContext,
           ).execute({
             sourceCard: card,
             targetStackIndex,
@@ -563,15 +575,17 @@ export default class InteractSubmode extends Component {
     async (selectedCards: CardDefOrId[], stackItem: StackItem) => {
       let waiterToken = waiter.beginAsync();
       try {
-        let loadedCards = await Promise.all(
-          selectedCards.map((cardDefOrId: CardDefOrId) => {
-            if (typeof cardDefOrId === 'string') {
-              // WARNING This card is not part of the identity map!
-              return this.store.get(cardDefOrId);
-            }
-            return cardDefOrId;
-          }),
-        );
+        // Prerendered-card IDs arrive with the `.json` file extension on
+        // them, but the canonical card id (and `cardToDelete.id` in the
+        // delete handler) is the extensionless URL. Strip the extension
+        // here so prune-on-delete and copy lookups match.
+        let ids = selectedCards
+          .map((cardDefOrId) => {
+            let raw =
+              typeof cardDefOrId === 'string' ? cardDefOrId : cardDefOrId.id;
+            return raw ? removeCardJsonExtension(raw) : undefined;
+          })
+          .filter(Boolean) as string[];
 
         let selected = cardSelections.get(stackItem);
         if (!selected) {
@@ -579,10 +593,8 @@ export default class InteractSubmode extends Component {
           cardSelections.set(stackItem, selected);
         }
         selected.clear();
-        for (let card of loadedCards) {
-          if (isCardInstance(card)) {
-            selected.add(card);
-          }
+        for (let id of ids) {
+          selected.add(id);
         }
       } finally {
         waiter.endAsync(waiterToken);
@@ -590,7 +602,7 @@ export default class InteractSubmode extends Component {
     },
   );
 
-  private get selectedCards() {
+  private get selectedCardIds() {
     return this.operatorModeStateService
       .topMostStackItems()
       .map((i) => [...(cardSelections.get(i) ?? [])]);
@@ -615,10 +627,14 @@ export default class InteractSubmode extends Component {
   }
 
   private openSelectedSearchResultInStack = restartableTask(
-    async (cardId: string) => {
+    async (cardId: string, kind?: SearchResultKind) => {
       let waiterToken = waiter.beginAsync();
       try {
         let searchSheetTrigger = this.searchSheetTrigger; // Will be set by showSearchWithTrigger
+        // The selected result carries its own card/file `kind`; honor it so the
+        // stack item opens as the right type without re-deriving it. Absent
+        // `kind` falls back to the existing detection (`getStackItemType` /
+        // `viewCard`).
 
         // In case the left button was clicked, whatever is currently in stack with index 0 will be moved to stack with index 1,
         // and the card will be added to stack with index 0. shiftStack executes this logic.
@@ -630,7 +646,7 @@ export default class InteractSubmode extends Component {
             id: cardId,
             format: 'isolated',
             stackIndex: 0,
-            type: this.getStackItemType(cardId, cardId),
+            type: kind ?? this.getStackItemType(cardId, cardId),
           });
           // it's important that we await the stack item readiness _before_
           // we mutate the stack, otherwise there are very odd visual artifacts
@@ -651,7 +667,9 @@ export default class InteractSubmode extends Component {
           searchSheetTrigger ===
           SearchSheetTriggers.DropCardToRightNeighborStackButton
         ) {
-          await this.viewCard(this.stacks.length, cardId, 'isolated');
+          await this.viewCard(this.stacks.length, cardId, 'isolated', {
+            type: kind,
+          });
         } else {
           // In case, that the search was accessed directly without clicking right and left buttons,
           // the rightmost stack will be REPLACED by the selection
@@ -663,7 +681,7 @@ export default class InteractSubmode extends Component {
             numberOfStacks === 0 ||
             this.operatorModeStateService.stackIsEmpty(stackIndex)
           ) {
-            await this.viewCard(0, cardId, 'isolated');
+            await this.viewCard(0, cardId, 'isolated', { type: kind });
           } else {
             stack = this.operatorModeStateService.rightMostStack();
             if (stack) {
@@ -673,7 +691,7 @@ export default class InteractSubmode extends Component {
                   id: cardId,
                   format: 'isolated',
                   stackIndex,
-                  type: this.getStackItemType(cardId, cardId),
+                  type: kind ?? this.getStackItemType(cardId, cardId),
                 });
                 // await stackItem.ready();
                 this.operatorModeStateService.clearStackAndAdd(
@@ -725,10 +743,21 @@ export default class InteractSubmode extends Component {
     }
 
     let items: { name: string; icon: Icon; ref: ResolvedCodeRef }[] = [];
-    const excludedCardIds = this.realmServer.availableRealmIndexCardIds;
+    // A realm index card id and a recent card's id can be in different forms
+    // (e.g. the base realm's alias `https://cardstack.com/base/index` vs an
+    // instance's registered-prefix form `@cardstack/base/index`). Unresolve
+    // both sides to the same form so index cards are excluded regardless.
+    let { virtualNetwork } = this.network;
+    const excludedCardIds = new Set(
+      this.realmServer.availableRealmIndexCardIds.map((id) =>
+        virtualNetwork.unresolveURL(id),
+      ),
+    );
 
     recentCards
-      .filter((card) => !excludedCardIds.includes(card.id)) // filter out realm index cards
+      .filter(
+        (card) => !excludedCardIds.has(virtualNetwork.unresolveURL(card.id)),
+      ) // filter out realm index cards
       .map((card) => {
         let ref = identifyCard(card.constructor);
         let name = cardTypeDisplayName(card);
@@ -901,7 +930,7 @@ export default class InteractSubmode extends Component {
                 @saveCard={{this.saveCard}}
                 @editCard={{fn this.editCard stackIndex}}
                 @deleteCard={{this.requestDeleteCard}}
-                @commandContext={{this.commandService.commandContext}}
+                @toolContext={{this.toolService.toolContext}}
                 @close={{this.close}}
                 @onSelectedCards={{this.onSelectedCards}}
                 @setupStackItem={{this.setupStackItem}}
@@ -910,7 +939,7 @@ export default class InteractSubmode extends Component {
           {{/each}}
 
           <CopyButton
-            @selectedCards={{this.selectedCards}}
+            @selectedCardIds={{this.selectedCardIds}}
             @copy={{fn (perform this.copy)}}
             @isCopying={{this.copy.isRunning}}
           />

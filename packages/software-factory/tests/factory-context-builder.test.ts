@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 
 import type {
   KnowledgeArticleData,
@@ -7,18 +8,18 @@ import type {
   TestResult,
   ValidationResults,
   IssueData,
-} from '../src/factory-agent';
+} from '../src/factory-agent/index.ts';
 
 import {
   ContextBuilder,
   type ContextBuilderConfig,
   type IssueRelationshipLoader,
-} from '../src/factory-context-builder';
+} from '../src/factory-context-builder.ts';
 
 import type {
   SkillLoaderInterface,
   SkillResolver,
-} from '../src/factory-skill-loader';
+} from '../src/factory-skill-loader.ts';
 
 // ---------------------------------------------------------------------------
 // Test doubles
@@ -30,7 +31,7 @@ class StubSkillResolver implements SkillResolver {
   /** Records all (issue, project) pairs passed to resolve(). */
   calls: { issue: IssueData; project: ProjectData }[] = [];
 
-  constructor(skillNames: string[] = ['boxel-development']) {
+  constructor(skillNames: string[] = ['boxel']) {
     this.skillNames = skillNames;
   }
 
@@ -131,7 +132,7 @@ function makeSkill(name: string, content?: string): ResolvedSkill {
 function makeConfig(overrides?: Partial<ContextBuilderConfig>) {
   let resolver = new StubSkillResolver();
   let loader = new StubSkillLoader([
-    makeSkill('boxel-development'),
+    makeSkill('boxel'),
     makeSkill('boxel-file-structure'),
     makeSkill('ember-best-practices'),
   ]);
@@ -179,12 +180,9 @@ module('factory-context-builder > skill resolution', function () {
   });
 
   test('passes resolved skill names to loader', async function (assert) {
-    let resolver = new StubSkillResolver([
-      'boxel-development',
-      'ember-best-practices',
-    ]);
+    let resolver = new StubSkillResolver(['boxel', 'ember-best-practices']);
     let loader = new StubSkillLoader([
-      makeSkill('boxel-development'),
+      makeSkill('boxel'),
       makeSkill('ember-best-practices'),
     ]);
     let { config } = makeConfig({
@@ -203,14 +201,14 @@ module('factory-context-builder > skill resolution', function () {
     assert.strictEqual(loader.loadAllCalls.length, 1, 'loadAll() called once');
     assert.deepEqual(
       loader.loadAllCalls[0].skillNames,
-      ['boxel-development', 'ember-best-practices'],
+      ['boxel', 'ember-best-practices'],
       'loadAll() received the resolved skill names',
     );
   });
 
   test('passes issue to loadAll for reference filtering', async function (assert) {
-    let resolver = new StubSkillResolver(['boxel-development']);
-    let loader = new StubSkillLoader([makeSkill('boxel-development')]);
+    let resolver = new StubSkillResolver(['boxel']);
+    let loader = new StubSkillLoader([makeSkill('boxel')]);
     let { config } = makeConfig({
       skillResolver: resolver,
       skillLoader: loader,
@@ -233,12 +231,9 @@ module('factory-context-builder > skill resolution', function () {
   });
 
   test('includes resolved skills in the context', async function (assert) {
-    let resolver = new StubSkillResolver([
-      'boxel-development',
-      'ember-best-practices',
-    ]);
+    let resolver = new StubSkillResolver(['boxel', 'ember-best-practices']);
     let loader = new StubSkillLoader([
-      makeSkill('boxel-development', 'BD content'),
+      makeSkill('boxel', 'BD content'),
       makeSkill('ember-best-practices', 'EBP content'),
     ]);
     let { config } = makeConfig({
@@ -255,7 +250,7 @@ module('factory-context-builder > skill resolution', function () {
     });
 
     assert.strictEqual(ctx.skills.length, 2, 'two skills in context');
-    assert.strictEqual(ctx.skills[0].name, 'boxel-development');
+    assert.strictEqual(ctx.skills[0].name, 'boxel');
     assert.strictEqual(ctx.skills[1].name, 'ember-best-practices');
   });
 });
@@ -268,12 +263,9 @@ module('factory-context-builder > skill budget', function () {
   test('enforces skill budget when maxSkillTokens is set', async function (assert) {
     // Each skill content is short (~36 chars ÷ 4 ≈ 9 tokens).
     // A budget of 10 tokens should allow only one skill.
-    let resolver = new StubSkillResolver([
-      'boxel-development',
-      'ember-best-practices',
-    ]);
+    let resolver = new StubSkillResolver(['boxel', 'ember-best-practices']);
     let loader = new StubSkillLoader([
-      makeSkill('boxel-development', 'A'.repeat(36)), // 9 tokens
+      makeSkill('boxel', 'A'.repeat(36)), // 9 tokens
       makeSkill('ember-best-practices', 'B'.repeat(36)), // 9 tokens
     ]);
     let { config } = makeConfig({
@@ -293,18 +285,15 @@ module('factory-context-builder > skill budget', function () {
     assert.strictEqual(ctx.skills.length, 1, 'budget trimmed to one skill');
     assert.strictEqual(
       ctx.skills[0].name,
-      'boxel-development',
+      'boxel',
       'higher-priority skill kept',
     );
   });
 
   test('does not enforce budget when maxSkillTokens is undefined', async function (assert) {
-    let resolver = new StubSkillResolver([
-      'boxel-development',
-      'ember-best-practices',
-    ]);
+    let resolver = new StubSkillResolver(['boxel', 'ember-best-practices']);
     let loader = new StubSkillLoader([
-      makeSkill('boxel-development', 'A'.repeat(1000)),
+      makeSkill('boxel', 'A'.repeat(1000)),
       makeSkill('ember-best-practices', 'B'.repeat(1000)),
     ]);
     let { config } = makeConfig({
@@ -486,7 +475,7 @@ function makeIssueConfig(
 ) {
   let resolver = new StubSkillResolver();
   let loader = new StubSkillLoader([
-    makeSkill('boxel-development'),
+    makeSkill('boxel'),
     makeSkill('boxel-file-structure'),
     makeSkill('ember-best-practices'),
   ]);
@@ -542,26 +531,39 @@ module('factory-context-builder > buildForIssue > relationships', function () {
     assert.strictEqual(ctx.knowledge[1].id, 'ka-2');
   });
 
-  test('throws when issue has no linked project', async function (assert) {
+  test('an issue with no linked project gets a stub instead of killing the run', async function (assert) {
     let { config } = makeIssueConfig({ project: null });
     let builder = new ContextBuilder(config);
 
-    try {
-      await builder.buildForIssue({
-        issue: makeIssue({ id: 'orphan-issue' }),
-        targetRealm: 'https://example.test/target/',
-      });
-      assert.ok(false, 'should have thrown');
-    } catch (error) {
-      assert.ok(
-        (error as Error).message.includes('orphan-issue'),
-        'error mentions the issue id',
-      );
-      assert.ok(
-        (error as Error).message.includes('no linked project'),
-        'error explains the problem',
-      );
-    }
+    // Agent-authored issues (e.g. acceptance-walkthrough defect issues)
+    // may omit relationships entirely; throwing here took down a whole
+    // run over one unlinked issue (wardrobe, 2026-07-17).
+    let ctx = await builder.buildForIssue({
+      issue: makeIssue({ id: 'orphan-issue' }),
+      targetRealm: 'https://example.test/target/',
+    });
+
+    assert.strictEqual(
+      ctx.project.id,
+      'bootstrap-pending',
+      'context builds with the stub project rather than throwing',
+    );
+  });
+
+  test('analysis issue (PORT-0) with no linked project gets a stub project instead of throwing', async function (assert) {
+    let { config } = makeIssueConfig({ project: null });
+    let builder = new ContextBuilder(config);
+
+    let ctx = await builder.buildForIssue({
+      issue: makeIssue({ id: 'port-analysis-seed', issueType: 'analysis' }),
+      targetRealm: 'https://example.test/target/',
+    });
+
+    assert.strictEqual(
+      ctx.project.id,
+      'bootstrap-pending',
+      'analysis issues get the same project stub as bootstrap issues, since PORT-0 runs before any Project card exists',
+    );
   });
 });
 
@@ -722,12 +724,9 @@ module('factory-context-builder > buildForIssue > skills', function () {
   });
 
   test('token budget enforcement still works with buildForIssue', async function (assert) {
-    let resolver = new StubSkillResolver([
-      'boxel-development',
-      'ember-best-practices',
-    ]);
+    let resolver = new StubSkillResolver(['boxel', 'ember-best-practices']);
     let loader = new StubSkillLoader([
-      makeSkill('boxel-development', 'A'.repeat(36)), // 9 tokens
+      makeSkill('boxel', 'A'.repeat(36)), // 9 tokens
       makeSkill('ember-best-practices', 'B'.repeat(36)), // 9 tokens
     ]);
     let issueLoader = new StubIssueRelationshipLoader();
@@ -747,7 +746,7 @@ module('factory-context-builder > buildForIssue > skills', function () {
     assert.strictEqual(ctx.skills.length, 1, 'budget trimmed to one skill');
     assert.strictEqual(
       ctx.skills[0].name,
-      'boxel-development',
+      'boxel',
       'higher-priority skill kept',
     );
   });

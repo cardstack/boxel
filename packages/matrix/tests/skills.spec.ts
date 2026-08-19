@@ -1,10 +1,11 @@
-import { expect, test } from './fixtures';
+import { expect, test } from './fixtures.ts';
 import type { Page } from '@playwright/test';
 import {
   login,
   logout,
   createRoom,
   getRoomId,
+  openAiAssistant,
   openRoom,
   assertMessages,
   sendMessage,
@@ -14,8 +15,8 @@ import {
   createSubscribedUser,
   createSubscribedUserAndLogin,
   createRealm,
-} from '../helpers';
-import { appURL } from '../helpers/isolated-realm-server';
+} from '../helpers/index.ts';
+import { appURL, skillsRealmURL } from '../support/isolated-realm-server.ts';
 import { randomUUID } from 'crypto';
 
 test.describe('Skills', () => {
@@ -39,8 +40,8 @@ test.describe('Skills', () => {
         .click();
     }
     await page.locator('[data-test-pill-menu-add-button]').click();
-    await page.locator(`[data-test-card-catalog-item="${cardId}"]`).click();
-    await page.locator('[data-test-card-catalog-go-button]').click();
+    await page.locator(`[data-test-item-button="${cardId}"]`).click();
+    await page.locator('[data-test-card-chooser-go-button]').click();
 
     await expect(
       page.locator(`[data-test-pill-menu-item="${cardId}"]`),
@@ -50,18 +51,21 @@ test.describe('Skills', () => {
     ).toContainClass('checked');
   }
 
-  const environmentSkillCardId = `@cardstack/skills/Skill/boxel-environment`;
-  const defaultSkillCardsForCodeMode = [
-    `@cardstack/skills/Skill/boxel-development`,
-    environmentSkillCardId,
-  ];
+  // The skills index is the default skill for every new room. Room state keys
+  // a `.md` skill by the realm's own absolute file URL, so this is the id the
+  // skill menu renders — not the `@cardstack/skills/` reference the system card
+  // stores.
+  const defaultSkillId = `${skillsRealmURL}index.md`;
   const skillCard1 = `${appURL}/skill-pirate-speak`;
   const skillCard2 = `${appURL}/skill-seo`;
   const skillCard3 = `${appURL}/skill-card-title-editing`;
   const serverIndexUrl = new URL(appURL).origin;
 
   test(`it can attach skill cards and toggle activation`, async ({ page }) => {
-    await login(page, firstUser.username, firstUser.password, { url: appURL });
+    await login(page, firstUser.username, firstUser.password, {
+      url: appURL,
+      openAiAssistant: true,
+    });
     await getRoomId(page);
     await expect(page.locator('[data-test-new-session]')).toHaveCount(1);
     await expect(page.locator('[data-test-skill-menu]')).toHaveCount(1);
@@ -77,10 +81,10 @@ test.describe('Skills', () => {
     );
     await expect(page.locator('[data-test-pill-menu-item]')).toHaveCount(1);
     await expect(
-      page.locator(`[data-test-pill-menu-item="${environmentSkillCardId}"]`),
+      page.locator(`[data-test-pill-menu-item="${defaultSkillId}"]`),
     ).toHaveCount(1);
     await expect(
-      page.locator(`[data-test-skill-toggle="${environmentSkillCardId}-on"]`),
+      page.locator(`[data-test-skill-toggle="${defaultSkillId}-on"]`),
     ).toHaveCount(1);
     await expect(page.locator('[data-test-pill-menu-add-button]')).toHaveCount(
       1,
@@ -137,38 +141,13 @@ test.describe('Skills', () => {
     );
   });
 
-  // TODO: restore in CS-10374
-  test.skip('it will attach code editing skills in code mode by default', async ({
-    page,
-  }) => {
-    await login(page, firstUser.username, firstUser.password, { url: appURL });
-    await page.locator(`[data-test-room-settled]`).waitFor();
-
-    await page.locator('[data-test-submode-switcher] button').click();
-    await page.locator('[data-test-boxel-menu-item-text="Code"]').click();
-    await page.locator('[data-test-skill-menu]').hover();
-    await page
-      .locator('[data-test-skill-menu][data-test-pill-menu-button]')
-      .click();
-
-    // Check that each default skill card for code mode is attached
-    for (const skillCardURL of defaultSkillCardsForCodeMode) {
-      await expect(
-        page.locator(`[data-test-pill-menu-item="${skillCardURL}"]`),
-        `Skill card ${skillCardURL} should be attached`,
-      ).toHaveCount(1);
-
-      await expect(
-        page.locator(`[data-test-skill-toggle="${skillCardURL}-on"]`),
-        `Skill card ${skillCardURL} should be active`,
-      ).toContainClass('checked');
-    }
-  });
-
   test(`room skills state does not leak when switching rooms`, async ({
     page,
   }) => {
-    await login(page, firstUser.username, firstUser.password, { url: appURL });
+    await login(page, firstUser.username, firstUser.password, {
+      url: appURL,
+      openAiAssistant: true,
+    });
     let room1 = await getRoomId(page);
 
     await attachSkill(page, skillCard1, true);
@@ -221,7 +200,10 @@ test.describe('Skills', () => {
   });
 
   test(`can attach more skills during chat`, async ({ page }) => {
-    await login(page, firstUser.username, firstUser.password, { url: appURL });
+    await login(page, firstUser.username, firstUser.password, {
+      url: appURL,
+      openAiAssistant: true,
+    });
     let room1 = await getRoomId(page);
     await attachSkill(page, skillCard2, true);
     await sendMessage(page, room1, 'Message 1');
@@ -238,7 +220,10 @@ test.describe('Skills', () => {
   });
 
   test(`can disable all skills`, async ({ page }) => {
-    await login(page, firstUser.username, firstUser.password, { url: appURL });
+    await login(page, firstUser.username, firstUser.password, {
+      url: appURL,
+      openAiAssistant: true,
+    });
     let room1 = await getRoomId(page);
     await attachSkill(page, skillCard1, true);
     await attachSkill(page, skillCard2);
@@ -256,12 +241,12 @@ test.describe('Skills', () => {
       .locator('[data-test-skill-menu][data-test-pill-menu-button]')
       .click();
     await page
-      .locator(`[data-test-skill-toggle="${environmentSkillCardId}-on"]`)
-      .click(); // toggle off default skill card
+      .locator(`[data-test-skill-toggle="${defaultSkillId}-on"]`)
+      .click(); // toggle off the default skill
     await page.locator(`[data-test-skill-toggle="${skillCard1}-on"]`).click(); // toggle off skill 1
     await page.locator(`[data-test-skill-toggle="${skillCard2}-on"]`).click(); // toggle off skill 2
     await expect(
-      page.locator(`[data-test-skill-toggle="${environmentSkillCardId}-off"]`),
+      page.locator(`[data-test-skill-toggle="${defaultSkillId}-off"]`),
     ).toHaveCount(1);
     await expect(
       page.locator(`[data-test-skill-toggle="${skillCard1}-off"]`),
@@ -281,7 +266,10 @@ test.describe('Skills', () => {
   });
 
   test(`previously disabled skills can be enabled`, async ({ page }) => {
-    await login(page, firstUser.username, firstUser.password, { url: appURL });
+    await login(page, firstUser.username, firstUser.password, {
+      url: appURL,
+      openAiAssistant: true,
+    });
     let room1 = await getRoomId(page);
     await attachSkill(page, skillCard1, true);
     await attachSkill(page, skillCard2);
@@ -313,7 +301,10 @@ test.describe('Skills', () => {
   test(`skills are persisted per room and do not leak between different users`, async ({
     page,
   }) => {
-    await login(page, firstUser.username, firstUser.password, { url: appURL });
+    await login(page, firstUser.username, firstUser.password, {
+      url: appURL,
+      openAiAssistant: true,
+    });
     let room1 = await getRoomId(page);
     await attachSkill(page, skillCard1, true);
     await attachSkill(page, skillCard2);
@@ -331,6 +322,7 @@ test.describe('Skills', () => {
     await logout(page);
     await login(page, secondUser.username, secondUser.password, {
       url: appURL,
+      openAiAssistant: true,
     });
     await getRoomId(page);
     await expect(page.locator('[data-test-active-skills-count]')).toContainText(
@@ -342,7 +334,10 @@ test.describe('Skills', () => {
     );
 
     await logout(page);
-    await login(page, firstUser.username, firstUser.password, { url: appURL });
+    await login(page, firstUser.username, firstUser.password, {
+      url: appURL,
+      openAiAssistant: true,
+    });
     await openRoom(page, room1);
     await expect(page.locator('[data-test-active-skills-count]')).toContainText(
       '2 Skills',
@@ -361,17 +356,22 @@ test.describe('Skills', () => {
     await createRealm(page, realmName);
     const realmURL = new URL(`${username}/${realmName}/`, serverIndexUrl).href;
     await page.goto(realmURL);
+    await openAiAssistant(page);
     await showAllCards(page);
 
-    // create a skill card
-    await page.locator('[data-test-create-new-card-button]').click();
+    // create a skill card — open the chooser via the index-agnostic
+    // operator-mode "New" button rather than the CardsGrid-only + button.
+    await page.locator('[data-test-new-file-button]').click();
+    await page
+      .locator('[data-test-boxel-menu-item-text="Choose a card type..."]')
+      .click();
     await page.locator('[data-test-search-field]').fill('Skill');
     await page
       .locator(
-        '[data-test-card-catalog-item="https://cardstack.com/base/cards/skill"]',
+        '[data-test-item-button="https://cardstack.com/base/cards/skill"]',
       )
       .click();
-    await page.locator('[data-test-card-catalog-go-button]').click();
+    await page.locator('[data-test-card-chooser-go-button]').click();
     await page
       .locator('[data-test-field="cardTitle"] input')
       .fill('Automatic Switch Command');
@@ -402,22 +402,31 @@ test.describe('Skills', () => {
       .locator('[data-test-skill-menu] [data-test-pill-menu-add-button]')
       .click();
     await page
-      .locator('[data-test-card-catalog-item]', {
+      .locator('[data-test-item-button]', {
         hasText: 'Automatic Switch Command',
       })
       .first()
       .click();
-    await page.locator('[data-test-card-catalog-go-button]').click();
+    await page.locator('[data-test-card-chooser-go-button]').click();
 
     // fill in message field with "Switch to code mode"
     await page
       .locator('[data-test-boxel-input-id="ai-chat-input"]')
       .fill('Switch to code mode');
     await page.locator('[data-test-send-message-btn]').click();
-    await page.locator('[data-test-message-idx="0"]').waitFor();
+    // Wait for the optimistic bubble's real echo to land before editing the
+    // skill card and reloading — otherwise a reload mid-send leaves a failed
+    // pending bubble hydrated from localStorage.
+    await page
+      .locator(
+        '[data-test-message-idx="0"]:not([data-test-ai-assistant-message-pending="true"])',
+      )
+      .waitFor();
 
-    // Update the uploaded skill card
-    await page.locator('[data-test-filter-list-item="Skill"]').click();
+    // Update the uploaded skill card — reach the realm's card grid (CardsGrid's
+    // "All Cards" or the Workspace Library) and open the skill directly by its
+    // id, rather than the CardsGrid-only "Skill" type filter.
+    await showAllCards(page);
     await page.locator(`[data-cards-grid-item="${skillCard}"]`).click();
     await page.locator('[data-test-edit-button]').click();
     await page
@@ -438,7 +447,7 @@ test.describe('Skills', () => {
     ).toHaveText(
       'Here is an updated command you might find useful: * switch-submode: use this with "code" to go to code mode and "interact" to go to interact mode.',
     );
-    await page.locator('[data-test-open-ai-assistant]').click();
+    await openAiAssistant(page);
     await expect(
       page.locator('[data-test-field="instructions"] .content'),
     ).toHaveText(

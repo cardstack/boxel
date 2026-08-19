@@ -10,18 +10,18 @@
  */
 
 // This should be first
-import '../../src/setup-logger';
+import '../../src/setup-logger.ts';
 
 import { parseArgs } from 'node:util';
-import { logger } from '../../src/logger';
+import { logger } from '../../src/logger.ts';
 
 import {
   DefaultSkillResolver,
   SkillLoader,
   enforceSkillBudget,
   estimateTokens,
-} from '../../src/factory-skill-loader';
-import type { ProjectData, IssueData } from '../../src/factory-agent';
+} from '../../src/factory-skill-loader.ts';
+import type { ProjectData, IssueData } from '../../src/factory-agent/index.ts';
 
 const SAMPLE_ISSUES: { label: string; issue: IssueData }[] = [
   {
@@ -153,10 +153,11 @@ async function main(): Promise<void> {
   // Summary: list all discoverable skills
   log.info('--- All discoverable skills ---');
   let allSkillNames = [
-    'boxel-development',
+    'boxel',
     'boxel-file-structure',
     'boxel-api',
     'boxel-command',
+    'boxel-file-def',
     'ember-best-practices',
     'software-factory-operations',
   ];

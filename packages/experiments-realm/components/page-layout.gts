@@ -1,6 +1,6 @@
 import GlimmerComponent from '@glimmer/component';
 
-import type { Format } from 'https://cardstack.com/base/card-api';
+import type { Format } from '@cardstack/base/card-api';
 
 import { cn } from '@cardstack/boxel-ui/helpers';
 

@@ -1,24 +1,25 @@
-import { expect, test } from './fixtures';
-import { putEvent } from '../docker/synapse';
+import { expect, test } from './fixtures.ts';
+import { putEvent } from '../support/synapse/index.ts';
 import {
   getRoomId,
+  openAiAssistant,
   createSubscribedUserAndLogin,
   getRoomEvents,
   showAllCards,
   createRealm,
   postNewCard,
   postCardSource,
-} from '../helpers';
-import { getMatrixTestContext } from '../helpers';
-import { registerUser, loginUser } from '../docker/synapse';
+} from '../helpers/index.ts';
+import { getMatrixTestContext } from '../helpers/index.ts';
+import { registerUser, loginUser } from '../support/synapse/index.ts';
 import {
   APP_BOXEL_MESSAGE_MSGTYPE,
-  APP_BOXEL_COMMAND_REQUESTS_KEY,
-  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
-  APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
-  APP_BOXEL_COMMAND_RESULT_REL_TYPE,
-} from '../helpers/matrix-constants';
-import { appURL } from '../helpers/isolated-realm-server';
+  APP_BOXEL_TOOL_REQUESTS_KEY,
+  APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+  APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
+  APP_BOXEL_TOOL_RESULT_REL_TYPE,
+} from '../support/matrix-constants.ts';
+import { appURL } from '../support/isolated-realm-server.ts';
 
 const serverIndexUrl = new URL(appURL).origin;
 
@@ -57,6 +58,7 @@ test.describe('Correctness Checks', () => {
     });
 
     await page.goto(realmURL);
+    await openAiAssistant(page);
     let roomId = await getRoomId(page);
     await showAllCards(page);
     let testCard = page.locator(`[data-test-cards-grid-item="${cardId}"]`);
@@ -99,7 +101,7 @@ test.describe('Correctness Checks', () => {
     );
 
     // Simulate a correctness check message from the AI bot (same approach as commands.spec.ts)
-    let commandRequests = [
+    let toolRequests = [
       {
         id: commandRequestId,
         name: 'checkCorrectness',
@@ -130,13 +132,13 @@ test.describe('Correctness Checks', () => {
             agentId,
           },
         },
-        [APP_BOXEL_COMMAND_REQUESTS_KEY]: commandRequests,
+        [APP_BOXEL_TOOL_REQUESTS_KEY]: toolRequests,
       },
     );
 
     // Wait for the command to render
     let commandContainer = page.locator(
-      `[data-test-command-id="${commandRequestId}"]`,
+      `[data-test-tool-call-id="${commandRequestId}"]`,
     );
     await commandContainer.waitFor();
 
@@ -149,39 +151,39 @@ test.describe('Correctness Checks', () => {
     await expect(commandContainer).not.toHaveClass(/is-failed/);
 
     // Verify the command description is displayed
-    await expect(
-      commandContainer.locator('.command-description'),
-    ).toContainText('Check correctness');
+    await expect(commandContainer.locator('.tool-description')).toContainText(
+      'Check correctness',
+    );
 
     // Verify the command result event was dispatched with correct data
-    let commandResultEvent: any;
+    let toolResultEvent: any;
     await expect(async () => {
       let events = await getRoomEvents(username, password, roomId);
-      commandResultEvent = events.find(
-        (e: any) => e.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+      toolResultEvent = events.find(
+        (e: any) => e.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
       );
-      expect(commandResultEvent).toBeDefined();
+      expect(toolResultEvent).toBeDefined();
     }).toPass();
 
     // Verify the command result has the correct structure
-    expect(commandResultEvent!.content.msgtype).toStrictEqual(
-      APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+    expect(toolResultEvent!.content.msgtype).toStrictEqual(
+      APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
     );
-    expect(commandResultEvent!.content['m.relates_to']?.rel_type).toStrictEqual(
-      APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+    expect(toolResultEvent!.content['m.relates_to']?.rel_type).toStrictEqual(
+      APP_BOXEL_TOOL_RESULT_REL_TYPE,
     );
-    expect(commandResultEvent!.content['m.relates_to']?.key).toStrictEqual(
+    expect(toolResultEvent!.content['m.relates_to']?.key).toStrictEqual(
       'applied',
     );
-    expect(commandResultEvent!.content.commandRequestId).toStrictEqual(
+    expect(toolResultEvent!.content.commandRequestId).toStrictEqual(
       commandRequestId,
     );
 
     // Verify the result contains a CorrectnessResultCard FileDef
     let commandResultData =
-      typeof commandResultEvent!.content.data === 'string'
-        ? JSON.parse(commandResultEvent!.content.data)
-        : commandResultEvent!.content.data;
+      typeof toolResultEvent!.content.data === 'string'
+        ? JSON.parse(toolResultEvent!.content.data)
+        : toolResultEvent!.content.data;
     expect(commandResultData.card).toBeDefined();
     expect(commandResultData.card.contentType).toStrictEqual(
       'application/vnd.card+json',
@@ -308,12 +310,12 @@ ${brokenContent}
             agentId,
           },
         },
-        [APP_BOXEL_COMMAND_REQUESTS_KEY]: failingCommandRequests,
+        [APP_BOXEL_TOOL_REQUESTS_KEY]: failingCommandRequests,
       },
     );
 
     let failingCommandContainer = page.locator(
-      `[data-test-command-id="${failingCommandRequestId}"]`,
+      `[data-test-tool-call-id="${failingCommandRequestId}"]`,
     );
     await failingCommandContainer.waitFor();
 
@@ -326,7 +328,7 @@ ${brokenContent}
       let events = await getRoomEvents(username, password, roomId);
       failingCommandResultEvent = events.find(
         (e: any) =>
-          e.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+          e.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
           e.content.commandRequestId === failingCommandRequestId,
       );
       expect(failingCommandResultEvent).toBeDefined();
@@ -450,12 +452,12 @@ ${originalContent}
             agentId,
           },
         },
-        [APP_BOXEL_COMMAND_REQUESTS_KEY]: finalCommandRequests,
+        [APP_BOXEL_TOOL_REQUESTS_KEY]: finalCommandRequests,
       },
     );
 
     let finalCommandContainer = page.locator(
-      `[data-test-command-id="${finalCommandRequestId}"]`,
+      `[data-test-tool-call-id="${finalCommandRequestId}"]`,
     );
     await finalCommandContainer.waitFor();
     await finalCommandContainer
@@ -467,7 +469,7 @@ ${originalContent}
       let events = await getRoomEvents(username, password, roomId);
       finalCommandResultEvent = events.find(
         (e: any) =>
-          e.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+          e.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
           e.content.commandRequestId === finalCommandRequestId,
       );
       expect(finalCommandResultEvent).toBeDefined();
@@ -519,8 +521,8 @@ ${originalContent}
     const modulePath = 'import-check.gts';
     const moduleUrl = `${realmURL}${modulePath}`;
     const originalModuleSource = `
-import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 export class ImportCheck extends CardDef {
   @field title = contains(StringField);
   static isolated = class Isolated extends Component<typeof this> {
@@ -532,13 +534,14 @@ export class ImportCheck extends CardDef {
 `.trim();
     const originalModuleContent = `${originalModuleSource}\n`;
     const brokenModuleContent = originalModuleContent.replace(
-      `https://cardstack.com/base/card-api'`,
-      `https://cardstack.com/base/card-api-broken'`,
+      `@cardstack/base/card-api'`,
+      `@cardstack/base/card-api-broken'`,
     );
 
     await postCardSource(page, realmURL, modulePath, originalModuleContent);
 
     await page.goto(realmURL);
+    await openAiAssistant(page);
     let roomId = await getRoomId(page);
 
     let agentId = await page.evaluate(() => {
@@ -632,7 +635,7 @@ ${brokenModuleContent}
       description: string,
       expectedApplyState: 'applied' | 'applied-with-error' = 'applied',
     ) {
-      let commandRequests = [
+      let toolRequests = [
         {
           id: commandRequestId,
           name: 'checkCorrectness',
@@ -663,33 +666,33 @@ ${brokenModuleContent}
               agentId,
             },
           },
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: commandRequests,
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: toolRequests,
         },
       );
 
       let commandContainer = page.locator(
-        `[data-test-command-id="${commandRequestId}"]`,
+        `[data-test-tool-call-id="${commandRequestId}"]`,
       );
       await commandContainer.waitFor();
       await commandContainer
         .locator(`[data-test-apply-state="${expectedApplyState}"]`)
         .waitFor();
 
-      let commandResultEvent: any;
+      let toolResultEvent: any;
       await expect(async () => {
         let events = await getRoomEvents(username, password, roomId);
-        commandResultEvent = events.find(
+        toolResultEvent = events.find(
           (e: any) =>
-            e.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+            e.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
             e.content.commandRequestId === commandRequestId,
         );
-        expect(commandResultEvent).toBeDefined();
+        expect(toolResultEvent).toBeDefined();
       }).toPass();
 
       let commandResultData =
-        typeof commandResultEvent!.content.data === 'string'
-          ? JSON.parse(commandResultEvent!.content.data)
-          : commandResultEvent!.content.data;
+        typeof toolResultEvent!.content.data === 'string'
+          ? JSON.parse(toolResultEvent!.content.data)
+          : toolResultEvent!.content.data;
       expect(commandResultData.card).toBeDefined();
       expect(commandResultData.card.url).toBeDefined();
 
@@ -718,16 +721,16 @@ ${brokenModuleContent}
       failingResult.data.attributes.errors.some(
         (err: string) =>
           err.includes(moduleUrl.replace('.gts', '')) &&
-          err.includes('https://cardstack.com/base/card-api-broken not found'),
+          err.includes('@cardstack/base/card-api-broken not found'),
       ),
     ).toBe(true);
 
     const fixMessageBody = `\`\`\`
 ${moduleUrl}
 ╔═══ SEARCH ════╗
-} from 'https://cardstack.com/base/card-api-broken';
+} from '@cardstack/base/card-api-broken';
 ╠═══════════════╣
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 ╚═══ REPLACE ═══╝
 \`\`\``;
     await applyPatchMessage(fixMessageBody);

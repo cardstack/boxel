@@ -1,4 +1,11 @@
-import { click, waitFor, fillIn, find, settled } from '@ember/test-helpers';
+import {
+  click,
+  waitFor,
+  waitUntil,
+  fillIn,
+  find,
+  settled,
+} from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 
@@ -35,6 +42,7 @@ import {
   withSlowSave,
   withCachedRealmSetup,
   type TestContextWithSave,
+  realmConfigCardJSON,
 } from '../../helpers';
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -80,8 +88,8 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         contents: {
           ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'pet.gts': `
-        import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+        import { contains, field, Component, CardDef } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
 
         export class Pet extends CardDef {
           static displayName = 'Pet';
@@ -100,9 +108,37 @@ module('Acceptance | code submode | editor tests', function (hooks) {
           }
         }
       `,
+          'snack.gts': `
+        import { contains, field, Component, CardDef } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
+
+        export class Snack extends CardDef {
+          static displayName = 'Snack';
+          @field name = contains(StringField);
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <div data-test-snack={{@model.name}}><@fields.name/></div>
+            </template>
+          }
+        }
+      `,
+          'treat.gts': `
+        import { contains, field, Component, CardDef } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
+
+        export class Treat extends CardDef {
+          static displayName = 'Treat';
+          @field name = contains(StringField);
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <div data-test-treat={{@model.name}}><@fields.name/></div>
+            </template>
+          }
+        }
+      `,
           'shipping-info.gts': `
-        import { contains, field, Component, FieldDef } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+        import { contains, field, Component, FieldDef } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
         export class ShippingInfo extends FieldDef {
           static displayName = 'Shipping Info';
           @field preferredCarrier = contains(StringField);
@@ -121,8 +157,8 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         }
       `,
           'address.gts': `
-        import { contains, field, Component, FieldDef } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+        import { contains, field, Component, FieldDef } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
         import { ShippingInfo } from "./shipping-info";
         import { FieldContainer } from '@cardstack/boxel-ui/components';
 
@@ -157,8 +193,8 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         }
       `,
           'person.gts': `
-        import { contains, linksTo, field, Component, CardDef, linksToMany } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+        import { contains, linksTo, field, Component, CardDef, linksToMany } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
         import { Pet } from "./pet";
         import { Address } from "./address";
 
@@ -220,6 +256,19 @@ module('Acceptance | code submode | editor tests', function (hooks) {
               },
             },
           },
+          'Snack/cookie.json': {
+            data: {
+              attributes: {
+                name: 'Cookie',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}snack`,
+                  name: 'Snack',
+                },
+              },
+            },
+          },
           'Person/fadhlan.json': {
             data: {
               attributes: {
@@ -254,18 +303,18 @@ module('Acceptance | code submode | editor tests', function (hooks) {
               attributes: {},
               meta: {
                 adoptsFrom: {
-                  module: 'https://cardstack.com/base/cards-grid',
+                  module: '@cardstack/base/cards-grid',
                   name: 'CardsGrid',
                 },
               },
             },
           },
-          '.realm.json': {
+          'realm.json': realmConfigCardJSON({
             name: 'Test Workspace B',
             backgroundURL:
               'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
             iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-          },
+          }),
           'Person/john-with-bad-pet-link.json': {
             data: {
               attributes: {
@@ -295,7 +344,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
               meta: {
                 adoptsFrom: {
                   name: 'Theme',
-                  module: 'https://cardstack.com/base/card-api',
+                  module: '@cardstack/base/card-api',
                 },
               },
               attributes: {
@@ -359,6 +408,79 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     assert.false(
       monacoService?.editor?.getOption(MonacoSDK.editor.EditorOption.readOnly),
       'editor should not be read-only for a .txt file in a writable realm',
+    );
+  });
+
+  test('updating the cursor position does not steal focus from a text-entry element', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}pet.gts`,
+    });
+    await waitFor('[data-test-editor]');
+    await waitUntil(() => monacoService.editor);
+
+    let textarea = document.createElement('textarea');
+    document.body.appendChild(textarea);
+    try {
+      textarea.focus();
+      assert.strictEqual(
+        document.activeElement,
+        textarea,
+        'textarea has focus before the cursor update',
+      );
+
+      monacoService.updateCursorPosition(new MonacoSDK.Position(3, 1));
+
+      assert.strictEqual(
+        document.activeElement,
+        textarea,
+        'textarea keeps focus after the cursor update',
+      );
+      let cursorPosition = monacoService.getCursorPosition();
+      assert.strictEqual(
+        cursorPosition?.lineNumber,
+        3,
+        'editor cursor line is updated',
+      );
+      assert.strictEqual(
+        cursorPosition?.column,
+        1,
+        'editor cursor column is updated',
+      );
+    } finally {
+      textarea.remove();
+    }
+  });
+
+  test('updating the cursor position focuses the editor when no text-entry element has focus', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}pet.gts`,
+    });
+    await waitFor('[data-test-editor]');
+    await waitUntil(() => monacoService.editor);
+
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    assert.notStrictEqual(
+      document.activeElement,
+      null,
+      'something (e.g. the body) is the active element before the cursor update',
+    );
+
+    monacoService.updateCursorPosition(new MonacoSDK.Position(3, 1));
+
+    let editorDom = monacoService.editor!.getDomNode();
+    assert.true(
+      editorDom!.contains(document.activeElement),
+      'editor receives focus when no text-entry element had it',
+    );
+    let cursorPosition = monacoService.getCursorPosition();
+    assert.strictEqual(
+      cursorPosition?.lineNumber,
+      3,
+      'editor cursor line is updated',
     );
   });
 
@@ -464,6 +586,62 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       .containsText('MangoXXX');
   });
 
+  test('changing a card instance adoptsFrom in the editor re-renders it as the new type after indexing', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Snack/cookie`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      codePath: `${testRealmURL}Snack/cookie.json`,
+    });
+
+    await waitFor('[data-test-code-mode-card-renderer-body] [data-test-snack]');
+    assert
+      .dom('[data-test-code-mode-card-renderer-body] [data-test-snack]')
+      .containsText('Cookie', 'the preview renders as the original Snack type');
+    assert
+      .dom('[data-test-code-mode-card-renderer-body] [data-test-treat]')
+      .doesNotExist();
+
+    // Re-point the card's meta.adoptsFrom at an unrelated type by editing its
+    // JSON in the editor. This exercises the full path through the realm
+    // server: save -> reindex -> index event -> store reload -> re-render.
+    setMonacoContent(
+      JSON.stringify({
+        data: {
+          attributes: {
+            name: 'Cookie',
+          },
+          meta: {
+            adoptsFrom: {
+              module: testRRI('treat'),
+              name: 'Treat',
+            },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+
+    await waitFor(
+      '[data-test-code-mode-card-renderer-body] [data-test-treat]',
+      { timeout: 10_000 },
+    );
+    assert
+      .dom('[data-test-code-mode-card-renderer-body] [data-test-treat]')
+      .containsText(
+        'Cookie',
+        'the preview re-rendered using the new Treat type',
+      );
+    assert
+      .dom('[data-test-code-mode-card-renderer-body] [data-test-snack]')
+      .doesNotExist('the stale Snack render is gone');
+  });
+
   test('card instance changes made in monaco editor are synchronized with store', async function (assert) {
     assert.expect(2);
     let expected: LooseSingleCardDocument = {
@@ -528,13 +706,6 @@ module('Acceptance | code submode | editor tests', function (hooks) {
             notes: null,
           },
         },
-        relationships: {
-          'cardInfo.theme': {
-            links: {
-              self: null,
-            },
-          },
-        },
         meta: {
           adoptsFrom: {
             module: rri(`../pet`),
@@ -566,6 +737,11 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       delete json.data.meta.realmURL;
       delete json.data.meta.lastModified;
       delete json.data.meta.resourceCreatedAt;
+      // `generation` is index metadata the realm stamps on the card+json GET;
+      // it rides along in the loaded card the same way lastModified/realmInfo
+      // do (and, like them, is stripped from the persisted source), so drop it
+      // before comparing against the card's source serialization.
+      delete json.data.meta.generation;
       assert.strictEqual(
         stringify(json),
         stringify(expected),
@@ -710,8 +886,8 @@ module('Acceptance | code submode | editor tests', function (hooks) {
 
   test<TestContextWithSave>('card definition change made in monaco editor is auto-saved', async function (assert) {
     let expected = `
-    import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-    import StringField from "https://cardstack.com/base/string";
+    import { contains, field, Component, CardDef } from "@cardstack/base/card-api";
+    import StringField from "@cardstack/base/string";
 
     export class Pet extends CardDef {
       static displayName = 'PetXXX';  // this is the change
@@ -791,9 +967,9 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     await click('[data-test-toggle-thumbnail-editor]');
     await click('[data-test-add-new="theme"]');
 
-    assert.dom('[data-test-card-catalog-modal]').exists();
-    await click(`[data-test-card-catalog-item="${themeId}"]`);
-    await click('[data-test-card-catalog-go-button]');
+    assert.dom('[data-test-card-chooser-modal]').exists();
+    await click(`[data-test-item-button="${themeId}"]`);
+    await click('[data-test-card-chooser-go-button]');
 
     assert
       .dom(`[data-test-field="cardInfo-theme"] [data-test-card="${themeId}"]`)
@@ -809,7 +985,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
 
     await click(`[data-test-field="cardInfo-theme"] [data-test-remove-card]`);
 
-    assert.dom('[data-test-card-catalog-modal]').doesNotExist();
+    assert.dom('[data-test-card-chooser-modal]').doesNotExist();
     assert
       .dom(`[data-test-field="cardInfo-theme"] [data-test-card="${themeId}"]`)
       .doesNotExist();

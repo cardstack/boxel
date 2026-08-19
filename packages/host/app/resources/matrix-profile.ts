@@ -22,6 +22,10 @@ export class MatrixProfileResource extends Resource<Args> {
 
   @service declare private matrixService: MatrixService;
 
+  get isLoaded() {
+    return this.load.performCount > 0 && !this.load.isRunning;
+  }
+
   modify(_positional: never[], named: Args['named']) {
     let { userId } = named;
     this.userId = userId;

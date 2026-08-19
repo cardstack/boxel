@@ -72,7 +72,7 @@
 
 import type { CDPSession, Page } from 'puppeteer';
 import { logger } from '@cardstack/runtime-common';
-import type { ConsoleErrorEntry, ConsoleErrorLocation } from './page-pool';
+import type { ConsoleErrorEntry, ConsoleErrorLocation } from './page-pool.ts';
 
 const log = logger('prerenderer');
 const chromeLog = logger('prerenderer-chrome');

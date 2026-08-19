@@ -1,15 +1,16 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 
-import type { ValidationStepResult } from '../src/factory-agent';
+import type { ValidationStepResult } from '../src/factory-agent/index.ts';
 
 import {
   LintValidationStep,
   type LintValidationStepConfig,
   type LintValidationDetails,
-} from '../src/validators/lint-step';
+} from '../src/validators/lint-step.ts';
 import type { LintResult } from '@cardstack/boxel-cli/api';
-import { createMockClient } from './helpers/mock-client';
-import { createTestWorkspace } from './helpers/workspace-fixture';
+import { createMockClient } from './helpers/mock-client.ts';
+import { createTestWorkspace } from './helpers/workspace-fixture.ts';
 
 // ---------------------------------------------------------------------------
 // Mock helpers
@@ -82,7 +83,7 @@ module('LintValidationStep', function () {
         fetchFilenames: makeFetchFilenames([
           'Cards/my-card.json',
           'index.json',
-          '.realm.json',
+          'realm.json',
         ]),
         readFileFn: makeReadFile({}),
         lintFileFn: makeLintFile({}),

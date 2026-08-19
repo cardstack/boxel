@@ -6,7 +6,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 
 export const sharedRuntimeDir = join(tmpdir(), 'software-factory-runtime');
 export const templateMetadataDir = join(
@@ -101,27 +101,36 @@ export function readPreparedTemplateMetadata(
   }
 }
 
-export function writePreparedTemplateMetadata(
-  payload: PreparedTemplateMetadata,
+// Write JSON to a sibling temp file and rename it into place. A reader
+// polling for the file with existsSync + readFileSync would otherwise be
+// able to observe the target mid-write — created but not yet fully
+// written — and parse a truncated prefix (`Unexpected end of JSON
+// input`). A rename within a directory is atomic on the same filesystem,
+// so the reader sees either no file or the complete payload, never a
+// partial one. The pid+timestamp suffix keeps concurrent writers from
+// colliding on the temp path.
+export function writeMetadataFileAtomically(
+  metadataFile: string,
+  payload: unknown,
 ): void {
-  mkdirSync(templateMetadataDir, { recursive: true });
-  let metadataFile = getTemplateMetadataFile(payload.templateDatabaseName);
+  mkdirSync(dirname(metadataFile), { recursive: true });
   let tempFile = join(
     dirname(metadataFile),
-    `.template.${process.pid}.${Date.now()}.tmp`,
+    `.${basename(metadataFile)}.${process.pid}.${Date.now()}.tmp`,
   );
   writeFileSync(tempFile, JSON.stringify(payload, null, 2));
   renameSync(tempFile, metadataFile);
 }
 
-export function writeSupportMetadata(payload: unknown): void {
-  let metadataFile = getSupportMetadataFile();
-  mkdirSync(dirname(metadataFile), { recursive: true });
-  let tempFile = join(
-    dirname(metadataFile),
-    `.support.${process.pid}.${Date.now()}.tmp`,
+export function writePreparedTemplateMetadata(
+  payload: PreparedTemplateMetadata,
+): void {
+  writeMetadataFileAtomically(
+    getTemplateMetadataFile(payload.templateDatabaseName),
+    payload,
   );
+}
 
-  writeFileSync(tempFile, JSON.stringify(payload, null, 2));
-  renameSync(tempFile, metadataFile);
+export function writeSupportMetadata(payload: unknown): void {
+  writeMetadataFileAtomically(getSupportMetadataFile(), payload);
 }

@@ -1,5 +1,5 @@
 import { test as base, expect } from '@playwright/test';
-import { setRealmRedirects } from '../helpers';
+import { setRealmRedirects } from '../helpers/index.ts';
 
 export const test = base.extend({
   page: async ({ page }, use) => {

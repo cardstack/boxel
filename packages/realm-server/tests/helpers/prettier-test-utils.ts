@@ -1,5 +1,57 @@
 // Test utilities for prettier formatting tests
 import { performance } from 'perf_hooks';
+import * as v8 from 'v8';
+import * as vm from 'vm';
+
+// Resolved once and cached: the test runner does not start Node with
+// `--expose-gc`, so `globalThis.gc` is normally absent and we synthesize the
+// function through the V8 flag API. Resolving lazily and caching means we
+// create at most one throwaway VM context for the whole suite rather than one
+// per `forceGc` call (a per-call context would itself allocate and perturb the
+// very heap reading the helper exists to make trustworthy). `null` records a
+// completed resolution that produced no usable function.
+let resolvedGc: (() => void) | null | undefined;
+
+function resolveGc(): (() => void) | null {
+  if (resolvedGc !== undefined) {
+    return resolvedGc;
+  }
+  let gc = (globalThis as { gc?: () => void }).gc;
+  if (typeof gc !== 'function') {
+    try {
+      v8.setFlagsFromString('--expose-gc');
+      // Evaluating `gc` throws ReferenceError if the flag didn't take effect
+      // (e.g. an unsupported V8 build); treat that as "no GC available".
+      gc = vm.runInNewContext('gc') as () => void;
+    } catch {
+      gc = undefined;
+    } finally {
+      v8.setFlagsFromString('--no-expose-gc');
+    }
+  }
+  resolvedGc = typeof gc === 'function' ? gc : null;
+  return resolvedGc;
+}
+
+/**
+ * Forces a full garbage collection so that a subsequent
+ * `process.memoryUsage().heapUsed` reading reflects retained memory rather
+ * than uncollected transient garbage. Returns true if a collection was
+ * actually performed, false if no GC function could be resolved — callers can
+ * branch on the result to decide how much to trust the measurement.
+ *
+ * Two passes: the first promotes/collects the young generation, the second
+ * collects what the first pass made unreachable, so the reading settles.
+ */
+export function forceGc(): boolean {
+  const gc = resolveGc();
+  if (!gc) {
+    return false;
+  }
+  gc();
+  gc();
+  return true;
+}
 
 interface FormattingTestCase {
   name: string;
@@ -291,7 +343,7 @@ export function createErrorTestCases() {
   return {
     syntaxError: {
       name: 'Syntax Error',
-      source: `import { CardDef } from 'https://cardstack.com/base/card-api';
+      source: `import { CardDef } from '@cardstack/base/card-api';
 export class MyCard extends CardDef {
   @field name = contains(StringField);
   // Malformed syntax that prettier cannot parse
@@ -302,7 +354,7 @@ export class MyCard extends CardDef {
 
     configError: {
       name: 'Config Error',
-      source: `import { CardDef } from 'https://cardstack.com/base/card-api';
+      source: `import { CardDef } from '@cardstack/base/card-api';
 export class MyCard extends CardDef {
   @field name = contains(StringField);
 }`,
@@ -320,7 +372,7 @@ export class MyCard extends CardDef {
     largeFile: {
       name: 'Large File',
       source: `${'// Large comment line\n'.repeat(5000)}
-import { CardDef } from 'https://cardstack.com/base/card-api';
+import { CardDef } from '@cardstack/base/card-api';
 export class MyCard extends CardDef {
   @field name = contains(StringField);
 }`,
@@ -341,13 +393,13 @@ export function createConcurrentTestData(count: number = 5): Array<{
   const testData = [];
 
   for (let i = 0; i < count; i++) {
-    const source = `import { CardDef } from 'https://cardstack.com/base/card-api';
+    const source = `import { CardDef } from '@cardstack/base/card-api';
 export class MyCard${i} extends CardDef {
   @field name${i} = contains(StringField);
 }`;
 
-    const expectedOutput = `import StringField from 'https://cardstack.com/base/string';
-import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
+    const expectedOutput = `import StringField from '@cardstack/base/string';
+import { CardDef, field, contains } from '@cardstack/base/card-api';
 
 export class MyCard${i} extends CardDef {
   @field name${i} = contains(StringField);
@@ -369,9 +421,9 @@ export class MyCard${i} extends CardDef {
  */
 export function createLargeFileTestCase(lineCount: number): string {
   const imports = [
-    "import { CardDef } from 'https://cardstack.com/base/card-api';",
-    "import { field, contains } from 'https://cardstack.com/base/card-api';",
-    "import StringField from 'https://cardstack.com/base/string';",
+    "import { CardDef } from '@cardstack/base/card-api';",
+    "import { field, contains } from '@cardstack/base/card-api';",
+    "import StringField from '@cardstack/base/string';",
     "import { tracked } from '@glimmer/tracking';",
     "import { action } from '@ember/object';",
     "import { fn } from '@ember/helper';",

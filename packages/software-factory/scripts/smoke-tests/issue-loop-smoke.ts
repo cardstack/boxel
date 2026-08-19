@@ -9,24 +9,27 @@
  */
 
 // This should be first
-import '../../src/setup-logger';
+import '../../src/setup-logger.ts';
 
-import { logger } from '../../src/logger';
+import { logger } from '../../src/logger.ts';
 
 import type {
   AgentContext,
   SchedulableIssue,
   IssueData,
   ValidationResults,
-} from '../../src/factory-agent';
+} from '../../src/factory-agent/index.ts';
 
 import type {
   FactoryTool,
   ToolCallEntry,
-} from '../../src/factory-tool-builder';
+} from '../../src/factory-tool-builder.ts';
 
-import type { AgentRunResult, LoopAgent } from '../../src/factory-agent';
-import type { IssueStore } from '../../src/issue-scheduler';
+import type {
+  AgentRunResult,
+  LoopAgent,
+} from '../../src/factory-agent/index.ts';
+import type { IssueStore } from '../../src/issue-scheduler.ts';
 
 import {
   runIssueLoop,
@@ -35,9 +38,9 @@ import {
   type IssueContextBuilderLike,
   type IssueLoopResult,
   type Validator,
-} from '../../src/issue-loop';
+} from '../../src/issue-loop.ts';
 
-import { NoOpStepRunner } from '../../src/validators/noop-step';
+import { NoOpStepRunner } from '../../src/validators/noop-step.ts';
 
 // ---------------------------------------------------------------------------
 // Helpers

@@ -2,6 +2,13 @@
   "name": "@cardstack/billing",
   "version": "0.0.0",
   "license": "MIT",
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    "./stripe-webhook-handlers": "./stripe-webhook-handlers/index.ts",
+    "./stripe-webhook-handlers/*": "./stripe-webhook-handlers/*.ts",
+    "./*": "./*.ts"
+  },
   "dependencies": {
     "@cardstack/postgres": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",

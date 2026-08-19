@@ -10,23 +10,18 @@ import { tracked } from '@glimmer/tracking';
 
 import { dropTask } from 'ember-concurrency';
 import { velcro } from 'ember-velcro';
-import { isEqual, omit } from 'lodash';
+import { isEqual, omit } from 'lodash-es';
 
 import { localId as localIdSymbol, rri } from '@cardstack/runtime-common';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type RealmService from '@cardstack/host/services/realm';
 
-import type {
-  CardDef,
-  Format,
-  ViewCardFn,
-} from 'https://cardstack.com/base/card-api';
-
 import type { CardDefOrId } from './stack-item';
 
 import type { RenderedCardForOverlayActions } from '../../resources/element-tracker';
-import type { MiddlewareState } from '@floating-ui/dom';
+import type { CardDef, Format, ViewCardFn } from '@cardstack/base/card-api';
+import type { MiddlewareState, ReferenceElement } from '@floating-ui/dom';
 
 interface OverlaySignature {
   Args: {
@@ -48,6 +43,76 @@ interface OverlaySignature {
       isHovered: boolean,
     ];
   };
+}
+
+// A per-edge inset large enough to leave that edge effectively unclipped — it
+// extends the clip region a full viewport past the box on that side, well
+// beyond any overlay chrome.
+const UNCLIPPED_EDGE = '-100vmax';
+
+// Returns the `clip-path` that hides the portion of an overlay scrolled behind
+// a sticky header (e.g. the rich-markdown compose toolbar), or '' when the card
+// is clear of the header. `refTop` is the decorated card's viewport top and
+// `headerBottom` the header's viewport bottom, so `headerBottom - refTop` is how
+// far the overlay's top has slid under the header.
+//
+// Only the top edge is clipped; the other three are left unclipped. The header
+// is a horizontal top occluder, so the top clip line (anchored at
+// `headerBottom`) alone hides everything above it — regardless of which edge of
+// the overlay that content sits on. Clipping the sides/bottom would serve no
+// occlusion purpose and would crop chrome that legitimately hangs past the box:
+// the box-shadow ring, and above all a type-label that has flipped below the
+// card (which happens exactly when the card nears the top of its boundary — the
+// same moment this clip engages). A below-flipped label is still hidden while
+// it's above `headerBottom` (the top inset catches it) and shown once it clears
+// the header, which is the correct behavior. '' fully restores the overlay when
+// nothing occludes it. Exported for unit testing.
+export function stickyHeaderClipPath(
+  refTop: number,
+  headerBottom: number,
+): string {
+  let clipTop = Math.max(0, headerBottom - refTop);
+  return clipTop > 0
+    ? `inset(${clipTop}px ${UNCLIPPED_EDGE} ${UNCLIPPED_EDGE} ${UNCLIPPED_EDGE})`
+    : '';
+}
+
+// Finds the sticky header an overlay should clip against: the nearest
+// `[data-overlay-clip-header]` inside the reference card's enclosing
+// `[data-overlay-clip-container]` (the rich-markdown editor). Returns null for
+// cards outside a marked container — so the clip is a no-op for non-editor
+// overlay consumers (spec-preview, playground) and the `querySelector` never
+// runs for them. Scoped to the nearest container, so nested editors clip
+// against their own toolbar. Exported for unit testing.
+export function stickyClipHeaderFor(reference: Element): HTMLElement | null {
+  return (
+    reference
+      .closest('[data-overlay-clip-container]')
+      ?.querySelector<HTMLElement>('[data-overlay-clip-header]') ?? null
+  );
+}
+
+// Reads the live rects of `reference` and its clip container's sticky header
+// and assigns the resulting clip to `floating.style.clipPath` — the glue that
+// turns the pure helpers above into the running fix. Both elements must be laid
+// out in the document. Clears to '' when the reference is not an HTMLElement,
+// sits in no marked container, or has scrolled clear of the header. Exported so
+// a test can drive it without standing up the floating-ui middleware.
+export function applyStickyHeaderClip(
+  reference: ReferenceElement,
+  floating: HTMLElement,
+): void {
+  let clipPath = '';
+  if (reference instanceof HTMLElement) {
+    let header = stickyClipHeaderFor(reference);
+    if (header) {
+      clipPath = stickyHeaderClipPath(
+        reference.getBoundingClientRect().top,
+        header.getBoundingClientRect().bottom,
+      );
+    }
+  }
+  floating.style.clipPath = clipPath;
 }
 
 export default class Overlays extends Component<OverlaySignature> {
@@ -108,19 +173,89 @@ export default class Overlays extends Component<OverlaySignature> {
   @tracked
   protected currentlyHoveredCard: RenderedCardForOverlayActions | null = null;
 
+  // When the cursor leaves the underlying card it may still be travelling to
+  // floating chrome rendered above the card (e.g. the type-label tab in
+  // OperatorModeOverlays which sits a couple of pixels above the card's top
+  // edge). We defer the hover clear so the cursor can bridge that gap; any
+  // mouseenter on the chrome cancels the pending clear.
+  private hoverClearTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // Subclasses opt into a hover-bridge delay by overriding this getter.
+  // The base Overlays has no floating chrome, so the default is immediate
+  // (0ms) — preserving existing immediate-clear behaviour for consumers
+  // like spec-preview and playground-panel.
+  protected get hoverClearDelayMs(): number {
+    return 0;
+  }
+
   protected offset = {
     name: 'offset',
     fn: (state: MiddlewareState) => {
-      let { elements, rects } = state;
+      let { elements } = state;
       let { floating, reference } = elements;
-      let { width, height } = reference.getBoundingClientRect();
+      let refRect = reference.getBoundingClientRect();
 
-      floating.style.width = width + 'px';
-      floating.style.height = height + 'px';
+      floating.style.width = refRect.width + 'px';
+      floating.style.height = refRect.height + 'px';
       floating.style.position = 'absolute';
+      // Mirror the underlying card's corner radius so any decorative
+      // outline / box-shadow on the overlay follows the same curve.
+      if (reference instanceof Element) {
+        floating.style.borderRadius =
+          window.getComputedStyle(reference).borderRadius;
+      }
+
+      // Clip the overlay where a scrolled card slides behind a sticky header
+      // (the rich-markdown compose toolbar) — otherwise the adorn outline paints
+      // on top of the toolbar, because the overlay is a positioned sibling above
+      // the card's stacking-context-sealed subtree and z-index can't arbitrate
+      // it. Mirrors the overflow-occlusion the stack-item header
+      // already relies on, but at the toolbar's dynamic bottom edge. `stickyClipHeaderFor`
+      // is a no-op outside a marked clip container, so this stays inert for
+      // non-editor overlay consumers. Always assigned so the clip clears as the
+      // card scrolls back into the clear.
+      //
+      // The inset is measured in viewport px and applied to the floating
+      // element's own (pre-transform) box. In production the offset parent is
+      // unscaled, so the clip lands exactly at the header's bottom edge. Unlike
+      // the x/y offsets below we deliberately don't divide `clipTop` by the
+      // parent scale — under the test runner's #ember-testing scale the clip
+      // line is therefore only approximate, which doesn't affect real users.
+      applyStickyHeaderClip(reference, floating);
+
+      // Position the overlay from the live reference rect relative to the
+      // floating element's own offset parent, rather than floating-ui's
+      // `rects.reference`. floating-ui's first one-or-two computePosition calls
+      // omit the offset parent's offset (they return the reference in viewport
+      // coordinates and only subtract the offset parent a frame later), so
+      // trusting `rects.reference` makes the overlay — and everything riding it
+      // (the type-label tab, the select chip, the menu, the outline) — paint
+      // one frame off and visibly jump into place on first appearance.
+      // Computing it ourselves from the current rects is correct on the very
+      // first frame. We recover the offset parent's scale the same way the
+      // Adorn label positioner does (the test runner scales `#ember-testing`),
+      // and convert the viewport anchor into the offset parent's local space.
+      let offsetParent = floating.offsetParent as HTMLElement | null;
+      let parentRect = offsetParent
+        ? offsetParent.getBoundingClientRect()
+        : new DOMRect(0, 0, window.innerWidth, window.innerHeight);
+      let scaleX =
+        offsetParent && offsetParent.offsetWidth > 0
+          ? parentRect.width / offsetParent.offsetWidth
+          : 1;
+      let scaleY =
+        offsetParent && offsetParent.offsetHeight > 0
+          ? parentRect.height / offsetParent.offsetHeight
+          : 1;
+      if (!Number.isFinite(scaleX) || scaleX === 0) {
+        scaleX = 1;
+      }
+      if (!Number.isFinite(scaleY) || scaleY === 0) {
+        scaleY = 1;
+      }
       return {
-        x: rects.reference.x,
-        y: rects.reference.y,
+        x: (refRect.left - parentRect.left) / scaleX,
+        y: (refRect.top - parentRect.top) / scaleY,
       };
     },
   };
@@ -137,7 +272,15 @@ export default class Overlays extends Component<OverlaySignature> {
   // listeners for elements that are no longer present. A pure getter would leak stale listeners here.
   /* eslint-disable ember/no-side-effects */
   protected get renderedCardsForOverlayActionsWithEvents() {
-    let renderedCards = this.args.renderedCardsForOverlayActions;
+    // The element tracker reconciles its entries in an afterRender pass, so
+    // when a card's rendered DOM node is replaced (e.g. a hot update of the
+    // card's source while it is open in a stack), this getter can recompute
+    // while the incoming array still references the old, now-detached
+    // element. Prune those entries: a detached element has no parent to
+    // measure z-index from and no geometry to anchor an overlay to.
+    let renderedCards = this.args.renderedCardsForOverlayActions.filter(
+      (renderedCard) => renderedCard.element.isConnected,
+    );
     let currentElements = new Set(renderedCards.map((card) => card.element));
     for (let [element, handlers] of this.boundRenderedCardElements) {
       if (!currentElements.has(element)) {
@@ -149,6 +292,7 @@ export default class Overlays extends Component<OverlaySignature> {
         continue;
       }
       let mouseenter = (_ev: MouseEvent) => {
+        this.cancelHoverClear();
         if (this.currentlyHoveredCard === renderedCard) {
           return;
         }
@@ -159,12 +303,18 @@ export default class Overlays extends Component<OverlaySignature> {
         if (relatedTarget?.closest?.(`.${this.overlayClassName}`)) {
           return;
         }
-        this.setCurrentlyHoveredCard(null);
+        this.scheduleHoverClear();
       };
       let click = (e: MouseEvent) => {
         // prevent outer nested contains fields from triggering when inner most
         // contained field was clicked
         e.stopPropagation();
+        if (this.shouldSwallowCardClick()) {
+          // A subclass is currently holding chrome open (e.g. an overlay
+          // dropdown is open). This click is the outside-click that's about
+          // to dismiss that chrome — don't *also* open the underlying card.
+          return;
+        }
         this.openOrSelectCard(
           renderedCard.cardDefOrId,
           this.getFormatForCard(renderedCard),
@@ -210,6 +360,56 @@ export default class Overlays extends Component<OverlaySignature> {
     renderedCard: RenderedCardForOverlayActions | null,
   ) {
     this.currentlyHoveredCard = renderedCard;
+  }
+
+  @action
+  protected scheduleHoverClear() {
+    if (this.shouldDelayHoverClear()) {
+      return;
+    }
+    if (this.hoverClearTimer) {
+      return;
+    }
+    this.hoverClearTimer = setTimeout(() => {
+      this.hoverClearTimer = null;
+      if (this.shouldDelayHoverClear()) {
+        // A subclass began holding hover state (e.g. menu opened) while the
+        // timer was pending — re-schedule so we'll re-check after the hold
+        // lifts.
+        this.scheduleHoverClear();
+        return;
+      }
+      this.setCurrentlyHoveredCard(null);
+    }, this.hoverClearDelayMs);
+  }
+
+  @action
+  protected cancelHoverClear() {
+    if (this.hoverClearTimer) {
+      clearTimeout(this.hoverClearTimer);
+      this.hoverClearTimer = null;
+    }
+  }
+
+  /**
+   * Hook for subclasses to pin the current hover state. While this returns
+   * true, scheduleHoverClear is a no-op and any in-flight timer re-schedules
+   * itself. Use for "the cursor logically left but we don't want to dismiss
+   * the chrome yet" — e.g. a dropdown opened from the chrome is now floating
+   * in a portal outside the overlay.
+   */
+  protected shouldDelayHoverClear(): boolean {
+    return false;
+  }
+
+  /**
+   * Hook for subclasses to suppress the default card-open behavior on click.
+   * Use when the overlay has floating chrome whose outside-click dismissal
+   * shouldn't also trigger card navigation (e.g. clicking outside an open
+   * dropdown menu).
+   */
+  protected shouldSwallowCardClick(): boolean {
+    return false;
   }
 
   @action protected openOrSelectCard(
@@ -294,7 +494,13 @@ export default class Overlays extends Component<OverlaySignature> {
       return overlayZIndexStyle;
     }
 
-    let parentElement = element.parentElement!;
+    let parentElement = element.parentElement;
+    if (!parentElement) {
+      // An element with no parent element — a document element, or a direct
+      // child of a shadow root — has nothing to measure against, and default
+      // stacking is the only meaningful answer for it.
+      return htmlSafe('z-index: auto');
+    }
     let zIndexParentElement = window
       .getComputedStyle(parentElement)
       .getPropertyValue('z-index');
@@ -336,6 +542,10 @@ export default class Overlays extends Component<OverlaySignature> {
   private teardownBoundRenderedCards() {
     for (let [element, handlers] of this.boundRenderedCardElements) {
       this.unbindRenderedCardElement(element, handlers);
+    }
+    if (this.hoverClearTimer) {
+      clearTimeout(this.hoverClearTimer);
+      this.hoverClearTimer = null;
     }
     this.currentlyHoveredCard = null;
   }

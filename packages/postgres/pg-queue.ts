@@ -1,4 +1,4 @@
-import './instrument';
+import './instrument.ts';
 import {
   type QueuePublisher,
   type QueueRunner,
@@ -34,118 +34,33 @@ import { FROM_SCRATCH_JOB_TIMEOUT_SEC } from '@cardstack/runtime-common/tasks/in
 // coalesce handlers registered before publish() is called.
 import '@cardstack/runtime-common/tasks/copy';
 import '@cardstack/runtime-common/tasks/full-reindex';
-import type { PgAdapter } from './pg-adapter';
+import '@cardstack/runtime-common/tasks/prerender-html';
+import '@cardstack/runtime-common/tasks/prerender-html-reconcile';
+import type { PgAdapter } from './pg-adapter.ts';
+import type { JobReservationsTable, JobsTable } from './job-tables.ts';
+import { acquireConcurrencyGroupLock } from './job-concurrency-lock.ts';
+import { flattenErrorForJsonb } from './flatten-error-for-jsonb.ts';
+import { WorkLoop } from './work-loop.ts';
+import { finalizeJobVerdict, releaseJobReservation } from './job-finalize.ts';
 import * as Sentry from '@sentry/node';
 
 const log = logger('queue');
+
+// Ceiling on how long any single job may occupy a worker, whatever timeout it
+// declares. It clamps the reservation's lease — and with it the handler's abort
+// deadline, which is the same value — so it is the backstop behind every job
+// type's own budget rather than a deadline competing with it.
+//
+// Set to the largest timeout any job type declares, so in a deployed worker it
+// never binds: `Math.min` always picks the job's own, shorter budget. What it
+// bounds is a caller declaring something absurd, and it is how a test runner
+// keeps aborts short without restating a smaller timeout at every publish site.
 const MAX_JOB_TIMEOUT_SEC = FROM_SCRATCH_JOB_TIMEOUT_SEC;
-
-export interface JobsTable {
-  id: number;
-  job_type: string;
-  concurrency_group: string | null;
-  timeout: number;
-  priority: number;
-  args: PgPrimitive;
-  status: 'unfulfilled' | 'resolved' | 'rejected';
-  created_at: Date;
-  finished_at: Date;
-  result: PgPrimitive;
-}
-
-export interface JobReservationsTable {
-  id: number;
-  job_id: number;
-  created_at: Date;
-  locked_until: Date;
-  completed_at: Date;
-  worker_id: string;
-  // NULL while the reservation is open. On close: 'completed' for a
-  // genuine attempt (worker ran the job to a verdict), 'interrupted' for
-  // an operational interruption (child crash, manager SIGTERM, scale-in),
-  // 'timeout-expired' for the pg-pid reaper path.
-  completion_reason: 'completed' | 'interrupted' | 'timeout-expired' | null;
-}
 
 interface CoalesceCandidateRow extends Pick<
   JobsTable,
   'id' | 'job_type' | 'concurrency_group' | 'timeout' | 'priority' | 'args'
 > {}
-
-async function acquireConcurrencyGroupLock(
-  queryFn: (expression: Expression) => Promise<unknown>,
-  concurrencyGroup: string | null,
-) {
-  await queryFn([
-    'SELECT pg_advisory_xact_lock(hashtext(',
-    param(concurrencyGroup ?? '__queue_no_concurrency_group__'),
-    '))',
-  ]);
-}
-
-// Tracks a task that should loop with a timeout and an interruptible sleep.
-export class WorkLoop {
-  private internalWaker: Deferred<void> | undefined;
-  private timeout: NodeJS.Timeout | undefined;
-  private _shuttingDown = false;
-  private runnerPromise: Promise<void> | undefined;
-
-  constructor(
-    private label: string,
-    private pollInterval: number,
-  ) {}
-
-  // 1. Your fn should loop until workLoop.shuttingDown is true.
-  // 2. When it has no work to do, it should await workLoop.sleep().
-  // 3. It can be awoke with workLoop.wake().
-  // 4. Remember to await workLoop.shutdown() when you're done.
-  //
-  // This is separate from the constructor so you can store your WorkLoop first,
-  // *before* the runner starts doing things.
-  run(fn: (loop: WorkLoop) => Promise<void>) {
-    this.runnerPromise = fn(this);
-  }
-
-  async shutDown(): Promise<void> {
-    log.debug(`[workloop %s] shutting down`, this.label);
-    this._shuttingDown = true;
-    this.wake();
-    await this.runnerPromise;
-    log.debug(`[workloop %s] completed shutdown`, this.label);
-  }
-
-  get shuttingDown(): boolean {
-    return this._shuttingDown;
-  }
-
-  private get waker() {
-    if (!this.internalWaker) {
-      this.internalWaker = new Deferred();
-    }
-    return this.internalWaker;
-  }
-
-  wake() {
-    log.debug(`[workloop %s] waking up`, this.label);
-    this.waker.fulfill();
-  }
-
-  async sleep() {
-    if (this.shuttingDown) {
-      return;
-    }
-    let timerPromise = new Promise((resolve) => {
-      this.timeout = setTimeout(resolve, this.pollInterval).unref();
-    });
-    log.debug(`[workloop %s] entering promise race`, this.label);
-    await Promise.race([this.waker.promise, timerPromise]);
-    log.debug(`[workloop] leaving promise race`, this.label);
-    if (this.timeout != null) {
-      clearTimeout(this.timeout);
-    }
-    this.internalWaker = undefined;
-  }
-}
 
 export class PgQueuePublisher implements QueuePublisher {
   #isDestroyed = false;
@@ -573,6 +488,11 @@ export class PgQueueRunner implements QueueRunner {
   }
 
   private async processJobs(workLoop: WorkLoop) {
+    if (this.#handlers.size === 0) {
+      // nothing this runner could execute — and the claim query's
+      // job-type filter would be malformed with an empty IN list
+      return;
+    }
     await this.#pgClient.withConnection(async (query) => {
       try {
         while (!workLoop.shuttingDown) {
@@ -583,11 +503,25 @@ export class PgQueueRunner implements QueueRunner {
 
           let jobs = (await query([
             // find the queue with the oldest job that isn't running and lock it.
+            // Break created_at ties on the monotonic id so the job enqueued
+            // first always wins — two jobs in the same concurrency group can
+            // share a created_at (current_timestamp is the transaction start
+            // time), and without the tiebreaker the worker could claim them
+            // out of enqueue order.
             `WITH
               pending_jobs AS (
                 SELECT * FROM jobs WHERE status='unfulfilled' and priority >=`,
             param(this.#priority),
-            `),
+            // Only claim job types this runner has a handler for: a worker
+            // that claims a type it can't run would finalize the job as
+            // rejected, permanently discarding work a differently-configured
+            // worker (e.g. a newer version mid rolling-deploy) could have
+            // completed.
+            `AND job_type IN (`,
+            ...[...this.#handlers.keys()].flatMap((jobType, i) =>
+              i === 0 ? [param(jobType)] : [',', param(jobType)],
+            ),
+            `)),
               valid_reservations AS (
                 SELECT * FROM job_reservations WHERE locked_until > NOW() AND completed_at IS NULL
               ),
@@ -601,7 +535,7 @@ export class PgQueueRunner implements QueueRunner {
               AND j.concurrency_group NOT IN (
                 SELECT concurrency_group FROM active_concurrency_groups
               )
-              ORDER BY j.created_at
+              ORDER BY j.created_at, j.id
               LIMIT 1`,
           ])) as unknown as JobsTable[];
           if (jobs.length === 0) {
@@ -619,7 +553,11 @@ export class PgQueueRunner implements QueueRunner {
           await acquireConcurrencyGroupLock(query, jobToRun.concurrency_group);
 
           let jobIsStillEligible = (await query([
-            `SELECT j.id
+            // queue_wait_ms is computed against the database clock — the same
+            // clock that stamped created_at — so it needs no client-side
+            // timestamp parsing (created_at arrives as a timezone-less string
+            // on some adapters).
+            `SELECT j.id, (EXTRACT(EPOCH FROM (NOW() - j.created_at)) * 1000)::bigint AS queue_wait_ms
              FROM jobs j
              WHERE j.id =`,
             param(jobToRun.id),
@@ -631,7 +569,7 @@ export class PgQueueRunner implements QueueRunner {
                  AND r.completed_at IS NULL
              )
              FOR UPDATE`,
-          ])) as { id: number }[];
+          ])) as { id: number; queue_wait_ms: number | string }[];
           if (jobIsStillEligible.length === 0) {
             await query(['ROLLBACK']);
             continue;
@@ -680,13 +618,19 @@ export class PgQueueRunner implements QueueRunner {
             continue;
           }
 
+          // Serves both the lease and the handler's abort timer, so a healthy
+          // handler can never outlive the reservation protecting it.
+          let effectiveTimeoutSec = Math.min(
+            jobToRun.timeout,
+            this.#maxTimeoutSec,
+          );
           let [{ id: jobReservationId }] = (await query([
             'INSERT INTO job_reservations (job_id, locked_until, worker_id) values (',
             ...separatedByCommas([
               [param(jobToRun.id)],
               [
                 '(',
-                param(Math.min(jobToRun.timeout, this.#maxTimeoutSec)),
+                param(effectiveTimeoutSec),
                 ` || ' seconds')::interval + now()`,
               ],
               [param(this.#workerId)],
@@ -696,6 +640,23 @@ export class PgQueueRunner implements QueueRunner {
 
           await query(['COMMIT']); // this should fail in the case of a concurrency conflict
 
+          // Queue-wait rides at info so CI logs surface worker starvation:
+          // with few (or one) workers, a long-running job serializes everything
+          // behind it, and a large wait on a user-initiated job is the direct
+          // signal of that — without it a stalled dequeue is indistinguishable
+          // from slow job execution.
+          let queueWaitMs = Number(jobIsStillEligible[0].queue_wait_ms);
+          log.info(
+            `%s: starting job %s (type=%s priority=%s group=%s) after %s in queue`,
+            this.#workerId,
+            jobToRun.id,
+            jobToRun.job_type,
+            jobToRun.priority,
+            jobToRun.concurrency_group,
+            Number.isFinite(queueWaitMs)
+              ? `${queueWaitMs}ms`
+              : 'an unknown wait',
+          );
           log.debug(
             `%s: claimed job %s, reservation %s`,
             this.#workerId,
@@ -713,16 +674,23 @@ export class PgQueueRunner implements QueueRunner {
                 priority: jobToRun.priority,
               }),
               // we race the job so that it doesn't hold this worker hostage if
-              // the job's promise never resolves
+              // the job's promise never resolves. The deadline is the lease,
+              // clamped by the worker's own ceiling — never the ceiling alone.
+              // A handler allowed to run past its own reservation leaves the
+              // job claimable while it is still working, so a peer can run it
+              // concurrently, and it puts a healthy worker in front of the
+              // stuck-job watchdog. Nothing renews a lease, so sharing one
+              // deadline is what makes "reservation open past its lease" mean
+              // the worker died rather than the worker is slow.
               new Promise<'timeout'>((r) =>
                 setTimeout(() => {
                   r('timeout');
-                }, this.#maxTimeoutSec * 1000).unref(),
+                }, effectiveTimeoutSec * 1000).unref(),
               ),
             ]);
             if (result === 'timeout') {
               throw new Error(
-                `Timed-out after ${this.#maxTimeoutSec}s waiting for job ${
+                `Timed-out after ${effectiveTimeoutSec}s waiting for job ${
                   jobToRun.id
                 } to complete`,
               );
@@ -756,7 +724,7 @@ export class PgQueueRunner implements QueueRunner {
                 err,
               );
             }
-            result = serializableError(err);
+            result = flattenErrorForJsonb(err);
             newStatus = 'rejected';
           }
           log.debug(
@@ -765,75 +733,39 @@ export class PgQueueRunner implements QueueRunner {
             jobToRun.id,
             newStatus,
           );
-          await query(['BEGIN']);
-          await query(['SET TRANSACTION ISOLATION LEVEL SERIALIZABLE']);
-          let jobRows = (await query([
-            'SELECT status FROM jobs WHERE id = ',
-            param(jobToRun.id),
-          ])) as Pick<JobsTable, 'status'>[];
-          if (jobRows.length === 0 || jobRows[0].status !== 'unfulfilled') {
-            log.debug(
-              '%s: rolling back because our job is already marked done',
+          let outcome = await finalizeJobVerdict(
+            query,
+            this.#workerId,
+            jobToRun,
+            jobReservationId,
+            newStatus,
+            result,
+          );
+          if (outcome.type !== 'committed') {
+            // The verdict is gone either way. What must not also be lost is
+            // the reservation: an open row whose lease has aged out is
+            // indistinguishable, to the worker-manager watchdog, from a
+            // worker wedged inside its handler — so it would reject this
+            // job and kill this (healthy) worker up to a full lease later.
+            await releaseJobReservation(
+              query,
               this.#workerId,
+              jobToRun.id,
+              jobReservationId,
+              outcome,
             );
-            await query(['ROLLBACK']);
             return;
           }
-          let reservationRows = (await query([
-            'SELECT *, locked_until < NOW() as expired FROM job_reservations WHERE id = ',
-            param(jobReservationId),
-          ])) as unknown as (JobReservationsTable & { expired: boolean })[];
-          if (reservationRows.length === 0 || reservationRows[0].completed_at) {
-            log.debug(
-              '%s: rolling back because someone else processed our job',
-              this.#workerId,
-            );
-            await query(['ROLLBACK']);
-            return;
-          }
-          let jobReservation = reservationRows[0];
-          if (jobReservation.expired) {
-            // check to see if there are any other reservations for this job
-            let [{ total }] = (await query([
-              'SELECT COUNT(*) as total FROM job_reservations WHERE job_id = ',
-              param(jobToRun.id),
-              'AND id != ',
-              param(jobReservationId),
-            ])) as unknown as { total: number }[];
-            if (total > 0) {
-              log.debug(
-                '%s: rolling back because someone else has reserved our (timed-out) job',
-                this.#workerId,
-              );
-              await query(['ROLLBACK']);
-              return;
-            }
-          }
-          // All good, let's persist our results
-          await query([
-            `UPDATE jobs SET result=`,
-            param(result),
-            ', status=',
-            param(newStatus),
-            `, finished_at=now() WHERE id = `,
-            param(jobToRun.id),
-          ]);
-          await query([
-            `UPDATE job_reservations
-             SET completed_at = now(), completion_reason = 'completed'
-             WHERE id = `,
-            param(jobReservationId),
-          ]);
-          // NOTIFY takes effect when the transaction actually commits. If it
-          // doesn't commit, no notification goes out.
-          await query([`NOTIFY jobs_finished`]);
-          await query(['COMMIT']);
           log.debug(
             `%s: committed job completion, notified jobs_finished`,
             this.#workerId,
           );
         }
       } catch (e: any) {
+        // Reachable for the claim transaction only — `finalizeJob` handles
+        // its own serialization failures, because bailing out there loses a
+        // verdict the handler already produced. A conflict while claiming
+        // costs nothing: no handler has run, and the next poll re-claims.
         if (e.code === '40001') {
           log.debug(
             `%s: detected concurrency conflict, rolling back`,
@@ -852,26 +784,5 @@ export class PgQueueRunner implements QueueRunner {
     if (this.#jobRunner) {
       await this.#jobRunner.shutDown();
     }
-  }
-}
-
-export function serializableError(err: any): Record<string, any> {
-  try {
-    let result = Object.create(null);
-    for (let field of Object.getOwnPropertyNames(err)) {
-      result[field] = err[field];
-    }
-    return result;
-  } catch (megaError) {
-    let stringish: string | undefined;
-    try {
-      stringish = String(err);
-    } catch (_ignored) {
-      // ignoring
-    }
-    return {
-      failedToSerializeError: true,
-      string: stringish,
-    };
   }
 }

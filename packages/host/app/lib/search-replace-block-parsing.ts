@@ -1,7 +1,13 @@
 import {
-  SEARCH_MARKER,
-  SEPARATOR_MARKER,
-  REPLACE_MARKER,
+  findSearchMarker,
+  findSeparatorMarker,
+  findReplaceMarker,
+  stripTrailingSeparatorMarker,
+} from '@cardstack/runtime-common';
+
+export {
+  isCompleteSearchReplaceBlock,
+  stripTrailingSeparatorMarker,
 } from '@cardstack/runtime-common';
 
 interface SearchReplaceResult {
@@ -32,24 +38,24 @@ export function parseSearchReplace(input: string): SearchReplaceResult {
   };
 
   // Find the start of search content
-  const searchStart: number = input.indexOf(SEARCH_MARKER);
-  if (searchStart === -1) {
+  const search = findSearchMarker(input);
+  if (!search) {
     // If search marker not found, return empty result
     return result;
   }
 
   // Find the separator between search and replace content
-  const separator: number = input.indexOf(SEPARATOR_MARKER, searchStart);
+  const separator = findSeparatorMarker(input, search.end);
 
   // Find the end of replace content
-  const replaceEnd: number = input.indexOf(
-    REPLACE_MARKER,
-    separator > -1 ? separator : searchStart,
+  const replace = findReplaceMarker(
+    input,
+    separator ? separator.end : search.end,
   );
 
   // Extract search content
-  const searchContentStart = searchStart + SEARCH_MARKER.length;
-  const searchContentEnd = separator > -1 ? separator : input.length;
+  const searchContentStart = search.end;
+  const searchContentEnd = separator ? separator.index : input.length;
 
   // Handle the search content
   if (searchContentStart < searchContentEnd) {
@@ -66,9 +72,9 @@ export function parseSearchReplace(input: string): SearchReplaceResult {
   }
 
   // Extract replace content if separator exists
-  if (separator > -1) {
-    const replaceContentStart = separator + SEPARATOR_MARKER.length;
-    const replaceContentEnd = replaceEnd > -1 ? replaceEnd : input.length;
+  if (separator) {
+    const replaceContentStart = separator.end;
+    const replaceContentEnd = replace ? replace.index : input.length;
 
     if (replaceContentStart < replaceContentEnd) {
       let content = input.substring(replaceContentStart, replaceContentEnd);
@@ -78,7 +84,7 @@ export function parseSearchReplace(input: string): SearchReplaceResult {
         content = content.substring(1);
       }
 
-      content = content.trimEnd();
+      content = stripTrailingSeparatorMarker(content).trimEnd();
 
       result.replaceContent = content;
     } else {
@@ -87,15 +93,4 @@ export function parseSearchReplace(input: string): SearchReplaceResult {
   }
 
   return result;
-}
-
-export function isCompleteSearchReplaceBlock(code?: string | null): boolean {
-  if (!code) {
-    return false;
-  }
-  return (
-    code.includes(SEARCH_MARKER) &&
-    code.includes(SEPARATOR_MARKER) &&
-    code.includes(REPLACE_MARKER)
-  );
 }

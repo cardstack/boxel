@@ -13,13 +13,13 @@ import ToElsewhere from 'ember-elsewhere/components/to-elsewhere';
 import { consume, provide } from 'ember-provide-consume-context';
 import { resource, use } from 'ember-resources';
 
-import type { BoxelSelect } from '@cardstack/boxel-ui/components';
 import {
   CardContainer,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 import { eq, MenuItem, or, toMenuItems } from '@cardstack/boxel-ui/helpers';
 import { Folder, IconPlusThin } from '@cardstack/boxel-ui/icons';
+import type { Icon } from '@cardstack/boxel-ui/icons';
 
 import {
   CardContextName,
@@ -40,7 +40,6 @@ import {
   internalKeyFor,
   type ResolvedCodeRef,
   GetCardContextName,
-  GetCardsContextName,
   type getCard,
   type getCards,
   chooseCard,
@@ -50,10 +49,12 @@ import {
   trimJsonExtension,
   uuidv4,
   realmURL,
+  searchEntryWireQueryFromQuery,
   type LooseSingleCardDocument,
   type Query,
   type CardErrorJSONAPI,
-  type PrerenderedCardLike,
+  type RenderableSearchEntryLike,
+  type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
 
 import Overlays from '@cardstack/host/components/operator-mode/overlays';
@@ -65,9 +66,9 @@ import ElementTracker, {
 } from '@cardstack/host/resources/element-tracker';
 
 import type AiAssistantPanelService from '@cardstack/host/services/ai-assistant-panel-service';
-import type CommandService from '@cardstack/host/services/command-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
+import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
 import type RealmService from '@cardstack/host/services/realm';
@@ -76,18 +77,9 @@ import type { RecentCard } from '@cardstack/host/services/recent-cards-service';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type StoreService from '@cardstack/host/services/store';
+import type ToolService from '@cardstack/host/services/tool-service';
 
-import type {
-  CardContext,
-  CardDef,
-  FieldDef,
-  Format,
-  ViewCardFn,
-} from 'https://cardstack.com/base/card-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-import type { Spec } from 'https://cardstack.com/base/spec';
-
-import PrerenderedCardSearch from '../../../prerendered-card-search';
+import SearchResults from '../../../search/search-results';
 import CardError from '../../card-error';
 import FormatChooser from '../format-chooser';
 
@@ -96,6 +88,16 @@ import FieldPickerModal from './field-chooser-modal';
 import InstanceSelectDropdown from './instance-chooser-dropdown';
 import PlaygroundPreview from './playground-preview';
 import SpecSearch from './spec-search';
+
+import type {
+  CardContext,
+  CardDef,
+  FieldDef,
+  Format,
+  ViewCardFn,
+} from '@cardstack/base/card-api';
+import type { FileDef } from '@cardstack/base/file-api';
+import type { Spec } from '@cardstack/base/spec';
 
 export type SelectedInstance = {
   card: CardDef | FileDef;
@@ -121,12 +123,12 @@ interface Signature {
 
 export default class PlaygroundPanel extends Component<Signature> {
   @consume(GetCardContextName) declare private getCard: getCard;
-  @consume(GetCardsContextName) declare private getCards: getCards;
   @consume(CardContextName) declare private cardContext: CardContext;
   @service declare private aiAssistantPanelService: AiAssistantPanelService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private loaderService: LoaderService;
   @service declare private matrixService: MatrixService;
+  @service declare private network: NetworkService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
@@ -140,10 +142,14 @@ export default class PlaygroundPanel extends Component<Signature> {
   @tracked private fieldChooserIsOpen = false;
   @tracked private newCardNonce = 0;
 
-  @tracked private cardOptions: PrerenderedCardLike[] = [];
+  @tracked private cardOptions: RenderableSearchEntryLike[] = [];
   @tracked private selectedFileMetaId: string | undefined;
   @use private moduleChangeTracker = resource(() => {
-    let moduleId = internalKeyFor(this.args.codeRef, undefined);
+    let moduleId = internalKeyFor(
+      this.args.codeRef,
+      undefined,
+      this.network.virtualNetwork,
+    );
     if (moduleId !== this.#currentModuleId) {
       this.#currentModuleId = moduleId;
       this.#creationError = false;
@@ -215,7 +221,7 @@ export default class PlaygroundPanel extends Component<Signature> {
         canEdit: this.canEditCard,
         cardCrudFunctions: {},
         menuContext: 'code-mode-playground',
-        commandContext: this.commandService.commandContext,
+        toolContext: this.toolService.toolContext,
         format: this.format,
       }) || [],
     );
@@ -226,7 +232,9 @@ export default class PlaygroundPanel extends Component<Signature> {
       new MenuItem({
         label: 'Create new instance',
         action: () => this.createNew(),
-        icon: this.createNewIsRunning ? LoadingIndicator : IconPlusThin,
+        icon: (this.createNewIsRunning
+          ? LoadingIndicator
+          : IconPlusThin) as Icon,
         disabled: this.createNewIsRunning || !this.canWriteRealm,
       }),
       new MenuItem({
@@ -342,7 +350,8 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
   private get moduleId() {
     return (
-      this.moduleChangeTracker ?? internalKeyFor(this.args.codeRef, undefined)
+      this.moduleChangeTracker ??
+      internalKeyFor(this.args.codeRef, undefined, this.network.virtualNetwork)
     );
   }
 
@@ -357,7 +366,9 @@ export default class PlaygroundPanel extends Component<Signature> {
     if (!this.args.isFileDef) {
       return;
     }
-    this.fileSearchResults = this.getCards(
+    // Host code-submode UI searches the store directly (uncapped); the card
+    // caps live on the `@context` surfaces this component does not consume.
+    this.fileSearchResults = this.store.getSearchResource(
       this,
       () => this.fileMetaQuery,
       () => this.realmServer.availableRealmIdentifiers,
@@ -558,6 +569,29 @@ export default class PlaygroundPanel extends Component<Signature> {
     };
   }
 
+  // The `entry` queries for the instance chooser, adapted from the
+  // legacy `Query` getters above. The default fieldset resolves to fitted HTML
+  // (the format these searches used), so no `htmlQuery` override is needed.
+  private get searchResultsQuery(): SearchEntryWireQuery | undefined {
+    if (!this.query) {
+      return undefined;
+    }
+    return {
+      ...searchEntryWireQueryFromQuery(this.query),
+      realms: this.recentRealms,
+    };
+  }
+
+  private get expandedSearchResultsQuery(): SearchEntryWireQuery | undefined {
+    if (!this.expandedQuery) {
+      return undefined;
+    }
+    return {
+      ...searchEntryWireQueryFromQuery(this.expandedQuery),
+      realms: this.realmServer.availableRealmIdentifiers,
+    };
+  }
+
   private get fieldInstances(): FieldOption[] | undefined {
     if (!this.args.isFieldDef || !this.specCard) {
       return undefined;
@@ -613,7 +647,9 @@ export default class PlaygroundPanel extends Component<Signature> {
     };
   }
 
-  @action private onSelect(item: PrerenderedCardLike | FieldOption | FileDef) {
+  @action private onSelect(
+    item: RenderableSearchEntryLike | FieldOption | FileDef,
+  ) {
     if (this.args.isFileDef) {
       let fileId = (item as FileDef).id!;
       this.selectedFileMetaId = fileId;
@@ -625,7 +661,7 @@ export default class PlaygroundPanel extends Component<Signature> {
         (item as FieldOption).index,
       );
     } else {
-      this.persistSelections((item as PrerenderedCardLike).url);
+      this.persistSelections((item as RenderableSearchEntryLike).id);
     }
   }
 
@@ -872,7 +908,7 @@ export default class PlaygroundPanel extends Component<Signature> {
     (
       document.querySelector(
         '[data-playground-instance-chooser][aria-expanded="true"]',
-      ) as BoxelSelect | null
+      ) as HTMLElement | null
     )?.click();
 
   private get currentFileDef(): FileDef | undefined {
@@ -887,23 +923,23 @@ export default class PlaygroundPanel extends Component<Signature> {
     });
   }
 
-  private processSearchResults = (prerenderedCards?: PrerenderedCardLike[]) => {
-    this.cardOptions = prerenderedCards ?? [];
-    this.findSelectedCard(prerenderedCards);
+  private processSearchResults = (entries?: RenderableSearchEntryLike[]) => {
+    this.cardOptions = entries ?? [];
+    this.findSelectedCard(entries);
   };
 
-  private showResults = (cards: PrerenderedCardLike[] | undefined) => {
+  private showResults = (entries: RenderableSearchEntryLike[] | undefined) => {
     return (
       !this.args.isFieldDef &&
-      (cards?.length ||
+      (entries?.length ||
         this.persistedCardId ||
         this.createNewIsRunning ||
         this.isBaseCardModule) // means we do not conduct the expanded search for baseCardModule
     );
   };
 
-  private findSelectedCard = (prerenderedCards?: PrerenderedCardLike[]) => {
-    if (!prerenderedCards?.length) {
+  private findSelectedCard = (entries?: RenderableSearchEntryLike[]) => {
+    if (!entries?.length) {
       // it is possible that there's a persisted cardId in playground-selections local storage
       // but that the card is no longer in recent-files local storage
       // if that is the case, the card title will appear in dropdown menu but
@@ -918,27 +954,27 @@ export default class PlaygroundPanel extends Component<Signature> {
         // not displaying card preview for base card module unless user selects it specifically
         return;
       }
-      let recentCard = prerenderedCards[0];
+      let recentCard = entries[0];
       // if there's no selected card, choose the most recent card as selected
-      this.persistSelections(recentCard.url, 'isolated');
+      this.persistSelections(recentCard.id, 'isolated');
       return recentCard;
     }
 
     let selectedCardId = this.dropdownSelection.card.id;
-    let card = prerenderedCards.find(
-      (c) => trimJsonExtension(c.url) === selectedCardId,
-    );
+    // `entry.id` is the bare card URL already (the entry identity strips
+    // the `.json` the dropdown selection also omits), so they compare directly.
+    let card = entries.find((c) => c.id === selectedCardId);
     return card;
   };
 
-  // sort prerendered-search card results by most recently viewed
-  private getSortedCards = (cards: PrerenderedCardLike[]) => {
+  // sort the instance-chooser card results by most recently viewed
+  private getSortedCards = (entries: RenderableSearchEntryLike[]) => {
     if (!this.recentCardIds?.length) {
       return;
     }
-    let sortedCards: PrerenderedCardLike[] = [];
+    let sortedCards: RenderableSearchEntryLike[] = [];
     for (let id of this.recentCardIds) {
-      let card = cards.find((c) => trimJsonExtension(c.url) === id);
+      let card = entries.find((c) => c.id === id);
       if (card) {
         sortedCards.push(card);
       }
@@ -954,12 +990,12 @@ export default class PlaygroundPanel extends Component<Signature> {
     return this.moduleId === `${baseCardRef.module}/${baseCardRef.name}`;
   }
 
-  private firstResult = (results?: PrerenderedCardLike[]) => {
+  private firstResult = (results?: RenderableSearchEntryLike[]) => {
     let card = results?.[0];
-    return [card].filter(Boolean) as PrerenderedCardLike[];
+    return card ? [card] : [];
   };
 
-  private createNewWhenNoCards = (results?: PrerenderedCardLike[]) => {
+  private createNewWhenNoCards = (results?: RenderableSearchEntryLike[]) => {
     if (!results?.length) {
       if (
         this.#creationError ||
@@ -981,35 +1017,34 @@ export default class PlaygroundPanel extends Component<Signature> {
     {{consumeContext this.makeCardResource}}
     {{consumeContext this.searchFileMeta}}
 
-    {{#if this.query}}
-      <PrerenderedCardSearch
-        @query={{this.query}}
-        @format='fitted'
-        @realms={{this.recentRealms}}
-        @isLive={{true}}
+    {{#if this.searchResultsQuery}}
+      <SearchResults
+        @query={{this.searchResultsQuery}}
+        @mode='none'
+        as |results|
       >
-        <:response as |cards|>
-          {{#if (this.showResults cards)}}
-            {{#let (this.getSortedCards cards) as |sortedCards|}}
+        {{#unless results.isLoading}}
+          {{#if (this.showResults results.entries)}}
+            {{#let (this.getSortedCards results.entries) as |sortedCards|}}
               {{afterRender (fn this.processSearchResults sortedCards)}}
             {{/let}}
-          {{else if this.expandedQuery}}
-            <PrerenderedCardSearch
-              @query={{this.expandedQuery}}
-              @format='fitted'
-              @realms={{this.realmServer.availableRealmIdentifiers}}
+          {{else if this.expandedSearchResultsQuery}}
+            <SearchResults
+              @query={{this.expandedSearchResultsQuery}}
+              @mode='none'
+              as |expandedResults|
             >
-              <:response as |maybeCards|>
+              {{#unless expandedResults.isLoading}}
                 {{! TODO: remove side-effects for instance chooser in CS-8746 }}
-                {{this.createNewWhenNoCards maybeCards}}
-                {{#let (this.firstResult maybeCards) as |cards|}}
+                {{this.createNewWhenNoCards expandedResults.entries}}
+                {{#let (this.firstResult expandedResults.entries) as |cards|}}
                   {{afterRender (fn this.processSearchResults cards)}}
                 {{/let}}
-              </:response>
-            </PrerenderedCardSearch>
+              {{/unless}}
+            </SearchResults>
           {{/if}}
-        </:response>
-      </PrerenderedCardSearch>
+        {{/unless}}
+      </SearchResults>
     {{/if}}
 
     {{#if this.fieldChooserIsOpen}}

@@ -65,7 +65,7 @@ export default class UrlField extends StringField {
   };
 }
 
-function isValidUrl(urlString: string): boolean {
+export function isValidUrl(urlString: string): boolean {
   try {
     new URL(urlString);
     return true;
@@ -79,8 +79,6 @@ export class CardWithURL extends CardDef {
   static displayName = 'Card with URL';
   @field url = contains(UrlField);
   static isolated = class Isolated extends Component<typeof CardWithURL> {
-    <template>
-      <@fields.url @format='atom' />
-    </template>
+    <template><@fields.url @format='atom' /></template>
   };
 }

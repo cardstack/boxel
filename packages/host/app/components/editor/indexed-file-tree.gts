@@ -43,6 +43,7 @@ interface Signature {
   Args: {
     realmURL: string;
     fileTypeFilter?: CodeRef;
+    fileFieldFilter?: Record<string, unknown>;
     selectedFile?: LocalPath;
     openDirs?: LocalPath[];
     onFileSelected?: (entryPath: LocalPath) => void;
@@ -100,10 +101,8 @@ export default class IndexedFileTree extends Component<Signature> {
         position: relative;
         min-height: 100%;
       }
-      nav:focus-visible {
-        outline: 2px solid var(--boxel-highlight);
-        outline-offset: -2px;
-        border-radius: var(--boxel-border-radius-xs);
+      nav:focus {
+        outline: none;
       }
     </style>
   </template>
@@ -112,6 +111,7 @@ export default class IndexedFileTree extends Component<Signature> {
     this,
     () => this.args.realmURL,
     () => this.args.fileTypeFilter,
+    () => this.args.fileFieldFilter,
   );
   private localOpenDirs = new TrackedSet<string>();
   @tracked private selectedFile?: LocalPath;

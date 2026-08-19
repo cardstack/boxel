@@ -9,23 +9,23 @@ Wraps the `boxel realm` subcommands that move data between a local directory and
 - **`push`** — local → remote. Deploy local edits to the realm.
 - **`pull`** — remote → local. Download a realm into a directory.
 - **`sync`** — bidirectional. Reconcile both sides; needs a `--prefer-*` flag when there are conflicts.
-- **`watch`** — remote → local, continuous. Long-running poller; pulls remote changes into the local directory as they happen. Locally-edited files are *not* overwritten by default — the watcher skips downloads when the local copy diverges from the sync manifest, logs a warning, and keeps polling. Pass `--overwrite-local` to opt back into the unconditional mirror behavior.
+- **`watch`** — remote → local, continuous. Long-running poller; pulls remote changes into the local directory as they happen. Locally-edited files are _not_ overwritten by default — the watcher skips downloads when the local copy diverges from the sync manifest, logs a warning, and keeps polling. Pass `--overwrite-local` to opt back into the unconditional mirror behavior.
 - **`create`** — provision a new realm on the realm server.
 - **`remove`** — delete a realm and unlink it from the active profile.
 - **`list`** — see realms the active profile can access.
 
 ## When the user asks to...
 
-| Ask | Run |
-|---|---|
-| "push my changes" / "deploy" | `boxel realm push <local-dir> <realm-url>` |
-| "download a realm" / "pull it locally" | `boxel realm pull <realm-url> <local-dir>` |
-| "sync" / "keep them in lockstep" | `boxel realm sync <local-dir> <realm-url> --prefer-newest` (or `--prefer-local` / `--prefer-remote`) |
-| "watch the realm" / "live-mirror remote changes locally" | `boxel realm watch start <realm-url> <local-dir>` |
-| "stop watching" / "kill the watcher" | `boxel realm watch stop <local-dir>` |
-| "make a new realm" | `boxel realm create <realm-name> <display-name>` |
-| "delete this realm" / "remove a realm" | `boxel realm remove <realm-url>` |
-| "what realms do I have access to" | `boxel realm list` |
+| Ask                                                      | Run                                                                                                  |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| "push my changes" / "deploy"                             | `boxel realm push <local-dir> <realm-url>`                                                           |
+| "download a realm" / "pull it locally"                   | `boxel realm pull <realm-url> <local-dir>`                                                           |
+| "sync" / "keep them in lockstep"                         | `boxel realm sync <local-dir> <realm-url> --prefer-newest` (or `--prefer-local` / `--prefer-remote`) |
+| "watch the realm" / "live-mirror remote changes locally" | `boxel realm watch start <realm-url> <local-dir>`                                                    |
+| "stop watching" / "kill the watcher"                     | `boxel realm watch stop <local-dir>`                                                                 |
+| "make a new realm"                                       | `boxel realm create <realm-name> <display-name>`                                                     |
+| "delete this realm" / "remove a realm"                   | `boxel realm remove <realm-url>`                                                                     |
+| "what realms do I have access to"                        | `boxel realm list`                                                                                   |
 
 ## Prerequisites
 
@@ -44,6 +44,16 @@ A profile must be active. If `boxel profile list` shows none, the user has to ru
 `push` and `pull` have their own `--delete` and `--dry-run` flags but no `--prefer-*` flags (they're one-directional). When in doubt, dry-run first.
 
 `watch` protects local edits without a flag: by default any file whose local hash differs from the sync manifest is skipped (with a yellow `⚠ skipped …` line) instead of overwritten. The warning re-fires on every poll until the user reconciles via `boxel realm sync …` (e.g. `--prefer-newest`) or reruns watch with `--overwrite-local` to accept the remote.
+
+## Realm skills reach Claude Code automatically
+
+A workspace's user-authored skills live in the realm as `skills/<name>/SKILL.md` (see `/boxel-cli:boxel-skill-authoring`). `pull`, `sync`, and `watch` expose them to Claude Code with no extra step: each one is copied into `<local-dir>/.claude/skills/<realm>-<name>/`, where `<realm>` is the last segment of the realm URL. So a skill named `trip-planner` in `…/alice/experiments/` becomes `/experiments-trip-planner` in the next session.
+
+- The mirror always goes into the realm's own local directory — nothing is searched for up the tree. Claude Code loads nested `.claude/skills/` directories below the working directory, so a realm pulled into a subdirectory still surfaces its skills (under a directory-qualified name when two skills share one). Pulling a realm into the home directory itself is refused, since `~/.claude/skills` is Claude Code's personal scope.
+- Entries are generated copies, rewritten on every run. **Edit a skill in the realm checkout's `skills/<name>/`, never in `.claude/skills/`** — the checkout is what `push` and `sync` carry back to the realm, and an edit made to a copy is overwritten without warning by the next pull, sync, or watch tick.
+- A skill renamed or deleted in the realm has its mirror entry removed on the next run. A `.claude/skills/` directory boxel did not write is never touched.
+- `.claude/` is ignored by every direction of sync, so the mirror is never pushed into the realm.
+- Pass `--no-claude-skills` (or set `BOXEL_DISABLE_CLAUDE_SKILLS_SYNC=1`) to skip it.
 
 If `watch` is starting in a directory that already mirrors the realm but has no `.boxel-sync.json` (e.g. populated by hand, by `git clone`, or by a different tool), run `boxel realm pull` first. Without a manifest every existing file looks "diverged" and the first poll warns about each one until reconciled.
 
@@ -69,6 +79,7 @@ Bidirectional sync between a local directory and a Boxel realm
 - `--prefer-newest` — Resolve conflicts by keeping newest version
 - `--delete` — Sync deletions both ways
 - `--dry-run` — Preview without making changes
+- `--no-claude-skills` — Skip mirroring the realm's skills/ directory into the checkout's .claude/skills/ (env: BOXEL_DISABLE_CLAUDE_SKILLS_SYNC=1)
 - `--realm-secret-seed` — Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)
 
 ### `boxel realm watch start <realm-url> <local-dir>`
@@ -86,6 +97,7 @@ Start watching a Boxel realm for server-side changes and pull them into a local 
 - `-d, --debounce <seconds>` — Seconds to wait after a burst of changes before applying them
 - `--realm-secret-seed` — Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)
 - `--overwrite-local` — Overwrite local files when the remote changes. Default: skip + warn when the local copy diverges from the sync manifest.
+- `--no-claude-skills` — Skip mirroring the realm's skills/ directory into the checkout's .claude/skills/ (env: BOXEL_DISABLE_CLAUDE_SKILLS_SYNC=1)
 
 ### `boxel realm watch stop`
 
@@ -120,6 +132,7 @@ Pull files from a Boxel realm to a local directory
 
 - `--delete` — Delete local files that do not exist in the realm
 - `--dry-run` — Show what would be done without making changes
+- `--no-claude-skills` — Skip mirroring the realm's skills/ directory into the checkout's .claude/skills/ (env: BOXEL_DISABLE_CLAUDE_SKILLS_SYNC=1)
 - `--realm-secret-seed` — Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)
 
 ### `boxel realm create <realm-name> <display-name>`
@@ -158,11 +171,12 @@ List realms accessible to the active profile
 - `--json` — Output JSON
 - `--all-accessible` — Show all accessible realms, including hidden ones
 - `--hidden` — Show only realms not in the user's UI realm list
+- `--include-archived` — Also list realms the caller owns that have been archived
 
 <!-- generated:commands:end -->
 
 ## Pitfalls
 
 - `boxel realm push --delete` will remove remote files that don't exist locally. Confirm the user intends destructive sync before adding the flag.
-- The `<realm-url>` argument is the realm's *base URL* (`https://app.boxel.ai/owner/realm/`), not a card URL inside the realm. If the user pastes a card URL, strip the path back to the realm root.
+- The `<realm-url>` argument is the realm's _base URL_ (`https://app.boxel.ai/owner/realm/`), not a card URL inside the realm. If the user pastes a card URL, strip the path back to the realm root.
 - Newly created realms need indexing before they're usable. After `boxel realm create`, follow up with `boxel realm wait-for-ready` (see `/boxel-cli:realm-history`).

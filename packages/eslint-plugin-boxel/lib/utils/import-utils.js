@@ -1,5 +1,36 @@
 /** @type {import('eslint').Rule.RuleModule} */
 
+// URL-form alias for each registered RRI prefix. Lets the rule treat
+// `https://cardstack.com/base/X` and `@cardstack/base/X` as the same
+// module so a missing import configured in one form merges into an
+// existing import that uses the other form. Add new realms here as the
+// runtime registers their aliases.
+//
+// Transition shim: this map only exists because base-realm modules can
+// still be imported in either form. Once the virtual-alias URL form
+// (`https://cardstack.com/base/...`) is fully retired and all source
+// uses the RRI prefix form, this map and the two helpers below collapse
+// to identity and can be removed — callers compare specifiers directly.
+const REALM_PREFIX_ALIASES = {
+  '@cardstack/base/': 'https://cardstack.com/base/',
+};
+
+function canonicalizeModuleSpecifier(specifier) {
+  if (typeof specifier !== 'string') {
+    return specifier;
+  }
+  for (const [rriPrefix, urlPrefix] of Object.entries(REALM_PREFIX_ALIASES)) {
+    if (specifier.startsWith(rriPrefix)) {
+      return urlPrefix + specifier.slice(rriPrefix.length);
+    }
+  }
+  return specifier;
+}
+
+function modulesAreEquivalent(a, b) {
+  return canonicalizeModuleSpecifier(a) === canonicalizeModuleSpecifier(b);
+}
+
 /**
  * Adds an import statement for a missing import, or augments an existing import statement
  * @param {import('eslint').Rule.RuleFixer} fixer The fixer instance
@@ -16,11 +47,13 @@ function fixMissingImport(
   exportedName,
   module,
 ) {
-  // Check if an import from this module already exists
+  // Check if an import from this module already exists.
+  // URL-form and RRI-form imports of the same registered realm module
+  // are treated as equivalent — see `REALM_PREFIX_ALIASES`.
   const importDeclarations = sourceCode.ast.body.filter(
     (node) =>
       node.type === 'ImportDeclaration' &&
-      node.source.value === module &&
+      modulesAreEquivalent(node.source.value, module) &&
       // Skip type-only imports
       node.importKind !== 'type',
   );
@@ -174,4 +207,6 @@ module.exports = {
   fixMissingImport,
   isBound,
   buildImportStatement,
+  modulesAreEquivalent,
+  canonicalizeModuleSpecifier,
 };

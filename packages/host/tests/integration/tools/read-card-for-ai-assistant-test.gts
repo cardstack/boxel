@@ -1,0 +1,128 @@
+import { getOwner } from '@ember/owner';
+import type { RenderingTestContext } from '@ember/test-helpers';
+
+import { getService } from '@universal-ember/test-support';
+import { module, test } from 'qunit';
+
+import { SupportedMimeType } from '@cardstack/runtime-common';
+
+import RealmService from '@cardstack/host/services/realm';
+import ReadCardForAiAssistantCommand from '@cardstack/host/tools/read-card-for-ai-assistant';
+
+import {
+  setupIntegrationTestRealm,
+  setupLocalIndexing,
+  testRealmURL,
+  testRealmInfo,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
+} from '../../helpers';
+
+import { setupMockMatrix } from '../../helpers/mock-matrix';
+import { setupRenderingTest } from '../../helpers/setup';
+
+class StubRealmService extends RealmService {
+  get defaultReadableRealm() {
+    return {
+      path: testRealmURL,
+      info: testRealmInfo,
+    };
+  }
+}
+
+module('Integration | tools | read-card-for-ai-assistant', function (hooks) {
+  setupRenderingTest(hooks);
+  setupLocalIndexing(hooks);
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
+    activeRealms: [testRealmURL],
+  });
+
+  hooks.beforeEach(function (this: RenderingTestContext) {
+    getOwner(this)!.register('service:realm', StubRealmService);
+  });
+
+  setupRealmCacheTeardown(hooks);
+
+  hooks.beforeEach(async function () {
+    await withCachedRealmSetup(async () =>
+      setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'person.gts': `
+            import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+            import StringField from "@cardstack/base/string";
+            import NumberField from "@cardstack/base/number";
+
+            export class Person extends CardDef {
+              @field firstName = contains(StringField);
+              @field hourlyRate = contains(NumberField);
+              @field cardTitle = contains(StringField, {
+                computeVia: function (this: Person) {
+                  return this.firstName;
+                },
+              });
+              static isolated = class Isolated extends Component<typeof this> {
+                <template>
+                  <h1><@fields.firstName /> \${{@model.hourlyRate}}</h1>
+                </template>
+              }
+              static embedded = class Embedded extends Component<typeof this> {
+                <template>
+                  <h1> Embedded Card Person: <@fields.firstName/></h1>
+
+                  <style scoped>
+                    h1 { color: red }
+                  </style>
+                </template>
+              }
+              static fitted = class Fitted extends Component<typeof this> {
+                <template>
+                  <h1> Fitted Card Person: <@fields.firstName/></h1>
+
+                  <style scoped>
+                    h1 { color: red }
+                  </style>
+                </template>
+              }
+            }
+          `,
+          'mango.json': {
+            data: {
+              attributes: {
+                firstName: 'Mango',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './person',
+                  name: 'Person',
+                },
+              },
+            },
+          },
+        },
+      }),
+    );
+  });
+
+  test('read card', async function (assert) {
+    let toolService = getService('tool-service');
+
+    let command = new ReadCardForAiAssistantCommand(toolService.toolContext);
+    let result = await command.execute({
+      cardId: `${testRealmURL}mango`,
+    });
+    assert.true(!!result.cardForAttachment.contentHash);
+    assert.strictEqual(
+      result.cardForAttachment.contentType,
+      SupportedMimeType.CardJson,
+    );
+    assert.strictEqual(result.cardForAttachment.name, 'Mango');
+    assert.strictEqual(
+      result.cardForAttachment.sourceUrl,
+      `${testRealmURL}mango`,
+    );
+    assert.true(!!result.cardForAttachment.url);
+  });
+});

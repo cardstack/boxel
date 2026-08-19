@@ -12,8 +12,7 @@ import { getPageTitle } from 'ember-page-title/test-support';
 import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
-import { Deferred } from '@cardstack/runtime-common';
+import { Deferred, type HostRoutingRule } from '@cardstack/runtime-common';
 
 import HostModeService from '@cardstack/host/services/host-mode-service';
 import type StoreService from '@cardstack/host/services/store';
@@ -27,6 +26,7 @@ import {
   SYSTEM_CARD_FIXTURE_CONTENTS,
   setupAuthEndpoints,
   setupUserSubscription,
+  realmConfigCardJSON,
 } from '../helpers';
 import { viewCardDemoCardSource } from '../helpers/cards/view-card-demo';
 import { setupMockMatrix } from '../helpers/mock-matrix';
@@ -51,6 +51,41 @@ class StubHostModeService extends HostModeService {
 class StubCustomSubdomainHostModeService extends StubHostModeService {
   get hostModeOrigin() {
     return removeTrailingSlash(testHostModeRealmURL);
+  }
+}
+
+// The routing map normally arrives on the config meta tag the realm
+// server rewrites per request, which no test server emits — so stub the
+// getter that reads it. Paths and realm-relative targets are stored the
+// way the server injects them: prefixed with the realm's mount pathname,
+// which is `/test/` as this app sees it (`hostModeOrigin` absorbs the
+// `/user` segment above).
+class StubRoutingHostModeService extends StubHostModeService {
+  get hostRoutingMap(): HostRoutingRule[] {
+    return [
+      { path: '/test/terms', id: `${testHostModeRealmURL}Pet/mango` },
+      { path: '/test/tos', redirectTo: '/test/terms', statusCode: 302 },
+      {
+        path: '/test/docs',
+        redirectTo: '/test/terms?section=intro',
+        statusCode: 302,
+      },
+      {
+        path: '/test/blog',
+        redirectTo: 'https://boxel.example/posts',
+        statusCode: 301,
+      },
+    ];
+  }
+}
+
+// `hostModeOrigin` is visitor-controllable — it hands back the
+// `?hostModeOrigin=` query param verbatim whenever one is present — so a
+// redirect must never resolve a realm-relative target against it. This
+// stub returns an origin no redirect may land on.
+class StubHijackedOriginHostModeService extends StubRoutingHostModeService {
+  get hostModeOrigin() {
+    return 'https://attacker.example';
   }
 }
 
@@ -86,10 +121,10 @@ module('Acceptance | host mode tests', function (hooks) {
     setExpiresInSec(60 * 60);
 
     let loader = getService('loader-service').loader;
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
+    let cardApi: typeof import('@cardstack/base/card-api');
+    let string: typeof import('@cardstack/base/string');
+    cardApi = await loader.import('@cardstack/base/card-api');
+    string = await loader.import('@cardstack/base/string');
 
     let { field, contains, CardDef, Component } = cardApi;
     let { default: StringField } = string;
@@ -322,15 +357,15 @@ module('Acceptance | host mode tests', function (hooks) {
             type: 'card',
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
+                module: '@cardstack/base/cards-grid',
                 name: 'CardsGrid',
               },
             },
           },
         },
         'broken-card.gts': `
-          import { contains, field, Component, CardDef } from 'https://cardstack.com/base/card-api';
-          import StringField from 'https://cardstack.com/base/string';
+          import { contains, field, Component, CardDef } from '@cardstack/base/card-api';
+          import StringField from '@cardstack/base/string';
           export class BrokenCard extends CardDef {
             static displayName = 'BrokenCard';
             @field name = contains(StringField);
@@ -355,12 +390,36 @@ module('Acceptance | host mode tests', function (hooks) {
             },
           },
         },
-        '.realm.json': {
+        // A valid card definition whose module imports a dependency that does
+        // not exist, so resolving the import 404s. The card itself is found;
+        // it just can't load because a dependency is missing — a legitimate
+        // error state, distinct from the card not being found.
+        'missing-dep-card.gts': `
+          import { Component, CardDef } from '@cardstack/base/card-api';
+          import { MissingThing } from './missing-dependency';
+          export class MissingDepCard extends CardDef {
+            static displayName = 'MissingDepCard';
+            static isolated = class Isolated extends Component<typeof this> {
+              <template><div>{{MissingThing}}</div></template>
+            };
+          }
+        `,
+        'MissingDepCard/instance.json': {
+          data: {
+            meta: {
+              adoptsFrom: {
+                module: `${testHostModeRealmURL}missing-dep-card`,
+                name: 'MissingDepCard',
+              },
+            },
+          },
+        },
+        'realm.json': realmConfigCardJSON({
           name: 'Test Workspace B',
           backgroundURL:
             'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
           iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-        },
+        }),
       },
     });
 
@@ -396,6 +455,115 @@ module('Acceptance | host mode tests', function (hooks) {
     await percySnapshot(assert);
   });
 
+  test('host mode fetches the card head from the search API and injects it', async function (assert) {
+    // The published page talks to its realm server directly (cookie creds), so
+    // the head prefetch goes through the global fetch rather than the virtual
+    // network. Intercept the head query, assert its shape, and answer with a
+    // entry doc whose `html` resource carries the head markup so the
+    // injection path is exercised end-to-end.
+    let cardUrl = `${testHostModeRealmURL}Pet/mango`;
+    let htmlId = `${cardUrl}#head#${testHostModeRealmURL}pet/Pet`;
+    let capturedHeadQuery: any;
+    let realFetch = globalThis.fetch;
+    globalThis.fetch = async (input: any, init?: any) => {
+      let url = typeof input === 'string' ? input : (input?.url ?? '');
+      if (url.includes('_federated-search') && init?.body) {
+        let body = JSON.parse(init.body);
+        if (body?.filter?.eq?.htmlQuery) {
+          capturedHeadQuery = body;
+          return new Response(
+            JSON.stringify({
+              data: [
+                {
+                  type: 'entry',
+                  id: cardUrl,
+                  relationships: {
+                    html: { data: [{ type: 'html', id: htmlId }] },
+                  },
+                },
+              ],
+              included: [
+                {
+                  type: 'html',
+                  id: htmlId,
+                  attributes: {
+                    format: 'head',
+                    html: '<title data-test-card-head-title>Mango</title>\n<meta property="og:title" content="Mango" />',
+                  },
+                },
+              ],
+              meta: { page: { total: 1 } },
+            }),
+            {
+              status: 200,
+              headers: { 'content-type': 'application/vnd.card+json' },
+            },
+          );
+        }
+      }
+      return realFetch(input, init);
+    };
+
+    // The realm server serves index.html with these boundary markers, between
+    // which the host injects the card's prerendered <head>. The test harness
+    // index.html has none, so stand them in to observe the injection.
+    let headStart = document.createElement('meta');
+    headStart.setAttribute('data-boxel-head-start', '');
+    let headEnd = document.createElement('meta');
+    headEnd.setAttribute('data-boxel-head-end', '');
+    document.head.append(headStart, headEnd);
+
+    try {
+      await visit('/test/Pet/mango.json');
+
+      // The request is the head query: html-only fieldset, the `head`
+      // htmlQuery, scoped to the visited card.
+      assert.deepEqual(
+        capturedHeadQuery?.fields,
+        { entry: ['html'] },
+        'requests only the html branch',
+      );
+      assert.strictEqual(
+        capturedHeadQuery?.filter?.eq?.htmlQuery?.eq?.format,
+        'head',
+        'selects the head rendering',
+      );
+      assert.deepEqual(
+        capturedHeadQuery?.cardUrls,
+        [`${cardUrl}.json`],
+        'scoped to the visited card',
+      );
+
+      // og:title is emitted only by the prerendered card <head> (ember-page-title
+      // never does), so it uniquely marks the injected markup.
+      let ogTitle = document.head.querySelector('meta[property="og:title"]');
+      assert.ok(
+        ogTitle,
+        'the head markup from the search response is injected',
+      );
+      assert.strictEqual(
+        ogTitle?.getAttribute('content'),
+        'Mango',
+        'the injected head markup is the visited card head',
+      );
+
+      let hostModeService = getService('host-mode-service') as HostModeService;
+      assert.true(
+        hostModeService.headTemplateContainsTitle,
+        'the fetched head markup carries a title',
+      );
+    } finally {
+      globalThis.fetch = realFetch;
+      for (let node = headStart.nextSibling; node && node !== headEnd; ) {
+        let next = node.nextSibling;
+        node.remove();
+        node = next;
+      }
+      headStart.remove();
+      headEnd.remove();
+    }
+  });
+
   test('visiting a non-existent card shows an error', async function (assert) {
     let store = getService('store') as StoreService;
     let originalGet = store.get.bind(store);
@@ -419,9 +587,10 @@ module('Acceptance | host mode tests', function (hooks) {
     gate.fulfill();
 
     await visitPromise;
-    await waitFor('[data-test-card-error]');
-    assert.dom('[data-test-card-error]').exists();
-    assert.dom('[data-test-card-error]').containsText('Card not found');
+    await waitFor('[data-test-host-mode-404]');
+    assert
+      .dom('[data-test-host-mode-404]')
+      .containsText('This page could not be found.');
     assert.strictEqual(
       getPageTitle(),
       `Card not found: ${testHostModeRealmURL}Pet/non-existent`,
@@ -429,6 +598,25 @@ module('Acceptance | host mode tests', function (hooks) {
     assert.dom('[data-test-host-loading]').doesNotExist();
 
     store.get = originalGet;
+  });
+
+  test('visiting a card whose dependency is missing surfaces the error rather than a 404', async function (assert) {
+    await visit('/test/MissingDepCard/instance.json');
+
+    await waitFor('[data-test-card-error]');
+    // The card itself exists; one of its dependencies 404s. That is a
+    // legitimate error state, not a missing card, so the error is surfaced
+    // instead of the bare 404 placeholder.
+    assert
+      .dom('[data-test-host-mode-404]')
+      .doesNotExist('a missing dependency is not a missing card');
+    assert
+      .dom('[data-test-card-error]')
+      .containsText('This card contains an error');
+    assert.strictEqual(
+      getPageTitle(),
+      `Error rendering ${testHostModeRealmURL}MissingDepCard/instance`,
+    );
   });
 
   test('visiting a card with a rendering error shows an error', async function (assert) {
@@ -568,6 +756,149 @@ module('Acceptance | host mode tests', function (hooks) {
       .hasAttribute('data-test-view-card-demo-active-tab', 'details');
   });
 
+  // The ViewCardDemo instances form a cycle — index → secondary → tertiary →
+  // index — so tertiary's button is an "up" link back to the page the user is
+  // already inside. Viewing a card already on the trail must unwind to it,
+  // not stack a second copy of it.
+  test('viewing the primary card from deeper in the trail closes the stack', async function (assert) {
+    let primaryCardSelector = `[data-test-host-mode-card="${testHostModeRealmURL}ViewCardDemo/index"]`;
+    let firstStackSelector = `[data-test-host-mode-stack-item="${testHostModeRealmURL}ViewCardDemo/secondary"]`;
+    let secondStackSelector = `[data-test-host-mode-stack-item="${testHostModeRealmURL}ViewCardDemo/tertiary"]`;
+
+    await visit('/test/ViewCardDemo/index.json');
+
+    await waitFor(`${primaryCardSelector} [data-test-view-card-demo-button]`);
+    await click(`${primaryCardSelector} [data-test-view-card-demo-button]`);
+    await waitFor(`${firstStackSelector} [data-test-view-card-demo-button]`);
+    await click(`${firstStackSelector} [data-test-view-card-demo-button]`);
+    await waitFor(`${secondStackSelector} [data-test-view-card-demo-button]`);
+
+    // tertiary targets the primary card
+    await click(`${secondStackSelector} [data-test-view-card-demo-button]`);
+
+    await waitUntil(() => !document.querySelector(secondStackSelector));
+    assert
+      .dom(firstStackSelector)
+      .doesNotExist(
+        'the whole trail unwinds to the root rather than stacking the primary card again',
+      );
+    assert.dom(primaryCardSelector).exists();
+    // currentURL, not window.location: the latter is the test runner's own URL
+    // and never carries the app's query params, so asserting null against it
+    // would pass whether or not the param was cleared.
+    assert.strictEqual(
+      new URL(currentURL()!, 'http://localhost').searchParams.get(
+        'hostModeStack',
+      ),
+      null,
+      'the emptied stack drops out of the query param',
+    );
+  });
+
+  // The unwind by the route a visitor can take: the scrim covers the primary
+  // card, so only a stack item's own button is genuinely clickable.
+  test('viewing a card below it in the trail unwinds to that card', async function (assert) {
+    let belowCardId = `${testHostModeRealmURL}ViewCardDemo/secondary`;
+    // index sits above secondary in the trail and targets it
+    let topCardId = `${testHostModeRealmURL}ViewCardDemo/index`;
+    let hostModeStackValue = encodeURIComponent(
+      JSON.stringify([belowCardId, topCardId]),
+    );
+
+    // tertiary as primary keeps both stack cards off the root, so this takes the
+    // unwind branch rather than the close-everything one.
+    await visit(
+      `/test/ViewCardDemo/tertiary.json?hostModeStack=${hostModeStackValue}`,
+    );
+
+    let topSelector = `[data-test-host-mode-stack-item="${topCardId}"]`;
+    let belowSelector = `[data-test-host-mode-stack-item="${belowCardId}"]`;
+    await waitFor(`${topSelector} [data-test-view-card-demo-button]`);
+
+    await click(`${topSelector} [data-test-view-card-demo-button]`);
+
+    await waitUntil(() => !document.querySelector(topSelector));
+    assert
+      .dom(belowSelector)
+      .exists('unwinds to the targeted card rather than stacking a copy');
+    assert.strictEqual(
+      new URL(currentURL()!, 'http://localhost').searchParams.get(
+        'hostModeStack',
+      ),
+      JSON.stringify([belowCardId]),
+      'the unwound trail is what persists to the query param',
+    );
+  });
+
+  test('clicking the scrim closes the top card of the trail', async function (assert) {
+    let firstStackCardId = `${testHostModeRealmURL}ViewCardDemo/secondary`;
+    let secondStackCardId = `${testHostModeRealmURL}ViewCardDemo/tertiary`;
+    let hostModeStackValue = encodeURIComponent(
+      JSON.stringify([firstStackCardId, secondStackCardId]),
+    );
+
+    await visit(
+      `/test/ViewCardDemo/index.json?hostModeStack=${hostModeStackValue}`,
+    );
+
+    let secondStackSelector = `[data-test-host-mode-stack-item="${secondStackCardId}"]`;
+    await waitFor(secondStackSelector);
+
+    // `.inner` fills the scrim, so this — not the scrim element itself — is what
+    // a real background click in a browser actually targets.
+    await click('[data-test-host-mode-stack] .inner');
+
+    await waitUntil(() => !document.querySelector(secondStackSelector));
+    assert
+      .dom(`[data-test-host-mode-stack-item="${firstStackCardId}"]`)
+      .exists('only the top card closes');
+  });
+
+  // `hostModeStack` is taken from the URL verbatim, so the same card can appear
+  // twice in one trail. Closing has to act on the copy on screen — the top card
+  // — or the click appears to do nothing while a buried card disappears.
+  test('closing a card that appears twice in the trail closes the visible copy', async function (assert) {
+    let repeatedCardId = `${testHostModeRealmURL}ViewCardDemo/secondary`;
+    let middleCardId = `${testHostModeRealmURL}ViewCardDemo/tertiary`;
+    let hostModeStackValue = encodeURIComponent(
+      JSON.stringify([repeatedCardId, middleCardId, repeatedCardId]),
+    );
+
+    await visit(
+      `/test/ViewCardDemo/index.json?hostModeStack=${hostModeStackValue}`,
+    );
+
+    await waitFor('[data-test-host-mode-stack-item-index="2"]');
+
+    await click('[data-test-host-mode-stack] .inner');
+
+    await waitUntil(
+      () =>
+        !document.querySelector('[data-test-host-mode-stack-item-index="2"]'),
+    );
+    assert
+      .dom('[data-test-host-mode-stack-item-index="1"]')
+      .hasAttribute(
+        'data-test-host-mode-stack-item',
+        middleCardId,
+        'the card below the closed copy becomes the top of the trail',
+      );
+    assert
+      .dom('[data-test-host-mode-stack-item-index="0"]')
+      .hasAttribute(
+        'data-test-host-mode-stack-item',
+        repeatedCardId,
+        'the buried copy survives',
+      );
+    assert.strictEqual(
+      new URL(currentURL()!, 'http://localhost').searchParams.get(
+        'hostModeStack',
+      ),
+      JSON.stringify([repeatedCardId, middleCardId]),
+      'the persisted trail lost the top copy, not the bottom one',
+    );
+  });
+
   test('stack state persists in query parameter', async function (assert) {
     let hostModeStackValue = encodeURIComponent(
       JSON.stringify([`${testHostModeRealmURL}index`]),
@@ -584,39 +915,11 @@ module('Acceptance | host mode tests', function (hooks) {
 
     assert.strictEqual(currentURL(), '/test/Pet/mango.json');
     assert.strictEqual(
-      new URL(window.location.href).searchParams.get('hostModeStack'),
+      new URL(currentURL()!, 'http://localhost').searchParams.get(
+        'hostModeStack',
+      ),
       null,
     );
-  });
-
-  test('clicking the stack backdrop closes the top card', async function (assert) {
-    let hostModeStackValue = encodeURIComponent(
-      JSON.stringify([`${testHostModeRealmURL}index`]),
-    );
-    await visit(`/test/Pet/mango.json?hostModeStack=${hostModeStackValue}`);
-
-    // Wait for stack item to appear
-    await waitFor(
-      `[data-test-host-mode-stack-item="${testHostModeRealmURL}index"]`,
-    );
-
-    // Verify stack item exists
-    assert
-      .dom(`[data-test-host-mode-stack-item="${testHostModeRealmURL}index"]`)
-      .exists();
-
-    // Click outside the stack items (on the stack backdrop area)
-    await click('[data-test-host-mode-stack]');
-
-    // Stack item should be removed
-    await waitUntil(() => {
-      return !document.querySelector(
-        `[data-test-host-mode-stack-item="${testHostModeRealmURL}index"]`,
-      );
-    });
-    assert
-      .dom(`[data-test-host-mode-stack-item="${testHostModeRealmURL}index"]`)
-      .doesNotExist();
   });
 
   test('clicking on a stack card does not close it', async function (assert) {
@@ -688,6 +991,124 @@ module('Acceptance | host mode tests', function (hooks) {
       end.remove();
       fakeContainer.remove();
     }
+  });
+
+  module('with redirect routing rules', function (hooks) {
+    // A full-page request to a redirect-ruled path never reaches the SPA
+    // — serve-index answers the 3xx first. These cover the other leg: an
+    // in-app transition, where the route has to perform the redirect
+    // itself. `window` is ember-window-mock, whose `location.replace`
+    // records the URL instead of navigating.
+    //
+    // A realm-relative target resolves against the document's own
+    // origin, the way a browser resolves a `Location: /path` header.
+    // Read inside each test — the window mock is installed per-test, so
+    // capturing it out here would read the real page's origin instead.
+
+    hooks.beforeEach(function (this) {
+      let owner = getOwner(this)!;
+      let ownerWithUnregister = owner as {
+        unregister?: (fullName: string) => void;
+      };
+      ownerWithUnregister.unregister?.('service:host-mode-service');
+      owner.register('service:host-mode-service', StubRoutingHostModeService);
+    });
+
+    test('a serve rule still renders its target card', async function (assert) {
+      await visit('/test/terms');
+
+      assert
+        .dom(`[data-test-host-mode-card="${testHostModeRealmURL}Pet/mango"]`)
+        .exists('the rule’s target card renders at the routed path');
+    });
+
+    test('transitioning to a redirect rule replaces the location with its target', async function (assert) {
+      await visit('/test/tos');
+
+      assert.strictEqual(
+        window.location.href,
+        `${window.location.origin}/test/terms`,
+        'the realm-relative target is resolved against the host-mode origin',
+      );
+    });
+
+    test('a redirect rule may target an external URL', async function (assert) {
+      await visit('/test/blog');
+
+      assert.strictEqual(
+        window.location.href,
+        'https://boxel.example/posts',
+        'an external target is used verbatim',
+      );
+    });
+
+    test('the source query string carries onto the redirect target', async function (assert) {
+      // Regression guard for reading the query from the transition rather
+      // than `window.location.search`: mid-transition the location still
+      // holds the URL being navigated away from, so sourcing it there
+      // would drop `utm_source` (and could forward a stale query).
+      await visit('/test/tos?utm_source=newsletter');
+
+      assert.strictEqual(
+        window.location.href,
+        `${window.location.origin}/test/terms?utm_source=newsletter`,
+        'the inbound query is preserved, matching what serve-index does',
+      );
+    });
+
+    test('a target with its own query wins over the source query', async function (assert) {
+      await visit('/test/docs?section=appendix');
+
+      assert.strictEqual(
+        window.location.href,
+        `${window.location.origin}/test/terms?section=intro`,
+        'the declared target query is left alone, matching serve-index',
+      );
+    });
+
+    test('a hijacked hostModeOrigin cannot steer the redirect', async function (assert) {
+      // `?hostModeOrigin=https://evil.example` sticks across in-app
+      // transitions (it is a declared query param), so resolving a
+      // realm-relative target against `hostModeOrigin` would turn every
+      // redirect rule into an open redirect to a visitor-chosen origin.
+      let owner = getOwner(this)!;
+      let ownerWithUnregister = owner as {
+        unregister?: (fullName: string) => void;
+      };
+      ownerWithUnregister.unregister?.('service:host-mode-service');
+      owner.register(
+        'service:host-mode-service',
+        StubHijackedOriginHostModeService,
+      );
+
+      await visit('/test/tos');
+
+      assert.strictEqual(
+        window.location.href,
+        `${window.location.origin}/test/terms`,
+        'the redirect stays on the document origin',
+      );
+      assert.notOk(
+        window.location.href.startsWith('https://attacker.example'),
+        'hostModeOrigin is not used as the redirect base',
+      );
+    });
+
+    test("the app's own query params are not forwarded", async function (assert) {
+      // The router hydrates every declared query param onto
+      // `transition.to.queryParams` using its controller default, present
+      // in the URL or not. Forwarding those blind would append junk the
+      // server never sends (`debug=false` on every redirect) and would
+      // hand internal state — including the `sid` / `clientSecret`
+      // password-reset tokens — to an external target.
+      await visit('/test/blog?sid=secret-token&utm_source=newsletter');
+
+      assert.strictEqual(
+        window.location.href,
+        'https://boxel.example/posts?utm_source=newsletter',
+        'foreign params ride along; app-internal ones are dropped',
+      );
+    });
   });
 
   module('with a custom subdomain', function (hooks) {

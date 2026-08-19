@@ -5,7 +5,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
-  baseRealm,
+  baseRealmRRI,
   type FileExtractResponse,
   type RenderRouteOptions,
   type ResolvedCodeRef,
@@ -178,7 +178,7 @@ module('Acceptance | png image def', function (hooks) {
   const makeFileURL = (path: string) => new URL(path, testRealmURL).href;
 
   const pngDefCodeRef = (): ResolvedCodeRef => ({
-    module: `${baseRealm.url}png-image-def` as RealmResourceIdentifier,
+    module: `${baseRealmRRI}png-image-def` as RealmResourceIdentifier,
     name: 'PngDef',
   });
 
@@ -258,6 +258,33 @@ module('Acceptance | png image def', function (hooks) {
     assert.ok(
       String(result.searchDoc?.contentType).includes('png'),
       'sets png content type',
+    );
+  });
+
+  test('reads the color profile out of IHDR during extract', async function (assert) {
+    let url = makeFileURL('sample.png');
+    await visit(
+      fileExtractPath(url, {
+        fileExtract: true,
+        fileDefCodeRef: pngDefCodeRef(),
+      }),
+    );
+
+    let result = await captureFileExtractResult('ready');
+    assert.deepEqual(
+      result.searchDoc?.colorProfile,
+      {
+        bitDepth: 8,
+        channels: 3,
+        hasAlpha: false,
+      },
+      'the fixture is 8-bit color type 2, so three channels and no alpha; ' +
+        'IHDR proves the channel model but not colorimetry, so no color space is claimed',
+    );
+    assert.strictEqual(
+      result.searchDoc?.exif,
+      undefined,
+      'PNG carries no EXIF in IHDR, so no exif attribute is produced',
     );
   });
 
@@ -405,7 +432,7 @@ module('Acceptance | png image def', function (hooks) {
     let { status } = await capturePrerenderResult('innerHTML');
     assert.strictEqual(status, 'ready', 'render completed');
 
-    let imgSelector = '[data-prerender] .image-isolated__img';
+    let imgSelector = '[data-prerender] [data-test-image-preview]';
     let img = document.querySelector(imgSelector) as HTMLImageElement | null;
     assert.ok(img, 'img element is rendered');
     assert.ok(

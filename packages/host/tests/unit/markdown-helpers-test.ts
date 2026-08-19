@@ -3,16 +3,16 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, type Loader } from '@cardstack/runtime-common';
+import type { Loader } from '@cardstack/runtime-common';
+
+import { setupRenderingTest } from '../helpers/setup';
 
 import type {
   markdownLinkForCard as MarkdownLinkForCardFn,
   markdownLinksForCards as MarkdownLinksForCardsFn,
   markdownEmbedForCard as MarkdownEmbedForCardFn,
   markdownEmbedsForCards as MarkdownEmbedsForCardsFn,
-} from 'https://cardstack.com/base/markdown-helpers';
-
-import { setupRenderingTest } from '../helpers/setup';
+} from '@cardstack/base/markdown-helpers';
 
 module('Unit | markdown-helpers | card link helpers', function (hooks) {
   setupRenderingTest(hooks);
@@ -26,8 +26,8 @@ module('Unit | markdown-helpers | card link helpers', function (hooks) {
   hooks.beforeEach(async function () {
     loader = getService('loader-service').loader;
     let mod = await loader.import<
-      typeof import('https://cardstack.com/base/markdown-helpers')
-    >(`${baseRealm.url}markdown-helpers`);
+      typeof import('@cardstack/base/markdown-helpers')
+    >('@cardstack/base/markdown-helpers');
     markdownLinkForCard = mod.markdownLinkForCard;
     markdownLinksForCards = mod.markdownLinksForCards;
     markdownEmbedForCard = mod.markdownEmbedForCard;
@@ -184,11 +184,19 @@ module('Unit | markdown-helpers | card link helpers', function (hooks) {
     );
   });
 
-  test('size specifier is ignored for inline embeds', function (assert) {
+  test('size specifier is honored for inline embeds', function (assert) {
     let card = { id: 'https://example.com/Post/1' };
     assert.strictEqual(
       markdownEmbedForCard(card, { kind: 'inline', size: 'strip' }),
-      ':card[https://example.com/Post/1]',
+      ':card[https://example.com/Post/1 | strip]',
+    );
+  });
+
+  test('inline embed with embedded size', function (assert) {
+    let card = { id: 'https://example.com/Post/1' };
+    assert.strictEqual(
+      markdownEmbedForCard(card, { kind: 'inline', size: 'embedded' }),
+      ':card[https://example.com/Post/1 | embedded]',
     );
   });
 

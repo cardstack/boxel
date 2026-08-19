@@ -1,24 +1,32 @@
 import type { ChatCompletionMessageFunctionToolCall } from 'openai/resources/chat/completions';
-import type { CommandRequest } from '@cardstack/runtime-common/commands';
-import { thinkingMessage } from '../../constants';
-import type ResponseState from '../response-state';
+import type { ToolRequest } from '@cardstack/runtime-common/commands';
+import { AI_BOT_EXECUTOR } from '@cardstack/runtime-common/commands';
+import {
+  READ_REALM_FILE_TOOL_NAME,
+  readFilesLabel,
+} from '../read-realm-file.ts';
+import { thinkingMessage } from '../../constants.ts';
+import type ResponseState from '../response-state.ts';
 import {
   APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
   APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
 } from '@cardstack/runtime-common';
 import { sendErrorEvent, sendMessageEvent } from '@cardstack/runtime-common/ai';
-import type { CardMessageContent } from 'https://cardstack.com/base/matrix-event';
-import ResponseEventData from './response-event-data';
+import type {
+  CardMessageContent,
+  TokenUsage,
+} from '@cardstack/base/matrix-event';
+import ResponseEventData from './response-event-data.ts';
 import { logger } from '@cardstack/runtime-common';
 import type { MatrixClient } from 'matrix-js-sdk';
 
 let log = logger('ai-bot');
 
-function toCommandRequest(
+export function toCommandRequest(
   toolCall: ChatCompletionMessageFunctionToolCall,
-): Partial<CommandRequest> {
+): Partial<ToolRequest> {
   let { id, function: f } = toolCall;
-  let result = {} as Partial<CommandRequest>;
+  let result = {} as Partial<ToolRequest>;
   if (id) {
     result['id'] = id;
   }
@@ -35,14 +43,40 @@ function toCommandRequest(
       result['arguments'] = {};
     }
   }
+  // readRealmFile is a tool ai-bot fulfills itself: tag it so the host records
+  // it in the timeline but never runs it, and give it a human label the
+  // timeline indicator can show ("Read files: <names>") since the raw
+  // arguments carry no description of their own.
+  if (result.name === READ_REALM_FILE_TOOL_NAME) {
+    result.executedBy = AI_BOT_EXECUTOR;
+    result.arguments = {
+      ...(result.arguments ?? {}),
+      description: readFilesLabel(result.arguments?.urls),
+    };
+  }
   return result;
 }
 
 export const DEFAULT_EVENT_SIZE_MAX = 1024 * 16; // 16kB
 
 export default class MatrixResponsePublisher {
+  readonly client: MatrixClient;
+  readonly roomId: string;
+  readonly agentId: string;
+  readonly responseState: ResponseState;
   eventSizeMax = DEFAULT_EVENT_SIZE_MAX;
   responseEvents: ResponseEventData[] | undefined;
+  // Count of Matrix room events this publisher has sent this turn (thinking
+  // placeholder, streamed message edits, continuation splits, and errors).
+  // Read by the Responder's per-turn telemetry line to compare room-event
+  // volume across streaming modes.
+  roomEventsEmitted = 0;
+  // The provider's token counts for this turn, set by the Responder when the
+  // stream reports them. Carried on the final (non-split) part of the
+  // message; `usageSent` records that a sent event actually included them,
+  // so the Responder knows whether a follow-up edit is needed.
+  usage: TokenUsage | undefined;
+  usageSent = false;
   private sendingMessage = Promise.resolve(); // track pending send operation
 
   get currentResponseEvent() {
@@ -65,11 +99,16 @@ export default class MatrixResponsePublisher {
   }
 
   constructor(
-    readonly client: MatrixClient,
-    readonly roomId: string,
-    readonly agentId: string,
-    readonly responseState: ResponseState,
-  ) {}
+    client: MatrixClient,
+    roomId: string,
+    agentId: string,
+    responseState: ResponseState,
+  ) {
+    this.client = client;
+    this.roomId = roomId;
+    this.agentId = agentId;
+    this.responseState = responseState;
+  }
 
   async sendMessage() {
     let responseStateSnapshot = this.responseState.snapshot();
@@ -116,11 +155,16 @@ export default class MatrixResponsePublisher {
           reasoningAndContent.content,
           this.currentResponseEventId,
           extraData,
-          responseStateSnapshot.toolCalls.map((toolCall) =>
-            toCommandRequest(toolCall as ChatCompletionMessageFunctionToolCall),
-          ),
+          // No tool calls on a continuation fragment. They belong to the answer,
+          // not to each piece it was cut into, and the reader joins the pieces
+          // back into one message — so repeating them here puts the same
+          // tool_use id in that message more than once, which Anthropic rejects
+          // outright ("tool_use ids must be unique"), failing the whole next
+          // request. The final part below carries them.
+          [],
           reasoningAndContent.reasoning,
         );
+        this.roomEventsEmitted++;
         if (!this.currentResponseEvent.eventId) {
           this.currentResponseEvent.eventId = messageEvent.event_id;
         }
@@ -134,6 +178,11 @@ export default class MatrixResponsePublisher {
         );
       log.debug('matrix/reponse-publisher', contentAndReasoning);
 
+      // Only the last part of a split answer carries the usage, the same way
+      // it carries the tool calls: the counts describe the whole turn, not
+      // the piece it was cut into. (The split branch above builds its own
+      // extraData without it.)
+      let usageIncluded = this.usage;
       let extraData: any = {
         isStreamingFinished: responseStateSnapshot.isStreamingFinished,
         isCanceled: responseStateSnapshot.isCanceled,
@@ -141,6 +190,7 @@ export default class MatrixResponsePublisher {
           context: {
             agentId: this.agentId,
           },
+          ...(usageIncluded ? { usage: usageIncluded } : {}),
         },
       };
       if (this.currentResponseEvent.needsContinuation) {
@@ -164,6 +214,10 @@ export default class MatrixResponsePublisher {
           ),
         contentAndReasoning.reasoning,
       );
+      this.roomEventsEmitted++;
+      if (usageIncluded) {
+        this.usageSent = true;
+      }
       if (!this.currentResponseEvent.eventId) {
         this.currentResponseEvent.eventId = messageEvent.event_id;
       }
@@ -184,6 +238,7 @@ export default class MatrixResponsePublisher {
       this.originalResponseEventId,
       opts,
     );
+    this.roomEventsEmitted++;
   }
 
   async ensureThinkingMessageSent() {
@@ -206,5 +261,6 @@ export default class MatrixResponsePublisher {
     this.responseEvents = [
       new ResponseEventData(initialMessage.event_id, this.eventSizeMax),
     ];
+    this.roomEventsEmitted++;
   }
 }

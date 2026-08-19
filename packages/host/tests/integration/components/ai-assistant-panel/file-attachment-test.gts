@@ -12,7 +12,6 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
@@ -29,6 +28,7 @@ import {
   setupOperatorModeStateCleanup,
   setupRealmCacheTeardown,
   withCachedRealmSetup,
+  realmConfigCardJSON,
 } from '../../../helpers';
 import {
   CardDef,
@@ -63,7 +63,7 @@ module('Integration | ai-assistant-panel | file-attachment', function (hooks) {
   setupRealmCacheTeardown(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -122,7 +122,7 @@ module('Integration | ai-assistant-panel | file-attachment', function (hooks) {
           'person.gts': { Person },
           'pet.gts': { Pet },
           'Person/fadhlan.json': new Person({ firstName: 'Fadhlan' }),
-          '.realm.json': `{ "name": "${realmName}" }`,
+          'realm.json': realmConfigCardJSON({ name: realmName }),
         },
       });
     });

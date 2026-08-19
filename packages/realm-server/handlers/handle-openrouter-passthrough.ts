@@ -3,15 +3,15 @@ import type { DBAdapter } from '@cardstack/runtime-common';
 import { logger, SupportedMimeType } from '@cardstack/runtime-common';
 import * as Sentry from '@sentry/node';
 
-import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations';
-import { handleStreamingRequest } from '../lib/proxy-forward';
+import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations.ts';
+import { handleStreamingRequest } from '../lib/proxy-forward.ts';
 import {
   fetchRequestFromContext,
   sendResponseForBadRequest,
   sendResponseForForbiddenRequest,
   sendResponseForSystemError,
   setContextResponse,
-} from '../middleware';
+} from '../middleware/index.ts';
 
 const log = logger('openrouter-passthrough');
 

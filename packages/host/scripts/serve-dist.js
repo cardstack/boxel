@@ -7,6 +7,8 @@
  * `preview`.
  */
 
+require('./env-mode-lock').refuseIfAnotherSlugLocked();
+
 const { startWithTraefik } = require('./vite-with-traefik');
 
 startWithTraefik({

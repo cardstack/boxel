@@ -3,8 +3,8 @@ import {
   StringField,
   contains,
   field,
-} from 'https://cardstack.com/base/card-api';
-import EmailField from 'https://cardstack.com/base/email';
+} from '@cardstack/base/card-api';
+import EmailField from '@cardstack/base/email';
 
 export class User extends CardDef {
   static displayName = 'User';

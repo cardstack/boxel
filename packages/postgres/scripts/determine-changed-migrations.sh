@@ -35,7 +35,7 @@ fi
 
 echo "Using base SHA $BASE_SHA"
 
-CHANGED="$(git diff --name-only --diff-filter=AM "$BASE_SHA" "$TARGET_SHA" -- 'packages/postgres/migrations/*.js' 'packages/postgres/migrations/*.ts')"
+CHANGED="$(git diff --name-only --diff-filter=AM "$BASE_SHA" "$TARGET_SHA" -- 'packages/postgres/migrations/*.js' 'packages/postgres/migrations/*.ts' 'packages/postgres/migrations-removal/*.js' 'packages/postgres/migrations-removal/*.ts')"
 echo "$CHANGED"
 
 COUNT="$(printf '%s\n' "$CHANGED" | awk 'NF' | wc -l | tr -d ' ')"
@@ -53,35 +53,22 @@ printf '%s\n' "$SORTED"
   echo "EOF"
 } >> "$GITHUB_OUTPUT"
 
-EARLIEST_CHANGED="$(printf '%s\n' "$SORTED" | head -n 1)"
-if [[ -z "$EARLIEST_CHANGED" ]]; then
-  echo "Could not determine earliest changed migration" >&2
+# Always roll back the full chain when any migration file changes, not
+# just down to the earliest-changed migration. The narrower window left
+# cross-migration interaction bugs latent — a non-idempotent DOWN in
+# migration X only fails when a PR happens to edit a migration older
+# than X, which could be months between triggers. Full rollback costs a
+# few extra seconds per CI run but exercises every DOWN/UP cycle on
+# every migration-touching PR.
+# Match node-pg-migrate's own discovery: only timestamp-prefixed files
+# count as migrations (excludes .eslintrc.js, README, etc.). Count BOTH phases
+# (migrations/ + migrations-removal/) so the count reverts the entire combined
+# chain — `pnpm migrate down` reverts that many across both phases.
+TOTAL="$(find packages/postgres/migrations packages/postgres/migrations-removal -maxdepth 1 -type f \( -name '[0-9]*.js' -o -name '[0-9]*.ts' \) | wc -l | tr -d ' ')"
+if [[ "$TOTAL" -eq 0 ]]; then
+  echo "No migrations found in packages/postgres/migrations or migrations-removal" >&2
   exit 1
 fi
 
-EARLIEST_BASENAME="$(basename "$EARLIEST_CHANGED")"
-
-ALL_MIGRATIONS="$(find packages/postgres/migrations -maxdepth 1 -type f \( -name '*.js' -o -name '*.ts' \) | sort)"
-if [[ -z "$ALL_MIGRATIONS" ]]; then
-  echo "No migrations found in packages/postgres/migrations" >&2
-  exit 1
-fi
-
-TOTAL=0
-EARLIEST_INDEX=0
-while IFS= read -r FILE; do
-  [[ -z "$FILE" ]] && continue
-  TOTAL=$((TOTAL + 1))
-  if [[ "$EARLIEST_INDEX" -eq 0 && "$(basename "$FILE")" == "$EARLIEST_BASENAME" ]]; then
-    EARLIEST_INDEX=$TOTAL
-  fi
-done <<< "$ALL_MIGRATIONS"
-
-if [[ "$EARLIEST_INDEX" -eq 0 ]]; then
-  echo "Unable to locate changed migration $EARLIEST_BASENAME in migration list" >&2
-  exit 1
-fi
-
-DOWN_COUNT=$((TOTAL - EARLIEST_INDEX + 1))
-echo "down_count=$DOWN_COUNT" >> "$GITHUB_OUTPUT"
-echo "Will migrate down $DOWN_COUNT migration(s) to cover earliest changed migration"
+echo "down_count=$TOTAL" >> "$GITHUB_OUTPUT"
+echo "Will migrate down all $TOTAL migration(s) to exercise the full down/up chain"

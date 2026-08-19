@@ -15,11 +15,13 @@ docker exec boxel-pg pg_dump \
   -U postgres -w --schema-only \
   --exclude-table-and-children=pgmigrations \
   --exclude-table-and-children=migrations \
+  --exclude-table-and-children=migrations_removal \
   --exclude-table-and-children=job_statuses \
   --exclude-table-and-children=jobs \
   --exclude-table-and-children=queues \
   --exclude-table-and-children=job_reservations \
   --exclude-table-and-children=job_progress \
+  --exclude-table-and-children=job_scoped_search_cache \
   --exclude-table-and-children=subscription_cycles \
   --exclude-table-and-children=subscriptions \
   --exclude-table-and-children=ai_actions \
@@ -37,5 +39,5 @@ docker exec boxel-pg pg_dump \
   --no-acl \
   boxel >$tmpFile
 
-ts-node --transpileOnly ./scripts/convert-to-sqlite.ts $tmpFile
+node ./scripts/convert-to-sqlite.ts $tmpFile
 rm $tmpFile

@@ -3,7 +3,7 @@ import {
   CardContext,
   CreateCardFn,
   SaveCardFn,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import { CRMTaskStatusField } from './shared';
 import GlimmerComponent from '@glimmer/component';
 import { TaskPlanner, TaskCard } from '../components/base-task-planner';

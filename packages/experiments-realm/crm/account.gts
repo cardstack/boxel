@@ -8,9 +8,9 @@ import {
   linksToMany,
   realmURL,
   StringField,
-} from 'https://cardstack.com/base/card-api';
-import WebsiteField from 'https://cardstack.com/base/website';
-import AddressField from 'https://cardstack.com/base/address';
+} from '@cardstack/base/card-api';
+import WebsiteField from '@cardstack/base/website';
+import AddressField from '@cardstack/base/address';
 
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { codeRef, Query } from '@cardstack/runtime-common';
@@ -94,8 +94,8 @@ class IsolatedTemplate extends Component<typeof Account> {
 
   get hasContacts() {
     return (
-      this.args.model.primaryContact?.name ||
-      (this.args.model.contacts?.length ?? 0) > 0 //contacts is a proxy array
+      //contacts is a proxy array
+      (this.args.model.primaryContact?.name || (this.args.model.contacts?.length ?? 0) > 0)
     );
   }
 
@@ -1240,9 +1240,13 @@ export class Account extends CardDef {
   static displayName = 'Account';
   static headerColor = '#f8f7fa';
   static icon = AccountIcon;
-  @field crmApp = linksTo(() => CrmApp);
-  @field company = linksTo(() => Company, { isUsed: true });
-  @field primaryContact = linksTo(() => Contact, { isUsed: true });
+  @field crmApp = linksTo(() => CrmApp, { searchable: true });
+  @field company = linksTo(() => Company, {
+    searchable: 'crmApp',
+  });
+  @field primaryContact = linksTo(() => Contact, {
+    searchable: ['company', 'company.crmApp', 'crmApp'],
+  });
   @field contacts = linksToMany(() => Contact);
   @field shippingAddress = contains(AddressField);
   @field billingAddress = contains(AddressField);

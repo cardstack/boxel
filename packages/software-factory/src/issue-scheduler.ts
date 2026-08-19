@@ -13,15 +13,17 @@ import type {
   IssueStatus,
   IssuePriority,
   SchedulableIssue,
-} from './factory-agent';
+} from './factory-agent/index.ts';
 
 import {
   addCommentToIssue,
   ensureJsonExtension,
+  inferIssueTrackerModuleUrl,
   toRealmRelativePath,
-} from './realm-operations';
-import { readCard, writeCard } from './workspace-fs';
-import { logger } from './logger';
+} from './realm-operations.ts';
+import { readCard, writeCard } from './workspace-fs.ts';
+import { logger } from './logger.ts';
+import { traceEvent } from './run-trace.ts';
 
 let log = logger('issue-scheduler');
 
@@ -38,6 +40,14 @@ export interface IssueStore {
   listIssues(): Promise<SchedulableIssue[]>;
   /** Re-read a single issue's current state from the realm. */
   refreshIssue(issueId: string): Promise<SchedulableIssue>;
+  /**
+   * Read an issue's status from the AUTHORITATIVE local workspace file
+   * (not the realm index). Returns undefined when the file is absent.
+   * Used to reconcile against a stale index snapshot — the control-plane
+   * sync pushes raw writes that don't wait for indexing, so `listIssues`
+   * can report a status the workspace has already moved past.
+   */
+  readLocalStatus?(issueId: string): Promise<string | undefined>;
   /** Update issue fields in the realm (e.g., status, priority). Descriptions are immutable — use addComment instead. */
   updateIssue(
     issueId: string,
@@ -75,10 +85,55 @@ export class IssueScheduler {
     this.issueStore = issueStore;
   }
 
+  // Issues the ORCHESTRATOR just wrote (e.g. synthesized hardening
+  // issues) that the realm index may not reflect yet — control-plane
+  // raw writes index asynchronously, sometimes minutes behind under
+  // load. Kept merged into the working list until the index catches
+  // up, so the loop never has to poll the index for state it authored.
+  private localIssues: Map<string, SchedulableIssue> = new Map();
+
+  /**
+   * Register orchestrator-written issues directly, without waiting for
+   * the realm index. They participate in scheduling immediately and are
+   * dropped from the local overlay once `loadIssues` sees them indexed.
+   */
+  addLocalIssues(issues: SchedulableIssue[]): void {
+    for (let issue of issues) {
+      this.localIssues.set(issue.id, issue);
+      if (!this.issues.some((i) => i.id === issue.id)) {
+        this.issues.push(issue);
+      }
+    }
+    log.info(
+      `Registered ${issues.length} local issue(s) ahead of the index: ${issues
+        .map((i) => i.id)
+        .join(', ')}`,
+    );
+  }
+
   /** Load (or reload) the full issue list from the store. */
   async loadIssues(): Promise<void> {
     this.issues = await this.issueStore.listIssues();
+    for (let [id, local] of this.localIssues) {
+      if (this.issues.some((i) => i.id === id)) {
+        this.localIssues.delete(id);
+      } else {
+        this.issues.push(local);
+      }
+    }
     log.info(`Loaded ${this.issues.length} issue(s) from store`);
+    // One board snapshot per load. This is the only place the whole board is
+    // read, so it is also the only place telemetry can learn about tickets
+    // that have not produced a turn yet — a backlog or blocked issue is
+    // invisible in every other signal the run emits.
+    for (let issue of this.issues) {
+      traceEvent('scheduler', 'board', {
+        issueId: boardKeyOf(issue),
+        issue: issueTitleOf(issue),
+        status: issue.status,
+        blocked: issue.blockedBy.length > 0 || undefined,
+      });
+    }
   }
 
   /**
@@ -127,6 +182,14 @@ export class IssueScheduler {
     if (idx >= 0) {
       this.issues[idx] = refreshed;
     }
+    // Keep the local overlay current too: loadIssues re-pushes overlay
+    // entries while the index lags, and re-pushing the REGISTRATION
+    // snapshot would resurrect a stale status — a locally-registered
+    // issue that ended `blocked` would look `backlog` again and be
+    // re-picked every cycle until the index catches up.
+    if (this.localIssues.has(issue.id)) {
+      this.localIssues.set(issue.id, refreshed);
+    }
 
     return refreshed;
   }
@@ -134,6 +197,11 @@ export class IssueScheduler {
   /** True if any backlog or in_progress issue has no non-completed blockers. */
   hasUnblockedIssues(exclude?: ReadonlySet<string>): boolean {
     return this.getUnblockedIssues(exclude).length > 0;
+  }
+
+  /** Number of unblocked issues remaining (queue depth for monitor notes). */
+  unblockedCount(exclude?: ReadonlySet<string>): number {
+    return this.getUnblockedIssues(exclude).length;
   }
 
   /** True if the loaded issue list is non-empty (regardless of status). */
@@ -199,22 +267,22 @@ export interface RealmIssueStoreConfig {
 
 export class RealmIssueStore implements IssueStore {
   private realmUrl: string;
-  private darkfactoryModuleUrl: string;
+  private issueTrackerModuleUrl: string;
   private client: BoxelCLIClient;
   private workspaceDir: string;
 
   constructor(config: RealmIssueStoreConfig) {
     this.realmUrl = config.realmUrl;
-    this.darkfactoryModuleUrl = config.darkfactoryModuleUrl;
+    this.issueTrackerModuleUrl = inferIssueTrackerModuleUrl(
+      config.darkfactoryModuleUrl,
+    );
     this.client = config.client;
     this.workspaceDir = config.workspaceDir;
   }
 
   async listIssues(): Promise<SchedulableIssue[]> {
     let result = await this.client.search(this.realmUrl, {
-      filter: {
-        type: { module: this.darkfactoryModuleUrl, name: 'Issue' },
-      },
+      filter: { type: { module: this.issueTrackerModuleUrl, name: 'Issue' } },
     });
 
     if (!result.ok) {
@@ -230,18 +298,51 @@ export class RealmIssueStore implements IssueStore {
   async refreshIssue(issueId: string): Promise<SchedulableIssue> {
     let result = await this.client.search(this.realmUrl, {
       filter: {
-        type: { module: this.darkfactoryModuleUrl, name: 'Issue' },
-        eq: { id: issueId },
+        every: [
+          { type: { module: this.issueTrackerModuleUrl, name: 'Issue' } },
+          { eq: { id: issueId } },
+        ],
       },
     });
 
-    if (!result.ok || !result.data?.length) {
-      throw new Error(
-        `Failed to refresh issue "${issueId}": ${!result.ok ? result.error : 'not found'}`,
-      );
+    if (result.ok && result.data?.length) {
+      return mapCardToSchedulableIssue(result.data[0]);
     }
 
-    return mapCardToSchedulableIssue(result.data[0]);
+    // Index lag fallback: the local workspace file is the authoritative
+    // source (the loop writes status flips there first), so an issue the
+    // index hasn't caught up to yet — e.g. a freshly synthesized
+    // hardening issue — refreshes from disk instead of failing.
+    let filePath = ensureJsonExtension(
+      toRealmRelativePath(issueId, this.realmUrl),
+    );
+    let readResult = await readCard(this.workspaceDir, filePath);
+    if (readResult.ok && readResult.document) {
+      let doc = readResult.document as unknown as LooseSingleCardDocument;
+      return mapCardToSchedulableIssue({
+        id: issueId,
+        attributes: doc.data.attributes,
+        relationships: doc.data.relationships,
+      });
+    }
+
+    throw new Error(
+      `Failed to refresh issue "${issueId}": ${!result.ok ? result.error : 'not found in index or workspace'}`,
+    );
+  }
+
+  async readLocalStatus(issueId: string): Promise<string | undefined> {
+    let filePath = ensureJsonExtension(
+      toRealmRelativePath(issueId, this.realmUrl),
+    );
+    let readResult = await readCard(this.workspaceDir, filePath);
+    if (!readResult.ok || !readResult.document) {
+      return undefined;
+    }
+    let doc = readResult.document as unknown as LooseSingleCardDocument;
+    let status = (doc.data.attributes as Record<string, unknown> | undefined)
+      ?.status;
+    return typeof status === 'string' ? status : undefined;
   }
 
   async updateIssue(
@@ -308,11 +409,12 @@ export class RealmIssueStore implements IssueStore {
   }
 
   async updateProjectStatus(projectStatus: string): Promise<void> {
-    // We expect exactly one Project card per target realm. The search
-    // index stays on the realm — card mutations happen locally.
+    // We expect exactly one Project card per target realm. The search index
+    // stays on the realm — card mutations happen locally. Match by the
+    // canonical `issue-tracker` module (see the constructor).
     let result = await this.client.search(this.realmUrl, {
       filter: {
-        type: { module: this.darkfactoryModuleUrl, name: 'Project' },
+        type: { module: this.issueTrackerModuleUrl, name: 'Project' },
       },
       sort: [{ by: 'lastModified', direction: 'desc' as const }],
     });
@@ -419,7 +521,21 @@ function extractLinksToManyIds(
  * Extracts scheduling fields from the card's attributes, falling back
  * to safe defaults for any missing fields.
  */
-function mapCardToSchedulableIssue(
+/** Board key ("SN-1") when the card carries one, else the URL basename. */
+function boardKeyOf(issue: SchedulableIssue): string {
+  let key = issue.issueId;
+  if (typeof key === 'string' && key.trim() !== '') return key.trim();
+  return String(issue.id).split('/').filter(Boolean).pop() ?? String(issue.id);
+}
+
+function issueTitleOf(issue: SchedulableIssue): string {
+  let summary = issue.summary ?? (issue as Record<string, unknown>).title;
+  return typeof summary === 'string' && summary.trim() !== ''
+    ? summary
+    : String(issue.id);
+}
+
+export function mapCardToSchedulableIssue(
   card: Record<string, unknown>,
 ): SchedulableIssue {
   let attrs = (card.attributes ?? card) as Record<string, unknown>;
@@ -438,6 +554,10 @@ function mapCardToSchedulableIssue(
 
   return {
     id,
+    // The tracker's board key ("SN-1"), distinct from `id` (the card URL).
+    // Telemetry groups turns by it and the hardening seeder names issues
+    // after it, so dropping it here leaves both without an identity.
+    issueId: (attrs.issueId as string) ?? undefined,
     status: (attrs.status as IssueStatus) ?? 'backlog',
     priority: (attrs.priority as IssuePriority) ?? 'medium',
     blockedBy,

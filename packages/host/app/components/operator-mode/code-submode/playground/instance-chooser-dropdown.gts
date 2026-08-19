@@ -1,10 +1,14 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
+import { fn } from '@ember/helper';
 import Component from '@glimmer/component';
 
 import {
   BoxelSelect,
   CardContainer,
   Menu,
+  toAfterOptionsComponent,
+  toBeforeOptionsComponent,
+  toSelectedItemComponent,
 } from '@cardstack/boxel-ui/components';
 import type { MenuItem } from '@cardstack/boxel-ui/helpers';
 
@@ -12,14 +16,13 @@ import {
   cardTypeDisplayName,
   isFileDefInstance,
   type Format,
-  type PrerenderedCardLike,
+  type RenderableSearchEntryLike,
 } from '@cardstack/runtime-common';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
 
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-
 import type { FieldOption, SelectedInstance } from './playground-panel';
+import type { FileDef } from '@cardstack/base/file-api';
 
 const getItemTitle = (selection: SelectedInstance | undefined) => {
   if (!selection) {
@@ -135,14 +138,14 @@ interface Signature {
   Args: {
     isFieldDef: boolean;
     isFileDef?: boolean;
-    cardOptions: PrerenderedCardLike[] | undefined;
+    cardOptions: RenderableSearchEntryLike[] | undefined;
     fieldOptions?: FieldOption[];
     fileMetaOptions?: FileDef[];
     findSelectedCard: (
-      cards?: PrerenderedCardLike[],
-    ) => PrerenderedCardLike | SelectedInstance | undefined;
+      cards?: RenderableSearchEntryLike[],
+    ) => RenderableSearchEntryLike | SelectedInstance | undefined;
     selection: SelectedInstance | undefined;
-    onSelect: (item: PrerenderedCardLike | FieldOption | FileDef) => void;
+    onSelect: (item: RenderableSearchEntryLike | FieldOption | FileDef) => void;
     moduleId: string;
     persistSelections?: (cardId: string, format: Format) => void;
     recentCardIds: string[];
@@ -154,10 +157,18 @@ interface OptionsDropdownSignature {
   Args: {
     isField?: boolean;
     isFileMeta?: boolean;
-    options: PrerenderedCardLike[] | FieldOption[] | FileDef[] | undefined;
-    selected?: PrerenderedCardLike | FieldOption | SelectedInstance | FileDef;
+    options:
+      | RenderableSearchEntryLike[]
+      | FieldOption[]
+      | FileDef[]
+      | undefined;
+    selected?:
+      | RenderableSearchEntryLike
+      | FieldOption
+      | SelectedInstance
+      | FileDef;
     selection: SelectedInstance | undefined;
-    onSelect: (item: PrerenderedCardLike | FieldOption | FileDef) => void;
+    onSelect: (item: RenderableSearchEntryLike | FieldOption | FileDef) => void;
     afterMenuOptions: MenuItem[];
     beforeOptionsLabel?: string;
     selectedItemLabel?: string;
@@ -169,8 +180,46 @@ function closeInstanceChooser() {
   (
     document.querySelector(
       '[data-playground-instance-chooser][aria-expanded="true"]',
-    ) as BoxelSelect | null
+    ) as HTMLElement | null
   )?.click();
+}
+
+type OptionItem = RenderableSearchEntryLike | FieldOption | FileDef;
+
+// The template branches on @isFileMeta/@isField, which the parent keeps in
+// sync with the kind of options it passed; these narrow each branch's item.
+function optionItems(options: OptionsDropdownSignature['Args']['options']) {
+  return (options ?? []) as OptionItem[];
+}
+
+function asFile(item: OptionItem) {
+  return item as FileDef;
+}
+
+function fieldOf(item: OptionItem) {
+  return (item as FieldOption).field;
+}
+
+function componentOf(item: OptionItem) {
+  return (item as RenderableSearchEntryLike).component;
+}
+
+// A SelectedInstance is a display-only stand-in that never appears in
+// @options; power-select only compares this value against options for
+// highlighting, so passing it through as an OptionItem is safe.
+function selectedOptionItem(
+  selected: OptionsDropdownSignature['Args']['selected'],
+): OptionItem | null {
+  return (selected ?? null) as OptionItem | null;
+}
+
+function guardedOnSelect(
+  onSelect: OptionsDropdownSignature['Args']['onSelect'],
+  item: OptionItem | null,
+) {
+  if (item) {
+    onSelect(item);
+  }
 }
 
 export const OptionsDropdown: TemplateOnlyComponent<OptionsDropdownSignature> =
@@ -178,31 +227,32 @@ export const OptionsDropdown: TemplateOnlyComponent<OptionsDropdownSignature> =
     <BoxelSelect
       class='instance-chooser'
       @dropdownClass='instances-dropdown-content'
-      @options={{@options}}
-      @selected={{@selected}}
-      @selectedItemComponent={{component
-        SelectedItem
-        title=(getItemTitle @selection)
-        label=@selectedItemLabel
+      @options={{optionItems @options}}
+      @selected={{selectedOptionItem @selected}}
+      @selectedItemComponent={{toSelectedItemComponent
+        (component
+          SelectedItem title=(getItemTitle @selection) label=@selectedItemLabel
+        )
       }}
       @renderInPlace={{true}}
-      @onChange={{@onSelect}}
+      @onChange={{fn guardedOnSelect @onSelect}}
       @placeholder='Select {{if
         @isFileMeta
         "file"
         (if @isField "field" "card")
       }} instance'
-      @beforeOptionsComponent={{component
-        BeforeOptions
-        label=@beforeOptionsLabel
+      @beforeOptionsComponent={{toBeforeOptionsComponent
+        (component BeforeOptions label=@beforeOptionsLabel)
       }}
       @afterOptionsComponent={{if
         @afterMenuOptions.length
-        (component
-          AfterOptions
-          menuItems=@afterMenuOptions
-          closeMenu=closeInstanceChooser
-          hideTitle=@hideAfterOptionsTitle
+        (toAfterOptionsComponent
+          (component
+            AfterOptions
+            menuItems=@afterMenuOptions
+            closeMenu=closeInstanceChooser
+            hideTitle=@hideAfterOptionsTitle
+          )
         )
       }}
       @verticalPosition='above'
@@ -212,15 +262,17 @@ export const OptionsDropdown: TemplateOnlyComponent<OptionsDropdownSignature> =
     >
       {{#if @isFileMeta}}
         <div class='file-item'>
-          <CardRenderer @card={{item}} @format='atom' />
+          <CardRenderer @card={{asFile item}} @format='atom' />
         </div>
       {{else if @isField}}
         <CardContainer class='field' @displayBoundaries={{true}}>
-          <CardRenderer @card={{item.field}} @format='atom' />
+          <CardRenderer @card={{fieldOf item}} @format='atom' />
         </CardContainer>
       {{else}}
         <CardContainer class='card' @displayBoundaries={{true}}>
-          <item.component />
+          {{#let (componentOf item) as |ItemComponent|}}
+            <ItemComponent />
+          {{/let}}
         </CardContainer>
       {{/if}}
     </BoxelSelect>

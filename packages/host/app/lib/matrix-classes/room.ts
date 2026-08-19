@@ -6,16 +6,17 @@ import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_LLM_MODE,
+  getToolDefinitions,
   type LLMMode,
 } from '@cardstack/runtime-common/matrix-constants';
 
-import type { SerializedFile } from 'https://cardstack.com/base/file-api';
+import Mutex from '../mutex';
+
+import type { SerializedFile } from '@cardstack/base/file-api';
 import type {
   ActiveLLMEvent,
   MatrixEvent as DiscreteMatrixEvent,
-} from 'https://cardstack.com/base/matrix-event';
-
-import Mutex from '../mutex';
+} from '@cardstack/base/matrix-event';
 
 import type { IEvent } from 'matrix-js-sdk';
 
@@ -29,7 +30,7 @@ export type TempEvent = Partial<IEvent> & {
 export type SkillsConfig = {
   enabledSkillCards: SerializedFile[];
   disabledSkillCards: SerializedFile[];
-  commandDefinitions: SerializedFile[];
+  toolDefinitionFileDefs: SerializedFile[];
 };
 
 export default class Room {
@@ -85,7 +86,6 @@ export default class Room {
       ?.get('')?.event.content ?? {
       enabledSkillCards: [],
       disabledSkillCards: [],
-      commandDefinitions: [],
     };
 
     return {
@@ -95,11 +95,11 @@ export default class Room {
       disabledSkillCards: content.disabledSkillCards
         ? content.disabledSkillCards
         : [],
-      commandDefinitions: content.commandDefinitions ?? [],
+      toolDefinitionFileDefs: getToolDefinitions<SerializedFile>(content) ?? [],
     } as {
       enabledSkillCards: SerializedFile[];
       disabledSkillCards: SerializedFile[];
-      commandDefinitions: SerializedFile[];
+      toolDefinitionFileDefs: SerializedFile[];
     };
   }
 

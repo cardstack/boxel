@@ -3,9 +3,9 @@ import {
   field,
   CardDef,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import RichMarkdownField from 'https://cardstack.com/base/rich-markdown';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import RichMarkdownField from '@cardstack/base/rich-markdown';
 import TextIcon from '@cardstack/boxel-icons/text';
 
 export class RichMarkdownPlayground extends CardDef {

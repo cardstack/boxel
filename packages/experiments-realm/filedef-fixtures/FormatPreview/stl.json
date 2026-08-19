@@ -1,0 +1,47 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "stl · Format Preview",
+      "cardInfo": {
+        "name": "stl · Format Preview",
+        "summary": "Simple, moderate, and complex stl fixtures across atom, embedded, isolated, and the 16 fitted envelopes."
+      }
+    },
+    "relationships": {
+      "previewFiles.0": {
+        "links": {
+          "self": "../samples/stl-simple.stl"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/stl-simple.stl"
+        }
+      },
+      "previewFiles.1": {
+        "links": {
+          "self": "../samples/stl-moderate.stl"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/stl-moderate.stl"
+        }
+      },
+      "previewFiles.2": {
+        "links": {
+          "self": "../samples/stl-complex.stl"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/stl-complex.stl"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../format-preview",
+        "name": "FileDefFormatPreview"
+      }
+    }
+  }
+}

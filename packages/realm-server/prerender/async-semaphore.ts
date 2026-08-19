@@ -1,4 +1,4 @@
-import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel';
+import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel.ts';
 
 // Pure in-memory counting semaphore with AbortSignal-aware queueing.
 // Exported so cancellation-plumbing unit tests can drive it directly

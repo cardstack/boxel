@@ -5,7 +5,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
-  baseRealm,
+  baseRealmRRI,
   type FileExtractResponse,
   type RenderRouteOptions,
   type ResolvedCodeRef,
@@ -103,7 +103,7 @@ module('Acceptance | gif image def', function (hooks) {
   const makeFileURL = (path: string) => new URL(path, testRealmURL).href;
 
   const gifDefCodeRef = (): ResolvedCodeRef => ({
-    module: `${baseRealm.url}gif-image-def` as RealmResourceIdentifier,
+    module: `${baseRealmRRI}gif-image-def` as RealmResourceIdentifier,
     name: 'GifDef',
   });
 
@@ -330,7 +330,7 @@ module('Acceptance | gif image def', function (hooks) {
     let { status } = await capturePrerenderResult('innerHTML');
     assert.strictEqual(status, 'ready', 'render completed');
 
-    let imgSelector = '[data-prerender] .image-isolated__img';
+    let imgSelector = '[data-prerender] [data-test-image-preview]';
     let img = document.querySelector(imgSelector) as HTMLImageElement | null;
     assert.ok(img, 'img element is rendered');
     assert.ok(

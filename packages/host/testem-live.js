@@ -6,16 +6,28 @@ const XunitReporter = require('testem/lib/reporters/xunit_reporter');
 const fs = require('fs');
 const path = require('path');
 
-const DEFAULT_REALM_URLS = ['https://localhost:4201/software-factory/'];
+const DEFAULT_REALM_URLS = ['https://localhost:4201/skills/'];
 
+// REALM_URL may name one realm or a comma-separated list (each realm gets its
+// own live-test discovery page below). Trim + drop empties so a single value or
+// a trailing comma both behave.
 const realmURLs = process.env.REALM_URL
-  ? [process.env.REALM_URL]
+  ? process.env.REALM_URL.split(',')
+      .map((url) => url.trim())
+      .filter(Boolean)
   : DEFAULT_REALM_URLS;
+
+// Optional QUnit filter (plain substring or /regex/) so a caller can run a
+// subset of the realm's tests — e.g. content-only catalog PRs run just the
+// real-catalog-app smoke test.
+const filterParam = process.env.LIVE_TEST_FILTER
+  ? `&filter=${encodeURIComponent(process.env.LIVE_TEST_FILTER)}`
+  : '';
 
 const config = {
   test_page: realmURLs.map(
     (url) =>
-      `tests/index.html?liveTest=true&realmURL=${encodeURIComponent(url)}&hidepassed`,
+      `tests/index.html?liveTest=true&realmURL=${encodeURIComponent(url)}&hidepassed${filterParam}`,
   ),
   disable_watching: true,
   browser_timeout: 120,
@@ -39,11 +51,13 @@ const config = {
         // (see infra:ensure-dev-cert). `mkcert -install` is best-effort
         // in CI and may not land the root CA in the headless Chrome
         // trust store, so relax cert checks for the realm fetches that
-        // the live-test runner makes. Safe — the URL is fixed by
-        // REALM_URL (default https://localhost:4201/catalog/) and the
-        // connection is loopback. Chrome 144+ requires the
-        // `--allow-insecure-localhost` companion or it silently demotes
-        // `--ignore-certificate-errors` and TLS validation still fails.
+        // the live-test runner makes. These flags disable TLS validation
+        // for every HTTPS request in the session, so this testem config
+        // is dev / CI only — it assumes REALM_URL (default
+        // DEFAULT_REALM_URLS above) is a loopback origin. Chrome 144+
+        // requires the `--allow-insecure-localhost` companion or it
+        // silently demotes `--ignore-certificate-errors` and TLS
+        // validation still fails.
         '--ignore-certificate-errors',
         '--allow-insecure-localhost',
       ].filter(Boolean),

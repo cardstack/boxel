@@ -18,7 +18,7 @@ import { module, skip, test } from 'qunit';
 import stringify from 'safe-stable-stringify';
 
 import {
-  baseRealm,
+  baseRealmRRI,
   type LooseSingleCardDocument,
   rri,
   fileDefFormats,
@@ -44,12 +44,14 @@ import {
   SYSTEM_CARD_FIXTURE_CONTENTS,
   setMonacoContent,
   setupLocalIndexing,
+  testModuleRealm,
   testRealmURL,
   visitOperatorMode,
   setupAuthEndpoints,
   setupUserSubscription,
   assertMessages,
   withCachedRealmSetup,
+  realmConfigCardJSON,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import {
@@ -60,7 +62,7 @@ import {
 import { setupApplicationTest } from '../helpers/setup';
 
 const indexCardSource = `
-  import { CardDef, Component } from "https://cardstack.com/base/card-api";
+  import { CardDef, Component } from "@cardstack/base/card-api";
 
   export class Index extends CardDef {
     static isolated = class Isolated extends Component<typeof this> {
@@ -79,8 +81,8 @@ const postalCodeFieldSource = `
     field,
     Component,
     FieldDef,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
 
   export class PostalCode extends FieldDef {
     static displayName = 'Postal Code';
@@ -103,8 +105,8 @@ const addressFieldSource = `
     field,
     Component,
     FieldDef,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
   import { PostalCode } from './postal-code';
 
   export class Address extends FieldDef {
@@ -136,8 +138,8 @@ const countryCardSource = `
     field,
     Component,
     CardDef,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
 
   export class Country extends CardDef {
     static displayName = 'Country';
@@ -164,7 +166,7 @@ const tripsFieldSource = `
     field,
     Component,
     FieldDef,
-  } from 'https://cardstack.com/base/card-api';
+  } from '@cardstack/base/card-api';
   import { Country } from './country';
 
   export class Trips extends FieldDef {
@@ -182,8 +184,8 @@ const tripsFieldSource = `
 `;
 
 const personCardSource = `
-  import { contains, containsMany, field, linksTo, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { contains, containsMany, field, linksTo, linksToMany, CardDef, Component } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
   import { Friend } from './friend';
   import { Pet } from "./pet";
   import { Address } from './address';
@@ -224,8 +226,8 @@ const personCardSource = `
 `;
 
 const petCardSource = `
-  import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { contains, field, Component, CardDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
 
   export class Pet extends CardDef {
     static displayName = 'Pet';
@@ -260,8 +262,8 @@ const petCardSource = `
 `;
 
 const customEditCardSource = `
-  import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
   export class CustomEdit extends CardDef {
     static displayName = 'Custom Edit';
     @field name = contains(StringField);
@@ -279,10 +281,10 @@ const employeeCardSource = `
     field,
     Component,
     CardDef
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
-  import DateField from 'https://cardstack.com/base/date';
-  import BooleanField from 'https://cardstack.com/base/boolean';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
+  import DateField from '@cardstack/base/date';
+  import BooleanField from '@cardstack/base/boolean';
   import { Person } from './person';
 
   export class Isolated extends Component<typeof Employee> {
@@ -317,8 +319,8 @@ const inThisFileSource = `
     field,
     CardDef,
     FieldDef,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
 
   export const exportedVar = 'exported var';
 
@@ -363,8 +365,8 @@ const inThisFileSource = `
 `;
 
 const friendCardSource = `
-  import { contains, linksTo, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { contains, linksTo, field, CardDef, Component } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
 
   export class Friend extends CardDef {
     static displayName = 'Friend';
@@ -491,12 +493,12 @@ module('Acceptance | code submode tests', function (_hooks) {
           contents: {
             ...SYSTEM_CARD_FIXTURE_CONTENTS,
             'hello.txt': txtSource,
-            '.realm.json': {
+            'realm.json': realmConfigCardJSON({
               name: `Test User's Workspace`,
               backgroundURL:
                 'https://i.postimg.cc/NjcjbyD3/4k-origami-flock.jpg',
               iconURL: 'https://i.postimg.cc/Rq550Bwv/T.png',
-            },
+            }),
           },
         });
         await setupAcceptanceTestRealm({
@@ -508,11 +510,11 @@ module('Acceptance | code submode tests', function (_hooks) {
           contents: {
             ...SYSTEM_CARD_FIXTURE_CONTENTS,
             'hello.txt': txtSource,
-            '.realm.json': {
+            'realm.json': realmConfigCardJSON({
               name: `Additional Workspace`,
               backgroundURL: 'https://i.postimg.cc/4ycXQZ94/4k-powder-puff.jpg',
               iconURL: 'https://i.postimg.cc/BZwv0LyC/A.png',
-            },
+            }),
           },
         });
         await setupAcceptanceTestRealm({
@@ -524,12 +526,12 @@ module('Acceptance | code submode tests', function (_hooks) {
           contents: {
             ...SYSTEM_CARD_FIXTURE_CONTENTS,
             'hello.txt': txtSource,
-            '.realm.json': {
+            'realm.json': realmConfigCardJSON({
               name: `Catalog Realm`,
               backgroundURL: 'https://i.postimg.cc/zXsXLmqb/C.png',
               iconURL:
                 'https://i.postimg.cc/qv4pyPM0/4k-watercolor-splashes.jpg',
-            },
+            }),
           },
         });
         await setupAcceptanceTestRealm({
@@ -661,7 +663,7 @@ module('Acceptance | code submode tests', function (_hooks) {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: `${baseRealm.url}spec`,
+                    module: `${baseRealmRRI}spec`,
                     name: 'Spec',
                   },
                 },
@@ -679,7 +681,7 @@ module('Acceptance | code submode tests', function (_hooks) {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: `${baseRealm.url}spec`,
+                    module: `${baseRealmRRI}spec`,
                     name: 'Spec',
                   },
                 },
@@ -697,7 +699,7 @@ module('Acceptance | code submode tests', function (_hooks) {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: `${baseRealm.url}spec`,
+                    module: `${baseRealmRRI}spec`,
                     name: 'Spec',
                   },
                 },
@@ -716,6 +718,7 @@ module('Acceptance | code submode tests', function (_hooks) {
               },
             },
             'not-json.json': 'I am not JSON.',
+            'care-guide.md': '# Care Guide\n\nWater weekly.\n',
             'Person/fadhlan.json': {
               data: {
                 attributes: {
@@ -886,12 +889,12 @@ module('Acceptance | code submode tests', function (_hooks) {
             'z18.json': '{}',
             'z19.json': '{}',
             'zzz/zzz/file.json': '{}',
-            '.realm.json': {
+            'realm.json': realmConfigCardJSON({
               name: 'Test Workspace B',
               backgroundURL:
                 'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
               iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-            },
+            }),
             'noop.gts': `export function noop() {};\nclass NoopClass {}`,
           },
         }),
@@ -1272,12 +1275,12 @@ module('Acceptance | code submode tests', function (_hooks) {
     });
     module('with connection to test realm', function (hooks) {
       hooks.beforeEach(function () {
-        setActiveRealms([testRealmURL, 'https://localhost:4202/test/']);
+        setActiveRealms([testRealmURL, `${testModuleRealm}`]);
       });
       test('code submode handles binary files', async function (assert) {
         await visitOperatorMode({
           submode: 'code',
-          codePath: `https://localhost:4202/test/mango.png`,
+          codePath: `${testModuleRealm}mango.png`,
         });
 
         await waitFor('[data-test-binary-info]');
@@ -1617,6 +1620,34 @@ module('Acceptance | code submode tests', function (_hooks) {
       let previewResizeHandle = handles.at(-1);
       assert.ok(previewResizeHandle, 'preview panel resize handle exists');
 
+      // The panels either side of the handle, in group order.
+      let editorPanel = previewResizeHandle!
+        .previousElementSibling as HTMLElement;
+      let previewPanel = previewResizeHandle!.nextElementSibling as HTMLElement;
+      assert
+        .dom(editorPanel)
+        .hasAttribute(
+          'data-boxel-panel-id',
+          /.+/,
+          'the element before the handle is a resizable panel',
+        );
+      assert
+        .dom(previewPanel)
+        .hasAttribute(
+          'data-boxel-panel-id',
+          /.+/,
+          'the element after the handle is a resizable panel',
+        );
+
+      // Drag by a fraction of the preview panel's own width rather than a
+      // fixed pixel count. A drag wider than the panel is clamped where the
+      // panel runs out of room, so only part of it lands — and the reverse
+      // drag, which is not clamped, then gives back more than the first one
+      // took, leaving the group in a layout neither drag asked for.
+      let initialEditorWidth = editorPanel.getBoundingClientRect().width;
+      let initialPreviewWidth = previewPanel.getBoundingClientRect().width;
+      let dragDistance = Math.round(initialPreviewWidth * 0.75);
+
       let shrinkRect = previewResizeHandle!.getBoundingClientRect();
       await triggerEvent(previewResizeHandle!, 'pointerdown', {
         button: 0,
@@ -1627,12 +1658,12 @@ module('Acceptance | code submode tests', function (_hooks) {
       await triggerEvent(previewResizeHandle!, 'pointermove', {
         pointerId: 1,
         buttons: 1,
-        clientX: shrinkRect.x + shrinkRect.width / 2 + 320,
+        clientX: shrinkRect.x + shrinkRect.width / 2 + dragDistance,
         clientY: shrinkRect.y + shrinkRect.height / 2,
       });
       await triggerEvent(previewResizeHandle!, 'pointerup', {
         pointerId: 1,
-        clientX: shrinkRect.x + shrinkRect.width / 2 + 320,
+        clientX: shrinkRect.x + shrinkRect.width / 2 + dragDistance,
         clientY: shrinkRect.y + shrinkRect.height / 2,
       });
 
@@ -1677,12 +1708,12 @@ module('Acceptance | code submode tests', function (_hooks) {
       await triggerEvent(previewResizeHandle!, 'pointermove', {
         pointerId: 2,
         buttons: 1,
-        clientX: widenRect.x + widenRect.width / 2 - 320,
+        clientX: widenRect.x + widenRect.width / 2 - dragDistance,
         clientY: widenRect.y + widenRect.height / 2,
       });
       await triggerEvent(previewResizeHandle!, 'pointerup', {
         pointerId: 2,
-        clientX: widenRect.x + widenRect.width / 2 - 320,
+        clientX: widenRect.x + widenRect.width / 2 - dragDistance,
         clientY: widenRect.y + widenRect.height / 2,
       });
 
@@ -1704,6 +1735,23 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert
         .dom('[data-test-format-chooser-pill-label]')
         .hasText('isolated', 'full chooser label is restored');
+
+      // The chooser reports full mode for any width above its threshold, so
+      // it can read as restored while the panels sit somewhere else entirely.
+      // Check the widths themselves to hold the widen drag to giving back
+      // exactly what the shrink drag took.
+      assert.ok(
+        Math.abs(
+          previewPanel.getBoundingClientRect().width - initialPreviewWidth,
+        ) <= 1,
+        'preview panel is back to the width it started at',
+      );
+      assert.ok(
+        Math.abs(
+          editorPanel.getBoundingClientRect().width - initialEditorWidth,
+        ) <= 1,
+        'code editor panel is back to the width it started at',
+      );
     });
 
     test('displays clear message when a schema-editor incompatible item is selected within a valid file type', async function (assert) {
@@ -1825,6 +1873,39 @@ module('Acceptance | code submode tests', function (_hooks) {
           },
         },
       });
+    });
+
+    test('Clicking a file in search panel opens the file itself (no .json appended)', async function (assert) {
+      await visitOperatorMode({
+        submode: 'code',
+        codePath: `${testRealmURL}employee.gts`,
+      });
+
+      await click('[data-test-open-search-field]');
+      await fillIn('[data-test-search-field]', 'care-guide');
+
+      await waitFor(
+        `[data-test-search-result="${testRealmURL}care-guide.md"]`,
+        {
+          timeout: 2000,
+        },
+      );
+
+      // Click on the file result
+      await click(`[data-test-search-result="${testRealmURL}care-guide.md"]`);
+
+      assert.dom('[data-test-search-sheet]').doesNotHaveClass('results'); // Search sheet is closed
+      await waitFor('[data-test-card-url-bar-input]');
+      assert
+        .dom('[data-test-card-url-bar-input]')
+        .hasValue(
+          `${testRealmURL}care-guide.md`,
+          'the file opens at its own URL, without a .json extension appended',
+        );
+      assert.true(
+        getMonacoContent().includes('Care Guide'),
+        'the markdown file content is loaded in the editor',
+      );
     });
 
     test('clicking a linksTo field in card renderer panel opens the linked card JSON', async function (assert) {
@@ -2277,12 +2358,12 @@ module('Acceptance | code submode tests', function (_hooks) {
         '[data-test-links-to-many="countriesVisited"] [data-test-add-new]',
       );
       await waitFor(
-        `[data-test-card-catalog-item="${testRealmURL}Country/united-states"]`,
+        `[data-test-item-button="${testRealmURL}Country/united-states"]`,
       );
       await click(
-        `[data-test-card-catalog-item="${testRealmURL}Country/united-states"]`,
+        `[data-test-item-button="${testRealmURL}Country/united-states"]`,
       );
-      await click(`[data-test-card-catalog-go-button]`);
+      await click(`[data-test-card-chooser-go-button]`);
 
       await waitFor('[data-test-saved]');
       await waitFor('[data-test-save-idle]');
@@ -2469,8 +2550,8 @@ module('Acceptance | code submode tests', function (_hooks) {
 
     test('card preview live updates when there is a change in module', async function (assert) {
       const personGts = `
-        import { contains, containsMany, field, linksTo, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+        import { contains, containsMany, field, linksTo, linksToMany, CardDef, Component } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
         import { Friend } from './friend';
         import { Pet } from "./pet";
         import { Address } from './address';
@@ -2559,20 +2640,19 @@ module('Acceptance | code submode tests', function (_hooks) {
         .dom('[data-test-card-error]')
         .doesNotExist('card error state is not displayed');
 
+      // Cause error: flip the card's adoptsFrom to a missing module.
+      // Broken-linksTo no longer demotes the consuming instance, so a
+      // missing adoptsFrom module is the lever for "make this card error"
+      // live-update assertions.
       await realm.write(
         'Person/fadhlan.json',
         JSON.stringify({
           data: {
             type: 'card',
-            relationships: {
-              'friends.0': {
-                links: { self: './missing' },
-              },
-            },
             meta: {
               adoptsFrom: {
-                module: rri('../person'),
-                name: 'Person',
+                module: rri('../missing-person'),
+                name: 'MissingPerson',
               },
             },
           },
@@ -2589,11 +2669,6 @@ module('Acceptance | code submode tests', function (_hooks) {
         JSON.stringify({
           data: {
             type: 'card',
-            relationships: {
-              'friends.0': {
-                links: { self: null },
-              },
-            },
             meta: {
               adoptsFrom: {
                 module: rri('../person'),
@@ -2610,7 +2685,7 @@ module('Acceptance | code submode tests', function (_hooks) {
         .doesNotExist('card error state is not displayed');
     });
 
-    test('card-catalog does not offer to "create new card" when editing linked fields in code mode', async function (assert) {
+    test('card-chooser does not offer to "create new card" when editing linked fields in code mode', async function (assert) {
       await visitOperatorMode({
         submode: 'code',
         codePath: `${testRealmURL}Person/fadhlan.json`,
@@ -2628,25 +2703,25 @@ module('Acceptance | code submode tests', function (_hooks) {
       await click('[data-test-links-to-editor="pet"] [data-test-remove-card]');
       await waitFor('[data-test-links-to-editor="pet"] [data-test-add-new]');
       await click('[data-test-links-to-editor="pet"] [data-test-add-new]');
-      await waitFor('[data-test-card-catalog-modal]');
+      await waitFor('[data-test-card-chooser-modal]');
       assert
-        .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
+        .dom('[data-test-card-chooser-modal] [data-test-boxel-header-title]')
         .containsText('Choose a Pet card');
       assert
-        .dom('[data-test-card-catalog-create-new-button]')
+        .dom('[data-test-item-button-create-new]')
         .doesNotExist('can not create new card for linksTo field in code mode');
 
       await click('[aria-label="close modal"]');
-      await waitFor('[data-test-card-catalog-modal]', { count: 0 });
+      await waitFor('[data-test-card-chooser-modal]', { count: 0 });
 
       // linksToMany field
       await click('[data-test-links-to-many="friends"] [data-test-add-new]');
-      await waitFor('[data-test-card-catalog-modal]');
+      await waitFor('[data-test-card-chooser-modal]');
       assert
-        .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
+        .dom('[data-test-card-chooser-modal] [data-test-boxel-header-title]')
         .containsText('Select 1 or more Friend cards');
       assert
-        .dom('[data-test-card-catalog-create-new-button]')
+        .dom('[data-test-item-button-create-new]')
         .doesNotExist(
           'can not create new card for linksToMany field in code mode',
         );
@@ -2673,14 +2748,14 @@ module('Acceptance | code submode tests', function (_hooks) {
       await waitFor(`[data-test-create-file-modal][data-test-ready]`);
 
       await click('[data-test-select-card-type]');
-      await waitFor('[data-test-card-catalog-modal]');
+      await waitFor('[data-test-card-chooser-modal]');
       await percySnapshot(assert);
-      let cardCatalogModalOverlay = document.querySelector(
-        '[data-test-card-catalog-modal]',
+      let cardChooserModalOverlay = document.querySelector(
+        '[data-test-card-chooser-modal]',
       )?.previousElementSibling;
-      assert.dom(cardCatalogModalOverlay).exists();
-      await click(cardCatalogModalOverlay!);
-      assert.dom('[data-test-card-catalog-modal]').doesNotExist();
+      assert.dom(cardChooserModalOverlay).exists();
+      await click(cardChooserModalOverlay!);
+      assert.dom('[data-test-card-chooser-modal]').doesNotExist();
 
       let createFileModalOverlay = document.querySelector(
         '[data-test-create-file-modal]',

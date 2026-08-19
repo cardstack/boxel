@@ -1,13 +1,12 @@
-import './instrument';
-import './setup-logger'; // This should be first
+import './instrument.ts';
+import './setup-logger.ts'; // This should be first
 import { RoomMemberEvent, RoomEvent, createClient } from 'matrix-js-sdk';
 import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
 import { logger } from '@cardstack/runtime-common';
 import * as Sentry from '@sentry/node';
-import { onMembershipEvent } from './lib/membership-handler';
-import { onTimelineEvent } from './lib/timeline-handler';
-import { createGitHubClientFromEnv } from './lib/github';
-import { cleanupOrphanedSubmissionTemps } from '@cardstack/runtime-common/lint/submission-lint';
+import { onMembershipEvent } from './lib/membership-handler.ts';
+import { onTimelineEvent } from './lib/timeline-handler.ts';
+import { createGitHubClientFromEnv } from './lib/github.ts';
 
 const log = logger('bot-runner');
 const startTime = Date.now();
@@ -33,8 +32,6 @@ const botPassword = process.env.SUBMISSION_BOT_PASSWORD || 'password';
   }
 
   log.info(`logged in as ${auth.user_id}`);
-
-  await cleanupOrphanedSubmissionTemps();
 
   let dbAdapter = new PgAdapter();
   let queuePublisher = new PgQueuePublisher(dbAdapter);

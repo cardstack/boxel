@@ -1,6 +1,6 @@
 import type * as JSONTypes from 'json-typescript';
 
-import type { Task } from './index';
+import type { Task } from './index.ts';
 
 import {
   fetchRealmPermissions,
@@ -9,7 +9,7 @@ import {
   type RunCommandResponse,
   ensureFullMatrixUserId,
   ensureTrailingSlash,
-} from '../index';
+} from '../index.ts';
 
 export interface RunCommandArgs extends JSONTypes.Object {
   realmURL: string;

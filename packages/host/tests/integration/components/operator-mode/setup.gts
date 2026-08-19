@@ -7,17 +7,20 @@ import type {
   Realm,
   Loader,
 } from '@cardstack/runtime-common';
-import { baseRealm, baseRRI, rri } from '@cardstack/runtime-common';
+import { baseRRI, rri } from '@cardstack/runtime-common';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import {
+  withCachedRealmSetup,
+  setupRealmCacheTeardown,
   testRealmURL,
   setupCardLogs,
   setupIntegrationTestRealm,
   setupLocalIndexing,
   setupOnSave,
   setupOperatorModeStateCleanup,
+  realmConfigCardJSON,
 } from '../../../helpers';
 
 import { setupMockMatrix } from '../../../helpers/mock-matrix';
@@ -55,10 +58,15 @@ export function setupOperatorModeTests(
   });
 
   setupLocalIndexing(hooks);
+  // Registers for the scope this helper is called from. A consumer with nested
+  // modules registers its own too: the delete-prefix is fixed at registration
+  // from the module name, and a nested test's snapshot is keyed by its own
+  // composed name, which the outer prefix cannot match.
+  setupRealmCacheTeardown(hooks);
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -68,17 +76,17 @@ export function setupOperatorModeTests(
   });
 
   hooks.beforeEach(async function () {
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
-    let textArea: typeof import('https://cardstack.com/base/text-area');
-    let cardsGrid: typeof import('https://cardstack.com/base/cards-grid');
-    let spec: typeof import('https://cardstack.com/base/spec');
+    let cardApi: typeof import('@cardstack/base/card-api');
+    let string: typeof import('@cardstack/base/string');
+    let textArea: typeof import('@cardstack/base/text-area');
+    let cardsGrid: typeof import('@cardstack/base/cards-grid');
+    let spec: typeof import('@cardstack/base/spec');
 
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
-    textArea = await loader.import(`${baseRealm.url}text-area`);
-    cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
-    spec = await loader.import(`${baseRealm.url}spec`);
+    cardApi = await loader.import('@cardstack/base/card-api');
+    string = await loader.import('@cardstack/base/string');
+    textArea = await loader.import('@cardstack/base/text-area');
+    cardsGrid = await loader.import('@cardstack/base/cards-grid');
+    spec = await loader.import('@cardstack/base/spec');
 
     let {
       field,
@@ -98,7 +106,7 @@ export function setupOperatorModeTests(
 
     // use string source so we can get the transpiled scoped CSS
     let friendWithCSSSource = `
-      import { Component, field, contains, linksTo, CardDef, StringField } from 'https://cardstack.com/base/card-api';
+      import { Component, field, contains, linksTo, CardDef, StringField } from '@cardstack/base/card-api';
       export class FriendWithCSS extends CardDef {
         static displayName = 'Friend';
         @field cardTitle = contains(StringField);
@@ -451,6 +459,14 @@ export function setupOperatorModeTests(
       name: 'Stable Example',
       status: 'ok',
     });
+    // Companion fixture used by the operator-mode error-UI tests: an
+    // ExplodingCard whose `status: 'boom'` makes the `cardTitle` compute
+    // throw, so the card lands as instance-error on index from the start
+    // (no last-known-good HTML available).
+    let preExplodedCard = new ExplodingCard({
+      name: 'Pre-Exploded Example',
+      status: 'boom',
+    });
 
     //Generate 11 person card to test recent card menu in card sheet
     let personCards: Map<String, any> = new Map<String, any>();
@@ -468,208 +484,217 @@ export function setupOperatorModeTests(
       );
     }
 
+    // The fixtures are the same for every test in a module using this helper,
+    // so the indexed result is cached and restored rather than rebuilt.
     ({ adapter: testRealmAdapter, realm: testRealm } =
-      await setupIntegrationTestRealm({
-        mockMatrixUtils,
-        contents: {
-          'pet.gts': { Pet },
-          'shipping-info.gts': { ShippingInfo },
-          'address.gts': { Address },
-          'person.gts': { Person },
-          'boom-field.gts': { BoomField },
-          'boom-pet.gts': { BoomPet },
-          'blog-post.gts': { BlogPost },
-          'exploding-card.gts': { ExplodingCard },
-          'car.gts': { Car },
-          'author.gts': { Author },
-          'friend.gts': { Friend },
-          'friend-with-css.gts': friendWithCSSSource,
-          'publishing-packet.gts': { PublishingPacket },
-          'pet-room.gts': { PetRoom },
-          'Pet/mango.json': petMango,
-          'spec-card-linker.gts': { SpecCardLinker },
-          'BoomPet/paper.json': new BoomPet({ name: 'Paper' }),
-          'Car/myvi.json': myvi,
-          'Car/proton.json': proton,
-          'SpecCardLinker/spec-card-linker.json': {
-            data: {
-              attributes: {
-                cardTitle: 'Spec Card Linker',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: rri('../spec-card-linker.gts'),
-                  name: 'SpecCardLinker',
+      await withCachedRealmSetup(
+        async () =>
+          await setupIntegrationTestRealm({
+            mockMatrixUtils,
+            contents: {
+              'pet.gts': { Pet },
+              'shipping-info.gts': { ShippingInfo },
+              'address.gts': { Address },
+              'person.gts': { Person },
+              'boom-field.gts': { BoomField },
+              'boom-pet.gts': { BoomPet },
+              'blog-post.gts': { BlogPost },
+              'exploding-card.gts': { ExplodingCard },
+              'car.gts': { Car },
+              'author.gts': { Author },
+              'friend.gts': { Friend },
+              'friend-with-css.gts': friendWithCSSSource,
+              'publishing-packet.gts': { PublishingPacket },
+              'pet-room.gts': { PetRoom },
+              'Pet/mango.json': petMango,
+              'spec-card-linker.gts': { SpecCardLinker },
+              'BoomPet/paper.json': new BoomPet({ name: 'Paper' }),
+              'Car/myvi.json': myvi,
+              'Car/proton.json': proton,
+              'SpecCardLinker/spec-card-linker.json': {
+                data: {
+                  attributes: {
+                    cardTitle: 'Spec Card Linker',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('../spec-card-linker.gts'),
+                      name: 'SpecCardLinker',
+                    },
+                  },
                 },
-              },
-            },
-          } as LooseSingleCardDocument,
-          'fields/biginteger-field.json': {
-            data: {
-              attributes: {
-                cardTitle: 'Bigint Field',
-                cardDescription: 'A field that captures big int values',
-                specType: 'field',
-                ref: {
-                  module: baseRRI('big-integer'),
-                  name: 'default',
+              } as LooseSingleCardDocument,
+              'fields/biginteger-field.json': {
+                data: {
+                  attributes: {
+                    cardTitle: 'Bigint Field',
+                    cardDescription: 'A field that captures big int values',
+                    specType: 'field',
+                    ref: {
+                      module: baseRRI('big-integer'),
+                      name: 'default',
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: baseRRI('spec'),
+                      name: 'Spec',
+                    },
+                  },
                 },
-              },
-              meta: {
-                adoptsFrom: {
-                  module: baseRRI('spec'),
-                  name: 'Spec',
-                },
-              },
-            },
-          } as LooseSingleCardDocument,
-          'Pet/jackie.json': petJackie,
-          'Pet/woody.json': petWoody,
-          'Pet/buzz.json': petBuzz,
-          'Person/fadhlan.json': new Person({
-            firstName: 'Fadhlan',
-            address: new Address({
-              city: 'Bandung',
-              country: 'Indonesia',
-              shippingInfo: new ShippingInfo({
-                preferredCarrier: 'DHL',
-                remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
+              } as LooseSingleCardDocument,
+              'Pet/jackie.json': petJackie,
+              'Pet/woody.json': petWoody,
+              'Pet/buzz.json': petBuzz,
+              'Person/fadhlan.json': new Person({
+                firstName: 'Fadhlan',
+                address: new Address({
+                  city: 'Bandung',
+                  country: 'Indonesia',
+                  shippingInfo: new ShippingInfo({
+                    preferredCarrier: 'DHL',
+                    remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
+                  }),
+                }),
+                pet: petMango,
+                nicknames: ['Lan'],
+                favoriteGames: ['Soccer'],
               }),
-            }),
-            pet: petMango,
-            nicknames: ['Lan'],
-            favoriteGames: ['Soccer'],
-          }),
-          'Person/hassan.json': {
-            data: {
-              attributes: {
-                firstName: 'Hassan',
-              },
-              relationships: {
-                friends: {
-                  links: { self: null },
-                },
-              },
-              meta: {
-                adoptsFrom: {
-                  module: rri('../person'),
-                  name: 'Person',
-                },
-              },
-            },
-          },
-          'Person/burcu.json': new Person({
-            firstName: 'Burcu',
-            friends: [petJackie, petWoody, petBuzz],
-            cars: [myvi, proton],
-            nicknames: ['Ace', 'Bolt', 'Comet'],
-            favoriteGames: ['Chess', 'Go'],
-          }),
-          'Friend/friend-b.json': friendB,
-          'Friend/friend-a.json': new Friend({
-            name: 'Friend A',
-            friend: friendB,
-          }),
-          'FriendWithCSS/friend-b.json': {
-            data: {
-              attributes: {
-                cardTitle: 'Jade',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: rri('../friend-with-css.gts'),
-                  name: 'FriendWithCSS',
-                },
-              },
-            },
-          } as LooseSingleCardDocument,
-          'FriendWithCSS/friend-a.json': {
-            data: {
-              attributes: {
-                cardTitle: 'Hassan',
-              },
-              relationships: {
-                friend: {
-                  links: {
-                    self: './friend-b',
+              'Person/hassan.json': {
+                data: {
+                  attributes: {
+                    firstName: 'Hassan',
+                  },
+                  relationships: {
+                    friends: {
+                      links: { self: null },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('../person'),
+                      name: 'Person',
+                    },
                   },
                 },
               },
-              meta: {
-                adoptsFrom: {
-                  module: rri('../friend-with-css.gts'),
-                  name: 'FriendWithCSS',
-                },
-              },
-            },
-          } as LooseSingleCardDocument,
-          'FriendWithCSS/missing-link.json': {
-            data: {
-              attributes: {
-                cardTitle: 'Boris',
-              },
-              relationships: {
-                friend: {
-                  links: {
-                    self: './does-not-exist',
+              'Person/burcu.json': new Person({
+                firstName: 'Burcu',
+                friends: [petJackie, petWoody, petBuzz],
+                cars: [myvi, proton],
+                nicknames: ['Ace', 'Bolt', 'Comet'],
+                favoriteGames: ['Chess', 'Go'],
+              }),
+              'Friend/friend-b.json': friendB,
+              'Friend/friend-a.json': new Friend({
+                name: 'Friend A',
+                friend: friendB,
+              }),
+              'FriendWithCSS/friend-b.json': {
+                data: {
+                  attributes: {
+                    cardTitle: 'Jade',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('../friend-with-css.gts'),
+                      name: 'FriendWithCSS',
+                    },
                   },
                 },
-              },
-              meta: {
-                adoptsFrom: {
-                  module: rri('../friend-with-css.gts'),
-                  name: 'FriendWithCSS',
+              } as LooseSingleCardDocument,
+              'FriendWithCSS/friend-a.json': {
+                data: {
+                  attributes: {
+                    cardTitle: 'Hassan',
+                  },
+                  relationships: {
+                    friend: {
+                      links: {
+                        self: './friend-b',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('../friend-with-css.gts'),
+                      name: 'FriendWithCSS',
+                    },
+                  },
                 },
-              },
+              } as LooseSingleCardDocument,
+              'FriendWithCSS/missing-link.json': {
+                data: {
+                  attributes: {
+                    cardTitle: 'Boris',
+                  },
+                  relationships: {
+                    friend: {
+                      links: {
+                        self: './does-not-exist',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('../friend-with-css.gts'),
+                      name: 'FriendWithCSS',
+                    },
+                  },
+                },
+              } as LooseSingleCardDocument,
+              'grid.json': new CardsGrid(),
+              'index.json': new CardsGrid(),
+              'Spec/publishing-packet.json': new Spec({
+                cardTitle: 'Publishing Packet',
+                cardDescription: 'Spec for PublishingPacket',
+                specType: 'card',
+                ref: {
+                  module: `${testRealmURL}publishing-packet`,
+                  name: 'PublishingPacket',
+                },
+              }),
+              'Spec/pet-room.json': new Spec({
+                cardTitle: 'General Pet Room',
+                cardDescription: 'Spec for Pet Room Card',
+                specType: 'card',
+                ref: {
+                  module: `${testRealmURL}pet-room`,
+                  name: 'PetRoom',
+                },
+              }),
+              'Spec/pet-card.json': new Spec({
+                cardTitle: 'Pet',
+                cardDescription: 'Spec for Pet',
+                specType: 'card',
+                ref: {
+                  module: `${testRealmURL}pet`,
+                  name: 'Pet',
+                },
+              }),
+              'Author/1.json': author1,
+              'Author/2.json': new Author({ firstName: 'R2-D2' }),
+              'Author/mark.json': new Author({
+                firstName: 'Mark',
+                lastName: 'Jackson',
+              }),
+              'BlogPost/1.json': blogPost,
+              'BlogPost/2.json': new BlogPost({ cardTitle: 'Beginnings' }),
+              'ExplodingCard/1.json': explodingCard,
+              'ExplodingCard/exploded.json': preExplodedCard,
+              'CardDef/1.json': new CardDef({ cardTitle: 'CardDef instance' }),
+              'PublishingPacket/story.json': new PublishingPacket({
+                cardTitle: 'Space Story',
+                blogPost,
+              }),
+              'realm.json': realmConfigCardJSON({
+                name: realmName,
+                iconURL: 'https://boxel-images.boxel.ai/icons/Letter-o.png',
+              }),
+              ...Object.fromEntries(personCards),
             },
-          } as LooseSingleCardDocument,
-          'grid.json': new CardsGrid(),
-          'index.json': new CardsGrid(),
-          'Spec/publishing-packet.json': new Spec({
-            cardTitle: 'Publishing Packet',
-            cardDescription: 'Spec for PublishingPacket',
-            specType: 'card',
-            ref: {
-              module: `${testRealmURL}publishing-packet`,
-              name: 'PublishingPacket',
-            },
           }),
-          'Spec/pet-room.json': new Spec({
-            cardTitle: 'General Pet Room',
-            cardDescription: 'Spec for Pet Room Card',
-            specType: 'card',
-            ref: {
-              module: `${testRealmURL}pet-room`,
-              name: 'PetRoom',
-            },
-          }),
-          'Spec/pet-card.json': new Spec({
-            cardTitle: 'Pet',
-            cardDescription: 'Spec for Pet',
-            specType: 'card',
-            ref: {
-              module: `${testRealmURL}pet`,
-              name: 'Pet',
-            },
-          }),
-          'Author/1.json': author1,
-          'Author/2.json': new Author({ firstName: 'R2-D2' }),
-          'Author/mark.json': new Author({
-            firstName: 'Mark',
-            lastName: 'Jackson',
-          }),
-          'BlogPost/1.json': blogPost,
-          'BlogPost/2.json': new BlogPost({ cardTitle: 'Beginnings' }),
-          'ExplodingCard/1.json': explodingCard,
-          'CardDef/1.json': new CardDef({ cardTitle: 'CardDef instance' }),
-          'PublishingPacket/story.json': new PublishingPacket({
-            cardTitle: 'Space Story',
-            blogPost,
-          }),
-          '.realm.json': `{ "name": "${realmName}", "iconURL": "https://boxel-images.boxel.ai/icons/Letter-o.png" }`,
-          ...Object.fromEntries(personCards),
-        },
-      }));
+      ));
 
     let realmService = getService('realm');
     await realmService.getOrCreateRealmResource(testRealmURL).fetchInfo();

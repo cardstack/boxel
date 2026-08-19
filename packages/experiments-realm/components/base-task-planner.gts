@@ -2,7 +2,7 @@ import {
   CardContext,
   CardDef,
   BaseDef,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import { tracked } from '@glimmer/tracking';
 import { TrackedMap } from 'tracked-built-ins';
 import GlimmerComponent from '@glimmer/component';
@@ -29,6 +29,7 @@ import {
   DndKanbanBoard,
   DndColumn,
   BoxelSelect,
+  toTriggerComponent,
 } from '@cardstack/boxel-ui/components';
 import type { Query } from '@cardstack/runtime-common/query';
 import getKanbanResource from '../kanban-resource';
@@ -322,7 +323,10 @@ export class TaskPlanner extends GlimmerComponent<TaskPlannerArgs> {
     return this.selectedItems.get(this.selectedFilter) ?? [];
   }
 
-  @action onSelectFilter(item: FilterType) {
+  @action onSelectFilter(item: FilterType | null) {
+    if (!item) {
+      return;
+    }
     this.selectedFilter = item;
   }
 
@@ -354,7 +358,8 @@ export class TaskPlanner extends GlimmerComponent<TaskPlannerArgs> {
     );
   }
 
-  getComponent(cardOrField: BaseDef) {
+  getComponent(item: DndItem) {
+    let cardOrField = item as BaseDef;
     return cardOrField.constructor.getComponent(cardOrField);
   }
 
@@ -444,7 +449,7 @@ export class TaskPlanner extends GlimmerComponent<TaskPlannerArgs> {
               @onChange={{this.onSelectFilter}}
               @placeholder='Choose a Filter'
               @matchTriggerWidth={{false}}
-              @triggerComponent={{FilterTrigger}}
+              @triggerComponent={{toTriggerComponent FilterTrigger}}
               as |item|
             >
               {{#let (this.getFilterIcon item) as |Icon|}}

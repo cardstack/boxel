@@ -1,241 +1,372 @@
-import { expect, test } from './fixtures';
+import { expect, test } from './fixtures.ts';
 import {
   createRealm,
   createSubscribedUserAndLogin,
-  login,
   logout,
   postCardSource,
+  waitForPublishedMarker,
   waitUntil,
-} from '../helpers';
-import { appURL } from '../helpers/isolated-realm-server';
+  withTracedContext,
+} from '../helpers/index.ts';
+import { appURL } from '../support/isolated-realm-server.ts';
 import { randomUUID } from 'crypto';
+import type { Page } from '@playwright/test';
 
-test.describe('Host mode', () => {
-  let realmURL: string;
-  let publishedRealmURL: string;
-  let publishedCardURL: string;
-  let publishedWhitePaperCardURL: string;
-  let publishedMyCardURL: string;
-  let connectRouteURL: string;
-  let username: string;
-  let password: string;
+interface PublishedHostModeRealm {
+  username: string;
+  password: string;
+  realmURL: string;
+  publishedRealmURL: string;
+  publishedCardURL: string;
+  publishedWhitePaperCardURL: string;
+  publishedMyCardURL: string;
+  connectRouteURL: string;
+}
 
-  test.beforeEach(async ({ page }) => {
-    const serverIndexUrl = new URL(appURL).origin;
-    const user = await createSubscribedUserAndLogin(
-      page,
-      'host-mode',
-      serverIndexUrl,
+// POST /_publish-realm using the source realm's session token. Returns once
+// the server accepts the request; the published realm finishes re-indexing
+// asynchronously, so callers must poll the published URL before navigating.
+async function publishRealm(
+  page: Page,
+  realmURL: string,
+  publishedRealmURL: string,
+) {
+  await page.evaluate(
+    async ({ realmURL, publishedRealmURL }) => {
+      let sessions = JSON.parse(
+        window.localStorage.getItem('boxel-session') ?? '{}',
+      );
+      let token = sessions[realmURL];
+      if (!token) {
+        throw new Error(`No session token found for ${realmURL}`);
+      }
+
+      let response = await fetch('https://localhost:4205/_publish-realm', {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          Authorization: token,
+        },
+        body: JSON.stringify({
+          sourceRealmURL: realmURL,
+          publishedRealmURL,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+    },
+    { realmURL, publishedRealmURL },
+  );
+
+  // Publishing is 202/async. A published realm's rendered HTML is its
+  // deliverable, so wait until its readiness check reports both indexed AND
+  // rendered — `awaitPrerenderHtml` holds the readiness response until the
+  // prerendered HTML is live, not just the index (readiness returns 503 while
+  // it isn't). Poll until 200 rather than polling the served URL and racing
+  // the HTML job.
+  let readinessURL = `${publishedRealmURL}_readiness-check?awaitPrerenderHtml=true`;
+  let lastStatus: number | undefined;
+  try {
+    await waitUntil(async () => {
+      let readiness = await page.request.get(readinessURL, {
+        headers: { Accept: 'text/html' },
+        timeout: 120_000,
+      });
+      lastStatus = readiness.status();
+      return readiness.ok();
+    }, 120_000);
+  } catch {
+    throw new Error(
+      `published realm did not become ready (indexed + rendered): last HTTP ${
+        lastStatus ?? 'none'
+      } for ${readinessURL}`,
     );
-    username = user.username;
-    password = user.password;
+  }
+}
 
-    const realmName = `host-mode-${randomUUID()}`;
+// Create a fresh source realm, seed it with the host-mode fixture cards, and
+// publish it. Leaves the page logged out. The `page` must already have realm
+// redirects registered — the per-test `page` fixture and `withTracedContext`
+// both do this.
+//
+// `options.routingRulePath` seeds a `realm.json` host routing rule (mapping
+// that path to the white-paper card) BEFORE the single publish — so routing
+// tests don't have to publish, rewrite realm.json, and re-publish. Each
+// `_publish-realm` POST is the heaviest, contention-prone step in the suite,
+// so collapsing two publishes into one is what keeps the routing tests from
+// timing out on a first-attempt publish under shard load.
+//
+// `options.routingRuleTarget` overrides the rule's `instance` link (default
+// `./white-paper`). Point it at a card that is never created to exercise a
+// dangling routing target.
+async function createAndPublishHostModeRealm(
+  page: Page,
+  options: { routingRulePath?: string; routingRuleTarget?: string } = {},
+): Promise<PublishedHostModeRealm> {
+  const serverIndexUrl = new URL(appURL).origin;
+  const { username, password } = await createSubscribedUserAndLogin(
+    page,
+    'host-mode',
+    serverIndexUrl,
+  );
 
-    await createRealm(page, realmName);
-    realmURL = new URL(`${username}/${realmName}/`, serverIndexUrl).href;
+  const realmName = `host-mode-${randomUUID()}`;
 
-    await page.goto(realmURL);
-    await page.locator('[data-test-stack-item-content]').first().waitFor();
+  await createRealm(page, realmName);
+  const realmURL = new URL(`${username}/${realmName}/`, serverIndexUrl).href;
 
-    await postCardSource(
-      page,
-      realmURL,
-      'host-mode-isolated-card.gts',
-      `
-        import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+  await page.goto(realmURL, { waitUntil: 'domcontentloaded' });
+  await page.locator('[data-test-stack-item-content]').first().waitFor();
 
-        export class HostModeIsolatedCard extends CardDef {
-          static isolated = class Isolated extends Component<typeof this> {
-            <template>
-              <p data-test-host-mode-isolated>Host mode isolated</p>
-            </template>
-          };
-        }
-      `,
-    );
+  await postCardSource(
+    page,
+    realmURL,
+    'host-mode-isolated-card.gts',
+    `
+      import { CardDef, Component } from '@cardstack/base/card-api';
 
-    await postCardSource(
-      page,
-      realmURL,
-      'white-paper-card.gts',
-      `
-        import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+      export class HostModeIsolatedCard extends CardDef {
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <p data-test-host-mode-isolated>Host mode isolated</p>
+          </template>
+        };
+      }
+    `,
+  );
 
-        export class WhitePaperCard extends CardDef {
-          static prefersWideFormat = true;
+  await postCardSource(
+    page,
+    realmURL,
+    'white-paper-card.gts',
+    `
+      import { CardDef, Component } from '@cardstack/base/card-api';
 
-          static isolated = class Isolated extends Component<typeof this> {
-            <template>
-              <article class='white-paper' data-test-white-paper>
-                <section class='page-block'>Page 1</section>
-                <section class='page-block'>Page 2</section>
-                <section class='page-block'>Page 3</section>
-              </article>
-              <style scoped>
-                .white-paper {
-                  padding: 0;
-                  margin: 0;
-                  font-family: serif;
-                }
+      export class WhitePaperCard extends CardDef {
+        static prefersWideFormat = true;
 
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <article class='white-paper' data-test-white-paper>
+              <section class='page-block'>Page 1</section>
+              <section class='page-block'>Page 2</section>
+              <section class='page-block'>Page 3</section>
+            </article>
+            <style scoped>
+              .white-paper {
+                padding: 0;
+                margin: 0;
+                font-family: serif;
+              }
+
+              .page-block {
+                height: 9.5in;
+                padding: 0.75in;
+                box-sizing: border-box;
+              }
+
+              @media print {
                 .page-block {
-                  height: 9.5in;
-                  padding: 0.75in;
-                  box-sizing: border-box;
+                  break-after: page;
+                  page-break-after: always;
                 }
 
-                @media print {
-                  .page-block {
-                    break-after: page;
-                    page-break-after: always;
-                  }
-
-                  .page-block:last-child {
-                    break-after: auto;
-                    page-break-after: auto;
-                  }
+                .page-block:last-child {
+                  break-after: auto;
+                  page-break-after: auto;
                 }
-              </style>
-            </template>
-          };
-        }
-      `,
-    );
+              }
+            </style>
+          </template>
+        };
+      }
+    `,
+  );
 
-    await postCardSource(
-      page,
-      realmURL,
-      'index.json',
-      JSON.stringify({
-        data: {
-          type: 'card',
-          attributes: {},
-          meta: {
-            adoptsFrom: {
-              module: './host-mode-isolated-card.gts',
-              name: 'HostModeIsolatedCard',
-            },
+  await postCardSource(
+    page,
+    realmURL,
+    'index.json',
+    JSON.stringify({
+      data: {
+        type: 'card',
+        attributes: {},
+        meta: {
+          adoptsFrom: {
+            module: './host-mode-isolated-card.gts',
+            name: 'HostModeIsolatedCard',
           },
         },
-      }),
-    );
-
-    await postCardSource(
-      page,
-      realmURL,
-      'white-paper.json',
-      JSON.stringify({
-        data: {
-          type: 'card',
-          attributes: {},
-          meta: {
-            adoptsFrom: {
-              module: './white-paper-card.gts',
-              name: 'WhitePaperCard',
-            },
-          },
-        },
-      }),
-    );
-
-    await postCardSource(
-      page,
-      realmURL,
-      'card-with-head-title.gts',
-      `
-        import { CardDef, Component } from 'https://cardstack.com/base/card-api';
-
-        export class CardWithHeadTitle extends CardDef {
-          static displayName = 'Card With Head Title';
-
-          static head = class Head extends Component<typeof this> {
-            <template>
-              {{! template-lint-disable no-forbidden-elements }}
-              <title>My Custom Title From Head Template</title>
-              <meta name='description' content='A card with a custom title' />
-            </template>
-          };
-
-          static isolated = class Isolated extends Component<typeof this> {
-            <template>
-              <p data-test-card-with-head-title>Card content</p>
-            </template>
-          };
-        }
-      `,
-    );
-
-    await postCardSource(
-      page,
-      realmURL,
-      'my-card.json',
-      JSON.stringify({
-        data: {
-          type: 'card',
-          attributes: {},
-          meta: {
-            adoptsFrom: {
-              module: './card-with-head-title.gts',
-              name: 'CardWithHeadTitle',
-            },
-          },
-        },
-      }),
-    );
-
-    await page.reload();
-    await page.locator('[data-test-host-mode-isolated]').waitFor();
-
-    publishedRealmURL = `https://published.localhost:4205/${username}/${realmName}/`;
-
-    await page.evaluate(
-      async ({ realmURL, publishedRealmURL }) => {
-        let sessions = JSON.parse(
-          window.localStorage.getItem('boxel-session') ?? '{}',
-        );
-        let token = sessions[realmURL];
-        if (!token) {
-          throw new Error(`No session token found for ${realmURL}`);
-        }
-
-        let response = await fetch('https://localhost:4205/_publish-realm', {
-          method: 'POST',
-          headers: {
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-            Authorization: token,
-          },
-          body: JSON.stringify({
-            sourceRealmURL: realmURL,
-            publishedRealmURL,
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error(await response.text());
-        }
-
-        return response.json();
       },
-      { realmURL, publishedRealmURL },
+    }),
+  );
+
+  await postCardSource(
+    page,
+    realmURL,
+    'white-paper.json',
+    JSON.stringify({
+      data: {
+        type: 'card',
+        attributes: {},
+        meta: {
+          adoptsFrom: {
+            module: './white-paper-card.gts',
+            name: 'WhitePaperCard',
+          },
+        },
+      },
+    }),
+  );
+
+  await postCardSource(
+    page,
+    realmURL,
+    'card-with-head-title.gts',
+    `
+      import { CardDef, Component } from '@cardstack/base/card-api';
+
+      export class CardWithHeadTitle extends CardDef {
+        static displayName = 'Card With Head Title';
+
+        static head = class Head extends Component<typeof this> {
+          <template>
+            {{! template-lint-disable no-forbidden-elements }}
+            <title>My Custom Title From Head Template</title>
+            <meta name='description' content='A card with a custom title' />
+          </template>
+        };
+
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <p data-test-card-with-head-title>Card content</p>
+          </template>
+        };
+      }
+    `,
+  );
+
+  await postCardSource(
+    page,
+    realmURL,
+    'my-card.json',
+    JSON.stringify({
+      data: {
+        type: 'card',
+        attributes: {},
+        meta: {
+          adoptsFrom: {
+            module: './card-with-head-title.gts',
+            name: 'CardWithHeadTitle',
+          },
+        },
+      },
+    }),
+  );
+
+  if (options.routingRulePath) {
+    // Overwrite the auto-generated realm.json with a host routing rule that
+    // maps the given path to the white-paper card posted above. Seeding it
+    // here means the rule is present at the initial publish, so the routing
+    // tests need only one publish instead of publish-then-republish.
+    await postCardSource(
+      page,
+      realmURL,
+      'realm.json',
+      JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: {
+            cardInfo: { name: `Routed Realm ${randomUUID()}` },
+            hostRoutingRules: [{ path: options.routingRulePath }],
+          },
+          relationships: {
+            'hostRoutingRules.0.instance': {
+              links: { self: options.routingRuleTarget ?? './white-paper' },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: '@cardstack/base/realm-config',
+              name: 'RealmConfig',
+            },
+          },
+        },
+      }),
     );
+  }
 
-    publishedCardURL = `${publishedRealmURL}index.json`;
-    publishedWhitePaperCardURL = `${publishedRealmURL}white-paper.json`;
-    publishedMyCardURL = `${publishedRealmURL}my-card.json`;
-    connectRouteURL = `https://localhost:4205/connect/${encodeURIComponent(
+  await page.reload();
+  await page.locator('[data-test-host-mode-isolated]').waitFor();
+
+  const publishedRealmURL = `https://published.localhost:4205/${username}/${realmName}/`;
+
+  await publishRealm(page, realmURL, publishedRealmURL);
+
+  await logout(page);
+
+  return {
+    username,
+    password,
+    realmURL,
+    publishedRealmURL,
+    publishedCardURL: `${publishedRealmURL}index.json`,
+    publishedWhitePaperCardURL: `${publishedRealmURL}white-paper.json`,
+    publishedMyCardURL: `${publishedRealmURL}my-card.json`,
+    connectRouteURL: `https://localhost:4205/connect/${encodeURIComponent(
       publishedRealmURL,
-    )}`;
+    )}`,
+  };
+}
 
-    await logout(page);
+// Read-only tests share a single published realm created once per worker.
+// Publishing fans out a full reindex + prerender; doing it once instead of in
+// a per-test `beforeEach` removes the prerender storm that drove the flake.
+test.describe('Host mode', () => {
+  let realm: PublishedHostModeRealm;
+
+  test.beforeAll(async ({ browser }) => {
+    // This shared setup does the work of several tests' setup, and a failure
+    // here fails the whole read-only group — so give it a longer budget and
+    // retry with a fresh context. Retrying in-hook (rather than leaning on
+    // Playwright's hook retry) avoids the failure mode where the hand-rolled
+    // context wedges and every subsequent retry times out closing it.
+    test.setTimeout(180_000);
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      // `beforeAll` only has access to worker-scoped fixtures, so the context is
+      // built by hand. Publishing is server-side state that outlives it, so it
+      // closes once setup is done. Each attempt traces separately — the trace of
+      // the attempt that failed is what explains why setup never took.
+      try {
+        realm = await withTracedContext(
+          browser,
+          `host-mode-setup-attempt-${attempt}`,
+          (page) => createAndPublishHostModeRealm(page),
+        );
+        return;
+      } catch (e) {
+        lastError = e;
+        console.log(
+          `[host-mode beforeAll] setup attempt ${attempt}/3 failed: ${
+            (e as Error)?.message
+          }`,
+        );
+      }
+    }
+    throw lastError;
   });
 
   test('published card response includes isolated template markup', async ({
     page,
   }) => {
+    // Same readiness-gate budget as waitForPublishedMarker (not waitUntil's
+    // 10s default) — the realm may still be indexing under CI load.
     let html = await waitUntil(async () => {
-      let response = await page.request.get(publishedCardURL, {
+      let response = await page.request.get(realm.publishedCardURL, {
         headers: { Accept: 'text/html' },
       });
 
@@ -245,11 +376,11 @@ test.describe('Host mode', () => {
 
       let text = await response.text();
       return text.includes('data-test-host-mode-isolated') ? text : false;
-    });
+    }, 45_000);
 
     expect(html).toContain('data-test-host-mode-isolated');
 
-    await page.goto(publishedCardURL);
+    await page.goto(realm.publishedCardURL, { waitUntil: 'domcontentloaded' });
     await expect(page.locator('[data-test-host-mode-isolated]')).toBeVisible();
     await expect(page.locator('body.boxel-ready')).toBeAttached();
   });
@@ -257,7 +388,28 @@ test.describe('Host mode', () => {
   test('printed isolated card produces a stable page count', async ({
     page,
   }) => {
-    await page.goto(publishedWhitePaperCardURL);
+    // Warm up so we only navigate once the published card is render-ready;
+    // navigating cold is what previously timed out under load.
+    let warmupStart = Date.now();
+    await waitForPublishedMarker(
+      page,
+      realm.publishedWhitePaperCardURL,
+      'data-test-white-paper',
+    );
+    // Diagnostic: if this test ever times out again, the warm-up timing
+    // tells us whether the prerender was the slow part (long warm-up) or
+    // the navigation itself stalled (short warm-up, then goto hangs).
+    console.log(
+      `[host-mode print] warm-up ready after ${Date.now() - warmupStart}ms`,
+    );
+
+    let gotoStart = Date.now();
+    await page.goto(realm.publishedWhitePaperCardURL, {
+      waitUntil: 'domcontentloaded',
+    });
+    console.log(
+      `[host-mode print] page.goto resolved after ${Date.now() - gotoStart}ms`,
+    );
     await page.locator('[data-test-white-paper]').waitFor();
     await page.locator('[data-test-host-mode-card-loaded]').waitFor();
     await page.emulateMedia({ media: 'print' });
@@ -271,10 +423,10 @@ test.describe('Host mode', () => {
   test.skip('card in a published realm renders in host mode with a connect button', async ({
     page,
   }) => {
-    await page.goto(publishedCardURL);
+    await page.goto(realm.publishedCardURL, { waitUntil: 'domcontentloaded' });
 
     await expect(
-      page.locator(`[data-test-card="${publishedRealmURL}index"]`),
+      page.locator(`[data-test-card="${realm.publishedRealmURL}index"]`),
     ).toBeVisible();
 
     let connectIframe = page.frameLocator('iframe');
@@ -284,24 +436,24 @@ test.describe('Host mode', () => {
   test.skip('clicking connect button logs in on main site and redirects back to host mode', async ({
     page,
   }) => {
-    await page.goto(publishedCardURL);
+    await page.goto(realm.publishedCardURL, { waitUntil: 'domcontentloaded' });
 
     await expect(page.locator('iframe')).toBeVisible();
 
     let connectIframe = page.frameLocator('iframe');
     await connectIframe.locator('[data-test-connect]').click();
 
-    await page.locator('[data-test-username-field]').fill(username);
-    await page.locator('[data-test-password-field]').fill(password);
+    await page.locator('[data-test-username-field]').fill(realm.username);
+    await page.locator('[data-test-password-field]').fill(realm.password);
     await page.locator('[data-test-login-btn]').click();
 
-    await expect(page).toHaveURL(publishedCardURL);
+    await expect(page).toHaveURL(realm.publishedCardURL);
 
     await expect(page.locator('iframe')).toBeVisible();
     connectIframe = page.frameLocator('iframe');
     await expect(
       connectIframe.locator(
-        `[data-test-profile-icon-userid="@${username}:localhost"]`,
+        `[data-test-profile-icon-userid="@${realm.username}:localhost"]`,
       ),
     ).toBeVisible();
   });
@@ -309,10 +461,12 @@ test.describe('Host mode', () => {
   test('visiting connect route with known origin includes a matching frame-ancestors CSP', async ({
     page,
   }) => {
-    let response = await page.goto(connectRouteURL);
+    let response = await page.goto(realm.connectRouteURL, {
+      waitUntil: 'domcontentloaded',
+    });
 
     expect(response?.headers()['content-security-policy']).toBe(
-      `frame-ancestors ${publishedRealmURL}`,
+      `frame-ancestors ${realm.publishedRealmURL}`,
     );
   });
 
@@ -321,6 +475,7 @@ test.describe('Host mode', () => {
   }) => {
     let response = await page.goto(
       'https://localhost:4205/connect/http%3A%2F%2Fexample.com',
+      { waitUntil: 'domcontentloaded' },
     );
 
     expect(response?.status()).toBe(404);
@@ -330,7 +485,16 @@ test.describe('Host mode', () => {
   });
 
   test('page title comes from head format template', async ({ page }) => {
-    await page.goto(publishedMyCardURL);
+    // Warm up before the cold navigation (see `waitForPublishedMarker`).
+    await waitForPublishedMarker(
+      page,
+      realm.publishedMyCardURL,
+      'data-test-card-with-head-title',
+    );
+
+    await page.goto(realm.publishedMyCardURL, {
+      waitUntil: 'domcontentloaded',
+    });
     await page.locator('[data-test-card-with-head-title]').waitFor();
 
     // Wait for the head template to be injected
@@ -342,7 +506,13 @@ test.describe('Host mode', () => {
     const pageTitle = await page.title();
     expect(pageTitle).toBe('My Custom Title From Head Template');
   });
+});
 
+// Each test gets its own realm, published once with the routing rule already
+// seeded into realm.json (see `createAndPublishHostModeRealm`) — no
+// rewrite-and-republish, which is what made these the suite's heaviest,
+// flakiest tests.
+test.describe('Host mode routing rules', () => {
   // CS-10054 + CS-10055: routing rules in the realm config card resolve a
   // bare path (no .json extension) to a target card and render it in host
   // mode. This test fails until the host-mode request handler reads the
@@ -350,90 +520,17 @@ test.describe('Host mode', () => {
   test('routing rule resolves a bare path to its target card', async ({
     page,
   }) => {
-    // beforeEach logged out — re-login so we can write to the source realm.
-    await login(page, username, password);
-    await page.goto(realmURL);
-    await page.locator('[data-test-stack-item-content]').first().waitFor();
-
-    // Overwrite realm.json with a routing rule mapping /whitepaper to the
-    // existing white-paper card. The auto-generated realm.json from
-    // createRealm has no rules; we replace it before re-publishing.
-    await postCardSource(
-      page,
-      realmURL,
-      'realm.json',
-      JSON.stringify({
-        data: {
-          type: 'card',
-          attributes: {
-            cardInfo: { name: `Routed Realm ${randomUUID()}` },
-            hostRoutingRules: [{ path: '/whitepaper' }],
-          },
-          relationships: {
-            'hostRoutingRules.0.instance': {
-              links: { self: './white-paper' },
-            },
-          },
-          meta: {
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/realm-config',
-              name: 'RealmConfig',
-            },
-          },
-        },
-      }),
-    );
-
-    // Re-publish so the routing rule lands in the published realm.
-    await page.evaluate(
-      async ({ realmURL, publishedRealmURL }) => {
-        let sessions = JSON.parse(
-          window.localStorage.getItem('boxel-session') ?? '{}',
-        );
-        let token = sessions[realmURL];
-        if (!token) {
-          throw new Error(`No session token found for ${realmURL}`);
-        }
-        let response = await fetch('https://localhost:4205/_publish-realm', {
-          method: 'POST',
-          headers: {
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-            Authorization: token,
-          },
-          body: JSON.stringify({
-            sourceRealmURL: realmURL,
-            publishedRealmURL,
-          }),
-        });
-        if (!response.ok) {
-          throw new Error(await response.text());
-        }
-      },
-      { realmURL, publishedRealmURL },
-    );
-
-    await logout(page);
-
-    // The _publish-realm POST returns 202 before the published realm has
-    // finished re-indexing the new realm.json. Poll the bare URL until the
-    // server-rendered HTML contains the target card's marker — that
-    // confirms the routing rule is indexed AND the server cardURL rewrite
-    // is applying it. Mirrors the waitUntil pattern in the
-    // `published card response` test above.
-    let routedURL = `${publishedRealmURL}whitepaper`;
-    await waitUntil(async () => {
-      let response = await page.request.get(routedURL, {
-        headers: { Accept: 'text/html' },
-      });
-      if (!response.ok()) {
-        return false;
-      }
-      let text = await response.text();
-      return text.includes('data-test-white-paper');
+    let realm = await createAndPublishHostModeRealm(page, {
+      routingRulePath: '/whitepaper',
     });
 
-    await page.goto(routedURL);
+    // Poll the bare URL until the server-rendered HTML contains the target
+    // card's marker — that confirms the routing rule is indexed in the
+    // published realm AND the server cardURL rewrite is applying it.
+    let routedURL = `${realm.publishedRealmURL}whitepaper`;
+    await waitForPublishedMarker(page, routedURL, 'data-test-white-paper');
+
+    await page.goto(routedURL, { waitUntil: 'domcontentloaded' });
     await expect(page.locator('[data-test-white-paper]')).toBeVisible();
   });
 
@@ -450,84 +547,29 @@ test.describe('Host mode', () => {
     // match the client's `params.path === '<user>/<realm>'`, and
     // hydration would replace the SSR'd card with the bare-shell
     // fallback. This test pins the canonicalized comparator.
-    await login(page, username, password);
-    await page.goto(realmURL);
-    await page.locator('[data-test-stack-item-content]').first().waitFor();
-
-    await postCardSource(
-      page,
-      realmURL,
-      'realm.json',
-      JSON.stringify({
-        data: {
-          type: 'card',
-          attributes: {
-            cardInfo: { name: `Routed Realm ${randomUUID()}` },
-            hostRoutingRules: [{ path: '/' }],
-          },
-          relationships: {
-            'hostRoutingRules.0.instance': {
-              links: { self: './white-paper' },
-            },
-          },
-          meta: {
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/realm-config',
-              name: 'RealmConfig',
-            },
-          },
-        },
-      }),
-    );
-
-    await page.evaluate(
-      async ({ realmURL, publishedRealmURL }) => {
-        let sessions = JSON.parse(
-          window.localStorage.getItem('boxel-session') ?? '{}',
-        );
-        let token = sessions[realmURL];
-        if (!token) {
-          throw new Error(`No session token found for ${realmURL}`);
-        }
-        let response = await fetch('https://localhost:4205/_publish-realm', {
-          method: 'POST',
-          headers: {
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-            Authorization: token,
-          },
-          body: JSON.stringify({
-            sourceRealmURL: realmURL,
-            publishedRealmURL,
-          }),
-        });
-        if (!response.ok) {
-          throw new Error(await response.text());
-        }
-      },
-      { realmURL, publishedRealmURL },
-    );
-
-    await logout(page);
+    let realm = await createAndPublishHostModeRealm(page, {
+      routingRulePath: '/',
+    });
 
     // Wait until the SSR HTML at the canonical (trailing-slash) URL
     // contains the routed card's marker, then navigate to the
     // NO-TRAILING-SLASH variant and assert the marker stays visible
     // through hydration. The no-slash navigation is what the
     // canonicalization fix targets.
-    await waitUntil(async () => {
-      let response = await page.request.get(publishedRealmURL, {
-        headers: { Accept: 'text/html' },
-      });
-      if (!response.ok()) {
-        return false;
-      }
-      let text = await response.text();
-      return text.includes('data-test-white-paper');
-    });
+    await waitForPublishedMarker(
+      page,
+      realm.publishedRealmURL,
+      'data-test-white-paper',
+    );
 
-    let noSlashURL = publishedRealmURL.replace(/\/$/, '');
-    await page.goto(noSlashURL);
+    let noSlashURL = realm.publishedRealmURL.replace(/\/$/, '');
+    // The no-slash URL is a distinct server-render path from the
+    // trailing-slash one gated above; warm it on its own before
+    // navigating so `page.goto` doesn't race a cold render of this
+    // variant under prerender-pool load (a cold no-slash render that
+    // outruns the 60s test timeout is the flake this gate closes).
+    await waitForPublishedMarker(page, noSlashURL, 'data-test-white-paper');
+    await page.goto(noSlashURL, { waitUntil: 'domcontentloaded' });
     // `[data-test-host-mode-card="<id>"]` is set by the host SPA's
     // CardRenderer — that attribute exists ONLY post-hydration (it's
     // not in the SSR'd isolated_html). Pinning it to the rule's target
@@ -539,9 +581,43 @@ test.describe('Host mode', () => {
     //       the realm index card, the attribute value is `…/index`
     //       (or similar) and this assertion fails with a clear diff
     //       instead of silently catching the SSR'd marker.
-    let expectedRoutedCardId = `${publishedRealmURL}white-paper`;
+    let expectedRoutedCardId = `${realm.publishedRealmURL}white-paper`;
     await expect(
       page.locator(`[data-test-host-mode-card="${expectedRoutedCardId}"]`),
     ).toBeVisible();
+  });
+
+  // A routing rule whose target card no longer exists must degrade
+  // gracefully: the realm config keeps the rule (the read path only filters
+  // cross-realm targets, not missing ones), so serve-index rewrites the root
+  // to the dead card and the SPA's first store fetch for it 404s. Rather than
+  // taking the whole published site down with a raw card error, the host
+  // renders a friendly 404 placeholder for that path.
+  test('dangling `/` routing rule target renders a 404 placeholder', async ({
+    page,
+  }) => {
+    let realm = await createAndPublishHostModeRealm(page, {
+      routingRulePath: '/',
+      // Never created in the helper, so the rule dangles.
+      routingRuleTarget: './dangling-target',
+    });
+
+    // The usual card-marker gate can't be used here: the target 404s, so
+    // no isolated HTML is ever served at the root. Gate instead on the
+    // dead target's id appearing in serve-index's injected hostRoutingMap
+    // — that confirms the RealmConfig card is indexed and the rewrite is
+    // live (the base config ships an empty hostRoutingMap, so the slug
+    // only shows up once the rule is active).
+    await waitForPublishedMarker(
+      page,
+      realm.publishedRealmURL,
+      'dangling-target',
+    );
+
+    await page.goto(realm.publishedRealmURL, {
+      waitUntil: 'domcontentloaded',
+    });
+
+    await expect(page.locator('[data-test-host-mode-404]')).toBeVisible();
   });
 });

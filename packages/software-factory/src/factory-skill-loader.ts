@@ -1,13 +1,21 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
-import type { IssueData, ProjectData, ResolvedSkill } from './factory-agent';
+import type {
+  IssueData,
+  ProjectData,
+  ResolvedSkill,
+} from './factory-agent/index.ts';
+import { logger } from './logger.ts';
+import { startSpan } from './run-trace.ts';
+
+const log = logger('factory-skill-loader');
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-const PACKAGE_ROOT = resolve(__dirname, '..');
+const PACKAGE_ROOT = resolve(import.meta.dirname, '..');
 const MONOREPO_ROOT = resolve(PACKAGE_ROOT, '../..');
 /**
  * The SDK orchestrator and the new interactive Claude Code path each get
@@ -27,16 +35,39 @@ const DEFAULT_SKILLS_DIR = join(PACKAGE_ROOT, '.agents', 'skills-orchestrator');
  * found in the primary directory.
  *
  * - `packages/boxel-cli/plugin/skills/` hosts the boxel-cli Claude Code
- *   plugin skills (`boxel-api`, `boxel-command`, etc.) — boxel-cli owns the
- *   entire Boxel API surface, so its skills describe the platform. Same
- *   directory the plugin distributes to end users.
- * - The monorepo root `.agents/skills/` hosts shared domain skills
- *   (`boxel-development`, `boxel-file-structure`, `ember-best-practices`).
+ *   plugin skills (`boxel`, `boxel-api`, `boxel-command`, `boxel-file-def`,
+ *   etc.) — boxel-cli owns the entire Boxel API surface, so its skills
+ *   describe the platform. Same directory the plugin distributes to end
+ *   users; these skills and `ember-best-practices` /
+ *   `boxel-ui-component-discovery` are built from the boxel-skills repo by
+ *   `pnpm build:skills`.
+ * - The monorepo root `.agents/skills/` is a fallback slot for shared domain
+ *   skills, read directly by agents that follow the `.agents/skills`
+ *   convention. It holds `boxel-workspace-cardinal-rules`, which the plugin
+ *   dir above also carries: the plugin dir is searched first, so the copy
+ *   this loader resolves is the generated one, and editing the root copy does
+ *   not change what a factory run reads. Content changes to that skill belong
+ *   upstream in boxel-skills, which the plugin dir is generated from.
  */
 const DEFAULT_FALLBACK_DIRS = [
   join(MONOREPO_ROOT, 'packages', 'boxel-cli', 'plugin', 'skills'),
   join(MONOREPO_ROOT, '.agents', 'skills'),
+  // Package-local interactive skills (`packages/software-factory/.agents/skills`)
+  // are the primary skill set for the runbook (interactive Claude Code) loop.
+  // Listing them here lets the orchestrator's resolver pick them up too.
+  // `boxel-ui-component-discovery` (gated by `--enable-boxel-ui-discovery`)
+  // now resolves from the plugin dir above, not from here.
+  join(PACKAGE_ROOT, '.agents', 'skills'),
 ];
+
+/**
+ * All skill search directories in precedence order (primary first). Exposed
+ * for the on-demand skill tools (`list_skills` / `read_skill`) so their
+ * catalog matches exactly what the loader can resolve.
+ */
+export function skillSearchDirs(): string[] {
+  return [DEFAULT_SKILLS_DIR, ...DEFAULT_FALLBACK_DIRS];
+}
 
 /** Approximate characters per token for budget estimation. */
 const CHARS_PER_TOKEN = 4;
@@ -47,10 +78,12 @@ const CHARS_PER_TOKEN = 4;
  */
 const SKILL_PRIORITY: readonly string[] = [
   'software-factory-bootstrap',
-  'boxel-development',
+  'boxel',
   'boxel-file-structure',
   'boxel-api',
   'boxel-command',
+  'boxel-file-def',
+  'boxel-ui-component-discovery',
   'ember-best-practices',
   'software-factory-operations',
 ];
@@ -59,58 +92,67 @@ const SKILL_PRIORITY: readonly string[] = [
 // Keyword matchers for skill resolution
 // ---------------------------------------------------------------------------
 
-/** Keywords in issue content that indicate .gts component work. */
-const GTS_KEYWORDS = [
-  '.gts',
-  'component',
-  'template',
-  'glimmer',
-  'ember',
-  'CardDef',
-  'FieldDef',
-];
+/**
+ * Reference files in the `boxel` skill's `references/` directory and the
+ * keywords that trigger their inclusion. When an issue doesn't match any
+ * keyword, only the "always load" references are included.
+ *
+ * `technical-rules.md` is deliberately absent from both this map and the
+ * always-load list: boxel-skills folded its content into the `boxel`
+ * SKILL.md Cardinal Rules table and the core-patterns.md schema-hygiene
+ * checklist (both of which the factory already loads) and removed the file;
+ * the copy still in the built plugin skill only lingers until the next
+ * BOXEL_SKILLS_VERSION bump.
+ */
+export const REFERENCE_KEYWORD_MAP: Record<string, string[]> = {
+  'core-patterns.md': ['pattern', 'card', 'structure', 'safe'],
+  'template-syntax.md': ['template', 'component', 'render'],
+  'delegated-rendering.md': ['delegat', 'render', 'template'],
+  'styling-design.md': ['style', 'css', 'design', 'layout', 'visual'],
+  'design-playbook.md': ['design', 'visual', 'style'],
+  'theme-design-system.md': ['theme', 'design system', 'token', 'style'],
+  'fitted-formats.md': ['fitted', 'format', 'grid', 'dashboard'],
+  'container-query-fitted-layout.md': ['fitted'],
+  'prefers-wide-format.md': ['wide', 'dashboard', 'layout'],
+  'query-systems.md': ['query', 'search', 'filter', 'find'],
+  'searchable-fields.md': ['query', 'search', 'filter'],
+  'data-management.md': ['data', 'manage', 'relationship', 'link'],
+  'card-references.md': ['relationship', 'link', 'instance'],
+  'defensive-link-traversal.md': ['relationship', 'link', 'defensive'],
+  'relationship-loading-state.md': ['relationship', 'link', 'loading'],
+  'base-field-catalog.md': ['field', 'schema'],
+  'enumerations.md': ['enum', 'select', 'option', 'choice'],
+  'defensive-programming.md': ['defensive', 'guard', 'error', 'safe'],
+  'external-libraries.md': ['library', 'external', 'third-party', 'npm'],
+  'command-development.md': ['command', 'action', 'invoke'],
+  'command-invocation-modes.md': ['command', 'invoke'],
+  'date-math.md': ['date', 'time', 'schedule', 'calendar', 'deadline'],
+  'formatters.md': ['format', 'currency', 'number', 'duration'],
+  'icons.md': ['icon'],
+  'imagedef.md': ['image', 'photo', 'thumbnail', 'media'],
+  'lint-workflow.md': ['lint'],
+  'spec-usage.md': ['spec', 'catalog', 'specification'],
+};
 
-/** Keywords that indicate factory workflow / delivery issues. */
-const FACTORY_WORKFLOW_KEYWORDS = [
-  'factory',
-  'delivery',
-  'workflow',
-  'pipeline',
-  'orchestrat',
+/** References that are always loaded for the `boxel` skill. */
+export const ALWAYS_LOAD_REFERENCES: readonly string[] = [
+  'core-concept.md',
+  'quick-reference.md',
+  'common-imports.md',
+  'qunit-testing.md',
+  'spec-usage.md',
 ];
 
 /**
- * Reference files in `boxel-development/references/` and the keywords that
- * trigger their inclusion. When an issue doesn't match any keyword, only the
- * "always load" references from SKILL.md are included.
+ * Curated reference names not yet present in the built `boxel` skill —
+ * listed ahead of a boxel-skills release that adds them. Missing names are
+ * harmless at runtime (`filterBoxelRefs` filters what's actually on disk),
+ * and the validation test uses this set strictly: once a name ships in the
+ * built skill, the test fails until it is removed from here.
+ *
+ * Empty: `qunit-testing.md` shipped in boxel-skills v0.0.30.
  */
-const REFERENCE_KEYWORD_MAP: Record<string, string[]> = {
-  'dev-core-patterns.md': ['pattern', 'card', 'structure', 'safe'],
-  'dev-template-patterns.md': ['template', 'component', 'render'],
-  'dev-delegated-rendering.md': ['delegat', 'render', 'template'],
-  'dev-styling-design.md': ['style', 'css', 'design', 'layout', 'visual'],
-  'dev-theme-design-system.md': ['theme', 'design system', 'token', 'style'],
-  'dev-fitted-formats.md': ['fitted', 'format', 'grid', 'dashboard'],
-  'dev-query-systems.md': ['query', 'search', 'filter', 'find'],
-  'dev-data-management.md': ['data', 'manage', 'relationship', 'link'],
-  'dev-file-def.md': ['file', 'asset', 'FileDef', 'upload'],
-  'dev-enumerations.md': ['enum', 'select', 'option', 'choice'],
-  'dev-defensive-programming.md': ['defensive', 'guard', 'error', 'safe'],
-  'dev-external-libraries.md': ['library', 'external', 'third-party', 'npm'],
-  'dev-command-development.md': ['command', 'action', 'invoke'],
-  'dev-spec-usage.md': ['spec', 'catalog', 'specification'],
-  'dev-qunit-testing.md': ['test', 'qunit', 'test.gts', 'verify'],
-  'dev-replicate-ai.md': ['replicate', 'ai', 'model', 'ml'],
-};
-
-/** References that are always loaded for boxel-development (per SKILL.md). */
-const ALWAYS_LOAD_REFERENCES: readonly string[] = [
-  'dev-core-concept.md',
-  'dev-technical-rules.md',
-  'dev-quick-reference.md',
-  'dev-qunit-testing.md',
-  'dev-spec-usage.md',
-];
+export const PENDING_BOXEL_REFERENCES: readonly string[] = [];
 
 // ---------------------------------------------------------------------------
 // Internal types for tracking reference metadata
@@ -139,16 +181,13 @@ export class DefaultSkillResolver implements SkillResolver {
   /**
    * Determine which skills to load based on issue and project context.
    *
-   * Resolution rules:
-   * 1. boxel-development + boxel-file-structure — always loaded
-   * 2. ember-best-practices — when issue involves .gts component code
-   * 3. software-factory-operations — for factory delivery workflow issues
-   * 4. boxel-api + boxel-command — always loaded so the agent has the realm
-   *    search query syntax and host-command failure modes inline.
-   * 5. KnowledgeArticle tags can specify additional skills.
+   * Meta issues (bootstrap / analysis / design) get their own dedicated
+   * skill sets. Everything else gets the lean always-on core — the
+   * operations skill, file structure, and cardinal rules — plus any
+   * KnowledgeArticle skill tags; all other skills are discoverable at
+   * runtime via the `list_skills` / `read_skill` tools.
    */
   resolve(issue: IssueData, project: ProjectData): string[] {
-    let issueText = extractIssueText(issue);
     let issueType = (issue as Record<string, unknown>).issueType;
 
     // Bootstrap issues get the bootstrap skill instead of implementation skills
@@ -156,31 +195,39 @@ export class DefaultSkillResolver implements SkillResolver {
       return ['software-factory-bootstrap', 'boxel-file-structure'];
     }
 
-    let skills: string[] = [
-      'boxel-development',
+    // Port-analysis issues (GitHub-port flow) are research turns — no
+    // card authoring, so the design-first operations skill would only
+    // mislead. File-structure covers the tracker JSON they do write.
+    if (issueType === 'analysis') {
+      return ['boxel-file-structure'];
+    }
+
+    // Design-foundation turns author a brand guide + tokens + family
+    // coherence sheet — taste work, not card code. File-structure covers
+    // the KA JSON; boxel-design carries the visual-language method (it
+    // resolves from the materialized catalog's fallback dirs).
+    if (issueType === 'design') {
+      return ['boxel-file-structure', 'boxel-design'];
+    }
+
+    // Lean core: small always-on set; everything else on demand via the
+    // list_skills / read_skill tools. The design-first workflow and the
+    // "when you need X, read Y" pointer table live in the operations
+    // skill itself.
+    let leanSkills = [
+      'software-factory-operations',
       'boxel-file-structure',
-      'boxel-api',
-      'boxel-command',
+      'boxel-workspace-cardinal-rules',
     ];
-
-    if (matchesAnyKeyword(issueText, GTS_KEYWORDS)) {
-      skills.push('ember-best-practices');
-    }
-
-    if (matchesAnyKeyword(issueText, FACTORY_WORKFLOW_KEYWORDS)) {
-      skills.push('software-factory-operations');
-    }
-
-    // Check for additional skills from knowledge articles on the project
-    // and from related knowledge on the issue itself.
-    let additionalSkills = extractKnowledgeSkillTags(project, issue);
-    for (let skillName of additionalSkills) {
-      if (!skills.includes(skillName)) {
-        skills.push(skillName);
+    for (let skillName of extractKnowledgeSkillTags(project, issue)) {
+      if (!leanSkills.includes(skillName)) {
+        leanSkills.push(skillName);
       }
     }
-
-    return skills;
+    log.info(
+      `Resolved skills (lean core) for issue "${issue.id}": ${leanSkills.join(', ')}`,
+    );
+    return leanSkills;
   }
 }
 
@@ -213,8 +260,8 @@ export class SkillLoader implements SkillLoaderInterface {
   /**
    * Load a single skill by name.
    * Searches the primary skills directory first, then each fallback directory.
-   * When an issue is provided, `boxel-development` references are filtered to
-   * only include issue-relevant files (always applied, not just with a budget).
+   * When an issue is provided, `boxel` references are filtered to only
+   * include issue-relevant files (always applied, not just with a budget).
    * Results are cached for the duration of the factory run.
    */
   async load(skillName: string, issue?: IssueData): Promise<ResolvedSkill> {
@@ -230,6 +277,9 @@ export class SkillLoader implements SkillLoaderInterface {
     skillNames: string[],
     issue?: IssueData,
   ): Promise<ResolvedSkill[]> {
+    let endLoadSpan = startSpan('skills', 'load', {
+      skills: skillNames.join(','),
+    });
     let results: ResolvedSkill[] = [];
 
     for (let name of skillNames) {
@@ -245,6 +295,7 @@ export class SkillLoader implements SkillLoaderInterface {
       }
     }
 
+    endLoadSpan({ loaded: results.length });
     return results;
   }
 
@@ -297,7 +348,7 @@ export class SkillLoader implements SkillLoaderInterface {
       }
     }
 
-    // Check for references/ directory (e.g., boxel-development).
+    // Check for references/ directory (e.g., the boxel skill).
     // Load all reference files with their filenames preserved.
     if (!references) {
       let refsDir = join(skillDir, 'references');
@@ -353,7 +404,7 @@ export class SkillLoader implements SkillLoaderInterface {
  * skipped, and later (lower-priority) skills may still be included if they
  * fit within the remaining budget.
  *
- * Reference filtering for `boxel-development` is handled at load time by the
+ * Reference filtering for the `boxel` skill is handled at load time by the
  * SkillLoader when an issue is provided — it is always applied regardless of
  * whether a budget is set.
  */
@@ -418,15 +469,15 @@ export function estimateTokens(skill: ResolvedSkill): number {
 
 /**
  * Convert RawSkillData (with named references) to the public ResolvedSkill
- * interface. For `boxel-development`, filters references by issue relevance
+ * interface. For the `boxel` skill, filters references by issue relevance
  * using actual filenames — this happens on every load, not just when a
  * budget is enforced.
  */
 function toResolvedSkill(raw: RawSkillData, issue?: IssueData): ResolvedSkill {
   let refs = raw.references;
 
-  if (refs && raw.name === 'boxel-development' && issue) {
-    refs = filterBoxelDevelopmentRefs(refs, issue);
+  if (refs && raw.name === 'boxel' && issue) {
+    refs = filterBoxelRefs(refs, issue);
   }
 
   let refContents =
@@ -440,11 +491,11 @@ function toResolvedSkill(raw: RawSkillData, issue?: IssueData): ResolvedSkill {
 }
 
 /**
- * Filter boxel-development references to include only the "always load"
+ * Filter `boxel` skill references to include only the "always load"
  * references plus those whose keywords match the issue text.
  * Uses actual filenames from disk — no index-based reconstruction.
  */
-function filterBoxelDevelopmentRefs(
+function filterBoxelRefs(
   refs: NamedReference[],
   issue: IssueData,
 ): NamedReference[] {
@@ -466,7 +517,7 @@ function filterBoxelDevelopmentRefs(
       return true;
     }
 
-    // References not in the keyword map (e.g., dev-file-editing.md) are only
+    // References not in the keyword map (e.g., file-editing.md) are only
     // loaded when no issue context is available (handled by the caller).
     return false;
   });

@@ -1,31 +1,40 @@
-import { module, test, assert } from 'qunit';
+import QUnit from 'qunit';
+const { module, test, assert } = QUnit;
 import { getPatchTool } from '@cardstack/runtime-common/helpers/ai';
 import type { ChatCompletionMessageFunctionToolCall } from 'openai/resources/chat/completions';
 import {
   APP_BOXEL_MESSAGE_MSGTYPE,
-  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
-  APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
-  APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
-  APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+  APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+  APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
+  APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+  APP_BOXEL_TOOL_RESULT_REL_TYPE,
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
   APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
   APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
   APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
   APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE,
-  DEFAULT_LLM,
-  APP_BOXEL_COMMAND_REQUESTS_KEY,
+  DEFAULT_FALLBACK_MODELS,
+  DEFAULT_FALLBACK_MODEL_ID,
+  APP_BOXEL_ACTIVE_LLM,
+  APP_BOXEL_TOOL_REQUESTS_KEY,
+  APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+  LEGACY_APP_BOXEL_COMMAND_REQUESTS_KEY,
+  LEGACY_APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  LEGACY_APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+  LEGACY_APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import type {
   MatrixEvent as DiscreteMatrixEvent,
   Tool,
   CardMessageContent,
-} from 'https://cardstack.com/base/matrix-event';
+} from '@cardstack/base/matrix-event';
 import { EventStatus } from 'matrix-js-sdk';
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import { readFileSync } from 'fs-extra';
+import type { CardDef } from '@cardstack/base/card-api';
+import fsExtra from 'fs-extra';
+const { readFileSync } = fsExtra;
 import * as path from 'path';
-import { FakeMatrixClient } from './helpers/fake-matrix-client';
+import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';
 import {
   type LooseCardResource,
   ensureTrailingSlash,
@@ -33,10 +42,15 @@ import {
   rri,
 } from '@cardstack/runtime-common';
 import {
+  absolutizeSkillLinks,
   buildPromptForModel,
+  constructHistory,
   getPromptParts,
   getRelevantCards,
   getTools,
+  isMarkdownSkillFile,
+  parseMarkdownSkill,
+  skillCardsToMessages,
   SKILL_INSTRUCTIONS_MESSAGE,
 } from '@cardstack/runtime-common/ai';
 import type { TextContent } from '@cardstack/runtime-common/ai/types';
@@ -48,6 +62,41 @@ const catalogRealmURL = ensureTrailingSlash(
 
 function replaceCatalogRealmURL(value: string): string {
   return value.split(DEFAULT_CATALOG_REALM_URL).join(catalogRealmURL);
+}
+
+// The prompt marks the end of the stable conversation prefix with a
+// cache_control breakpoint, which turns that message's string content into a
+// content-part array. Tests that read a message's text must tolerate both
+// shapes, since which message carries the marker shifts with the history.
+function messageText(
+  message: { content: string | { type: string; text?: string }[] } | undefined,
+): string {
+  if (!message) {
+    return '';
+  }
+  let { content } = message;
+  if (typeof content === 'string') {
+    return content;
+  }
+  return content
+    .filter((part) => part.type === 'text')
+    .map((part) => part.text ?? '')
+    .join('');
+}
+
+// Total cache_control markers across the whole prompt. Anthropic allows at
+// most 4 per request; the prompt is designed to emit exactly 2 (system +
+// end of stable history), or 1 on a first turn with no history.
+function countCacheBreakpoints(
+  messages: { content: string | { cache_control?: unknown }[] }[],
+): number {
+  let count = 0;
+  for (let message of messages) {
+    if (Array.isArray(message.content)) {
+      count += message.content.filter((part) => part.cache_control).length;
+    }
+  }
+  return count;
 }
 
 function oldPatchTool(card: CardDef, properties: any): Tool {
@@ -175,12 +224,12 @@ module('buildPromptForModel', (hooks) => {
     // Should have a system prompt and a user prompt
     assert.equal(result.length, 3);
     assert.equal(result[0].role, 'system');
-    assert.equal(result[1].role, 'system');
+    assert.equal(result[1].role, 'user');
     assert.equal(result[2].role, 'user');
-    assert.equal(result[2].content, 'Hey');
 
+    assert.equal(messageText(result[1]), 'Hey');
     assert.equal(
-      result[1].content,
+      result[2].content,
       `The user is currently viewing the following user interface:
 Room ID: room1
 Submode: code
@@ -231,7 +280,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
                   },
                   {
                     codeRef: {
-                      module: rri('https://cardstack.com/base/card-api'),
+                      module: rri('@cardstack/base/card-api'),
                       name: 'CardDef',
                     },
                     fields: [],
@@ -274,12 +323,12 @@ Current date and time: 2025-06-11T11:43:00.533Z
     // Should have a system prompt and a user prompt
     assert.equal(result.length, 3);
     assert.equal(result[0].role, 'system');
-    assert.equal(result[1].role, 'system');
+    assert.equal(result[1].role, 'user');
     assert.equal(result[2].role, 'user');
-    assert.equal(result[2].content, 'Hey');
 
+    assert.equal(messageText(result[1]), 'Hey');
     assert.equal(
-      result[1].content,
+      result[2].content,
       `The user is currently viewing the following user interface:
 Room ID: room1
 Submode: code
@@ -290,7 +339,7 @@ File open in code editor: http://localhost:4201/experiments/author.gts
   Inheritance chain:
     1. Address from http://localhost:4201/experiments/author
        Fields: street, city, state
-      2. CardDef from https://cardstack.com/base/card-api
+      2. CardDef from @cardstack/base/card-api
   Selected text: lines 10-12 (1-based), columns 5-20 (1-based)
   Note: Line numbers in selection refer to the original file. Attached file contents below show line numbers for reference.
 Module inspector panel: preview
@@ -359,12 +408,12 @@ Current date and time: 2025-06-11T11:43:00.533Z
     // Should have a system prompt and a user prompt
     assert.equal(result.length, 3);
     assert.equal(result[0].role, 'system');
-    assert.equal(result[1].role, 'system');
+    assert.equal(result[1].role, 'user');
     assert.equal(result[2].role, 'user');
-    assert.equal(result[2].content, 'Hey');
 
+    assert.equal(messageText(result[1]), 'Hey');
     assert.equal(
-      result[1].content,
+      result[2].content,
       `The user is currently viewing the following user interface:
 Room ID: room1
 Submode: workspace-chooser
@@ -431,12 +480,12 @@ Current date and time: 2025-06-11T11:43:00.533Z
     // Should have a system prompt and a user prompt
     assert.equal(result.length, 3);
     assert.equal(result[0].role, 'system');
-    assert.equal(result[1].role, 'system');
+    assert.equal(result[1].role, 'user');
     assert.equal(result[2].role, 'user');
-    assert.equal(result[2].content, 'Hey');
 
+    assert.equal(messageText(result[1]), 'Hey');
     assert.equal(
-      result[1].content,
+      result[2].content,
       `The user is currently viewing the following user interface:
 Room ID: room1
 Submode: code
@@ -518,10 +567,10 @@ Current date and time: 2025-06-11T11:43:00.533Z
     // Should include the body as well as the card
     assert.equal(result.length, 3);
     assert.equal(result[0].role, 'system');
-    assert.equal(result[1].role, 'system');
+    assert.equal(result[1].role, 'user');
     assert.equal(result[2].role, 'user');
     assert.true(
-      (result[2].content as string).startsWith('Hey'),
+      messageText(result[1]).includes('Hey'),
       'message body should be in the user prompt',
     );
     if (
@@ -529,32 +578,32 @@ Current date and time: 2025-06-11T11:43:00.533Z
       history[0].content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE
     ) {
       assert.true(
-        (result[2].content as string).includes(`"firstName": "Terry"`),
+        messageText(result[1]).includes(`"firstName": "Terry"`),
         'attached card should be in the message that it was sent with 1',
       );
       assert.true(
-        (result[2].content as string).includes(`"lastName": "Pratchett"`),
+        messageText(result[1]).includes(`"lastName": "Pratchett"`),
         'attached card should be in the message that it was sent with 2',
       );
       assert.true(
-        (result[1].content as string).includes('Room ID: room1'),
-        'roomId should be in the system context message',
+        messageText(result[2]).includes('Room ID: room1'),
+        'roomId should be in the trailing context message',
       );
       assert.true(
-        (result[1].content as string).includes('Submode: interact'),
-        'submode should be in the system context message',
+        messageText(result[2]).includes('Submode: interact'),
+        'submode should be in the trailing context message',
       );
       assert.true(
-        (result[1].content as string).includes(
+        messageText(result[2]).includes(
           'Workspace: http://localhost:4201/experiments',
         ),
-        'workspace should be in the system context message',
+        'workspace should be in the trailing context message',
       );
       assert.true(
-        (result[1].content as string).includes(
+        messageText(result[2]).includes(
           'Open cards:\n - http://localhost:4201/experiments/Author/1\n',
         ),
-        'open card ids should be in the system context message',
+        'open card ids should be in the trailing context message',
       );
     } else {
       assert.true(
@@ -1020,7 +1069,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
 
     let userMessages = prompt.filter((message) => message.role === 'user');
     assert.ok(
-      (userMessages[0]?.content as string).includes(
+      messageText(userMessages[0]).includes(
         `
 Attached Files (files with newer versions don't show their content):
 [spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts)
@@ -1029,7 +1078,7 @@ Attached Files (files with newer versions don't show their content):
       ),
     );
     assert.ok(
-      (userMessages[1]?.content as string).includes(
+      messageText(userMessages[1]).includes(
         `
 Attached Files (files with newer versions don't show their content):
 [spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts)
@@ -1040,7 +1089,7 @@ Attached Files (files with newer versions don't show their content):
       ),
     );
     assert.ok(
-      (userMessages[2]?.content as string).includes(
+      messageText(userMessages[2]).includes(
         `
 Attached Files (files with newer versions don't show their content):
 [spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts):
@@ -1052,7 +1101,7 @@ Attached Files (files with newer versions don't show their content):
     );
 
     assert.ok(
-      (prompt[prompt.length - 2].content as string).includes(
+      messageText(prompt[prompt.length - 1]).includes(
         'File open in code editor: http://test-realm-server/my-realm/spaghetti-recipe.gts',
       ),
       'Context should include the URL of the file open in the code editor',
@@ -1355,26 +1404,24 @@ Attached Files (files with newer versions don't show their content):
       (message) => message.role === 'user',
     );
     assert.true(
-      (userMessages[0]?.content as string).includes(
+      messageText(userMessages[0]).includes(
         'http://localhost:4201/experiments/Author/1',
       ),
     );
     assert.false(
-      (userMessages[0]?.content as string).includes('"firstName": "Terry"'),
+      messageText(userMessages[0]).includes('"firstName": "Terry"'),
       'should not include the contents of the first version of the card in the first user message',
     );
     assert.true(
-      (userMessages[1]?.content as string).includes(
+      messageText(userMessages[1]).includes(
         'http://localhost:4201/experiments/Author/1',
       ),
     );
     assert.true(
-      (userMessages[1]?.content as string).includes(
-        '"firstName": "Newer Terry"',
-      ),
+      messageText(userMessages[1]).includes('"firstName": "Newer Terry"'),
     );
     assert.true(
-      (userMessages[1]?.content as string).includes(
+      messageText(userMessages[1]).includes(
         'http://localhost:4201/experiments/Author/2',
       ),
     );
@@ -1747,10 +1794,10 @@ Attached Files (files with newer versions don't show their content):
     let nonEditableCardsMessage =
       'You are unable to edit any cards, the user has not given you access, they need to open the card and let it be auto-attached.';
 
-    let userContextMessage = messages?.[messages.length - 2];
+    let userContextMessage = messages?.[messages.length - 1];
     assert.ok(
-      (userContextMessage?.content as string).includes(nonEditableCardsMessage),
-      'System context message should include the "unable to edit cards" message when there are attached cards and no tools, and no attached files, but was ' +
+      messageText(userContextMessage).includes(nonEditableCardsMessage),
+      'The context leading the user turn should include the "unable to edit cards" message when there are attached cards and no tools, and no attached files, but was ' +
         userContextMessage?.content,
     );
 
@@ -1770,7 +1817,7 @@ Attached Files (files with newer versions don't show their content):
     );
 
     assert.ok(
-      !(messages2?.[messages2.length - 2].content as string).includes(
+      !messageText(messages2?.[messages2.length - 2]).includes(
         nonEditableCardsMessage,
       ),
       'System context message should not include the "unable to edit cards" message when there are attached cards and a tool',
@@ -1796,7 +1843,7 @@ Attached Files (files with newer versions don't show their content):
     );
 
     assert.ok(
-      !(messages3?.[messages3.length - 2].content as string).includes(
+      !messageText(messages3?.[messages3.length - 2]).includes(
         nonEditableCardsMessage,
       ),
       'System context message should not include the "unable to edit cards" message when there is an attached file',
@@ -1930,7 +1977,7 @@ Attached Files (files with newer versions don't show their content):
 
   test('should include instructions in system prompt for skill cards', async () => {
     const rawEvents = readFileSync(
-      path.join(__dirname, 'resources/chats/added-skill.json'),
+      path.join(import.meta.dirname, 'resources/chats/added-skill.json'),
       'utf-8',
     );
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
@@ -1943,7 +1990,7 @@ Attached Files (files with newer versions don't show their content):
       text: JSON.stringify({
         data: {
           type: 'card',
-          id: 'https://cardstack.com/base/Skill/card-editing',
+          id: '@cardstack/base/Skill/card-editing',
           attributes: {
             instructions:
               '- If the user wants the data they see edited, AND the patchCardInstance function is available, you MUST use the "patchCardInstance" function to make the change.\n- If the user wants the data they see edited, AND the patchCardInstance function is NOT available, you MUST ask the user to open the card and share it with you.\n- If you do not call patchCardInstance, the user will not see the change.\n- You can ONLY modify cards shared with you. If there is no patchCardInstance function or tool, then the user hasn\'t given you access.\n- NEVER tell the user to use patchCardInstance; you should always do it for them.\n- If the user wants to search for a card instance, AND the "searchCard" function is available, you MUST use the "searchCard" function to find the card instance.\nOnly recommend one searchCard function at a time.\nIf the user wants to edit a field of a card, you can optionally use "searchCard" to help find a card instance that is compatible with the field being edited before using "patchCardInstance" to make the change of the field.\n You MUST confirm with the user the correct choice of card instance that he intends to use based upon the results of the search.',
@@ -1983,13 +2030,14 @@ Attached Files (files with newer versions don't show their content):
     ).messages!;
     assert.equal(result.length, 3);
     assert.equal(result[0].role, 'system');
+    assert.equal(result[2].role, 'user');
     const systemPromptText = (result[0].content as TextContent[])
       .map((c) => c.text)
       .join('\n');
     assert.true(systemPromptText.includes(SKILL_INSTRUCTIONS_MESSAGE));
     assert.true(
       systemPromptText.includes(
-        'Skill (id: https://cardstack.com/base/Skill/card-editing, title: Card Editing):',
+        'Skill (id: @cardstack/base/Skill/card-editing, title: Card Editing):',
       ),
       'includes skill title metadata when present',
     );
@@ -2009,7 +2057,7 @@ Attached Files (files with newer versions don't show their content):
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/added-skill-and-attached-card.json',
         ),
         'utf-8',
@@ -2022,7 +2070,7 @@ Attached Files (files with newer versions don't show their content):
       text: JSON.stringify({
         data: {
           type: 'card',
-          id: 'https://cardstack.com/base/Skill/card-editing',
+          id: '@cardstack/base/Skill/card-editing',
           attributes: {
             instructions:
               '- If the user wants the data they see edited, AND the patchCardInstance function is available, you MUST use the "patchCardInstance" function to make the change.\n- If the user wants the data they see edited, AND the patchCardInstance function is NOT available, you MUST ask the user to open the card and share it with you.\n- If you do not call patchCardInstance, the user will not see the change.\n- You can ONLY modify cards shared with you. If there is no patchCardInstance function or tool, then the user hasn\'t given you access.\n- NEVER tell the user to use patchCardInstance; you should always do it for them.\n- If the user wants to search for a card instance, AND the "searchCard" function is available, you MUST use the "searchCard" function to find the card instance.\nOnly recommend one searchCard function at a time.\nIf the user wants to edit a field of a card, you can optionally use "searchCard" to help find a card instance that is compatible with the field being edited before using "patchCardInstance" to make the change of the field.\n You MUST confirm with the user the correct choice of card instance that he intends to use based upon the results of the search.',
@@ -2114,9 +2162,9 @@ Attached Files (files with newer versions don't show their content):
       systemPromptText.includes('Use pirate colloquialism when responding.'),
       'skill card instructions included in the system message',
     );
-    assert.equal(result[2].role, 'user');
+    assert.equal(result[1].role, 'user');
     assert.true(
-      (result[2].content as string).includes(
+      messageText(result[1]).includes(
         '"appTitle": "Radio Episode Tracker for Nerds"',
       ),
       'attached card details included in the user message',
@@ -2127,7 +2175,7 @@ Attached Files (files with newer versions don't show their content):
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/added-two-skills-removed-one-skill.json',
         ),
         'utf-8',
@@ -2203,7 +2251,7 @@ Attached Files (files with newer versions don't show their content):
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/added-two-skills-removed-two-skills.json',
         ),
         'utf-8',
@@ -2230,7 +2278,7 @@ Attached Files (files with newer versions don't show their content):
     // handle that.
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/skill-card-no-id.json'),
+        path.join(import.meta.dirname, 'resources/chats/skill-card-no-id.json'),
         'utf-8',
       ),
     );
@@ -2241,7 +2289,7 @@ Attached Files (files with newer versions don't show their content):
       text: JSON.stringify({
         data: {
           type: 'card',
-          id: 'https://cardstack.com/base/Skill/card-editing',
+          id: '@cardstack/base/Skill/card-editing',
           attributes: {
             instructions:
               '- If the user wants the data they see edited, AND the patchCardInstance function is available, you MUST use the "patchCardInstance" function to make the change.\n- If the user wants the data they see edited, AND the patchCardInstance function is NOT available, you MUST ask the user to open the card and share it with you.\n- If you do not call patchCardInstance, the user will not see the change.\n- You can ONLY modify cards shared with you. If there is no patchCardInstance function or tool, then the user hasn\'t given you access.\n- NEVER tell the user to use patchCardInstance; you should always do it for them.\n- If the user wants to search for a card instance, AND the "searchCard" function is available, you MUST use the "searchCard" function to find the card instance.\nOnly recommend one searchCard function at a time.\nIf the user wants to edit a field of a card, you can optionally use "searchCard" to help find a card instance that is compatible with the field being edited before using "patchCardInstance" to make the change of the field.\n You MUST confirm with the user the correct choice of card instance that he intends to use based upon the results of the search.',
@@ -2291,7 +2339,7 @@ Attached Files (files with newer versions don't show their content):
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/two-messages-with-same-skill-card.json',
         ),
         'utf-8',
@@ -2339,7 +2387,10 @@ Attached Files (files with newer versions don't show their content):
   test('if tool calls are required, ensure they are set', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/forced-function-call.json'),
+        path.join(
+          import.meta.dirname,
+          'resources/chats/forced-function-call.json',
+        ),
         'utf-8',
       ),
     );
@@ -2350,6 +2401,7 @@ Attached Files (files with newer versions don't show their content):
       fakeMatrixClient,
     );
     assert.equal(messages!.length, 3);
+    assert.equal(messages![1].role, 'user');
     assert.equal(messages![2].role, 'user');
     assert.true(tools!.length === 1);
     assert.deepEqual(toolChoice, {
@@ -2596,7 +2648,7 @@ Attached Files (files with newer versions don't show their content):
               functions: [],
             },
           },
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: 'tool-call-id-1',
               name: 'searchCardsByTypeAndTitle',
@@ -2621,16 +2673,16 @@ Attached Files (files with newer versions don't show their content):
         status: EventStatus.SENT,
       },
       {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         room_id: 'room-id-1',
         sender: '@tintinthong:localhost',
         content: {
           'm.relates_to': {
             event_id: 'command-event-id-1',
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
             key: 'applied',
           },
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
           commandRequestId: 'tool-call-id-1',
           data: {
             card: {
@@ -2666,7 +2718,7 @@ Attached Files (files with newer versions don't show their content):
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'https://cardstack.com/base/search-results',
+                      module: '@cardstack/base/search-results',
                       name: 'SearchResults',
                     },
                   },
@@ -2706,16 +2758,103 @@ Attached Files (files with newer versions don't show their content):
     );
     assert.equal(result[5].role, 'tool');
     assert.equal(result[5].tool_call_id, 'tool-call-id-1');
-    const expected = `Tool call executed, with result card: {"data":{"type":"card","attributes":{"title":"Search Results","description":"Here are the search results","results":[{"data":{"type":"card","id":"http://localhost:4201/drafts/Author/1","attributes":{"firstName":"Alice","lastName":"Enwunder","photo":null,"body":"Alice is a software engineer at Google.","description":null,"thumbnailURL":null},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}]},"meta":{"adoptsFrom":{"module":"https://cardstack.com/base/search-results","name":"SearchResults"}}}}.`;
+    const expected = `Tool call executed, with result card: {"data":{"type":"card","attributes":{"title":"Search Results","description":"Here are the search results","results":[{"data":{"type":"card","id":"http://localhost:4201/drafts/Author/1","attributes":{"firstName":"Alice","lastName":"Enwunder","photo":null,"body":"Alice is a software engineer at Google.","description":null,"thumbnailURL":null},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}]},"meta":{"adoptsFrom":{"module":"@cardstack/base/search-results","name":"SearchResults"}}}}.`;
 
-    assert.equal((result[5].content as string).trim(), expected.trim());
+    assert.equal(messageText(result[5]).trim(), expected.trim());
+  });
+
+  test('pairs a pre-rename request/result (legacy wire keys) with the same tool_call_id', async () => {
+    // A room whose history predates the command → tool rename replays events
+    // with the legacy spellings forever; prompt assembly must pair them
+    // exactly as it pairs new-keyed events.
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        room_id: 'room-id-1',
+        sender: '@user:localhost',
+        content: {
+          body: 'set the title',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          data: { context: { tools: [], functions: [] } },
+        },
+        origin_server_ts: 1722242847000,
+        unsigned: { age: 1000, transaction_id: 't0' },
+        event_id: 'user-event-id-1',
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        room_id: 'room-id-1',
+        sender: '@aibot:localhost',
+        content: {
+          body: 'Setting the title',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          data: { context: { functions: [] } },
+          [LEGACY_APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+            {
+              id: 'legacy-tool-call-id-1',
+              name: 'patchCardInstance',
+              arguments: JSON.stringify({
+                attributes: { description: 'Set the title' },
+              }),
+            },
+          ],
+        },
+        origin_server_ts: 1722242849000,
+        unsigned: { age: 900, transaction_id: 't1' },
+        event_id: 'legacy-command-event-id-1',
+        status: EventStatus.SENT,
+      },
+      {
+        type: LEGACY_APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        room_id: 'room-id-1',
+        sender: '@user:localhost',
+        content: {
+          'm.relates_to': {
+            event_id: 'legacy-command-event-id-1',
+            rel_type: LEGACY_APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            key: 'applied',
+          },
+          msgtype: LEGACY_APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          commandRequestId: 'legacy-tool-call-id-1',
+          data: { context: { tools: [], functions: [] } },
+        },
+        origin_server_ts: 1722242853000,
+        unsigned: { age: 800, transaction_id: 't2' },
+        event_id: 'legacy-command-result-id-1',
+        status: EventStatus.SENT,
+      },
+    ];
+    const result = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      [],
+      [],
+      [],
+      fakeMatrixClient,
+    );
+    let assistantMessage = result.find((m) => m.role === 'assistant');
+    assert.ok(
+      assistantMessage?.tool_calls?.some(
+        (tc) => tc.id === 'legacy-tool-call-id-1',
+      ),
+      'the legacy-keyed request surfaces as a tool call',
+    );
+    let toolMessage = result.find((m) => m.role === 'tool');
+    assert.equal(
+      (toolMessage as { tool_call_id?: string })?.tool_call_id,
+      'legacy-tool-call-id-1',
+      'the legacy-typed result pairs with the same tool_call_id',
+    );
   });
 
   test('Tools remain available in prompt parts even when not in last message', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/required-tools-multiple-messages.json',
         ),
         'utf-8',
@@ -2741,7 +2880,7 @@ Attached Files (files with newer versions don't show their content):
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/required-tools-multiple-messages.json',
         ),
         'utf-8',
@@ -2760,7 +2899,7 @@ Attached Files (files with newer versions don't show their content):
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/required-tool-call-in-last-message.json',
         ),
         'utf-8',
@@ -2784,7 +2923,7 @@ Attached Files (files with newer versions don't show their content):
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/connect-tool-calls-to-results.json',
         ),
         'utf-8',
@@ -2825,7 +2964,7 @@ Attached Files (files with newer versions don't show their content):
     );
     assert.ok(toolCallMessage, 'Should have a tool call message');
     assert.ok(
-      (toolCallMessage!.content as string).includes('Cloudy'),
+      messageText(toolCallMessage!).includes('Cloudy'),
       'Tool call result should include "Cloudy"',
     );
   });
@@ -2834,7 +2973,7 @@ Attached Files (files with newer versions don't show their content):
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/invoke-submode-swith-command.json',
         ),
         'utf-8',
@@ -2847,7 +2986,7 @@ Attached Files (files with newer versions don't show their content):
       text: JSON.stringify({
         data: {
           type: 'card',
-          id: 'https://cardstack.com/base/Skill/skill_card_v1',
+          id: '@cardstack/base/Skill/skill_card_v1',
           attributes: {
             instructions: 'Test skill instructions',
             title: 'Test Skill',
@@ -2866,7 +3005,7 @@ Attached Files (files with newer versions don't show their content):
       text: JSON.stringify({
         data: {
           type: 'card',
-          id: 'https://cardstack.com/base/Skill/skill_card_v2',
+          id: '@cardstack/base/Skill/skill_card_v2',
           attributes: {
             instructions: 'Test skill instructions with updated commands',
             commands: [
@@ -2950,7 +3089,7 @@ Attached Files (files with newer versions don't show their content):
       'Should have one tool call message',
     );
     assert.ok(
-      (toolCallMessages[0].content as string).includes('Tool call executed'),
+      messageText(toolCallMessages[0]).includes('Tool call executed'),
       'Tool call result should include "Tool call executed"',
     );
   });
@@ -2958,7 +3097,10 @@ Attached Files (files with newer versions don't show their content):
   test('Does not respond to first tool call result when two tool calls were made', async function () {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/two-tool-calls-one-result.json'),
+        path.join(
+          import.meta.dirname,
+          'resources/chats/two-tool-calls-one-result.json',
+        ),
         'utf-8',
       ),
     );
@@ -3000,7 +3142,10 @@ Attached Files (files with newer versions don't show their content):
   test('Responds to second tool call result when two tool calls were made', async function () {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/two-tool-calls-two-results.json'),
+        path.join(
+          import.meta.dirname,
+          'resources/chats/two-tool-calls-two-results.json',
+        ),
         'utf-8',
       ),
     );
@@ -3065,11 +3210,11 @@ Attached Files (files with newer versions don't show their content):
       'Should have two tool call messages',
     );
     assert.ok(
-      (toolCallMessages[0].content as string).includes('Cloudy'),
+      messageText(toolCallMessages[0]).includes('Cloudy'),
       'Tool call result should include "Cloudy"',
     );
     assert.ok(
-      (toolCallMessages[1].content as string).includes('Sunny'),
+      messageText(toolCallMessages[1]).includes('Sunny'),
       'Tool call result should include "Sunny"',
     );
   });
@@ -3078,7 +3223,7 @@ Attached Files (files with newer versions don't show their content):
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/enabled-skill-with-commands.json',
         ),
         'utf-8',
@@ -3091,7 +3236,7 @@ Attached Files (files with newer versions don't show their content):
       text: JSON.stringify({
         data: {
           type: 'card',
-          id: 'https://cardstack.com/base/Skill/card-editing',
+          id: '@cardstack/base/Skill/card-editing',
           attributes: {
             instructions:
               '- If the user wants the data they see edited, AND the patchCardInstance function is available, you MUST use the "patchCardInstance" function to make the change.\n- If the user wants the data they see edited, AND the patchCardInstance function is NOT available, you MUST ask the user to open the card and share it with you.\n- If you do not call patchCardInstance, the user will not see the change.\n- You can ONLY modify cards shared with you. If there is no patchCardInstance function or tool, then the user hasn\'t given you access.\n- NEVER tell the user to use patchCardInstance; you should always do it for them.\n- If the user wants to search for a card instance, AND the "searchCard" function is available, you MUST use the "searchCard" function to find the card instance.\nOnly recommend one searchCard function at a time.\nIf the user wants to edit a field of a card, you can optionally use "searchCard" to help find a card instance that is compatible with the field being edited before using "patchCardInstance" to make the change of the field.\n You MUST confirm with the user the correct choice of card instance that he intends to use based upon the results of the search.',
@@ -3115,7 +3260,7 @@ Attached Files (files with newer versions don't show their content):
           id: 'http://localhost:4201/admin/custom-embedded/Skill/72d005b5-1a6b-4c6d-995f-2411c5948e74',
           attributes: {
             instructions:
-              'Use the tool SwitchSubmodeCommand with "code" to go to codemode and "interact" to go to interact mode.',
+              'Use the tool SwitchSubmodeTool with "code" to go to codemode and "interact" to go to interact mode.',
             commands: [
               {
                 codeRef: {
@@ -3214,7 +3359,7 @@ Attached Files (files with newer versions don't show their content):
     );
     assert.ok(
       switchSubmodeTool,
-      'Should have SwitchSubmodeCommand function available',
+      'Should have SwitchSubmodeTool function available',
     );
   });
 
@@ -3222,7 +3367,7 @@ Attached Files (files with newer versions don't show their content):
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/disabled-skill-with-commands.json',
         ),
         'utf-8',
@@ -3237,8 +3382,9 @@ Attached Files (files with newer versions don't show their content):
     // we should not have any tools available
     assert.true(tools!.length == 0, 'Should not have tools available');
 
+    assert.equal(messageText(messages![1]), 'Command Definitions');
     assert.equal(
-      messages![1].content,
+      messages![2].content,
       `The user is currently viewing the following user interface:
 Room ID: !XuZQzeYAGZzFQFYUzQ:localhost
 Submode: interact
@@ -3254,7 +3400,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/updated-skill-command-definitions.json',
         ),
         'utf-8',
@@ -3267,7 +3413,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       text: JSON.stringify({
         data: {
           type: 'card',
-          id: 'https://cardstack.com/base/Skill/skill_card_v1',
+          id: '@cardstack/base/Skill/skill_card_v1',
           attributes: {
             instructions: 'Test skill instructions',
             title: 'Test Skill',
@@ -3286,7 +3432,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       text: JSON.stringify({
         data: {
           type: 'card',
-          id: 'https://cardstack.com/base/Skill/skill_card_v2',
+          id: '@cardstack/base/Skill/skill_card_v2',
           attributes: {
             instructions: 'Test skill instructions with updated commands',
             commands: [
@@ -3392,7 +3538,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/two-code-blocks-two-results.json',
         ),
         'utf-8',
@@ -3406,10 +3552,10 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
     assert.deepEqual(
       messages!.map((m) => m.role),
-      ['system', 'system', 'user', 'assistant'],
+      ['system', 'user', 'assistant', 'user'],
     );
     assert.equal(
-      messages![3].content,
+      messageText(messages![2]),
       'Updating the file...\n' +
         'http://test.com/spaghetti-recipe.gts\n' +
         '[Omitting previously suggested and applied code change]\n' +
@@ -3426,7 +3572,10 @@ Current date and time: 2025-06-11T11:43:00.533Z
     // m.replace messages, relying on server side aggregation
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/server-side-aggregations.json'),
+        path.join(
+          import.meta.dirname,
+          'resources/chats/server-side-aggregations.json',
+        ),
         'utf-8',
       ),
     );
@@ -3437,7 +3586,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       text: JSON.stringify({
         data: {
           type: 'card',
-          id: 'https://cardstack.com/base/Skill/skill_card_v1',
+          id: '@cardstack/base/Skill/skill_card_v1',
           attributes: {
             instructions: 'Test skill instructions',
             title: 'Test Skill',
@@ -3504,14 +3653,12 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
     assert.equal(messages![2].role, 'assistant');
     assert.equal(
-      messages![2].content,
+      messageText(messages![2]),
       'I see a card with the ID "http://localhost:4201/admin/personal/BusinessCard/business_card". It appears to be a business card for Jane Smith, a Senior Software Architect at Innovative Solutions Inc.',
     );
     assert.equal(messages![3].role, 'user');
     assert.true(
-      (messages![3].content as string).startsWith(
-        'change the name to stephanie',
-      ),
+      messageText(messages![3]).startsWith('change the name to stephanie'),
     );
     assert.equal(messages![4].role, 'assistant');
     assert.equal(
@@ -3525,13 +3672,16 @@ Current date and time: 2025-06-11T11:43:00.533Z
       'patchCardInstance',
       'Should have patchCardInstance tool call',
     );
-    assert.true((messages![6].content as string).includes('Business Card V2'));
+    assert.true(messageText(messages![6]).includes('Business Card V2'));
   });
 
   test('Responds to successful completion of lone code patch', async function () {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/one-code-block-one-success.json'),
+        path.join(
+          import.meta.dirname,
+          'resources/chats/one-code-block-one-success.json',
+        ),
         'utf-8',
       ),
     );
@@ -3545,7 +3695,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.ok(userMessages.length >= 1, 'Should have user messages');
     assert.false(
       userMessages.some((message) =>
-        (message.content as string).includes(
+        messageText(message).includes(
           '(The user has successfully applied code patch',
         ),
       ),
@@ -3556,7 +3706,10 @@ Current date and time: 2025-06-11T11:43:00.533Z
   test('Does not respond to first code patch result when two patches were proposed', async function () {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/two-code-blocks-one-result.json'),
+        path.join(
+          import.meta.dirname,
+          'resources/chats/two-code-blocks-one-result.json',
+        ),
         'utf-8',
       ),
     );
@@ -3576,7 +3729,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/two-code-blocks-two-results.json',
         ),
         'utf-8',
@@ -3593,7 +3746,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.ok(userMessages.length >= 1, 'Should have user messages');
     assert.false(
       userMessages.some((message) =>
-        (message.content as string).includes('(The user has successfully'),
+        messageText(message).includes('(The user has successfully'),
       ),
       'Code patch result messages should be omitted',
     );
@@ -3603,7 +3756,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/code-block-and-command-one-result.json',
         ),
         'utf-8',
@@ -3625,7 +3778,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/code-block-and-command-two-results-a.json',
         ),
         'utf-8',
@@ -3662,13 +3815,17 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.strictEqual(shouldRespond, true, 'AiBot should solicit a response');
     assert.deepEqual(
       messages!.map((m) => m.role),
-      ['system', 'user', 'assistant', 'tool', 'system'],
+      ['system', 'user', 'assistant', 'tool', 'user'],
     );
     const userMessages = messages!.filter((message) => message.role === 'user');
-    assert.strictEqual(userMessages.length, 1, 'Should have one user message');
+    assert.strictEqual(
+      userMessages.length,
+      2,
+      'The question plus the trailing context message',
+    );
     assert.false(
       userMessages.some((message) =>
-        (message.content as string).includes(
+        messageText(message).includes(
           '(The user has successfully applied code patch',
         ),
       ),
@@ -3683,7 +3840,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       'Should have one tool result message',
     );
     assert.ok(
-      (toolResultMessages[0].content as string).includes('Cloudy'),
+      messageText(toolResultMessages[0]).includes('Cloudy'),
       'Tool call result should include "Cloudy"',
     );
   });
@@ -3692,7 +3849,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/code-block-and-command-two-results-b.json',
         ),
         'utf-8',
@@ -3729,13 +3886,17 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.strictEqual(shouldRespond, true, 'AiBot should solicit a response');
     assert.deepEqual(
       messages!.map((m) => m.role),
-      ['system', 'user', 'assistant', 'tool', 'system'],
+      ['system', 'user', 'assistant', 'tool', 'user'],
     );
     const userMessages = messages!.filter((message) => message.role === 'user');
-    assert.strictEqual(userMessages.length, 1, 'Should have one user message');
+    assert.strictEqual(
+      userMessages.length,
+      2,
+      'The question plus the trailing context message',
+    );
     assert.false(
       userMessages.some((message) =>
-        (message.content as string).includes(
+        messageText(message).includes(
           '(The user has successfully applied code patch',
         ),
       ),
@@ -3750,7 +3911,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       'Should have one tool result message',
     );
     assert.ok(
-      (toolResultMessages[0].content as string).includes('Cloudy'),
+      messageText(toolResultMessages[0]).includes('Cloudy'),
       'Tool call result should include "Cloudy"',
     );
   });
@@ -3758,7 +3919,10 @@ Current date and time: 2025-06-11T11:43:00.533Z
   test('Responds to failure of lone code patch', async function () {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/one-code-block-one-failure.json'),
+        path.join(
+          import.meta.dirname,
+          'resources/chats/one-code-block-one-failure.json',
+        ),
         'utf-8',
       ),
     );
@@ -3772,18 +3936,19 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.ok(userMessages.length >= 1, 'Should have user messages');
     assert.false(
       userMessages.some((message) =>
-        (message.content as string).includes(
-          'The user tried to apply code patch',
-        ),
+        messageText(message).includes('The user tried to apply code patch'),
       ),
       'Code patch result messages should be omitted',
     );
   });
 
-  test('context message is placed before last user message when just one user message', async () => {
+  test('context trails as its own user message when there is just one user message', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/user-message-last-single.json'),
+        path.join(
+          import.meta.dirname,
+          'resources/chats/user-message-last-single.json',
+        ),
         'utf-8',
       ),
     );
@@ -3794,14 +3959,25 @@ Current date and time: 2025-06-11T11:43:00.533Z
       fakeMatrixClient,
     );
     assert.equal(messages![0].role, 'system');
-    assert.equal(messages![1].role, 'system');
+    assert.equal(messages![1].role, 'user');
     assert.equal(messages![2].role, 'user');
+    assert.ok(
+      messageText(messages![2]).startsWith('The user is currently viewing'),
+      'the context trails the conversation as its own message',
+    );
+    assert.notOk(
+      messageText(messages![1]).includes('The user is currently viewing'),
+      'the user turn stays byte-stable across requests: no context is folded into it',
+    );
   });
 
-  test('context message is placed before last user message when multiple user messages', async () => {
+  test('context trails as its own user message when there are multiple user messages', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/user-message-last-multiple.json'),
+        path.join(
+          import.meta.dirname,
+          'resources/chats/user-message-last-multiple.json',
+        ),
         'utf-8',
       ),
     );
@@ -3814,14 +3990,22 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.equal(messages![0].role, 'system');
     assert.equal(messages![1].role, 'user');
     assert.equal(messages![2].role, 'assistant');
-    assert.equal(messages![3].role, 'system');
+    assert.equal(messages![3].role, 'user');
     assert.equal(messages![4].role, 'user');
+    assert.ok(
+      messageText(messages![4]).startsWith('The user is currently viewing'),
+      'the context trails the conversation as its own message',
+    );
+    assert.notOk(
+      messageText(messages![3]).includes('The user is currently viewing'),
+      'the last user turn stays byte-stable across requests: no context is folded into it',
+    );
   });
 
   test('context message is placed after the last tool call if the last message is a tool call', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/tool-call-last.json'),
+        path.join(import.meta.dirname, 'resources/chats/tool-call-last.json'),
         'utf-8',
       ),
     );
@@ -3839,13 +4023,16 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.equal(messages![5].role, 'user');
     assert.equal(messages![6].role, 'assistant');
     assert.equal(messages![7].role, 'tool');
-    assert.equal(messages![8].role, 'system');
+    assert.equal(messages![8].role, 'user');
   });
 
-  test('context message is placed after the last user message if the last message is an assistant message', async () => {
+  test('context trails as its own user message when the last message is an assistant message', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/assistant-message-last.json'),
+        path.join(
+          import.meta.dirname,
+          'resources/chats/assistant-message-last.json',
+        ),
         'utf-8',
       ),
     );
@@ -3856,15 +4043,59 @@ Current date and time: 2025-06-11T11:43:00.533Z
       fakeMatrixClient,
     );
     assert.equal(messages![0].role, 'system');
-    assert.equal(messages![1].role, 'system');
-    assert.equal(messages![2].role, 'user');
-    assert.equal(messages![3].role, 'assistant');
+    assert.equal(messages![1].role, 'user');
+    assert.equal(messages![2].role, 'assistant');
+    assert.equal(messages![3].role, 'user');
+    assert.ok(
+      messageText(messages![3]).startsWith('The user is currently viewing'),
+      'the context trails the conversation as its own message',
+    );
+  });
+
+  test('the leading system prompt is the only system message', async () => {
+    // For models without a native mid-conversation system role, OpenRouter
+    // hoists every non-leading `system` message into the top-level system
+    // parameter. Volatile content hoisted that way lands in front of the
+    // whole conversation and defeats the prompt cache — so nothing after
+    // messages[0] may carry the system role.
+    for (let fixture of [
+      'user-message-last-single.json',
+      'user-message-last-multiple.json',
+      'assistant-message-last.json',
+      'tool-call-last.json',
+      'code-blocks.json',
+      'connect-tool-calls-to-results.json',
+    ]) {
+      const eventList: DiscreteMatrixEvent[] = JSON.parse(
+        readFileSync(
+          path.join(import.meta.dirname, 'resources/chats', fixture),
+          'utf-8',
+        ),
+      );
+      const { messages } = await getPromptParts(
+        eventList,
+        '@aibot:localhost',
+        fakeMatrixClient,
+      );
+      if (!messages) {
+        // A history the bot would not answer builds no message array.
+        continue;
+      }
+      assert.equal(messages![0].role, 'system', `${fixture}: leading system`);
+      assert.false(
+        messages!.slice(1).some((message) => message.role === 'system'),
+        `${fixture}: no system message after the leading one`,
+      );
+    }
   });
 
   test('context message contains the current date and time', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/user-message-last-multiple.json'),
+        path.join(
+          import.meta.dirname,
+          'resources/chats/user-message-last-multiple.json',
+        ),
         'utf-8',
       ),
     );
@@ -3874,20 +4105,20 @@ Current date and time: 2025-06-11T11:43:00.533Z
       '@aibot:localhost',
       fakeMatrixClient,
     );
-    assert.equal(messages![3].role, 'system');
+    assert.equal(messages![4].role, 'user');
     assert.true(
-      !!(messages![3].content as string).match(
+      !!messageText(messages![4]).match(
         /Current date and time: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/,
       ),
       'Context message should contain the current date and time but was ' +
-        messages![3].content,
+        messages![4].content,
     );
   });
 
   test('tool call messages include attached files when command result does', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/read-gts-file.json'),
+        path.join(import.meta.dirname, 'resources/chats/read-gts-file.json'),
         'utf-8',
       ),
     );
@@ -3908,11 +4139,11 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
     assert.ok(toolCallMessage, 'Should have a tool call message');
     assert.true(
-      (toolCallMessage!.content as string).includes('executed'),
+      messageText(toolCallMessage!).includes('executed'),
       'Tool call result should reflect that the tool was executed',
     );
     assert.true(
-      (toolCallMessage!.content as string).includes(
+      messageText(toolCallMessage!).includes(
         `
 Attached Files (files with newer versions don't show their content):
 [postcard.gts](http://test-realm-server/user/test-realm/postcard.gts):
@@ -3926,7 +4157,7 @@ Attached Files (files with newer versions don't show their content):
   test('tool call messages include attached cards when command result does', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/read-card.json'),
+        path.join(import.meta.dirname, 'resources/chats/read-card.json'),
         'utf-8',
       ),
     );
@@ -3946,11 +4177,11 @@ Attached Files (files with newer versions don't show their content):
     );
     assert.ok(toolCallMessage, 'Should have a tool call message');
     assert.true(
-      (toolCallMessage!.content as string).includes('executed'),
+      messageText(toolCallMessage!).includes('executed'),
       'Tool call result should reflect that the tool was executed',
     );
     assert.true(
-      (toolCallMessage!.content as string).includes(
+      messageText(toolCallMessage!).includes(
         `
 Attached Cards (cards with newer versions don't show their content):
 [
@@ -3971,7 +4202,7 @@ Attached Cards (cards with newer versions don't show their content):
   test('getPromptParts collects patched files from code patch result attachments', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/patched-gts.json'),
+        path.join(import.meta.dirname, 'resources/chats/patched-gts.json'),
         'utf-8',
       ),
     );
@@ -4065,7 +4296,7 @@ new content
               functions: [],
             },
           },
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: 'patch-card',
               name: 'patchCardInstance',
@@ -4121,17 +4352,17 @@ new content
         status: EventStatus.SENT,
       },
       {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         event_id: 'command-result',
         origin_server_ts: 4,
         room_id: roomId,
         sender: '@admin:localhost',
         content: {
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
           'm.relates_to': {
             event_id: aiMessageId,
             key: 'applied',
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
           },
           commandRequestId: 'patch-card',
           data: {
@@ -4219,7 +4450,7 @@ new content
               functions: [],
             },
           },
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: 'cancelled-patch',
               name: 'patchFields',
@@ -4288,7 +4519,7 @@ new content
               functions: [],
             },
           },
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: 'patch-card',
               name: 'patchCardInstance',
@@ -4344,17 +4575,17 @@ new content
         status: EventStatus.SENT,
       },
       {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         event_id: 'command-result',
         origin_server_ts: 4,
         room_id: roomId,
         sender: '@admin:localhost',
         content: {
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
           'm.relates_to': {
             event_id: aiMessageId,
             key: 'applied',
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
           },
           commandRequestId: 'patch-card',
           data: {
@@ -4444,7 +4675,7 @@ new content
               functions: [],
             },
           },
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: 'stale-command',
               name: 'patchFields',
@@ -4582,7 +4813,7 @@ new content
               functions: [],
             },
           },
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: `check-${requestId}`,
               name: 'checkCorrectness',
@@ -4613,18 +4844,18 @@ new content
       errorText: string,
     ): DiscreteMatrixEvent {
       return {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         event_id: `command-result-${index}`,
         room_id: roomId,
         sender: '@command:localhost',
         origin_server_ts: index * 10 + 3,
         content: {
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
           commandRequestId: requestId,
           'm.relates_to': {
             event_id: relatesToId,
             key: 'applied',
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
           },
           data: {
             card: {
@@ -4700,9 +4931,7 @@ new content
     let userMessages =
       messages?.filter((message) => message.role === 'user') ?? [];
     let retryMessages = userMessages.filter((message) =>
-      (message.content as string).includes(
-        'Propose fixes for the above errors',
-      ),
+      messageText(message).includes('Propose fixes for the above errors'),
     );
     assert.strictEqual(
       retryMessages.length,
@@ -4711,7 +4940,7 @@ new content
     );
 
     let failureLimitMessages = userMessages.filter((message) =>
-      (message.content as string).includes(
+      messageText(message).includes(
         'Automated correctness fixes have already been attempted 3 times',
       ),
     );
@@ -4722,7 +4951,7 @@ new content
     );
     let failureLimitMessage = failureLimitMessages[0];
     assert.notOk(
-      (failureLimitMessage?.content as string).includes(
+      messageText(failureLimitMessage).includes(
         'Propose fixes for the above errors',
       ),
       'The failure limit prompt should not ask for another round of fixes',
@@ -4748,7 +4977,7 @@ new content
           body: 'First patch',
           format: 'org.matrix.custom.html',
           isStreamingFinished: true,
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: 'check-first',
               name: 'checkCorrectness',
@@ -4775,18 +5004,18 @@ new content
         status: EventStatus.SENT,
       },
       {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         event_id: 'command-result-1',
         room_id: roomId,
         sender: '@command:localhost',
         origin_server_ts: 2,
         content: {
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
           commandRequestId: 'check-first',
           'm.relates_to': {
             event_id: firstEventId,
             key: 'applied',
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
           },
           data: {
             card: {
@@ -4820,7 +5049,7 @@ new content
           body: 'Second patch',
           format: 'org.matrix.custom.html',
           isStreamingFinished: true,
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: 'check-second',
               name: 'checkCorrectness',
@@ -4847,18 +5076,18 @@ new content
         status: EventStatus.SENT,
       },
       {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         event_id: 'command-result-2',
         room_id: roomId,
         sender: '@command:localhost',
         origin_server_ts: 4,
         content: {
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
           commandRequestId: 'check-second',
           'm.relates_to': {
             event_id: secondEventId,
             key: 'applied',
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
           },
           data: {
             card: {
@@ -4897,9 +5126,7 @@ new content
     );
     assert.ok(secondToolMessage, 'Second correctness result should be present');
     assert.ok(
-      (secondToolMessage!.content as string).includes(
-        'attempts so far: 1 of 3',
-      ),
+      messageText(secondToolMessage!).includes('attempts so far: 1 of 3'),
       'Correctness attempts reset to the first attempt when a new patch event begins for the same target',
     );
   });
@@ -4956,7 +5183,7 @@ new
               functions: [],
             },
           },
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: 'check-1',
               name: 'checkCorrectness',
@@ -5007,18 +5234,18 @@ new
         status: EventStatus.SENT,
       },
       {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         event_id: '$command-result',
         room_id: roomId,
         sender: '@command:localhost',
         origin_server_ts: 4,
         content: {
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
           commandRequestId: 'check-1',
           'm.relates_to': {
             event_id: aiMessageId,
             key: 'applied',
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
           },
           data: {
             context: {
@@ -5037,7 +5264,7 @@ new
     ];
 
     const summaryMessage =
-      'The automated correctness checks have finished. Summarize the results based on the tool output above in one short sentence. Do not mention: correctness, automated correctness checks, tool calls.';
+      'The automated correctness checks have finished. Summarize the results based on the tool output above in one short sentence. Do not mention: correctness, automated correctness checks, tool calls. If work you already described remains unfinished, carry straight on with it in the same reply — this is a note on what just landed, not a request to stop.';
 
     const promptParts = await getPromptParts(
       eventList,
@@ -5046,13 +5273,24 @@ new
     );
     let enabledUserMessages =
       promptParts.messages?.filter((message) => message.role === 'user') ?? [];
+    // The instruction exists for this one request only, so it rides the
+    // volatile trailing context message rather than the history — a history
+    // entry that vanishes on the next request would defeat the prompt cache.
+    let trailingMessage = promptParts.messages?.at(-1);
+    assert.equal(trailingMessage?.role, 'user');
     assert.true(
-      enabledUserMessages.some((message) => message.content === summaryMessage),
-      'Summary should be included',
+      messageText(trailingMessage).endsWith(summaryMessage),
+      'Summary should be appended to the trailing context message',
+    );
+    assert.false(
+      promptParts.messages
+        ?.slice(0, -1)
+        .some((message) => messageText(message).includes(summaryMessage)),
+      'Summary must not be a history entry — it vanishes on the next request',
     );
     assert.false(
       enabledUserMessages.some((message) =>
-        (message.content as string).includes(
+        messageText(message).includes(
           'The user has successfully applied code patch 1.',
         ),
       ),
@@ -5165,6 +5403,266 @@ new
     );
   });
 
+  test('marks the last real message as cacheable and leaves the trailing context unmarked', async () => {
+    // Three-turn history ending in a user message. The context (which carries
+    // the current time, so it changes every request) trails as its own
+    // message; the cache breakpoint lands on the last real message, and the
+    // volatile trailing context must never carry one.
+    const userEvent = (
+      event_id: string,
+      ts: number,
+      body: string,
+    ): DiscreteMatrixEvent => ({
+      type: 'm.room.message',
+      event_id,
+      origin_server_ts: ts,
+      content: {
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        format: 'org.matrix.custom.html',
+        body,
+        isStreamingFinished: true,
+        data: { context: { tools: [], functions: [] } },
+      },
+      sender: '@user:localhost',
+      room_id: 'room1',
+      unsigned: { age: 1000, transaction_id: event_id },
+      status: EventStatus.SENT,
+    });
+    const history: DiscreteMatrixEvent[] = [
+      userEvent('1', 1000, 'First question'),
+      {
+        type: 'm.room.message',
+        event_id: '2',
+        origin_server_ts: 2000,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'First answer',
+          isStreamingFinished: true,
+          data: {},
+        },
+        sender: '@aibot:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: '2' },
+        status: EventStatus.SENT,
+      },
+      userEvent('3', 3000, 'Second question'),
+    ];
+
+    const result = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      [],
+      [],
+      [],
+      fakeMatrixClient,
+    );
+
+    // [system, user, assistant, user, trailing context]
+    assert.deepEqual(
+      result.map((m) => m.role),
+      ['system', 'user', 'assistant', 'user', 'user'],
+    );
+    let lastUserMessage = result[3];
+    assert.ok(
+      Array.isArray(lastUserMessage.content) &&
+        (lastUserMessage.content.at(-1) as TextContent).cache_control?.type ===
+          'ephemeral',
+      'The last real message carries the history cache breakpoint',
+    );
+    assert.equal(
+      messageText(lastUserMessage),
+      'Second question',
+      'No context is folded into the user message — its bytes must not change between requests',
+    );
+    let contextMessage = result[4];
+    assert.notOk(
+      Array.isArray(contextMessage.content) &&
+        (contextMessage.content as TextContent[]).some(
+          (part) => part.cache_control,
+        ),
+      'The trailing context message carries no breakpoint — it changes every request',
+    );
+    assert.equal(
+      countCacheBreakpoints(result),
+      2,
+      'Exactly two breakpoints: system message + end of stable history',
+    );
+  });
+
+  test('marks the trailing tool result as cacheable when the history ends with one', async function () {
+    // Tool results are where pulled skill files land, so when the turn ends
+    // with one, the breakpoint must cover it — that content must not be
+    // re-billed fresh on every later request. The trailing system context
+    // message stays unmarked (it carries the current time).
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(
+          import.meta.dirname,
+          'resources/chats/code-block-and-command-two-results-a.json',
+        ),
+        'utf-8',
+      ),
+    );
+    mockResponses.set('mxc://mock-server/weather-report-1', {
+      ok: true,
+      text: JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: { temperature: '22°C', conditions: 'Cloudy' },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/admin/onnx/commandexample',
+              name: 'WeatherReport',
+            },
+          },
+        },
+      }),
+    });
+
+    const { messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.deepEqual(
+      messages!.map((m) => m.role),
+      ['system', 'user', 'assistant', 'tool', 'user'],
+    );
+    let toolMessage = messages![3];
+    assert.ok(
+      Array.isArray(toolMessage.content) &&
+        (toolMessage.content.at(-1) as TextContent).cache_control?.type ===
+          'ephemeral',
+      'The trailing tool result carries the history cache breakpoint',
+    );
+    let contextMessage = messages![4];
+    assert.notOk(
+      Array.isArray(contextMessage.content) &&
+        (contextMessage.content as TextContent[]).some(
+          (part) => part.cache_control,
+        ),
+      'The trailing context message carries no breakpoint',
+    );
+    assert.equal(
+      countCacheBreakpoints(messages!),
+      2,
+      'Exactly two breakpoints: system message + trailing tool result',
+    );
+  });
+
+  test('the shared history serializes byte-identically across consecutive turns, apart from the moving marker', async () => {
+    // The invariant the prompt cache lives on: request N+1's messages must
+    // be an exact byte extension of request N's stable prefix, marker aside
+    // — including the string-vs-parts shape of each message's content.
+    const makeEvent = (
+      event_id: string,
+      ts: number,
+      body: string,
+      sender = '@user:localhost',
+    ): DiscreteMatrixEvent => ({
+      type: 'm.room.message',
+      event_id,
+      origin_server_ts: ts,
+      content: {
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        format: 'org.matrix.custom.html',
+        body,
+        isStreamingFinished: true,
+        data:
+          sender === '@user:localhost'
+            ? { context: { tools: [], functions: [] } }
+            : {},
+      },
+      sender,
+      room_id: 'room1',
+      unsigned: { age: 1000, transaction_id: event_id },
+      status: EventStatus.SENT,
+    });
+    const turnOne: DiscreteMatrixEvent[] = [
+      makeEvent('1', 1000, 'First question'),
+    ];
+    const turnTwo: DiscreteMatrixEvent[] = [
+      ...turnOne,
+      makeEvent('2', 2000, 'First answer', '@aibot:localhost'),
+      makeEvent('3', 3000, 'Second question'),
+    ];
+
+    const promptOne = await buildPromptForModel(
+      turnOne,
+      '@aibot:localhost',
+      [],
+      [],
+      [],
+      fakeMatrixClient,
+    );
+    const promptTwo = await buildPromptForModel(
+      turnTwo,
+      '@aibot:localhost',
+      [],
+      [],
+      [],
+      fakeMatrixClient,
+    );
+
+    // Strip the marker (it is allowed to move) and each prompt's volatile
+    // trailing context message, then require an exact prefix match.
+    const stripMarkers = (message: (typeof promptOne)[number]) =>
+      JSON.stringify(message, (key, value) =>
+        key === 'cache_control' ? undefined : value,
+      );
+    const stableOne = promptOne.slice(0, -1).map(stripMarkers);
+    const stableTwo = promptTwo.slice(0, -1).map(stripMarkers);
+    for (let i = 0; i < stableOne.length; i++) {
+      assert.equal(
+        stableTwo[i],
+        stableOne[i],
+        `message ${i} must serialize identically on the next turn`,
+      );
+    }
+  });
+
+  test('a first-turn prompt marks the system prompt and the first user message', async () => {
+    // One user message and nothing before it: the user message is the whole
+    // stable history, so it carries the second breakpoint — the next request
+    // re-reads it from cache.
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1000,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Hello',
+          isStreamingFinished: true,
+          data: { context: { tools: [], functions: [] } },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: '1' },
+        status: EventStatus.SENT,
+      },
+    ];
+    const result = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      [],
+      [],
+      [],
+      fakeMatrixClient,
+    );
+    assert.deepEqual(
+      result.map((m) => m.role),
+      ['system', 'user', 'user'],
+    );
+    assert.equal(
+      countCacheBreakpoints(result),
+      2,
+      'System breakpoint plus the first user message',
+    );
+  });
+
   test('excludes assistant messages with empty body and no tool calls', async () => {
     const history: DiscreteMatrixEvent[] = [
       {
@@ -5255,8 +5753,8 @@ new
     const userMessages = result.filter((message) => message.role === 'user');
     assert.equal(
       userMessages.length,
-      2,
-      'Both user messages should be included',
+      3,
+      'Both user messages plus the trailing context message',
     );
   });
 
@@ -5294,7 +5792,7 @@ new
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           isStreamingFinished: true,
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: 'call_1',
               name: 'patchCardInstance',
@@ -5315,14 +5813,14 @@ new
         status: EventStatus.SENT,
       },
       {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         event_id: '3',
         origin_server_ts: 3,
         content: {
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
           commandRequestId: 'call_1',
           'm.relates_to': {
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
             event_id: '2',
             key: 'applied',
           },
@@ -5435,10 +5933,13 @@ new
     const userMessages = result.filter((message) => message.role === 'user');
     assert.equal(
       userMessages.length,
-      1,
-      'Only the non-empty user message should be included',
+      2,
+      'The non-empty user message plus the trailing context message',
     );
-    assert.equal(userMessages[0].content, 'Hello');
+    assert.true(
+      messageText(userMessages[0]).endsWith('Hello'),
+      'the surviving user message keeps its body',
+    );
   });
   test('only the most recent message attachments include file content in the prompt', async () => {
     // Policy: files attached to older messages should show metadata only,
@@ -5542,17 +6043,17 @@ new
 
     // Older message's unique file (config.json) should show metadata only, not content
     assert.ok(
-      (userMessages[0]?.content as string).includes('[config.json]'),
+      messageText(userMessages[0]).includes('[config.json]'),
       'First message mentions config.json',
     );
     assert.notOk(
-      (userMessages[0]?.content as string).includes('"key": "value"'),
+      messageText(userMessages[0]).includes('"key": "value"'),
       'First message should NOT include config.json content (not the current message)',
     );
 
     // Most recent message's file (utils.ts) should include content
     assert.ok(
-      (userMessages[1]?.content as string).includes(
+      messageText(userMessages[1]).includes(
         'export function hello() { return "world"; }',
       ),
       'Most recent message should include utils.ts content',
@@ -5701,7 +6202,7 @@ new
     );
 
     let userMessages = prompt.filter((m) => m.role === 'user');
-    let content = userMessages[0]?.content as string;
+    let content = messageText(userMessages[0]);
 
     assert.ok(
       content.includes('"name":"Alice"'),
@@ -5797,7 +6298,7 @@ new
     );
 
     let userMessages = prompt.filter((m) => m.role === 'user');
-    let firstMessage = userMessages[0]?.content as string;
+    let firstMessage = messageText(userMessages[0]);
     assert.ok(
       firstMessage.includes('diagram.png'),
       'older image attachment should still be mentioned',
@@ -6437,7 +6938,7 @@ new
           format: 'org.matrix.custom.html',
           isStreamingFinished: true,
           data: {},
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: 'call_1',
               name: 'read-file-for-ai-assistant_a831',
@@ -6458,14 +6959,14 @@ new
         status: EventStatus.SENT,
       },
       {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         event_id: '3',
         origin_server_ts: 3,
         content: {
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
           commandRequestId: 'call_1',
           'm.relates_to': {
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
             event_id: '2',
             key: 'applied',
           },
@@ -6499,7 +7000,7 @@ new
     // The command result for the unauthorized file should contain a rejection
     let toolMessages = prompt.filter((m) => m.role === 'tool');
     let rejectionMessage = toolMessages.find((m) =>
-      (m.content as string).includes('not-attached-file.ts'),
+      messageText(m).includes('not-attached-file.ts'),
     );
 
     assert.ok(
@@ -6508,7 +7009,7 @@ new
     );
 
     if (rejectionMessage) {
-      let rejectionContent = rejectionMessage.content as string;
+      let rejectionContent = messageText(rejectionMessage);
       assert.ok(
         rejectionContent.includes('not previously attached') ||
           rejectionContent.includes('not authorized') ||
@@ -6534,11 +7035,11 @@ module('set model in prompt', (hooks) => {
     fakeMatrixClient.resetSentEvents();
   });
 
-  test('default active LLM must be equal to `DEFAULT_LLM`', async () => {
+  test('default active LLM must be equal to `DEFAULT_FALLBACK_MODEL_ID`', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
-          __dirname,
+          import.meta.dirname,
           'resources/chats/required-tool-call-in-last-message.json',
         ),
         'utf-8',
@@ -6550,13 +7051,13 @@ module('set model in prompt', (hooks) => {
       '@aibot:localhost',
       fakeMatrixClient,
     );
-    assert.strictEqual(model, DEFAULT_LLM);
+    assert.strictEqual(model, DEFAULT_FALLBACK_MODEL_ID);
   });
 
   test('use latest active llm', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/set-active-llm.json'),
+        path.join(import.meta.dirname, 'resources/chats/set-active-llm.json'),
         'utf-8',
       ),
     );
@@ -6571,13 +7072,13 @@ module('set model in prompt', (hooks) => {
     assert.strictEqual(reasoningEffort, 'minimal');
   });
 
-  // Regression coverage for CS-11045: the host's `commandResult` may carry an
+  // Regression coverage for CS-11045: the host's `toolResult` may carry an
   // `m.relates_to.event_id` that disagrees with the bot message's canonical
   // event_id (the matrix server normalizes the bot message's event_id to the
   // last m.replace's id, while the host captured the streaming/original id).
   // ai-bot must still pair the result with the bot message via the
   // commandRequestId.
-  test('CS-11045: getCommandResults pairs by commandRequestId when m.relates_to.event_id drifts', async () => {
+  test('CS-11045: getToolResults pairs by commandRequestId when m.relates_to.event_id drifts', async () => {
     const NEW_EVENT_ID = '$NEW-canonical-id';
     const OLD_EVENT_ID = '$OLD-streaming-id';
     const TOOL_CALL_ID = 'tool-call-T1';
@@ -6608,7 +7109,7 @@ module('set model in prompt', (hooks) => {
           format: 'org.matrix.custom.html',
           isStreamingFinished: true,
           data: { context: {} },
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: TOOL_CALL_ID,
               name: 'switch-submode_dd88',
@@ -6625,15 +7126,15 @@ module('set model in prompt', (hooks) => {
         status: EventStatus.SENT,
       } as DiscreteMatrixEvent,
       {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         room_id: 'room-id-1',
         sender: '@user:localhost',
         content: {
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
           commandRequestId: TOOL_CALL_ID,
           'm.relates_to': {
             event_id: OLD_EVENT_ID,
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
             key: 'applied',
           },
           data: { context: {} },
@@ -6672,7 +7173,7 @@ module('set model in prompt', (hooks) => {
     assert.equal(
       (toolMessages[0] as any).tool_call_id,
       TOOL_CALL_ID,
-      'tool message tool_call_id should match the bot message commandRequest id',
+      'tool message tool_call_id should match the bot message toolRequest id',
     );
   });
 
@@ -6710,7 +7211,7 @@ module('set model in prompt', (hooks) => {
           format: 'org.matrix.custom.html',
           isStreamingFinished: true,
           data: { context: {} },
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: TOOL_CALL_ID,
               name: 'switch-submode_dd88',
@@ -6727,15 +7228,15 @@ module('set model in prompt', (hooks) => {
         status: EventStatus.SENT,
       } as DiscreteMatrixEvent,
       {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         room_id: 'room-id-1',
         sender: '@user:localhost',
         content: {
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
           commandRequestId: TOOL_CALL_ID,
           'm.relates_to': {
             event_id: BOT_EVENT_ID,
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
             key: 'applied',
           },
           data: { context: {} },
@@ -6765,7 +7266,7 @@ module('set model in prompt', (hooks) => {
     assert.equal(
       (toolMessages[0] as any).tool_call_id,
       TOOL_CALL_ID,
-      'tool message tool_call_id should match the bot message commandRequest id',
+      'tool message tool_call_id should match the bot message toolRequest id',
     );
   });
 
@@ -6815,7 +7316,7 @@ module('set model in prompt', (hooks) => {
           format: 'org.matrix.custom.html',
           isStreamingFinished: true,
           data: { context: {} },
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: TOOL_CALL_SWITCH_SUBMODE,
               name: 'switch-submode_dd88',
@@ -6832,15 +7333,15 @@ module('set model in prompt', (hooks) => {
         status: EventStatus.SENT,
       } as DiscreteMatrixEvent,
       {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         room_id: 'room-id-1',
         sender: '@user:localhost',
         content: {
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
           commandRequestId: TOOL_CALL_SWITCH_SUBMODE,
           'm.relates_to': {
             event_id: BOT1_EVENT_ID,
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
             key: 'applied',
           },
           data: { context: {} },
@@ -6851,7 +7352,7 @@ module('set model in prompt', (hooks) => {
         status: EventStatus.SENT,
       } as DiscreteMatrixEvent,
       // Bot message #2: write-text-file tool_call. The host emits its
-      // commandResult with m.relates_to.event_id pointing to the streaming
+      // toolResult with m.relates_to.event_id pointing to the streaming
       // id, which is NOT this bot message's canonical event_id. ✗
       {
         type: 'm.room.message',
@@ -6863,7 +7364,7 @@ module('set model in prompt', (hooks) => {
           format: 'org.matrix.custom.html',
           isStreamingFinished: true,
           data: { context: {} },
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: TOOL_CALL_WRITE_TEXT_FILE,
               name: 'write-text-file_e5a1',
@@ -6884,15 +7385,15 @@ module('set model in prompt', (hooks) => {
         status: EventStatus.SENT,
       } as DiscreteMatrixEvent,
       {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         room_id: 'room-id-1',
         sender: '@user:localhost',
         content: {
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
           commandRequestId: TOOL_CALL_WRITE_TEXT_FILE,
           'm.relates_to': {
             event_id: BOT2_DRIFTED_EVENT_ID,
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
             key: 'applied',
           },
           data: { context: {} },
@@ -6918,7 +7419,7 @@ module('set model in prompt', (hooks) => {
             event_id: BOT2_EVENT_ID,
           },
           data: { context: {} },
-          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
             {
               id: TOOL_CALL_CHECK_CORRECTNESS,
               name: 'checkCorrectness',
@@ -6942,15 +7443,15 @@ module('set model in prompt', (hooks) => {
         status: EventStatus.SENT,
       } as DiscreteMatrixEvent,
       {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
         room_id: 'room-id-1',
         sender: '@user:localhost',
         content: {
-          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
           commandRequestId: TOOL_CALL_CHECK_CORRECTNESS,
           'm.relates_to': {
             event_id: BOT3_EVENT_ID,
-            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
             key: 'applied',
           },
           data: { context: {} },
@@ -7014,6 +7515,710 @@ module('set model in prompt', (hooks) => {
         TOOL_CALL_CHECK_CORRECTNESS,
       ],
       'every tool_call must have a matching tool result, including the drifted write-text-file one',
+    );
+  });
+});
+
+module('fill missing capability fields from fallback constant', (hooks) => {
+  let fakeMatrixClient: FakeMatrixClient;
+
+  hooks.beforeEach(() => {
+    fakeMatrixClient = new FakeMatrixClient();
+  });
+
+  hooks.afterEach(() => {
+    fakeMatrixClient.resetSentEvents();
+  });
+
+  // Minimal eventList with a single user message plus an active-LLM event.
+  // The active-LLM event content is supplied by the caller so each test can
+  // exercise a specific shape (no caps, explicit false, healthy, non-curated).
+  function buildEventList(
+    activeLLMContent: Record<string, unknown> | null,
+  ): DiscreteMatrixEvent[] {
+    const events: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        room_id: 'room-id-1',
+        sender: '@user:localhost',
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: 'hello',
+          format: 'org.matrix.custom.html',
+          clientGeneratedId: 'user-msg-1',
+          data: { context: {} },
+        } as CardMessageContent,
+        origin_server_ts: 1,
+        unsigned: { age: 1 },
+        event_id: 'user-msg-event-1',
+        status: EventStatus.SENT,
+      } as DiscreteMatrixEvent,
+    ];
+    if (activeLLMContent !== null) {
+      events.push({
+        type: APP_BOXEL_ACTIVE_LLM,
+        room_id: 'room-id-1',
+        sender: '@user:localhost',
+        content: activeLLMContent,
+        state_key: '',
+        origin_server_ts: 2,
+        unsigned: { age: 1 },
+        event_id: 'active-llm-event-1',
+      } as unknown as DiscreteMatrixEvent);
+    }
+    return events;
+  }
+
+  test('older room: curated model with no capability fields → caps filled from constant', async () => {
+    const claudeRow = DEFAULT_FALLBACK_MODELS.find(
+      (m) => m.modelId === 'anthropic/claude-sonnet-4.6',
+    )!;
+    const eventList = buildEventList({ model: claudeRow.modelId });
+
+    const { model, toolsSupported } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+
+    assert.strictEqual(model, claudeRow.modelId, 'event model passes through');
+    assert.strictEqual(
+      toolsSupported,
+      true,
+      'toolsSupported filled from DEFAULT_FALLBACK_MODELS row',
+    );
+  });
+
+  test('explicit toolsSupported: false on event is respected (no fill)', async () => {
+    const eventList = buildEventList({
+      model: 'anthropic/claude-sonnet-4.6',
+      toolsSupported: false,
+    });
+
+    const { toolsSupported } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+
+    assert.strictEqual(
+      toolsSupported,
+      false,
+      'explicit false is not overwritten by the constant',
+    );
+  });
+
+  test('healthy room: explicit caps pass through unchanged', async () => {
+    const eventList = buildEventList({
+      model: 'anthropic/claude-sonnet-4.6',
+      toolsSupported: true,
+    });
+
+    const { toolsSupported } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+
+    assert.strictEqual(
+      toolsSupported,
+      true,
+      'explicit true is preserved (no overwrite)',
+    );
+  });
+
+  test('non-curated model with undefined caps stays undefined (known limitation)', async () => {
+    const eventList = buildEventList({ model: 'some/unknown-model' });
+
+    const { model, toolsSupported } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+
+    assert.strictEqual(model, 'some/unknown-model');
+    assert.strictEqual(
+      toolsSupported,
+      undefined,
+      'non-curated models are not in the constant — leave undefined',
+    );
+  });
+
+  test('no active-LLM event in history: caps come from the default fallback row', async () => {
+    const eventList = buildEventList(null);
+
+    const { model, toolsSupported } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+
+    assert.strictEqual(
+      model,
+      DEFAULT_FALLBACK_MODEL_ID,
+      'no-event branch uses DEFAULT_FALLBACK_MODEL_ID',
+    );
+    assert.strictEqual(
+      toolsSupported,
+      true,
+      'no-event branch fills toolsSupported from the default row',
+    );
+  });
+});
+
+module('markdown skills', () => {
+  test('isMarkdownSkillFile detects .md/.markdown by sourceUrl', (assert) => {
+    assert.true(
+      isMarkdownSkillFile({ sourceUrl: 'https://r/skills/x/SKILL.md' } as any),
+    );
+    assert.true(
+      isMarkdownSkillFile({ sourceUrl: 'https://r/notes.markdown' } as any),
+    );
+    assert.false(
+      isMarkdownSkillFile({ sourceUrl: 'https://r/Skill/boxel-dev' } as any),
+    );
+  });
+
+  test('parseMarkdownSkill strips frontmatter and takes title from name', (assert) => {
+    let content =
+      '---\nname: "Source Code Editing"\ndescription: edits\nboxel:\n  kind: skill\n---\n\n# Source Code Editing\n\nUse SEARCH/REPLACE blocks.\n';
+    let { title, body, kind } = parseMarkdownSkill(content, {
+      sourceUrl: 'https://r/skills/source-code-editing/SKILL.md',
+    } as any);
+    assert.strictEqual(title, 'Source Code Editing');
+    assert.strictEqual(
+      body,
+      '# Source Code Editing\n\nUse SEARCH/REPLACE blocks.',
+    );
+    assert.strictEqual(kind, 'skill');
+    assert.notOk(body.includes('kind: skill'), 'frontmatter is stripped');
+  });
+
+  test('parseMarkdownSkill reports no kind for plain markdown', (assert) => {
+    let { kind } = parseMarkdownSkill(
+      '---\nname: "Notes"\n---\nJust some notes.',
+      { sourceUrl: 'https://r/notes.md' } as any,
+    );
+    assert.strictEqual(kind, undefined);
+  });
+
+  test('parseMarkdownSkill falls back to the file name when no frontmatter', (assert) => {
+    let { title, body } = parseMarkdownSkill('Just instructions.', {
+      sourceUrl: 'https://r/skills/my-skill/SKILL.md',
+    } as any);
+    assert.strictEqual(title, 'SKILL.md');
+    assert.strictEqual(body, 'Just instructions.');
+  });
+});
+
+module('markdown skill tools', (hooks) => {
+  let fakeMatrixClient: FakeMatrixClient;
+  let mockResponses: Map<string, { ok: boolean; text: string }>;
+  let originalFetch: any;
+
+  hooks.beforeEach(() => {
+    fakeMatrixClient = new FakeMatrixClient();
+    mockResponses = new Map();
+    originalFetch = (globalThis as any).fetch;
+    (globalThis as any).fetch = async (url: string) => {
+      const response = mockResponses.get(url);
+      if (response) {
+        return {
+          ok: response.ok,
+          status: response.ok ? 200 : 500,
+          text: async () => response.text,
+        };
+      }
+      throw new Error(`No mock response for ${url}`);
+    };
+  });
+
+  hooks.afterEach(() => {
+    (globalThis as any).fetch = originalFetch;
+  });
+
+  const SKILL_MD = [
+    '---',
+    'name: "Boxel Environment"',
+    'description: "env"',
+    'boxel:',
+    '  kind: skill',
+    '  tools:',
+    '    - codeRef:',
+    '        module: "@cardstack/boxel-host/commands/switch-submode"',
+    '        name: "default"',
+    '      requiresApproval: false',
+    '---',
+    '',
+    'Use switch-submode to change modes.',
+  ].join('\n');
+
+  test('parseMarkdownSkill computes the same functionName the host derives', (assert) => {
+    let { tools: commands } = parseMarkdownSkill(SKILL_MD, {
+      sourceUrl: 'https://realm/skills/boxel-environment/SKILL.md',
+    } as any);
+    assert.strictEqual(commands.length, 1);
+    // switch-submode_dd88 is the name the host's buildToolFunctionName
+    // produces for this code ref (registered prefixes resolve verbatim).
+    assert.strictEqual(commands[0].functionName, 'switch-submode_dd88');
+    assert.false(commands[0].requiresApproval);
+  });
+
+  test('parseMarkdownSkill reads the pre-rename boxel.commands key', (assert) => {
+    let { tools: commands } = parseMarkdownSkill(
+      SKILL_MD.replace('  tools:', '  commands:'),
+      {
+        sourceUrl: 'https://realm/skills/boxel-environment/SKILL.md',
+      } as any,
+    );
+    assert.strictEqual(commands.length, 1);
+    assert.strictEqual(commands[0].functionName, 'switch-submode_dd88');
+  });
+
+  test('a command without requiresApproval defaults to approval required', (assert) => {
+    let md = [
+      '---',
+      'name: "My Skill"',
+      'boxel:',
+      '  kind: skill',
+      '  tools:',
+      '    - codeRef:',
+      '        module: "@cardstack/boxel-host/commands/switch-submode"',
+      '        name: "default"',
+      '---',
+      'body',
+    ].join('\n');
+    let { tools: commands } = parseMarkdownSkill(md, {
+      sourceUrl: 'https://realm/skills/my-skill/SKILL.md',
+    } as any);
+    assert.true(commands[0].requiresApproval);
+  });
+
+  test('parseMarkdownSkill resolves relative command modules against the skill URL', (assert) => {
+    let md = [
+      '---',
+      'name: "My Skill"',
+      'boxel:',
+      '  kind: skill',
+      '  tools:',
+      '    - codeRef:',
+      '        module: "../../commands/my-command"',
+      '        name: "default"',
+      '---',
+      'body',
+    ].join('\n');
+    let { tools: commands } = parseMarkdownSkill(md, {
+      sourceUrl: 'https://realm/skills/my-skill/SKILL.md',
+    } as any);
+    assert.strictEqual(
+      commands[0].codeRef.module,
+      'https://realm/commands/my-command',
+    );
+  });
+
+  test('parseMarkdownSkill resolves root-relative command modules against the skill URL', (assert) => {
+    let md = [
+      '---',
+      'name: "My Skill"',
+      'boxel:',
+      '  kind: skill',
+      '  tools:',
+      '    - codeRef:',
+      '        module: "/commands/my-command"',
+      '        name: "default"',
+      '---',
+      'body',
+    ].join('\n');
+    let { tools: commands } = parseMarkdownSkill(md, {
+      sourceUrl: 'https://realm/skills/my-skill/SKILL.md',
+    } as any);
+    assert.strictEqual(
+      commands[0].codeRef.module,
+      'https://realm/commands/my-command',
+    );
+  });
+
+  // Builds the room-skills state event + enabled skill for the getTools
+  // tests; `definitionsKey` selects which spelling the state event uses for
+  // its uploaded definitions ('toolDefinitions', or the pre-rename
+  // 'commandDefinitions' that old rooms replay).
+  function skillsRoomFixture(definitionsKey: string) {
+    mockResponses.set('mxc://mock-server/switch-submode-def', {
+      ok: true,
+      text: JSON.stringify({
+        codeRef: {
+          module: '@cardstack/boxel-host/commands/switch-submode',
+          name: 'default',
+        },
+        tool: {
+          type: 'function',
+          function: {
+            name: 'switch-submode_dd88',
+            description: 'Switch between interact and code submodes',
+            parameters: { type: 'object', properties: {} },
+          },
+        },
+      }),
+    });
+
+    const eventList = [
+      {
+        type: APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+        event_id: 'skills-1',
+        origin_server_ts: 1000,
+        state_key: '',
+        content: {
+          enabledSkillCards: [
+            {
+              sourceUrl: 'https://realm/skills/boxel-environment/SKILL.md',
+              url: 'mxc://mock-server/env-skill',
+              name: 'SKILL.md',
+              contentType: 'text/plain',
+            },
+          ],
+          disabledSkillCards: [],
+          [definitionsKey]: [
+            {
+              sourceUrl: 'https://realm/commands/switch-submode',
+              url: 'mxc://mock-server/switch-submode-def',
+              name: 'switch-submode_dd88',
+              contentType: 'text/plain',
+            },
+          ],
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000 },
+        status: EventStatus.SENT,
+      },
+    ] as unknown as DiscreteMatrixEvent[];
+
+    // The card-shaped skill getEnabledSkills produces for this SKILL.md.
+    let { title, body, tools } = parseMarkdownSkill(SKILL_MD, {
+      sourceUrl: 'https://realm/skills/boxel-environment/SKILL.md',
+    } as any);
+    const enabledSkills = [
+      {
+        id: 'https://realm/skills/boxel-environment/SKILL.md',
+        type: 'card',
+        attributes: { title, instructions: body, tools },
+      } as unknown as LooseCardResource,
+    ];
+    return { eventList, enabledSkills };
+  }
+
+  test('getTools offers a command definition matched by a markdown skill', async () => {
+    const { eventList, enabledSkills } = skillsRoomFixture('toolDefinitions');
+    const tools = await getTools(
+      eventList,
+      enabledSkills,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(tools.length, 1);
+    assert.strictEqual(tools[0].function.name, 'switch-submode_dd88');
+  });
+
+  test('getTools reads definitions from the pre-rename commandDefinitions state key', async () => {
+    const { eventList, enabledSkills } =
+      skillsRoomFixture('commandDefinitions');
+    const tools = await getTools(
+      eventList,
+      enabledSkills,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(tools.length, 1);
+    assert.strictEqual(tools[0].function.name, 'switch-submode_dd88');
+  });
+
+  const DISCOVERED_SKILL_URL = 'https://realm/skills/trip-planner/SKILL.md';
+
+  // A definition as the fulfillment layer embeds it: the skill's indexed
+  // frontmatter entry tagged with the skill file it came from.
+  function discoveredDef(
+    name: string,
+    {
+      skillUrl = DISCOVERED_SKILL_URL,
+      description = 'Plans a trip',
+    }: { skillUrl?: string; description?: string } = {},
+  ) {
+    return {
+      sourceSkillUrl: skillUrl,
+      codeRef: { module: 'https://realm/commands/plan-trip', name: 'default' },
+      functionName: name,
+      requiresApproval: true,
+      definition: {
+        type: 'function',
+        function: {
+          name,
+          description,
+          parameters: { type: 'object', properties: {} },
+        },
+      },
+    };
+  }
+
+  function readResultEvent(
+    eventId: string,
+    ts: number,
+    discoveredTools: unknown[],
+  ): DiscreteMatrixEvent {
+    return {
+      type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+      event_id: eventId,
+      origin_server_ts: ts,
+      sender: '@aibot:localhost',
+      room_id: 'room1',
+      content: {
+        msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
+        commandRequestId: `req-${eventId}`,
+        'm.relates_to': {
+          rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+          key: 'applied',
+          event_id: '$bot-message',
+        },
+        data: { attachedFiles: [], discoveredTools },
+      },
+      unsigned: { age: 100, transaction_id: 't' },
+      status: EventStatus.SENT,
+    } as unknown as DiscreteMatrixEvent;
+  }
+
+  test('getTools offers tools discovered by a readRealmFile result event', async () => {
+    const tools = await getTools(
+      [readResultEvent('read-1', 2000, [discoveredDef('plan-trip_ab12')])],
+      [],
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(tools.length, 1);
+    assert.strictEqual(tools[0].function.name, 'plan-trip_ab12');
+    assert.strictEqual(tools[0].function.description, 'Plans a trip');
+  });
+
+  test('the latest read of a skill replaces its earlier definitions wholesale', async () => {
+    const tools = await getTools(
+      [
+        readResultEvent('read-1', 1000, [
+          discoveredDef('plan-trip_ab12', { description: 'stale' }),
+          discoveredDef('book-hotel_cd34'),
+        ]),
+        readResultEvent('read-2', 2000, [
+          discoveredDef('plan-trip_ab12', { description: 'fresh' }),
+        ]),
+      ],
+      [],
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(
+      tools.length,
+      1,
+      'a tool the skill no longer declares disappears with the newer read',
+    );
+    assert.strictEqual(tools[0].function.description, 'fresh');
+  });
+
+  test('discovered tools on a non-bot result event are ignored', async () => {
+    let forged = readResultEvent('read-1', 2000, [
+      discoveredDef('plan-trip_ab12'),
+    ]) as any;
+    forged.sender = '@someone-else:localhost';
+    const tools = await getTools(
+      [forged],
+      [],
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(
+      tools.length,
+      0,
+      'only the bot publishes readRealmFile results',
+    );
+  });
+
+  test('an entry whose definition is not a function tool is skipped', async () => {
+    const tools = await getTools(
+      [
+        readResultEvent('read-1', 2000, [
+          {
+            ...discoveredDef('plan-trip_ab12'),
+            definition: { function: { name: 'plan-trip_ab12' } },
+          },
+          discoveredDef('book-hotel_cd34'),
+        ]),
+      ],
+      [],
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(tools.length, 1, 'the malformed entry is dropped');
+    assert.strictEqual(tools[0].function.name, 'book-hotel_cd34');
+  });
+
+  test('discoveries on a non-applied result are ignored', async () => {
+    let failed = readResultEvent('read-1', 2000, [
+      discoveredDef('plan-trip_ab12'),
+    ]) as any;
+    failed.content['m.relates_to'].key = 'invalid';
+    const tools = await getTools(
+      [failed],
+      [],
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(
+      tools.length,
+      0,
+      'only an applied read is evidence the skill was actually fetched',
+    );
+  });
+
+  test('a skill disabled in room state contributes no discovered tools', async () => {
+    const skillsEvent = {
+      type: APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+      event_id: 'skills-1',
+      origin_server_ts: 3000,
+      state_key: '',
+      content: {
+        enabledSkillCards: [],
+        disabledSkillCards: [
+          {
+            sourceUrl: DISCOVERED_SKILL_URL,
+            url: 'mxc://mock-server/trip-planner',
+            name: 'SKILL.md',
+            contentType: 'text/plain',
+          },
+        ],
+      },
+      sender: '@user:localhost',
+      room_id: 'room1',
+      unsigned: { age: 1000 },
+      status: EventStatus.SENT,
+    } as unknown as DiscreteMatrixEvent;
+    const tools = await getTools(
+      [
+        readResultEvent('read-1', 2000, [discoveredDef('plan-trip_ab12')]),
+        skillsEvent,
+      ],
+      [],
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(tools.length, 0);
+  });
+
+  test('a skill both enabled and read yields one definition; the uploaded one wins', async () => {
+    const { eventList, enabledSkills } = skillsRoomFixture('toolDefinitions');
+    eventList.push(
+      readResultEvent('read-1', 2000, [
+        discoveredDef('switch-submode_dd88', {
+          skillUrl: 'https://realm/skills/boxel-environment/SKILL.md',
+          description: 'discovered copy that must lose to the upload',
+        }),
+      ]),
+    );
+    const tools = await getTools(
+      eventList,
+      enabledSkills,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(
+      tools.length,
+      1,
+      'one definition for the shared functionName',
+    );
+    assert.strictEqual(
+      tools[0].function.description,
+      'Switch between interact and code submodes',
+      'the enabled skill uploaded definition wins the conflict',
+    );
+  });
+
+  test('discovered definitions round-trip the event encode/decode path', async () => {
+    // sendMatrixEvent JSON-stringifies `data` on the way out; constructHistory
+    // parses it back. Feed getTools a history built from the wire shape.
+    let rawEvent = readResultEvent('read-1', 2000, [
+      discoveredDef('plan-trip_ab12'),
+    ]) as any;
+    rawEvent.content = {
+      ...rawEvent.content,
+      data: JSON.stringify(rawEvent.content.data),
+    };
+    const history = await constructHistory([rawEvent], fakeMatrixClient);
+    const tools = await getTools(
+      history,
+      [],
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(tools.length, 1);
+    assert.strictEqual(tools[0].function.name, 'plan-trip_ab12');
+  });
+});
+
+module('absolutizeSkillLinks', () => {
+  const INDEX = 'https://localhost:4201/skills/index.md';
+
+  test('resolves a document-relative link against the skill url', () => {
+    // The skills realm is itself named `skills`, so a link relative to the
+    // index (which lives at the realm root) doubles the segment — the exact
+    // shape the ai-bot used to flatten to a 404.
+    assert.strictEqual(
+      absolutizeSkillLinks('See [boxel](skills/boxel/SKILL.md).', INDEX),
+      'See [boxel](https://localhost:4201/skills/skills/boxel/SKILL.md).',
+    );
+  });
+
+  test('resolves against the skill url, not a shorter prefix', () => {
+    assert.strictEqual(
+      absolutizeSkillLinks('[g](skills/glossary.md)', INDEX),
+      '[g](https://localhost:4201/skills/skills/glossary.md)',
+    );
+  });
+
+  test('leaves absolute urls, anchors, and non-navigational schemes alone', () => {
+    let body =
+      '[abs](https://example.com/x) [anchor](#section) [mail](mailto:a@b.c) [root](/top)';
+    assert.strictEqual(absolutizeSkillLinks(body, INDEX), body);
+  });
+
+  test('preserves a link title', () => {
+    assert.strictEqual(
+      absolutizeSkillLinks(
+        '[c](commands/boxel-create-card.md "Create")',
+        INDEX,
+      ),
+      '[c](https://localhost:4201/skills/commands/boxel-create-card.md "Create")',
+    );
+  });
+
+  test('leaves the body untouched when the id is not an absolute url', () => {
+    let body = '[boxel](skills/boxel/SKILL.md)';
+    assert.strictEqual(
+      absolutizeSkillLinks(body, '@cardstack/skills/index.md'),
+      body,
+    );
+    assert.strictEqual(absolutizeSkillLinks(body, undefined), body);
+  });
+
+  test('skillCardsToMessages absolutizes links in the emitted instructions', () => {
+    let [message] = skillCardsToMessages([
+      {
+        id: INDEX,
+        attributes: {
+          title: 'Index',
+          instructions: 'Read [boxel](skills/boxel/SKILL.md).',
+        },
+      },
+    ]);
+    assert.true(
+      message.includes(
+        '[boxel](https://localhost:4201/skills/skills/boxel/SKILL.md)',
+      ),
+      'the prompt carries a copy-ready absolute url',
     );
   });
 });

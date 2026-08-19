@@ -2,6 +2,7 @@ import type Koa from 'koa';
 import type { DBAdapter, Realm } from '@cardstack/runtime-common';
 import {
   fetchUserPermissions,
+  isSessionRevoked,
   param,
   parseRealmsFromPayload,
   parseSearchRequestPayload,
@@ -10,20 +11,26 @@ import {
   separatedByCommas,
   type Expression,
 } from '@cardstack/runtime-common';
-import { AuthenticationError } from '@cardstack/runtime-common/router';
-import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler';
-import { retrieveTokenClaim, type RealmServerTokenClaim } from '../utils/jwt';
+import {
+  AuthenticationError,
+  AuthenticationErrorMessages,
+} from '@cardstack/runtime-common/router';
+import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.ts';
+import {
+  retrieveTokenClaim,
+  type RealmServerTokenClaim,
+} from '../utils/jwt.ts';
 import {
   buildReadableRealms,
   getPublishedRealmURLs,
-} from '../utils/realm-readability';
+} from '../utils/realm-readability.ts';
 import {
   fetchRequestFromContext,
   sendResponseForBadRequest,
   sendResponseForForbiddenRequest,
   sendResponseForNotFound,
   sendResponseForUnauthorizedRequest,
-} from '../middleware';
+} from '../middleware/index.ts';
 
 export type MultiRealmAuthorizationState = {
   realmList: string[];
@@ -133,9 +140,14 @@ export function multiRealmAuthorization({
         return;
       }
     } else {
-      let token: RealmServerTokenClaim;
+      let token: RealmServerTokenClaim & { iat: number; exp: number };
       try {
         token = retrieveTokenClaim(authorization, realmSecretSeed);
+        if (await isSessionRevoked(dbAdapter, token.user, token.iat)) {
+          throw new AuthenticationError(
+            AuthenticationErrorMessages.SessionRevoked,
+          );
+        }
       } catch (e) {
         if (e instanceof AuthenticationError) {
           await sendResponseForUnauthorizedRequest(ctxt, e.message);

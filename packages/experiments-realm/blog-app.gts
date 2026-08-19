@@ -13,7 +13,7 @@ import {
   contains,
   StringField,
   type CardContext,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 import {
   codeRef,
@@ -234,7 +234,7 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
               <:meta as |card|>
                 {{#if this.showAdminData}}
                   <BlogAdminData
-                    @cardId={{card.url}}
+                    @cardId={{card.id}}
                     @context={{this.context}}
                   />
                 {{/if}}
@@ -307,10 +307,10 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
       displayName === 'Blog Posts'
         ? 'blog-posts-grid'
         : displayName === 'Author Bios'
-        ? 'author-bios-grid'
-        : displayName === 'Categories'
-        ? 'categories-grid'
-        : '';
+          ? 'author-bios-grid'
+          : displayName === 'Categories'
+            ? 'categories-grid'
+            : '';
     return gridName ? `bordered-items ${gridName}` : '';
   }
 
@@ -368,8 +368,8 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
     };
   }
 
-  @action private onChangeView(id: ViewOption) {
-    this.selectedView = id;
+  @action private onChangeView(id: string) {
+    this.selectedView = id as ViewOption;
   }
 
   @action private onSort(option: SortOption) {

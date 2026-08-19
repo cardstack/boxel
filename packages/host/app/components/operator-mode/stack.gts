@@ -9,24 +9,23 @@ import { cn, eq, gte } from '@cardstack/boxel-ui/helpers';
 
 import {
   CardCrudFunctionsContextName,
-  type CommandContext,
+  type ToolContext,
 } from '@cardstack/runtime-common';
 
 import type { StackItem } from '@cardstack/host/lib/stack-item';
-
-import type {
-  CreateCardFn,
-  DeleteCardFn,
-  EditCardFn,
-  SaveCardFn,
-  ViewCardFn,
-} from 'https://cardstack.com/base/card-api';
 
 import OperatorModeStackItem, {
   type StackItemComponentAPI,
 } from './stack-item';
 
 import type { CardDefOrId } from './stack-item';
+import type {
+  CreateCardFn,
+  DeleteCardFn,
+  EditCardFn,
+  SaveCardFn,
+  ViewCardFn,
+} from '@cardstack/base/card-api';
 
 interface Signature {
   Element: HTMLElement;
@@ -39,7 +38,7 @@ interface Signature {
     editCard: EditCardFn;
     saveCard: SaveCardFn;
     deleteCard: DeleteCardFn;
-    commandContext: CommandContext;
+    toolContext: ToolContext;
     close: (stackItem: StackItem) => void;
     onSelectedCards: (
       selectedCards: CardDefOrId[],
@@ -121,7 +120,7 @@ export default class OperatorModeStack extends Component<Signature> {
             @item={{item}}
             @index={{i}}
             @stackItems={{@stackItems}}
-            @commandContext={{@commandContext}}
+            @toolContext={{@toolContext}}
             @dismissStackedCardsAbove={{perform this.dismissStackedCardsAbove}}
             @requestDeleteCard={{@deleteCard}}
             @close={{@close}}

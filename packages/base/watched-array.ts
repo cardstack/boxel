@@ -1,12 +1,71 @@
+// Reading `proxy[rawValues]` returns the underlying backing array with every
+// slot intact — including any values the index getter hides from userland.
+// `WatchedArray` is generic: when a `hideSlot` predicate is supplied the masked
+// per-slot surface is `T | undefined` (for the `linksToMany` caller, that is
+// `Card | undefined`); without one the array is unmasked. Only the link-aware
+// modules in `packages/base` (card-api.gts, field-support.ts) read through this
+// escape hatch to inspect or swap the hidden values.
+export const rawValues = Symbol.for('@cardstack/watched-array:raw-values');
+
+// Return the raw backing array for a value that may be a `WatchedArray` proxy
+// or an ordinary array. A plain array has no `rawValues` slot, so it is returned
+// as-is; a `WatchedArray` returns its sentinel-bearing backing store.
+export function rawArrayValues<T>(value: ArrayLike<T>): T[] {
+  let raw = (value as any)?.[rawValues];
+  return (raw ?? value) as T[];
+}
+
+interface WatchedArrayOptions<T> {
+  // When provided, a numeric-index read whose backing value satisfies this
+  // predicate resolves to `undefined` instead of the stored value. The value
+  // remains in the backing array (so `length`, iteration count, and in-place
+  // swaps are unaffected); it is simply never handed to userland through `[i]`.
+  hideSlot?: (value: T) => boolean;
+}
+
+function arrayIndex(prop: string | symbol): number | undefined {
+  if (typeof prop !== 'string') {
+    return undefined;
+  }
+  let n = Number(prop);
+  // Canonical array indices only: non-negative integers whose string form round
+  // -trips (rules out '01', '1.0', '-1', 'length', etc.).
+  if (Number.isInteger(n) && n >= 0 && String(n) === prop) {
+    return n;
+  }
+  return undefined;
+}
+
 class WatchedArray<T> {
   constructor(
     subscriber: (oldArr: Array<T>, arr: Array<T>) => void,
     arr: T[] = [],
+    opts: WatchedArrayOptions<T> = {},
   ) {
     this.#subscriber = subscriber;
+    let { hideSlot } = opts;
     let clone = arr.slice();
     let self = this;
     return new Proxy(clone, {
+      get(target, prop, receiver) {
+        // Escape hatch for the link-aware base modules: hand back the raw
+        // backing array so they can read/swap sentinels directly.
+        if (prop === rawValues) {
+          return target;
+        }
+        if (hideSlot !== undefined) {
+          let index = arrayIndex(prop);
+          // Only consult the predicate for indices that actually hold a value;
+          // an out-of-range read (`arr[999]`) falls straight through to
+          // `undefined` without handing the predicate a missing slot.
+          if (index !== undefined && index < target.length) {
+            if (hideSlot(target[index])) {
+              return undefined;
+            }
+          }
+        }
+        return Reflect.get(target, prop, receiver);
+      },
       set(target, prop, value /*, _receiver */) {
         let prevValues = [...target];
         (target as any)[prop] = value;

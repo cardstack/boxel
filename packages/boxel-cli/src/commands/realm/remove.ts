@@ -4,9 +4,9 @@ import {
   getProfileManager,
   NO_ACTIVE_PROFILE_ERROR,
   type ProfileManager,
-} from '../../lib/profile-manager';
-import { prompt } from '../../lib/prompt';
-import { DIM, FG_CYAN, FG_GREEN, FG_RED, RESET } from '../../lib/colors';
+} from '../../lib/profile-manager.ts';
+import { prompt } from '../../lib/prompt.ts';
+import { DIM, FG_CYAN, FG_GREEN, FG_RED, RESET } from '../../lib/colors.ts';
 
 export interface RemoveRealmOptions {
   realmUrl: string;

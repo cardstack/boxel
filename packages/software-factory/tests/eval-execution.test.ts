@@ -1,11 +1,12 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 
 import {
   discoverEvaluableFiles,
   runEvaluateInMemory,
-} from '../src/eval-execution';
+} from '../src/eval-execution.ts';
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -92,7 +93,7 @@ module('discoverEvaluableFiles', function () {
       client: stubClient([
         'Cards/my-card.json',
         'index.json',
-        '.realm.json',
+        'realm.json',
         'README.md',
         'hello.gts',
       ]),

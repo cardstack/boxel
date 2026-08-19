@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import {
   formattedError,
+  isJsonContentType,
   SupportedMimeType,
   type CardDocument,
   type SingleCardDocument,
@@ -15,16 +16,10 @@ import {
 } from '@cardstack/runtime-common';
 import type { AtomicOperation } from '@cardstack/runtime-common/atomic-document';
 import { createAtomicDocument } from '@cardstack/runtime-common/atomic-document';
-import { validateWriteSize } from '@cardstack/runtime-common/write-size-validation';
-
-import type {
-  BaseDef,
-  CardDef,
-  FieldDef,
-  Field,
-  SerializeOpts,
-} from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import {
+  fileSizeLimitFor,
+  validateWriteSize,
+} from '@cardstack/runtime-common/write-size-validation';
 
 import LimitedSet from '../lib/limited-set';
 
@@ -33,7 +28,16 @@ import type LoaderService from './loader-service';
 import type MessageService from './message-service';
 import type NetworkService from './network';
 import type Realm from './realm';
-import type ResetService from './reset';
+import type SessionService from './session';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type {
+  BaseDef,
+  CardDef,
+  FieldDef,
+  Field,
+  SerializeOpts,
+} from '@cardstack/base/card-api';
+import type * as Searchable from '@cardstack/base/searchable';
 
 export type CardSaveSubscriber = (
   url: URL,
@@ -61,7 +65,7 @@ export default class CardService extends Service {
   @service declare private network: NetworkService;
   @service declare private environmentService: EnvironmentService;
   @service declare private realm: Realm;
-  @service declare private reset: ResetService;
+  @service declare private session: SessionService;
 
   private subscriber: CardSaveSubscriber | undefined;
   // This error will be used by check-correctness command to report size limit errors
@@ -72,19 +76,26 @@ export default class CardService extends Service {
     Loader,
     Promise<typeof CardAPI>
   >;
+  // The searchable-driven search-doc generator lives in its own base module so
+  // it stays out of every card's dependency closure; cache it per-loader the
+  // same way the card-api module is cached.
+  declare private loaderToSearchableLoadingCache: WeakMap<
+    Loader,
+    Promise<typeof Searchable>
+  >;
   declare clientRequestIds: LimitedSet<string>;
 
   constructor(owner: Owner) {
     super(owner);
     this.resetState();
-    this.reset.register(this);
+    this.session.register(this);
   }
 
   async getAPI(): Promise<typeof CardAPI> {
     let loader = this.loaderService.loader;
     if (!this.loaderToCardAPILoadingCache.has(loader)) {
       let apiPromise = loader.import<typeof CardAPI>(
-        'https://cardstack.com/base/card-api',
+        '@cardstack/base/card-api',
       );
       this.loaderToCardAPILoadingCache.set(loader, apiPromise);
       return apiPromise;
@@ -92,10 +103,23 @@ export default class CardService extends Service {
     return this.loaderToCardAPILoadingCache.get(loader)!;
   }
 
+  async getSearchable(): Promise<typeof Searchable> {
+    let loader = this.loaderService.loader;
+    if (!this.loaderToSearchableLoadingCache.has(loader)) {
+      let searchablePromise = loader.import<typeof Searchable>(
+        '@cardstack/base/searchable',
+      );
+      this.loaderToSearchableLoadingCache.set(loader, searchablePromise);
+      return searchablePromise;
+    }
+    return this.loaderToSearchableLoadingCache.get(loader)!;
+  }
+
   resetState() {
     this.subscriber = undefined;
     this.clientRequestIds = new LimitedSet(250);
     this.loaderToCardAPILoadingCache = new WeakMap();
+    this.loaderToSearchableLoadingCache = new WeakMap();
     this.sizeLimitError.clear();
   }
 
@@ -179,7 +203,32 @@ export default class CardService extends Service {
       throw err;
     }
     if (response.status !== 204) {
-      return await response.json();
+      // A relationship link can point at a non-card URL (e.g. an image);
+      // gate on Content-Type so the binary body never reaches JSON.parse.
+      let contentType = response.headers.get('content-type');
+      if (!isJsonContentType(contentType)) {
+        let err = new Error(
+          `Expected a card document from ${urlString} but the response content type was ${
+            contentType ?? 'unknown'
+          }. If this is a relationship link, it likely points at a non-card URL (e.g. an image) rather than a card.`,
+        ) as any;
+        err.status = response.status;
+        err.responseHeaders = response.headers;
+        throw err;
+      }
+      let doc = await response.json();
+      // Stamp the transferred body size (O(1)) so the client-telemetry
+      // deserialize hook can report it without re-serializing the whole
+      // document to measure it. Non-enumerable so it never reaches the wire.
+      let contentLength = Number(response.headers.get('content-length') ?? '');
+      if (Number.isFinite(contentLength) && doc && typeof doc === 'object') {
+        Object.defineProperty(doc, Symbol.for('boxel-doc-response-bytes'), {
+          value: contentLength,
+          enumerable: false,
+          configurable: true,
+        });
+      }
+      return doc;
     }
     return;
   }
@@ -189,7 +238,9 @@ export default class CardService extends Service {
     opts?: SerializeOpts & { withIncluded?: true },
   ): Promise<LooseSingleCardDocument> {
     let api = await this.getAPI();
-    let serialized = api.serializeCard(card, opts);
+    let serialized = api.serializeCard(card, {
+      ...opts,
+    });
     if (!opts?.withIncluded) {
       delete serialized.included;
     }
@@ -205,6 +256,7 @@ export default class CardService extends Service {
     return {
       status: response.status,
       content: await response.text(),
+      contentType: response.headers.get('content-type'),
     };
   }
 
@@ -244,7 +296,10 @@ export default class CardService extends Service {
         options?.resetLoader &&
         this.loaderService.loader.isModuleLoaded(url.href)
       ) {
-        this.loaderService.resetLoader();
+        this.loaderService.resetLoader({
+          reason: 'source-write',
+          codeChange: true,
+        });
       }
 
       return response;
@@ -264,6 +319,15 @@ export default class CardService extends Service {
         Accept: 'application/vnd.card+source',
       },
     });
+    // Without this guard an error response's body would be written into the
+    // destination as file content and the copy would appear to succeed.
+    if (!response.ok) {
+      throw new Error(
+        `Could not read ${fromUrl.href} for copying: ${
+          response.status
+        } - ${(await response.text()).slice(0, 500)}`,
+      );
+    }
 
     const content = await response.text();
     return await this.saveSource(toUrl, content, 'copy');
@@ -355,7 +419,11 @@ export default class CardService extends Service {
     let maxSizeBytes =
       type === 'card'
         ? this.environmentService.cardSizeLimitBytes
-        : this.environmentService.fileSizeLimitBytes;
+        : fileSizeLimitFor(url, {
+            default: this.environmentService.fileSizeLimitBytes,
+            audio: this.environmentService.audioSizeLimitBytes,
+            video: this.environmentService.videoSizeLimitBytes,
+          });
     try {
       this.sizeLimitError.delete(url);
       validateWriteSize(content, maxSizeBytes, type);

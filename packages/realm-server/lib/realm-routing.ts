@@ -1,6 +1,11 @@
 import { join } from 'path';
-import { existsSync } from 'fs-extra';
-import type { DBAdapter, Realm } from '@cardstack/runtime-common';
+import fsExtra from 'fs-extra';
+const { existsSync } = fsExtra;
+import type {
+  DBAdapter,
+  HostRoutingRule,
+  Realm,
+} from '@cardstack/runtime-common';
 import {
   executableExtensions,
   fetchRealmPermissions,
@@ -13,8 +18,8 @@ import {
 import {
   indexCandidateExpressions,
   indexURLCandidates,
-} from './index-url-utils';
-import type { RealmRegistryReconciler } from './realm-registry-reconciler';
+} from './index-url-utils.ts';
+import type { RealmRegistryReconciler } from './realm-registry-reconciler.ts';
 
 const federatedLog = logger('realm-server:federated');
 
@@ -90,6 +95,62 @@ export async function findOrMountRealm(
     return undefined;
   }
   return await reconciler.lookupOrMount(rows[0].url);
+}
+
+// A host routing rule matched against a concrete request URL, together
+// with the realm it belongs to and that realm's canonical form of the
+// path. `canonicalPathname` is the single URL the rule should be served
+// under: the realm mount pathname joined with the rule's declared path
+// (so the realm-root rule '/' keeps its trailing slash, while a sub-path
+// rule like '/pricing' has none). Callers redirect to it when the request
+// arrived under a different form. The rule is the serve/redirect union
+// from the realm's routing map — a redirect rule is never served, so its
+// canonicalPathname is only meaningful for serve rules.
+export type MatchedHostRoutingRule = {
+  realm: Realm;
+  rule: HostRoutingRule;
+  canonicalPathname: string;
+};
+
+// Resolve a request URL against the routed realm's host routing rules.
+// Trailing-slash-insensitive: `RealmPaths.local` strips trailing slashes,
+// so '/pricing' and '/pricing/' both match a rule declared as '/pricing'.
+// Returns undefined when the realm has no routing rules or the path
+// matches none. Used both to decide whether a bare routed path is
+// servable (rather than falling through to the module resolver) and to
+// canonicalize the request URL.
+export async function matchHostRoutingRule(
+  requestURL: URL,
+  deps: RealmRoutingDeps,
+): Promise<MatchedHostRoutingRule | undefined> {
+  let realm = await findOrMountRealm(requestURL, deps);
+  if (!realm) {
+    return undefined;
+  }
+  let routingMap = await realm.getHostRoutingMap();
+  if (routingMap.length === 0) {
+    return undefined;
+  }
+  let realmURL = new URL(realm.url);
+  realmURL.protocol = requestURL.protocol;
+  let realmPaths = new RealmPaths(realmURL);
+  let pathInRealm: string;
+  try {
+    pathInRealm = '/' + realmPaths.local(requestURL);
+  } catch {
+    // local() throws when the request is not within the realm; treat as
+    // no match rather than surfacing the error on the hot HTML path.
+    return undefined;
+  }
+  let rule = routingMap.find((r) => r.path === pathInRealm);
+  if (!rule) {
+    return undefined;
+  }
+  return {
+    realm,
+    rule,
+    canonicalPathname: realmURL.pathname + rule.path.replace(/^\//, ''),
+  };
 }
 
 export async function getPublishedRealmInfo(
@@ -240,12 +301,40 @@ export async function hasPublicPermissions(
 // + drops to undefined, matching searchRealms / handle-realm-info's
 // existing "skip missing realm, return partial results" semantics so
 // one broken realm does not 5xx the whole federated request.
+//
+// CS-11259 self-mount fast-path. A `_federated-search` fired from
+// inside a prerender that is itself rendering for `url` would re-
+// enter `lookupOrMount(url)`, find the URL in `pendingMounts`, and
+// await the very `start()` it is nested inside — deadlocking until
+// the 90s prerender timeout breaks the cycle. When the request
+// carries `x-boxel-consuming-realm === url` (it originated from a
+// prerender for this exact realm) AND the URL is already published
+// into `reconciler.mounted` (`ensureMounted` publishes it
+// synchronously before awaiting `start()`), resolve to that
+// published Realm without awaiting startup. Searches against the
+// mid-index `boxel_index` return the correct empty result for a
+// brand-new realm and the rest of the chain unwinds.
+//
+// Scope is intentionally narrow: any caller without a
+// `consumingRealm` (live SPA / API requests, cross-replica federated
+// requests) keeps the default `lookupOrMount` behavior and still
+// waits on `start()` for read-after-mount consistency. A cross-realm
+// federated search fired from inside a prerender only fast-paths the
+// self-realm slot; other URLs in `realmList` still go through
+// `lookupOrMount`.
 export async function resolveRealmsForFederatedRequest(
   reconciler: RealmRegistryReconciler,
   realmList: string[],
+  opts?: { consumingRealm?: string | null },
 ): Promise<Array<Realm | undefined>> {
+  let consumingRealm = opts?.consumingRealm ?? null;
   let results = await Promise.allSettled(
-    realmList.map((url) => reconciler.lookupOrMount(url)),
+    realmList.map((url) => {
+      if (consumingRealm === url && reconciler.mounted.has(url)) {
+        return Promise.resolve(reconciler.mounted.get(url)!);
+      }
+      return reconciler.lookupOrMount(url);
+    }),
   );
   return results.map((result, idx) => {
     if (result.status === 'fulfilled') {

@@ -1,4 +1,4 @@
-import type { FetcherMiddlewareHandler } from './fetcher';
+import type { FetcherMiddlewareHandler } from './fetcher.ts';
 
 export interface TokenSource {
   token(url: string): string | undefined;

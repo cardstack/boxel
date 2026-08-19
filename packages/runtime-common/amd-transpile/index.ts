@@ -51,10 +51,10 @@ import {
   defineGetter,
   defineLocalGetter,
   reExportStarSnippet,
-} from './emit-helpers';
-import { collectPatternBindings } from './pattern-helpers';
-import { IdentifierRewriter } from './identifier-rewriter';
-import { hasTopLevelAwait } from './top-level-await';
+} from './emit-helpers.ts';
+import { collectPatternBindings } from './pattern-helpers.ts';
+import { IdentifierRewriter } from './identifier-rewriter.ts';
+import { hasTopLevelAwait } from './top-level-await.ts';
 
 interface AmdTranspileOptions {
   // Module identifier embedded in the emitted `define(...)` call. Same role

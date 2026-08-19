@@ -1,8 +1,8 @@
 import { getReasonPhrase } from 'http-status-codes';
 import status from 'statuses';
-import { createResponse } from './create-response';
-import type { RequestContext } from './realm';
-import type { SearchResultError } from './realm-index-query-engine';
+import { createResponse } from './create-response.ts';
+import type { RequestContext } from './realm.ts';
+import type { SearchResultError } from './realm-index-query-engine.ts';
 
 export interface ErrorDetails {
   status?: number;
@@ -29,11 +29,37 @@ export interface SerializedError {
   stack?: string;
   // Structured render-timeout diagnostics (e.g. launchMs, waits,
   // renderStage, queryLoadsInFlight). The source of truth is the
-  // `boxel_index.timing_diagnostics` column; the IndexWriter copies
+  // `boxel_index.diagnostics` column; the IndexWriter copies
   // the payload onto this field when persisting an error row so the
   // existing UI read path (formattedError → CardErrorJSONAPI.meta.
   // diagnostics) continues to work unchanged.
   diagnostics?: Record<string, unknown>;
+  // Set when the failure describes the visit's own request — it aborted or
+  // errored before any response document existed — rather than a verdict
+  // about the content. A `prerendered_html` error row carrying this marker
+  // is eligible for the reconcile sweep's bounded retry lane, unlike a
+  // deterministic render error.
+  visitRequestFailure?: true;
+  // How many consecutive `visitRequestFailure` rows this URL has recorded,
+  // maintained by the prerendered-html writer: incremented while each
+  // successive write carries the marker, cleared whenever a render
+  // succeeds (the error row is simply replaced). The reconcile sweep stops
+  // retrying once this reaches its cap, making the row terminal so a
+  // persistently failing visit cannot keep consuming its realm's prerender
+  // affinity lane.
+  consecutiveVisitFailures?: number;
+}
+
+// A persisted error document: the `SerializedError` plus the index metadata
+// that rode with the row that failed. Stored in the `error_doc` column and
+// carried on the wire by anything that stands in for a card/module/file that
+// failed to render or index.
+export interface ErrorEntry {
+  type: 'instance-error' | 'module-error' | 'file-error';
+  error: SerializedError;
+  types?: string[];
+  searchData?: Record<string, any>;
+  cardType?: string;
 }
 
 // Postgres `jsonb` containers store child offsets in 28 bits, so a
@@ -62,6 +88,32 @@ export interface SerializedError {
 // The budget is set to 8 MiB: 32× under the jsonb limit, plenty of
 // debug headroom for healthy errors, and small enough to leave room
 // for the rest of the row (`pristine_doc` / `search_doc` etc.).
+// Postgres rejects the NUL character (`22P05`) and unpaired UTF-16
+// surrogate halves inside a `jsonb` value's text. A single such code
+// point — e.g. raw binary folded into an error message — aborts the
+// whole upsert batch, so `sanitizeForJsonb` replaces them before write.
+/* eslint-disable no-control-regex -- matching the NUL control character is the whole point */
+const JSONB_ILLEGAL_CODE_POINTS =
+  /\u0000|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+/* eslint-enable no-control-regex */
+
+export function sanitizeForJsonb<T>(value: T): T {
+  if (typeof value === 'string') {
+    return value.replace(JSONB_ILLEGAL_CODE_POINTS, '\uFFFD') as unknown as T;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeForJsonb(item)) as unknown as T;
+  }
+  if (value !== null && typeof value === 'object') {
+    let result: Record<string, unknown> = {};
+    for (let [key, val] of Object.entries(value)) {
+      result[sanitizeForJsonb(key)] = sanitizeForJsonb(val);
+    }
+    return result as T;
+  }
+  return value;
+}
+
 export const ERROR_DOC_MAX_BYTES = 8 * 1024 * 1024;
 export const ERROR_DOC_MAX_ADDITIONAL_ERRORS = 200;
 const ENTRY_STACK_BUDGET = 64 * 1024;
@@ -195,6 +247,85 @@ function omittedSentinel(count: number): {
     } omitted to satisfy error_doc size budget`,
     additionalErrors: null,
   };
+}
+
+// Identity used to dedupe error documents when folding one into another —
+// two documents describing the same failure (same target, message, status)
+// are the same error even if one rode in via a different path.
+function errorDocIdentity(error: {
+  id?: string | null;
+  message?: string;
+  status?: number;
+}): string {
+  return JSON.stringify({
+    id: error.id ?? null,
+    message: error.message ?? null,
+    status: error.status ?? null,
+  });
+}
+
+// Fold `secondary`'s error detail into `primary` without changing which
+// document is authoritative: `primary` keeps its message / status / stack
+// (the reader-facing text), and `secondary`'s detail is added to
+// `primary.additionalErrors` so a dependency error only one document captured
+// survives. `secondary`'s own top-level error is added as a flat entry (its
+// nested `additionalErrors` are spread in alongside rather than nested), and
+// `deps` are unioned. Entries are deduped by (id, message, status).
+export function mergeErrorDetail(
+  primary: SerializedError,
+  secondary: SerializedError,
+): SerializedError {
+  let merged = Array.isArray(primary.additionalErrors)
+    ? [...primary.additionalErrors]
+    : [];
+  let seen = new Set<string>([
+    errorDocIdentity(primary),
+    ...merged.map(errorDocIdentity),
+  ]);
+  let candidates = [
+    { ...secondary, additionalErrors: null },
+    ...(Array.isArray(secondary.additionalErrors)
+      ? secondary.additionalErrors
+      : []),
+  ];
+  for (let candidate of candidates) {
+    let key = errorDocIdentity(candidate);
+    if (!seen.has(key)) {
+      seen.add(key);
+      merged.push(candidate);
+    }
+  }
+  let deps =
+    primary.deps || secondary.deps
+      ? [...new Set([...(primary.deps ?? []), ...(secondary.deps ?? [])])]
+      : undefined;
+  return {
+    ...primary,
+    additionalErrors: merged.length > 0 ? merged : null,
+    ...(deps ? { deps } : {}),
+  };
+}
+
+// Combine two error documents for the same indexed entry, using their index
+// generation as the authority. A higher generation is more recent, so it wins
+// outright: the lower-generation document may be stale — the dependency graph
+// it recorded may have changed since. At the same generation neither
+// supersedes the other (e.g. the two prerender visits of a single indexing
+// job): keep `a` as the authoritative envelope and fold `b`'s detail into it
+// via `mergeErrorDetail`.
+export function mergeErrorsByGeneration(
+  a: SerializedError,
+  aGeneration: number,
+  b: SerializedError,
+  bGeneration: number,
+): SerializedError {
+  if (aGeneration > bGeneration) {
+    return a;
+  }
+  if (bGeneration > aGeneration) {
+    return b;
+  }
+  return mergeErrorDetail(a, b);
 }
 
 export interface CardErrorJSONAPI {
@@ -464,6 +595,48 @@ export class CardError extends Error implements SerializedError {
   }
 }
 
+// The import map (host network.ts) resolves every `@cardstack/boxel-icons/<name>`
+// import to `<iconsURL>/@cardstack/boxel-icons/v1/icons/<name>.js`. This path
+// segment is the same in every environment (local http-server, per-slug
+// Traefik host, and the production CDN), so a path match is a reliable,
+// config-free way to recognize an icon module from inside runtime-common.
+const BOXEL_ICONS_MODULE_PATH = '/@cardstack/boxel-icons/v1/icons/';
+
+// A missing icon key returns 403 from the production S3-backed CDN (the bucket
+// withholds `s3:ListBucket` from the public principal, so absent keys 403
+// instead of 404) and 404 from the local http-server. Either way it means the
+// named icon does not exist. Translate that into a message that points the user
+// at the real fix — correcting the import — instead of surfacing the raw S3
+// AccessDenied XML. Returns undefined when `moduleHref`/`status` are not a
+// missing-icon fetch, so callers fall back to their normal error handling.
+export function iconNotFoundMessage(
+  moduleHref: string,
+  status: number,
+): string | undefined {
+  if (status !== 403 && status !== 404) {
+    return undefined;
+  }
+  let pathname: string;
+  try {
+    pathname = new URL(moduleHref).pathname;
+  } catch {
+    return undefined;
+  }
+  let index = pathname.indexOf(BOXEL_ICONS_MODULE_PATH);
+  if (index === -1) {
+    return undefined;
+  }
+  let rest = pathname.slice(index + BOXEL_ICONS_MODULE_PATH.length);
+  if (!rest.endsWith('.js')) {
+    return undefined;
+  }
+  let iconName = rest.slice(0, -'.js'.length);
+  if (!iconName) {
+    return undefined;
+  }
+  return `Icon "${iconName}" was not found in @cardstack/boxel-icons. Check the import path against the available icons.`;
+}
+
 export function isCardErrorJSONAPI(err: any): err is CardErrorJSONAPI {
   return (
     err != null &&
@@ -557,6 +730,30 @@ export function coerceErrorMessage(err: unknown, placeholder: string): string {
     }
   }
   return placeholder;
+}
+
+// Render an unknown error as a single log-safe string. Passing an Error (or any
+// object) as a console argument serializes to "[object Object]" in
+// text-captured console output (e.g. CI test logs), and `JSON.stringify` of an
+// Error yields "{}" because its `message`/`stack` are non-enumerable — both
+// drop the stack, which is the detail that localizes a transient failure.
+// Prefer the stack for Errors, a JSON dump for plain / JSON:API error objects,
+// and fall back to `coerceErrorMessage` for everything else.
+export function stringifyErrorForLog(err: unknown): string {
+  if (err instanceof Error) {
+    return err.stack ?? `${err.name}: ${err.message}`;
+  }
+  if (err != null && typeof err === 'object') {
+    try {
+      let json = JSON.stringify(err);
+      if (json && json !== '{}') {
+        return json;
+      }
+    } catch {
+      // not serializable (e.g. circular references) — fall through
+    }
+  }
+  return coerceErrorMessage(err, '(no error detail available)');
 }
 
 export function responseWithError(
@@ -700,6 +897,7 @@ export function systemError({
   body,
   id,
   lid,
+  status: httpStatus = 500,
 }: {
   requestContext: RequestContext;
   message: string;
@@ -707,9 +905,21 @@ export function systemError({
   body?: Record<string, any>;
   id?: string;
   lid?: string;
+  // HTTP status for the response. Defaults to 500; callers serving an
+  // index error row pass the underlying error's status so a card whose
+  // recorded failure is, say, an auth or validation error returns that
+  // status rather than masquerading as a realm outage.
+  status?: number;
 }): Response {
   let err = new CardError(message, {
-    status: 500,
+    status: httpStatus,
+    // Supply a title explicitly so the CardError constructor never falls
+    // back to `getReasonPhrase`, which throws for unregistered codes — a
+    // mirrored upstream status (e.g. a proxied 520/499) would otherwise
+    // turn the error response itself into an unhandled failure. The
+    // `statuses` lookup returns undefined for unknown codes rather than
+    // throwing, and we backstop that with a generic phrase.
+    title: status.message[httpStatus] || `HTTP ${httpStatus}`,
     ...(id ? { id } : {}),
     ...(lid ? { lid } : {}),
   });

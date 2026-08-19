@@ -10,14 +10,14 @@
  * in the source realm (software-factory/).
  */
 
-import { test } from './fixtures';
+import { test } from './fixtures.ts';
 import { expect } from '@playwright/test';
 
-import { rri } from '@cardstack/runtime-common/card-reference-resolver';
+import { rri } from '@cardstack/runtime-common/realm-identifiers';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
-import { fetchCardTypeSchema } from '../src/darkfactory-schemas';
-import { buildTestClient } from './helpers/test-client';
+import { fetchCardTypeSchema } from '../src/darkfactory-schemas.ts';
+import { buildTestClient } from './helpers/test-client.ts';
 
 const GET_CARD_TYPE_SCHEMA_COMMAND =
   '@cardstack/boxel-host/commands/get-card-type-schema/default';
@@ -102,6 +102,43 @@ test('fetches Issue schema with enum fields', async ({ realm }) => {
     expect(attrs.properties).toHaveProperty('summary');
     expect(attrs.properties).toHaveProperty('status');
     expect(attrs.properties).toHaveProperty('priority');
+    expect(attrs.properties).toHaveProperty('issueType');
+
+    // Function-form enum fields emit a description hint (not a hard enum
+    // constraint) so agents can still use custom project-defined values.
+    // The typical values are also surfaced as `examples`, which survives the
+    // description being overwritten by a field-level description.
+    expect(attrs.properties.issueType.description).toBe(
+      'Typical values: "bootstrap", "feature", "adjustment", "bug", "task", "research", "infrastructure"',
+    );
+    expect(attrs.properties.issueType.examples).toEqual([
+      'bootstrap',
+      'feature',
+      'adjustment',
+      'bug',
+      'task',
+      'research',
+      'infrastructure',
+    ]);
+    expect(attrs.properties.priority.description).toBe(
+      'Typical values: "critical", "high", "medium", "low"',
+    );
+    expect(attrs.properties.priority.examples).toEqual([
+      'critical',
+      'high',
+      'medium',
+      'low',
+    ]);
+    expect(attrs.properties.status.description).toBe(
+      'Typical values: "backlog", "in_progress", "blocked", "review", "done"',
+    );
+    expect(attrs.properties.status.examples).toEqual([
+      'backlog',
+      'in_progress',
+      'blocked',
+      'review',
+      'done',
+    ]);
   } finally {
     cleanup();
   }

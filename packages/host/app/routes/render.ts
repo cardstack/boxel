@@ -17,12 +17,9 @@ import {
   beginRuntimeDependencyTrackingSession,
   endRuntimeDependencyTrackingSession,
   formattedError,
-  baseRealm,
   snapshotRuntimeDependencies,
   SupportedMimeType,
   isCardError,
-  isBaseDefInstance,
-  cardIdToURL,
   rri,
   type CardErrorsJSONAPI,
   type LooseSingleCardDocument,
@@ -37,9 +34,6 @@ import {
   coerceErrorMessage,
   serializableError,
 } from '@cardstack/runtime-common/error';
-
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import {
   windowErrorHandler,
@@ -68,6 +62,7 @@ import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
 import type RenderErrorStateService from '../services/render-error-state';
 import type RenderStoreService from '../services/render-store';
+import type { CardDef } from '@cardstack/base/card-api';
 
 type RenderStatus = 'loading' | 'ready' | 'error' | 'unusable';
 
@@ -149,11 +144,6 @@ export default class RenderRoute extends Route<Model> {
     }
   };
 
-  activate() {
-    // this is for route errors, not window level error
-    window.addEventListener('boxel-render-error', this.handleRenderError);
-  }
-
   deactivate() {
     if (isTesting()) {
       (globalThis as any).__boxelRenderContext = undefined;
@@ -176,6 +166,7 @@ export default class RenderRoute extends Route<Model> {
     // invalidation is handled by `fetchSearchDoc`'s entry-time
     // jobId-change clear (and by `resetState` on harder resets).
     (globalThis as any).__renderModel = undefined;
+    (globalThis as any).__boxelRenderCapturedDeps = undefined;
     (globalThis as any).__docsInFlight = undefined;
     (globalThis as any).__boxelRenderStage = undefined;
     // CS-10872: also tear down the stage setter + timestamp. Without
@@ -186,7 +177,6 @@ export default class RenderRoute extends Route<Model> {
     (globalThis as any).__boxelRenderStageSetAt = undefined;
     (globalThis as any).__boxelRenderDiagnostics = undefined;
     (globalThis as any).__waitForRenderLoadStability = undefined;
-    window.removeEventListener('boxel-render-error', this.handleRenderError);
     this.#detachWindowErrorListeners();
     this.lastStoreResetKey = undefined;
     this.renderBaseParams = undefined;
@@ -222,6 +212,14 @@ export default class RenderRoute extends Route<Model> {
       await this.store.ensureSetupComplete();
       this.#restoreRenderTimers = enableRenderTimerStub();
       this.#releaseTimerBlock = beginTimerBlock();
+      // Mark this app as the dedicated prerender app for its whole lifetime.
+      // Persistence must be blocked for EVERY store here (see
+      // renderContextBlocksPersistence): a write from the prerender deadlocks
+      // the from-scratch index — the render holds the sole worker while the
+      // write takes the realm write lock and awaits a reindex that needs that
+      // worker. Never set under isTesting(): host tests run in-browser index
+      // renders alongside an interactive app whose saves must keep working.
+      (globalThis as any).__boxelPrerenderApp = true;
     }
   }
 
@@ -338,8 +336,12 @@ export default class RenderRoute extends Route<Model> {
     beginRuntimeDependencyTrackingSession({
       sessionKey: key,
       rootURL: id,
+      // A fused index render (cardRender + fileExtract in one pass) hydrates
+      // the card, so its session root is the instance; the file extract it
+      // performs runs in its own session (see the render.meta route).
       rootKind:
-        parsedOptions.fileExtract || parsedOptions.fileRender
+        !parsedOptions.cardRender &&
+        (parsedOptions.fileExtract || parsedOptions.fileRender)
           ? 'file'
           : 'instance',
     });
@@ -359,6 +361,30 @@ export default class RenderRoute extends Route<Model> {
     { id, nonce }: { id: string; nonce: string },
     parsedOptions: ReturnType<typeof parseRenderRouteOptions>,
   ): Promise<Model> {
+    // Reset before any await so a reader can never see a previous card's
+    // settle-time snapshot; #settleModelAfterRender repopulates it.
+    (globalThis as any).__boxelRenderCapturedDeps = undefined;
+    // Loader-epoch synchronization: indexing renders thread the realm's
+    // loader epoch (re-minted whenever an index pass invalidates executable
+    // modules — see RealmGenerationsTable.loader_epoch). When it differs
+    // from the epoch this tab last cleared for — in either direction; a
+    // mismatch means this loader belongs to a different module timeline —
+    // reset the loader and the store, then record it. This clears each tab
+    // exactly once per module change no matter how many tabs serve the
+    // pass, and instance-only passes (whose epoch is unchanged) keep the
+    // loader warm. Held per tab, unkeyed: the visits that thread an epoch
+    // are realm-affine, so one tab only ever sees one realm's epochs.
+    if (parsedOptions.loaderEpoch !== undefined) {
+      let held = (globalThis as any).__boxelLoaderEpoch as string | undefined;
+      if (held !== parsedOptions.loaderEpoch) {
+        this.loaderService.resetLoader({
+          clearFetchCache: true,
+          reason: 'render-route loader epoch changed',
+        });
+        this.store.resetCache();
+        (globalThis as any).__boxelLoaderEpoch = parsedOptions.loaderEpoch;
+      }
+    }
     if (parsedOptions.clearCache) {
       this.loaderService.resetLoader({
         clearFetchCache: true,
@@ -370,7 +396,11 @@ export default class RenderRoute extends Route<Model> {
         this.lastStoreResetKey = resetKey;
       }
     }
-    if (parsedOptions.fileExtract) {
+    // A fused index render carries both `fileExtract` and `cardRender`; the
+    // card branch below serves it (hydration + settle) and the render.meta
+    // route performs the extract against the hydrated model's file. Only a
+    // fileExtract-only render gets this trivial model.
+    if (parsedOptions.fileExtract && !parsedOptions.cardRender) {
       let state = new TrackedMap<string, unknown>();
       state.set('status', 'ready');
       let readyDeferred = new Deferred<void>();
@@ -409,7 +439,9 @@ export default class RenderRoute extends Route<Model> {
       let instance = (await this.store.addFileMeta(
         resource,
         doc,
-        resource.id ? cardIdToURL(resource.id) : undefined,
+        resource.id
+          ? this.network.virtualNetwork.toURL(resource.id)
+          : undefined,
       )) as unknown as CardDef;
 
       let state = new TrackedMap<string, unknown>();
@@ -537,12 +569,6 @@ export default class RenderRoute extends Route<Model> {
             realm: realmURL,
             doNotPersist: true,
           });
-          if (hydratedInstance) {
-            (globalThis as any).__boxelSetRenderStage?.(
-              'buildModel:touching-used-fields',
-            );
-            await this.#touchIsUsedFields(hydratedInstance);
-          }
           (globalThis as any).__boxelSetRenderStage?.(
             'buildModel:store-settle',
           );
@@ -574,137 +600,6 @@ export default class RenderRoute extends Route<Model> {
     (globalThis as any).__renderModel = model;
     this.currentTransition = undefined;
     return model;
-  }
-
-  async #touchIsUsedFields(instance: CardDef): Promise<void> {
-    let cardApi = await this.loaderService.loader.import<typeof CardAPI>(
-      `${baseRealm.url}card-api`,
-    );
-    this.#touchIsUsedRelationships(
-      cardApi,
-      instance,
-      new WeakSet<object>(),
-      new WeakMap<object, boolean>(),
-    );
-  }
-
-  #touchFieldSafely(container: any, fieldName: string): unknown {
-    try {
-      // accessing the field triggers lazy loading for links
-      return container?.[fieldName];
-    } catch (error) {
-      console.warn(
-        `Failed to touch field '${fieldName}' on ${container?.constructor?.name ?? 'Unknown'} for isUsed=true:`,
-        error,
-      );
-      return undefined;
-    }
-  }
-
-  #touchIsUsedRelationships(
-    cardApi: typeof CardAPI,
-    value: unknown,
-    visited: WeakSet<object>,
-    typeHasUsedRelationshipCache: WeakMap<object, boolean>,
-  ): void {
-    if (Array.isArray(value)) {
-      for (let item of value) {
-        this.#touchIsUsedRelationships(
-          cardApi,
-          item,
-          visited,
-          typeHasUsedRelationshipCache,
-        );
-      }
-      return;
-    }
-    if (!isBaseDefInstance(value)) {
-      return;
-    }
-    if (visited.has(value)) {
-      return;
-    }
-    visited.add(value);
-
-    let fields = cardApi.getFields(value, { includeComputeds: true });
-    for (let [fieldName, field] of Object.entries(fields)) {
-      if (!field) {
-        continue;
-      }
-      if (field.fieldType === 'linksTo' || field.fieldType === 'linksToMany') {
-        if (field.isUsed) {
-          this.#touchFieldSafely(value, fieldName);
-        }
-        continue;
-      }
-      if (
-        field.fieldType === 'contains' ||
-        field.fieldType === 'containsMany'
-      ) {
-        if (
-          !this.#typeHasIsUsedRelationship(
-            cardApi,
-            field.card as CardAPI.BaseDefConstructor,
-            new WeakSet<object>(),
-            typeHasUsedRelationshipCache,
-          )
-        ) {
-          continue;
-        }
-        let nested = this.#touchFieldSafely(value, fieldName);
-        this.#touchIsUsedRelationships(
-          cardApi,
-          nested,
-          visited,
-          typeHasUsedRelationshipCache,
-        );
-      }
-    }
-  }
-
-  #typeHasIsUsedRelationship(
-    cardApi: typeof CardAPI,
-    type: CardAPI.BaseDefConstructor,
-    visitedTypes: WeakSet<object>,
-    cache: WeakMap<object, boolean>,
-  ): boolean {
-    if (cache.has(type)) {
-      return cache.get(type)!;
-    }
-    if (visitedTypes.has(type)) {
-      return false;
-    }
-    visitedTypes.add(type);
-
-    let fields = cardApi.getFields(type, { includeComputeds: true });
-    for (let field of Object.values(fields)) {
-      if (!field) {
-        continue;
-      }
-      if (
-        (field.fieldType === 'linksTo' || field.fieldType === 'linksToMany') &&
-        field.isUsed
-      ) {
-        cache.set(type, true);
-        return true;
-      }
-      if (
-        (field.fieldType === 'contains' ||
-          field.fieldType === 'containsMany') &&
-        this.#typeHasIsUsedRelationship(
-          cardApi,
-          field.card as CardAPI.BaseDefConstructor,
-          visitedTypes,
-          cache,
-        )
-      ) {
-        cache.set(type, true);
-        return true;
-      }
-    }
-
-    cache.set(type, false);
-    return false;
   }
 
   setupController(controller: Controller, model: Model) {
@@ -791,6 +686,14 @@ export default class RenderRoute extends Route<Model> {
     model.capturedDeps = snapshotRuntimeDependencies({
       excludeQueryOnly: true,
     }).deps;
+    // Publish the settle-time dependency snapshot (unresolved/prefix form,
+    // matching what render.meta reports as `deps`) for visits that never run
+    // the meta route: a prerender-html visit reads this global after its
+    // isolated render so the HTML rendering still reports the dependencies
+    // it pulled in. Cleared at the top of #buildModel so a later card in the
+    // same tab can never read a predecessor's snapshot.
+    (globalThis as any).__boxelRenderCapturedDeps =
+      this.network.virtualNetwork.unresolveURLs(model.capturedDeps);
     renderReadyLogger.debug(
       `settleModelAfterRender done cardId=${model.cardId} deps=${model.capturedDeps?.length ?? 0}`,
     );
@@ -955,6 +858,7 @@ export default class RenderRoute extends Route<Model> {
       // (and the entire ApplicationInstance) on globalThis.
       (globalThis as any).__boxelRenderContext = undefined;
       (globalThis as any).__renderModel = undefined;
+      (globalThis as any).__boxelRenderCapturedDeps = undefined;
       (globalThis as any).__docsInFlight = undefined;
       (globalThis as any).__waitForRenderLoadStability = undefined;
     });

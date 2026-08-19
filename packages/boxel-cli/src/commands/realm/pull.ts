@@ -1,29 +1,32 @@
 import type { Command } from 'commander';
-import { RealmSyncBase, type SyncOptions } from '../../lib/realm-sync-base';
+import { RealmSyncBase, type SyncOptions } from '../../lib/realm-sync-base.ts';
 import {
   CheckpointManager,
   type CheckpointChange,
-} from '../../lib/checkpoint-manager';
-import type { ProfileManager } from '../../lib/profile-manager';
-import type { RealmAuthenticator } from '../../lib/realm-authenticator';
-import { resolveRealmAuthenticator } from '../../lib/auth-resolver';
-import { resolveRealmSecretSeed } from '../../lib/prompt';
+} from '../../lib/checkpoint-manager.ts';
+import type { ProfileManager } from '../../lib/profile-manager.ts';
+import type { RealmAuthenticator } from '../../lib/realm-authenticator.ts';
+import { resolveRealmAuthenticator } from '../../lib/auth-resolver.ts';
+import { resolveRealmIdentifier } from '../../lib/resolve-realm-identifier.ts';
+import { resolveRealmSecretSeed } from '../../lib/prompt.ts';
+import { reconcileSkillsMirror } from '../../lib/claude-skills-mirror.ts';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
 interface PullOptions extends SyncOptions {
   deleteLocal?: boolean;
+  /** Mirror the realm's `skills/` into `.claude/skills/`. On by default. */
+  claudeSkills?: boolean;
 }
 
 class RealmPuller extends RealmSyncBase {
   hasError = false;
   downloadedFiles: string[] = [];
+  private pullOptions: PullOptions;
 
-  constructor(
-    private pullOptions: PullOptions,
-    authenticator: RealmAuthenticator,
-  ) {
+  constructor(pullOptions: PullOptions, authenticator: RealmAuthenticator) {
     super(pullOptions, authenticator);
+    this.pullOptions = pullOptions;
   }
 
   async sync(): Promise<void> {
@@ -163,6 +166,13 @@ class RealmPuller extends RealmSyncBase {
       }
     }
 
+    await reconcileSkillsMirror({
+      realmUrl: this.normalizedRealmUrl,
+      localDir: this.options.localDir,
+      dryRun: this.options.dryRun,
+      enabled: this.pullOptions.claudeSkills,
+    });
+
     console.log('Pull completed');
   }
 }
@@ -170,6 +180,13 @@ class RealmPuller extends RealmSyncBase {
 export interface PullCommandOptions {
   delete?: boolean;
   dryRun?: boolean;
+  /**
+   * Mirror the realm's `skills/` directory into the surrounding checkout's
+   * `.claude/skills/` so realm-authored skills are available to Claude Code.
+   * On by default; `--no-claude-skills` (or `BOXEL_DISABLE_CLAUDE_SKILLS_SYNC=1`) opts
+   * out.
+   */
+  claudeSkills?: boolean;
   profileManager?: ProfileManager;
   /**
    * Pre-resolved realm secret seed for administrative access. When set, the
@@ -198,6 +215,10 @@ export function registerPullCommand(realm: Command): void {
     .option('--delete', 'Delete local files that do not exist in the realm')
     .option('--dry-run', 'Show what would be done without making changes')
     .option(
+      '--no-claude-skills',
+      "Skip mirroring the realm's skills/ directory into the checkout's .claude/skills/ (env: BOXEL_DISABLE_CLAUDE_SKILLS_SYNC=1)",
+    )
+    .option(
       '--realm-secret-seed',
       'Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)',
     )
@@ -208,6 +229,7 @@ export function registerPullCommand(realm: Command): void {
         options: {
           delete?: boolean;
           dryRun?: boolean;
+          claudeSkills?: boolean;
           realmSecretSeed?: boolean;
         },
       ) => {
@@ -217,6 +239,7 @@ export function registerPullCommand(realm: Command): void {
         const result = await pull(realmUrl, localDir, {
           delete: options.delete,
           dryRun: options.dryRun,
+          claudeSkills: options.claudeSkills,
           realmSecretSeed,
         });
         if (result.error) {
@@ -233,20 +256,23 @@ export async function pull(
   localDir: string,
   options: PullCommandOptions,
 ): Promise<{ files: string[]; error?: string }> {
-  let authenticator: RealmAuthenticator;
-  if (options.authenticator) {
-    authenticator = options.authenticator;
-  } else {
-    const resolution = resolveRealmAuthenticator({
-      realmUrl,
-      realmSecretSeed: options.realmSecretSeed,
-      profileManager: options.profileManager,
-    });
-    if (!resolution.ok) {
-      return { files: [], error: resolution.error };
-    }
-    authenticator = resolution.authenticator;
+  const resolvedRealm = resolveRealmIdentifier(realmUrl, {
+    profileManager: options.profileManager,
+  });
+  if (!resolvedRealm.ok) {
+    return { files: [], error: resolvedRealm.error };
   }
+  realmUrl = resolvedRealm.url;
+  const resolution = resolveRealmAuthenticator({
+    realmUrl,
+    realmSecretSeed: options.realmSecretSeed,
+    profileManager: options.profileManager,
+    authenticator: options.authenticator,
+  });
+  if (!resolution.ok) {
+    return { files: [], error: resolution.error };
+  }
+  const authenticator = resolution.authenticator;
 
   try {
     const puller = new RealmPuller(
@@ -255,6 +281,7 @@ export async function pull(
         localDir,
         deleteLocal: options.delete,
         dryRun: options.dryRun,
+        claudeSkills: options.claudeSkills,
       },
       authenticator,
     );

@@ -1,53 +1,41 @@
 import { registerDestructor } from '@ember/destroyable';
 import { getOwner } from '@ember/owner';
 import { service } from '@ember/service';
+import { isTesting } from '@embroider/macros';
 import { tracked, cached } from '@glimmer/tracking';
 
 import { restartableTask, timeout } from 'ember-concurrency';
 import { Resource } from 'ember-modify-based-class-resource';
 
-import difference from 'lodash/difference';
+import { difference } from 'lodash-es';
 
 import { TrackedMap } from 'tracked-built-ins';
 
 import {
   isCardInstance,
+  logger,
   rri,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 
-import type { CommandRequest } from '@cardstack/runtime-common/commands';
+import type { ToolRequest } from '@cardstack/runtime-common/commands';
 import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
-  APP_BOXEL_COMMAND_REQUESTS_KEY,
-  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
-  APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+  APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+  LEGACY_APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  getToolRequests,
+  isToolResultRelType,
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
+  APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
+  APP_BOXEL_REASONING_CONTENT_KEY,
+  APP_BOXEL_TOOL_REQUESTS_KEY,
   APP_BOXEL_LLM_MODE,
-  DEFAULT_LLM,
+  DEFAULT_FALLBACK_MODEL_ID,
+  type AppBoxelResponseStreamContent,
   type LLMMode,
 } from '@cardstack/runtime-common/matrix-constants';
-
-import type { SerializedFile } from 'https://cardstack.com/base/file-api';
-import type {
-  MatrixEvent as DiscreteMatrixEvent,
-  RoomCreateEvent,
-  RoomNameEvent,
-  InviteEvent,
-  JoinEvent,
-  LeaveEvent,
-  CardMessageEvent,
-  DebugMessageEvent,
-  MessageEvent,
-  CommandResultEvent,
-  RealmServerEvent,
-  CodePatchResultEvent,
-  ActiveLLMEvent,
-} from 'https://cardstack.com/base/matrix-event';
-
-import type { Skill } from 'https://cardstack.com/base/skill';
 
 import {
   RoomMember,
@@ -56,15 +44,40 @@ import {
 
 import MessageBuilder from '../lib/matrix-classes/message-builder';
 
+import {
+  getSkillSourceTools,
+  isMarkdownSkillId,
+  loadSkillSource,
+  peekSkillSource,
+} from '../lib/skill-tools';
+
 import type { Message } from '../lib/matrix-classes/message';
 
 import type Room from '../lib/matrix-classes/room';
 
-import type CommandService from '../services/command-service';
 import type MatrixService from '../services/matrix-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
+import type ToolService from '../services/tool-service';
+import type { SerializedFile } from '@cardstack/base/file-api';
+import type {
+  MatrixEvent as DiscreteMatrixEvent,
+  RoomCreateEvent,
+  RoomNameEvent,
+  InviteEvent,
+  JoinEvent,
+  LeaveEvent,
+  CardMessageContent,
+  CardMessageEvent,
+  DebugMessageEvent,
+  MessageEvent,
+  ToolResultEvent,
+  RealmServerEvent,
+  CodePatchResultEvent,
+  ActiveLLMEvent,
+} from '@cardstack/base/matrix-event';
+import type { Skill } from '@cardstack/base/skill';
 import type { TaskInstance } from 'ember-concurrency';
 import type { IRoomEvent } from 'matrix-js-sdk';
 
@@ -74,6 +87,8 @@ export type RoomSkill = {
   fileDef: SerializedFile;
   isActive: boolean;
 };
+
+const responseStreamLog = logger('matrix:response-stream');
 
 interface Args {
   named: {
@@ -88,6 +103,16 @@ interface Args {
 export class RoomResource extends Resource<Args> {
   #skillIds = new Set<string>();
   #hasRegisteredDestructor = false;
+  #responseStreamPreviewDisposer: (() => void) | undefined;
+  // Highest to-device preview `sequence` applied per streaming message
+  // (keyed by parentEventId). Previews carry full accumulated state, so an
+  // out-of-order or duplicate delivery is simply dropped rather than regressing
+  // the message to older content. Both maps are pruned when a message finalizes
+  // (see hydrateResponseStreamPreview) and cleared in teardown().
+  #lastPreviewSequence = new Map<string, number>();
+  // Serializes preview applies per streaming message so their async tool-request
+  // builds land in sequence order rather than promise-completion order.
+  #previewApplyChain = new Map<string, Promise<void>>();
   private _messageCache: TrackedMap<string, Message> = new TrackedMap();
   private _nameEventsCache: TrackedMap<string, RoomNameEvent> =
     new TrackedMap();
@@ -105,7 +130,7 @@ export class RoomResource extends Resource<Args> {
   @tracked private llmModeBeingActivated: LLMMode | undefined;
   @service declare private matrixService: MatrixService;
   @service declare private operatorModeStateService: OperatorModeStateService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private store: StoreService;
   @service declare private realm: RealmService;
 
@@ -117,6 +142,10 @@ export class RoomResource extends Resource<Args> {
     this.processing = this.processRoomTask.perform(named.roomId);
     if (!this.#hasRegisteredDestructor) {
       this.#hasRegisteredDestructor = true;
+      this.#responseStreamPreviewDisposer =
+        this.matrixService.onResponseStreamPreview((payload) =>
+          this.hydrateResponseStreamPreview(payload),
+        );
       registerDestructor(this, () => this.teardown());
     }
   }
@@ -125,6 +154,10 @@ export class RoomResource extends Resource<Args> {
     this.processRoomTask.cancelAll();
     this.activateLLMTask.cancelAll();
     this.activateLLMModeTask.cancelAll();
+    this.#responseStreamPreviewDisposer?.();
+    this.#responseStreamPreviewDisposer = undefined;
+    this.#lastPreviewSequence.clear();
+    this.#previewApplyChain.clear();
     for (let id of this.#skillIds ?? []) {
       this.store.dropReference(id);
     }
@@ -147,7 +180,34 @@ export class RoomResource extends Resource<Args> {
 
   processingLastStartedAt = 0;
 
+  // `modify` restarts `processRoomTask` on every timeline/room-state
+  // invalidation. A restart storm — processing whose own effects re-invalidate
+  // the deps thunk — keeps the runloop occupied so `settled()` never resolves,
+  // hanging any awaited test helper with no console output at all. Track the
+  // restart rate (testing only) so a silent test hang can be attributed to (or
+  // cleared of) a processing loop from CI output alone.
+  private processingRestartWindowStartedAt = 0;
+  private processingRestartsInWindow = 0;
+
+  private notePerformForRestartTrace(roomId: string) {
+    if (!isTesting()) {
+      return;
+    }
+    let now = Date.now();
+    if (now - this.processingRestartWindowStartedAt > 1_000) {
+      if (this.processingRestartsInWindow > 20) {
+        console.log(
+          `[room-processing-trace] processRoomTask restarted ${this.processingRestartsInWindow} times in the last second for room ${roomId}`,
+        );
+      }
+      this.processingRestartWindowStartedAt = now;
+      this.processingRestartsInWindow = 0;
+    }
+    this.processingRestartsInWindow++;
+  }
+
   private processRoomTask = restartableTask(async (roomId: string) => {
+    this.notePerformForRestartTrace(roomId);
     this.processingLastStartedAt = Date.now();
     try {
       this.matrixRoom = roomId
@@ -193,7 +253,8 @@ export class RoomResource extends Resource<Args> {
           case APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE:
             await this.loadRoomMessage({ roomId, event, index });
             break;
-          case APP_BOXEL_COMMAND_RESULT_EVENT_TYPE:
+          case APP_BOXEL_TOOL_RESULT_EVENT_TYPE:
+          case LEGACY_APP_BOXEL_COMMAND_RESULT_EVENT_TYPE:
             await this.updateMessageCommandResult({ roomId, event, index });
             break;
           case APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE:
@@ -231,6 +292,33 @@ export class RoomResource extends Resource<Args> {
       .filter((m) => m.roomId === this.roomId)
       .filter((m) => !m.continuationOf)
       .sort((a, b) => a.created.getTime() - b.created.getTime());
+  }
+
+  /**
+   * The message an event belongs to, which for an answer long enough to have
+   * been split across continuation events is the head of that chain — the one
+   * `messages` exposes, and the only one whose `body` is the whole answer. A
+   * caller holding a raw event id cannot use `messages.find` for this: the
+   * continuations are filtered out of that list, so every id but the first
+   * looks like an event with no message.
+   */
+  messageForEventId(eventId: string): Message | undefined {
+    let message = this._messageCache.get(eventId);
+    if (!message) {
+      return undefined;
+    }
+    let seen = new Set<string>();
+    while (message?.continuationOf && !seen.has(message.continuationOf)) {
+      seen.add(message.continuationOf);
+      let parent = this._messageCache.get(message.continuationOf);
+      if (!parent) {
+        // The head has not arrived yet. Returning nothing lets the caller wait
+        // for a later event in the chain rather than act on a partial answer.
+        return undefined;
+      }
+      message = parent;
+    }
+    return message;
   }
 
   @cached
@@ -332,13 +420,17 @@ export class RoomResource extends Resource<Args> {
     return result;
   }
 
-  get commands() {
-    // Usable commands are all commands on *active* skills
+  get tools() {
+    // Usable tools are all tools on *active* skills, whether the skill is
+    // a Skill card or a skill-bearing markdown file.
     let commands = [];
     for (let skill of this.skills) {
-      let skillCard = this.store.peek<Skill>(skill.cardId);
-      if (skillCard && isCardInstance(skillCard) && skill.isActive) {
-        commands.push(...skillCard.commands);
+      if (!skill.isActive) {
+        continue;
+      }
+      let skillSource = peekSkillSource(this.store, skill.cardId);
+      if (skillSource) {
+        commands.push(...getSkillSourceTools(skillSource));
       }
     }
     return commands;
@@ -411,7 +503,7 @@ export class RoomResource extends Resource<Args> {
     return (
       systemCard?.defaultModelConfiguration?.id ??
       systemCard?.modelConfigurations?.[0]?.id ??
-      DEFAULT_LLM
+      DEFAULT_FALLBACK_MODEL_ID
     );
   }
 
@@ -499,29 +591,35 @@ export class RoomResource extends Resource<Args> {
   }
 
   /**
-   * Get the active LLM mode at a specific timestamp by looking at the most recent
-   * LLM mode event that occurred before or at the given timestamp.
+   * Get the LLM mode that was active when a given message was created.
+   *
+   * Matrix `origin_server_ts` has millisecond resolution, so a message and a
+   * mode transition can share a timestamp; a bare timestamp comparison cannot
+   * tell whether such a transition happened just before or just after the
+   * message. `sortedEvents` is a stable sort on `origin_server_ts`, so for
+   * equal timestamps it preserves room (insertion) order. Walking it up to the
+   * message and tracking the last mode transition seen yields the mode in
+   * effect when the message arrived, regardless of same-millisecond ties.
    */
-  getActiveLLMModeAtTimestamp(timestamp: number): LLMMode {
-    let latestLLMModeEvent: DiscreteMatrixEvent | undefined;
-
-    for (let event of this.llmModeEvents) {
-      if (event.origin_server_ts <= timestamp) {
-        if (
-          !latestLLMModeEvent ||
-          event.origin_server_ts > latestLLMModeEvent.origin_server_ts
-        ) {
-          latestLLMModeEvent = event;
-        }
+  getActiveLLMModeForMessage(messageEventId: string): LLMMode {
+    let activeMode: LLMMode = 'ask';
+    let foundMessage = false;
+    for (let event of this.sortedEvents) {
+      if (event.event_id === messageEventId) {
+        foundMessage = true;
+        break;
+      }
+      if (event.type === APP_BOXEL_LLM_MODE) {
+        activeMode = (event as any).content?.mode ?? 'ask';
       }
     }
-
-    // If no LLM mode event found before the timestamp, default to 'ask'
-    if (!latestLLMModeEvent) {
+    // If the message isn't in the timeline yet, don't infer 'act' from later
+    // transitions — fall back to 'ask' so a patch is never auto-applied on
+    // incomplete data.
+    if (!foundMessage) {
       return 'ask';
     }
-
-    return (latestLLMModeEvent as any).content?.mode ?? 'ask';
+    return activeMode;
   }
 
   get isActivatingLLMMode() {
@@ -595,11 +693,24 @@ export class RoomResource extends Resource<Args> {
   private async loadSkills(skillCardFileDefs: SerializedFile[]) {
     let skillIds: string[] = [];
     for (let skillCardFileDef of skillCardFileDefs) {
-      let cardDoc =
-        await this.matrixService.downloadCardFileDef(skillCardFileDef);
-      let skill = await this.loadSkill(cardDoc);
-      if (skill?.id) {
-        skillIds.push(skill.id);
+      if (isMarkdownSkillId(skillCardFileDef.sourceUrl)) {
+        // A skill markdown file loads as a file-meta resource (not a card doc
+        // downloaded from Matrix). Keep its instance in the store so the menu
+        // pill renders and the room's usable commands resolve.
+        let source = await loadSkillSource(
+          this.store,
+          skillCardFileDef.sourceUrl,
+        );
+        if (source) {
+          skillIds.push(skillCardFileDef.sourceUrl);
+        }
+      } else {
+        let cardDoc =
+          await this.matrixService.downloadCardFileDef(skillCardFileDef);
+        let skill = await this.loadSkill(cardDoc);
+        if (skill?.id) {
+          skillIds.push(skill.id);
+        }
       }
     }
     let oldReferences = [...(this.#skillIds ?? [])];
@@ -611,7 +722,10 @@ export class RoomResource extends Resource<Args> {
     }
     let referencesToAdd = difference(newReferences, oldReferences);
     for (let id of referencesToAdd) {
-      this.store.addReference(id);
+      this.store.addReference(
+        id,
+        isMarkdownSkillId(id) ? { type: 'file-meta' } : undefined,
+      );
     }
   }
 
@@ -649,6 +763,16 @@ export class RoomResource extends Resource<Args> {
       (clientGeneratedId
         ? this._messageCache.get(clientGeneratedId)
         : undefined);
+    // Usage can arrive on an edit sent after the finishing one (the provider
+    // reports it on a trailing chunk). The finished-guard below skips such
+    // edits — it exists to stop stale previews from un-finishing a message —
+    // so apply the late counts directly.
+    if (message?.isStreamingOfEventFinished) {
+      let usage = (event.content as CardMessageContent).data?.usage;
+      if (usage && !message.usage) {
+        message.setUsage(usage);
+      }
+    }
     if (!message?.isStreamingOfEventFinished) {
       let author = this.upsertRoomMember({
         roomId,
@@ -682,38 +806,159 @@ export class RoomResource extends Resource<Args> {
     }
   }
 
+  // Hydrate an in-flight `app.boxel.response-stream` to-device preview (ai-bot
+  // in AI_BOT_STREAMING_MODE=to-device) into the same Message the final room
+  // edit will eventually reconcile. Shaping the preview as the CardMessage edit
+  // it mirrors lets us reuse MessageBuilder.updateMessage — including its tool
+  // request chunk merging — and its `setUpdated(new Date())` resets the
+  // streaming stall timeout so long responses don't trip the fallback.
+  //
+  // This method gates an incoming preview (roomId / staleness / duplicate)
+  // synchronously and then enqueues its apply on a per-message chain. The gate
+  // must be synchronous: it decides ordering by arrival, and
+  // applyResponseStreamPreview awaits async tool-request builds, so without
+  // serialization two overlapping previews would resolve their tool args in
+  // promise-completion order rather than sequence order (every synthetic event
+  // pins the same origin_server_ts, so MessageBuilder.applyToolRequestChunk's
+  // timestamp guard can't reorder them).
+  private hydrateResponseStreamPreview(payload: AppBoxelResponseStreamContent) {
+    if (!payload || payload.roomId !== this.roomId) {
+      return;
+    }
+    let message = this._messageCache.get(payload.parentEventId);
+    // Either the thinking placeholder this preview belongs to hasn't loaded
+    // yet, or the turn already landed its final consolidated room edit. In both
+    // cases the room-event path is authoritative and reconciles the true state,
+    // so there is nothing for an ephemeral preview to add.
+    if (!message || message.isStreamingOfEventFinished) {
+      // Once the message is finalized its tracking entries are dead — prune
+      // them opportunistically so a long-lived room doesn't accumulate one per
+      // AI turn (teardown() is the backstop).
+      if (message?.isStreamingOfEventFinished) {
+        this.#lastPreviewSequence.delete(payload.parentEventId);
+        this.#previewApplyChain.delete(payload.parentEventId);
+      }
+      return;
+    }
+    let lastSequence =
+      this.#lastPreviewSequence.get(payload.parentEventId) ?? -1;
+    if (payload.sequence <= lastSequence) {
+      return;
+    }
+    this.#lastPreviewSequence.set(payload.parentEventId, payload.sequence);
+
+    let previous =
+      this.#previewApplyChain.get(payload.parentEventId) ?? Promise.resolve();
+    let next = previous.then(() =>
+      this.applyResponseStreamPreview(message, payload),
+    );
+    this.#previewApplyChain.set(payload.parentEventId, next);
+  }
+
+  private async applyResponseStreamPreview(
+    message: Message,
+    payload: AppBoxelResponseStreamContent,
+  ) {
+    // The synchronous gate checked isStreamingOfEventFinished at *enqueue* time,
+    // but this apply may have waited behind a predecessor on the chain while the
+    // final consolidated room edit landed and finalized the message. Re-check
+    // now: updateMessage rewrites body / reasoning / isStreamingFinished
+    // synchronously (before its first await), so an apply that *starts* after
+    // finalization would un-finish the completed message with stale content —
+    // leaving it stuck "streaming" until the stall timeout trips. An apply that
+    // started before finalization is safe: the final edit's synchronous writes
+    // still land last.
+    if (message.isStreamingOfEventFinished) {
+      return;
+    }
+    try {
+      let author = this.upsertRoomMember({
+        roomId: payload.roomId,
+        userId: this.matrixService.aiBotUserId,
+      });
+      // origin_server_ts is pinned to the message's creation time so a preview
+      // never advances past — and thus never suppresses (see
+      // MessageBuilder.applyToolRequestChunk) — the real, later final room edit.
+      //
+      // A preview intentionally owns only body / reasoning / toolRequests. The
+      // other fields updateMessage writes (attachedCards/Files, continuationOf,
+      // hasContinuation, status, reloadBillingData) are reset to empty/false on
+      // every apply because the synthetic event doesn't carry them; that's
+      // benign for a streaming response — the final room edit restores the truth
+      // — but a placeholder that legitimately carried any of those would have it
+      // wiped until finalization.
+      let syntheticEvent = {
+        type: 'm.room.message',
+        event_id: payload.parentEventId,
+        room_id: payload.roomId,
+        sender: this.matrixService.aiBotUserId,
+        origin_server_ts: message.created.getTime(),
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: payload.body,
+          [APP_BOXEL_REASONING_CONTENT_KEY]: payload.reasoning,
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: payload.toolRequests,
+          isStreamingFinished: false,
+        },
+      } as unknown as CardMessageEvent;
+
+      let messageBuilder = new MessageBuilder(syntheticEvent, getOwner(this)!, {
+        roomId: payload.roomId,
+        effectiveEventId: payload.parentEventId,
+        author,
+        index: message.index ?? 0,
+        events: this.events,
+        skills: this.skills,
+      });
+      await messageBuilder.updateMessage(message);
+    } catch (err) {
+      // A dropped preview is harmless — the final room edit reconciles the true
+      // state — so swallow (mirroring ai-bot's best-effort sendToDevicePreview)
+      // rather than surface an unhandled rejection from this fire-and-forget
+      // handler. updateMessage can throw when a new tool id triggers an async
+      // skill/loader resolve.
+      responseStreamLog.debug(
+        `dropped response-stream preview (seq ${payload.sequence}) for ${payload.parentEventId}`,
+        err,
+      );
+    }
+  }
+
   private async updateMessageCommandResult({
     roomId,
     event,
     index,
   }: {
     roomId: string;
-    event: CommandResultEvent;
+    event: ToolResultEvent;
     index: number;
   }) {
-    let effectiveEventId = this.getEffectiveEventId(event);
+    // Locate the owning bot message by commandRequestId. The commandResult's
+    // m.relates_to.event_id points at the latest m.replace edit, but a reload
+    // strips those edits and loads only the original event, so matching on
+    // event_id finds nothing and the status flip is lost. commandRequestId is
+    // the globally-unique LLM tool-call id, stable across edits and present on
+    // every one, so it resolves the same bot message on both the live and
+    // reload paths.
     let messageEventWithCommand = this.events.find(
       (e: any) =>
         e.type === 'm.room.message' &&
-        e.content[APP_BOXEL_COMMAND_REQUESTS_KEY]?.length &&
-        (e.event_id === effectiveEventId ||
-          e.content['m.relates_to']?.event_id === effectiveEventId),
-    )! as CardMessageEvent | undefined;
-    // CS-11045: _messageCache is keyed by the bot message's effective/parent
-    // event_id — getEffectiveEventId resolves an m.replace event back to its
-    // parent, so when an m.replace Y of original X arrives loadRoomMessage
-    // keys the cache by X. The commandResult event's own effectiveEventId is
-    // its m.relates_to.event_id verbatim, which under the CS-11045 host fix
-    // is the latest m.replace id Y rather than the parent X. Looking up the
-    // cache by Y would miss and silently fail to flip MessageCommand status
-    // to 'applied'. Instead, derive the cache key from the bot-message event
-    // we just located (messageEventWithCommand): for the m.replace event Y,
-    // getEffectiveEventId returns parent X — which is what the cache holds.
-    let messageCacheKey = messageEventWithCommand
-      ? this.getEffectiveEventId(messageEventWithCommand)
-      : effectiveEventId;
+        getToolRequests(e.content)?.some(
+          (cr: any) => cr.id === event.content.commandRequestId,
+        ),
+    ) as CardMessageEvent | undefined;
+    if (!messageEventWithCommand) {
+      return;
+    }
+    // _messageCache is keyed by the bot message's effective/parent event_id —
+    // getEffectiveEventId resolves an m.replace event back to its parent, so
+    // when an m.replace Y of original X arrives loadRoomMessage keys the cache
+    // by X. Derive the cache key from the bot-message event we just located
+    // (messageEventWithCommand): for the m.replace event Y, getEffectiveEventId
+    // returns parent X — which is what the cache holds.
+    let messageCacheKey = this.getEffectiveEventId(messageEventWithCommand);
     let message = this._messageCache.get(messageCacheKey);
-    if (!message || !messageEventWithCommand) {
+    if (!message) {
       return;
     }
 
@@ -731,7 +976,7 @@ export class RoomResource extends Resource<Args> {
         index,
         events: this.events,
         skills: this.skills,
-        commandResultEvent: event,
+        toolResultEvent: event,
       },
     );
     await messageBuilder.updateMessageCommandResult(message);
@@ -775,7 +1020,7 @@ export class RoomResource extends Resource<Args> {
     event:
       | MessageEvent
       | CardMessageEvent
-      | CommandResultEvent
+      | ToolResultEvent
       | CodePatchResultEvent
       | DebugMessageEvent,
   ) {
@@ -784,8 +1029,7 @@ export class RoomResource extends Resource<Args> {
     }
 
     return event.content['m.relates_to']?.rel_type === 'm.replace' ||
-      event.content['m.relates_to']?.rel_type ===
-        APP_BOXEL_COMMAND_RESULT_REL_TYPE
+      isToolResultRelType(event.content['m.relates_to']?.rel_type)
       ? event.content['m.relates_to'].event_id
       : event.event_id;
   }
@@ -838,14 +1082,14 @@ export class RoomResource extends Resource<Args> {
     return member;
   }
 
-  public isDisplayingCode(commandRequest: CommandRequest) {
-    return this._isDisplayingViewCodeMap.get(commandRequest.id) ?? false;
+  public isDisplayingCode(toolRequest: ToolRequest) {
+    return this._isDisplayingViewCodeMap.get(toolRequest.id) ?? false;
   }
 
-  public toggleViewCode(commandRequest: CommandRequest) {
+  public toggleViewCode(toolRequest: ToolRequest) {
     this._isDisplayingViewCodeMap.set(
-      commandRequest.id,
-      !this.isDisplayingCode(commandRequest),
+      toolRequest.id,
+      !this.isDisplayingCode(toolRequest),
     );
   }
 }

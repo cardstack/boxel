@@ -25,7 +25,6 @@ import { dayjsFormat } from '@cardstack/boxel-ui/helpers';
 
 import type { Loader } from '@cardstack/runtime-common';
 import {
-  baseRealm,
   primitive,
   localId,
   getField,
@@ -35,11 +34,6 @@ import {
   rri,
   type CodeRef,
 } from '@cardstack/runtime-common';
-
-import type {
-  BaseDef,
-  SignatureFor,
-} from 'https://cardstack.com/base/card-api';
 
 import {
   cleanWhiteSpace,
@@ -95,6 +89,8 @@ import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
+import type { BaseDef, SignatureFor } from '@cardstack/base/card-api';
+
 let loader: Loader;
 
 module('Integration | card-basics', function (hooks) {
@@ -106,7 +102,7 @@ module('Integration | card-basics', function (hooks) {
   });
 
   setupCardLogs(hooks, async () => {
-    return await loader.import(`${baseRealm.url}card-api`);
+    return await loader.import('@cardstack/base/card-api');
   });
 
   module('cards are read-only', function (_hooks) {
@@ -2323,6 +2319,7 @@ module('Integration | card-basics', function (hooks) {
       assert
         .dom('[data-test-field="cardInfo-thumbnailURL"] input')
         .hasValue('');
+      assert.dom('[data-test-thumbnail-select-image]').exists();
       assert.dom('[data-test-links-to-editor="theme"]').exists();
       await click('[data-test-toggle-thumbnail-editor]');
       assert.dom('[data-test-field="cardInfo-thumbnailURL"]').doesNotExist();
@@ -2608,8 +2605,8 @@ module('Integration | card-basics', function (hooks) {
         .hasValue('The latest novel from John Doe');
       await click('[data-test-toggle-thumbnail-editor]');
       assert
-        .dom('[data-test-thumbnail-placeholder] input')
-        .hasValue('http://book/pic.jpg');
+        .dom('[data-test-thumbnail-placeholder]')
+        .hasText('http://book/pic.jpg');
       assert.dom('[data-test-thumbnail-input] input').hasNoValue();
       assert
         .dom('[data-test-field="cardInfo-theme"]')
@@ -2989,6 +2986,101 @@ module('Integration | card-basics', function (hooks) {
       assert
         .dom('[data-test-plural-view-item="1"]')
         .hasStyle({ height: '32px' });
+    });
+
+    test('renders containsMany composite field without chrome when displayContainer is false', async function (this: RenderingTestContext, assert) {
+      class Person extends FieldDef {
+        @field firstName = contains(StringField);
+        @field lastName = contains(StringField);
+        static embedded = class Embedded extends Component<typeof this> {
+          <template>
+            <span data-test-person-firstName><@fields.firstName /></span>
+            <span data-test-person-lastName><@fields.lastName /></span>
+          </template>
+        };
+      }
+
+      class Family extends CardDef {
+        @field people = containsMany(Person);
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <div data-test-family>
+              <@fields.people @displayContainer={{false}} />
+            </div>
+          </template>
+        };
+      }
+      loader.shimModule(`${testRealmURL}test-cards`, { Family, Person });
+
+      let abdelRahmans = new Family({
+        people: [
+          new Person({ firstName: 'Mango', lastName: 'Abdel-Rahman' }),
+          new Person({ firstName: 'Van Gogh', lastName: 'Abdel-Rahman' }),
+        ],
+      });
+
+      await renderCard(loader, abdelRahmans, 'isolated');
+
+      assert
+        .dom('.plural-field')
+        .doesNotExist('containsMany wrapper div is not rendered');
+      assert
+        .dom('.containsMany-item')
+        .doesNotExist('per-item wrapper divs are not rendered');
+      assert
+        .dom('[data-test-compound-field-component]')
+        .doesNotExist('compound field wrapper is not rendered');
+      assert
+        .dom('[data-test-person-firstName]')
+        .exists({ count: 2 }, 'items are rendered');
+      assert.deepEqual(
+        [...this.element.querySelectorAll('[data-test-person-firstName]')].map(
+          (el) => el.textContent?.trim(),
+        ),
+        ['Mango', 'Van Gogh'],
+        'item content is rendered in order',
+      );
+    });
+
+    test('renders compound field without chrome when displayContainer is false', async function (assert) {
+      class Name extends FieldDef {
+        @field firstName = contains(StringField);
+        @field lastName = contains(StringField);
+        static embedded = class Embedded extends Component<typeof this> {
+          <template>
+            <span data-test-name>
+              <@fields.firstName />
+              <@fields.lastName />
+            </span>
+          </template>
+        };
+      }
+
+      class Person extends CardDef {
+        @field name = contains(Name);
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <div data-test-person>
+              <@fields.name @displayContainer={{false}} />
+            </div>
+          </template>
+        };
+      }
+      loader.shimModule(`${testRealmURL}test-cards`, { Person, Name });
+
+      let person = new Person({
+        name: new Name({ firstName: 'Arthur', lastName: 'Dent' }),
+      });
+
+      await renderCard(loader, person, 'isolated');
+
+      assert
+        .dom('[data-test-compound-field-component]')
+        .doesNotExist('compound field wrapper div is not rendered');
+      assert
+        .dom('[data-test-name]')
+        .exists('field content is still rendered')
+        .containsText('Arthur Dent');
     });
 
     test('can #each over a containsMany primitive @fields', async function (assert) {

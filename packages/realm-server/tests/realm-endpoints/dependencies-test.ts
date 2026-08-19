@@ -1,12 +1,13 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import type { SuperTest, Test } from 'supertest';
 import { basename } from 'path';
 import type { Realm } from '@cardstack/runtime-common';
 import { SupportedMimeType } from '@cardstack/runtime-common';
-import type { RealmHttpServer as Server } from '../../server';
-import { closeServer, setupPermissionedRealmCached } from '../helpers';
+import type { RealmHttpServer as Server } from '../../server.ts';
+import { closeServer, setupPermissionedRealmCached } from '../helpers/index.ts';
 
-module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
+module(`realm-endpoints/${basename(import.meta.filename)}`, function (hooks) {
   let testRealm: Realm;
   let testRealmHttpServer: Server;
   let request: SuperTest<Test>;
@@ -40,8 +41,8 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
     await testRealm.write(
       'dependencies-card.gts',
       `
-        import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+        import { contains, field, CardDef } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
         export class ResourceIndexCard extends CardDef {
           @field title = contains(StringField);
         }
@@ -67,9 +68,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
     assert.strictEqual(entry.attributes.entryType, 'file');
     assert.false(entry.attributes.hasError);
     assert.true(
-      entry.attributes.dependencies.includes(
-        'https://cardstack.com/base/card-api',
-      ),
+      entry.attributes.dependencies.includes('@cardstack/base/card-api'),
       'includes consumed card-api module dependency',
     );
     assert.false(

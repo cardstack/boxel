@@ -1,7 +1,7 @@
 import type {
   PossibleCardOrFieldDeclaration,
   PossibleField,
-} from './schema-analysis-plugin';
+} from './schema-analysis-plugin.ts';
 import type { types as t } from '@babel/core';
 import type { NodePath } from '@babel/traverse';
 

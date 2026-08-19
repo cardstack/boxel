@@ -8,9 +8,9 @@ import {
   field,
   Component,
   FieldDef,
-} from 'https://cardstack.com/base/card-api';
-import BooleanField from 'https://cardstack.com/base/boolean';
-import NumberField from 'https://cardstack.com/base/number';
+} from '@cardstack/base/card-api';
+import BooleanField from '@cardstack/base/boolean';
+import NumberField from '@cardstack/base/number';
 
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import { Star, StarHalfFill, StarFilled } from '@cardstack/boxel-ui/icons';

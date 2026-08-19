@@ -1,6 +1,6 @@
 import type { DBAdapter } from '@cardstack/runtime-common';
 import { reportError } from '@cardstack/runtime-common';
-import type { StripeSubscriptionDeletedWebhookEvent } from '.';
+import type { StripeSubscriptionDeletedWebhookEvent } from './index.ts';
 import {
   insertStripeEvent,
   updateSubscription,
@@ -10,11 +10,11 @@ import {
   addToCreditsLedger,
   getMostRecentSubscriptionCycle,
   getPlanByMonthlyPrice,
-} from '../billing-queries';
+} from '../billing-queries.ts';
 
 import type { PgAdapter } from '@cardstack/postgres';
 import { TransactionManager } from '@cardstack/postgres';
-import { getStripe } from './stripe';
+import { getStripe } from './stripe.ts';
 
 export async function handleSubscriptionDeleted(
   dbAdapter: DBAdapter,

@@ -9,67 +9,81 @@ import type {
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import Router from '@koa/router';
 import { createRequire } from 'module';
-import handleCreateSessionRequest from './handlers/handle-create-session';
+import handleCreateSessionRequest from './handlers/handle-create-session.ts';
 import handleCreateRealmRequest, {
   type CreateRealmDeps,
-} from './handlers/create-realm';
-import handleDeleteRealm from './handlers/handle-delete-realm';
-import handleFetchCatalogRealmsRequest from './handlers/handle-fetch-catalog-realms';
-import handleFetchUserRequest from './handlers/handle-fetch-user';
-import handleStripeWebhookRequest from './handlers/handle-stripe-webhook';
-import handlePublishRealm from './handlers/handle-publish-realm';
-import handleUnpublishRealm from './handlers/handle-unpublish-realm';
-import { healthCheck, jwtMiddleware, grafanaAuthorization } from './middleware';
+} from './handlers/create-realm.ts';
+import handleDeleteRealm from './handlers/handle-delete-realm.ts';
+import handleFetchCatalogRealmsRequest from './handlers/handle-fetch-catalog-realms.ts';
+import handleFetchUserRequest from './handlers/handle-fetch-user.ts';
+import handleStripeWebhookRequest from './handlers/handle-stripe-webhook.ts';
+import handlePublishRealm from './handlers/handle-publish-realm.ts';
+import handlePublishProgress from './handlers/handle-publish-progress.ts';
+import handleUnpublishRealm from './handlers/handle-unpublish-realm.ts';
+import handleArchiveRealm from './handlers/handle-archive-realm.ts';
+import handleUnarchiveRealm from './handlers/handle-unarchive-realm.ts';
+import handleArchivedRealms from './handlers/handle-archived-realms.ts';
+import {
+  healthCheck,
+  jwtMiddleware,
+  grafanaAuthorization,
+} from './middleware/index.ts';
 import type Koa from 'koa';
-import handleCreateUserRequest from './handlers/handle-create-user';
-import handleQueueStatusRequest from './handlers/handle-queue-status';
-import handleReindex from './handlers/handle-reindex';
-import handleFullReindex from './handlers/handle-full-reindex';
-import handleRemoveJob from './handlers/handle-remove-job';
-import handleAddCredit from './handlers/handle-add-credit';
-import handleUpsertRealmUserPermission from './handlers/handle-upsert-realm-user-permission';
-import handleCreateStripeSessionRequest from './handlers/handle-create-stripe-session';
-import handleRequestForward from './handlers/handle-request-forward';
-import handleOpenRouterPassthrough from './handlers/handle-openrouter-passthrough';
-import handlePostDeployment from './handlers/handle-post-deployment';
-import { handleCheckBoxelDomainAvailabilityRequest } from './handlers/handle-check-boxel-domain-availability';
-import handleRealmAuth from './handlers/handle-realm-auth';
-import handleGetBoxelClaimedDomainRequest from './handlers/handle-get-boxel-claimed-domain';
-import handleClaimBoxelDomainRequest from './handlers/handle-claim-boxel-domain';
-import handleDeleteBoxelClaimedDomainRequest from './handlers/handle-delete-boxel-claimed-domain';
-import handlePrerenderProxy from './handlers/handle-prerender-proxy';
-import handleSearch from './handlers/handle-search';
-import { JobScopedSearchCache } from './job-scoped-search-cache';
-import handleSearchPrerendered from './handlers/handle-search-prerendered';
-import handleRealmInfo from './handlers/handle-realm-info';
-import handleFederatedTypes from './handlers/handle-federated-types';
-import { multiRealmAuthorization } from './middleware/multi-realm-authorization';
-import handleDownloadRealm from './handlers/handle-download-realm';
+import handleCreateUserRequest from './handlers/handle-create-user.ts';
+import handleClientTelemetry from './handlers/handle-client-telemetry.ts';
+import handleQueueStatusRequest from './handlers/handle-queue-status.ts';
+import handleSkillValidation from './handlers/handle-skill-validation.ts';
+import handleReindex from './handlers/handle-reindex.ts';
+import handleFullReindex from './handlers/handle-full-reindex.ts';
+import handleRemoveJob from './handlers/handle-remove-job.ts';
+import handleAddCredit from './handlers/handle-add-credit.ts';
+import handleUpsertRealmUserPermission from './handlers/handle-upsert-realm-user-permission.ts';
+import handleRevokeUserSessions from './handlers/handle-revoke-user-sessions.ts';
+import handleCreateStripeSessionRequest from './handlers/handle-create-stripe-session.ts';
+import handleRequestForward from './handlers/handle-request-forward.ts';
+import handleOpenRouterPassthrough from './handlers/handle-openrouter-passthrough.ts';
+import handlePostDeployment from './handlers/handle-post-deployment.ts';
+import { handleCheckBoxelDomainAvailabilityRequest } from './handlers/handle-check-boxel-domain-availability.ts';
+import handleRealmAuth from './handlers/handle-realm-auth.ts';
+import handleDelegateSession from './handlers/handle-delegate-session.ts';
+import handleWorkerRequest from './handlers/handle-worker-request.ts';
+import handleGetBoxelClaimedDomainRequest from './handlers/handle-get-boxel-claimed-domain.ts';
+import handleClaimBoxelDomainRequest from './handlers/handle-claim-boxel-domain.ts';
+import handleDeleteBoxelClaimedDomainRequest from './handlers/handle-delete-boxel-claimed-domain.ts';
+import handleUnlistedRealmPathRequest from './handlers/handle-unlisted-realm-path.ts';
+import handlePrerenderProxy from './handlers/handle-prerender-proxy.ts';
+import handleSearch from './handlers/handle-search.ts';
+import type { JobScopedSearchCache } from './job-scoped-search-cache.ts';
+import handleRealmIndexCounts from './handlers/handle-realm-index-counts.ts';
+import handleRealmInfo from './handlers/handle-realm-info.ts';
+import handleFederatedTypes from './handlers/handle-federated-types.ts';
+import { multiRealmAuthorization } from './middleware/multi-realm-authorization.ts';
+import handleDownloadRealm from './handlers/handle-download-realm.ts';
 import {
   handleBotRegistrationRequest,
   handleBotRegistrationsRequest,
   handleBotUnregistrationRequest,
-} from './handlers/handle-bot-registration';
+} from './handlers/handle-bot-registration.ts';
 import {
   handleBotCommandDeleteRequest,
   handleBotCommandsListRequest,
   handleBotCommandsRequest,
-} from './handlers/handle-bot-commands';
+} from './handlers/handle-bot-commands.ts';
 import {
   handleCreateIncomingWebhookRequest,
   handleListIncomingWebhooksRequest,
   handleDeleteIncomingWebhookRequest,
-} from './handlers/handle-incoming-webhook';
+} from './handlers/handle-incoming-webhook.ts';
 import {
   handleCreateWebhookCommandRequest,
   handleListWebhookCommandsRequest,
   handleDeleteWebhookCommandRequest,
-} from './handlers/handle-webhook-commands';
-import handleWebhookReceiverRequest from './handlers/handle-webhook-receiver';
-import handleRunCommand from './handlers/handle-run-command';
-import handleScreenshotCard from './handlers/handle-screenshot-card';
-import { buildCreatePrerenderAuth } from './prerender/auth';
-import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler';
+} from './handlers/handle-webhook-commands.ts';
+import handleWebhookReceiverRequest from './handlers/handle-webhook-receiver.ts';
+import handleRunCommand from './handlers/handle-run-command.ts';
+import handleScreenshotCard from './handlers/handle-screenshot-card.ts';
+import { buildCreatePrerenderAuth } from './prerender/auth.ts';
+import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler.ts';
 
 export type CreateRoutesArgs = {
   serverURL: string;
@@ -79,12 +93,23 @@ export type CreateRoutesArgs = {
   realmServerSecretSeed: string;
   grafanaSecret: string;
   realmSecretSeed: string;
+  // Shared secret authenticating ai-bot's delegation requests (CS-11552).
+  // Optional: when unset, the /_delegate-session endpoint responds 503 rather
+  // than minting tokens, so the feature stays inert until a secret is
+  // provisioned.
+  aiBotDelegationSecret?: string;
   virtualNetwork: VirtualNetwork;
   queue: QueuePublisher;
   realms: Realm[];
   reconciler: RealmRegistryReconciler;
   realmsRootPath: string;
   getMatrixRegistrationSecret: () => Promise<string>;
+  // Synapse admin credentials. Optional at the top: when both are unset the
+  // grafana upsert handler falls back to a localhost-only default so local
+  // dev / tests don't need to thread env vars through. When provided they
+  // are used as-is for any environment (staging, prod).
+  matrixAdminUsername?: string;
+  matrixAdminPassword?: string;
   serveHostApp: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
   serveIndex: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
   serveFromRealm: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
@@ -99,6 +124,11 @@ export type CreateRoutesArgs = {
   };
   assetsURL: URL;
   prerenderer?: Prerenderer;
+  // Reports the current host-shell token to the prerender manager. The
+  // post-deployment hook calls it so the fleet's recycle signal is refreshed
+  // once the new code is live and the service is stable.
+  reportHostShell?: () => Promise<void>;
+  searchCache: JobScopedSearchCache;
 };
 
 export function createRoutes(args: CreateRoutesArgs) {
@@ -107,15 +137,12 @@ export function createRoutes(args: CreateRoutesArgs) {
     args.serverURL,
   );
   let router = new Router();
-  // One job-scoped same-realm search cache per realm-server process.
-  // Lives for the life of the process; TTL-evicts entries 10 min after
-  // their initial populate (hits do NOT refresh the TTL — tying it to
-  // populate time bounds the leak deterministically, where touch-
-  // refresh would let a hot entry survive indefinitely past job
-  // completion). Future work wires NOTIFY-driven eviction so a job
-  // completion releases its entries immediately. Hard-capped to bound
-  // worst-case memory under a synthetic-jobId flood.
-  let searchCache = new JobScopedSearchCache();
+  // One job-scoped search cache per realm-server process, created by the
+  // composition root (main.ts) and shared with the JobsFinishedListener so a
+  // `jobs_finished` NOTIFY can evict a finished job's entries immediately. An
+  // age-based janitor reclaims any entries a job leaves behind on a missed
+  // NOTIFY.
+  let searchCache = args.searchCache;
 
   let createRealmDeps: CreateRealmDeps = {
     serverURL: new URL(args.serverURL),
@@ -137,47 +164,60 @@ export function createRoutes(args: CreateRoutesArgs) {
   router.post('/_server-session', handleCreateSessionRequest(args));
   router.post(
     '/_create-realm',
-    jwtMiddleware(args.realmSecretSeed),
-    handleCreateRealmRequest(createRealmDeps),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleCreateRealmRequest(createRealmDeps, args.sendEvent),
   );
   router.delete(
     '/_delete-realm',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleDeleteRealm(args),
   );
   router.get('/_catalog-realms', handleFetchCatalogRealmsRequest(args));
   router.get('/_queue-status', handleQueueStatusRequest(args));
+  // Monitoring endpoint validating that every skill's command codeRefs
+  // resolve in the deployed host. Self-authenticated with the monitoring
+  // token, same as /_queue-status.
+  router.get('/_skill-validation', handleSkillValidation(args));
   router.post(
     '/_run-command',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleRunCommand(args),
   );
   router.post('/_stripe-webhook', handleStripeWebhookRequest(args));
   router.post(
     '/_stripe-session',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleCreateStripeSessionRequest(args),
   );
   router.get(
     '/_user',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleFetchUserRequest(args),
   );
   router.post(
     '/_user',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleCreateUserRequest(args),
   );
   router.post(
     '/_request-forward',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleRequestForward({
       dbAdapter: args.dbAdapter,
     }),
   );
+  // Batched client performance beacons. The host sends its server session
+  // token as `Authorization: Bearer <token>`, so the standard jwtMiddleware
+  // authenticates the caller and the authenticated matrix user id is used in
+  // preference to the body's self-reported value.
+  router.post(
+    '/_client-telemetry',
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleClientTelemetry(),
+  );
   router.post(
     '/_openrouter/chat/completions',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleOpenRouterPassthrough({
       dbAdapter: args.dbAdapter,
     }),
@@ -196,6 +236,14 @@ export function createRoutes(args: CreateRoutesArgs) {
     }),
   );
   router.all(
+    '/_federated-index-counts',
+    multiRealmAuthorization(args),
+    handleRealmIndexCounts({
+      dbAdapter: args.dbAdapter,
+      reconciler: args.reconciler,
+    }),
+  );
+  router.all(
     '/_federated-types',
     multiRealmAuthorization(args),
     handleFederatedTypes({
@@ -203,14 +251,9 @@ export function createRoutes(args: CreateRoutesArgs) {
       reconciler: args.reconciler,
     }),
   );
-  router.all(
-    '/_federated-search-prerendered',
-    multiRealmAuthorization(args),
-    handleSearchPrerendered({ reconciler: args.reconciler, searchCache }),
-  );
   router.post(
     '/_prerender-card',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handlePrerenderProxy({
       kind: 'card',
       prerenderer: args.prerenderer,
@@ -220,7 +263,7 @@ export function createRoutes(args: CreateRoutesArgs) {
   );
   router.post(
     '/_prerender-module',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handlePrerenderProxy({
       kind: 'module',
       prerenderer: args.prerenderer,
@@ -230,7 +273,7 @@ export function createRoutes(args: CreateRoutesArgs) {
   );
   router.post(
     '/_prerender-file-extract',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handlePrerenderProxy({
       kind: 'file-extract',
       prerenderer: args.prerenderer,
@@ -240,18 +283,38 @@ export function createRoutes(args: CreateRoutesArgs) {
   );
   router.post(
     '/_screenshot-card',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleScreenshotCard(args),
   );
   router.post(
     '/_publish-realm',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handlePublishRealm(args),
+  );
+  router.get(
+    '/_publish-progress',
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handlePublishProgress(args),
   );
   router.post(
     '/_unpublish-realm',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleUnpublishRealm(args),
+  );
+  router.post(
+    '/_archive-realm',
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleArchiveRealm(args),
+  );
+  router.post(
+    '/_unarchive-realm',
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleUnarchiveRealm(args),
+  );
+  router.get(
+    '/_archived-realms',
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleArchivedRealms(args),
   );
 
   // Grafana operator-action endpoints. All POST-only with
@@ -269,100 +332,116 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_grafana-upsert-realm-user-permission',
     handleUpsertRealmUserPermission(args),
   );
+  registerGrafanaEndpoint(
+    '/_grafana-revoke-user-sessions',
+    handleRevokeUserSessions(args),
+  );
   router.post('/_post-deployment', handlePostDeployment(args));
   router.post(
     '/_realm-auth',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleRealmAuth(args),
   );
+  // Shared-secret authenticated (HMAC over body + timestamp); auth is handled
+  // inside the handler because the signature covers the request body.
+  router.post('/_delegate-session', handleDelegateSession(args));
+  // Handles a worker-originated request bridged in through the worker manager,
+  // dispatched on its `type`. Shared-secret authenticated (HMAC over body +
+  // timestamp), same as /_delegate-session — auth is inside the handler.
+  router.post('/_worker-request', handleWorkerRequest(args));
   router.get(
     '/_check-boxel-domain-availability',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleCheckBoxelDomainAvailabilityRequest(args),
   );
   router.get(
     '/_boxel-claimed-domains',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleGetBoxelClaimedDomainRequest(args),
   );
   router.post(
     '/_boxel-claimed-domains',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleClaimBoxelDomainRequest(args),
   );
   router.delete(
     '/_boxel-claimed-domains/:claimedDomainId',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleDeleteBoxelClaimedDomainRequest(args),
+  );
+  router.post(
+    '/_unlisted-realm-path',
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleUnlistedRealmPathRequest(args),
   );
   // Matrix tests don't need the GitHub PR integration, and skipping this route
   // keeps the realm server from loading Octokit's ESM entrypoint during boot.
   if (process.env.DISABLE_GITHUB_PR_ROUTE !== 'true') {
     router.post(
       '/_github-pr',
-      jwtMiddleware(args.realmSecretSeed),
+      jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
       handleGitHubPRRequestLazy(args),
     );
   }
   router.get('/_download-realm', handleDownloadRealm(args));
   router.post(
     '/_bot-registration',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleBotRegistrationRequest(args),
   );
   router.get(
     '/_bot-registrations',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleBotRegistrationsRequest(args),
   );
   router.delete(
     '/_bot-registration',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleBotUnregistrationRequest(args),
   );
   router.post(
     '/_bot-commands',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleBotCommandsRequest(args),
   );
   router.get(
     '/_bot-commands',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleBotCommandsListRequest(args),
   );
   router.delete(
     '/_bot-commands',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleBotCommandDeleteRequest(args),
   );
   router.post(
     '/_incoming-webhooks',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleCreateIncomingWebhookRequest(args),
   );
   router.get(
     '/_incoming-webhooks',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleListIncomingWebhooksRequest(args),
   );
   router.delete(
     '/_incoming-webhooks',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleDeleteIncomingWebhookRequest(args),
   );
   router.post(
     '/_webhook-commands',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleCreateWebhookCommandRequest(args),
   );
   router.get(
     '/_webhook-commands',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleListWebhookCommandsRequest(args),
   );
   router.delete(
     '/_webhook-commands',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleDeleteWebhookCommandRequest(args),
   );
   router.post('/_webhooks/:webhookPath', handleWebhookReceiverRequest(args));
@@ -378,9 +457,9 @@ function handleGitHubPRRequestLazy(args: CreateRoutesArgs) {
   return async function (ctxt: Koa.Context, next: Koa.Next) {
     if (!handler) {
       handler = (
-        createRequire(__filename)(
+        createRequire(import.meta.filename)(
           './handlers/handle-github-pr',
-        ) as typeof import('./handlers/handle-github-pr')
+        ) as typeof import('./handlers/handle-github-pr.ts')
       ).default(args);
     }
     return await handler(ctxt, next);

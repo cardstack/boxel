@@ -4,9 +4,9 @@ import {
   contains,
   StringField,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import NumberField from 'https://cardstack.com/base/number';
-import ColorField from 'https://cardstack.com/base/color';
+} from '@cardstack/base/card-api';
+import NumberField from '@cardstack/base/number';
+import ColorField from '@cardstack/base/color';
 
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
 
@@ -29,7 +29,10 @@ class DealPriorityEdit extends Component<typeof DealPriority> {
     });
   }
 
-  @action onSelectStatus(status: DealPriority): void {
+  @action onSelectStatus(status: DealPriority | null): void {
+    if (!status) {
+      return;
+    }
     this.label = status.label;
     this.args.model.label = this.selectedStatus?.label;
     this.args.model.index = this.selectedStatus?.index;

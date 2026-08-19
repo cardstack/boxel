@@ -21,8 +21,8 @@ ruleTester.run('missing-card-api-import', rule, {
         field,
         FieldDef,
         linksTo,
-      } from 'https://cardstack.com/base/card-api';
-      import StringField from 'https://cardstack.com/base/string';
+      } from '@cardstack/base/card-api';
+      import StringField from '@cardstack/base/string';
 
       import { Chain } from './chain';
 
@@ -33,7 +33,7 @@ ruleTester.run('missing-card-api-import', rule, {
   `,
     {
       code: `
-        import { FieldDef } from 'https://cardstack.com/base/card-api';
+        import { FieldDef } from '@cardstack/base/card-api';
 
         export class AddressField extends FieldDef {}
 
@@ -42,7 +42,7 @@ ruleTester.run('missing-card-api-import', rule, {
       options: [
         {
           importMappings: {
-            AddressField: ['AddressField', 'https://cardstack.com/base/card-api'],
+            AddressField: ['AddressField', '@cardstack/base/card-api'],
           },
         },
       ],
@@ -51,6 +51,55 @@ ruleTester.run('missing-card-api-import', rule, {
 
   invalid: [
     {
+      code: `import {
+        contains,
+        field,
+        linksTo,
+      } from '@cardstack/base/card-api';
+      import StringField from '@cardstack/base/string';
+
+      import { Chain } from './chain';
+
+      export class Payment extends FieldDef {
+        @field chain = linksTo(Chain);
+        @field address = contains(StringField);
+      }
+      `,
+      output: `import {
+        contains,
+        field,
+        linksTo, FieldDef,
+      } from '@cardstack/base/card-api';
+      import StringField from '@cardstack/base/string';
+
+      import { Chain } from './chain';
+
+      export class Payment extends FieldDef {
+        @field chain = linksTo(Chain);
+        @field address = contains(StringField);
+      }
+      `,
+      options: [
+        {
+          importMappings: {
+            FieldDef: ['FieldDef', '@cardstack/base/card-api'],
+          },
+        },
+      ],
+
+      errors: [
+        {
+          type: 'Identifier',
+          message: rule.meta.messages['missing-card-api-import'],
+        },
+      ],
+    },
+    {
+      // The configured target module is the RRI prefix form, but the
+      // file imports the equivalent virtual-alias URL form. The fix
+      // must merge into the existing import rather than emitting a
+      // second, duplicate import line — the two specifiers refer to the
+      // same module (see REALM_PREFIX_ALIASES in import-utils).
       code: `import {
         contains,
         field,
@@ -82,7 +131,7 @@ ruleTester.run('missing-card-api-import', rule, {
       options: [
         {
           importMappings: {
-            FieldDef: ['FieldDef', 'https://cardstack.com/base/card-api'],
+            FieldDef: ['FieldDef', '@cardstack/base/card-api'],
           },
         },
       ],
@@ -99,8 +148,8 @@ ruleTester.run('missing-card-api-import', rule, {
         field,
         linksTo,
         FieldDef
-      } from 'https://cardstack.com/base/card-api';
-      import StringField from 'https://cardstack.com/base/string';
+      } from '@cardstack/base/card-api';
+      import StringField from '@cardstack/base/string';
 
       import { Chain } from './chain';
 
@@ -113,8 +162,8 @@ ruleTester.run('missing-card-api-import', rule, {
         field,
         linksTo,
         FieldDef, contains
-      } from 'https://cardstack.com/base/card-api';
-      import StringField from 'https://cardstack.com/base/string';
+      } from '@cardstack/base/card-api';
+      import StringField from '@cardstack/base/string';
 
       import { Chain } from './chain';
 
@@ -126,7 +175,7 @@ ruleTester.run('missing-card-api-import', rule, {
       options: [
         {
           importMappings: {
-            contains: ['contains', 'https://cardstack.com/base/card-api'],
+            contains: ['contains', '@cardstack/base/card-api'],
           },
         },
       ],
@@ -142,8 +191,8 @@ ruleTester.run('missing-card-api-import', rule, {
         FieldDef,
         contains,
         linksTo,
-      } from 'https://cardstack.com/base/card-api';
-      import StringField from 'https://cardstack.com/base/string';
+      } from '@cardstack/base/card-api';
+      import StringField from '@cardstack/base/string';
 
       export class Payment extends FieldDef {
         @field address = contains(StringField);
@@ -153,8 +202,8 @@ ruleTester.run('missing-card-api-import', rule, {
         FieldDef,
         contains,
         linksTo, field,
-      } from 'https://cardstack.com/base/card-api';
-      import StringField from 'https://cardstack.com/base/string';
+      } from '@cardstack/base/card-api';
+      import StringField from '@cardstack/base/string';
 
       export class Payment extends FieldDef {
         @field address = contains(StringField);
@@ -163,7 +212,7 @@ ruleTester.run('missing-card-api-import', rule, {
       options: [
         {
           importMappings: {
-            field: ['field', 'https://cardstack.com/base/card-api'],
+            field: ['field', '@cardstack/base/card-api'],
           },
         },
       ],
@@ -181,19 +230,19 @@ ruleTester.run('missing-card-api-import', rule, {
         contains,
         field,
         linksTo,
-      } from 'https://cardstack.com/base/card-api';
+      } from '@cardstack/base/card-api';
 
       export class Payment extends FieldDef {
         @field address = contains(StringField);
       }
       `,
-      output: `import StringField from 'https://cardstack.com/base/string';
+      output: `import StringField from '@cardstack/base/string';
 import {
         FieldDef,
         contains,
         field,
         linksTo,
-      } from 'https://cardstack.com/base/card-api';
+      } from '@cardstack/base/card-api';
 
       export class Payment extends FieldDef {
         @field address = contains(StringField);
@@ -202,7 +251,7 @@ import {
       options: [
         {
           importMappings: {
-            StringField: ['default', 'https://cardstack.com/base/string'],
+            StringField: ['default', '@cardstack/base/string'],
           },
         },
       ],
@@ -214,8 +263,8 @@ import {
       ],
     },
     {
-      code: `import { FieldDef, field } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+      code: `import { FieldDef, field } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 
 export class CurrencyField extends FieldDef {
   static displayName = "Currency";
@@ -226,8 +275,8 @@ export class CurrencyField extends FieldDef {
     }
   });
 }`,
-      output: `import { FieldDef, field, contains } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+      output: `import { FieldDef, field, contains } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 
 export class CurrencyField extends FieldDef {
   static displayName = "Currency";
@@ -241,9 +290,9 @@ export class CurrencyField extends FieldDef {
       options: [
         {
           importMappings: {
-            field: ['field', 'https://cardstack.com/base/card-api'],
-            contains: ['contains', 'https://cardstack.com/base/card-api'],
-            Component: ['Component', 'https://cardstack.com/base/card-api'],
+            field: ['field', '@cardstack/base/card-api'],
+            contains: ['contains', '@cardstack/base/card-api'],
+            Component: ['Component', '@cardstack/base/card-api'],
           },
         },
       ],

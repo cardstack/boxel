@@ -4,8 +4,8 @@ import {
   contains,
   StringField,
   FieldDef,
-} from 'https://cardstack.com/base/card-api';
-import UrlField from 'https://cardstack.com/base/url';
+} from '@cardstack/base/card-api';
+import UrlField from '@cardstack/base/url';
 
 import {
   BoxelSelect,
@@ -95,9 +95,15 @@ export class ContactLinkField extends FieldDef {
       </style>
     </template>
 
-    options = this.args.model.items;
+    get options() {
+      return this.args.model.items ?? [];
+    }
 
-    onSelect = (option: ContactLink) => (this.args.model.label = option.label);
+    onSelect = (option: ContactLink | null) => {
+      if (option) {
+        this.args.model.label = option.label;
+      }
+    };
 
     get selectedOption() {
       return this.options?.find(

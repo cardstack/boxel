@@ -1,34 +1,44 @@
-import { isEqual } from 'lodash';
+import { isEqual } from 'lodash-es';
 
 import {
   baseRef,
   CardError,
+  FRONTMATTER_DIAGNOSTICS_SYMBOL,
+  FRONTMATTER_FILE_META_VALUE_SYMBOL,
+  FRONTMATTER_PARSE_ERROR_SYMBOL,
   identifyCard,
   inferContentType,
   internalKeyFor,
   SupportedMimeType,
   type CodeRef,
+  type Diagnostics,
   type FileMetaResource,
+  type FrontmatterParseError,
   type QueryFieldMeta,
   type RealmResourceIdentifier,
   type RenderError,
   type ResolvedCodeRef,
+  type ToolContext,
 } from '@cardstack/runtime-common';
 import { getFieldDefinitions } from '@cardstack/runtime-common/definitions';
-
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type { BaseDef } from 'https://cardstack.com/base/card-api';
 
 import type { createAuthErrorGuard } from './auth-error-guard';
 
 import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
+import type { BaseDef } from '@cardstack/base/card-api';
+import type * as CardAPI from '@cardstack/base/card-api';
 
 export type FileDefExport = {
   extractAttributes: (
     url: string,
     getStream: () => Promise<unknown>,
-    options?: { contentHash?: string; contentSize?: number },
+    options?: {
+      contentHash?: string;
+      contentSize?: number;
+      toolContext?: ToolContext;
+      fileSizeLimitBytes?: number;
+    },
   ) => Promise<any>;
 };
 export type FileDefModule = Record<string, FileDefExport | undefined>;
@@ -44,6 +54,14 @@ export type FileDefExtractResult = {
   deps: string[];
   error?: RenderError;
   mismatch?: true;
+  // The frontmatter YAML wouldn't parse. The extract still succeeds (the file
+  // indexes body-only); lifted out of the searchDoc here so the indexer can
+  // persist it onto `diagnostics.frontmatterParseError`. See markdown-file-def.
+  frontmatterParseError?: FrontmatterParseError;
+  // Diagnostics findings the frontmatter contributed (e.g. a skill's
+  // `toolSchemaErrors`). The extract still succeeds; the indexer merges the
+  // bag onto the row's `diagnostics`.
+  frontmatterDiagnostics?: Partial<Diagnostics>;
 };
 
 export class FileDefAttributesExtractor {
@@ -55,14 +73,10 @@ export class FileDefAttributesExtractor {
   #baseFileDefCodeRef: ResolvedCodeRef;
   #contentHash: string | undefined;
   #contentSize: number | undefined;
+  #fileSizeLimitBytes: number | undefined;
   #fileBytes: Uint8Array | undefined;
   #buildError: (url: string, error: unknown) => RenderError;
-  #streamsPromise: Promise<
-    [
-      ReadableStream<Uint8Array> | Uint8Array,
-      ReadableStream<Uint8Array> | Uint8Array,
-    ]
-  > | null = null;
+  #toolContext: ToolContext | undefined;
   #fallbackBytes: Uint8Array | null = null;
   #primaryUsed = false;
 
@@ -75,8 +89,10 @@ export class FileDefAttributesExtractor {
     baseFileDefCodeRef,
     contentHash,
     contentSize,
+    fileSizeLimitBytes,
     fileBytes,
     buildError,
+    toolContext,
   }: {
     loaderService: LoaderService;
     network: NetworkService;
@@ -86,8 +102,20 @@ export class FileDefAttributesExtractor {
     baseFileDefCodeRef: ResolvedCodeRef;
     contentHash: string | undefined;
     contentSize: number | undefined;
+    // The realm's configured file-size ceiling. Threaded through to each leaf
+    // `extractAttributes` so a format that parses bytes at index time (the 3D
+    // model defs) caps that work at the same limit the write path enforces,
+    // rather than a hard-coded default.
+    fileSizeLimitBytes?: number;
     fileBytes?: Uint8Array;
     buildError: (url: string, error: unknown) => RenderError;
+    // Owner-carrying context that index-time tool schema generation
+    // constructs tool classes with (see SkillFrontmatterField.fromFrontmatter).
+    // Only the indexing path (the file-extract render route) provides one:
+    // schema generation loads each tool's module, which the interactive
+    // extract paths (room file attach, the store's direct fallback) shouldn't
+    // pay for — their consumers generate schemas on demand instead.
+    toolContext?: ToolContext;
   }) {
     this.#loaderService = loaderService;
     this.#network = network;
@@ -97,8 +125,10 @@ export class FileDefAttributesExtractor {
     this.#baseFileDefCodeRef = baseFileDefCodeRef;
     this.#contentHash = contentHash;
     this.#contentSize = contentSize;
+    this.#fileSizeLimitBytes = fileSizeLimitBytes;
     this.#fileBytes = fileBytes;
     this.#buildError = buildError;
+    this.#toolContext = toolContext;
   }
 
   async extract(): Promise<FileDefExtractResult> {
@@ -152,7 +182,12 @@ export class FileDefAttributesExtractor {
         return await klass.extractAttributes(
           this.#fileURL,
           this.#getStreamForAttempt,
-          { contentHash: this.#contentHash, contentSize: this.#contentSize },
+          {
+            contentHash: this.#contentHash,
+            contentSize: this.#contentSize,
+            fileSizeLimitBytes: this.#fileSizeLimitBytes,
+            toolContext: this.#toolContext,
+          },
         );
       } catch (err) {
         console.warn(
@@ -200,24 +235,74 @@ export class FileDefAttributesExtractor {
       let searchDoc = await tryExtract(klass, missingMessage);
       if (searchDoc) {
         let typeCodeRefs = getTypes(klass);
-        let types = typeCodeRefs.map((type) => internalKeyFor(type, undefined));
+        let types = typeCodeRefs.map((type) =>
+          internalKeyFor(type, undefined, this.#network.virtualNetwork),
+        );
         let displayNames = getDisplayNames(klass);
         let adoptsFrom = typeCodeRefs[0] ?? this.#fileDefCodeRef;
         let queryFieldDefs = await this.extractQueryFieldDefs(klass);
+        // `extractAttributes` may route per-field meta (the concrete subclass
+        // of a nested polymorphic field) via this global symbol. Lift it out so
+        // it lands in the resource's `meta.fields` and never in the flat
+        // `search_doc`. The base FileDef sets the same `Symbol.for` key.
+        let fieldMetaSymbol = Symbol.for('boxel:file-field-meta');
+        let cleanedDoc: Record<string, any> = { ...searchDoc };
+        let cleanedBag = cleanedDoc as Record<PropertyKey, any>;
+        let fieldsMeta = cleanedBag[fieldMetaSymbol] as
+          | NonNullable<FileMetaResource['meta']['fields']>
+          | undefined;
+        if (fieldsMeta) {
+          delete cleanedBag[fieldMetaSymbol];
+        }
+        // Same out-of-band lift for a frontmatter parse failure: keep it off
+        // the flat `search_doc` and hand it back so the indexer can persist it
+        // onto `diagnostics.frontmatterParseError`.
+        let frontmatterParseError = cleanedBag[
+          FRONTMATTER_PARSE_ERROR_SYMBOL
+        ] as FrontmatterParseError | undefined;
+        if (frontmatterParseError) {
+          delete cleanedBag[FRONTMATTER_PARSE_ERROR_SYMBOL];
+        }
+        // And for any diagnostics findings the frontmatter contributed,
+        // merged onto the row's `diagnostics` by the indexer.
+        let frontmatterDiagnostics = cleanedBag[
+          FRONTMATTER_DIAGNOSTICS_SYMBOL
+        ] as Partial<Diagnostics> | undefined;
+        if (frontmatterDiagnostics) {
+          delete cleanedBag[FRONTMATTER_DIAGNOSTICS_SYMBOL];
+        }
+        // A frontmatter value enriched for the index (e.g. a skill's
+        // generated tool definitions) replaces the resource's `frontmatter`
+        // only; the search doc keeps the value as authored, because multi-KB
+        // generated content must never land in `search_doc`.
+        let fileMetaFrontmatter = cleanedBag[
+          FRONTMATTER_FILE_META_VALUE_SYMBOL
+        ] as Record<string, unknown> | undefined;
+        if (fileMetaFrontmatter) {
+          delete cleanedBag[FRONTMATTER_FILE_META_VALUE_SYMBOL];
+        }
+        let resource = buildFileResource(
+          this.#fileURL,
+          cleanedDoc,
+          adoptsFrom,
+          queryFieldDefs,
+          fieldsMeta,
+        );
+        if (fileMetaFrontmatter) {
+          (resource.attributes as Record<string, unknown>).frontmatter =
+            fileMetaFrontmatter;
+        }
         return {
           status: 'ready',
-          searchDoc,
-          resource: buildFileResource(
-            this.#fileURL,
-            searchDoc,
-            adoptsFrom,
-            queryFieldDefs,
-          ),
+          searchDoc: cleanedDoc,
+          resource,
           types,
           displayNames,
           deps,
           ...(error ? { error } : {}),
           ...(mismatch ? { mismatch: true } : {}),
+          ...(frontmatterParseError ? { frontmatterParseError } : {}),
+          ...(frontmatterDiagnostics ? { frontmatterDiagnostics } : {}),
         };
       }
     }
@@ -232,6 +317,23 @@ export class FileDefAttributesExtractor {
     };
   }
 
+  // Each extractAttributes attempt asks for a stream. The first attempt — the
+  // most-specific FileDef subclass — gets the response body streamed directly,
+  // so a FileDef that only needs a small header (e.g. an audio duration in the
+  // `moov` box) can read what it needs and let the rest flow past without the
+  // whole file ever being buffered. The streams are deliberately NOT tee'd:
+  // teeing queues every chunk of the consumed branch for the unread retry
+  // branch, which pins the entire file in memory and defeats the streaming.
+  // Instead, the rare retry path (a subclass mismatch falling back to a parent
+  // class, after the primary stream has already been consumed) re-fetches the
+  // file once and buffers that copy for any further attempts.
+  //
+  // A FileDef that reads only a prefix MUST cancel the stream rather than
+  // abandon it — an undrained response body can hold the underlying HTTP
+  // connection open until GC. The `readFirstBytes()` helper in
+  // runtime-common/stream.ts does this (it cancels in a `finally`), and is what
+  // the header-only extractors (the image defs) already use; partial readers
+  // should go through it rather than draining the stream by hand.
   #getStreamForAttempt = async () => {
     if (!this.#primaryUsed) {
       this.#primaryUsed = true;
@@ -240,87 +342,64 @@ export class FileDefAttributesExtractor {
     return this.#getRetryStream();
   };
 
-  async #getStreams() {
-    if (!this.#streamsPromise) {
-      this.#streamsPromise = (async () => {
-        if (this.#fileBytes) {
-          return [this.#fileBytes, this.#fileBytes];
-        }
-
-        let response: Response;
-        try {
-          let request = new Request(this.#fileURL, {
-            method: 'GET',
-            headers: {
-              Accept: SupportedMimeType.CardSource,
-            },
-          });
-          if (this.#authGuard) {
-            response = await this.#authGuard.race(() =>
-              this.#network.authedFetch(request),
-            );
-          } else {
-            response = await this.#network.authedFetch(request);
-          }
-        } catch (error) {
-          console.warn('file extract fetch failed', {
-            fileURL: this.#fileURL,
-            error,
-          });
-          throw error;
-        }
-        if (!response.ok) {
-          console.warn('file extract fetch returned non-ok', {
-            fileURL: this.#fileURL,
-            status: response.status,
-          });
-          throw await CardError.fromFetchResponse(this.#fileURL, response);
-        }
-        return await this.#teeResponse(response);
-      })();
+  async #getPrimaryStream(): Promise<ReadableStream<Uint8Array> | Uint8Array> {
+    if (this.#fileBytes) {
+      return this.#fileBytes;
     }
-    return this.#streamsPromise;
+    let response = await this.#fetch();
+    // Hand back the live body so the consumer decides how much to read. Fall
+    // back to a buffered read only when the body isn't a stream (real fetches
+    // always expose one; this keeps non-streaming environments working).
+    if (response.body) {
+      return response.body;
+    }
+    return new Uint8Array(await response.arrayBuffer());
   }
 
-  async #getPrimaryStream() {
-    return (await this.#getStreams())[0];
-  }
-
-  async #getFallbackStream() {
-    return (await this.#getStreams())[1];
-  }
-
-  async #getRetryStream() {
+  async #getRetryStream(): Promise<Uint8Array> {
+    if (this.#fileBytes) {
+      return this.#fileBytes;
+    }
+    // Buffer the re-fetched copy once and reuse it for any subsequent
+    // attempts, so a chain of N fallbacks costs at most one extra fetch.
     if (!this.#fallbackBytes) {
-      this.#fallbackBytes = await this.#streamToBytes(
-        await this.#getFallbackStream(),
-      );
+      let response = await this.#fetch();
+      this.#fallbackBytes = new Uint8Array(await response.arrayBuffer());
     }
     return this.#fallbackBytes;
   }
 
-  async #teeResponse(
-    response: Response,
-  ): Promise<
-    [
-      ReadableStream<Uint8Array> | Uint8Array,
-      ReadableStream<Uint8Array> | Uint8Array,
-    ]
-  > {
-    if (response.body && 'tee' in response.body) {
-      return response.body.tee();
+  async #fetch(): Promise<Response> {
+    let response: Response;
+    try {
+      let request = new Request(this.#fileURL, {
+        method: 'GET',
+        headers: {
+          Accept: SupportedMimeType.CardSource,
+        },
+      });
+      if (this.#authGuard) {
+        response = await this.#authGuard.race(() =>
+          this.#network.authedFetch(request),
+        );
+      } else {
+        response = await this.#network.authedFetch(request);
+      }
+    } catch (error) {
+      console.warn('file extract fetch failed', {
+        fileURL: this.#fileURL,
+        error,
+      });
+      throw error;
     }
-    let bytes = new Uint8Array(await response.arrayBuffer());
-    return [bytes, bytes];
-  }
-
-  async #streamToBytes(
-    stream: ReadableStream<Uint8Array> | Uint8Array,
-  ): Promise<Uint8Array> {
-    if (stream instanceof Uint8Array) {
-      return stream;
+    if (!response.ok) {
+      console.warn('file extract fetch returned non-ok', {
+        fileURL: this.#fileURL,
+        status: response.status,
+      });
+      throw await CardError.fromFetchResponse(this.#fileURL, response);
     }
-    return new Uint8Array(await new Response(stream).arrayBuffer());
+    return response;
   }
 
   // Extract query field definitions (linksTo/linksToMany with a query) from
@@ -332,7 +411,7 @@ export class FileDefAttributesExtractor {
     try {
       let cardApiModule = await this.#loaderService.loader.import<
         typeof CardAPI
-      >('https://cardstack.com/base/card-api');
+      >('@cardstack/base/card-api');
       let { fields, fieldDefs } = getFieldDefinitions(
         cardApiModule,
         klass as unknown as typeof BaseDef,
@@ -371,10 +450,16 @@ export function getTypes(klass: FileDefConstructor): CodeRef[] {
 
   while (current) {
     let ref = identifyCard(current as unknown as typeof BaseDef);
-    if (!ref || isEqual(ref, baseRef)) {
+    if (!ref) {
       break;
     }
     types.push(ref);
+    // Include BaseDef as the final element then stop, matching the card-side
+    // getTypes (routes/render/meta.ts) so a `{ type: baseRef }` filter spans
+    // file and card rows. getDisplayNames below intentionally does not.
+    if (isEqual(ref, baseRef)) {
+      break;
+    }
     current = Reflect.getPrototypeOf(current) as FileDefConstructor | undefined;
   }
   return types;
@@ -411,6 +496,7 @@ export function buildFileResource(
   attributes: Record<string, any>,
   adoptsFrom: CodeRef,
   queryFieldDefs?: Record<string, QueryFieldMeta>,
+  fieldsMeta?: NonNullable<FileMetaResource['meta']['fields']>,
 ): FileMetaResource {
   let name = new URL(fileURL).pathname.split('/').pop() ?? fileURL;
   let baseAttributes = {
@@ -431,6 +517,10 @@ export function buildFileResource(
     attributes: mergedAttributes,
     meta: {
       adoptsFrom,
+      // Per-field subclass overrides for nested polymorphic fields (e.g.
+      // `frontmatter` → SkillFrontmatterField). Without this the field rehydrates
+      // as its declared base type. Supplied by `extractAttributes` (see below).
+      ...(fieldsMeta ? { fields: fieldsMeta } : {}),
       ...(queryFieldDefs ? { queryFieldDefs } : {}),
     },
     links: { self: fileURL },

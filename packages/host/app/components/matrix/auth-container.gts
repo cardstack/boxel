@@ -1,6 +1,5 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
-import { CardContainer, BoxelHeader } from '@cardstack/boxel-ui/components';
 import { BoxelIcon } from '@cardstack/boxel-ui/icons';
 
 interface Signature {
@@ -10,55 +9,59 @@ interface Signature {
 }
 
 const AuthContainer: TemplateOnlyComponent<Signature> = <template>
-  <div class='auth'>
+  <div class='auth' data-theme='dark'>
+    <div class='logo' aria-hidden='true'>
+      <BoxelIcon />
+    </div>
     <div class='container'>
-      <CardContainer class='auth-container'>
-        <BoxelHeader @title='Boxel' class='header'>
-          <:icon>
-            <BoxelIcon />
-          </:icon>
-        </BoxelHeader>
-        <div class='content'>
-          {{yield}}
-        </div>
-      </CardContainer>
+      <div class='content'>
+        {{yield}}
+      </div>
     </div>
   </div>
 
   <style scoped>
     .auth {
-      height: 100%;
+      /* theme color variable updates */
+      --background: #272432;
+      --foreground: var(--boxel-light);
+      --muted-foreground: #7f7c8c;
+      /* local color vars */
+      --auth-background: #191624;
+      --auth-foreground: var(--boxel-light);
+
+      position: relative;
+      min-height: 100dvh;
+      background-color: var(--auth-background);
+      color: var(--auth-foreground);
       overflow: auto;
     }
-
+    .logo {
+      position: absolute;
+      top: var(--boxel-sp-lg);
+      left: var(--boxel-sp-lg);
+      --icon-color: var(--boxel-highlight);
+      width: 2rem;
+      height: 2rem;
+    }
+    .logo :deep(svg) {
+      width: 100%;
+      height: 100%;
+    }
     .container {
       display: flex;
       flex-direction: column;
       justify-content: center;
       align-items: center;
-      min-height: 100%;
+      min-height: 100dvh;
       padding: var(--boxel-sp-lg);
-    }
-
-    .auth-container {
-      background-color: var(--boxel-light);
-      border: 1px solid var(--boxel-form-control-border-color);
-      border-radius: var(--boxel-form-control-border-radius);
-      letter-spacing: var(--boxel-lsp);
-      max-width: 34.375rem;
-      position: relative;
-    }
-    .header {
-      text-transform: uppercase;
-      gap: var(--boxel-sp-xxs);
-      font: 700 var(--boxel-font);
-      letter-spacing: var(--boxel-lsp-lg);
     }
     .content {
       display: flex;
       flex-direction: column;
-      padding: var(--boxel-sp) var(--boxel-sp-xl) calc(var(--boxel-sp) * 2)
-        var(--boxel-sp-xl);
+      width: 100%;
+      max-width: 25rem;
+      padding: var(--boxel-sp) 0 calc(var(--boxel-sp) * 2) 0;
     }
   </style>
 </template>;

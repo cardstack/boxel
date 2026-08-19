@@ -1,7 +1,8 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
-import { AsyncSemaphore } from '../prerender/async-semaphore';
-import { isPrerenderCancellation } from '../prerender/prerender-cancel';
+import { AsyncSemaphore } from '../prerender/async-semaphore.ts';
+import { isPrerenderCancellation } from '../prerender/prerender-cancel.ts';
 
 // Tests for AsyncSemaphore's resize-aware behaviour. The cancellation
 // tests live in prerender-cancellation-test.ts; this file owns the
@@ -20,7 +21,7 @@ import { isPrerenderCancellation } from '../prerender/prerender-cancel';
 //   4. Edge cases: clamping to 1, no-op resize, resize while empty,
 //      cancelled waiters mixed with grow.
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('AsyncSemaphore basic state', function () {
     test('reports correct counts at construction', function (assert) {
       let sem = new AsyncSemaphore(3);

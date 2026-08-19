@@ -1,15 +1,16 @@
 import type * as JSONTypes from 'json-typescript';
-import isPlainObject from 'lodash/isPlainObject';
+import { isPlainObject } from 'lodash-es';
 import stringify from 'safe-stable-stringify';
-import flattenDeep from 'lodash/flattenDeep';
+import { flattenDeep } from 'lodash-es';
 
-import type { CodeRef, DBAdapter, TypeCoercion } from './index';
+import type { CodeRef, DBAdapter, TypeCoercion } from './index.ts';
 
 export type Expression = (
   | string
   | Param
-  | TableValuedEach
   | TableValuedTree
+  | JsonContains
+  | TypesContains
   | DBSpecificExpression
 )[];
 
@@ -57,17 +58,48 @@ export interface FieldValue {
   kind: 'field-value';
 }
 
-export interface TableValuedEach {
-  kind: 'table-valued-each';
-  column: string;
-}
-
 export interface TableValuedTree {
   kind: 'table-valued-tree';
   column: string;
   rootPath: string;
   fieldPath: string;
   treeColumn: string;
+}
+
+// Deferred (pass-1 input) node for a non-null `eq` predicate. The first pass
+// resolves it against the field schema and decides — based on the leaf field's
+// serializer — whether it can become a GIN-servable `JsonContains`. It is the
+// `eq` analogue of FieldQuery.
+export interface JsonContainsQuery {
+  kind: 'json-contains-query';
+  path: string;
+  type: CodeRef;
+  value: CardExpression;
+}
+
+// Resolved (pass-2 input) node describing JSON containment of `column` by the
+// object formed from `segments` with `value` at the leaf — e.g. segments
+// ['customer','id'] => {"customer":{"id": <value>}}. Like TableValuedTree it
+// carries no SQL text and no schema dependence; expressionToSql renders it per
+// adapter (Postgres `@>`, SQLite `-> / ->>` extraction).
+export interface JsonContains {
+  kind: 'json-contains';
+  column: string;
+  segments: string[];
+  value: Param;
+}
+
+// Self-contained membership test: does the JSON array in `column` contain
+// `key`? Rendered per adapter (Postgres `@>`, SQLite `json_each` EXISTS).
+// Unlike a `jsonb_array_elements_text` cross join — which fans a row out into
+// one row per array element and so gives a type condition exists-one-element
+// semantics that miscompose under AND/NOT — this is a single per-row scalar
+// predicate, so type conditions compose correctly (a real `NOT` exclusion, an
+// AND intersection) and no GROUP BY is needed to recollapse the fan-out.
+export interface TypesContains {
+  kind: 'types-contains';
+  column: string;
+  key: string;
 }
 
 export interface FieldArity {
@@ -84,8 +116,10 @@ export type CardExpression = (
   | string
   | Param
   | DBSpecificExpression
-  | TableValuedEach
   | TableValuedTree
+  | JsonContains
+  | TypesContains
+  | JsonContainsQuery
   | FieldQuery
   | FieldValue
   | FieldArity
@@ -160,13 +194,6 @@ export function isDbExpression(
   );
 }
 
-export function tableValuedEach(column: string): TableValuedEach {
-  return {
-    kind: 'table-valued-each',
-    column,
-  };
-}
-
 export function tableValuedTree(
   column: string,
   rootPath: string,
@@ -179,6 +206,27 @@ export function tableValuedTree(
     rootPath,
     fieldPath,
     treeColumn,
+  };
+}
+
+export function jsonContainsQuery(
+  path: string,
+  type: CodeRef,
+  value: CardExpression,
+): JsonContainsQuery {
+  return {
+    kind: 'json-contains-query',
+    path,
+    type,
+    value,
+  };
+}
+
+export function typesContains(key: string, column = 'i.types'): TypesContains {
+  return {
+    kind: 'types-contains',
+    column,
+    key,
   };
 }
 
@@ -466,19 +514,55 @@ export function expressionToSql(
         });
       }
       return `${name}.${treeColumn}`;
-    } else if (element.kind === 'table-valued-each') {
-      let { column } = element;
-      let key = `each_${column}`;
-      let { name } = tableValuedFunctions.get(key) ?? {};
-      if (!name) {
-        name = `${column}${nonce++}_array_element`;
-
-        tableValuedFunctions.set(key, {
-          name,
-          fn: `jsonb_array_elements_text(case jsonb_typeof(${column}) when 'array' then ${column} else '[]' end) as ${name}`,
+    } else if (element.kind === 'json-contains') {
+      // Render the containment of `column` by {segments: value}. Both branches
+      // re-use renderElement so binds are pushed in left-to-right order.
+      let { column, segments, value } = element;
+      if (dbAdapterKind === 'sqlite') {
+        // SQLite has no `@>`; navigate the singular object path: interior
+        // segments with `->`, the leaf with `->>`, then compare. (Only string
+        // leaves reach here, so `->>` text-equality matches the value.)
+        let frag: Expression = [column];
+        segments.forEach((segment, i) => {
+          frag.push(i === segments.length - 1 ? '->>' : '->', param(segment));
         });
+        frag.push('=', value);
+        return frag.map(renderElement).join(' ');
       }
-      return name;
+      // Postgres: GIN-servable containment, full nested object from the root.
+      let nested = segments.reduceRight<JSONTypes.Value>(
+        (acc, segment) => ({ [segment]: acc }),
+        (value[dbAdapterKind] ?? value.param ?? null) as JSONTypes.Value,
+      );
+      return [column, '@>', param(nested as JSONTypes.Object), '::jsonb']
+        .map(renderElement)
+        .join(' ');
+    } else if (element.kind === 'types-contains') {
+      // Per-row array membership. COALESCE keeps a NULL/absent `types` array a
+      // definite FALSE (not SQL NULL) at positive polarity, so an enclosing
+      // `NOT (...)` keeps rows whose types never indexed rather than dropping
+      // them — the fan-out approach eliminated those rows before WHERE ran.
+      let { column, key } = element;
+      if (dbAdapterKind === 'sqlite') {
+        return [
+          'EXISTS (SELECT 1 FROM json_each(COALESCE(',
+          column,
+          `, '[]')) WHERE value =`,
+          param(key),
+          ')',
+        ]
+          .map(renderElement)
+          .join(' ');
+      }
+      // The boxel_index_types_containment_idx GIN indexes (migration
+      // 1784272066344) cover this exact expression — Postgres only uses an
+      // expression index when the query's left operand structurally matches
+      // the indexed expression (aliasing and whitespace don't matter; any
+      // semantic change to the COALESCE wrapper does), so changing the SQL
+      // here un-indexes type filters unless the index expression moves with it.
+      return ['COALESCE(', column, `, '[]'::jsonb) @>`, param([key]), '::jsonb']
+        .map(renderElement)
+        .join(' ');
     } else {
       throw assertNever(element);
     }

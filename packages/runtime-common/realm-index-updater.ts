@@ -1,4 +1,3 @@
-import { Memoize } from 'typescript-memoize';
 import {
   IndexWriter,
   Deferred,
@@ -11,24 +10,27 @@ import {
   type QueuePublisher,
   type CopyArgs,
   type CopyResult,
-} from '.';
+} from './index.ts';
 import {
+  indexingConcurrencyGroup,
   INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
   makeIncrementalArgsWithCallerMetadata,
   mapIncrementalDoneResult,
   type IncrementalIndexEnqueueArgs,
-} from './jobs/indexing';
-import { enqueueReindexRealmJob } from './jobs/reindex-realm';
-import type { FromScratchResult, IncrementalDoneResult } from './tasks/indexer';
-import type { Realm } from './realm';
-import { RealmPaths } from './paths';
-import ignore, { type Ignore } from 'ignore';
+} from './jobs/indexing.ts';
+import { enqueueReindexRealmJob } from './jobs/reindex-realm.ts';
+import type {
+  FromScratchResult,
+  IncrementalDoneResult,
+} from './tasks/indexer.ts';
+import type { Realm } from './realm.ts';
+import { RealmPaths } from './paths.ts';
+import { ignore, type Ignore } from './ignore.ts';
 
 export class RealmIndexUpdater {
   #realm: Realm;
+  #realmURL: URL | undefined;
   #log = logger('realm-index-updater');
-  // [readiness-diag] — opt-in CI flake diagnostics. Remove with call site.
-  #readinessDiag = logger('readiness-diag');
   #ignoreData: Record<string, string> = {};
   // Bumped every time a from-scratch result writes #ignoreData. Concurrent
   // incrementals capture this version when they snapshot #ignoreData; if a
@@ -53,6 +55,16 @@ export class RealmIndexUpdater {
   // gate exists to serialize. From-scratch jobs are tracked too, but only so
   // that callers wanting "all indexing has settled" semantics (e.g. publish)
   // continue to see them via `indexing()`.
+  //
+  // These deferreds are quiescence signals, not success signals: they are
+  // always fulfilled, never rejected, even when the underlying job fails.
+  // Failures travel to interested callers via the per-job promise (`settled`
+  // for incremental, `completed` for from-scratch, the method's own throw
+  // for copy) and via error_doc inside the worker. Rejecting the gate would
+  // (a) turn a background indexing failure into a 500 for whatever
+  // unrelated request happens to be awaiting the write-path gate, and
+  // (b) become an unhandled promise rejection whenever a deferred-indexing
+  // job fails while nothing is draining the gate.
   #incrementalIndexingDeferreds = new Set<Deferred<void>>();
   #fullIndexingDeferreds = new Set<Deferred<void>>();
 
@@ -80,9 +92,8 @@ export class RealmIndexUpdater {
     return this.#stats;
   }
 
-  @Memoize()
   private get realmURL() {
-    return new URL(this.#realm.url);
+    return (this.#realmURL ??= new URL(this.#realm.url));
   }
 
   private get ignoreMap() {
@@ -134,7 +145,7 @@ export class RealmIndexUpdater {
 
   publishFullIndex(
     priority = systemInitiatedPriority,
-    opts?: { clearLastModified?: boolean },
+    opts?: { clearLastModified?: boolean; awaitedByPublish?: boolean },
   ): {
     published: Promise<Job<FromScratchResult>>;
     completed: Promise<FromScratchResult>;
@@ -153,15 +164,8 @@ export class RealmIndexUpdater {
         priority,
         {
           clearLastModified: opts?.clearLastModified,
+          awaitedByPublish: opts?.awaitedByPublish,
         },
-      );
-      // [readiness-diag] — startedAt covers the full enqueue path
-      // (getRealmOwnerUsername + the optional clearLastModified write
-      // inside enqueueReindexRealmJob + the queue insert), not just the
-      // SQL publish. Labeled accordingly. See also realm.ts
-      // readinessCheck + #startup.
-      this.#readinessDiag.debug(
-        `Realm ${this.realmURL.href} from-scratch job durably enqueued as job_id=${job.id} (enqueue path took ${((performance.now() - startedAt) / 1000).toFixed(2)}s)`,
       );
       return job;
     })();
@@ -228,8 +232,20 @@ export class RealmIndexUpdater {
     urls: URL[],
     opts?: {
       delete?: true;
-      onInvalidation?: (invalidatedURLs: URL[]) => Promise<void>;
+      onInvalidation?: (
+        invalidatedURLs: URL[],
+        meta: { generation?: number },
+      ) => Promise<void>;
       onSettled?: () => Promise<void> | void;
+      // Runs when the worker job rejects, inside the same deferred lifecycle
+      // as onSettled (before the quiescence deferred fulfills). A failed
+      // incremental job may still have persisted setup-phase error docs, so
+      // callers use this to run the cache-invalidation / broadcast work the
+      // success path routes through onInvalidation — otherwise those rows
+      // stay hidden behind stale caches and silent subscribers until the
+      // next successful swap. Best-effort: a hook failure is logged and the
+      // job's own rejection still propagates through `settled`.
+      onFailed?: (error: unknown) => Promise<void> | void;
       clientRequestId?: string | null;
     },
   ): Promise<{ settled: Promise<void> }> {
@@ -250,23 +266,24 @@ export class RealmIndexUpdater {
       let clientRequestId = opts?.clientRequestId ?? null;
       job = await this.#queue.publish<IncrementalDoneResult>({
         jobType: 'incremental-index',
-        concurrencyGroup: `indexing:${this.#realm.url}`,
+        concurrencyGroup: indexingConcurrencyGroup(this.#realm.url),
         timeout: INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
         priority: userInitiatedPriority,
         args: makeIncrementalArgsWithCallerMetadata(args, clientRequestId),
         mapResult: mapIncrementalDoneResult(clientRequestId),
       });
     } catch (e: any) {
-      indexingDeferred.reject(e);
+      indexingDeferred.fulfill();
       this.#incrementalIndexingDeferreds.delete(indexingDeferred);
       throw e;
     }
     // Past the durable-enqueue boundary. Build the settle promise that the
     // caller can either await (synchronous-indexing path) or fire-and-forget
-    // (deferred-indexing path).
+    // (deferred-indexing path). Failures reject `settled` only — the
+    // quiescence gate always fulfills (see #incrementalIndexingDeferreds).
     let settled = (async () => {
       try {
-        let { invalidations, ignoreData, stats } = await job.done;
+        let { invalidations, ignoreData, stats, generation } = await job.done;
         this.#stats = stats;
         // Drop the result if a from-scratch index landed since we snapshotted.
         // Its ignoreData was computed from a stale snapshot and would clobber
@@ -277,13 +294,22 @@ export class RealmIndexUpdater {
         if (opts?.onInvalidation) {
           await opts.onInvalidation(
             invalidations.map((href) => new URL(href.replace(/\.json$/, ''))),
+            { generation },
           );
         }
         if (opts?.onSettled) {
           await opts.onSettled();
         }
-      } catch (e: any) {
-        indexingDeferred.reject(e);
+      } catch (e) {
+        if (opts?.onFailed) {
+          try {
+            await opts.onFailed(e);
+          } catch (hookError: any) {
+            this.#log.warn(
+              `onFailed hook for ${this.realmURL.href} threw: ${hookError?.message}`,
+            );
+          }
+        }
         throw e;
       } finally {
         indexingDeferred.fulfill();
@@ -297,7 +323,10 @@ export class RealmIndexUpdater {
     urls: URL[],
     opts?: {
       delete?: true;
-      onInvalidation?: (invalidatedURLs: URL[]) => Promise<void>;
+      onInvalidation?: (
+        invalidatedURLs: URL[],
+        meta: { generation?: number },
+      ) => Promise<void>;
       clientRequestId?: string | null;
     },
   ): Promise<void> {
@@ -308,7 +337,7 @@ export class RealmIndexUpdater {
   async copy(
     sourceRealmURL: URL,
     onInvalidation?: (invalidatedURLs: URL[]) => Promise<void>,
-  ): Promise<void> {
+  ): Promise<{ generation?: number }> {
     let indexingDeferred = new Deferred<void>();
     this.#incrementalIndexingDeferreds.add(indexingDeferred);
     try {
@@ -319,20 +348,18 @@ export class RealmIndexUpdater {
       };
       let job = await this.#queue.publish<CopyResult>({
         jobType: 'copy-index',
-        concurrencyGroup: `indexing:${this.#realm.url}`,
+        concurrencyGroup: indexingConcurrencyGroup(this.#realm.url),
         timeout: 4 * 60,
         priority: userInitiatedPriority,
         args,
       });
-      let { invalidations } = await job.done;
+      let { invalidations, generation } = await job.done;
       if (onInvalidation) {
         await onInvalidation(
           invalidations.map((href) => new URL(href.replace(/\.json$/, ''))),
         );
       }
-    } catch (e: any) {
-      indexingDeferred.reject(e);
-      throw e;
+      return { generation };
     } finally {
       indexingDeferred.fulfill();
       this.#incrementalIndexingDeferreds.delete(indexingDeferred);
@@ -362,10 +389,7 @@ export function isIgnored(
     return false; // you can't ignore the entire realm
   }
   if (
-    [
-      `${realmURL.href}.realm.json`,
-      `${realmURL.href}.template-lintrc.js`,
-    ].includes(url.href) ||
+    [`${realmURL.href}.template-lintrc.js`].includes(url.href) ||
     url.href.startsWith(`${realmURL.href}.git/`)
   ) {
     return true;

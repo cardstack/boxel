@@ -5,34 +5,38 @@
  * / `document-types.ts` / `code-ref.ts`) so that callers which only need
  * to know whether a payload *looks* like a card document can import them
  * without pulling the transitive runtime chain rooted at
- * `resource-types.ts` → `card-reference-resolver.ts` → `loader.ts` →
- * `realm.ts` → `realm-index-query-engine.ts`. The latter uses
- * `@Memoize()` decorators that some downstream TS loaders (notably
- * Playwright's) can't compile.
+ * `resource-types.ts` → `realm-identifiers.ts` → `loader.ts` →
+ * `realm.ts` → `realm-index-query-engine.ts` — a heavy, Node-oriented
+ * chain that lightweight callers (e.g. browser or Playwright loaders)
+ * should not have to pull in just to shape-check a payload.
  *
  * This module only `import type`s from those neighbors — all runtime
  * type-guards are defined inline — so it has no runtime dependency on
- * anything that reaches the decorator chain.
+ * that chain.
  *
  * The original `code-ref.ts` / `resource-types.ts` / `document-types.ts`
  * re-export these predicates for backward compat, so existing imports
- * keep working; new callers that must avoid the decorator chain should
+ * keep working; new callers that must avoid the heavy chain should
  * import from `@cardstack/runtime-common/card-document-shape` directly.
  */
 
-import type { CodeRef, ResolvedCodeRef } from './code-ref';
+import type { CodeRef, ResolvedCodeRef } from './code-ref.ts';
 import type {
   CardFields,
   CardResource,
+  CssResource,
   FileMetaResource,
+  HtmlResource,
+  IconResource,
   Meta,
   Relationship,
   Saved,
-} from './resource-types';
+  EntryResource,
+} from './resource-types.ts';
 import type {
   CardCollectionDocument,
   SingleCardDocument,
-} from './document-types';
+} from './document-types.ts';
 
 // Inlined — reading these via a runtime `import` from `resource-types.ts`
 // would pull in `code-ref.ts` → `loader.ts`, which is exactly the
@@ -42,6 +46,10 @@ import type {
 // `FileMetaResource['type']` field types.
 const CardResourceType: CardResource['type'] = 'card';
 const FileMetaResourceType: FileMetaResource['type'] = 'file-meta';
+const CssResourceType: CssResource['type'] = 'css';
+const EntryResourceType: EntryResource['type'] = 'entry';
+const HtmlResourceType: HtmlResource['type'] = 'html';
+const IconResourceType: IconResource['type'] = 'icon';
 
 // ---------------------------------------------------------------------------
 // Code refs
@@ -279,6 +287,134 @@ export function isFileMetaResource(
   }
   let { adoptsFrom } = meta;
   return isCodeRef(adoptsFrom);
+}
+
+export function isCssResource(resource: any): resource is CssResource {
+  if (typeof resource !== 'object' || resource == null) {
+    return false;
+  }
+  if (resource.type !== CssResourceType) {
+    return false;
+  }
+  if (typeof resource.id !== 'string') {
+    return false;
+  }
+  if (typeof resource.attributes !== 'object' || resource.attributes == null) {
+    return false;
+  }
+  return typeof resource.attributes.href === 'string';
+}
+
+export function isIconResource(resource: any): resource is IconResource {
+  if (typeof resource !== 'object' || resource == null) {
+    return false;
+  }
+  if (resource.type !== IconResourceType) {
+    return false;
+  }
+  if (typeof resource.id !== 'string') {
+    return false;
+  }
+  let { attributes } = resource;
+  if (typeof attributes !== 'object' || attributes == null) {
+    return false;
+  }
+  return (
+    typeof attributes.iconHtml === 'string' &&
+    typeof attributes.displayName === 'string' &&
+    isResolvedCodeRef(attributes.codeRef)
+  );
+}
+
+export function isEntryResource(resource: any): resource is EntryResource {
+  if (typeof resource !== 'object' || resource == null) {
+    return false;
+  }
+  if (resource.type !== EntryResourceType) {
+    return false;
+  }
+  if (typeof resource.id !== 'string') {
+    return false;
+  }
+  let { relationships } = resource;
+  if (typeof relationships !== 'object' || relationships == null) {
+    return false;
+  }
+  let { html, item, icon } = relationships;
+  if (html !== undefined) {
+    if (!Array.isArray(html?.data)) {
+      return false;
+    }
+    for (let member of html.data) {
+      if (member?.type !== HtmlResourceType || typeof member?.id !== 'string') {
+        return false;
+      }
+    }
+  }
+  if (item !== undefined) {
+    if (
+      (item?.data?.type !== CardResourceType &&
+        item?.data?.type !== FileMetaResourceType) ||
+      typeof item.data.id !== 'string'
+    ) {
+      return false;
+    }
+  }
+  if (icon !== undefined) {
+    if (
+      icon?.data?.type !== IconResourceType ||
+      typeof icon.data.id !== 'string'
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+export function isHtmlResource(resource: any): resource is HtmlResource {
+  if (typeof resource !== 'object' || resource == null) {
+    return false;
+  }
+  if (resource.type !== HtmlResourceType) {
+    return false;
+  }
+  if (typeof resource.id !== 'string') {
+    return false;
+  }
+  let { attributes } = resource;
+  if (typeof attributes !== 'object' || attributes == null) {
+    return false;
+  }
+  if (
+    typeof attributes.cardType !== 'string' ||
+    typeof attributes.format !== 'string'
+  ) {
+    return false;
+  }
+  // `html` is absent only on an error rendering with no last-known-good HTML.
+  if (attributes.html === undefined && attributes.isError !== true) {
+    return false;
+  }
+  if (attributes.html !== undefined && typeof attributes.html !== 'string') {
+    return false;
+  }
+  // The has-many `styles` relationship is part of the type, so a sound guard
+  // must confirm it before a consumer reads the stylesheet links.
+  let styles = resource.relationships?.styles;
+  return Boolean(styles && Array.isArray(styles.data));
+}
+
+// A field-limited (`meta.sparseFields`-carrying) `card`/`file-meta`
+// serialization — the `item` shape a sparse fieldset produces. Presence of
+// the marker is the authoritative sparse signal (not which fields happen to
+// be present); a sparse item must never enter the Store.
+export function isSparseItemResource(
+  resource: any,
+): resource is CardResource | FileMetaResource {
+  if (!isCardResource(resource) && !isFileMetaResource(resource)) {
+    return false;
+  }
+  return Array.isArray(resource.meta?.sparseFields);
 }
 
 // ---------------------------------------------------------------------------

@@ -1,16 +1,16 @@
 import { resolve } from 'node:path';
 
-import { expect, test } from './fixtures';
+import { expect, test } from './fixtures.ts';
 
-import { InstantiateValidationStep } from '../src/validators/instantiate-step';
-import type { InstantiateValidationDetails } from '../src/validators/instantiate-step';
+import { InstantiateValidationStep } from '../src/validators/instantiate-step.ts';
+import type { InstantiateValidationDetails } from '../src/validators/instantiate-step.ts';
 import {
   seedTagsCardWithBrokenExampleAndSpec,
   seedValidCardWithSpec,
   overwriteTagsExampleWithBadShape,
-} from './helpers/instantiate-test-fixtures';
-import { buildTestClient } from './helpers/test-client';
-import { createTestWorkspace } from './helpers/workspace-fixture';
+} from './helpers/instantiate-test-fixtures.ts';
+import { buildTestClient } from './helpers/test-client.ts';
+import { createTestWorkspace } from './helpers/workspace-fixture.ts';
 
 const fixtureRealmDir = resolve(
   process.cwd(),

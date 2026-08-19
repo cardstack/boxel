@@ -1,7 +1,7 @@
 /* eslint-env node */
 import { Client } from 'pg';
 
-import migrationNameFixes from './migration-name-fixes.js';
+import migrationNameFixes from './migration-name-fixes.cjs';
 
 type MigrationNameFixes = {
   migrationRenames: Array<[string, string]>;

@@ -33,12 +33,24 @@ boxel --help
 boxel --version
 ```
 
+### Choosing an environment for `boxel profile add`
+
+`boxel profile add` targets **production**. Whichever environment it lands on is resolved the same way for the interactive and non-interactive paths, in this order:
+
+1. `--matrix-url` / `--realm-server-url` / `--host-url` — a per-field override on top of whatever the following rules chose.
+2. `--staging` or `--local` (`--production` is the default, accepted so a script can say so explicitly). Passing more than one exits with an error.
+3. The domain of the `-u` Matrix ID: `boxel.ai`, `stack.cards`, or `localhost`. Any other domain requires `--matrix-url` and `--realm-server-url`.
+4. `BOXEL_ENVIRONMENT` (see below).
+5. Production.
+
+A recognized `-u` domain deliberately outranks `BOXEL_ENVIRONMENT`: the mise tasks export that variable, so it lingers in a shell, and letting it win would write a profile whose Matrix ID and URLs describe different environments.
+
 ### Environment variables
 
 These are read by `boxel profile add`:
 
 - `BOXEL_PASSWORD` — password for non-interactive profile creation. Preferred over `-p/--password`, which exposes the password in shell history and process listings.
-- `BOXEL_ENVIRONMENT` — env-mode slug (typically a branch name) for per-branch local dev. Interpreted like `scripts/env-slug.sh`: the value is slugified (lowercased, `/` → `-`, other chars stripped) and URLs are derived as `http://matrix.<slug>.localhost` and `http://realm-server.<slug>.localhost/`. Overridden by `--matrix-url` / `--realm-server-url` if those flags are provided. Values that slugify to empty (e.g. `!!!`) exit with an error.
+- `BOXEL_ENVIRONMENT` — env-mode slug (typically a branch name) for per-branch local dev. Interpreted like `scripts/env-slug.sh`: the value is slugified (lowercased, `/` → `-`, other chars stripped) and URLs are derived as `https://matrix.<slug>.localhost` and `https://realm-server.<slug>.localhost/`. Overridden per the precedence above. Values that slugify to empty (e.g. `!!!`) exit with an error — but only when the variable is actually consulted, so a fully-specified invocation is unaffected.
 
 Example — create a profile for a branch running in env mode:
 
@@ -55,6 +67,16 @@ BOXEL_PASSWORD=… boxel profile add \
   --matrix-url https://matrix.my.server \
   --realm-server-url https://realms.my.server/
 ```
+
+### Realm skills in Claude Code
+
+A realm's user-authored skills live in it as `skills/<name>/SKILL.md`. `boxel realm pull`, `sync`, and `watch` copy each one into `<local-dir>/.claude/skills/<realm>-<name>/`, so the same skill Boxel's AI assistant loads is available in a Claude Code session as `/<realm>-<name>`.
+
+The mirror always lands in the realm's own local directory; nothing is searched for up the tree. Claude Code loads nested `.claude/skills/` directories below the working directory, so a realm pulled into a subdirectory still surfaces its skills, directory-qualified when two skills share a name. The home directory itself is refused, since `~/.claude/skills` is Claude Code's personal scope.
+
+The copies are generated output, rewritten on every run: edit a skill in the realm checkout's `skills/` — that is what `push` and `sync` carry back to the realm — because an edit made under `.claude/skills/` is overwritten without warning. `.claude/skills/.boxel-skills-sync.json` records which entry names boxel wrote, so an entry whose realm-side skill is renamed or removed is deleted while a directory boxel did not write is left alone.
+
+Set `BOXEL_DISABLE_CLAUDE_SKILLS_SYNC=1`, or pass `--no-claude-skills`, to skip it.
 
 ## Development
 
@@ -101,7 +123,7 @@ boxel --help
 boxel sync .
 ```
 
-The linked command automatically uses `dist/index.js` if built, or falls back to running TypeScript source via `ts-node`.
+The linked command runs `dist/index.js`, so build the CLI first (`pnpm --filter @cardstack/boxel-cli build`). The TypeScript source isn't run directly.
 
 To unlink:
 

@@ -12,9 +12,9 @@ import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
 
-import type { BaseDef } from 'https://cardstack.com/base/card-api';
-
 import RenderedMarkdown from './rendered-markdown';
+
+import type { BaseDef } from '@cardstack/base/card-api';
 
 type ViewMode = 'source' | 'rendered';
 

@@ -6,6 +6,7 @@ import {
   Loader,
   VirtualNetwork,
   baseRealm,
+  baseRealmRRI,
   IndexQueryEngine,
   fetcher,
   maybeHandleScopedCSSRequest,
@@ -18,14 +19,12 @@ import {
   type Definition,
   type LooseCardResource,
   FilterRefersToNonexistentTypeError,
+  isFilterRefersToNonsearchableFieldError,
 } from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
 import { shimExternals } from '@cardstack/host/lib/externals';
 import type SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
-
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import {
   testRealmURL,
@@ -36,12 +35,15 @@ import {
   serializeCard,
 } from '../helpers';
 
-let cardApi: typeof import('https://cardstack.com/base/card-api');
-let string: typeof import('https://cardstack.com/base/string');
-let date: typeof import('https://cardstack.com/base/date');
-let number: typeof import('https://cardstack.com/base/number');
-let boolean: typeof import('https://cardstack.com/base/boolean');
-let codeRef: typeof import('https://cardstack.com/base/code-ref');
+import type { CardDef } from '@cardstack/base/card-api';
+import type * as CardAPI from '@cardstack/base/card-api';
+
+let cardApi: typeof import('@cardstack/base/card-api');
+let string: typeof import('@cardstack/base/string');
+let date: typeof import('@cardstack/base/date');
+let number: typeof import('@cardstack/base/number');
+let boolean: typeof import('@cardstack/base/boolean');
+let codeRef: typeof import('@cardstack/base/code-ref');
 let { resolvedBaseRealmURL } = ENV;
 
 module('Unit | query', function (hooks) {
@@ -49,17 +51,19 @@ module('Unit | query', function (hooks) {
   let indexQueryEngine: IndexQueryEngine;
   let loader: Loader;
   let testCards: { [name: string]: CardDef } = {};
+  let virtualNetwork: VirtualNetwork;
 
   hooks.before(async function () {
     dbAdapter = await getDbAdapter();
   });
 
   hooks.beforeEach(async function () {
-    let virtualNetwork = new VirtualNetwork();
+    virtualNetwork = new VirtualNetwork();
     virtualNetwork.addURLMapping(
       new URL(baseRealm.url),
       new URL(resolvedBaseRealmURL),
     );
+    virtualNetwork.addRealmMapping('@cardstack/base/', resolvedBaseRealmURL);
     virtualNetwork.addImportMap('@cardstack/boxel-icons/', (rest) => {
       return `${ENV.iconsURL}/@cardstack/boxel-icons/v1/icons/${rest}.js`;
     });
@@ -69,14 +73,16 @@ module('Unit | query', function (hooks) {
         return (await maybeHandleScopedCSSRequest(req)) || next(req);
       },
     ]);
-    loader = new Loader(fetch, virtualNetwork.resolveImport);
+    loader = new Loader(fetch, virtualNetwork.resolveImport, {
+      virtualNetwork,
+    });
 
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
-    date = await loader.import(`${baseRealm.url}date`);
-    number = await loader.import(`${baseRealm.url}number`);
-    boolean = await loader.import(`${baseRealm.url}boolean`);
-    codeRef = await loader.import(`${baseRealm.url}code-ref`);
+    cardApi = await loader.import('@cardstack/base/card-api');
+    string = await loader.import('@cardstack/base/string');
+    date = await loader.import('@cardstack/base/date');
+    number = await loader.import('@cardstack/base/number');
+    boolean = await loader.import('@cardstack/base/boolean');
+    codeRef = await loader.import('@cardstack/base/code-ref');
 
     let {
       field,
@@ -102,8 +108,12 @@ module('Unit | query', function (hooks) {
       @field name = contains(StringField);
       @field nickNames = containsMany(StringField);
       @field address = contains(Address);
-      @field bestFriend = linksTo(() => Person);
-      @field friends = linksToMany(() => Person);
+      // These relationships are queried through (e.g. `bestFriend.friends.name`,
+      // `friends.bestFriend.name`), so they are annotated `searchable` to pull
+      // their targets into the search doc — the query compiler now rejects a
+      // filter that crosses a relationship hop that isn't searchable.
+      @field bestFriend = linksTo(() => Person, { searchable: 'friends' });
+      @field friends = linksToMany(() => Person, { searchable: 'bestFriend' });
       @field age = contains(NumberField);
       @field isHairy = contains(BooleanField);
       @field lotteryNumbers = containsMany(NumberField);
@@ -123,6 +133,21 @@ module('Unit | query', function (hooks) {
       @field venue = contains(StringField);
       @field date = contains(DateField);
     }
+    // Exercises the query-time searchability check: `headquarters` is searchable
+    // (its target is in the search doc), `ceo`/`staff` are not (bare `{ id }`
+    // only), and `matchingPeople` is query-backed (never in the doc at all).
+    class Org extends CardDef {
+      @field name = contains(StringField);
+      @field headquarters = linksTo(() => Person, { searchable: true });
+      @field ceo = linksTo(() => Person);
+      @field staff = linksToMany(() => Person);
+      @field matchingPeople = linksToMany(() => Person, {
+        query: {
+          filter: { eq: { name: 'match' } },
+          page: { size: 10, number: 0 },
+        },
+      });
+    }
 
     loader.shimModule(`${testRealmURL}address`, { Address });
     loader.shimModule(`${testRealmURL}person`, { Person });
@@ -130,18 +155,19 @@ module('Unit | query', function (hooks) {
     loader.shimModule(`${testRealmURL}cat`, { Cat });
     loader.shimModule(`${testRealmURL}spec`, { SimpleSpec });
     loader.shimModule(`${testRealmURL}event`, { Event });
+    loader.shimModule(`${testRealmURL}org`, { Org });
 
     let stringFieldEntry = new SimpleSpec({
       cardTitle: 'String Field',
       ref: {
-        module: `${baseRealm.url}string`,
+        module: `${baseRealmRRI}string`,
         name: 'default',
       },
     });
     let numberFieldEntry = new SimpleSpec({
       cardTitle: 'Number Field',
       ref: {
-        module: `${baseRealm.url}number`,
+        module: `${baseRealmRRI}number`,
         name: 'default',
       },
     });
@@ -199,7 +225,7 @@ module('Unit | query', function (hooks) {
       setCardAsSavedForTest(card);
     }
 
-    let api = await loader.import<typeof CardAPI>(`${baseRealm.url}card-api`);
+    let api = await loader.import<typeof CardAPI>('@cardstack/base/card-api');
 
     async function buildDefinition(cardDef: typeof CardDef) {
       let { fields, fieldDefs } = getFieldDefinitions(api, cardDef);
@@ -214,7 +240,7 @@ module('Unit | query', function (hooks) {
     await dbAdapter.reset();
     let mockDefinitionLookup = {
       async lookupDefinition(codeRef: ResolvedCodeRef): Promise<Definition> {
-        let key = internalKeyFor(codeRef, undefined);
+        let key = internalKeyFor(codeRef, undefined, virtualNetwork);
         switch (key) {
           case `${testRealmURL}address/Address`:
             return await buildDefinition(Address as unknown as typeof CardDef);
@@ -228,6 +254,8 @@ module('Unit | query', function (hooks) {
             return await buildDefinition(SimpleSpec);
           case `${testRealmURL}event/Event`:
             return await buildDefinition(Event);
+          case `${testRealmURL}org/Org`:
+            return await buildDefinition(Org);
           default:
             throw new FilterRefersToNonexistentTypeError(codeRef, {
               cause: `Definition for ${stringify(codeRef)} not found`,
@@ -247,6 +275,9 @@ module('Unit | query', function (hooks) {
       async getCachedDefinitions(): Promise<undefined> {
         return undefined;
       },
+      async populateDefinitionCacheEntry(): Promise<undefined> {
+        return undefined;
+      },
       async getCachedDefinitionsBatch(): Promise<Record<string, never>> {
         return {};
       },
@@ -258,7 +289,11 @@ module('Unit | query', function (hooks) {
         return this;
       },
     };
-    indexQueryEngine = new IndexQueryEngine(dbAdapter, mockDefinitionLookup);
+    indexQueryEngine = new IndexQueryEngine(
+      dbAdapter,
+      mockDefinitionLookup,
+      virtualNetwork,
+    );
   });
 
   test('can get all cards with empty filter', async function (assert) {
@@ -303,7 +338,7 @@ module('Unit | query', function (hooks) {
         url: `${testRealmURL}1.json`,
         type: 'instance',
         has_error: true,
-        realm_version: 1,
+        generation: 1,
         realm_url: testRealmURL,
         pristine_doc: undefined,
         types: [],
@@ -316,7 +351,7 @@ module('Unit | query', function (hooks) {
       {
         url: `${testRealmURL}mango.json`,
         type: 'instance',
-        realm_version: 1,
+        generation: 1,
         realm_url: testRealmURL,
         pristine_doc: await serializeCard(mango),
         types: await getTypes(mango),
@@ -325,7 +360,7 @@ module('Unit | query', function (hooks) {
       {
         url: `${testRealmURL}vangogh.json`,
         type: 'instance',
-        realm_version: 1,
+        generation: 1,
         realm_url: testRealmURL,
         pristine_doc: await serializeCard(vangogh),
         types: await getTypes(vangogh),
@@ -361,6 +396,64 @@ module('Unit | query', function (hooks) {
       [mango.id, vangogh.id],
       'results are correct',
     );
+  });
+
+  test('not: { type } genuinely excludes rows whose types chain contains the ref', async function (assert) {
+    // mango is a FancyPerson, so its `types` chain contains Person. With the
+    // per-row membership predicate `not: { type: Person }` must exclude it (and
+    // vangogh/ringo); before the fix the shared cross-join alias let a
+    // FancyPerson row survive via its own non-Person element.
+    let { paper } = testCards;
+    await setupIndex(dbAdapter, [testCards.mango, testCards.vangogh, paper]);
+
+    let personType = await personCardType(testCards);
+    let { cards: results, meta } = await indexQueryEngine.searchCards(
+      new URL(testRealmURL),
+      { filter: { not: { type: personType } } },
+    );
+
+    assert.strictEqual(meta.page.total, 1, 'only the non-Person card remains');
+    assert.deepEqual(
+      getIds(results),
+      [paper.id],
+      'the Cat is kept; both Person-chain cards are excluded',
+    );
+  });
+
+  test('every: [{ type: A }, { type: B }] is an intersection, satisfiable within one chain', async function (assert) {
+    // mango's chain contains both FancyPerson and Person, so the intersection
+    // matches it; ringo (plain Person) lacks FancyPerson. Before the fix this
+    // conjunction was unsatisfiable (no single array element equals both).
+    let { mango, ringo } = testCards;
+    await setupIndex(dbAdapter, [mango, ringo]);
+
+    let personType = await personCardType(testCards);
+    let fancyType = internalKeyToCodeRef([...(await getTypes(mango))].shift()!);
+    let { cards: results, meta } = await indexQueryEngine.searchCards(
+      new URL(testRealmURL),
+      { filter: { every: [{ type: fancyType }, { type: personType }] } },
+    );
+
+    assert.strictEqual(meta.page.total, 1, 'the intersection matches one card');
+    assert.deepEqual(getIds(results), [mango.id], 'only the FancyPerson');
+  });
+
+  test('{ type: baseRef } matches every card instance (BaseDef terminates the chain)', async function (assert) {
+    // getTypes now ends each chain at BaseDef, so a BaseDef-anchored filter is a
+    // universe selector across kinds. Here (instance-only fixtures) it should
+    // match all cards regardless of their concrete type.
+    let { mango, paper } = testCards;
+    await setupIndex(dbAdapter, [mango, paper]);
+
+    // BaseDef is the last element of any card's types chain.
+    let baseType = internalKeyToCodeRef([...(await getTypes(mango))].pop()!);
+    let { cards: results, meta } = await indexQueryEngine.searchCards(
+      new URL(testRealmURL),
+      { filter: { type: baseType } },
+    );
+
+    assert.strictEqual(meta.page.total, 2, 'both cards match BaseDef');
+    assert.deepEqual(getIds(results), [mango.id, paper.id]);
   });
 
   test(`can filter using 'eq'`, async function (assert) {
@@ -665,7 +758,11 @@ module('Unit | query', function (hooks) {
         data: {
           search_doc: {
             cardTitle: stringFieldEntry.cardTitle,
-            ref: internalKeyFor((stringFieldEntry as any).ref, undefined),
+            ref: internalKeyFor(
+              (stringFieldEntry as any).ref,
+              undefined,
+              virtualNetwork,
+            ),
           },
         },
       },
@@ -674,7 +771,11 @@ module('Unit | query', function (hooks) {
         data: {
           search_doc: {
             cardTitle: numberFieldEntry.cardTitle,
-            ref: internalKeyFor((numberFieldEntry as any).ref, undefined),
+            ref: internalKeyFor(
+              (numberFieldEntry as any).ref,
+              undefined,
+              virtualNetwork,
+            ),
           },
         },
       },
@@ -688,7 +789,7 @@ module('Unit | query', function (hooks) {
           on: type,
           eq: {
             ref: {
-              module: `${baseRealm.url}string`,
+              module: `${baseRealmRRI}string`,
               name: 'default',
             },
           },
@@ -1372,6 +1473,193 @@ module('Unit | query', function (hooks) {
     }
   });
 
+  test(`errors when a filter crosses a non-searchable relationship`, async function (assert) {
+    await setupIndex(dbAdapter, []);
+    let orgType = {
+      module: `${testRealmURL}org`,
+      name: 'Org',
+    } as ResolvedCodeRef;
+
+    try {
+      await indexQueryEngine.searchCards(new URL(testRealmURL), {
+        filter: {
+          on: orgType,
+          // `ceo` is a plain (non-searchable) linksTo, so its target is only a
+          // bare `{ id }` in the search doc — `ceo.name` is not there.
+          eq: { 'ceo.name': 'Robin' },
+        },
+      });
+      throw new Error('failed to throw expected exception');
+    } catch (err: any) {
+      assert.true(
+        isFilterRefersToNonsearchableFieldError(err),
+        'throws the distinct non-searchable-field error',
+      );
+      assert.strictEqual(
+        err.reason,
+        'not-searchable',
+        'reason is not-searchable',
+      );
+      assert.true(
+        err.message.includes('"ceo"'),
+        `message names the relationship: ${err.message}`,
+      );
+      assert.true(
+        err.message.includes('not searchable'),
+        `message explains it is not searchable: ${err.message}`,
+      );
+      assert.true(
+        err.message.includes('searchable: true'),
+        `message names the annotation to add: ${err.message}`,
+      );
+    }
+  });
+
+  test(`errors when a filter crosses a non-searchable relationship deeper in the path`, async function (assert) {
+    await setupIndex(dbAdapter, []);
+    let orgType = {
+      module: `${testRealmURL}org`,
+      name: 'Org',
+    } as ResolvedCodeRef;
+
+    try {
+      await indexQueryEngine.searchCards(new URL(testRealmURL), {
+        filter: {
+          on: orgType,
+          // `headquarters` is searchable (self only), but its target's
+          // `bestFriend` link is not reached by any route, so the hop into it
+          // is not covered.
+          eq: { 'headquarters.bestFriend.name': 'Robin' },
+        },
+      });
+      throw new Error('failed to throw expected exception');
+    } catch (err: any) {
+      assert.true(
+        isFilterRefersToNonsearchableFieldError(err),
+        'throws the distinct non-searchable-field error',
+      );
+      assert.strictEqual(
+        err.reason,
+        'not-searchable',
+        'reason is not-searchable',
+      );
+      assert.true(
+        err.message.includes('"headquarters.bestFriend"'),
+        `message names the deeper hop: ${err.message}`,
+      );
+      assert.true(
+        err.message.includes(`searchable: 'bestFriend'`),
+        `message names the route to add to the head field: ${err.message}`,
+      );
+    }
+  });
+
+  test(`errors when a filter crosses a query-backed relationship`, async function (assert) {
+    await setupIndex(dbAdapter, []);
+    let orgType = {
+      module: `${testRealmURL}org`,
+      name: 'Org',
+    } as ResolvedCodeRef;
+
+    try {
+      await indexQueryEngine.searchCards(new URL(testRealmURL), {
+        filter: {
+          on: orgType,
+          // `matchingPeople` is query-backed: never in the search doc at all.
+          eq: { 'matchingPeople.name': 'Robin' },
+        },
+      });
+      throw new Error('failed to throw expected exception');
+    } catch (err: any) {
+      assert.true(
+        isFilterRefersToNonsearchableFieldError(err),
+        'throws the distinct non-searchable-field error',
+      );
+      assert.strictEqual(err.reason, 'query-backed', 'reason is query-backed');
+      assert.true(
+        err.message.includes('"matchingPeople"'),
+        `message names the relationship: ${err.message}`,
+      );
+      assert.true(
+        err.message.includes('query-backed'),
+        `message explains it is query-backed: ${err.message}`,
+      );
+    }
+  });
+
+  test(`a searchable relationship path compiles and runs`, async function (assert) {
+    await setupIndex(dbAdapter, []);
+    let orgType = {
+      module: `${testRealmURL}org`,
+      name: 'Org',
+    } as ResolvedCodeRef;
+
+    // `headquarters` is `searchable: true`, so its target is in the doc and a
+    // path through it is allowed — the query compiles and executes (no throw).
+    let { meta } = await indexQueryEngine.searchCards(new URL(testRealmURL), {
+      filter: {
+        on: orgType,
+        eq: { 'headquarters.name': 'Robin' },
+      },
+    });
+    assert.strictEqual(
+      meta.page.total,
+      0,
+      'the searchable path ran without error',
+    );
+  });
+
+  test(`a filter on a relationship's id is allowed even when it is not searchable`, async function (assert) {
+    await setupIndex(dbAdapter, []);
+    let orgType = {
+      module: `${testRealmURL}org`,
+      name: 'Org',
+    } as ResolvedCodeRef;
+
+    // `ceo` is not searchable, but every relationship keeps its `{ id }`, so a
+    // reference filter on `ceo.id` reads an always-present value and is allowed.
+    let { meta } = await indexQueryEngine.searchCards(new URL(testRealmURL), {
+      filter: {
+        on: orgType,
+        eq: { 'ceo.id': `${testRealmURL}mango` },
+      },
+    });
+    assert.strictEqual(
+      meta.page.total,
+      0,
+      'the id reference filter ran without error',
+    );
+  });
+
+  test(`a nonexistent field beyond a searchable relationship still reports the nonexistent-field error`, async function (assert) {
+    await setupIndex(dbAdapter, []);
+    let orgType = {
+      module: `${testRealmURL}org`,
+      name: 'Org',
+    } as ResolvedCodeRef;
+
+    try {
+      await indexQueryEngine.searchCards(new URL(testRealmURL), {
+        filter: {
+          on: orgType,
+          // `headquarters` is searchable, so the hop is fine — but `nope` does
+          // not exist, so resolution (not searchability) is what fails.
+          eq: { 'headquarters.nope': 'Robin' },
+        },
+      });
+      throw new Error('failed to throw expected exception');
+    } catch (err: any) {
+      assert.false(
+        isFilterRefersToNonsearchableFieldError(err),
+        'does not throw the searchability error',
+      );
+      assert.true(
+        err.message.includes('nonexistent field "headquarters.nope"'),
+        `reports the nonexistent-field error: ${err.message}`,
+      );
+    }
+  });
+
   test(`it can filter on a plural primitive field using 'eq'`, async function (assert) {
     let { mango, vangogh } = testCards;
     await setupIndex(dbAdapter, [
@@ -1640,34 +1928,34 @@ module('Unit | query', function (hooks) {
     let { mango, vangogh, ringo } = testCards;
     await setupIndex(
       dbAdapter,
-      [{ realm_url: testRealmURL, current_version: 1 }],
+      [{ realm_url: testRealmURL, current_generation: 1 }],
       {
         working: [
           {
             card: mango,
-            data: { realm_version: 1, search_doc: { name: 'Mango' } },
+            data: { generation: 1, search_doc: { name: 'Mango' } },
           },
           {
             card: vangogh,
-            data: { realm_version: 2, search_doc: { name: 'Mango' } },
+            data: { generation: 2, search_doc: { name: 'Mango' } },
           },
           {
             card: ringo,
-            data: { realm_version: 2, search_doc: { name: 'Ringo' } },
+            data: { generation: 2, search_doc: { name: 'Ringo' } },
           },
         ],
         production: [
           {
             card: mango,
-            data: { realm_version: 1, search_doc: { name: 'Mango' } },
+            data: { generation: 1, search_doc: { name: 'Mango' } },
           },
           {
             card: vangogh,
-            data: { realm_version: 1, search_doc: { name: 'Van Gogh' } },
+            data: { generation: 1, search_doc: { name: 'Van Gogh' } },
           },
           {
             card: ringo,
-            data: { realm_version: 1, search_doc: { name: 'Mango' } },
+            data: { generation: 1, search_doc: { name: 'Mango' } },
           },
         ],
       },
@@ -1697,34 +1985,34 @@ module('Unit | query', function (hooks) {
     let { mango, vangogh, ringo } = testCards;
     await setupIndex(
       dbAdapter,
-      [{ realm_url: testRealmURL, current_version: 1 }],
+      [{ realm_url: testRealmURL, current_generation: 1 }],
       {
         working: [
           {
             card: mango,
-            data: { realm_version: 1, search_doc: { name: 'Mango' } },
+            data: { generation: 1, search_doc: { name: 'Mango' } },
           },
           {
             card: vangogh,
-            data: { realm_version: 2, search_doc: { name: 'Mango' } },
+            data: { generation: 2, search_doc: { name: 'Mango' } },
           },
           {
             card: ringo,
-            data: { realm_version: 1, search_doc: { name: 'Ringo' } },
+            data: { generation: 1, search_doc: { name: 'Ringo' } },
           },
         ],
         production: [
           {
             card: mango,
-            data: { realm_version: 1, search_doc: { name: 'Mango' } },
+            data: { generation: 1, search_doc: { name: 'Mango' } },
           },
           {
             card: vangogh,
-            data: { realm_version: 1, search_doc: { name: 'Van Gogh' } },
+            data: { generation: 1, search_doc: { name: 'Van Gogh' } },
           },
           {
             card: ringo,
-            data: { realm_version: 1, search_doc: { name: 'Ringo' } },
+            data: { generation: 1, search_doc: { name: 'Ringo' } },
           },
         ],
       },
@@ -3098,7 +3386,7 @@ module('Unit | query', function (hooks) {
         url: `${testRealmURL}vangogh.json`,
         file_alias: `${testRealmURL}vangogh`,
         type: 'instance',
-        realm_version: 1,
+        generation: 1,
         realm_url: testRealmURL,
         deps: [],
         types: [
@@ -3112,7 +3400,7 @@ module('Unit | query', function (hooks) {
         url: `${testRealmURL}jimmy.json`,
         file_alias: `${testRealmURL}jimmy`,
         type: 'instance',
-        realm_version: 1,
+        generation: 1,
         realm_url: testRealmURL,
         deps: [],
         types: [
@@ -3126,7 +3414,7 @@ module('Unit | query', function (hooks) {
         url: `${testRealmURL}donald.json`,
         file_alias: `${testRealmURL}donald`,
         type: 'instance',
-        realm_version: 1,
+        generation: 1,
         realm_url: testRealmURL,
         deps: [],
         types: [
@@ -3138,24 +3426,22 @@ module('Unit | query', function (hooks) {
       },
     ]);
 
-    let { prerenderedCards: results } =
-      await indexQueryEngine.searchPrerendered(
-        new URL(testRealmURL),
-        {
-          sort: [
-            {
-              by: 'lastModified',
-              direction: 'desc',
-            },
-          ],
-        },
-        {
-          htmlFormat: 'embedded',
-        },
-      );
+    let { results } = await indexQueryEngine.search(
+      new URL(testRealmURL),
+      {
+        sort: [
+          {
+            by: 'lastModified',
+            direction: 'desc',
+          },
+        ],
+      },
+      { includeErrors: true },
+      { kind: 'dataOnly' },
+    );
 
     assert.deepEqual(
-      results.map((r: { url: string }) => r.url),
+      results.map((r) => r.url),
       [
         `${testRealmURL}jimmy.json`,
         `${testRealmURL}donald.json`,
@@ -3164,24 +3450,22 @@ module('Unit | query', function (hooks) {
       'results are correct',
     );
 
-    let { prerenderedCards: results2 } =
-      await indexQueryEngine.searchPrerendered(
-        new URL(testRealmURL),
-        {
-          sort: [
-            {
-              by: 'lastModified',
-              direction: 'asc',
-            },
-          ],
-        },
-        {
-          htmlFormat: 'embedded',
-        },
-      );
+    let { results: results2 } = await indexQueryEngine.search(
+      new URL(testRealmURL),
+      {
+        sort: [
+          {
+            by: 'lastModified',
+            direction: 'asc',
+          },
+        ],
+      },
+      { includeErrors: true },
+      { kind: 'dataOnly' },
+    );
 
     assert.deepEqual(
-      results2.map((r: { url: string }) => r.url),
+      results2.map((r) => r.url),
       [
         `${testRealmURL}vangogh.json`,
         `${testRealmURL}donald.json`,
@@ -3190,24 +3474,22 @@ module('Unit | query', function (hooks) {
       'results are correct',
     );
 
-    let { prerenderedCards: results3 } =
-      await indexQueryEngine.searchPrerendered(
-        new URL(testRealmURL),
-        {
-          sort: [
-            {
-              by: 'createdAt',
-              direction: 'desc',
-            },
-          ],
-        },
-        {
-          htmlFormat: 'embedded',
-        },
-      );
+    let { results: results3 } = await indexQueryEngine.search(
+      new URL(testRealmURL),
+      {
+        sort: [
+          {
+            by: 'createdAt',
+            direction: 'desc',
+          },
+        ],
+      },
+      { includeErrors: true },
+      { kind: 'dataOnly' },
+    );
 
     assert.deepEqual(
-      results3.map((r: { url: string }) => r.url),
+      results3.map((r) => r.url),
       [
         `${testRealmURL}jimmy.json`,
         `${testRealmURL}donald.json`,
@@ -3215,398 +3497,6 @@ module('Unit | query', function (hooks) {
       ],
       'results are correct',
     );
-  });
-
-  test('can get prerendered cards from the indexer', async function (assert) {
-    let personCard = await personCardType(testCards);
-    let personKey = internalKeyFor(personCard, undefined);
-    let fancyPersonCard = await fancyPersonCardType(testCards);
-    let fancyPersonKey = internalKeyFor(fancyPersonCard, undefined);
-    await setupIndex(dbAdapter, [
-      {
-        url: `${testRealmURL}vangogh.json`,
-        file_alias: `${testRealmURL}vangogh`,
-        type: 'instance',
-        realm_version: 1,
-        realm_url: testRealmURL,
-        deps: [],
-        types: [personKey, 'https://cardstack.com/base/card-api/CardDef'],
-        embedded_html: {
-          [personKey]: '<div>Van Gogh (Person embedded template)</div>',
-          'https://cardstack.com/base/card-api/CardDef':
-            '<div>Van Gogh (CardDef embedded template)</div>',
-        },
-        fitted_html: {
-          [personKey]: '<div>Van Gogh (Person fitted template)</div>',
-          'https://cardstack.com/base/card-api/CardDef':
-            '<div>Van Gogh (CardDef fitted template)</div>',
-        },
-        atom_html: 'Van Gogh',
-        search_doc: { name: 'Van Gogh' },
-      },
-      {
-        url: `${testRealmURL}jimmy.json`,
-        file_alias: `${testRealmURL}jimmy`,
-        type: 'instance',
-        realm_version: 1,
-        realm_url: testRealmURL,
-        deps: [],
-        types: [personKey, 'https://cardstack.com/base/card-api/CardDef'],
-        embedded_html: {
-          [personKey]: '<div>Jimmy (Person embedded template)</div>',
-          'https://cardstack.com/base/card-api/CardDef':
-            '<div>Jimmy (CardDef embedded template)</div>',
-        },
-        fitted_html: {
-          [personKey]: '<div>Jimmy (Person fitted template)</div>',
-          'https://cardstack.com/base/card-api/CardDef':
-            '<div>Jimmy (CardDef fitted template)</div>',
-        },
-        atom_html: 'Jimmy',
-        head_html: '<title>Jimmy</title>',
-        search_doc: { name: 'Jimmy' },
-      },
-      {
-        url: `${testRealmURL}donald.json`,
-        file_alias: `${testRealmURL}donald`,
-        type: 'instance',
-        realm_version: 1,
-        realm_url: testRealmURL,
-        deps: [],
-        types: [
-          fancyPersonKey,
-          personKey,
-          'https://cardstack.com/base/card-api/CardDef',
-        ],
-        embedded_html: {
-          [fancyPersonKey]: '<div>Donald (FancyPerson embedded template)</div>',
-          [personKey]: '<div>Donald (Person embedded template)</div>',
-          'https://cardstack.com/base/card-api/CardDef':
-            '<div>Donald (CardDef embedded template)</div>',
-        },
-        fitted_html: {
-          [fancyPersonKey]: '<div>Donald (FancyPerson fitted template)</div>',
-          [personKey]: '<div>Donald (Person fitted template)</div>',
-          'https://cardstack.com/base/card-api/CardDef':
-            '<div>Donald (CardDef fitted template)</div>',
-        },
-        atom_html: 'Donald',
-        search_doc: { name: 'Donald' },
-      },
-    ]);
-
-    // Requesting embedded template without ON filter
-    let { prerenderedCards, meta } = await indexQueryEngine.searchPrerendered(
-      new URL(testRealmURL),
-      {}, // When there is no ON filter, embedded template for CardDef is used
-      {
-        htmlFormat: 'embedded',
-      },
-    );
-
-    assert.strictEqual(
-      meta.page.total,
-      3,
-      'meta total results meta is correct',
-    );
-    assert.strictEqual(
-      prerenderedCards.length,
-      3,
-      'the actual returned total results are correct',
-    );
-
-    assert.strictEqual(
-      prerenderedCards[0].url,
-      'http://test-realm/test/donald.json',
-    );
-    assert.strictEqual(
-      prerenderedCards[0].html,
-      '<div>Donald (FancyPerson embedded template)</div>',
-    );
-    assert.deepEqual(prerenderedCards[0].usedRenderType, fancyPersonCard);
-
-    assert.strictEqual(
-      prerenderedCards[1].url,
-      'http://test-realm/test/jimmy.json',
-    );
-    assert.strictEqual(
-      prerenderedCards[1].html,
-      '<div>Jimmy (Person embedded template)</div>',
-    );
-    assert.deepEqual(prerenderedCards[1].usedRenderType, personCard);
-
-    assert.strictEqual(
-      prerenderedCards[2].url,
-      'http://test-realm/test/vangogh.json',
-    );
-    assert.strictEqual(
-      prerenderedCards[2].html,
-      '<div>Van Gogh (Person embedded template)</div>',
-    );
-    assert.deepEqual(prerenderedCards[2].usedRenderType, personCard);
-
-    // Requesting embedded template with ON filter
-    ({ prerenderedCards, meta } = await indexQueryEngine.searchPrerendered(
-      new URL(testRealmURL),
-      {
-        filter: {
-          on: fancyPersonCard,
-          not: {
-            eq: {
-              name: 'Richard',
-            },
-          },
-        },
-      },
-      {
-        htmlFormat: 'embedded',
-      },
-    ));
-
-    assert.strictEqual(
-      prerenderedCards.length,
-      1,
-      'the actual returned total results are correct (there is only one FancyPerson)',
-    );
-
-    assert.strictEqual(
-      prerenderedCards[0].url,
-      'http://test-realm/test/donald.json',
-    );
-    assert.strictEqual(
-      prerenderedCards[0].html,
-      '<div>Donald (FancyPerson embedded template)</div>',
-    );
-    assert.deepEqual(prerenderedCards[0].usedRenderType, fancyPersonCard);
-
-    //  Requesting atom template
-    ({ prerenderedCards, meta } = await indexQueryEngine.searchPrerendered(
-      new URL(testRealmURL),
-      {
-        filter: {
-          on: fancyPersonCard,
-          eq: {
-            name: 'Donald',
-          },
-        },
-      },
-      {
-        htmlFormat: 'atom',
-      },
-    ));
-
-    assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
-    assert.strictEqual(prerenderedCards[0].url, `${testRealmURL}donald.json`);
-    assert.strictEqual(prerenderedCards[0].html, 'Donald'); // Atom template
-    assert.deepEqual(prerenderedCards[0].usedRenderType, fancyPersonCard);
-
-    //  Requesting head template
-    ({ prerenderedCards, meta } = await indexQueryEngine.searchPrerendered(
-      new URL(testRealmURL),
-      {
-        filter: {
-          on: personCard,
-          eq: {
-            name: 'Jimmy',
-          },
-        },
-      },
-      {
-        htmlFormat: 'head',
-      },
-    ));
-
-    assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
-    assert.strictEqual(prerenderedCards[0].url, `${testRealmURL}jimmy.json`);
-    assert.strictEqual(prerenderedCards[0].html, '<title>Jimmy</title>'); // head template
-    assert.deepEqual(prerenderedCards[0].usedRenderType, personCard);
-
-    // Define renderType argument
-    ({ prerenderedCards, meta } = await indexQueryEngine.searchPrerendered(
-      new URL(testRealmURL),
-      {
-        filter: {
-          on: fancyPersonCard,
-          not: {
-            eq: {
-              name: 'Richard',
-            },
-          },
-        },
-      },
-      {
-        htmlFormat: 'embedded',
-        renderType: personCard,
-      },
-    ));
-
-    assert.strictEqual(
-      prerenderedCards.length,
-      1,
-      'the actual returned total results are correct (there is only one FancyPerson)',
-    );
-
-    assert.strictEqual(
-      prerenderedCards[0].url,
-      'http://test-realm/test/donald.json',
-    );
-    assert.strictEqual(
-      prerenderedCards[0].html,
-      '<div>Donald (Person embedded template)</div>',
-    );
-    assert.deepEqual(prerenderedCards[0].usedRenderType, personCard);
-  });
-
-  test('can get prerendered cards in an error state from the indexer', async function (assert) {
-    let personCard = await personCardType(testCards);
-    let personKey = internalKeyFor(personCard, undefined);
-    let fancyPersonCard = await fancyPersonCardType(testCards);
-    let fancyPersonKey = internalKeyFor(fancyPersonCard, undefined);
-    await setupIndex(dbAdapter, [
-      {
-        url: `${testRealmURL}vangogh.json`,
-        file_alias: `${testRealmURL}vangogh`,
-        type: 'instance',
-        realm_version: 1,
-        realm_url: testRealmURL,
-        deps: [],
-        types: [personKey, 'https://cardstack.com/base/card-api/CardDef'],
-        embedded_html: {
-          [personKey]: '<div>Van Gogh (Person embedded template)</div>',
-          'https://cardstack.com/base/card-api/CardDef':
-            '<div>Van Gogh (CardDef embedded template)</div>',
-        },
-        fitted_html: {
-          [personKey]: '<div>Van Gogh (Person fitted template)</div>',
-          'https://cardstack.com/base/card-api/CardDef':
-            '<div>Van Gogh (CardDef fitted template)</div>',
-        },
-        atom_html: 'Van Gogh',
-        search_doc: { name: 'Van Gogh' },
-      },
-      {
-        url: `${testRealmURL}jimmy.json`,
-        file_alias: `${testRealmURL}jimmy`,
-        type: 'instance',
-        realm_version: 1,
-        realm_url: testRealmURL,
-        deps: [],
-        types: [
-          fancyPersonKey,
-          personKey,
-          'https://cardstack.com/base/card-api/CardDef',
-        ],
-        embedded_html: {
-          [fancyPersonKey]: '<div>Jimmy (FancyPerson embedded template)</div>',
-          [personKey]: '<div>Jimmy (Person embedded template)</div>',
-          'https://cardstack.com/base/card-api/CardDef':
-            '<div>Jimmy (CardDef embedded template)</div>',
-        },
-        fitted_html: {
-          [fancyPersonKey]: '<div>Jimmy (FancyPerson fitted template)</div>',
-          [personKey]: '<div>Jimmy (Person fitted template)</div>',
-          'https://cardstack.com/base/card-api/CardDef':
-            '<div>Jimmy (CardDef fitted template)</div>',
-        },
-        atom_html: 'Jimmy',
-        search_doc: { name: 'Jimmy' },
-      },
-      {
-        url: `${testRealmURL}donald.json`,
-        file_alias: `${testRealmURL}donald`,
-        type: 'instance',
-        has_error: true,
-        realm_version: 1,
-        realm_url: testRealmURL,
-        deps: [],
-        types: [
-          fancyPersonKey,
-          personKey,
-          'https://cardstack.com/base/card-api/CardDef',
-        ],
-        embedded_html: {
-          [fancyPersonKey]: '<div>Donald (FancyPerson embedded template)</div>',
-          [personKey]: '<div>Donald (Person embedded template)</div>',
-          'https://cardstack.com/base/card-api/CardDef':
-            '<div>Donald (CardDef embedded template)</div>',
-        },
-        fitted_html: {
-          [fancyPersonKey]: '<div>Donald (FancyPerson fitted template)</div>',
-          [personKey]: '<div>Donald (Person fitted template)</div>',
-          'https://cardstack.com/base/card-api/CardDef':
-            '<div>Donald (CardDef fitted template)</div>',
-        },
-        atom_html: 'Donald',
-        search_doc: { name: 'Donald' },
-      },
-      {
-        url: `${testRealmURL}paper.json`,
-        file_alias: `${testRealmURL}paper`,
-        type: 'instance',
-        has_error: true,
-        realm_version: 1,
-        realm_url: testRealmURL,
-        deps: [],
-        types: null, // here we are asserting that we can handle a `null` types column
-        embedded_html: {
-          [fancyPersonKey]: '<div>Paper (FancyPerson embedded template)</div>',
-          [personKey]: '<div>Paper (Person embedded template)</div>',
-          'https://cardstack.com/base/card-api/CardDef':
-            '<div>Paper (CardDef embedded template)</div>',
-        },
-        fitted_html: {
-          [fancyPersonKey]: '<div>Paper (FancyPerson fitted template)</div>',
-          [personKey]: '<div>Paper (Person fitted template)</div>',
-          'https://cardstack.com/base/card-api/CardDef':
-            '<div>Paper (CardDef fitted template)</div>',
-        },
-        atom_html: 'Paper',
-        search_doc: { name: 'Paper' },
-      },
-    ]);
-
-    let { prerenderedCards } = await indexQueryEngine.searchPrerendered(
-      new URL(testRealmURL),
-      {
-        filter: {
-          on: fancyPersonCard,
-          not: {
-            eq: {
-              name: 'Richard',
-            },
-          },
-        },
-      },
-      {
-        htmlFormat: 'embedded',
-        includeErrors: true,
-      },
-    );
-
-    assert.strictEqual(
-      prerenderedCards.length,
-      2,
-      'the actual returned total results are correct',
-    );
-
-    assert.strictEqual(
-      prerenderedCards[0].url,
-      'http://test-realm/test/donald.json',
-    );
-    assert.strictEqual(
-      prerenderedCards[0].html,
-      '<div>Donald (FancyPerson embedded template)</div>',
-    );
-    assert.true(prerenderedCards[0].isError, 'card is in error state');
-    assert.strictEqual(
-      prerenderedCards[1].url,
-      'http://test-realm/test/jimmy.json',
-    );
-    assert.strictEqual(
-      prerenderedCards[1].html,
-      '<div>Jimmy (FancyPerson embedded template)</div>',
-    );
-    assert.notOk(prerenderedCards[1].isError, 'card is not in an error state');
   });
 });
 
@@ -3637,17 +3527,6 @@ async function personCardType(testCards: { [name: string]: CardDef }) {
     );
   }
   let internalKey = [...(await getTypes(vangogh))].shift()!;
-  return internalKeyToCodeRef(internalKey);
-}
-
-async function fancyPersonCardType(testCards: { [name: string]: CardDef }) {
-  let { mango } = testCards;
-  if (!mango) {
-    throw new Error(
-      `missing the 'mango' test card in the--this is the card we use to derive the FancyPerson type`,
-    );
-  }
-  let internalKey = [...(await getTypes(mango))].shift()!;
   return internalKeyToCodeRef(internalKey);
 }
 

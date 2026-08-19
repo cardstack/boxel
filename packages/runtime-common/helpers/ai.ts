@@ -1,8 +1,8 @@
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import { primitive } from '../constants';
-import type { Loader } from '../loader';
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type { Tool } from 'https://cardstack.com/base/matrix-event';
+import type * as CardAPI from '@cardstack/base/card-api';
+import { primitive } from '../constants.ts';
+import type { Loader } from '../loader.ts';
+import type { CardDef } from '@cardstack/base/card-api';
+import type { Tool } from '@cardstack/base/matrix-event';
 
 type ArraySchema = {
   type: 'array';
@@ -59,6 +59,7 @@ type DateSchema = {
   type: 'string';
   description?: string;
   format: 'date' | 'date-time';
+  examples?: any[];
 };
 
 type NumberSchema = {
@@ -69,6 +70,7 @@ type NumberSchema = {
   exclusiveMaximum?: number;
   maximum?: number;
   multipleOf?: number;
+  examples?: any[];
 };
 
 type StringSchema = {
@@ -78,17 +80,20 @@ type StringSchema = {
   maxLength?: number;
   pattern?: string;
   const?: string;
+  examples?: any[];
 };
 
 type BooleanSchema = {
   description?: string;
   type: 'boolean';
+  examples?: any[];
 };
 
 type EnumSchema = {
   // JSON Schema allows a mix of any types in an enum
   description?: string;
   enum: any[];
+  examples?: any[];
 };
 
 export type AttributesSchema =
@@ -112,21 +117,27 @@ export interface CardSchema {
 export async function basicMappings(loader: Loader) {
   let mappings = new Map<typeof CardAPI.FieldDef, AttributesSchema>();
 
-  let string: typeof import('https://cardstack.com/base/string') =
-    await loader.import('https://cardstack.com/base/string');
-  let number: typeof import('https://cardstack.com/base/number') =
-    await loader.import('https://cardstack.com/base/number');
-  let biginteger: typeof import('https://cardstack.com/base/big-integer') =
-    await loader.import('https://cardstack.com/base/big-integer');
-  let date: typeof import('https://cardstack.com/base/date') =
-    await loader.import('https://cardstack.com/base/date');
-  let datetime: typeof import('https://cardstack.com/base/datetime') =
-    await loader.import('https://cardstack.com/base/datetime');
-  let boolean: typeof import('https://cardstack.com/base/boolean') =
-    await loader.import('https://cardstack.com/base/boolean');
-  let codeRef: typeof import('https://cardstack.com/base/code-ref') =
-    await loader.import('https://cardstack.com/base/code-ref');
-  let query: typeof import('https://cardstack.com/base/commands/search-card-result') =
+  let string: typeof import('@cardstack/base/string') = await loader.import(
+    '@cardstack/base/string',
+  );
+  let number: typeof import('@cardstack/base/number') = await loader.import(
+    '@cardstack/base/number',
+  );
+  let biginteger: typeof import('@cardstack/base/big-integer') =
+    await loader.import('@cardstack/base/big-integer');
+  let date: typeof import('@cardstack/base/date') = await loader.import(
+    '@cardstack/base/date',
+  );
+  let datetime: typeof import('@cardstack/base/datetime') = await loader.import(
+    '@cardstack/base/datetime',
+  );
+  let boolean: typeof import('@cardstack/base/boolean') = await loader.import(
+    '@cardstack/base/boolean',
+  );
+  let codeRef: typeof import('@cardstack/base/code-ref') = await loader.import(
+    '@cardstack/base/code-ref',
+  );
+  let query: typeof import('@cardstack/base/commands/search-card-result') =
     await loader.import(
       'https://cardstack.com/base/commands/search-card-result',
     );
@@ -286,10 +297,10 @@ export async function basicMappings(loader: Loader) {
         properties: {
           number: { type: 'integer', description: '0-based page number.' },
           size: { type: 'integer', description: 'Number of items per page.' },
-          realmVersion: {
+          generation: {
             type: 'integer',
             description:
-              'Optional. Specifies the realm version for consistent pagination if data can change.',
+              'Optional. Specifies the realm generation for consistent pagination if data can change.',
           },
         },
         required: ['number', 'size'],
@@ -319,6 +330,56 @@ function getPrimitiveType(
 }
 
 /**
+ * `enumField()` (base/enum.gts) attaches its options to the generated
+ * FieldDef subclass as `static configuration = { enum: { options } }`.
+ * Surface those as JSON-Schema `enum` values. Options are either rich
+ * `{ value, label }` objects or bare primitives; the allowed value is
+ * `option.value` for the former, the option itself for the latter.
+ *
+ * The function form of `configuration` (model-dependent options, e.g. a
+ * status list configured per project) cannot be resolved at schema-generation
+ * time. When `defaultOptions` is provided, it returns them with
+ * `isDynamic: true` so callers can use a non-constraining description hint
+ * instead of a hard `enum` — preserving the AI's ability to use custom
+ * project values that differ from the defaults.
+ */
+function getEnumValues(
+  def: typeof CardAPI.BaseDef,
+): { values: unknown[]; isDynamic: boolean } | undefined {
+  let configuration = (def as { configuration?: unknown }).configuration;
+  if (typeof configuration === 'function') {
+    let defaultOptions = (def as { defaultOptions?: unknown[] }).defaultOptions;
+    if (Array.isArray(defaultOptions) && defaultOptions.length > 0) {
+      return {
+        values: defaultOptions.map((option) =>
+          option !== null && typeof option === 'object' && 'value' in option
+            ? (option as { value: unknown }).value
+            : option,
+        ),
+        isDynamic: true,
+      };
+    }
+    return undefined;
+  }
+  if (!configuration || typeof configuration !== 'object') {
+    return undefined;
+  }
+  let options = (configuration as { enum?: { options?: unknown } }).enum
+    ?.options;
+  if (!Array.isArray(options) || options.length === 0) {
+    return undefined;
+  }
+  return {
+    values: options.map((option) =>
+      option !== null && typeof option === 'object' && 'value' in option
+        ? (option as { value: unknown }).value
+        : option,
+    ),
+    isDynamic: false,
+  };
+}
+
+/**
  *  From a card or field definition, generate a JSON Schema that can be used to
  *  define the shape of a patch call. Fields that cannot be automatically
  *  identified may be omitted from the schema.
@@ -344,7 +405,24 @@ function generateJsonSchemaForContainsFields(
   let requiredFields = options?.require || [];
   // If we're looking at a primitive field we can get the schema
   if (primitive in def) {
-    return getPrimitiveType(def, mappings);
+    let schema = getPrimitiveType(def, mappings);
+    let enumResult = getEnumValues(def);
+    if (schema && enumResult) {
+      if (enumResult.isDynamic) {
+        // Options are resolved at runtime from the model instance, so
+        // defaultOptions only represents typical values — use a description
+        // hint rather than a hard enum constraint to avoid rejecting valid
+        // custom project values.
+        let hint = `Typical values: ${enumResult.values.map((v) => JSON.stringify(v)).join(', ')}`;
+        return {
+          ...schema,
+          description: hint,
+          examples: enumResult.values,
+        } as AttributesSchema;
+      }
+      return { ...schema, enum: enumResult.values } as AttributesSchema;
+    }
+    return schema;
   }
 
   // If it's not a primitive, it contains other fields

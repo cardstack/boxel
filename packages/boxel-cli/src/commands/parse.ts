@@ -21,12 +21,13 @@ import {
   getProfileManager,
   NO_ACTIVE_PROFILE_ERROR,
   type ProfileManager,
-} from '../lib/profile-manager';
-import { FG_RED, DIM, RESET } from '../lib/colors';
-import { cliLog } from '../lib/cli-log';
-import { findBoxelCliRoot } from '../lib/find-package-root';
-import { validateRealmRelativePath } from '../lib/realm-relative-path';
-import { search } from './search';
+} from '../lib/profile-manager.ts';
+import { resolveRealmIdentifier } from '../lib/resolve-realm-identifier.ts';
+import { FG_RED, DIM, RESET } from '../lib/colors.ts';
+import { cliLog } from '../lib/cli-log.ts';
+import { findBoxelCliRoot } from '../lib/find-package-root.ts';
+import { validateRealmRelativePath } from '../lib/realm-relative-path.ts';
+import { search } from './search.ts';
 
 /**
  * Inlined to avoid cascading the runtime-common index's URL-style
@@ -36,7 +37,7 @@ import { search } from './search';
  * `@cardstack/runtime-common/constants`.
  */
 const SPEC_TYPE = {
-  module: 'https://cardstack.com/base/spec',
+  module: '@cardstack/base/spec',
   name: 'Spec',
 } as const;
 
@@ -66,7 +67,7 @@ const SPEC_TYPE = {
 const PARSEABLE_GTS_EXTENSIONS = ['.gts', '.gjs', '.ts'] as const;
 const PARSEABLE_JSON_EXTENSION = '.json';
 
-const BOXEL_CLI_PATH = findBoxelCliRoot(__dirname);
+const BOXEL_CLI_PATH = findBoxelCliRoot(import.meta.dirname);
 const PACKAGES_PATH = resolve(BOXEL_CLI_PATH, '..');
 
 // CS-11165: a published `@cardstack/boxel-cli` install vendors the type
@@ -94,10 +95,18 @@ const HOST_TYPES_PATH = BUNDLED_TYPES_DIR
   : join(PACKAGES_PATH, 'host', 'types');
 const BOXEL_UI_PATH = BUNDLED_TYPES_DIR
   ? join(BUNDLED_TYPES_DIR, 'boxel-ui')
-  : join(PACKAGES_PATH, 'boxel-ui', 'addon', 'src');
+  : join(PACKAGES_PATH, 'boxel-ui', 'src');
 const LOCAL_TYPES_PATH = BUNDLED_TYPES_DIR
   ? join(BUNDLED_TYPES_DIR, 'local-types')
   : join(PACKAGES_PATH, 'local-types');
+// `@cardstack/runtime-common` is a devDependency, so `npm install` of a
+// published CLI never installs it. Bundle its generated `.d.ts` and
+// alias the bare + subpath specifiers to it; base's bundled `.d.ts`
+// import its `primitive` symbol and field/query types, which card
+// field-value typing depends on.
+const RUNTIME_COMMON_PATH = BUNDLED_TYPES_DIR
+  ? join(BUNDLED_TYPES_DIR, 'runtime-common')
+  : join(PACKAGES_PATH, 'runtime-common');
 // Ambient module decls for paths boxel-cli doesn't ship full types
 // for (e.g. `@cardstack/boxel-icons/*` — 130MB if shipped). Generated
 // by `scripts/build-types.ts`. Only present in published / built
@@ -106,16 +115,45 @@ const SHIMS_PATH = BUNDLED_TYPES_DIR
   ? join(BUNDLED_TYPES_DIR, 'shims')
   : undefined;
 
-// Node modules: in-monorepo, host has every transitive dep glint needs
-// already installed. In a published install we don't ship host's
-// node_modules, so we fall back to boxel-cli's own node_modules — which
-// has `@glint/ember-tsc`, `typescript`, and `content-tag` as runtime
-// dependencies (CS-11165). Diagnostics from third-party imports that
-// exist only in host/node_modules but not in boxel-cli's will surface as
-// "Cannot find module …"; we filter those out in `runGlintCheck` below.
-const NODE_MODULES_PATH = BUNDLED_TYPES_DIR
-  ? join(BOXEL_CLI_PATH, 'node_modules')
-  : join(PACKAGES_PATH, 'host', 'node_modules');
+// The temp parse workspace needs the CLI's runtime deps resolvable so
+// glint can type-check card code: `@glint/ember-tsc` (and its
+// `-private/dsl`, which every compiled template imports), `content-tag`,
+// the packages card code commonly imports — `@glimmer/component`,
+// `@glimmer/tracking` — plus `qunit` / `qunit-dom` for `.test.gts`.
+// Imports outside that set surface as "Cannot find module …"; the fix is
+// adding the package as a boxel-cli dependency, not shimming it.
+//
+// In the monorepo (no bundled-types) host's node_modules carries the full
+// transitive set in one place, so a single symlink suffices.
+const HOST_NODE_MODULES_PATH = join(PACKAGES_PATH, 'host', 'node_modules');
+
+// In a published install those deps can be split across dirs. Usually
+// they're all at the install root (npm hoisting) or all in the CLI's own
+// nested node_modules (pnpm) — but a consumer that pins an incompatible
+// `@glint/ember-tsc` makes npm nest the CLI's copy while other deps stay
+// hoisted, so no single node_modules dir holds them all and symlinking
+// one would hide the rest. Resolve each package from the CLI's location
+// instead (Node's resolver walks the ancestor chain, finding nested and
+// hoisted alike) and symlink each into the workspace individually.
+//
+// The set to link is exactly the CLI's own declared `dependencies`: each
+// is there so card code (or a `.test.gts`) can resolve it —
+// `@glint/ember-tsc`, `content-tag`, `@glimmer/*`, `qunit`, `qunit-dom`,
+// `@types/qunit`, `@universal-ember/test-support`, … Deriving the list
+// from package.json (rather than hand-maintaining one) keeps it from
+// silently drifting out of date — a curated list already dropped
+// `@types/qunit` and `@universal-ember/test-support`, each a
+// published-install-only "Cannot find module" regression.
+const CLI_DEPENDENCY_PACKAGES = (() => {
+  try {
+    let pkg = JSON.parse(
+      readFileSync(join(BOXEL_CLI_PATH, 'package.json'), 'utf8'),
+    ) as { dependencies?: Record<string, string> };
+    return Object.keys(pkg.dependencies ?? {});
+  } catch {
+    return [];
+  }
+})();
 
 let cachedTsconfigContent: string | undefined;
 
@@ -212,6 +250,16 @@ export async function parseRealm(
     if (!active) {
       return emptyErrorResult(NO_ACTIVE_PROFILE_ERROR);
     }
+  }
+
+  if (realmUrl) {
+    let resolvedRealm = resolveRealmIdentifier(realmUrl, {
+      profileManager: pm,
+    });
+    if (!resolvedRealm.ok) {
+      return emptyErrorResult(resolvedRealm.error);
+    }
+    realmUrl = resolvedRealm.url;
   }
 
   let normalizedRealmUrl = realmUrl ? ensureTrailingSlash(realmUrl) : '';
@@ -499,10 +547,47 @@ async function fetchSource(
 // ---------------------------------------------------------------------------
 
 /**
+ * Locate an installed package's root by walking `node_modules` up the
+ * ancestor chain from the CLI, exactly as Node's own resolver does — so
+ * it finds the package whether it's nested in the CLI's node_modules or
+ * hoisted to the install root, and (unlike `require.resolve`) it also
+ * finds type-only `@types/*` packages, which have no runtime entry.
+ * Returns undefined when the package isn't installed (a card importing it
+ * then gets a normal "Cannot find module" diagnostic).
+ */
+function resolvePackageRoot(pkg: string): string | undefined {
+  let dir = BOXEL_CLI_PATH;
+  for (;;) {
+    let candidate = join(dir, 'node_modules', pkg);
+    if (existsSync(join(candidate, 'package.json'))) return candidate;
+    let parent = dirname(dir);
+    if (parent === dir) return undefined;
+    dir = parent;
+  }
+}
+
+/**
+ * Assemble the temp workspace's `node_modules` by symlinking each
+ * resolvable runtime dep individually. Unlike a single node_modules
+ * symlink, this gathers deps that a published install may have split
+ * across the nested and hoisted node_modules (see CLI_DEPENDENCY_PACKAGES).
+ */
+function linkResolvedDeps(nodeModulesDir: string): void {
+  mkdirSync(nodeModulesDir, { recursive: true });
+  for (let pkg of CLI_DEPENDENCY_PACKAGES) {
+    let root = resolvePackageRoot(pkg);
+    if (!root) continue;
+    let dest = join(nodeModulesDir, pkg);
+    mkdirSync(dirname(dest), { recursive: true }); // scoped pkgs → @scope dir
+    symlinkSync(root, dest);
+  }
+}
+
+/**
  * Run `ember-tsc --noEmit` against a set of `.gts` / `.gjs` / `.ts`
- * files in a temp dir. Symlinks the host package's node_modules and
- * writes a tsconfig with the same monorepo path mappings the realm
- * uses at runtime, then parses TS diagnostics from stdout.
+ * files in a temp dir. Makes the CLI's runtime deps resolvable in the
+ * workspace and writes a tsconfig with the same monorepo path mappings
+ * the realm uses at runtime, then parses TS diagnostics from stdout.
  */
 async function runGlintCheck(
   files: { path: string; content: string }[],
@@ -541,15 +626,28 @@ async function runGlintCheck(
           skipLibCheck: true,
           noUnusedLocals: false,
           noUnusedParameters: false,
-          // `@cardstack/local-types` is workspace-only — fed via `include`
-          // below instead of `types` so the published CLI doesn't need a
-          // resolvable `@cardstack/local-types` package in node_modules.
+          // `qunit-dom` augments QUnit's `Assert` with `.dom(...)`.
+          // Workspaces routinely include `.test.gts` files that call
+          // `assert.dom(...)` without importing qunit-dom directly (they
+          // rely on the ambient augmentation), and parse type-checks every
+          // discovered `.gts` — so the type lib has to be loaded here or
+          // those tests fail with "Property 'dom' does not exist on type
+          // 'Assert'". It resolves because qunit-dom is a runtime
+          // dependency of boxel-cli, reachable via the node_modules
+          // resolution above. `@cardstack/local-types` is workspace-only
+          // and fed via `include` below instead of here.
           types: ['qunit-dom'],
           paths: {
+            '@cardstack/base/*': [`${BASE_PKG_PATH}/*`],
             'https://cardstack.com/base/*': [`${BASE_PKG_PATH}/*`],
+            '@cardstack/runtime-common': [`${RUNTIME_COMMON_PATH}/index`],
+            '@cardstack/runtime-common/*': [`${RUNTIME_COMMON_PATH}/*`],
             '@cardstack/host/tests/*': [`${HOST_TESTS_PATH}/*`],
             '@cardstack/host/*': [`${HOST_APP_PATH}/*`],
             '@cardstack/boxel-host/commands/*': [`${HOST_APP_PATH}/commands/*`],
+            // Card code imports host tools as
+            // `@cardstack/boxel-host/tools/<name>`.
+            '@cardstack/boxel-host/tools/*': [`${HOST_APP_PATH}/tools/*`],
             '@cardstack/boxel-ui/*': [`${BOXEL_UI_PATH}/*`],
             '*': [`${HOST_TYPES_PATH}/*`],
           },
@@ -571,7 +669,14 @@ async function runGlintCheck(
       'utf8',
     );
 
-    symlinkSync(NODE_MODULES_PATH, join(tempDir, 'node_modules'));
+    if (BUNDLED_TYPES_DIR) {
+      // Published install: deps may be split across nested + hoisted
+      // node_modules, so resolve and link each individually.
+      linkResolvedDeps(join(tempDir, 'node_modules'));
+    } else {
+      // Monorepo dev: host's node_modules has the full set in one place.
+      symlinkSync(HOST_NODE_MODULES_PATH, join(tempDir, 'node_modules'));
+    }
 
     // Resolve the package's JS bin entry directly and run it with
     // `node`. Avoids the `.bin/ember-tsc` shim, which is a shell script
@@ -651,7 +756,7 @@ async function runGlintCheck(
         file: originalFile.path,
         line: parseInt(lineStr, 10),
         column: parseInt(colStr, 10),
-        message,
+        message: explainDiagnostic(tsCode, message),
       });
     }
 
@@ -673,6 +778,28 @@ async function runGlintCheck(
       // best-effort cleanup
     }
   }
+}
+
+/**
+ * Turn a few cryptic TS diagnostics into actionable guidance for card
+ * authors. The raw text is accurate but doesn't say what to change.
+ */
+function explainDiagnostic(tsCode: string, message: string): string {
+  // TS1206 "Decorators are not valid here." Card code hits this when a
+  // decorator (`@tracked`, `@field`) sits on a member of a format-class
+  // *expression* (`static isolated = class { … }`). TypeScript's legacy
+  // decorators are only allowed on class *declarations*, so this pattern
+  // can't type-check even though it runs. The fix is to move the reactive
+  // state into a top-level component the format class renders.
+  if (tsCode === 'TS1206') {
+    return (
+      `${message} Decorators like @tracked aren't allowed inside a ` +
+      `format-class expression (e.g. \`static isolated = class { … }\`). ` +
+      `Move reactive state into a top-level component that the format ` +
+      `class renders.`
+    );
+  }
+  return message;
 }
 
 // ---------------------------------------------------------------------------

@@ -11,12 +11,10 @@ import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
 import type { FileDefManager } from '@cardstack/host/lib/file-def-manager';
 import FileDefManagerImpl from '@cardstack/host/lib/file-def-manager';
 
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type * as FileAPI from 'https://cardstack.com/base/file-api';
-
 import type MatrixService from './matrix-service';
 import type NetworkService from './network';
-import type ResetService from './reset';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type * as FileAPI from '@cardstack/base/file-api';
 import type * as MatrixSDK from 'matrix-js-sdk';
 
 type JoinedRoomsResponse = { joined_rooms: string[] };
@@ -49,13 +47,13 @@ function getJoinedRoomsWithCache(client: MatrixSDK.MatrixClient) {
 export default class MatrixSDKLoader extends Service {
   @service declare private network: NetworkService;
   @service declare private matrixService: MatrixService;
-  @service declare private reset: ResetService;
+  // The loaded SDK bundle is app-scoped: `loadSDK()` is a one-shot that never
+  // re-runs, and the wrapper closes over app-lifetime state (the owner, the
+  // authed fetch). So this service is intentionally NOT a session participant —
+  // it must not tear the SDK down on logout, or a re-login would have no SDK to
+  // create clients with (today MatrixService keeps its own #matrixSDK reference,
+  // which only masked the latent bug).
   #extended: ExtendedMatrixSDK | undefined;
-
-  constructor(owner: Owner) {
-    super(owner);
-    this.reset.register(this);
-  }
 
   async load(): Promise<ExtendedMatrixSDK> {
     if (!this.#extended) {
@@ -74,10 +72,6 @@ export default class MatrixSDKLoader extends Service {
   // For testing purposes, we need to mock the SlidingSync class
   get SlidingSync() {
     return SlidingSync;
-  }
-
-  resetState() {
-    this.#extended = undefined;
   }
 }
 
@@ -141,6 +135,7 @@ export type ExtendedClient = Pick<
   | 'getJoinedRooms'
   | 'getProfileInfo'
   | 'getRoom'
+  | 'getSsoLoginUrl'
   | 'getStateEvent'
   | 'getThreePids'
   | 'getUserId'
@@ -149,7 +144,9 @@ export type ExtendedClient = Pick<
   | 'isUsernameAvailable'
   | 'joinRoom'
   | 'leave'
+  | 'loginFlows'
   | 'loginWithPassword'
+  | 'loginWithToken'
   | 'logout'
   | 'getOpenIdToken'
   | 'off'
@@ -308,8 +305,8 @@ function extendedClient({
           return getJoinedRoomsWithCache.bind(null, target);
         case 'uploadCards':
           return fileDefManager.uploadCards.bind(fileDefManager);
-        case 'uploadCommandDefinitions':
-          return fileDefManager.uploadCommandDefinitions.bind(fileDefManager);
+        case 'uploadToolDefinitions':
+          return fileDefManager.uploadToolDefinitions.bind(fileDefManager);
         case 'uploadFiles':
           return fileDefManager.uploadFiles.bind(fileDefManager);
         case 'prefetchFileContent':

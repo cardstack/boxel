@@ -5,6 +5,7 @@ import type RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
 import { isDevelopingApp } from '@embroider/macros';
 import Component from '@glimmer/component';
+import { cached } from '@glimmer/tracking';
 
 import { modifier } from 'ember-modifier';
 import { pageTitle } from 'ember-page-title';
@@ -22,12 +23,12 @@ import {
   CardContextName,
   CommandContextName,
   type getCard as GetCardType,
+  type Query,
 } from '@cardstack/runtime-common';
 
 import HostModeContent from '@cardstack/host/components/host-mode/content';
 import OperatorModeContainer from '@cardstack/host/components/operator-mode/container';
-
-import PrerenderedCardSearch from '@cardstack/host/components/prerendered-card-search';
+import SearchResults from '@cardstack/host/components/search/search-results';
 
 import config from '@cardstack/host/config/environment';
 
@@ -36,22 +37,20 @@ import type IndexController from '@cardstack/host/controllers/index';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
-import type CommandService from '@cardstack/host/services/command-service';
-
 import type HostModeStateService from '@cardstack/host/services/host-mode-state-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type StoreService from '@cardstack/host/services/store';
+import type ToolService from '@cardstack/host/services/tool-service';
 
 import { idFromCardOrURL } from '@cardstack/host/utils/id-from-card-or-url';
 
+import type HostModeService from '../services/host-mode-service';
+import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type {
   CardContext,
   CardDef,
   ViewCardFn,
-} from 'https://cardstack.com/base/card-api';
-
-import type HostModeService from '../services/host-mode-service';
-import type OperatorModeStateService from '../services/operator-mode-state-service';
+} from '@cardstack/base/card-api';
 
 export interface IndexComponentComponentSignature {
   Args: {
@@ -60,7 +59,7 @@ export interface IndexComponentComponentSignature {
 }
 
 export class IndexComponent extends Component<IndexComponentComponentSignature> {
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private hostModeService: HostModeService;
   @service declare private hostModeStateService: HostModeStateService;
   @service declare private matrixService: MatrixService;
@@ -73,9 +72,31 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
     return getCard as unknown as GetCardType;
   }
 
+  // The realm a card's no-realm search targets — the current realm.
+  private get currentRealm(): string | undefined {
+    return this.operatorModeStateService.realmURL;
+  }
+
+  @cached
+  private get cardStore() {
+    return this.store.cardFacingStore(() => this.currentRealm);
+  }
+
   @provide(GetCardsContextName)
   private get getCards() {
-    return this.store.getSearchResource.bind(this.store);
+    let store = this.store;
+    let getDefaultRealm = () => this.currentRealm;
+    return (
+      parent: object,
+      getQuery: () => Query | undefined,
+      getRealms?: () => string[] | undefined,
+      opts?: { isLive?: boolean; doWhileRefreshing?: () => void },
+    ) =>
+      store.getSearchResource(parent, getQuery, getRealms, {
+        ...opts,
+        cardInitiated: true,
+        getDefaultRealm,
+      });
   }
 
   @provide(GetCardCollectionContextName)
@@ -84,8 +105,8 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
   }
 
   @provide(CommandContextName)
-  private get commandContext() {
-    return this.commandService.commandContext;
+  private get toolContext() {
+    return this.toolService.toolContext;
   }
 
   // Remove this and onClose argument in OperatorModeContainer once we remove host mode and the card route, where closing operator mode will not be a thing anymore
@@ -145,9 +166,10 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
       getCard: this.getCard,
       getCards: this.getCards,
       getCardCollection: this.getCardCollection,
-      store: this.store,
-      commandContext: this.commandContext,
-      prerenderedCardSearchComponent: PrerenderedCardSearch,
+      store: this.cardStore,
+      toolContext: this.toolContext,
+      commandContext: this.toolContext,
+      searchResultsComponent: SearchResults,
       mode: this.hostModeService.isActive ? 'host' : 'operator',
       submode: this.hostModeService.isActive
         ? 'host'

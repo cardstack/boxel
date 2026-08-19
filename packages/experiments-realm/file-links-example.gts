@@ -6,9 +6,9 @@ import {
   field,
   linksTo,
   linksToMany,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import { gt } from '@cardstack/boxel-ui/helpers';
-import { FileDef } from 'https://cardstack.com/base/file-api';
+import { FileDef } from '@cardstack/base/file-api';
 
 /**
  * Example card demonstrating the use of FileDef with linksTo and linksToMany.
@@ -27,10 +27,10 @@ export class FileLinksExample extends CardDef {
   @field cardDescription = contains(StringField);
 
   // Single file link - e.g., a main document or primary attachment
-  @field primaryDocument = linksTo(FileDef);
+  @field primaryDocument = linksTo(FileDef, { searchable: true });
 
   // Multiple file links - e.g., supporting documents or attachments
-  @field attachments = linksToMany(FileDef);
+  @field attachments = linksToMany(FileDef, { searchable: true });
 
   static isolated = class Isolated extends Component<typeof this> {
     <template>

@@ -4,7 +4,12 @@ import { tracked } from '@glimmer/tracking';
 
 import window from 'ember-window-mock';
 
-import { sanitizeHeadHTML } from '@cardstack/runtime-common';
+import {
+  isExternalRedirectTarget,
+  normalizeRoutingPath,
+  sanitizeHeadHTML,
+  type HostRoutingRule,
+} from '@cardstack/runtime-common';
 
 import config from '@cardstack/host/config/environment';
 
@@ -20,20 +25,11 @@ function ensureSingleTitle(headHTML: string): string {
     : `${DEFAULT_HEAD_HTML}\n${headHTML}`;
 }
 
-// Normalize trailing-slash variance for routing-map matching. `/realm/`
-// and `/realm` are the same destination from the user's perspective,
-// but the injected map keys and Ember's `params.path` disagree on
-// the trailing slash. Stripping it on both sides makes the comparator
-// robust. Preserve the root `/` since stripping it would empty the path.
-function canonicalizeRoutingPath(path: string): string {
-  if (path === '/') return '/';
-  return path.replace(/\/+$/, '');
-}
 import type HostModeStateService from '@cardstack/host/services/host-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
-import type ResetService from '@cardstack/host/services/reset';
+import type SessionService from '@cardstack/host/services/session';
 
 interface PublishedRealmMetadata {
   urlString: string;
@@ -46,7 +42,7 @@ export default class HostModeService extends Service {
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare realm: RealmService;
   @service declare realmServer: RealmServerService;
-  @service declare reset: ResetService;
+  @service declare session: SessionService;
 
   // increasing token to ignore stale async head fetches
   private headUpdateRequestId = 0;
@@ -56,7 +52,7 @@ export default class HostModeService extends Service {
 
   constructor(owner: Owner) {
     super(owner);
-    this.reset.register(this);
+    this.session.register(this);
   }
 
   resetState() {
@@ -128,13 +124,19 @@ export default class HostModeService extends Service {
   // per-request when the request hits a realm whose config card has
   // hostRoutingRules — so the first-render decision in the index route
   // is synchronous and the field is part of the typed config surface
-  // rather than a window global.
-  get hostRoutingMap(): { path: string; id: string }[] {
+  // rather than a window global. The rules arrive host-scoped — every
+  // path, and any realm-relative redirect target, already carries the
+  // realm's mount pathname — so a target can go straight to a location
+  // change without the SPA knowing where the realm is mounted.
+  get hostRoutingMap(): HostRoutingRule[] {
     let map = (config as { hostRoutingMap?: unknown }).hostRoutingMap;
-    return Array.isArray(map) ? (map as { path: string; id: string }[]) : [];
+    return Array.isArray(map) ? (map as HostRoutingRule[]) : [];
   }
 
-  // Returns the target card id if `path` matches a routing rule, else null.
+  // Returns the routing rule matching `path`, else null. A serve rule
+  // carries the target card `id` to render; a redirect rule carries the
+  // `redirectTo` target the SPA should navigate to instead of rendering
+  // anything (see `redirectTo` below).
   // `path` is the URL pathname on the host (what Ember's `/*path` catch-all
   // route delivers — e.g. `<user>/<realm>/whitepaper` for a request to
   // `https://host/<user>/<realm>/whitepaper`); a leading slash is added if
@@ -145,15 +147,60 @@ export default class HostModeService extends Service {
   // rule's injected key is the realm's mount pathname WITH trailing
   // slash (e.g. `/progressive-cheetah/`), but Ember's catch-all strips
   // it (`params.path === 'progressive-cheetah'` for either visit form).
-  // Canonicalize both sides by stripping trailing slashes (except the
-  // root `/` itself) before comparing so `/realm` ↔ `/realm/` resolve.
-  resolveRoutedPath(path: string): string | null {
+  // Canonicalize both sides with the shared `normalizeRoutingPath` (strips
+  // trailing slashes, preserves the root `/`) before comparing, so
+  // `/realm` ↔ `/realm/` resolve and the client agrees with how the server
+  // map builder and the editor normalize.
+  resolveRoutedPath(path: string): HostRoutingRule | null {
     let normalized = path.startsWith('/') ? path : `/${path}`;
-    let canonical = canonicalizeRoutingPath(normalized);
+    let canonical = normalizeRoutingPath(normalized);
     let rule = this.hostRoutingMap.find(
-      (r) => canonicalizeRoutingPath(r.path) === canonical,
+      (r) => normalizeRoutingPath(r.path) === canonical,
     );
-    return rule ? rule.id : null;
+    return rule ?? null;
+  }
+
+  // SPA-side counterpart of the server's HTTP redirect for a redirect
+  // routing rule: a full-page navigation to matched paths gets the 3xx
+  // from serve-index, but an in-app transition never leaves the SPA, so
+  // the index route calls this instead. `replace` mirrors an HTTP
+  // redirect, which leaves no history entry for the redirecting URL.
+  // Goes through ember-window-mock's `window` so tests can intercept the
+  // navigation.
+  //
+  // `queryParams` is the transition target's query, already filtered to
+  // the params worth forwarding — NOT `window.location.search`, which
+  // with HistoryLocation still shows the URL being navigated away from
+  // while the transition is in flight. Matching serve-index's semantics,
+  // it carries over only when the redirect target declares no query of
+  // its own.
+  //
+  // A realm-relative target arrives already prefixed with the realm's
+  // mount pathname, and resolves against the document's own origin —
+  // what a browser does with a `Location: /path` header. Deliberately
+  // NOT `hostModeOrigin`: that returns the `?hostModeOrigin=` query
+  // param verbatim whenever it is present, which would let a visitor
+  // pick the origin this navigates to. The two are the same value in
+  // host mode anyway; only the simulation affordance separates them,
+  // and a simulated session should stay on the page it is running from.
+  redirectTo(target: string, queryParams?: Record<string, unknown>) {
+    let url = isExternalRedirectTarget(target)
+      ? new URL(target)
+      : new URL(target, window.location.origin);
+    if (!url.search && queryParams) {
+      for (let [key, value] of Object.entries(queryParams)) {
+        if (value == null) {
+          continue;
+        }
+        // A repeated query param (`?tag=a&tag=b`) parses to an array;
+        // append each value so the target carries `tag=a&tag=b` like the
+        // server's verbatim search copy, not a collapsed `tag=a,b`.
+        for (let v of Array.isArray(value) ? value : [value]) {
+          url.searchParams.append(key, String(v));
+        }
+      }
+    }
+    window.location.replace(url.href);
   }
 
   get currentCardId() {
@@ -304,18 +351,33 @@ export default class HostModeService extends Service {
     ) {
       realmServerURL = hostModeOrigin;
     }
-    let searchURL = new URL('_federated-search-prerendered', realmServerURL);
+    let searchURL = new URL('_federated-search', realmServerURL);
     let cardJsonURL = cardURL.endsWith('.json') ? cardURL : `${cardURL}.json`;
+    // The head markup is the `head` rendering of the card's `entry`:
+    // an html-only query at `html.format: head`, scoped to the single card.
+    // The head HTML rides on the resolved `html` resource in `included`,
+    // reached through the entry's `html` relationship.
     let response = await fetch(searchURL.toString(), {
       method: 'QUERY',
       headers: {
         Accept: 'application/vnd.card+json',
+        'Content-Type': 'application/json',
       },
       credentials: 'include',
       body: JSON.stringify({
         realms: [realmRoot],
-        prerenderedHtmlFormat: 'head',
         cardUrls: [cardJsonURL],
+        // `scope: 'cards'` pins the instance row, dropping the card `.json`'s
+        // dual-indexed file row that shares the `cardUrls` URL — a by-URL card
+        // lookup, so it's exactly the scope's purpose (and immune to the
+        // un-restamped-rows window a stamp-based dedup depends on).
+        scope: 'cards',
+        filter: {
+          eq: {
+            htmlQuery: { eq: { format: 'head' } },
+          },
+        },
+        fields: { entry: ['html'] },
       }),
     });
 
@@ -329,7 +391,15 @@ export default class HostModeService extends Service {
     } catch (_error) {
       return undefined;
     }
-    let headHTML: unknown = json?.data?.[0]?.attributes?.html;
+    let htmlRef = json?.data?.[0]?.relationships?.html?.data?.[0];
+    let headHTML: unknown;
+    if (htmlRef?.id) {
+      let htmlResource = (json?.included ?? []).find(
+        (resource: { type?: string; id?: string }) =>
+          resource?.type === 'html' && resource?.id === htmlRef.id,
+      );
+      headHTML = htmlResource?.attributes?.html;
+    }
     return typeof headHTML === 'string' ? headHTML : null;
   }
 

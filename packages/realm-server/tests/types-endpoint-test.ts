@@ -1,14 +1,17 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import type { Test, SuperTest } from 'supertest';
 import { join, basename } from 'path';
-import type { RealmHttpServer as Server } from '../server';
+import type { RealmHttpServer as Server } from '../server.ts';
 import type { DirResult } from 'tmp';
-import { copySync, ensureDirSync } from 'fs-extra';
+import fsExtra from 'fs-extra';
+const { copySync, ensureDirSync } = fsExtra;
 import type { Realm } from '@cardstack/runtime-common';
 import type { QueuePublisher, QueueRunner } from '@cardstack/runtime-common';
 import {
   setupPermissionedRealmCached,
   runTestRealmServer,
+  logRealmIndexDiagnostics,
   setupDB,
   setupMatrixRoom,
   createVirtualNetwork,
@@ -17,13 +20,13 @@ import {
   closeServer,
   type RealmRequest,
   withRealmPath,
-} from './helpers';
+} from './helpers/index.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import type { PgAdapter } from '@cardstack/postgres';
 
 const testRealm2URL = new URL('http://127.0.0.1:4445/test/');
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('Realm-specific Endpoints | GET _types', function (hooks) {
     let realmURL = new URL('http://127.0.0.1:4444/test/');
     let testRealm: Realm;
@@ -160,9 +163,14 @@ module(basename(__filename), function () {
         {
           type: 'card-type-summary',
           id: `${testRealm.url}friend/Friend`,
+          // The fixture realm includes a Friend instance whose linksTo
+          // target is broken; that instance now lands as type='instance'
+          // (broken slot renders the placeholder) instead of being
+          // demoted to instance-error, so it contributes to the
+          // type-summary total alongside the two clean Friend instances.
           attributes: {
             displayName: 'Friend',
-            total: 2,
+            total: 3,
             iconHTML,
             kind: 'instance' as const,
           },
@@ -209,7 +217,7 @@ module(basename(__filename), function () {
         },
         {
           type: 'card-type-summary',
-          id: 'https://cardstack.com/base/realm-config/RealmConfig',
+          id: '@cardstack/base/realm-config/RealmConfig',
           attributes: {
             displayName: 'Realm Config',
             total: 1,
@@ -231,6 +239,18 @@ module(basename(__filename), function () {
       let actualInstances = response.body.data.filter(
         (entry: any) => entry.attributes.kind === 'instance',
       );
+      if (actualInstances.length === 0) {
+        // Read-time companion to the build-time diagnostic: an empty instance
+        // set here means the realm served by this (cached-template-restored)
+        // realm-server has no `realm_meta` instances. Dump the restored DB
+        // state so the next failure shows whether the snapshot itself was
+        // empty/degraded or a version mismatch surfaced on read.
+        await logRealmIndexDiagnostics(
+          dbAdapter,
+          realmURL.href,
+          'types-endpoint-read',
+        );
+      }
       assert.deepEqual(
         sortCardTypeSummaries(actualInstances),
         sortCardTypeSummaries(instanceEntries),

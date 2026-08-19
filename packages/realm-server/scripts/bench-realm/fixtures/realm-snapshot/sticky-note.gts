@@ -3,11 +3,11 @@ import {
   field,
   contains,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import DatetimeField from 'https://cardstack.com/base/datetime';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
+import MarkdownField from '@cardstack/base/markdown';
+import DatetimeField from '@cardstack/base/datetime';
 import StickyNoteIcon from '@cardstack/boxel-icons/sticky-note';
 
 type StickyColor = 'yellow' | 'pink' | 'blue' | 'green' | 'orange' | 'purple';

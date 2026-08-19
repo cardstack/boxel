@@ -3,8 +3,11 @@ import {
   findJobIdForReservationId,
   forceCancelJobById,
 } from '@cardstack/runtime-common';
-import { sendResponseForBadRequest, setContextResponse } from '../middleware';
-import type { CreateRoutesArgs } from '../routes';
+import {
+  sendResponseForBadRequest,
+  setContextResponse,
+} from '../middleware/index.ts';
+import type { CreateRoutesArgs } from '../routes.ts';
 
 export default function handleRemoveJob({
   dbAdapter,

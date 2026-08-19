@@ -1,7 +1,7 @@
 import GlimmerComponent from '@glimmer/component';
 import { Pill } from '@cardstack/boxel-ui/components';
 import { cssVar, getContrastColor } from '@cardstack/boxel-ui/helpers';
-import { CardOrFieldTypeIcon } from 'https://cardstack.com/base/card-api';
+import { CardOrFieldTypeIcon } from '@cardstack/base/card-api';
 
 interface StatusPillSignature {
   Args: {

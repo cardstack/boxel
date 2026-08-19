@@ -36,6 +36,63 @@ delete process.env.REALM_SERVER_TLS_KEY_FILE;
 }
 
 import QUnit from 'qunit';
+import { createRequire } from 'module';
+
+// `require` doesn't exist in ESM scope; recreate it so the synchronous,
+// order-preserving test-file loader and the lazy cleanup requires below keep
+// working under native node.
+const require = createRequire(import.meta.url);
+
+// The qunit CLI used to provide the TAP reporter, autostart, and a
+// failure-based exit code. Running under `node tests/index.ts` we wire them up
+// here; autostart is disabled so every test file registers before we start.
+QUnit.config.autostart = false;
+(QUnit as any).reporters.tap.init(QUnit); // QUnit 2.x API missing from @types/qunit
+(QUnit as any).on('runEnd', (data: { testCounts: { failed: number } }) => {
+  process.exitCode = data.testCounts.failed > 0 ? 1 : 0;
+});
+
+// Track the running test through QUnit's public callback API so the
+// unhandled-rejection handler below can attribute a leak without reaching
+// into QUnit internals.
+let currentTestName = '<no test running>';
+QUnit.testStart(({ module, name }) => {
+  currentTestName = module ? `${module} > ${name}` : name;
+});
+QUnit.testDone(() => {
+  currentTestName = '<no test running>';
+});
+
+// Native Node aborts the whole suite on the first unhandled rejection, and
+// its default dump names neither the test that leaked the promise nor a
+// usable stack. Attribute it to the running test before re-raising so the
+// failure stays fatal but becomes diagnosable instead of an opaque object
+// printed by node:internal/process/promises.
+process.on('unhandledRejection', (reason: unknown) => {
+  let testName = currentTestName;
+  let detail =
+    reason instanceof Error
+      ? (reason.stack ?? reason.message)
+      : (() => {
+          try {
+            return JSON.stringify(reason);
+          } catch {
+            return String(reason);
+          }
+        })();
+  // Write synchronously to fd 2: the re-throw below turns this into an
+  // uncaughtException that exits the process immediately, and a buffered
+  // console.error to a pipe (as on CI) can be dropped before it flushes,
+  // leaving a nonzero exit with no visible cause. fs.writeSync always flushes
+  // before returning.
+  let message = `Unhandled promise rejection during test [${testName}]:\n${detail}\n`;
+  try {
+    (require('node:fs') as typeof import('node:fs')).writeSync(2, message);
+  } catch {
+    console.error(message);
+  }
+  throw reason;
+});
 
 QUnit.config.testTimeout = 60000;
 const testModules = process.env.TEST_MODULES?.trim();
@@ -54,13 +111,17 @@ if (testModules) {
   }
 }
 
+const qunitFilter = process.env.QUNIT_FILTER?.trim();
+if (qunitFilter) {
+  QUnit.config.filter = qunitFilter;
+}
+
 // Cleanup here ensures lingering servers/prerenderers/queues don't keep the
 // Node event loop alive after tests finish — and equivalently, don't leave
 // hardcoded test ports (4444-4471, etc.) bound after a test is aborted by
 // Ctrl+C or an abnormal exit (but not SIGKILL, which bypasses handlers).
 async function runTrackedCleanup(): Promise<void> {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const helpers = require('./helpers') as {
+  const helpers = require('./helpers/index.ts') as {
     closeTrackedServers?: () => Promise<void>;
     stopTrackedPrerenderers?: () => Promise<void>;
     destroyTrackedQueueRunners?: () => Promise<void>;
@@ -87,8 +148,7 @@ for (let signal of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {
 }
 
 QUnit.done(() => {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const helpers = require('./helpers') as {
+  const helpers = require('./helpers/index.ts') as {
     closeTrackedServers?: () => Promise<void>;
     stopTrackedPrerenderers?: () => Promise<void>;
     destroyTrackedQueueRunners?: () => Promise<void>;
@@ -103,7 +163,6 @@ QUnit.done(() => {
       await helpers.destroyTrackedQueuePublishers?.();
       await helpers.closeTrackedDbAdapters?.();
       try {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
         const undici = require('undici') as {
           getGlobalDispatcher?: () => { close?: () => Promise<void> };
         };
@@ -166,43 +225,74 @@ QUnit.done(() => {
 });
 
 import 'decorator-transforms/globals';
-import '../setup-logger'; // This should be first
+import '../setup-logger.ts'; // This should be first
 
 const ALL_TEST_FILES: string[] = [
+  './atomic-batch-indexing-test',
   './atomic-endpoints-test',
   './auth-client-test',
+  './await-realm-index-settled-test',
   './billing-test',
   './card-dependencies-endpoint-test',
   './card-endpoints-test',
+  './card-html-endpoints-test',
   './card-source-endpoints-test',
+  './cpu-profiler-affinity-gate-test',
   './definition-lookup-test',
+  './searchable-parity-diff-test',
+  './migrate-index-to-workspace-test',
   './file-watcher-events-test',
   './full-index-on-startup-test',
   './full-reindex-test',
+  './http-range-test',
+  './range-request-test',
+  './http2-keepalive-test',
   './indexing-test',
   './lazy-mount-test',
   './listener-dispatcher-test',
+  './liveness-verdict-test',
+  './liveness-responder-test',
   './module-cache-race-test',
   './module-syntax-test',
+  './network-inflight-tracker-test',
   './permissions/permission-checker-test',
   './prerendering-test',
+  './prewarm-query-field-test',
+  './prerender-html-split-test',
+  './prerender-html-split-integration-test',
+  './prerender-html-reconcile-test',
   './prerender-server-test',
   './prerender-manager-test',
+  './prerender-host-shell-recycle-test',
+  './prerender-artifact-sink-test',
   './prerender-affinity-activity-test',
   './prerender-batch-ownership-test',
   './prerender-cancellation-test',
+  './prerender-never-settles-test',
   './async-semaphore-test',
   './page-pool-expansion-test',
   './page-pool-priority-test',
   './page-pool-eviction-recovery-test',
   './page-pool-standby-refill-test',
+  './page-pool-cert-verifier-retry-test',
+  './page-pool-lease-revalidation-test',
+  './page-pool-unresponsive-tab-test',
   './prerender-deadlock-test',
   './runtime-exception-capture-test',
   './clamp-serialized-error-test',
+  './sanitize-for-jsonb-test',
+  './is-json-content-type-test',
+  './file-size-limit-test',
+  './content-hash-test',
+  './fitted-formats-parity-test',
   './prerender-diagnostics-persistence-test',
   './prerender-proxy-test',
+  './prerender-v8-prof-test',
   './queue-test',
   './finalize-orphan-reservations-test',
+  './stuck-reservations-test',
+  './mark-failed-job-test',
+  './pg-queue-finalize-test',
   './finalize-child-fatal-failure-test',
   './screenshot-card-test',
   './run-command-task-test',
@@ -210,18 +300,21 @@ const ALL_TEST_FILES: string[] = [
   './realm-endpoints/dependencies-test',
   './realm-advisory-locks-test',
   './realm-cleanup-transaction-test',
-  './realm-config-card-backfill-test',
   './data-plane-write-lock-test',
   './realm-registry-backfill-test',
   './realm-registry-reconciler-test',
   './realm-registry-writes-test',
   './realm-file-changes-listener-test',
   './realm-index-updated-listener-test',
+  './jobs-finished-listener-test',
   './realm-routing-test',
   './module-cache-invalidation-listener-test',
   './pg-adapter-subscribe-test',
   './module-cache-coordination-test',
+  './realm-endpoints/archived-seal-test',
+  './realm-endpoints/readiness-check-test',
   './realm-endpoints/directory-test',
+  './realm-endpoints/indexing-errors-test',
   './realm-endpoints/info-test',
   './realm-endpoints/invalidate-urls-test',
   './realm-endpoints/lint-test',
@@ -233,7 +326,7 @@ const ALL_TEST_FILES: string[] = [
   './realm-endpoints/reindex-test',
   './realm-endpoints/search-test',
   './realm-endpoints/user-test',
-  './search-prerendered-test',
+  './server-endpoints/archive-realm-test',
   './server-endpoints/authentication-test',
   './server-endpoints/bot-commands-test',
   './server-endpoints/bot-registration-test',
@@ -242,14 +335,16 @@ const ALL_TEST_FILES: string[] = [
   './server-endpoints/federated-types-test',
   './server-endpoints/index-responses-test',
   './server-endpoints/maintenance-endpoints-test',
+  './server-endpoints/publish-progress-test',
   './server-endpoints/queue-status-test',
   './server-endpoints/realm-lifecycle-test',
   './server-endpoints/run-command-endpoint-test',
   './server-endpoints/screenshot-card-endpoint-test',
   './server-endpoints/search-test',
-  './server-endpoints/search-prerendered-test',
+  './server-endpoints/skill-validation-test',
   './serve-index-test',
   './server-config-test',
+  './server-endpoints/index-counts-test',
   './server-endpoints/info-test',
   './server-endpoints/stripe-session-test',
   './server-endpoints/stripe-webhook-test',
@@ -257,6 +352,7 @@ const ALL_TEST_FILES: string[] = [
   './server-endpoints/incoming-webhook-test',
   './server-endpoints/webhook-commands-test',
   './server-endpoints/webhook-receiver-test',
+  './server-endpoints/worker-request-test',
   './transpile-test',
   './types-endpoint-test',
   './virtual-network-test',
@@ -266,14 +362,30 @@ const ALL_TEST_FILES: string[] = [
   './boxel-domain-availability-test',
   './get-boxel-claimed-domain-test',
   './claim-boxel-domain-test',
-  './card-reference-resolver-test',
+  './client-telemetry-test',
+  './realm-identifiers-test',
   './bfm-card-references-test',
   './package-shim-handler-test',
   './command-parsing-utils-test',
+  './command-function-name-test',
+  './tool-request-decoding-test',
   './query-matches-filter-test',
+  './parse-search-url-test',
   './matches-filter-integration-test',
-  './search-in-flight-key-test',
+  './eq-containment-integration-test',
+  './search-resource-helpers-test',
+  './superseded-search-surface-removed-test',
+  './search-entry-test',
+  './search-entries-engine-test',
+  './search-bounds-test',
   './coerce-error-message-test',
+  './settled-by-test',
+  './canonical-url-memo-test',
+  './dependency-normalization-test',
+  './realm-operations-test',
+  './resolve-published-realm-url-test',
+  './fallback-models-test',
+  './host-routing-validation-test',
   './normalize-realm-meta-value-test',
   './job-scoped-search-cache-test',
   './consuming-realm-header-test',
@@ -286,7 +398,16 @@ const ALL_TEST_FILES: string[] = [
   './sanitize-head-html-test',
   './node-realm-test',
   './session-room-queries-test',
+  './session-revocation-test',
+  './session-lifetime-test',
+  './indexing-dashboard-test',
   './indexing-event-sink-test',
+  './skip-query-backed-expansion-test',
+  './worker-request-signature-test',
+  './worker-request-forwarder-test',
+  './worker-reader-test',
+  './worker-job-registration-test',
+  './realm-index-updater-test',
 ];
 
 // TEST_FILES limits which test files are loaded (parsed and executed). Useful
@@ -306,8 +427,11 @@ if (testFilesEnv) {
 }
 
 for (const file of filesToLoad) {
-  require(file);
+  // Explicit `.ts` — native `require` does no extension search for TypeScript.
+  require(`${file}.ts`);
 }
+
+QUnit.start();
 
 function parseTestFiles(value: string): string[] {
   return value

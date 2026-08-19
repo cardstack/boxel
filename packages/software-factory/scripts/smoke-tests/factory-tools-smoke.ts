@@ -10,18 +10,18 @@
  */
 
 // This should be first
-import '../../src/setup-logger';
+import '../../src/setup-logger.ts';
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 
-import { logger } from '../../src/logger';
+import { logger } from '../../src/logger.ts';
 
 import {
   ToolExecutor,
   ToolNotFoundError,
   ToolSafetyError,
-} from '../../src/factory-tool-executor';
+} from '../../src/factory-tool-executor.ts';
 
 function makeMockClient(fetchImpl: typeof globalThis.fetch): BoxelCLIClient {
   async function jsonFetch(
@@ -121,8 +121,8 @@ import {
   CLARIFICATION_SIGNAL,
   type DoneResult,
   type ClarificationResult,
-} from '../../src/factory-tool-builder';
-import { ToolRegistry } from '../../src/factory-tool-registry';
+} from '../../src/factory-tool-builder.ts';
+import { ToolRegistry } from '../../src/factory-tool-registry.ts';
 
 // ---------------------------------------------------------------------------
 // Helpers

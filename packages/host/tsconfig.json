@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
     "target": "es2020",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "allowJs": true,
     "module": "nodenext",
     "moduleResolution": "nodenext",
@@ -27,8 +28,20 @@
     "paths": {
       "@cardstack/host/tests/*": ["tests/*"],
       "@cardstack/host/*": ["app/*"],
-      "@cardstack/boxel-host/commands/*": ["app/commands/*"],
-      "https://cardstack.com/base/*": ["../base/*"],
+      "@cardstack/boxel-host/tools/*": ["app/tools/*"],
+      "@cardstack/boxel-host/commands/*": ["app/tools/*"],
+      "@cardstack/base/*": [
+        "../base/*.gts",
+        "../base/*.ts",
+        "../base/*.d.ts",
+        "../base/*"
+      ],
+      "https://cardstack.com/base/*": [
+        "../base/*.gts",
+        "../base/*.ts",
+        "../base/*.d.ts",
+        "../base/*"
+      ],
       "@cardstack/openrouter/*": ["../openrouter-realm/*"],
       "*": ["types/*"]
     },
@@ -38,6 +51,7 @@
     "../base/**/*",
     "../experiments-realm/**/*",
     "../openrouter-realm/**/*",
+    "../test-realm-cards/contents/**/*",
     "app/**/*",
     "tests/**/*",
     "types/**/*"

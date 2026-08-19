@@ -25,9 +25,9 @@ import type { Type } from '@cardstack/host/services/card-type-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type NetworkService from '@cardstack/host/services/network';
 
-import type { BaseDef } from 'https://cardstack.com/base/card-api';
-
 import { loadModule } from '../resources/import';
+
+import type { BaseDef } from '@cardstack/base/card-api';
 
 export interface CardOrField {
   cardType: Type;
@@ -42,14 +42,14 @@ export type CardOrFieldReexport = CardOrField &
     displayName?: string;
   };
 
-export type CommandDeclaration = Omit<ClassDeclaration, 'type'> & {
+export type ToolDeclaration = Omit<ClassDeclaration, 'type'> & {
   type: 'command';
   command: typeof Command;
 };
 
 export type ModuleDeclaration =
   | CardOrFieldDeclaration
-  | CommandDeclaration
+  | ToolDeclaration
   | ClassDeclaration
   | FunctionDeclaration
   | CardOrFieldReexport;
@@ -63,9 +63,9 @@ export function isCardOrFieldDeclaration(
   );
 }
 
-export function isCommandDeclaration(
+export function isToolDeclaration(
   declaration: ModuleDeclaration,
-): declaration is CommandDeclaration {
+): declaration is ToolDeclaration {
   return declaration.type === 'command';
 }
 
@@ -74,6 +74,23 @@ export function isReexportCardOrField(
 ): declaration is CardOrFieldReexport {
   return (
     declaration.type === 'reexport' && hasCardOrFieldProperties(declaration)
+  );
+}
+
+export function isComponentDeclaration(
+  declaration: ModuleDeclaration,
+): boolean {
+  if (
+    !('super' in declaration) ||
+    !declaration.super ||
+    declaration.super.type !== 'external'
+  ) {
+    return false;
+  }
+  let { name, module } = declaration.super;
+  return (
+    module === '@glimmer/component' ||
+    (name === 'Component' && module === 'https://cardstack.com/base/card-api')
   );
 }
 
@@ -111,7 +128,11 @@ export default class ModuleContentsService extends Service {
       throw new Error(`Failed to fetch module source from ${url}: ${r.status}`);
     }
     let source = r.content;
-    let moduleSyntax = new ModuleSyntax(source, moduleId);
+    let moduleSyntax = new ModuleSyntax(
+      source,
+      moduleId,
+      this.network.virtualNetwork,
+    );
     if ('error' in result) {
       throw new Error(
         `Error loading module at ${url}: ${result.error.message}`,
@@ -321,7 +342,7 @@ function isCommandConstructor(
 function asCommandDeclaration(
   declaration: PossibleCardOrFieldDeclaration | ClassDeclaration,
   command: typeof Command,
-): CommandDeclaration {
+): ToolDeclaration {
   return {
     ...('super' in declaration ? { super: declaration.super } : {}),
     localName: declaration.localName,

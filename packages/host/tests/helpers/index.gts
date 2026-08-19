@@ -16,7 +16,6 @@ import QUnit from 'qunit';
 import { validate as uuidValidate } from 'uuid';
 
 import {
-  baseRealm,
   CachingDefinitionLookup,
   cardDefComputedFields,
   ensureTrailingSlash,
@@ -32,8 +31,10 @@ import {
   testRealmURL,
   testRRI,
   Worker,
+  DEFAULT_AUDIO_SIZE_LIMIT_BYTES,
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
+  DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
   type DefinitionLookup,
   type LooseSingleCardDocument,
   type Prerenderer,
@@ -48,7 +49,6 @@ import {
   type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 
-import UpdateRoomSkillsCommand from '@cardstack/host/commands/update-room-skills';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import ENV from '@cardstack/host/config/environment';
 import {
@@ -58,17 +58,12 @@ import {
 import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
 import type QueueService from '@cardstack/host/services/queue';
 import type { CardSaveSubscriber } from '@cardstack/host/services/store';
+import UpdateRoomSkillsTool from '@cardstack/host/tools/update-room-skills';
 
 import {
   coerceRenderError,
   normalizeRenderError,
 } from '@cardstack/host/utils/render-error';
-
-import type {
-  CardStore,
-  CardDef,
-  FieldDef,
-} from 'https://cardstack.com/base/card-api';
 
 import { TestRealmAdapter } from './adapter';
 import { testRealmServerMatrixUsername, setupMockMatrix } from './mock-matrix';
@@ -80,6 +75,7 @@ import { getTestRealmRegistry } from './test-realm-registry';
 import visitOperatorMode from './visit-operator-mode';
 
 import type { MockUtils } from './mock-matrix/_utils';
+import type { CardStore, CardDef, FieldDef } from '@cardstack/base/card-api';
 
 import type { SimpleElement } from '@simple-dom/interface';
 
@@ -95,6 +91,8 @@ export { createJWT, testRealmSecretSeed } from './test-auth';
 export {
   registerRealmAuthSessionRoomEnsurer,
   resetCatalogRealmURL,
+  setRealmArchived,
+  setRealmAuthFailure,
   setupAuthEndpoints,
   setCatalogRealmURL,
 } from './realm-server-mock';
@@ -102,7 +100,14 @@ export { setupOperatorModeStateCleanup } from './operator-mode-state';
 export * from '@cardstack/runtime-common/helpers';
 export * from './indexer';
 
-export const testModuleRealm = ri('https://localhost:4202/test/');
+// The live test realm-server's /test/ realm. Standard mode serves it at
+// `https://localhost:4202/test/`; env mode at the per-environment
+// `https://realm-test.<slug>.localhost/test/`. Sourced from the resolved
+// URL the host config exports (set from `REALM_TEST_URL` by env-vars.sh)
+// so a single test bundle works in both modes.
+export const testModuleRealm = ri(
+  ensureTrailingSlash(ENV.resolvedTestRealmURL),
+);
 
 /**
  * Build a `RealmResourceIdentifier` for a module in `testModuleRealm`.
@@ -113,24 +118,32 @@ export function testModuleRRI(path: string): RealmResourceIdentifier {
 }
 
 export {
-  catalogRealm,
-  skillsRealm,
+  catalogRealmURL,
+  skillsRealmURL,
   skillCardURL,
+  skillFileURL,
   devSkillId,
-  envSkillId,
+  skillsIndexId,
 } from '@cardstack/host/lib/utils';
 
 const { sqlSchema } = ENV;
 
 export const cardDefFieldCount = cardDefComputedFields?.length + 1; // standard computeds + `cardInfo`
 
-type CardAPI = typeof import('https://cardstack.com/base/card-api');
+type CardAPI = typeof import('@cardstack/base/card-api');
 type ModuleHooks = {
   after: (callback: () => void | Promise<void>) => void;
 };
 
+// Matrix homeserver URL. Standard mode: `http://localhost:8008`; env
+// mode: `https://matrix.<slug>.localhost`. ENV.matrixURL is the
+// already-resolved value (set by `environment.js` from BOXEL_ENVIRONMENT
+// or MATRIX_URL). The mock-matrix harness still routes requests to its
+// in-process mock — this URL is what the host code reads as
+// `ENV.matrixURL` and what the matrix-js-sdk gets as its default
+// homeserver, so it has to match whichever stack is actually running.
 const baseTestMatrix = {
-  url: new URL(`http://localhost:8008`),
+  url: new URL(ENV.matrixURL),
   username: 'test_realm',
   password: 'password',
 };
@@ -345,15 +358,13 @@ export async function waitForSyntaxHighlighting(
   );
 }
 export async function showSearchResult(realmName: string, id: string) {
-  await waitFor(
-    `[data-test-realm="${realmName}"] [data-test-card-catalog-item]`,
-  );
+  await waitFor(`[data-test-realm="${realmName}"] [data-test-item-button]`);
   while (
     document.querySelector(
       `[data-test-realm="${realmName}"] [data-test-show-more-cards]`,
     ) &&
     !document.querySelector(
-      `[data-test-realm="${realmName}"] [data-test-card-catalog-item="${id}"]`,
+      `[data-test-realm="${realmName}"] [data-test-item-button="${id}"]`,
     )
   ) {
     await click(`[data-test-realm="${realmName}"] [data-test-show-more-cards]`);
@@ -932,10 +943,114 @@ class MockLocalIndexer extends Service {
   }
 }
 
-export function setupLocalIndexing(hooks: NestedHooks) {
+// Set while a module has opted into reusing one indexed realm across its
+// tests (see the `reuseIndexAcrossTests` option below). Tests run serially in
+// a single page, so module-scoped state is enough to coordinate the two
+// halves of this: `setupLocalIndexing`'s beforeEach, which decides whether
+// this test starts from a snapshot, and `setupTestRealm`, which skips the
+// boot index when it does and captures the snapshot when it doesn't.
+let reusableIndex:
+  | {
+      snapshotName: string;
+      captured: boolean;
+      restored: boolean;
+      manual: boolean;
+      // The realms the snapshot actually contains, recorded when it was taken.
+      // `restored` says whether this test restored; only this says *what* it
+      // restored, which is what a realm appearing for the first time in a later
+      // test has to be checked against.
+      realmURLs: Set<string>;
+    }
+  | undefined;
+
+export function setupLocalIndexing(
+  hooks: NestedHooks,
+  opts?: {
+    // Index this module's realm once and restore that result before each
+    // subsequent test, instead of re-indexing per test. Pass a snapshot name
+    // unique to the module (matching /^[A-Za-z][A-Za-z0-9_]*$/).
+    //
+    // Worth it when a module's fixtures are the same for every test and cost
+    // real time to index — the per-test cost of rendering and serializing
+    // every fixture is the single largest line in the host suite. Each test
+    // still gets a fresh app, owner and loader, and still starts from an
+    // identical pristine index: the snapshot is *restored* (a full table
+    // replace), not carried over, so one test's writes cannot reach another.
+    //
+    // Not usable by a module whose tests are *about* indexing. A test whose
+    // index was restored runs against a realm started with `skipBootIndex`, so
+    // anything the boot index does beyond populating those tables — evicting a
+    // module from the loader, recording that it was flushed — has not happened.
+    // `Integration | Store` is the worked example: 71 of its 73 tests are
+    // indifferent, while two assert on exactly that module-rebuild bookkeeping
+    // and fail. Identical fixtures are necessary but not sufficient; the module
+    // also has to not care how its index came to exist.
+    reuseIndexAcrossTests?: string;
+
+    // Set by a module (or its setup helper) that builds more than one realm
+    // per test. By default the snapshot is captured as soon as the first realm
+    // finishes indexing, which for such a module would omit every later
+    // realm's rows; this suppresses that and hands the timing to
+    // `captureReusableIndex`, which the caller invokes once its last realm is
+    // built.
+    //
+    // Forgetting that call is safe: nothing is ever captured, so every test
+    // indexes for itself exactly as it did before opting in. Calling it too
+    // early is the failure that matters, which is why it belongs immediately
+    // after the last realm rather than being inferred from a realm count kept
+    // somewhere else — and why building a realm after the capture throws (see
+    // setupTestRealm) instead of quietly serving that realm unindexed.
+    captureIndexManually?: boolean;
+  },
+) {
+  hooks.before(function () {
+    reusableIndex = opts?.reuseIndexAcrossTests
+      ? {
+          snapshotName: opts.reuseIndexAcrossTests,
+          captured: false,
+          restored: false,
+          manual: opts.captureIndexManually ?? false,
+          realmURLs: new Set<string>(),
+        }
+      : undefined;
+  });
+
+  hooks.after(async function () {
+    if (reusableIndex?.captured) {
+      // A snapshot is a separate in-memory database that `exportSnapshot`
+      // opens and leaves ATTACHed, since `importSnapshot` reads from it; only
+      // `deleteSnapshot` detaches and closes it. Nothing restores this module's
+      // snapshot after its last test, and the adapter is a page singleton whose
+      // `close()` never runs mid-shard, so without this every opted-in module
+      // would leave its indexed fixtures resident — and hold an ATTACH slot,
+      // which SQLite caps — for the rest of the shard.
+      let dbAdapter = await getDbAdapter();
+      await dbAdapter.deleteSnapshot(reusableIndex.snapshotName);
+    }
+    reusableIndex = undefined;
+  });
+
   hooks.beforeEach(async function () {
     let dbAdapter = await getDbAdapter();
-    await dbAdapter.reset();
+    if (reusableIndex?.captured) {
+      // Subsumes reset(), which is a precondition rather than a property:
+      // importSnapshot DELETEs and refills every table it finds in the
+      // *snapshot*, so it covers reset()'s list only because the snapshot was
+      // taken from `main` with the schema unchanged since. A table in `main`
+      // but missing from the snapshot would never be cleared, and that leak
+      // reads as one test seeing another's rows, with nothing to attribute it
+      // to. The systematic exception is `sqlite_%` names, which the copy skips
+      // — harmless while nothing in config/schema is AUTOINCREMENT, since then
+      // `sqlite_sequence` doesn't exist; a migration adding one would leave
+      // restored tests inheriting the previous test's id counter.
+      await dbAdapter.importSnapshot(reusableIndex.snapshotName);
+      reusableIndex.restored = true;
+    } else {
+      await dbAdapter.reset();
+      if (reusableIndex) {
+        reusableIndex.restored = false;
+      }
+    }
     this.owner.register('service:local-indexer', MockLocalIndexer);
   });
 
@@ -979,6 +1094,36 @@ export function setupLocalIndexing(hooks: NestedHooks) {
   });
 }
 
+// Registry keys come from RealmPaths, which stores `ensureTrailingSlash(decodeURI(href))`.
+// Compare against that exact form so a realm isn't reported missing over a
+// trailing slash or an encoded character.
+function normalizeRealmKey(url: string): string {
+  return ensureTrailingSlash(url.includes('%') ? decodeURI(url) : url);
+}
+
+// Capture the reusable index now, for a module that opted in with
+// `captureIndexManually` because it builds several realms per test. Call it
+// once, from wherever the last realm is built — a setup helper that builds them
+// all is the right home, since the call then can't drift out of step with the
+// number of realms the way a count declared elsewhere would.
+//
+// Must be called before the test body runs, so that what later tests restore is
+// the fixtures as indexed and nothing a test went on to write. A no-op unless
+// the module opted in, so a shared helper can call it unconditionally, and a
+// no-op after the first test, since the snapshot it captured is what every
+// later test restores.
+export async function captureReusableIndex() {
+  if (!reusableIndex || reusableIndex.captured || !reusableIndex.manual) {
+    return;
+  }
+  let dbAdapter = await getDbAdapter();
+  await dbAdapter.exportSnapshot(reusableIndex.snapshotName);
+  reusableIndex.captured = true;
+  reusableIndex.realmURLs = new Set(
+    [...getTestRealmRegistry().keys()].map(normalizeRealmKey),
+  );
+}
+
 export function setupOnSave(hooks: NestedHooks) {
   hooks.beforeEach<TestContextWithSave>(function () {
     let store = getService('store');
@@ -987,7 +1132,7 @@ export function setupOnSave(hooks: NestedHooks) {
   });
 }
 
-interface RealmContents {
+export interface RealmContents {
   [key: string]:
     | CardDef
     | FieldDef
@@ -1014,16 +1159,9 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
         toolsSupported: true,
         reasoningEffort: 'minimal',
       },
-      relationships: {
-        'cardInfo.theme': {
-          links: {
-            self: null,
-          },
-        },
-      },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/system-card',
+          module: '@cardstack/base/system-card',
           name: 'ModelConfiguration',
         },
       },
@@ -1043,16 +1181,9 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
         modelId: 'anthropic/claude-sonnet-4.6',
         toolsSupported: true,
       },
-      relationships: {
-        'cardInfo.theme': {
-          links: {
-            self: null,
-          },
-        },
-      },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/system-card',
+          module: '@cardstack/base/system-card',
           name: 'ModelConfiguration',
         },
       },
@@ -1072,16 +1203,9 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
         modelId: 'anthropic/claude-sonnet-4.5',
         toolsSupported: true,
       },
-      relationships: {
-        'cardInfo.theme': {
-          links: {
-            self: null,
-          },
-        },
-      },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/system-card',
+          module: '@cardstack/base/system-card',
           name: 'ModelConfiguration',
         },
       },
@@ -1101,16 +1225,9 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
         modelId: 'anthropic/claude-3.7-sonnet',
         toolsSupported: true,
       },
-      relationships: {
-        'cardInfo.theme': {
-          links: {
-            self: null,
-          },
-        },
-      },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/system-card',
+          module: '@cardstack/base/system-card',
           name: 'ModelConfiguration',
         },
       },
@@ -1149,7 +1266,7 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
       },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/system-card',
+          module: '@cardstack/base/system-card',
           name: 'SystemCard',
         },
       },
@@ -1163,6 +1280,8 @@ export async function setupAcceptanceTestRealm({
   mockMatrixUtils,
   startMatrix = true,
   fileSizeLimitBytes,
+  audioSizeLimitBytes,
+  videoSizeLimitBytes,
 }: {
   contents: RealmContents;
   realmURL?: string;
@@ -1170,6 +1289,8 @@ export async function setupAcceptanceTestRealm({
   mockMatrixUtils: MockUtils;
   startMatrix?: boolean;
   fileSizeLimitBytes?: number;
+  audioSizeLimitBytes?: number;
+  videoSizeLimitBytes?: number;
 }) {
   let resolvedRealmURL = ensureTrailingSlash(realmURL ?? testRealmURL);
   setupAuthEndpoints({
@@ -1183,6 +1304,8 @@ export async function setupAcceptanceTestRealm({
     mockMatrixUtils,
     startMatrix,
     fileSizeLimitBytes,
+    audioSizeLimitBytes,
+    videoSizeLimitBytes,
   });
   getTestRealmRegistry().set(result.realm.url, {
     realm: result.realm,
@@ -1198,6 +1321,8 @@ export async function setupIntegrationTestRealm({
   mockMatrixUtils,
   startMatrix = true,
   fileSizeLimitBytes,
+  audioSizeLimitBytes,
+  videoSizeLimitBytes,
 }: {
   contents: RealmContents;
   realmURL?: string;
@@ -1205,6 +1330,8 @@ export async function setupIntegrationTestRealm({
   mockMatrixUtils: MockUtils;
   startMatrix?: boolean;
   fileSizeLimitBytes?: number;
+  audioSizeLimitBytes?: number;
+  videoSizeLimitBytes?: number;
 }) {
   let resolvedRealmURL = ensureTrailingSlash(realmURL ?? testRealmURL);
   setupAuthEndpoints({
@@ -1218,6 +1345,8 @@ export async function setupIntegrationTestRealm({
     mockMatrixUtils,
     startMatrix,
     fileSizeLimitBytes,
+    audioSizeLimitBytes,
+    videoSizeLimitBytes,
   });
   getTestRealmRegistry().set(result.realm.url, {
     realm: result.realm,
@@ -1251,6 +1380,8 @@ async function setupTestRealm({
   mockMatrixUtils,
   startMatrix = true,
   fileSizeLimitBytes,
+  audioSizeLimitBytes,
+  videoSizeLimitBytes,
 }: {
   contents: RealmContents;
   realmURL?: string;
@@ -1259,6 +1390,8 @@ async function setupTestRealm({
   mockMatrixUtils: MockUtils;
   startMatrix?: boolean;
   fileSizeLimitBytes?: number;
+  audioSizeLimitBytes?: number;
+  videoSizeLimitBytes?: number;
 }) {
   let owner = (getContext() as TestContext).owner;
   let { virtualNetwork } = getService('network');
@@ -1307,6 +1440,37 @@ async function setupTestRealm({
       'definition-lookup:main',
     ) as DefinitionLookup;
   }
+
+  // A realm the snapshot doesn't contain, in a module that reuses one, is the
+  // failure this whole mechanism has to avoid: the realm mounts with
+  // `skipBootIndex` and is served with nothing indexed, which reads as "these
+  // cards don't exist" — a search returns nothing, an assertion that a card is
+  // absent passes, a list renders short. Nothing looks broken. So fail loudly
+  // instead, as early as the mistake is detectable, and say what to do.
+  //
+  // Two ways in, and they need different advice. Building a realm in the test
+  // that captured (`restored === false`) means the capture came too early —
+  // that test's own later realms are missing from it. Building one in a test
+  // that restored means this realm was never in the snapshot at all, which is
+  // what `realmURLs` is for: `restored` says whether this test restored, only
+  // the set says what it restored.
+  if (reusableIndex?.captured) {
+    let context = `reuseIndexAcrossTests ('${reusableIndex.snapshotName}'): `;
+    if (!reusableIndex.restored) {
+      throw new Error(
+        `${context}a realm is being built after this module's index snapshot was captured, so the snapshot cannot contain it. ` +
+          (reusableIndex.manual
+            ? 'captureReusableIndex() ran too early — move it after the last realm this module builds.'
+            : 'This module builds more than one realm per test: pass captureIndexManually and call captureReusableIndex() once, after the last realm.'),
+      );
+    }
+    if (!reusableIndex.realmURLs.has(normalizeRealmKey(realmURL))) {
+      throw new Error(
+        `${context}'${realmURL}' is not one of the realms the snapshot was taken from (${[...reusableIndex.realmURLs].join(', ')}), so it would be served with an empty index. ` +
+          'A module that builds a realm only some of its tests need cannot reuse an index; build it in the shared setup, or drop the option for this module.',
+      );
+    }
+  }
   await insertPermissions(dbAdapter, new URL(realmURL), permissions);
   let worker = new Worker({
     indexWriter: new IndexWriter(dbAdapter),
@@ -1343,6 +1507,19 @@ async function setupTestRealm({
       Number(
         process.env.FILE_SIZE_LIMIT_BYTES ?? DEFAULT_FILE_SIZE_LIMIT_BYTES,
       ),
+    audioSizeLimitBytes:
+      audioSizeLimitBytes ??
+      Number(
+        process.env.AUDIO_SIZE_LIMIT_BYTES ?? DEFAULT_AUDIO_SIZE_LIMIT_BYTES,
+      ),
+    videoSizeLimitBytes:
+      videoSizeLimitBytes ??
+      Number(
+        process.env.VIDEO_SIZE_LIMIT_BYTES ?? DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
+      ),
+    // This test's index was restored from a snapshot taken after the same
+    // fixtures were indexed, so there is nothing to index; mount and serve.
+    ...(reusableIndex?.restored ? { skipBootIndex: true as const } : {}),
   });
 
   // Register the realm early so realm-server mock _info lookups can resolve
@@ -1354,7 +1531,9 @@ async function setupTestRealm({
 
   // we use this to run cards that were added to the test filesystem
   adapter.setLoader(
-    new Loader(realm.__fetchForTesting, virtualNetwork.resolveImport),
+    new Loader(realm.__fetchForTesting, virtualNetwork.resolveImport, {
+      virtualNetwork,
+    }),
   );
 
   // TODO this is the only use of Realm.maybeHandle left--can we get rid of it?
@@ -1362,6 +1541,21 @@ async function setupTestRealm({
   await adapter.ready;
   await worker.run();
   await realm.start();
+  if (reusableIndex && !reusableIndex.captured && !reusableIndex.manual) {
+    // First test of a module that reuses its index: this start() just did the
+    // indexing, so keep the result for the rest of the module. Captured before
+    // the test body runs, so what later tests restore is the fixtures as
+    // indexed and nothing a test went on to write.
+    //
+    // A module building several realms per test opts out of this timing with
+    // `captureIndexManually` and calls `captureReusableIndex` after its last
+    // realm, since capturing here would omit the realms still to come.
+    await dbAdapter.exportSnapshot(reusableIndex.snapshotName);
+    reusableIndex.captured = true;
+    reusableIndex.realmURLs = new Set(
+      [...getTestRealmRegistry().keys()].map(normalizeRealmKey),
+    );
+  }
   if (startMatrix) {
     await mockMatrixUtils.start();
   }
@@ -1465,8 +1659,8 @@ export async function saveCard(
   store?: CardStore,
   realmURL?: RealmIdentifier,
 ) {
-  let api = await loader.import<CardAPI>(`${baseRealm.url}card-api`);
-  let doc = api.serializeCard(instance);
+  let api = await loader.import<CardAPI>('@cardstack/base/card-api');
+  let doc = api.serializeCard(instance, {});
   doc.data.id = id;
   if (realmURL) {
     doc.data.meta = {
@@ -1538,7 +1732,7 @@ export function setupCardTest(hooks: NestedHooks): {
   setupRealmCacheTeardown(hooks);
   setupCardLogs(hooks, async () =>
     (getService('loader-service') as any).loader.import(
-      `${baseRealm.url}card-api`,
+      '@cardstack/base/card-api',
     ),
   );
   return {
@@ -1909,6 +2103,15 @@ export const cardInfo = Object.freeze({
   notes: null,
 });
 
+// The link fields `CardInfoField` declares. A composite field serializes its
+// never-authored links only under `includeUnrenderedFields`, so these appear
+// in an exact-document assertion exactly when that option is set — and, since
+// every CardDef contains a `cardInfo`, they appear for every card.
+export const cardInfoLinks = Object.freeze({
+  'cardInfo.cardThumbnail': { links: { self: null } },
+  'cardInfo.theme': { links: { self: null } },
+});
+
 // UI interaction helpers for acceptance tests
 
 /**
@@ -2021,9 +2224,25 @@ export async function addSkillToAiAssistant(
   skillCardId: string,
   roomId?: string,
 ) {
-  let resolvedRoomId =
-    roomId ??
-    document.querySelector('[data-test-room]')?.getAttribute('data-test-room');
+  // The room element can lag the click that opened or created the room: room
+  // creation resolves through async matrix operations, so `[data-test-room]`
+  // may not carry the id yet in the runloop the caller reached. Waiting for it
+  // rather than reading a single snapshot is what removes the intermittent
+  // "Expected an active AI assistant room" failure; a genuine absence still
+  // surfaces the same message when the wait times out.
+  let resolvedRoomId = roomId;
+  if (!resolvedRoomId) {
+    resolvedRoomId = (await waitUntil(
+      () =>
+        document
+          .querySelector('[data-test-room]')
+          ?.getAttribute('data-test-room'),
+      {
+        timeout: 5000,
+        timeoutMessage: `Expected an active AI assistant room before adding skill "${skillCardId}"`,
+      },
+    )) as string;
+  }
 
   if (!resolvedRoomId) {
     throw new Error(
@@ -2031,8 +2250,8 @@ export async function addSkillToAiAssistant(
     );
   }
 
-  let command = new UpdateRoomSkillsCommand(
-    getService('command-service').commandContext,
+  let command = new UpdateRoomSkillsTool(
+    getService('tool-service').toolContext,
   );
   await command.execute({
     roomId: resolvedRoomId,
@@ -2049,7 +2268,7 @@ export async function addSkillToAiAssistant(
       skillsConfig: {
         enabledSkillCards?: Array<{ sourceUrl?: string }>;
         disabledSkillCards?: Array<{ sourceUrl?: string }>;
-        commandDefinitions?: Array<{ sourceUrl?: string }>;
+        toolDefinitionFileDefs?: Array<{ sourceUrl?: string }>;
       };
     } | null;
   };
@@ -2084,7 +2303,7 @@ export async function addSkillToAiAssistant(
         snapshot?.enabledSkillCards?.map((f) => f.sourceUrl) ?? null,
       disabledSkillCards:
         snapshot?.disabledSkillCards?.map((f) => f.sourceUrl) ?? null,
-      commandDefinitionsCount: snapshot?.commandDefinitions?.length ?? null,
+      toolDefinitionsCount: snapshot?.toolDefinitionFileDefs?.length ?? null,
     };
     let originalMessage = err instanceof Error ? err.message : String(err);
     let enriched = new Error(
@@ -2113,14 +2332,14 @@ export async function waitForNewRoomSkillsLoaded(roomId: string) {
       skillsConfig: {
         enabledSkillCards?: Array<{ sourceUrl?: string }>;
         disabledSkillCards?: Array<{ sourceUrl?: string }>;
-        commandDefinitions?: Array<{ sourceUrl?: string }>;
+        toolDefinitionFileDefs?: Array<{ sourceUrl?: string }>;
       };
     } | null;
     roomResources: Map<
       string,
       {
         skills?: Array<{ cardId: string }>;
-        commands?: Array<unknown>;
+        tools?: Array<unknown>;
       }
     >;
   };
@@ -2138,9 +2357,7 @@ export async function waitForNewRoomSkillsLoaded(roomId: string) {
         // a non-empty list proves that loadSkills finished and the skill
         // card's @field commands is populated — i.e. message-builder will be
         // able to resolve the request's functionName.
-        return Boolean(
-          roomResource && (roomResource.commands?.length ?? 0) > 0,
-        );
+        return Boolean(roomResource && (roomResource.tools?.length ?? 0) > 0);
       },
       {
         timeout: 5000,
@@ -2160,10 +2377,10 @@ export async function waitForNewRoomSkillsLoaded(roomId: string) {
       disabledSkillCards:
         roomData?.skillsConfig?.disabledSkillCards?.map((f) => f.sourceUrl) ??
         null,
-      commandDefinitionsCount:
-        roomData?.skillsConfig?.commandDefinitions?.length ?? null,
+      toolDefinitionsCount:
+        roomData?.skillsConfig?.toolDefinitionFileDefs?.length ?? null,
       roomResourceSkillIds: roomResource?.skills?.map((s) => s.cardId) ?? null,
-      roomResourceCommandCount: roomResource?.commands?.length ?? null,
+      roomResourceCommandCount: roomResource?.tools?.length ?? null,
     };
     let originalMessage = err instanceof Error ? err.message : String(err);
     let enriched = new Error(
@@ -2173,4 +2390,44 @@ export async function waitForNewRoomSkillsLoaded(roomId: string) {
       err instanceof Error ? err : undefined;
     throw enriched;
   }
+}
+
+// Builds the JSON string for a /realm.json RealmConfig card from a flat
+// config object ({ name, iconURL, backgroundURL, ... }). The card stores
+// `name` under cardInfo.name (matching the CardDef slot); other fields
+// land on attributes directly. Omit a key to leave that field unset.
+export function realmConfigCardJSON(
+  config: {
+    name?: string;
+    iconURL?: string;
+    backgroundURL?: string;
+    includePrerenderedDefaultRealmIndex?: boolean;
+  } = {},
+): string {
+  let attrs: Record<string, unknown> = {};
+  if (config.name !== undefined) {
+    attrs.cardInfo = { name: config.name };
+  }
+  if (config.iconURL !== undefined) {
+    attrs.iconURL = config.iconURL;
+  }
+  if (config.backgroundURL !== undefined) {
+    attrs.backgroundURL = config.backgroundURL;
+  }
+  if (config.includePrerenderedDefaultRealmIndex !== undefined) {
+    attrs.includePrerenderedDefaultRealmIndex =
+      config.includePrerenderedDefaultRealmIndex;
+  }
+  return JSON.stringify({
+    data: {
+      type: 'card',
+      attributes: attrs,
+      meta: {
+        adoptsFrom: {
+          module: '@cardstack/base/realm-config',
+          name: 'RealmConfig',
+        },
+      },
+    },
+  });
 }

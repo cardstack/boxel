@@ -1,8 +1,9 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { join, basename } from 'path';
 import supertest from 'supertest';
 import type { Test, SuperTest } from 'supertest';
-import type { RealmHttpServer as Server } from '../../server';
+import type { RealmHttpServer as Server } from '../../server.ts';
 import { dirSync, type DirResult } from 'tmp';
 import {
   DEFAULT_PERMISSIONS,
@@ -12,7 +13,8 @@ import {
   rri,
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
-import { testRealmURL } from './helpers';
+import { testRealmURL } from './helpers.ts';
+import { settlePrerenderHtmlJobs } from '../helpers/indexing.ts';
 import {
   closeServer,
   createVirtualNetwork,
@@ -22,12 +24,13 @@ import {
   setupDB,
   setupPermissionedRealmCached,
   waitUntil,
-} from '../helpers';
-import { createJWT as createRealmServerJWT } from '../../utils/jwt';
-import { ensureDirSync } from 'fs-extra';
+} from '../helpers/index.ts';
+import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
+import fsExtra from 'fs-extra';
+const { ensureDirSync } = fsExtra;
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
-module(`server-endpoints/${basename(__filename)}`, function () {
+module(`server-endpoints/${basename(import.meta.filename)}`, function () {
   module(
     'Realm Server Endpoints (not specific to one realm)',
     function (hooks) {
@@ -58,7 +61,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               },
             },
           },
-          'home.gts': `import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+          'home.gts': `import { Component, CardDef } from '@cardstack/base/card-api';
                       export class Home extends CardDef {
                         static isolated = class Isolated extends Component<typeof this> {
                           <template>
@@ -71,8 +74,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                             field,
                             Component,
                             CardDef,
-                          } from 'https://cardstack.com/base/card-api';
-                          import StringField from 'https://cardstack.com/base/string';
+                          } from '@cardstack/base/card-api';
+                          import StringField from '@cardstack/base/string';
 
                           export class Person extends CardDef {
                             static displayName = 'Person';
@@ -103,7 +106,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             },
           },
           'isolated-card.gts': `
-              import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+              import { Component, CardDef } from '@cardstack/base/card-api';
 
               export class IsolatedCard extends CardDef {
                 static isolated = class Isolated extends Component<typeof this> {
@@ -127,7 +130,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           },
 
           'dollar-sign-card.gts': `
-            import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+            import { Component, CardDef } from '@cardstack/base/card-api';
 
             export class DollarSignCard extends CardDef {
               static isolated = class Isolated extends Component<typeof this> {
@@ -152,7 +155,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           },
 
           'head-card.gts': `
-            import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+            import { Component, CardDef } from '@cardstack/base/card-api';
 
             export class HeadCard extends CardDef {
               static isolated = class Isolated extends Component<typeof this> {
@@ -183,7 +186,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           },
 
           'unsafe-head-card.gts': `
-            import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+            import { Component, CardDef } from '@cardstack/base/card-api';
 
             export class UnsafeHeadCard extends CardDef {
               static isolated = class Isolated extends Component<typeof this> {
@@ -218,7 +221,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           },
 
           'scoped-css-card.gts': `
-            import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+            import { Component, CardDef } from '@cardstack/base/card-api';
 
             export class ScopedCssCard extends CardDef {
               static isolated = class Isolated extends Component<typeof this> {
@@ -253,7 +256,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           // can only be found by iterating over serialized.included resources.
 
           'linked-css-base.gts': `
-            import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+            import { Component, CardDef } from '@cardstack/base/card-api';
 
             export class LinkedCssBase extends CardDef {
               static embedded = class Embedded extends Component<typeof this> {
@@ -265,7 +268,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             `,
 
           'linked-css-child.gts': `
-            import { Component } from 'https://cardstack.com/base/card-api';
+            import { Component } from '@cardstack/base/card-api';
             import { LinkedCssBase } from './linked-css-base.gts';
 
             export class LinkedCssChild extends LinkedCssBase {
@@ -293,7 +296,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             `,
 
           'linked-css-parent.gts': `
-            import { Component, CardDef, field, linksTo } from 'https://cardstack.com/base/card-api';
+            import { Component, CardDef, field, linksTo } from '@cardstack/base/card-api';
             import { LinkedCssBase } from './linked-css-base.gts';
 
             export class LinkedCssParent extends CardDef {
@@ -351,7 +354,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: rri('https://cardstack.com/base/card-api'),
+                  module: rri('@cardstack/base/card-api'),
                   name: 'Theme',
                 },
               },
@@ -368,7 +371,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: rri('https://cardstack.com/base/brand-guide'),
+                  module: rri('@cardstack/base/brand-guide'),
                   name: 'default',
                 },
               },
@@ -729,11 +732,13 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('missing apple-touch-icon is filled with default when only favicon is present in head HTML', async function (assert) {
-        // Directly set head_html to contain only a favicon link (no apple-touch-icon)
+        // Directly set head_html to contain only a favicon link (no apple-touch-icon).
+        // The head-HTML injection reads from prerendered_html.
         let cardURL = `${testRealmURL.href}isolated-test.json`;
+        let faviconHead = `'<title>Test</title><link rel="icon" href="https://example.com/custom-icon.png" type="image/png">'`;
         await dbAdapter.execute(
-          `UPDATE boxel_index
-           SET head_html = '<title>Test</title><link rel="icon" href="https://example.com/custom-icon.png" type="image/png">'
+          `UPDATE prerendered_html
+           SET head_html = ${faviconHead}
            WHERE url = '${cardURL}'
              AND type = 'instance'
              AND is_deleted IS NOT TRUE`,
@@ -782,10 +787,12 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('missing favicon is filled with default when only apple-touch-icon is present in head HTML', async function (assert) {
+        // The head-HTML injection reads from prerendered_html.
         let cardURL = `${testRealmURL.href}isolated-test.json`;
+        let touchIconHead = `'<title>Test</title><link rel="apple-touch-icon" href="https://example.com/custom-touch.png">'`;
         await dbAdapter.execute(
-          `UPDATE boxel_index
-           SET head_html = '<title>Test</title><link rel="apple-touch-icon" href="https://example.com/custom-touch.png">'
+          `UPDATE prerendered_html
+           SET head_html = ${touchIconHead}
            WHERE url = '${cardURL}'
              AND type = 'instance'
              AND is_deleted IS NOT TRUE`,
@@ -872,11 +879,13 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           'card-with-theme file write was accepted',
         );
 
-        // Wait for the card to be indexed (head_html populated, even if empty string).
+        // Wait for the card's rendering to land (head_html populated, even
+        // if empty string) — it arrives on the prerendered_html channel via
+        // the fire-and-forget prerender_html job.
         await waitUntil(
           async () => {
             let rows = (await dbAdapter.execute(
-              `SELECT url, head_html FROM boxel_index
+              `SELECT url, head_html FROM prerendered_html
                WHERE url LIKE '%card-with-theme%'
                  AND type = 'instance'
                  AND is_deleted IS NOT TRUE
@@ -976,7 +985,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         await waitUntil(
           async () => {
             let rows = (await dbAdapter.execute(
-              `SELECT url, head_html FROM boxel_index
+              `SELECT url, head_html FROM prerendered_html
                WHERE url LIKE '%card-with-brand-guide-theme%'
                  AND type = 'instance'
                  AND is_deleted IS NOT TRUE
@@ -1345,6 +1354,9 @@ module(`server-endpoints/${basename(__filename)}`, function () {
     'Published realm: theme icon links after _publish-realm',
     function (hooks) {
       let testRealmHttpServer: Server;
+      let testRealmServer: Awaited<
+        ReturnType<typeof runTestRealmServer>
+      >['testRealmServer'];
       let request: SuperTest<Test>;
       let dbAdapter: PgAdapter;
       let dir: DirResult;
@@ -1363,7 +1375,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           let virtualNetwork = createVirtualNetwork();
           let testRealmDir = join(dir.name, 'realm_server_theme', 'test');
           ensureDirSync(testRealmDir);
-          ({ testRealmHttpServer } = await runTestRealmServer({
+          ({ testRealmHttpServer, testRealmServer } = await runTestRealmServer({
             virtualNetwork,
             testRealmDir,
             fileSystem: {},
@@ -1442,7 +1454,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'https://cardstack.com/base/brand-guide',
+                      module: '@cardstack/base/brand-guide',
                       name: 'default',
                     },
                   },
@@ -1474,7 +1486,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'https://cardstack.com/base/card-api',
+                      module: '@cardstack/base/card-api',
                       name: 'CardDef',
                     },
                   },
@@ -1515,6 +1527,34 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               `Failed to publish realm: ${publishResponse.status} ${publishResponse.text}`,
             );
           }
+
+          // `_publish-realm` returns 202 before indexing finishes. Drive a
+          // reconcile pass to mount the published realm, then poll its
+          // readiness check until it reports ready, so the assertions below
+          // query indexed content. Poll rather than asking once: readiness
+          // bounds how long it will hold a single request and answers 503 with
+          // `Retry-After` once that budget is spent, so a from-scratch index
+          // longer than the budget takes more than one request to observe.
+          await testRealmServer.testingOnlyReconcile();
+          await waitUntil(
+            async () =>
+              (
+                await request
+                  .get(`${publishedRealmPath}_readiness-check`)
+                  .set('Host', publishedRealmHost)
+                  .set('Accept', 'application/vnd.api+json')
+              ).status === 200,
+            {
+              timeout: 120_000,
+              interval: 1000,
+              timeoutMessage:
+                'published realm never passed its readiness check',
+            },
+          );
+          // Readiness drains the index channel only; head HTML lands via the
+          // realm's prerender_html job, so settle that channel before the
+          // assertions read it.
+          await settlePrerenderHtmlJobs(dbAdapter, publishedRealmURLString);
         },
         afterEach: async () => {
           await closeServer(testRealmHttpServer);
@@ -1569,6 +1609,457 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         assert.ok(
           themeRel,
           `pristine_doc preserves the cardInfo.theme relationship URL (got ${themeRel})`,
+        );
+      });
+    },
+  );
+
+  // Host routing rules must resolve a bare sub-path (e.g. /pricing) as well
+  // as the trailing-slash form, and canonicalize between them. The bug: the
+  // bare form 404'd for generic (non-text/html) Accept
+  // headers — crawlers, link-unfurlers, curl — because serve-index bailed to
+  // the module resolver when the path wasn't itself an indexed card
+  // instance, without first consulting the routing map. The trailing-slash
+  // form took the directory-index branch and rendered. This module publishes
+  // a realm whose routed instance lives in a subdirectory (its id therefore
+  // does NOT equal the routed path, so the card-id fallback cannot mask the
+  // bug) and asserts both forms plus the 308 canonical redirect.
+  module(
+    'Published realm: host routing rules + trailing-slash canonicalization',
+    function (hooks) {
+      let testRealmHttpServer: Server;
+      let testRealmServer: Awaited<
+        ReturnType<typeof runTestRealmServer>
+      >['testRealmServer'];
+      let request: SuperTest<Test>;
+      let dbAdapter: PgAdapter;
+      let dir: DirResult;
+      let sourceRealmUrlString: string;
+      let publishedRealmURLString: string;
+      let publishedRealmHost: string;
+      let publishedRealmPath: string;
+      let ownerUserId = '@mango:localhost';
+
+      hooks.beforeEach(function () {
+        dir = dirSync();
+      });
+      setupDB(hooks, {
+        beforeEach: async (_dbAdapter, _publisher, _runner) => {
+          dbAdapter = _dbAdapter;
+          let virtualNetwork = createVirtualNetwork();
+          let testRealmDir = join(dir.name, 'realm_server_routing', 'test');
+          ensureDirSync(testRealmDir);
+          ({ testRealmHttpServer, testRealmServer } = await runTestRealmServer({
+            virtualNetwork,
+            testRealmDir,
+            fileSystem: {},
+            realmsRootPath: join(dir.name, 'realm_server_routing'),
+            realmURL: new URL('http://127.0.0.1:4444/test/'),
+            dbAdapter: _dbAdapter,
+            publisher: _publisher,
+            runner: _runner,
+            matrixURL,
+            permissions: {
+              '*': ['read', 'write'],
+              [ownerUserId]: DEFAULT_PERMISSIONS,
+            },
+            domainsForPublishedRealms: {
+              boxelSpace: 'localhost',
+              boxelSite: 'localhost:4444',
+            },
+          }));
+          request = supertest(testRealmHttpServer);
+
+          // Create a publishable source realm.
+          let endpoint = 'routing-source';
+          let createResponse = await request
+            .post('/_create-realm')
+            .set('Accept', 'application/vnd.api+json')
+            .set('Content-Type', 'application/json')
+            .set(
+              'Authorization',
+              `Bearer ${createRealmServerJWT(
+                { user: ownerUserId, sessionRoom: 'session-room-test' },
+                realmSecretSeed,
+              )}`,
+            )
+            .send(
+              JSON.stringify({
+                data: {
+                  type: 'realm',
+                  attributes: { name: 'Routing Source Realm', endpoint },
+                },
+              }),
+            );
+          if (createResponse.status !== 202) {
+            throw new Error(
+              `/_create-realm failed with status ${createResponse.status}: ` +
+                (createResponse.text ||
+                  (createResponse.body
+                    ? JSON.stringify(createResponse.body)
+                    : '')),
+            );
+          }
+
+          sourceRealmUrlString = createResponse.body.data.id;
+          let sourceRealmPath = new URL(sourceRealmUrlString).pathname;
+
+          // Make the source realm publicly readable.
+          await _dbAdapter.execute(`
+            INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
+            VALUES ('${sourceRealmUrlString}', '*', true, true, true)
+          `);
+
+          // The routed instance lives in a subdirectory. Its id is
+          // <realm>/pages/pricing, which is deliberately NOT the routed path
+          // (<realm>/pricing) — so a 200 on /pricing can only come from the
+          // routing map, never from the card-id fallback.
+          let instanceResponse = await request
+            .post(`${sourceRealmPath}pages/pricing.json`)
+            .set('Accept', 'application/vnd.card+source')
+            .send(
+              JSON.stringify({
+                data: {
+                  type: 'card',
+                  id: `${sourceRealmUrlString}pages/pricing`,
+                  attributes: { cardInfo: { name: 'Pricing' } },
+                  meta: {
+                    adoptsFrom: {
+                      module: '@cardstack/base/card-api',
+                      name: 'CardDef',
+                    },
+                  },
+                },
+              }),
+            );
+          if (instanceResponse.status !== 204) {
+            throw new Error(
+              `Failed to write pages/pricing: ${instanceResponse.status} ${instanceResponse.text}`,
+            );
+          }
+
+          // Overwrite realm.json with a routing rule mapping the bare
+          // sub-path /pricing to the subdirectory instance. Writing realm.json
+          // re-indexes the RealmConfig card, so the routing map picks the rule
+          // up (and, after publish, the published realm's own index does too).
+          let realmConfigResponse = await request
+            .post(`${sourceRealmPath}realm.json`)
+            .set('Accept', 'application/vnd.card+source')
+            .send(
+              JSON.stringify({
+                data: {
+                  type: 'card',
+                  attributes: {
+                    cardInfo: { name: 'Routing Source Realm' },
+                    hostRoutingRules: [
+                      { path: '/' },
+                      { path: '/pricing' },
+                      // Redirect rules: a realm-relative target using
+                      // the default status code, and an external
+                      // target with an explicit permanent code.
+                      { path: '/tos', redirectTo: '/terms' },
+                      {
+                        path: '/external',
+                        redirectTo: 'https://example.com/landing',
+                        statusCode: 301,
+                      },
+                    ],
+                  },
+                  relationships: {
+                    'hostRoutingRules.0.instance': {
+                      links: { self: './index' },
+                    },
+                    'hostRoutingRules.1.instance': {
+                      links: { self: './pages/pricing' },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: '@cardstack/base/realm-config',
+                      name: 'RealmConfig',
+                    },
+                  },
+                },
+              }),
+            );
+          if (realmConfigResponse.status !== 204) {
+            throw new Error(
+              `Failed to write realm.json: ${realmConfigResponse.status} ${realmConfigResponse.text}`,
+            );
+          }
+
+          // Publish the source realm — triggers a full from-scratch reindex of
+          // the published copy.
+          publishedRealmURLString =
+            'http://routingtest.localhost:4444/routing-source/';
+          publishedRealmHost = new URL(publishedRealmURLString).host;
+          publishedRealmPath = new URL(publishedRealmURLString).pathname;
+
+          let publishResponse = await request
+            .post('/_publish-realm')
+            .set('Accept', 'application/vnd.api+json')
+            .set('Content-Type', 'application/json')
+            .set(
+              'Authorization',
+              `Bearer ${createRealmServerJWT(
+                { user: ownerUserId, sessionRoom: 'session-room-test' },
+                realmSecretSeed,
+              )}`,
+            )
+            .send(
+              JSON.stringify({
+                sourceRealmURL: sourceRealmUrlString,
+                publishedRealmURL: publishedRealmURLString,
+              }),
+            );
+          if (publishResponse.status !== 202) {
+            throw new Error(
+              `Failed to publish realm: ${publishResponse.status} ${publishResponse.text}`,
+            );
+          }
+
+          await testRealmServer.testingOnlyReconcile();
+          let readinessResponse = await request
+            .get(`${publishedRealmPath}_readiness-check`)
+            .set('Host', publishedRealmHost)
+            .set('Accept', 'application/vnd.api+json');
+          if (readinessResponse.status !== 200) {
+            throw new Error(
+              `Published realm not ready: ${readinessResponse.status} ${readinessResponse.text}`,
+            );
+          }
+          await settlePrerenderHtmlJobs(dbAdapter, publishedRealmURLString);
+        },
+        afterEach: async () => {
+          await closeServer(testRealmHttpServer);
+        },
+      });
+
+      test('bare routed sub-path serves HTML for a generic Accept header (regression: was 404)', async function (assert) {
+        let response = await request
+          .get(`${publishedRealmPath}pricing`)
+          .set('Host', publishedRealmHost)
+          .set('Accept', '*/*');
+
+        assert.strictEqual(
+          response.status,
+          200,
+          `bare /pricing serves for */* (was 404 via the module resolver). body=${response.text?.slice(
+            0,
+            300,
+          )}`,
+        );
+      });
+
+      test('bare routed sub-path serves HTML for text/html', async function (assert) {
+        let response = await request
+          .get(`${publishedRealmPath}pricing`)
+          .set('Host', publishedRealmHost)
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'bare /pricing serves HTML');
+      });
+
+      test('trailing-slash form 308-redirects to the canonical bare form', async function (assert) {
+        let response = await request
+          .get(`${publishedRealmPath}pricing/`)
+          .set('Host', publishedRealmHost)
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 308, '/pricing/ is redirected');
+        let location = response.headers['location'] ?? '';
+        assert.true(
+          location.endsWith(`${publishedRealmPath}pricing`),
+          `redirect strips the trailing slash (location=${location})`,
+        );
+        assert.false(
+          location.endsWith('/pricing/'),
+          `redirect target has no trailing slash (location=${location})`,
+        );
+      });
+
+      test('trailing-slash form is also canonicalized for a generic Accept header', async function (assert) {
+        let response = await request
+          .get(`${publishedRealmPath}pricing/`)
+          .set('Host', publishedRealmHost)
+          .set('Accept', '*/*');
+
+        assert.strictEqual(
+          response.status,
+          308,
+          '/pricing/ is redirected for */* too',
+        );
+      });
+
+      test('a redirect rule with a realm-relative target answers the default 302, resolved against the realm mount', async function (assert) {
+        let response = await request
+          .get(`${publishedRealmPath}tos`)
+          .set('Host', publishedRealmHost)
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(
+          response.status,
+          302,
+          'redirect rule answers its (default) status code',
+        );
+        assert.strictEqual(
+          response.headers['location'],
+          `http://${publishedRealmHost}${publishedRealmPath}terms`,
+          'relative target resolves against the realm mount pathname',
+        );
+      });
+
+      test('a redirect rule fires from the trailing-slash form in one hop', async function (assert) {
+        let response = await request
+          .get(`${publishedRealmPath}tos/`)
+          .set('Host', publishedRealmHost)
+          .set('Accept', 'text/html');
+
+        // The declared redirect wins over trailing-slash canonicalization —
+        // a 308 to /tos first would cost the client a second round-trip.
+        assert.strictEqual(
+          response.status,
+          302,
+          'trailing-slash form redirects straight to the target, not via a canonicalizing 308',
+        );
+        assert.strictEqual(
+          response.headers['location'],
+          `http://${publishedRealmHost}${publishedRealmPath}terms`,
+          'same target as the bare form',
+        );
+      });
+
+      test('a redirect rule carries the request query string over to a target without its own', async function (assert) {
+        let response = await request
+          .get(`${publishedRealmPath}tos?utm_source=newsletter`)
+          .set('Host', publishedRealmHost)
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 302);
+        assert.strictEqual(
+          response.headers['location'],
+          `http://${publishedRealmHost}${publishedRealmPath}terms?utm_source=newsletter`,
+          'query string is preserved on the redirect target',
+        );
+      });
+
+      test('a redirect rule does not hand the host app’s own query params to its target', async function (assert) {
+        // `sid` / `clientSecret` are password-reset tokens, and this
+        // target is a third-party site. The SPA drops the same list on
+        // its in-app navigation, so both answer the same URL.
+        let response = await request
+          .get(
+            `${publishedRealmPath}external?sid=secret-token&clientSecret=secret-secret&utm_source=newsletter`,
+          )
+          .set('Host', publishedRealmHost)
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 301);
+        assert.strictEqual(
+          response.headers['location'],
+          'https://example.com/landing?utm_source=newsletter',
+          'only the foreign param rides along',
+        );
+      });
+
+      test('a redirect rule drops a query string made up entirely of the host app’s params', async function (assert) {
+        let response = await request
+          .get(`${publishedRealmPath}tos?hostModeStack=%5B%5D`)
+          .set('Host', publishedRealmHost)
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 302);
+        assert.strictEqual(
+          response.headers['location'],
+          `http://${publishedRealmHost}${publishedRealmPath}terms`,
+          'no empty ? is appended when nothing survives filtering',
+        );
+      });
+
+      test('a redirect rule may target an external URL with an explicit status code', async function (assert) {
+        let response = await request
+          .get(`${publishedRealmPath}external`)
+          .set('Host', publishedRealmHost)
+          .set('Accept', '*/*');
+
+        assert.strictEqual(
+          response.status,
+          301,
+          'the authored status code is used',
+        );
+        assert.strictEqual(
+          response.headers['location'],
+          'https://example.com/landing',
+          'external target is emitted verbatim',
+        );
+      });
+
+      test('redirect rules are injected into the host config routing map', async function (assert) {
+        let response = await request
+          .get(`${publishedRealmPath}pricing`)
+          .set('Host', publishedRealmHost)
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200);
+        // The routing map rides the URL-encoded config meta tag; letters
+        // are not percent-encoded, so the discriminant field name is
+        // directly visible in the served HTML.
+        assert.true(
+          response.text.includes('redirectTo'),
+          'the injected hostRoutingMap carries the redirect rules',
+        );
+      });
+
+      test('a non-public realm does not disclose routes via a canonical redirect', async function (assert) {
+        // Drop the published realm's permissions so it is no longer publicly
+        // readable. `fetchRealmPermissions` reads this table uncached, so the
+        // next request sees the change immediately.
+        await dbAdapter.execute(
+          `DELETE FROM realm_user_permissions WHERE realm_url = '${publishedRealmURLString}'`,
+        );
+
+        let response = await request
+          .get(`${publishedRealmPath}pricing/`)
+          .set('Host', publishedRealmHost)
+          .set('Accept', 'text/html');
+
+        // The public-permission gate runs before the routing-map lookup, so a
+        // non-public realm falls through to the generic Boxel shell instead of
+        // emitting a route-specific 308 that would reveal the private route
+        // exists.
+        assert.notStrictEqual(
+          response.status,
+          308,
+          'no route-specific redirect is emitted for a non-public realm',
+        );
+        assert.strictEqual(
+          response.status,
+          200,
+          'serves the generic shell for a non-public realm',
+        );
+      });
+
+      test('a non-public realm does not disclose bare routes to a generic Accept header', async function (assert) {
+        await dbAdapter.execute(
+          `DELETE FROM realm_user_permissions WHERE realm_url = '${publishedRealmURLString}'`,
+        );
+
+        // The bare-path gate consults the routing map for */* requests; if it
+        // did so without checking public read, a real route would answer 200
+        // (generic shell) while a non-route 404s — enumerating private routes.
+        let routed = await request
+          .get(`${publishedRealmPath}pricing`) // a real rule
+          .set('Host', publishedRealmHost)
+          .set('Accept', '*/*');
+        let bogus = await request
+          .get(`${publishedRealmPath}not-a-route`) // no rule
+          .set('Host', publishedRealmHost)
+          .set('Accept', '*/*');
+
+        assert.strictEqual(
+          routed.status,
+          bogus.status,
+          `a routed and a non-routed bare path are indistinguishable on a non-public realm (routed=${routed.status}, bogus=${bogus.status})`,
         );
       });
     },

@@ -1,10 +1,10 @@
+import { array } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
-import { debounce } from '@ember/runloop';
+import { cancel, debounce } from '@ember/runloop';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 import { modifier } from 'ember-modifier';
@@ -20,22 +20,21 @@ import {
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { IconSearch } from '@cardstack/boxel-ui/icons';
 
-import {
-  type Filter,
-  type ResolvedCodeRef,
-  baseCardRef,
-  baseFieldRef,
-} from '@cardstack/runtime-common';
+import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 
 import type RealmServerService from '@cardstack/host/services/realm-server';
+import type SearchSheetStateService from '@cardstack/host/services/search-sheet-state';
+import { SEARCH_SHEET_BASE_FILTER } from '@cardstack/host/services/search-sheet-state';
+import type { SearchResultKind } from '@cardstack/host/utils/search/types';
 import {
   isURLSearchKey,
   resolveSearchKeyAsURL,
-} from '@cardstack/host/utils/card-search/url';
+} from '@cardstack/host/utils/search/url';
 
-import SearchPanel from '../card-search/panel';
+import SearchPanel from '../search/panel';
 
 import type StoreService from '../../services/store';
+import type { SortOption } from '../search/constants';
 
 export const SearchSheetModes = {
   Closed: 'closed',
@@ -59,7 +58,7 @@ interface Signature {
     onFocus: () => void;
     onBlur: () => void;
     onSearch: (term: string) => void;
-    onCardSelect: (cardId: string) => void;
+    onCardSelect: (cardId: string, kind?: SearchResultKind) => void;
     onInputInsertion?: (element: HTMLElement) => void;
     onFilterChange?: () => void;
   };
@@ -80,16 +79,32 @@ const repositionDropdownsOnTransitionEnd = modifier((element: Element) => {
     element.removeEventListener('transitionend', handler as EventListener);
 });
 
-const BASE_FILTER: Filter = {
-  any: [{ type: baseCardRef }, { type: baseFieldRef }],
-};
-
 export default class SearchSheet extends Component<Signature> {
-  @tracked private searchKey = '';
-  @tracked private initialSelectedTypes: ResolvedCodeRef[] | undefined;
-
   @service declare private realmServer: RealmServerService;
   @service declare private store: StoreService;
+  @service('search-sheet-state')
+  declare private searchSheetState: SearchSheetStateService;
+
+  // The sheet's search state is held in the session-scoped service so it
+  // survives the close/reopen that unmounts this component's subtree.
+  private get searchKey() {
+    return this.searchSheetState.searchKey;
+  }
+  private set searchKey(value: string) {
+    this.searchSheetState.searchKey = value;
+  }
+
+  private get initialSelectedTypes(): ResolvedCodeRef[] | undefined {
+    return this.searchSheetState.selectedTypes;
+  }
+
+  private get initialSelectedRealms(): URL[] {
+    return this.searchSheetState.selectedRealms;
+  }
+
+  private get initialActiveSort(): SortOption | undefined {
+    return this.searchSheetState.activeSort;
+  }
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
@@ -122,7 +137,7 @@ export default class SearchSheet extends Component<Signature> {
       mode == SearchSheetModes.SearchPrompt ||
       mode == SearchSheetModes.ChoosePrompt
     ) {
-      return 'Search for cards or enter card URL';
+      return 'Search for cards and files or enter card URL';
     }
     return 'Search for…';
   }
@@ -139,33 +154,59 @@ export default class SearchSheet extends Component<Signature> {
 
   @action
   private onBlur() {
+    // A plain close/blur keeps the search so reopening restores it; only an
+    // explicit Cancel (or Escape) resets.
     this.args.onBlur();
-    if (this.args.mode === SearchSheetModes.Closed) {
-      this.resetState();
-    }
   }
 
-  @action private handleCardSelect(selection: string | { realmURL: string }) {
+  @action private handleCardSelect(
+    selection: string | { realmURL: string },
+    kind?: SearchResultKind,
+  ) {
     if (typeof selection !== 'string') {
       return;
     }
-    this.resetState();
-    this.args.onCardSelect(selection);
+    // Selecting a result keeps the search, so reopening returns to it. `kind`
+    // carries the result's card/file classification so the consumer opens the
+    // right URL without re-deriving it from the id.
+    this.args.onCardSelect(selection, kind);
   }
 
   @action
   private doExternallyTriggeredSearch(term: string, typeRef?: ResolvedCodeRef) {
+    // A triggered search starts clean: leftover state from a previously
+    // persisted search (realm scope, sort, scroll offset, a pending debounce)
+    // must not silently narrow, position, or overwrite it. Reset everything,
+    // then apply the trigger's own term and type. Bumping the epoch remounts a
+    // `SearchPanel` that's already mounted (the sheet was open), so its
+    // init-once filter display re-reads the freshly-reset state instead of
+    // showing stale chips over the correctly-rescoped search.
+    this.resetState();
     this.searchKey = term;
-    this.initialSelectedTypes = typeRef ? [typeRef] : undefined;
+    this.searchSheetState.selectedTypes = typeRef ? [typeRef] : undefined;
+    this.searchSheetState.searchTriggerEpoch++;
   }
 
+  // The pending 300ms debounce handle, kept so Cancel/Escape can cancel it —
+  // otherwise a keystroke within 300ms of a reset re-persists the cancelled
+  // term and reopens the sheet.
+  private pendingSearchKeyDebounce: ReturnType<typeof debounce> | undefined;
+
   private resetState() {
-    this.searchKey = '';
-    this.initialSelectedTypes = undefined;
+    if (this.pendingSearchKeyDebounce) {
+      cancel(this.pendingSearchKeyDebounce);
+      this.pendingSearchKeyDebounce = undefined;
+    }
+    this.searchSheetState.resetState();
   }
 
   @action private debouncedSetSearchKey(searchKey: string) {
-    debounce(this, this.setSearchKey, searchKey, 300);
+    this.pendingSearchKeyDebounce = debounce(
+      this,
+      this.setSearchKey,
+      searchKey,
+      300,
+    );
   }
 
   @action
@@ -174,12 +215,32 @@ export default class SearchSheet extends Component<Signature> {
     this.args.onSearch?.(searchKey);
   }
 
-  @action private handleRealmChange(_selectedRealms: URL[]) {
+  @action private handleRealmChange(selectedRealms: URL[]) {
+    this.searchSheetState.selectedRealms = selectedRealms;
     this.args.onFilterChange?.();
   }
 
-  @action private handleTypeChange(_selectedTypes: ResolvedCodeRef[]) {
+  @action private handleTypeChange(selectedTypes: ResolvedCodeRef[]) {
+    this.searchSheetState.selectedTypes = selectedTypes;
     this.args.onFilterChange?.();
+  }
+
+  @action private handleSortChange(option: SortOption) {
+    // Unlike realm/type changes, no `onFilterChange` here: the sort control only
+    // exists in the results view, so there's never a prompt→results expansion to
+    // trigger — just record the choice for persistence.
+    this.searchSheetState.activeSort = option;
+  }
+
+  // The panel is a controlled consumer here: it renders the session-scoped
+  // service's view id / scroll offset and reports changes back through these,
+  // so both survive the sheet's close/reopen.
+  @action private handleViewIdChange(id: string) {
+    this.searchSheetState.activeViewId = id;
+  }
+
+  @action private handleScrollTopChange(scrollTop: number) {
+    this.searchSheetState.resultsScrollTop = scrollTop;
   }
 
   @action private onSearchInputKeyDown(e: Event) {
@@ -247,7 +308,7 @@ export default class SearchSheet extends Component<Signature> {
       {{repositionDropdownsOnTransitionEnd}}
       {{onClickOutside
         this.onBlur
-        exceptSelector='.add-card-to-neighbor-stack,.boxel-picker__dropdown,.picker-before-options-with-search,.picker-option-row,.search-sheet-header,.search-sheet-section-header,.variant-default'
+        exceptSelector='.add-card-to-neighbor-stack,.boxel-dropdown__content,.boxel-picker__dropdown,.boxel-select__dropdown,.picker-before-options-with-search,.picker-option-row,.search-sheet-header,.search-sheet-section-header'
       }}
     >
       {{#if (eq @mode 'closed')}}
@@ -262,39 +323,59 @@ export default class SearchSheet extends Component<Signature> {
           data-test-open-search-field
         />
       {{else}}
-        <SearchPanel
-          @searchKey={{this.searchKey}}
-          @baseFilter={{BASE_FILTER}}
-          @initialSelectedTypes={{this.initialSelectedTypes}}
-          @onRealmChange={{this.handleRealmChange}}
-          @onTypeChange={{this.handleTypeChange}}
-          as |Bar Content|
-        >
-          <Bar
-            class='search-sheet__search-input-group'
-            @placeholder={{this.placeholderText}}
-            @state={{this.inputValidationState}}
-            @bottomTreatment={{this.inputBottomTreatment}}
-            @onFocus={{@onFocus}}
-            @onInput={{this.debouncedSetSearchKey}}
-            @onKeyDown={{this.onSearchInputKeyDown}}
-            @onInputInsertion={{@onInputInsertion}}
-            @autocomplete='off'
-          />
-          <Content
-            class='search-sheet__content'
-            @isCompact={{this.isCompact}}
-            @handleSelect={{this.handleCardSelect}}
-          />
-          <div class='footer'>
-            <div class='buttons'>
-              <Button
-                {{on 'click' this.onCancel}}
-                data-test-search-sheet-cancel-button
-              >Cancel</Button>
+        {{! Keyed on the trigger epoch so an externally-triggered search (which
+            bumps it) remounts the panel — the only way its init-once filter
+            display picks up the freshly-reset state while the sheet is already
+            open. A normal reopen doesn't bump the epoch, so it reuses the
+            panel. }}
+        {{#each
+          (array this.searchSheetState.searchTriggerEpoch) key='@identity'
+          as |_epoch|
+        }}
+          <SearchPanel
+            @searchKey={{this.searchKey}}
+            @baseFilter={{SEARCH_SHEET_BASE_FILTER}}
+            @initialSelectedTypes={{this.initialSelectedTypes}}
+            @initialSelectedRealms={{this.initialSelectedRealms}}
+            @initialActiveSort={{this.initialActiveSort}}
+            @onRealmChange={{this.handleRealmChange}}
+            @onTypeChange={{this.handleTypeChange}}
+            @onSortChange={{this.handleSortChange}}
+            as |Bar Content|
+          >
+            <Bar
+              class='search-sheet__search-input-group'
+              @placeholder={{this.placeholderText}}
+              @state={{this.inputValidationState}}
+              @bottomTreatment={{this.inputBottomTreatment}}
+              @onFocus={{@onFocus}}
+              @onInput={{this.debouncedSetSearchKey}}
+              @onKeyDown={{this.onSearchInputKeyDown}}
+              @onInputInsertion={{@onInputInsertion}}
+              @autocomplete='off'
+            />
+            <Content
+              class='search-sheet__content'
+              @isCompact={{this.isCompact}}
+              @handleSelect={{this.handleCardSelect}}
+              @adorn={{true}}
+              @mainSearchResource={{this.searchSheetState.mainSearch}}
+              @viewId={{this.searchSheetState.activeViewId}}
+              @onViewIdChange={{this.handleViewIdChange}}
+              @pagination={{this.searchSheetState.pagination}}
+              @scrollTop={{this.searchSheetState.resultsScrollTop}}
+              @onScrollTopChange={{this.handleScrollTopChange}}
+            />
+            <div class='footer'>
+              <div class='buttons'>
+                <Button
+                  {{on 'click' this.onCancel}}
+                  data-test-search-sheet-cancel-button
+                >Cancel</Button>
+              </div>
             </div>
-          </div>
-        </SearchPanel>
+          </SearchPanel>
+        {{/each}}
       {{/if}}
     </div>
     <style scoped>
@@ -304,7 +385,7 @@ export default class SearchSheet extends Component<Signature> {
             var(--operator-mode-spacing)
         );
         --search-sheet-closed-width: var(--container-button-size);
-        --search-sheet-prompt-height: 8.75rem;
+        --search-sheet-prompt-height: 10.45rem;
       }
 
       .search-sheet {

@@ -1,16 +1,56 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename, join } from 'path';
 import { dirSync, type DirResult } from 'tmp';
-import { ensureDirSync, writeFileSync } from 'fs-extra';
+import fsExtra from 'fs-extra';
+const { ensureDirSync, writeFileSync } = fsExtra;
 import type { PgAdapter } from '@cardstack/postgres';
 import {
   asExpressions,
   insert,
+  insertPermissions,
   query,
+  param,
   PUBLISHED_DIRECTORY_NAME,
 } from '@cardstack/runtime-common';
-import { setupDB } from './helpers';
-import { runRegistryBackfill } from '../lib/realm-registry-backfill';
+import { setupDB } from './helpers/index.ts';
+import { runRegistryBackfill } from '../lib/realm-registry-backfill.ts';
+
+async function publicReadGranted(
+  dbAdapter: PgAdapter,
+  realmURL: string,
+): Promise<boolean> {
+  let rows = (await query(dbAdapter, [
+    `SELECT read FROM realm_user_permissions WHERE realm_url =`,
+    param(realmURL),
+    `AND username = '*'`,
+  ])) as Array<{ read: boolean }>;
+  return rows.length > 0 && rows[0].read === true;
+}
+
+interface UserPermissionRow {
+  username: string;
+  read: boolean;
+  write: boolean;
+  realm_owner: boolean;
+}
+
+async function userPermissionsAt(
+  dbAdapter: PgAdapter,
+  realmURL: string,
+): Promise<UserPermissionRow[]> {
+  let rows = (await query(dbAdapter, [
+    `SELECT username, read, write, realm_owner FROM realm_user_permissions WHERE realm_url =`,
+    param(realmURL),
+    `ORDER BY username`,
+  ])) as Array<Record<string, unknown>>;
+  return rows.map((r) => ({
+    username: r.username as string,
+    read: r.read as boolean,
+    write: r.write as boolean,
+    realm_owner: r.realm_owner as boolean,
+  }));
+}
 
 interface RegistryRow {
   url: string;
@@ -39,13 +79,33 @@ async function allRegistryRows(dbAdapter: PgAdapter): Promise<RegistryRow[]> {
 
 function seedRealmJson(realmDir: string, payload: Record<string, unknown>) {
   ensureDirSync(realmDir);
-  writeFileSync(
-    join(realmDir, '.realm.json'),
-    JSON.stringify(payload, null, 2),
-  );
+  // Seed the on-disk RealmConfig card the backfill uses as the marker
+  // for "this directory is a realm". The card shape only matters to the
+  // backfill insofar as the file exists — the payload is captured for
+  // any future assertion that wants to read it back.
+  let cardInfo =
+    typeof payload.name === 'string' ? { name: payload.name } : undefined;
+  let card = {
+    data: {
+      type: 'card',
+      attributes: {
+        ...(cardInfo ? { cardInfo } : {}),
+        ...Object.fromEntries(
+          Object.entries(payload).filter(([k]) => k !== 'name'),
+        ),
+      },
+      meta: {
+        adoptsFrom: {
+          module: '@cardstack/base/realm-config',
+          name: 'RealmConfig',
+        },
+      },
+    },
+  };
+  writeFileSync(join(realmDir, 'realm.json'), JSON.stringify(card, null, 2));
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('runRegistryBackfill', function (hooks) {
     let dbAdapter: PgAdapter;
     let dir: DirResult;
@@ -72,16 +132,14 @@ module(basename(__filename), function () {
         dbAdapter,
         realmsRootPath,
         serverURL,
-        bootstrapRealms: [
-          { diskPath: bootstrapPath, url: 'https://cardstack.com/base/' },
-        ],
+        bootstrapRealms: [{ diskPath: bootstrapPath, url: '@cardstack/base/' }],
       });
 
       const rows = (await allRegistryRows(dbAdapter)).filter(
         (r) => r.kind === 'bootstrap',
       );
       assert.strictEqual(rows.length, 1, 'one bootstrap row written');
-      assert.strictEqual(rows[0].url, 'https://cardstack.com/base/');
+      assert.strictEqual(rows[0].url, '@cardstack/base/');
       assert.true(rows[0].pinned, 'pinned=true');
       assert.strictEqual(
         rows[0].owner_username,
@@ -101,7 +159,7 @@ module(basename(__filename), function () {
       seedRealmJson(join(realmsRootPath, 'luke', 'other-realm'), {
         name: 'other-realm',
       });
-      // A directory without .realm.json should be skipped:
+      // A directory without realm.json should be skipped:
       ensureDirSync(join(realmsRootPath, 'luke', 'not-a-realm'));
 
       await runRegistryBackfill({
@@ -132,7 +190,7 @@ module(basename(__filename), function () {
 
     test('skips the _published directory during source-realm scan', async function (assert) {
       seedRealmJson(join(realmsRootPath, 'luke', 'src'), { name: 'src' });
-      // Create a _published/<uuid>/.realm.json — should NOT be picked up as
+      // Create a _published/<uuid>/realm.json — should NOT be picked up as
       // a source realm. (Published rows are written by the publish handler
       // directly into realm_registry; the boot-time scan does not recover
       // them from disk.)
@@ -170,9 +228,7 @@ module(basename(__filename), function () {
         dbAdapter,
         realmsRootPath,
         serverURL,
-        bootstrapRealms: [
-          { diskPath: bootstrapPath, url: 'https://cardstack.com/base/' },
-        ],
+        bootstrapRealms: [{ diskPath: bootstrapPath, url: '@cardstack/base/' }],
       };
       await runRegistryBackfill(opts);
       const firstRun = await allRegistryRows(dbAdapter);
@@ -198,9 +254,7 @@ module(basename(__filename), function () {
         dbAdapter,
         realmsRootPath,
         serverURL,
-        bootstrapRealms: [
-          { diskPath: pathA, url: 'https://cardstack.com/base/' },
-        ],
+        bootstrapRealms: [{ diskPath: pathA, url: '@cardstack/base/' }],
       });
       const firstDiskId = (await allRegistryRows(dbAdapter)).find(
         (r) => r.kind === 'bootstrap',
@@ -211,9 +265,7 @@ module(basename(__filename), function () {
         dbAdapter,
         realmsRootPath,
         serverURL,
-        bootstrapRealms: [
-          { diskPath: pathB, url: 'https://cardstack.com/base/' },
-        ],
+        bootstrapRealms: [{ diskPath: pathB, url: '@cardstack/base/' }],
       });
       const secondDiskId = (await allRegistryRows(dbAdapter)).find(
         (r) => r.kind === 'bootstrap',
@@ -222,6 +274,203 @@ module(basename(__filename), function () {
         secondDiskId.endsWith('/base-b'),
         'second disk_id is base-b (rehomed)',
       );
+    });
+
+    module('env-mode permission parity', function (envHooks) {
+      let priorBoxelEnvironment: string | undefined;
+      // Use a synthetic `/probe-realm/` pathname for tests that deepEqual
+      // the full row set at the env-mode URL. The skills + base + catalog
+      // migrations already seed standard-mode rows the template DB carries
+      // into every test, so a test that uses `/skills/` would silently
+      // pick those rows up alongside its own and yield an "actual" that
+      // looks reasonable but isn't what the test set up. The publicReadGranted
+      // tests below stay on `/skills/` because they only assert one specific
+      // property and aren't affected by extra rows.
+      const envSkillsURL = 'https://realm-server.test-env.localhost/skills/';
+      const envPrivateURL = 'https://realm-server.test-env.localhost/private/';
+      const stdSkillsURL = 'http://localhost:4201/skills/';
+      const envProbeURL =
+        'https://realm-server.test-env.localhost/probe-realm/';
+      const stdProbeURL = 'http://localhost:4201/probe-realm/';
+      const altStdProbeURL = 'http://localhost:4205/probe-realm/';
+
+      envHooks.beforeEach(function () {
+        priorBoxelEnvironment = process.env.BOXEL_ENVIRONMENT;
+        process.env.BOXEL_ENVIRONMENT = 'test-env';
+      });
+      envHooks.afterEach(function () {
+        if (priorBoxelEnvironment === undefined) {
+          delete process.env.BOXEL_ENVIRONMENT;
+        } else {
+          process.env.BOXEL_ENVIRONMENT = priorBoxelEnvironment;
+        }
+      });
+
+      test('grants public read at the env-mode URL for an already-public path', async function (assert) {
+        // Stand in for the migration seed that makes the standard-mode skills
+        // realm public.
+        await insertPermissions(dbAdapter, new URL(stdSkillsURL), {
+          '*': ['read'],
+        });
+        const bootstrapPath = join(dir.name, 'skills');
+        seedRealmJson(bootstrapPath, { name: 'skills' });
+
+        await runRegistryBackfill({
+          dbAdapter,
+          realmsRootPath,
+          serverURL,
+          bootstrapRealms: [{ diskPath: bootstrapPath, url: envSkillsURL }],
+        });
+
+        assert.true(
+          await publicReadGranted(dbAdapter, envSkillsURL),
+          'env-mode skills realm is now public-readable',
+        );
+      });
+
+      test('does not promote a realm whose path is not already public', async function (assert) {
+        await insertPermissions(dbAdapter, new URL(stdSkillsURL), {
+          '*': ['read'],
+        });
+        const bootstrapPath = join(dir.name, 'private');
+        seedRealmJson(bootstrapPath, { name: 'private' });
+
+        await runRegistryBackfill({
+          dbAdapter,
+          realmsRootPath,
+          serverURL,
+          bootstrapRealms: [{ diskPath: bootstrapPath, url: envPrivateURL }],
+        });
+
+        assert.false(
+          await publicReadGranted(dbAdapter, envPrivateURL),
+          'a path with no existing public grant stays private',
+        );
+      });
+
+      test('is a no-op when BOXEL_ENVIRONMENT is unset', async function (assert) {
+        delete process.env.BOXEL_ENVIRONMENT;
+        await insertPermissions(dbAdapter, new URL(stdSkillsURL), {
+          '*': ['read'],
+        });
+        const bootstrapPath = join(dir.name, 'skills');
+        seedRealmJson(bootstrapPath, { name: 'skills' });
+
+        await runRegistryBackfill({
+          dbAdapter,
+          realmsRootPath,
+          serverURL,
+          bootstrapRealms: [{ diskPath: bootstrapPath, url: envSkillsURL }],
+        });
+
+        assert.false(
+          await publicReadGranted(dbAdapter, envSkillsURL),
+          'standard mode does not seed env-mode parity rows',
+        );
+      });
+
+      test('mirrors realm-owner, write, and named-user rows from the matching standard-mode URL', async function (assert) {
+        // Stand in for the migration seed: realm-owner + read + write for the
+        // realm bot, read+write for a writer, and public read.
+        await insertPermissions(dbAdapter, new URL(stdProbeURL), {
+          '@probe_realm:localhost': ['read', 'write', 'realm-owner'],
+          '@probe_writer:localhost': ['read', 'write'],
+          '*': ['read'],
+        });
+        const bootstrapPath = join(dir.name, 'probe-realm');
+        seedRealmJson(bootstrapPath, { name: 'probe-realm' });
+
+        await runRegistryBackfill({
+          dbAdapter,
+          realmsRootPath,
+          serverURL,
+          bootstrapRealms: [{ diskPath: bootstrapPath, url: envProbeURL }],
+        });
+
+        assert.deepEqual(
+          await userPermissionsAt(dbAdapter, envProbeURL),
+          [
+            {
+              username: '*',
+              read: true,
+              write: false,
+              realm_owner: false,
+            },
+            {
+              username: '@probe_realm:localhost',
+              read: true,
+              write: true,
+              realm_owner: true,
+            },
+            {
+              username: '@probe_writer:localhost',
+              read: true,
+              write: true,
+              realm_owner: false,
+            },
+          ],
+          'env-mode URL gets the full standard-mode permission set',
+        );
+      });
+
+      test('coalesces multiple standard-mode source URLs sharing the bootstrap path', async function (assert) {
+        // Some migrations seed BOTH localhost:4201 and localhost:4205 for
+        // the same realm with the same grants. Either alone (or both) must
+        // produce a single env-mode row carrying the union.
+        await insertPermissions(dbAdapter, new URL(stdProbeURL), {
+          '@probe_realm:localhost': ['read', 'write', 'realm-owner'],
+        });
+        await insertPermissions(dbAdapter, new URL(altStdProbeURL), {
+          '@probe_realm:localhost': ['read', 'write', 'realm-owner'],
+        });
+        const bootstrapPath = join(dir.name, 'probe-realm');
+        seedRealmJson(bootstrapPath, { name: 'probe-realm' });
+
+        await runRegistryBackfill({
+          dbAdapter,
+          realmsRootPath,
+          serverURL,
+          bootstrapRealms: [{ diskPath: bootstrapPath, url: envProbeURL }],
+        });
+
+        assert.deepEqual(await userPermissionsAt(dbAdapter, envProbeURL), [
+          {
+            username: '@probe_realm:localhost',
+            read: true,
+            write: true,
+            realm_owner: true,
+          },
+        ]);
+      });
+
+      test('preserves a custom env-mode permission row across reruns', async function (assert) {
+        await insertPermissions(dbAdapter, new URL(stdProbeURL), {
+          '@probe_realm:localhost': ['read', 'write', 'realm-owner'],
+        });
+        // Operator pre-seeded a downgraded permission for the same user at
+        // the env URL — backfill must not clobber it.
+        await insertPermissions(dbAdapter, new URL(envProbeURL), {
+          '@probe_realm:localhost': ['read'],
+        });
+        const bootstrapPath = join(dir.name, 'probe-realm');
+        seedRealmJson(bootstrapPath, { name: 'probe-realm' });
+
+        await runRegistryBackfill({
+          dbAdapter,
+          realmsRootPath,
+          serverURL,
+          bootstrapRealms: [{ diskPath: bootstrapPath, url: envProbeURL }],
+        });
+
+        assert.deepEqual(await userPermissionsAt(dbAdapter, envProbeURL), [
+          {
+            username: '@probe_realm:localhost',
+            read: true,
+            write: false,
+            realm_owner: false,
+          },
+        ]);
+      });
     });
 
     test('bootstrap upsert does not clobber a non-bootstrap row with a colliding URL', async function (assert) {

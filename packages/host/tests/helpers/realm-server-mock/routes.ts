@@ -2,23 +2,20 @@ import {
   buildSearchErrorResponse,
   baseRealm,
   ensureTrailingSlash,
-  parsePrerenderedSearchRequestFromPayload,
   parseRealmsFromPayload,
-  parseSearchQueryFromPayload,
+  parseSearchEntryQueryFromPayload,
   parseSearchRequestPayload,
   SearchRequestError,
-  searchPrerenderedRealms,
-  searchRealms,
+  sanitizeLoggingCorrelationId,
+  searchEntryRealms,
   SupportedMimeType,
+  X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
   type RealmInfo,
-  type Query,
+  type EntryCollectionDocument,
+  type SearchEntryQuery,
 } from '@cardstack/runtime-common';
 
-import {
-  makeCardTypeSummaryDoc,
-  type LinkableCollectionDocument,
-  type PrerenderedCardCollectionDocument,
-} from '@cardstack/runtime-common/document-types';
+import { makeCardTypeSummaryDoc } from '@cardstack/runtime-common/document-types';
 
 import ENV from '@cardstack/host/config/environment';
 
@@ -50,31 +47,13 @@ export function resetCatalogRealmURL() {
   catalogRealmURLOverrides = [];
 }
 
-type SearchableRealm = {
-  url?: string;
-  search: (query: Query) => Promise<LinkableCollectionDocument>;
-  searchPrerendered: (
-    query: Query,
-    opts: Pick<
-      ReturnType<typeof parsePrerenderedSearchRequestFromPayload>,
-      'htmlFormat' | 'cardUrls' | 'renderType'
-    >,
-  ) => Promise<PrerenderedCardCollectionDocument>;
-};
-
-const remoteRealmCache = new Map<string, SearchableRealm>();
-
-export function clearRemoteRealmCache() {
-  remoteRealmCache.clear();
-}
-
 const realmServerRoutes = new Map<string, RealmServerMockRoute>();
 
 function normalizeRoutePath(path: string): string {
   return path.startsWith('/') ? path : `/${path}`;
 }
 
-function registerRealmServerRoute(route: RealmServerMockRoute) {
+export function registerRealmServerRoute(route: RealmServerMockRoute) {
   realmServerRoutes.set(normalizeRoutePath(route.path), route);
 }
 
@@ -90,6 +69,82 @@ export function registerDefaultRoutes() {
   registerTypesRoutes();
   registerCatalogRoutes();
   registerAuthRoutes();
+  registerArchiveRoutes();
+  registerPublishRoutes();
+}
+
+// The test environment points `ENV.realmServerURL` at the fake `http://test-realm`
+// host (config/environment.js), so every realm-server call a test makes through
+// the network service lands here. An endpoint with no route escapes to the real
+// network and fails, which is harmless — nothing asserts on these — but it
+// accounted for 43 failed fetches per CI run, and that noise is what error
+// triage has to read past.
+//
+// These answer only the background calls nobody asserted on. A test that cares
+// about one of these endpoints stubs the service method instead (see
+// `stubAllocateUnlistedPath` in acceptance/host-submode-test.gts), and a stub
+// takes precedence over any of this. Anything other than the method the client
+// actually uses returns null, so it falls through rather than being answered
+// with a fabricated result.
+//
+// Only requests that go through the network service can be answered here, since
+// that is where this mock is mounted (see ensureRealmServerMockState). Notably
+// that excludes `_client-telemetry`: client-telemetry.ts flushes through
+// `globalThis.fetch` deliberately, so a route for it would never be consulted —
+// its 9 escapes per run belong to tests that opt into telemetry under
+// `isTesting()`, and the fix belongs in that opt-in, not here.
+function registerPublishRoutes() {
+  registerRealmServerRoute({
+    path: '/_boxel-claimed-domains',
+    handler: async (req) => {
+      if (req.method !== 'GET') {
+        return null;
+      }
+      // 404 is the realm server's "nothing claimed for this realm" answer,
+      // which `fetchBoxelClaimedDomain` maps to null.
+      return new Response(null, { status: 404 });
+    },
+  });
+
+  registerRealmServerRoute({
+    path: '/_unlisted-realm-path',
+    handler: async (req) => {
+      if (req.method !== 'POST') {
+        return null;
+      }
+      let sourceRealmURL = '';
+      try {
+        ({ sourceRealmURL } = (await req.clone().json()) as {
+          sourceRealmURL: string;
+        });
+      } catch {
+        // A malformed body is the caller's business, not this mock's; answer
+        // with an empty source rather than throwing inside the handler.
+      }
+      return new Response(
+        JSON.stringify({
+          data: {
+            type: 'unlisted-realm-path',
+            attributes: {
+              sourceRealmURL,
+              slug: unlistedSlugFor(sourceRealmURL),
+            },
+          },
+        }),
+        { status: 200, headers: { 'content-type': SupportedMimeType.JSONAPI } },
+      );
+    },
+  });
+}
+
+// The real slug is server-issued and opaque; this only has to be stable, since
+// a test asserting on a particular slug stubs `allocateUnlistedPath`.
+function unlistedSlugFor(sourceRealmURL: string): string {
+  let slug = sourceRealmURL
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return `unlisted-${slug || 'realm'}`;
 }
 
 function registerSearchRoutes() {
@@ -108,46 +163,9 @@ function registerSearchRoutes() {
         throw e;
       }
 
-      let cardsQuery;
-      try {
-        cardsQuery = parseSearchQueryFromPayload(payload);
-      } catch (e) {
-        if (e instanceof SearchRequestError) {
-          return buildSearchErrorResponse(e.message);
-        }
-        throw e;
-      }
-
-      let combined = await searchRealms(
-        realmList.map((realmURL) => getSearchableRealmForURL(realmURL)),
-        cardsQuery,
-      );
-
-      return new Response(JSON.stringify(combined), {
-        status: 200,
-        headers: { 'content-type': SupportedMimeType.CardJson },
-      });
-    },
-  });
-
-  registerRealmServerRoute({
-    path: '/_federated-search-prerendered',
-    handler: async (req, _url) => {
-      let realmList: string[];
-      let payload: unknown;
-      try {
-        payload = await parseSearchRequestPayload(req);
-        realmList = parseRealmsFromPayload(payload);
-      } catch (e) {
-        if (e instanceof SearchRequestError) {
-          return buildSearchErrorResponse(e.message);
-        }
-        throw e;
-      }
-
       let parsed;
       try {
-        parsed = parsePrerenderedSearchRequestFromPayload(payload);
+        parsed = parseSearchEntryQueryFromPayload(payload);
       } catch (e) {
         if (e instanceof SearchRequestError) {
           return buildSearchErrorResponse(e.message);
@@ -155,14 +173,19 @@ function registerSearchRoutes() {
         throw e;
       }
 
-      let combined = await searchPrerenderedRealms(
-        realmList.map((realmURL) => getSearchableRealmForURL(realmURL)),
-        parsed.cardsQuery,
-        {
-          htmlFormat: parsed.htmlFormat,
-          cardUrls: parsed.cardUrls,
-          renderType: parsed.renderType,
-        },
+      // Mirror the realm-server's `handle-search`: read the client's
+      // correlation id off the request and thread it into searchEntryRealms,
+      // so the real `realm:search-timing` line is emitted (and observable by
+      // host integration tests) keyed by the id the client minted.
+      let loggingCorrelationId = sanitizeLoggingCorrelationId(
+        req.headers.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER),
+      );
+      let combined = await searchEntryRealms(
+        realmList.map((realmURL) =>
+          getSearchEntrySearchableRealmForURL(realmURL, payload),
+        ),
+        parsed,
+        loggingCorrelationId ? { loggingCorrelationId } : undefined,
       );
 
       return new Response(JSON.stringify(combined), {
@@ -353,9 +376,17 @@ function registerAuthRoutes() {
   registerRealmServerRoute({
     path: '/_realm-auth',
     handler: async (_req, _url, state: RealmServerMockState) => {
+      if (state.failRealmAuth) {
+        return new Response('realm server unreachable', { status: 503 });
+      }
       let realmServerURL = ensureTrailingSlash(_url.origin);
       const authTokens: Record<string, string> = {};
       for (let [realmURL, permissions] of state.realmPermissions.entries()) {
+        // Archived realms are omitted from enumeration, matching the real
+        // `_realm-auth` so the active workspace list excludes them.
+        if (state.archivedRealms.has(realmURL)) {
+          continue;
+        }
         if (state.ensureSessionRoom) {
           await state.ensureSessionRoom(realmURL, TEST_MATRIX_USER);
         }
@@ -456,25 +487,143 @@ function registerAuthRoutes() {
   });
 }
 
-function getSearchableRealmForURL(
+function registerArchiveRoutes() {
+  registerRealmServerRoute({
+    path: '/_archive-realm',
+    handler: (req, _url, state) => handleArchiveToggle(req, state, true),
+  });
+  registerRealmServerRoute({
+    path: '/_unarchive-realm',
+    handler: (req, _url, state) => handleArchiveToggle(req, state, false),
+  });
+  registerRealmServerRoute({
+    path: '/_archived-realms',
+    handler: async (_req, _url, state: RealmServerMockState) => {
+      let data: {
+        type: 'realm';
+        id: string;
+        attributes: {
+          archivedAt: string;
+          name: string;
+          iconURL: string | null;
+          backgroundURL: string | null;
+        };
+      }[] = [];
+      for (let [realmURL, { archivedAt }] of state.archivedRealms.entries()) {
+        // The endpoint is owner-scoped server-side; mirror that by surfacing
+        // only realms the caller owns.
+        let permissions = state.realmPermissions.get(realmURL);
+        if (!permissions?.includes('realm-owner')) {
+          continue;
+        }
+        let info = await getRealmInfoForURL(realmURL);
+        data.push({
+          type: 'realm',
+          id: realmURL,
+          attributes: {
+            archivedAt,
+            name: info?.name ?? realmURL,
+            iconURL: info?.iconURL ?? null,
+            backgroundURL: info?.backgroundURL ?? null,
+          },
+        });
+      }
+      // Order most-recently-archived first, breaking ties by url, matching
+      // fetchArchivedRealmsForOwner's `archived_at DESC, url ASC`.
+      data.sort((a, b) => {
+        if (a.attributes.archivedAt !== b.attributes.archivedAt) {
+          return a.attributes.archivedAt < b.attributes.archivedAt ? 1 : -1;
+        }
+        return a.id.localeCompare(b.id);
+      });
+      return new Response(JSON.stringify({ data }), {
+        status: 200,
+        headers: { 'content-type': SupportedMimeType.JSONAPI },
+      });
+    },
+  });
+}
+
+async function handleArchiveToggle(
+  req: Request,
+  state: RealmServerMockState,
+  archive: boolean,
+): Promise<Response> {
+  let body = (await req.json()) as { data?: { id?: string; type?: string } };
+  let realmURL = body.data?.id;
+  if (!realmURL || body.data?.type !== 'realm') {
+    return new Response(
+      JSON.stringify({ errors: ['Request body must include a realm id'] }),
+      { status: 400, headers: { 'content-type': SupportedMimeType.JSONAPI } },
+    );
+  }
+
+  let normalizedRealmURL = ensureTrailingSlash(realmURL);
+  let permissions = state.realmPermissions.get(normalizedRealmURL);
+  if (!permissions?.includes('realm-owner')) {
+    return new Response(JSON.stringify({ errors: ['Forbidden'] }), {
+      status: 403,
+      headers: { 'content-type': SupportedMimeType.JSONAPI },
+    });
+  }
+
+  if (archive) {
+    state.archivedRealms.set(normalizedRealmURL, {
+      archivedAt: new Date().toISOString(),
+    });
+  } else {
+    state.archivedRealms.delete(normalizedRealmURL);
+  }
+
+  return new Response(
+    JSON.stringify({
+      data: {
+        type: 'realm',
+        id: normalizedRealmURL,
+        attributes: { archived: archive },
+      },
+    }),
+    { status: 200, headers: { 'content-type': SupportedMimeType.JSONAPI } },
+  );
+}
+
+// The entry searchable-realm resolver. In-process registry
+// realms expose `searchEntries` directly; a live remote realm (base, skills,
+// catalog on localhost:4201) is reached by passing the original wire payload
+// through to its per-realm `_search` endpoint — the parsed query the
+// fan-out hands us is the server's internal form and has no wire spelling,
+// so the passthrough closes over the raw payload instead.
+function getSearchEntrySearchableRealmForURL(
   realmURL: string,
-): SearchableRealm | undefined {
+  rawPayload: unknown,
+):
+  | {
+      url?: string;
+      searchEntries: (
+        searchEntryQuery: SearchEntryQuery,
+      ) => Promise<EntryCollectionDocument>;
+    }
+  | undefined {
   let registry = getTestRealmRegistry();
   let registryEntry = registry.get(ensureTrailingSlash(realmURL));
   if (registryEntry?.realm) {
     return registryEntry.realm;
   }
 
-  let cached = remoteRealmCache.get(realmURL);
-  if (cached) {
-    return cached;
-  }
-
   let resolvedRealmURL = resolveRemoteRealmURL(realmURL);
-  let remoteRealm: SearchableRealm = {
+  if (isInProcessRealmURL(resolvedRealmURL)) {
+    // In-process realm not in the registry: there is no real server to
+    // search, so treat it as unavailable. searchEntryRealms() drops undefined
+    // entries.
+    return undefined;
+  }
+  return {
     url: resolvedRealmURL,
-    // pass thru for live realms on localhost:4201 (base, skills, catalog)
-    async search(query: Query) {
+    async searchEntries(_searchEntryQuery: SearchEntryQuery) {
+      let { realms: _realms, ...wireQuery } = rawPayload as Record<
+        string,
+        unknown
+      >;
       let url = new URL('_search', resolvedRealmURL);
       let response = await globalThis.fetch(url.href, {
         method: 'QUERY',
@@ -482,7 +631,7 @@ function getSearchableRealmForURL(
           Accept: SupportedMimeType.CardJson,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(query),
+        body: JSON.stringify(wireQuery),
       });
       if (!response.ok) {
         let responseText = await response.text();
@@ -490,35 +639,9 @@ function getSearchableRealmForURL(
           `Remote realm search failed for ${resolvedRealmURL}: ${response.status} ${responseText}`,
         );
       }
-      return (await response.json()) as LinkableCollectionDocument;
-    },
-    async searchPrerendered(query: Query, opts) {
-      let url = new URL('_search-prerendered', resolvedRealmURL);
-      let response = await globalThis.fetch(url.href, {
-        method: 'QUERY',
-        headers: {
-          Accept: SupportedMimeType.CardJson,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...query,
-          prerenderedHtmlFormat: opts.htmlFormat,
-          cardUrls: opts.cardUrls,
-          renderType: opts.renderType,
-        }),
-      });
-      if (!response.ok) {
-        let responseText = await response.text();
-        throw new Error(
-          `Remote realm prerendered search failed for ${resolvedRealmURL}: ${response.status} ${responseText}`,
-        );
-      }
-      return (await response.json()) as PrerenderedCardCollectionDocument;
+      return (await response.json()) as EntryCollectionDocument;
     },
   };
-
-  remoteRealmCache.set(realmURL, remoteRealm);
-  return remoteRealm;
 }
 
 async function getRealmInfoForURL(realmURL: string): Promise<RealmInfo | null> {
@@ -542,6 +665,13 @@ async function getRealmInfoForURL(realmURL: string): Promise<RealmInfo | null> {
   }
 
   let resolvedRealmURL = resolveRemoteRealmURL(realmURL);
+  if (isInProcessRealmURL(resolvedRealmURL)) {
+    // In-process realm that isn't (yet) in the registry — e.g. its setup
+    // hasn't run, or a prior test's destroyed-owner entry was just evicted.
+    // There is no real server to fall back to, so report it as unavailable
+    // rather than fetching a non-existent host.
+    return null;
+  }
   try {
     let response = await globalThis.fetch(`${resolvedRealmURL}_info`, {
       method: 'QUERY',
@@ -561,12 +691,26 @@ async function readRealmConfigFromAdapter(
   adapter: TestRealmAdapter,
 ): Promise<Record<string, unknown> | null> {
   await adapter.ready;
-  let fileRef = await adapter.openFile('.realm.json');
+  let fileRef = await adapter.openFile('realm.json');
   if (!fileRef || typeof fileRef.content !== 'string') {
     return null;
   }
   try {
-    return JSON.parse(fileRef.content) as Record<string, unknown>;
+    let card = JSON.parse(fileRef.content) as {
+      data?: { attributes?: Record<string, unknown> };
+    };
+    let attrs = card?.data?.attributes ?? {};
+    // Flatten the card shape into the legacy sidecar key-set so the
+    // overrides applier doesn't need to know about cardInfo. `name`
+    // lives under cardInfo on the card (matching the CardDef slot),
+    // every other migrated key sits on attributes directly.
+    let cardInfo = (attrs as { cardInfo?: { name?: unknown } }).cardInfo;
+    return {
+      ...attrs,
+      ...(cardInfo && typeof cardInfo.name === 'string'
+        ? { name: cardInfo.name }
+        : {}),
+    } as Record<string, unknown>;
   } catch (error) {
     console.warn(
       `[realm-server-mock] _info invalid realm config ${JSON.stringify({
@@ -591,11 +735,6 @@ function applyRealmConfigOverrides(
     showAsCatalog:
       (realmConfig.showAsCatalog as boolean | null | undefined) ??
       info.showAsCatalog,
-    interactHome:
-      (realmConfig.interactHome as string | null | undefined) ??
-      info.interactHome,
-    hostHome:
-      (realmConfig.hostHome as string | null | undefined) ?? info.hostHome,
     realmUserId:
       (realmConfig.realmUserId as string | null | undefined) ??
       info.realmUserId,
@@ -614,4 +753,21 @@ function resolveRemoteRealmURL(realmURL: string): string {
     return ensureTrailingSlash(ENV.resolvedBaseRealmURL);
   }
   return normalizedRealmURL;
+}
+
+// The realm server is mocked at ENV.realmServerURL (http://test-realm); realms
+// under that origin are served in-process via the test-realm registry and have
+// no listener on the real network. Only realms that resolve to a genuinely
+// served origin — the base and skills realms on localhost:4201 — can be reached
+// with a real fetch. A `globalThis.fetch` against an in-process realm always
+// rejects with `TypeError: Failed to fetch`; besides the noise, that rejection
+// can escape as an uncaught error and red an unrelated sibling test.
+function isInProcessRealmURL(resolvedRealmURL: string): boolean {
+  try {
+    return (
+      new URL(resolvedRealmURL).origin === new URL(ENV.realmServerURL).origin
+    );
+  } catch {
+    return false;
+  }
 }

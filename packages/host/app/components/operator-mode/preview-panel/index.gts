@@ -32,7 +32,10 @@ import {
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
-import { CardContextName } from '@cardstack/runtime-common';
+import {
+  CardContextName,
+  CardCrudFunctionsContextName,
+} from '@cardstack/runtime-common';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
 import Overlays from '@cardstack/host/components/operator-mode/overlays';
@@ -40,24 +43,25 @@ import Overlays from '@cardstack/host/components/operator-mode/overlays';
 import ElementTracker, {
   type RenderedCardForOverlayActions,
 } from '@cardstack/host/resources/element-tracker';
-import type CommandService from '@cardstack/host/services/command-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import type RealmService from '@cardstack/host/services/realm';
-
-import type {
-  BaseDef,
-  CardContext,
-  CardDef,
-  Format,
-  ViewCardFn,
-} from 'https://cardstack.com/base/card-api';
+import type ToolService from '@cardstack/host/services/tool-service';
 
 import FormatChooser from '../code-submode/format-chooser';
 
 import FittedFormatGallery from './fitted-format-gallery';
 import MarkdownPreview from './markdown-preview';
 import MetadataPanel from './metadata-panel';
+
+import type {
+  BaseDef,
+  CardContext,
+  CardCrudFunctions,
+  CardDef,
+  Format,
+  ViewCardFn,
+} from '@cardstack/base/card-api';
 
 interface Signature {
   Element: HTMLElement;
@@ -71,7 +75,7 @@ interface Signature {
 
 export default class PreviewPanel extends Component<Signature> {
   @consume(CardContextName) declare private cardContext: CardContext;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
 
@@ -152,7 +156,7 @@ export default class PreviewPanel extends Component<Signature> {
         canEdit: this.cardId ? this.realm.canWrite(this.cardId) : false,
         cardCrudFunctions: {},
         menuContext: 'code-mode-preview',
-        commandContext: this.commandService.commandContext,
+        toolContext: this.toolService.toolContext,
       }),
     );
   }
@@ -209,6 +213,26 @@ export default class PreviewPanel extends Component<Signature> {
       ...this.cardContext,
       cardComponentModifier: this.cardTracker.trackElement,
     };
+  }
+
+  /**
+   * Card templates receive their crud functions through this context rather
+   * than through args (see `field-component.gts`), and the two providers of
+   * it are the interact-mode stack and host mode. Without one here, a button
+   * inside a previewed card that calls `viewCard` — the Workspace card's
+   * pinned tiles, a Library tile, any card that navigates — silently does
+   * nothing, because `viewCard` is undefined and every call site guards with
+   * `?.`. The pane's own `@viewCard` only ever reached the hover overlays.
+   *
+   * Only `viewCard` is provided: it navigates the code path, which is what
+   * the overlay buttons in this same pane already do. The rest stay
+   * undefined, so an in-card create/edit/delete button remains inert here
+   * instead of doing something a code-mode preview cannot honor.
+   */
+  @provide(CardCrudFunctionsContextName)
+  // @ts-ignore context is used via provider
+  private get cardCrudFunctions(): Partial<CardCrudFunctions> {
+    return { viewCard: this.args.viewCard };
   }
 
   private get renderedCardsForOverlayActions():

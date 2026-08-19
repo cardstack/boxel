@@ -13,14 +13,18 @@
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 
-import type { ValidationStepResult } from '../factory-agent';
-import { deriveIssueSlug } from '../factory-agent';
-import { executeTestRunFromRealm } from '../test-run-execution';
-import type { ExecuteTestRunOptions, TestRunHandle } from '../test-run-types';
-import { logger } from '../logger';
-import { readCard } from '../workspace-fs';
+import type { ValidationStepResult } from '../factory-agent/index.ts';
+import { deriveIssueSlug } from '../factory-agent/index.ts';
+import { executeTestRunFromRealm } from '../test-run-execution.ts';
+import type {
+  ExecuteTestRunOptions,
+  TestRunHandle,
+} from '../test-run-types.ts';
+import { logger } from '../logger.ts';
+import { readCard } from '../workspace-fs.ts';
 
-import type { ValidationStepRunner } from './validation-pipeline';
+import type { ValidationStepRunner } from './validation-pipeline.ts';
+import type { ValidationRunCache } from '../validation-run-cache.ts';
 
 let log = logger('test-validation-step');
 
@@ -31,6 +35,8 @@ let log = logger('test-validation-step');
 export interface TestValidationStepConfig {
   client: BoxelCLIClient;
   realmServerUrl: string;
+  /** Memoizes the engine run per workspace fingerprint — see ValidationRunCache. */
+  cache?: ValidationRunCache;
   hostAppUrl: string;
   testResultsModuleUrl: string;
   /**
@@ -178,6 +184,7 @@ export class TestValidationStep implements ValidationStepRunner {
         lastSequenceNumber: this.lastSequenceNumber,
         issueURL,
         iteration,
+        cache: this.config.cache,
       });
 
       if (handle.sequenceNumber != null) {

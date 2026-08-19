@@ -10,9 +10,8 @@ import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import type StoreService from '@cardstack/host/services/store';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-
 import {
+  setupRealmCacheTeardown,
   percySnapshot,
   testRealmURL,
   type TestContextWithSave,
@@ -21,6 +20,8 @@ import {
 import { renderComponent } from '../../helpers/render-component';
 
 import { setupOperatorModeTests } from './operator-mode/setup';
+
+import type { CardDef } from '@cardstack/base/card-api';
 
 module('Integration | operator-mode | basics', function (hooks) {
   let ctx = setupOperatorModeTests(hooks);
@@ -59,7 +60,10 @@ module('Integration | operator-mode | basics', function (hooks) {
   });
 
   test('it renders a card with an error that has does not have a last known good state', async function (assert) {
-    ctx.setCardInOperatorModeState(`${testRealmURL}FriendWithCSS/missing-link`);
+    // ExplodingCard/exploded has status='boom' from the seed fixture, so
+    // its cardTitle compute throws on first index — the entry lands as
+    // instance-error with no last-known-good HTML available.
+    ctx.setCardInOperatorModeState(`${testRealmURL}ExplodingCard/exploded`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template><OperatorMode @onClose={{noop}} /></template>
@@ -68,20 +72,12 @@ module('Integration | operator-mode | basics', function (hooks) {
 
     assert
       .dom('[data-test-boxel-card-header-title]')
-      .includesText('Link Not Found', 'card error title is displayed');
-    assert
-      .dom('[data-test-error-message]')
-      .containsText(
-        `missing file ${testRealmURL}FriendWithCSS/does-not-exist.json`,
-      );
+      .containsText('Card Error', 'card error title is displayed');
+    assert.dom('[data-test-error-message]').containsText('Boom!');
     await percySnapshot(assert);
     await click('[data-test-toggle-details]');
-    assert
-      .dom('[data-test-error-details]')
-      .containsText(`FriendWithCSS/does-not-exist.json not found`);
-    assert
-      .dom('[data-test-error-stack]')
-      .containsText('at Realm.getSourceOrRedirect');
+    assert.dom('[data-test-error-details]').exists();
+    assert.dom('[data-test-error-stack]').exists();
     assert.strictEqual(
       ctx.operatorModeStateService.state?.submode,
       'interact',
@@ -95,34 +91,93 @@ module('Integration | operator-mode | basics', function (hooks) {
     );
     assert.strictEqual(
       ctx.operatorModeStateService.state?.codePath?.href,
-      `${testRealmURL}FriendWithCSS/missing-link.json`,
+      `${testRealmURL}ExplodingCard/exploded.json`,
       'codePath is correct',
     );
+  });
+
+  test('navigating to an archived realm shows the sealed state, not card chrome or a generic error', async function (assert) {
+    // A realm sealed by the archive flag answers content requests with 403 and
+    // the X-Boxel-Realm-Archived marker. Intercept the card fetch to reproduce
+    // that response and assert the host renders the sealed state.
+    let networkService = getService('network');
+    networkService.virtualNetwork.mount(
+      async (req: Request) => {
+        if (req.method === 'GET' && req.url.includes('Person/fadhlan')) {
+          return new Response(
+            JSON.stringify({
+              errors: [
+                {
+                  status: '403',
+                  code: 'archived',
+                  title: 'Realm Archived',
+                  detail: `Realm ${testRealmURL} is archived`,
+                },
+              ],
+            }),
+            {
+              status: 403,
+              headers: {
+                'Content-Type': 'application/vnd.api+json',
+                'X-Boxel-Realm-Archived': 'true',
+                'X-Boxel-Realm-Url': testRealmURL,
+              },
+            },
+          );
+        }
+        return null;
+      },
+      { prepend: true },
+    );
+
+    ctx.setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+
+    await waitFor('[data-test-archived-realm-state]');
+    assert
+      .dom('[data-test-archived-realm-state]')
+      .containsText(
+        'This workspace is archived',
+        'the sealed/archived state is shown',
+      );
+    assert
+      .dom('[data-test-boxel-card-header-title]')
+      .containsText('Workspace Archived', 'the archived header is shown');
+    assert
+      .dom('[data-test-card-error]')
+      .doesNotExist('a generic card error is not shown for an archived realm');
   });
 
   module(
     'card with an error that has a last known good state',
     function (hooks) {
+      // The helper's realm-building beforeEach runs for these tests too, and caches
+      // under this module's name, which the outer teardown's prefix cannot match.
+      setupRealmCacheTeardown(hooks);
+
       hooks.beforeEach(async function () {
+        // Flip the existing clean ExplodingCard/1 (status='ok', cardTitle
+        // resolves to 'Stable Example') to status='boom' so the cardTitle
+        // compute throws on the next index. The card's last-known-good HTML
+        // — captured by the prior clean indexing pass — survives the flip
+        // and is what the operator-mode error renderer shows below.
         await ctx.testRealm.write(
-          'FriendWithCSS/friend-a.json',
+          'ExplodingCard/1.json',
           JSON.stringify({
             data: {
               type: 'card',
               attributes: {
-                name: 'Friend A',
-              },
-              relationships: {
-                friend: {
-                  links: {
-                    self: './does-not-exist',
-                  },
-                },
+                name: 'Stable Example',
+                status: 'boom',
               },
               meta: {
                 adoptsFrom: {
-                  module: rri('../friend-with-css.gts'),
-                  name: 'FriendWithCSS',
+                  module: rri('../exploding-card.gts'),
+                  name: 'ExplodingCard',
                 },
               },
             },
@@ -131,7 +186,7 @@ module('Integration | operator-mode | basics', function (hooks) {
       });
 
       test('it renders a card with an error that has a last known good state', async function (assert) {
-        ctx.setCardInOperatorModeState(`${testRealmURL}FriendWithCSS/friend-a`);
+        ctx.setCardInOperatorModeState(`${testRealmURL}ExplodingCard/1`);
         await renderComponent(
           class TestDriver extends GlimmerComponent {
             <template><OperatorMode @onClose={{noop}} /></template>
@@ -140,23 +195,19 @@ module('Integration | operator-mode | basics', function (hooks) {
 
         assert
           .dom('[data-test-boxel-card-header-title]')
-          .includesText('Link Not Found', 'card error title is displayed');
+          .containsText('Card Error', 'card error title is displayed');
         assert
           .dom('[data-test-card-error]')
           .includesText(
-            'Hassan has a friend Jade',
+            'Stable Example',
             'the last known good HTML is rendered',
           );
 
         await percySnapshot(assert);
 
         await click('[data-test-toggle-details]');
-        assert
-          .dom('[data-test-error-details]')
-          .containsText(`FriendWithCSS/does-not-exist.json not found`);
-        assert
-          .dom('[data-test-error-stack]')
-          .containsText('at Realm.getSourceOrRedirect');
+        assert.dom('[data-test-error-details]').containsText('Boom!');
+        assert.dom('[data-test-error-stack]').exists();
         assert.strictEqual(
           ctx.operatorModeStateService.state?.submode,
           'interact',
@@ -170,13 +221,13 @@ module('Integration | operator-mode | basics', function (hooks) {
         );
         assert.strictEqual(
           ctx.operatorModeStateService.state?.codePath?.href,
-          `${testRealmURL}FriendWithCSS/friend-a.json`,
+          `${testRealmURL}ExplodingCard/1.json`,
           'codePath is correct',
         );
       });
 
       test('it has the ability to delete the card that has an error', async function (assert) {
-        ctx.setCardInOperatorModeState(`${testRealmURL}FriendWithCSS/friend-a`);
+        ctx.setCardInOperatorModeState(`${testRealmURL}ExplodingCard/1`);
         await renderComponent(
           class TestDriver extends GlimmerComponent {
             <template><OperatorMode @onClose={{noop}} /></template>
@@ -187,11 +238,11 @@ module('Integration | operator-mode | basics', function (hooks) {
         await click('[data-test-boxel-menu-item-text="Delete Card"]');
         assert
           .dom('[data-test-delete-modal-container]')
-          .includesText('Delete the card Hassan?');
+          .includesText('Delete the card');
         await click('[data-test-confirm-delete-button]');
 
         assert
-          .dom(`[data-test-stack-card="${testRealmURL}FriendWithCSS/friend-a"]`)
+          .dom(`[data-test-stack-card="${testRealmURL}ExplodingCard/1"]`)
           .doesNotExist();
         assert.dom(`[data-test-stack-card="${testRealmURL}index"]`).exists();
       });
@@ -451,21 +502,19 @@ module('Integration | operator-mode | basics', function (hooks) {
       await click(`[data-test-boxel-filter-list-button="All Cards"]`);
       await click('[data-test-create-new-card-button]');
       assert
-        .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
+        .dom('[data-test-card-chooser-modal] [data-test-boxel-header-title]')
         .containsText('Choose a Spec card');
       await waitFor(
-        `[data-test-card-catalog-item="${testRealmURL}Spec/publishing-packet"]`,
+        `[data-test-item-button="${testRealmURL}Spec/publishing-packet"]`,
       );
       assert
-        .dom(
-          `[data-test-realm="${ctx.realmName}"] [data-test-card-catalog-item]`,
-        )
+        .dom(`[data-test-realm="${ctx.realmName}"] [data-test-item-button]`)
         .exists({ count: 3 });
 
       await click(
-        `[data-test-card-catalog-item="${testRealmURL}Spec/publishing-packet"]`,
+        `[data-test-item-button="${testRealmURL}Spec/publishing-packet"]`,
       );
-      click('[data-test-card-catalog-go-button]');
+      click('[data-test-card-chooser-go-button]');
       await waitFor('[data-test-stack-card-index="1"]');
       assert
         .dom('[data-test-stack-card-index="1"] [data-test-field="blogPost"]')
@@ -537,27 +586,27 @@ module('Integration | operator-mode | basics', function (hooks) {
 
     await click('[data-test-create-new-card-button]');
     await waitFor(
-      `[data-test-card-catalog-item="${testRealmURL}Spec/publishing-packet"]`,
+      `[data-test-item-button="${testRealmURL}Spec/publishing-packet"]`,
     );
     assert
-      .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
+      .dom('[data-test-card-chooser-modal] [data-test-boxel-header-title]')
       .containsText('Choose a Spec card');
     assert
-      .dom(`[data-test-realm="${ctx.realmName}"] [data-test-card-catalog-item]`)
+      .dom(`[data-test-realm="${ctx.realmName}"] [data-test-item-button]`)
       .exists({ count: 3 });
 
     await click(
-      `[data-test-card-catalog-item="${testRealmURL}Spec/publishing-packet"]`,
+      `[data-test-item-button="${testRealmURL}Spec/publishing-packet"]`,
     );
-    await click('[data-test-card-catalog-go-button]');
+    await click('[data-test-card-chooser-go-button]');
     await waitFor('[data-test-stack-card-index="1"]');
     assert
       .dom('[data-test-stack-card-index="1"] [data-test-field="blogPost"]')
       .exists();
 
     await click('[data-test-add-new="blogPost"]');
-    await waitFor(`[data-test-card-catalog-modal]`);
-    await click(`[data-test-card-catalog-create-new-button]`);
+    await waitFor(`[data-test-card-chooser-modal]`);
+    await click(`[data-test-item-button-create-new]`);
 
     await waitFor(`[data-test-stack-card-index="2"]`);
     assert.dom('[data-test-stack-card-index]').exists({ count: 3 });
@@ -573,8 +622,8 @@ module('Integration | operator-mode | basics', function (hooks) {
     await click(
       '[data-test-stack-card-index="2"] [data-test-field="authorBio"] [data-test-add-new]',
     );
-    await waitFor(`[data-test-card-catalog-modal]`);
-    await click(`[data-test-card-catalog-create-new-button]`);
+    await waitFor(`[data-test-card-chooser-modal]`);
+    await click(`[data-test-item-button-create-new]`);
 
     await waitFor(`[data-test-stack-card-index="3"]`);
 
@@ -785,7 +834,11 @@ module('Integration | operator-mode | basics', function (hooks) {
     );
   });
 
-  module('expand to full width', function () {
+  module('expand to full width', function (hooks) {
+    // The helper's realm-building beforeEach runs for these tests too, and caches
+    // under this module's name, which the outer teardown's prefix cannot match.
+    setupRealmCacheTeardown(hooks);
+
     test('can expand card to full width via more options menu and collapse via header button', async function (assert) {
       let personCard = `${testRealmURL}Person/fadhlan`;
       ctx.setCardInOperatorModeState(personCard);

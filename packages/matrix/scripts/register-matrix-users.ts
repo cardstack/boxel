@@ -1,12 +1,15 @@
 import * as childProcess from 'child_process';
 
-import { createRegistrationToken, loginUser } from '../docker/synapse';
-import { ensureUserRecord } from '../helpers/ensure-user-record';
+import {
+  createRegistrationToken,
+  loginUser,
+} from '../support/synapse/index.ts';
+import { ensureUserRecord } from '../helpers/ensure-user-record.ts';
 import {
   getSynapseContainerName,
-  getSynapseURL,
-} from '../helpers/environment-config';
-import { realmPassword } from '../helpers/realm-credentials';
+  tryGetSynapseURL,
+} from '../support/environment-config.ts';
+import { realmPassword } from '../helpers/realm-credentials.ts';
 
 type Mode = 'all' | 'realms-only';
 
@@ -64,20 +67,46 @@ const EXTRA_USERS: ExtraUser[] = [
 ];
 
 async function waitForSynapse(): Promise<void> {
-  const url = getSynapseURL();
-  const maxAttempts = 24;
+  // The budget is deliberately generous. On a cold or loaded CI runner the
+  // image pull and migrations can take minutes, and a too-tight window took out
+  // the whole test shard before a single test ran rather than tolerating a slow
+  // start.
+  const maxAttempts = 60;
+  const intervalMs = 5000;
+  // Re-resolve the address on every attempt. This gate is expected to start
+  // before Synapse does, and in environment mode Synapse's host port is only
+  // discoverable once its container exists — so resolving once up front would
+  // capture "not knowable yet" and then poll that stale answer for the whole
+  // budget, never noticing the container that appeared a few seconds later.
+  let lastUrl: string | undefined;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    try {
-      const res = await fetch(url, { method: 'HEAD' });
-      if (res.ok) return;
-    } catch {
-      // fall through to retry
+    const base = tryGetSynapseURL()?.replace(/\/$/, '');
+    if (base) {
+      // `/_matrix/client/versions` returns 200 only once Synapse has finished
+      // booting and running its database migrations, so it is a truer readiness
+      // signal than a HEAD on the root (which can answer non-2xx while the
+      // server is still coming up, or 404 depending on config).
+      lastUrl = `${base}/_matrix/client/versions`;
+      try {
+        const res = await fetch(lastUrl);
+        if (res.ok) return;
+      } catch {
+        // fall through to retry
+      }
     }
     process.stdout.write('.');
-    await new Promise((r) => setTimeout(r, 5000));
+    await new Promise((r) => setTimeout(r, intervalMs));
   }
+  // Distinguish the two ways this wait runs out, because they point at
+  // different things: a container that never came up, versus one that came up
+  // but never finished booting.
+  const target =
+    lastUrl ??
+    `container ${getSynapseContainerName()}, which never started (no published port to poll)`;
   throw new Error(
-    `Failed to reach Synapse at ${url} after ${maxAttempts} attempts.`,
+    `Failed to reach Synapse at ${target} after ${maxAttempts} attempts (~${Math.round(
+      (maxAttempts * intervalMs) / 1000,
+    )}s).`,
   );
 }
 
@@ -149,7 +178,8 @@ async function main() {
     process.exit(-1);
   }
 
-  const realmSecretSeed = process.env.REALM_SECRET_SEED || "shhh! it's a secret";
+  const realmSecretSeed =
+    process.env.REALM_SECRET_SEED || "shhh! it's a secret";
 
   // In 'all' mode we'll INSERT into the users table for bot/writer accounts,
   // so ensure Postgres is reachable too. 'realms-only' mode never touches

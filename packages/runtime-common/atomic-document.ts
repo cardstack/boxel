@@ -1,7 +1,7 @@
-import type { ErrorDetails } from './error';
-import type { ModuleResource } from './resource-types';
-import { isCardResource, isModuleResource } from './resource-types';
-import type { LooseCardResource } from './index';
+import type { ErrorDetails } from './error.ts';
+import type { ModuleResource } from './resource-types.ts';
+import { isCardResource, isModuleResource } from './resource-types.ts';
+import type { LooseCardResource } from './index.ts';
 
 export type AtomicOperationType = 'add' | 'update' | 'remove';
 

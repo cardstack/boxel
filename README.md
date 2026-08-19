@@ -18,9 +18,9 @@ For a quickstart, see [here](./QUICKSTART.md)
 
 `packages/realm-server` is a node app that serves the realm as an HTTP server, as well as, it can also host the runtime application for its own realm.
 
-`packages/boxel-ui/addon` is the UI components Ember addon
+`packages/boxel-ui` is the UI components Ember addon
 
-`packages/boxel-ui/test-app` is the test suite and component explorer for boxel-ui, deployed at [boxel-ui.stack.cards](https://boxel-ui.stack.cards)
+`packages/boxel-ui/docs-app` is the test suite and component explorer for boxel-ui, deployed at [boxel-ui.stack.cards](https://boxel-ui.stack.cards)
 
 `packages/matrix` is the docker container for running the matrix server: synapse, as well as tests that involve running a matrix client.
 
@@ -71,7 +71,7 @@ mise-tasks/
     bot-runner                 # Bot runner
   dev                          # Full dev stack (realm server + workers + test realms)
   dev-all                      # Host app + full dev stack (single command)
-  dev-minimal                  # Dev stack without optional realms
+  dev-minimal                  # Dev stack without optional realms (host started separately)
   dev-without-matrix           # Dev stack (expects Matrix already running)
   build:ui                     # Build boxel-icons + boxel-ui (in dependency order)
   test-services:host           # Services for host test suite
@@ -109,7 +109,7 @@ Make sure that you have created a matrix user for the base and experiments realm
 
 In order to run the ember-cli hosted app:
 
-1. `pnpm build` in the boxel-ui/addon workspace to build the boxel-ui addon.
+1. `pnpm build` in the boxel-ui workspace to build the boxel-ui addon.
 2. `pnpm start` in the host/ workspace to serve the ember app.
 3. `mise run dev` from the repo root to serve the base and experiments realms -- this will also allow you to switch between the app and the tests without having to restart servers). This expects the Ember application to be running at `https://localhost:4200`, if you’re running it elsewhere you can specify it with `HOST_URL=http://localhost:5200 mise run dev`.
 
@@ -142,7 +142,7 @@ Live reloads are not available in this mode, however, if you use start the serve
 
 #### Using `mise run dev`
 
-Instead of running `mise run services:realm-server-base`, you can alternatively use `mise run dev` which also serves a few other realms on other ports--this is convenient if you wish to switch between the app and the tests without having to restart servers. For faster startup, `mise run dev-minimal` skips experiments, catalog, homepage, and submission realms. Use the environment variable `WORKER_HIGH_PRIORITY_COUNT` to add additional workers that service only user initiated requests and `WORKER_ALL_PRIORITY_COUNT` to add workers that service all jobs (system or user initiated). By default there is 1 all priority worker for each realm server.
+Instead of running `mise run services:realm-server-base`, you can alternatively use `mise run dev` which also serves a few other realms on other ports--this is convenient if you wish to switch between the app and the tests without having to restart servers. For faster startup, `mise run dev-minimal` skips experiments, catalog, homepage, and submission realms. `dev-minimal` does not start the host app — run it in a second terminal with `mise exec -- pnpm -C packages/host start` (the `mise exec` prefix loads the HTTPS dev cert env so host comes up on `https://localhost:4200`). Use the environment variable `WORKER_HIGH_PRIORITY_COUNT` to add additional workers that service only user initiated requests and `WORKER_ALL_PRIORITY_COUNT` to add workers that service all jobs regardless of priority. By default there is 1 all priority worker for each realm server.
 
 ##### Turbo mode
 
@@ -316,7 +316,7 @@ In environment mode, this is at `https://worker.<slug>.localhost/_indexing-dashb
 Boxel supports server-side rendering of cards via a lightweight prerender service and an optional manager that coordinates multiple services.
 
 - Prerender server: Handles POST `/prerender-card` (cards) and `/prerender-module` (modules) requests that include user/session permissions and a target URL. It launches a headless browser and maintains a small pool of per-realm pages (LRU-evicted) to speed up subsequent renders. Each page keeps a logged-in session for its realm and reuses the page for repeated renders of that realm.
-- Pooling: Each prerender server maintains a dynamic page pool sized between `PRERENDER_PAGE_POOL_MIN` and `PRERENDER_PAGE_POOL_MAX` (both default 4 in dev). When the pool is full, the least-recently-used realm is evicted (its browser context is closed). When a page becomes unusable (timeout or explicit unusable signal), the realm is evicted proactively.
+- Pooling: Each prerender server maintains a dynamic page pool sized between `PRERENDER_PAGE_POOL_MIN` and `PRERENDER_PAGE_POOL_MAX` (both default 4 in dev). When the pool is full, the least-recently-used realm is evicted (its browser context is closed). When a page becomes unusable (timeout or explicit unusable signal), the realm is evicted proactively. A page that has already served a render is probed for main-thread liveness before being handed back out — if its JS thread can't answer a trivial `evaluate` within `PRERENDER_TAB_HEALTH_PROBE_MS`, that page is retired (and with it the realm, when it was the realm's only page) and the caller is given a live page instead of stalling until the render timeout. When the pool has no page to swap in, it keeps the one it has and lets the render timeout handle it, rather than leaving the caller with no page at all.
 - Prerender manager: When multiple prerender servers are running, a central manager receives `/prerender-card` and `/prerender-module` requests and routes them to a suitable server. The manager tracks which servers are registered and which realms they actively handle. It supports realm affinity, multiplexing the same realm across multiple servers to handle high prerender throughput, capacity-aware selection, and health-based eviction of unreachable servers.
 
 #### Pre-rendering start scripts
@@ -347,6 +347,7 @@ Prerender server:
 - PRERENDER_PAGE_POOL_MIN (optional): Idle floor for the dynamic page pool. The pool boots at this size and contracts back to it after sustained idle. Default 4 in dev (set in `mise-tasks/lib/env-vars.sh`).
 - PRERENDER_PAGE_POOL_MAX (optional): Burst ceiling for the dynamic page pool. The pool expands up to this size under saturation. Default 4 in dev. Setting MIN === MAX disables expansion/contraction (fixed-size pool).
 - PRERENDER_AFFINITY_TAB_MAX (optional): Max number of tabs a single realm can use within a prerender server. Defaults to 5, clamped to the effective pool max (`PRERENDER_PAGE_POOL_MAX` when set, otherwise the fixed `maxPages` pool size).
+- PRERENDER_TAB_HEALTH_PROBE_MS (optional): Budget for the main-thread liveness probe that runs before a page that has already rendered is handed back out. A healthy page answers in about a millisecond, so this is only spent in full on a page that can't run script at all. Must be an integer ≥ 0, and is clamped to the render timeout. Default 3000; `0` disables the probe and hands warm pages straight back out.
 - BOXEL_SHOW_PRERENDER (optional): If set to 'true', opens a visible browser (useful for debugging locally). Headless otherwise.
 
 Prerender manager:
@@ -436,7 +437,7 @@ This will create a new SQLite schema based on the current postgres DB (the schem
 
 ### Matrix Server
 
-The boxel platform leverages a Matrix server called Synapse in order to support identity, workflow, and chat behaviors. This project uses a dockerized Matrix server. We have multiple matrix server configurations (currently one for development that uses a persistent DB, and one for testing that uses an in-memory DB). You can find and configure these matrix servers at `packages/matrix/docker/synapse/*`.
+The boxel platform leverages a Matrix server called Synapse in order to support identity, workflow, and chat behaviors. This project uses a dockerized Matrix server. We have multiple matrix server configurations (currently one for development that uses a persistent DB, and one for testing that uses an in-memory DB). You can find and configure these matrix servers at `packages/matrix/support/synapse/*`.
 
 This server is automatically started as part of `mise run dev`, but if you wish to control it separately:
 
@@ -481,6 +482,41 @@ To stop the admin console:
 mise run infra:stop-admin
 ```
 
+#### Google Sign-In (local dev)
+
+The dev Synapse template ships with a Google OIDC block and a custom `user_mapping_provider` (`packages/matrix/support/synapse/modules/boxel_oidc_mapping_provider.py`) that auto-links Google sign-ins to existing Matrix accounts by verified email. The whole block is **gated on env vars** — without them, `packages/matrix/support/synapse/index.ts` strips the OIDC block from the generated `homeserver.yaml` so Synapse boots cleanly for unrelated work. The host's "Sign in with Google" button appears whenever the homeserver's login flows advertise the `oidc-google` IdP, so it shows up automatically once the OIDC block is in place.
+
+To enable Google sign-in locally:
+
+1. **Create a Google Cloud OAuth 2.0 client** (Web application) in the [Google Cloud Console](https://console.cloud.google.com/apis/credentials). Add `http://localhost:8008/_synapse/client/oidc/callback` as an authorized redirect URI (exact match — `http`, no trailing slash, port `8008`). If you haven't configured an OAuth consent screen, create one in **Testing** mode and add your own Google account as a test user.
+
+2. **Export the client ID and secret** in the same shell that runs `mise`:
+
+   ```sh
+   export GOOGLE_OAUTH_CLIENT_ID='<your-id>.apps.googleusercontent.com'
+   export GOOGLE_OAUTH_CLIENT_SECRET='<your-secret>'
+   ```
+
+3. **Restart Synapse** so the OIDC block is interpolated into the generated `homeserver.yaml`:
+
+   ```sh
+   pnpm stop:synapse
+   mise run infra:start-synapse
+   ```
+
+4. **Verify** Synapse advertises the Google IDP:
+
+   ```sh
+   curl -s http://localhost:8008/_matrix/client/v3/login | jq
+   ```
+
+   You should see a flow with `type: "m.login.sso"` and an `identity_providers` entry whose `id` is `"oidc-google"`. The "Sign in with Google" button will now appear on the host login screen.
+
+Notes:
+
+- Each developer uses their own Google OAuth client locally. The shared client used for staging/prod is provisioned separately.
+- To reset the link and see Google's consent screen again, revoke the OAuth client at [https://myaccount.google.com/permissions](https://myaccount.google.com/permissions). To also re-trigger Synapse's username picker, wipe the dev Synapse DB: `pnpm stop:synapse && rm -rf packages/matrix/synapse-data && mise run infra:start-synapse`.
+
 #### SMTP Server
 
 Matrix requires an SMTP server in order to send emails. In order to facilitate this we leverage [smtp4dev](https://github.com/rnwood/smtp4dev) in dev and test (CI) environments . This is a docker container that includes both a local SMTP server and hosts a web app for viewing all emails send from the SMTP server (the emails never leave the docker container). smtp4dev runs in the same docker network as synapse, so the SMTP port is never projected to the docker host. smtp4dev also runs the web app used to view emails sent from the SMTP server at `http://localhost:5001`. You can open a browser tab with this URL to view any emails sent from the matrix server. As well as, our matrix tests leverage the mail web app in order to perform email assertions. smtp4dev is automatically started as part of `mise run dev`.
@@ -489,7 +525,7 @@ Matrix requires an SMTP server in order to send emails. In order to facilitate t
 
 There is a ember-freestyle component explorer available to assist with development. In order to run the freestyle app:
 
-1. `cd packages/boxel-ui/test-app`
+1. `cd packages/boxel-ui/docs-app`
 2. `pnpm start`
 3. Visit http://localhost:4220/ in your browser
 
@@ -616,7 +652,7 @@ To run the `packages/realm-server/` workspace tests start:
 
 ### Boxel UI
 
-1. `cd packages/boxel-ui/test-app`
+1. `cd packages/boxel-ui/docs-app`
 2. `pnpm test` (or `pnpm start` and visit http://localhost:4220/tests to run tests in the browser)
 
 ### Matrix tests
@@ -672,6 +708,8 @@ If the isolated realm server fails to get stopped you may see an error about por
 “Environment mode” lets multiple Boxel environments run simultaneously on the same machine. It is opt-in via the `BOXEL_ENVIRONMENT` environment variable. When set, all services use dynamic ports and register with a Traefik reverse proxy so each environment gets its own `*.localhost` hostnames.
 
 All environment configuration is centralized in `mise-tasks/lib/env-vars.sh`, which is automatically sourced by every mise task. The slug computation used for hostnames and database names lives in `scripts/env-slug.sh`.
+
+Run one environment per Git worktree. The host package's embroider cache (`packages/host/node_modules/.embroider/content-for.json`) is rewritten at vite startup with that env's URLs; two vites launched from the same worktree would fight over it and silently serve each other's URLs even though Traefik routes correctly. The vite launcher refuses to start a second env-mode vite when it detects one already running in this worktree.
 
 Here’s an example using Git worktrees and a `parallel` environment name:
 

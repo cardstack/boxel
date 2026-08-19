@@ -1,0 +1,269 @@
+<!--
+  Boxel incident-report house template.
+  Copy this file, fill every {{PLACEHOLDER}} with pinned evidence, delete these
+  guidance comments, then publish with the Artifact tool (favicon 🚨).
+  This is Artifact *body* content: no <!doctype>/<html>/<head>/<body> — the
+  Artifact tool wraps those. Keep the <style> block and the .wrap container.
+  The palette + light/dark tokens below ARE the house style; don't re-derive them.
+-->
+<style>
+  :root {
+    --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+
+    --bg: #F5F7F9; --surface: #FFFFFF; --surface-2: #EDF1F4; --border: #DBE2E8;
+    --border-strong: #C5CFD8; --ink: #14191F; --ink-2: #3E4954; --ink-3: #6B7681;
+    --accent: #35506B; --accent-soft: #E7EDF2;
+    --critical: #B92B37; --critical-bg: #FBECEE; --warning: #9E6410; --warning-bg: #FBF2E0;
+    --good: #1C7049; --good-bg: #E6F3EC; --info: #2B6CB0;
+    --radius: 8px; --maxw: 940px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0E1318; --surface: #151C24; --surface-2: #1B2430; --border: #29333F;
+      --border-strong: #3A4653; --ink: #E7EDF2; --ink-2: #AEB9C4; --ink-3: #7E8A96;
+      --accent: #7BA0CC; --accent-soft: #1B2836;
+      --critical: #F0656F; --critical-bg: #2A181B; --warning: #E0A54A; --warning-bg: #29210F;
+      --good: #56C089; --good-bg: #12241A; --info: #6BA6E0;
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #F5F7F9; --surface: #FFFFFF; --surface-2: #EDF1F4; --border: #DBE2E8;
+    --border-strong: #C5CFD8; --ink: #14191F; --ink-2: #3E4954; --ink-3: #6B7681;
+    --accent: #35506B; --accent-soft: #E7EDF2;
+    --critical: #B92B37; --critical-bg: #FBECEE; --warning: #9E6410; --warning-bg: #FBF2E0;
+    --good: #1C7049; --good-bg: #E6F3EC; --info: #2B6CB0;
+  }
+  :root[data-theme="dark"] {
+    --bg: #0E1318; --surface: #151C24; --surface-2: #1B2430; --border: #29333F;
+    --border-strong: #3A4653; --ink: #E7EDF2; --ink-2: #AEB9C4; --ink-3: #7E8A96;
+    --accent: #7BA0CC; --accent-soft: #1B2836;
+    --critical: #F0656F; --critical-bg: #2A181B; --warning: #E0A54A; --warning-bg: #29210F;
+    --good: #56C089; --good-bg: #12241A; --info: #6BA6E0;
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-sans); font-size: 16px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 40px 24px 80px; }
+
+  .doc-head { border-left: 4px solid var(--critical); padding-left: 20px; margin-bottom: 32px; }
+  .eyebrow { font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 10px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  h1 { font-size: 1.95rem; line-height: 1.15; letter-spacing: -0.02em; text-wrap: balance; margin: 0 0 12px; font-weight: 680; }
+  .lede { font-size: 1.08rem; color: var(--ink-2); max-width: 68ch; margin: 0; }
+
+  .pill { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 0.7rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; padding: 3px 9px; border-radius: 999px; border: 1px solid transparent; }
+  .pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .pill-resolved { color: var(--good); background: var(--good-bg); border-color: color-mix(in srgb, var(--good) 30%, transparent); }
+  .pill-critical { color: var(--critical); background: var(--critical-bg); border-color: color-mix(in srgb, var(--critical) 30%, transparent); }
+  .pill-info { color: var(--info); background: color-mix(in srgb, var(--info) 12%, transparent); border-color: color-mix(in srgb, var(--info) 30%, transparent); }
+
+  .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 28px; }
+  .fact { background: var(--surface); padding: 14px 16px; }
+  .fact dt { font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 5px; }
+  .fact dd { margin: 0; font-size: 0.92rem; font-weight: 550; color: var(--ink); }
+  .fact dd small { display: block; font-weight: 400; color: var(--ink-3); font-size: 0.8rem; }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(158px, 1fr)); gap: 12px; margin: 28px 0; }
+  .stat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+  .stat .num { font-family: var(--font-mono); font-size: 1.7rem; font-weight: 600; letter-spacing: -0.02em; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1.05; }
+  .stat .num .unit { font-size: 0.9rem; color: var(--ink-3); font-weight: 500; }
+  .stat .lbl { margin-top: 6px; font-size: 0.82rem; color: var(--ink-2); }
+  .stat.is-critical .num { color: var(--critical); }
+  .stat.is-warning .num { color: var(--warning); }
+
+  section { margin-top: 44px; }
+  h2 { font-size: 1.28rem; letter-spacing: -0.01em; margin: 0 0 4px; font-weight: 640; display: flex; align-items: baseline; gap: 12px; }
+  h2 .idx { font-family: var(--font-mono); font-size: 0.8rem; color: var(--accent); font-weight: 600; }
+  .section-sub { color: var(--ink-3); font-size: 0.9rem; margin: 0 0 18px; }
+  h3 { font-size: 1.02rem; margin: 26px 0 8px; font-weight: 620; }
+  p { margin: 0 0 14px; }
+  a { color: var(--accent); text-decoration: none; border-bottom: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); }
+  code { font-family: var(--font-mono); font-size: 0.85em; background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; padding: 0.08em 0.36em; color: var(--ink); word-break: break-word; }
+  strong { font-weight: 620; color: var(--ink); }
+
+  .callout { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: var(--radius); padding: 16px 18px; }
+  .callout.key { border-left-color: var(--good); }
+  .callout.warn { border-left-color: var(--warning); }
+
+  ul.clean { margin: 0 0 14px; padding-left: 0; list-style: none; }
+  ul.clean li { position: relative; padding-left: 22px; margin-bottom: 9px; color: var(--ink-2); }
+  ul.clean li::before { content: ""; position: absolute; left: 4px; top: 0.62em; width: 6px; height: 6px; border-radius: 1px; background: var(--accent); }
+  ul.clean.bad li::before { background: var(--critical); }
+  ul.clean.ruled li::before { background: var(--good); transform: rotate(45deg); }
+
+  .timeline { border-left: 2px solid var(--border-strong); margin-left: 8px; padding-left: 0; }
+  .tl-row { position: relative; padding: 0 0 20px 26px; }
+  .tl-row::before { content: ""; position: absolute; left: -7px; top: 4px; width: 12px; height: 12px; border-radius: 50%; background: var(--surface); border: 2px solid var(--accent); }
+  .tl-row.hot::before { background: var(--critical); border-color: var(--critical); }
+  .tl-row.deploy::before { background: var(--warning); border-color: var(--warning); }
+  .tl-row.recover::before { background: var(--good); border-color: var(--good); }
+  .tl-time { font-family: var(--font-mono); font-size: 0.78rem; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .tl-time .edt { color: var(--ink-3); font-weight: 400; }
+  .tl-body { color: var(--ink-2); font-size: 0.93rem; margin-top: 2px; }
+
+  .table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); margin: 14px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.86rem; }
+  th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  thead th { font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.07em; text-transform: uppercase; color: var(--ink-3); background: var(--surface-2); font-weight: 600; }
+  tbody tr:last-child td { border-bottom: none; }
+  td.mono, th.mono, .num-col { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+  td.wrap-ok { white-space: normal; }
+  tbody tr:hover td { background: var(--surface-2); }
+  td .was { color: var(--critical); font-family: var(--font-mono); }
+  td .now { color: var(--good); font-family: var(--font-mono); }
+
+  .prio { font-family: var(--font-mono); font-size: 0.68rem; font-weight: 700; letter-spacing: 0.04em; padding: 2px 7px; border-radius: 4px; }
+  .p0 { color: var(--critical); background: var(--critical-bg); }
+  .p1 { color: var(--warning); background: var(--warning-bg); }
+  .p2 { color: var(--info); background: color-mix(in srgb, var(--info) 12%, transparent); }
+  .st-done { color: var(--good); font-weight: 600; }
+  .st-open { color: var(--ink-3); }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 620px) { .two-col { grid-template-columns: 1fr; } }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; }
+  .card h3 { margin-top: 0; }
+  .card.crit { border-top: 3px solid var(--critical); }
+  .card.trig { border-top: 3px solid var(--warning); }
+
+  footer.doc-foot { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--border); font-family: var(--font-mono); font-size: 0.74rem; color: var(--ink-3); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+  .kbd-note { color: var(--ink-3); font-size: 0.82rem; font-style: italic; }
+</style>
+
+<div class="wrap">
+
+  <!-- ── HEADER: eyebrow pills + one-line headline + ≤3-sentence lede ── -->
+  <header class="doc-head">
+    <p class="eyebrow">
+      <span>Incident Report</span>
+      <span class="pill pill-critical">{{Staging|Prod outage}}</span>
+      <span class="pill pill-resolved">{{Resolved · auto-recovered | Ongoing}}</span>
+      <!-- optional relation pill: <span class="pill pill-info">Recurrence of CS-xxxxx</span> -->
+    </p>
+    <h1>{{One-line headline: what actually happened}}</h1>
+    <p class="lede">{{2–3 sentences a non-oncall teammate can follow: what broke, the mechanism, and that it recovered / is ongoing.}}</p>
+  </header>
+
+  <!-- ── FACTS GRID ── -->
+  <dl class="facts">
+    <div class="fact"><dt>Environment</dt><dd>{{Staging}}<small>{{host}}</small></dd></div>
+    <div class="fact"><dt>Window (UTC)</dt><dd>{{HH:MM – HH:MM}}<small>{{HH:MM – HH:MM local}}</small></dd></div>
+    <div class="fact"><dt>Duration</dt><dd>{{~N min}}<small>{{single burst | intermittent}}</small></dd></div>
+    <div class="fact"><dt>Trigger</dt><dd>{{short}}<small>{{detail}}</small></dd></div>
+    <div class="fact"><dt>Production impact</dt><dd>{{None | ...}}</dd></div>
+    <div class="fact"><dt>Data loss</dt><dd>{{None}}</dd></div>
+  </dl>
+
+  <!-- ── STAT TILES: 4–6 key numbers; mark alarming ones is-critical / is-warning ── -->
+  <div class="stats">
+    <div class="stat is-critical"><div class="num">{{N}}</div><div class="lbl">{{peak error count / what}}</div></div>
+    <div class="stat is-critical"><div class="num">{{N}}<span class="unit"> s</span></div><div class="lbl">{{max target response time}}</div></div>
+    <div class="stat is-warning"><div class="num">{{N}}<span class="unit"> /5min</span></div><div class="lbl">{{request-volume delta}}</div></div>
+    <div class="stat"><div class="num">{{N}}</div><div class="lbl">{{tasks / capacity}}</div></div>
+    <div class="stat is-warning"><div class="num">{{N}}</div><div class="lbl">{{the one config value that mattered}}</div></div>
+    <div class="stat"><div class="num">{{N}}</div><div class="lbl">{{context number}}</div></div>
+  </div>
+
+  <!-- ── SUMMARY ── -->
+  <section>
+    <h2>Summary</h2>
+    <div class="callout">
+      <p style="margin:0 0 12px">{{What broke, in plain terms, with the key numbers.}}</p>
+      <p style="margin:0">{{The mechanism, and whether it recovered on its own.}}</p>
+    </div>
+  </section>
+
+  <!-- Optional: lead with the reader's key question when there is one (e.g. "Can we
+       simply avoid it?"). Give a one-word verdict in the h2, then evidence + a
+       current-vs-recommended config table. Reuse the table markup below. -->
+
+  <!-- ── ROOT CAUSE: vulnerability (standing) vs trigger (this time) ── -->
+  <section>
+    <h2><span class="idx">01</span>Root cause</h2>
+    <p class="section-sub">A standing weakness, met by a specific trigger. Keeping them separate is the point.</p>
+    <div class="two-col">
+      <div class="card crit">
+        <h3>The vulnerability</h3>
+        <ul class="clean bad">
+          <li>{{the standing weakness that let this become an outage}}</li>
+        </ul>
+      </div>
+      <div class="card trig">
+        <h3>The trigger</h3>
+        <ul class="clean">
+          <li>{{the specific thing that set it off this time}}</li>
+        </ul>
+      </div>
+    </div>
+    <h3>{{Why milder/worse than <prior incident>, if comparable}}</h3>
+    <p>{{comparison with numbers}}</p>
+  </section>
+
+  <!-- ── TIMELINE: types = (none)|hot|deploy|recover. UTC first, local in grey. ── -->
+  <section>
+    <h2><span class="idx">02</span>Timeline</h2>
+    <p class="section-sub">All times UTC (local in grey). Reconstructed from {{sources}}.</p>
+    <div class="timeline">
+      <div class="tl-row"><div class="tl-time">{{HH:MM}} <span class="edt">· {{HH:MM local}}</span></div><div class="tl-body">{{event}}</div></div>
+      <div class="tl-row deploy"><div class="tl-time">{{HH:MM}}</div><div class="tl-body">{{deploy / config change}}</div></div>
+      <div class="tl-row hot"><div class="tl-time">{{HH:MM}}</div><div class="tl-body">{{peak impact, with numbers}}</div></div>
+      <div class="tl-row recover"><div class="tl-time">{{HH:MM}}</div><div class="tl-body">{{recovery}}</div></div>
+    </div>
+  </section>
+
+  <!-- ── CONTRIBUTING FACTORS & RULED OUT ── -->
+  <section>
+    <h2><span class="idx">03</span>Contributing factors &amp; what was ruled out</h2>
+    <div class="two-col">
+      <div>
+        <h3>Contributing factors</h3>
+        <ul class="clean bad"><li>{{factor}}</li></ul>
+      </div>
+      <div>
+        <h3>Ruled out</h3>
+        <ul class="clean ruled"><li>{{not-the-cause + the evidence that rules it out}}</li></ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── ACTION ITEMS: cheapest high-leverage first; note config-only vs code; tie to tickets ── -->
+  <section>
+    <h2><span class="idx">04</span>Action items</h2>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Prio</th><th>Action</th><th>Layer</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td><span class="prio p1">P1</span></td><td class="wrap-ok">{{action}}</td><td>{{layer}}</td><td class="st-open">Open</td></tr>
+          <tr><td><span class="prio p0">GUARD</span></td><td class="wrap-ok">{{durable guarantee}} (<code>CS-xxxxx</code>)</td><td>{{layer}}</td><td class="st-done">{{Staged}}</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Optional current-vs-recommended config table (reuse anywhere):
+  <div class="table-scroll"><table>
+    <thead><tr><th>Lever</th><th class="mono">Now</th><th class="mono">Recommended</th><th>Why</th></tr></thead>
+    <tbody><tr><td class="wrap-ok"><code>setting</code></td><td><span class="was">old</span></td><td><span class="now">new</span></td><td class="wrap-ok">why</td></tr></tbody>
+  </table></div>
+  -->
+
+  <!-- ── EVIDENCE APPENDIX: the raw tables the narrative rests on ── -->
+  <section>
+    <h2><span class="idx">05</span>Evidence appendix</h2>
+    <h3>{{table name, e.g. errors per minute}}</h3>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th class="mono">{{col}}</th><th class="mono">{{col}}</th><th>Note</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">{{v}}</td><td class="mono">{{v}}</td><td>{{note}}</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer class="doc-foot">
+    <span>Boxel · {{Env}} incident · {{YYYY-MM-DD}}</span>
+    <span>Sources: {{ALB CloudWatch · ECS · logs · git · …}}</span>
+  </footer>
+
+</div>

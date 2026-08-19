@@ -44,13 +44,30 @@ import {
   keymap,
 } from '@codemirror/view';
 
+import {
+  type BfmRefFormat,
+  type BfmRefRange,
+  bfmRefFormatAndSize,
+  bfmResolvedEmbedStyle,
+  extractBfmRefRanges,
+  parseBfmSizeSpec,
+} from '@cardstack/runtime-common/bfm-card-references';
+
 // ── Card widget target interface ────────────────────────────────────────────
 
 export interface CardWidgetTarget {
   element: HTMLElement;
   cardId: string;
-  format: 'atom' | 'embedded';
+  format: BfmRefFormat;
   kind: 'inline' | 'block';
+  // 'card' refs (`:card[URL]`) resolve to CardDef instances; 'file' refs
+  // (`:file[URL]`) resolve to FileDef instances.
+  refType: 'card' | 'file';
+  // Inline sizing derived from the directive's format — fitted dimensions plus
+  // `overflow: hidden`, or the shared non-atom footprint from
+  // `bfmResolvedEmbedStyle`. Undefined for atom and block embedded. Mirrors
+  // the style the saved/preview markdown renderers apply.
+  style?: string;
 }
 
 // ── State effect for opening card search ────────────────────────────────────
@@ -90,6 +107,19 @@ interface DecoRange {
 const BLOCK_CARD_RE = /^::card\[([^\]\n]+)\][ \t]*$/gm;
 // Inline: :card[URL], not preceded by another colon (avoids matching ::card)
 const INLINE_CARD_RE = /(?<!:):card\[([^\]\n]+)\]/g;
+// File references mirror card references with the `file` keyword.
+const BLOCK_FILE_RE = /^::file\[([^\]\n]+)\][ \t]*$/gm;
+const INLINE_FILE_RE = /(?<!:):file\[([^\]\n]+)\]/g;
+
+// The keyword-generic set of BFM reference patterns scanned in the editor.
+const BFM_REF_CONFIGS: {
+  refType: 'card' | 'file';
+  blockRe: RegExp;
+  inlineRe: RegExp;
+}[] = [
+  { refType: 'card', blockRe: BLOCK_CARD_RE, inlineRe: INLINE_CARD_RE },
+  { refType: 'file', blockRe: BLOCK_FILE_RE, inlineRe: INLINE_FILE_RE },
+];
 
 // ── Cursor-aware helpers ───────────────────────────────────────────────────
 
@@ -118,12 +148,28 @@ class CardWidget extends WidgetType {
   constructor(
     readonly cardId: string,
     readonly kind: 'inline' | 'block',
+    readonly refType: 'card' | 'file' = 'card',
+    // Size specifier fields parsed from the directive's `| spec` segment.
+    // `width`/`height` stay strings for a clean DOM data-attr round-trip;
+    // `format` is the parsed render format. Undefined when absent.
+    readonly format?: BfmRefFormat,
+    readonly width?: string,
+    readonly height?: string,
   ) {
     super();
   }
 
   eq(other: CardWidget) {
-    return this.cardId === other.cardId && this.kind === other.kind;
+    return (
+      this.cardId === other.cardId &&
+      this.kind === other.kind &&
+      this.refType === other.refType &&
+      // A size-only edit (e.g. `w:400` → `w:600`) must invalidate the widget so
+      // CM6 rebuilds the DOM with fresh data-attrs instead of reusing the old one.
+      this.format === other.format &&
+      this.width === other.width &&
+      this.height === other.height
+    );
   }
 
   toDOM(): HTMLElement {
@@ -131,6 +177,18 @@ class CardWidget extends WidgetType {
     let el = document.createElement(tag);
     el.setAttribute('data-card-id', this.cardId);
     el.setAttribute('data-card-kind', this.kind);
+    el.setAttribute('data-bfm-ref-type', this.refType);
+    // Emit the size spec so `notifyTargets` can re-derive format + style off the
+    // DOM, using the same attribute names as the render-side BFM markup.
+    if (this.format !== undefined) {
+      el.setAttribute('data-boxel-bfm-format', this.format);
+    }
+    if (this.width !== undefined) {
+      el.setAttribute('data-boxel-bfm-width', this.width);
+    }
+    if (this.height !== undefined) {
+      el.setAttribute('data-boxel-bfm-height', this.height);
+    }
     el.className = `cm-card-widget cm-card-widget--${this.kind}`;
     el.contentEditable = 'false';
     return el;
@@ -612,6 +670,34 @@ function buildLinkDecorations(
 
 // ── Card decorations ───────────────────────────────────────────────────────
 
+// Parse a directive's inner content (between `[` and `]`) into the URL/id and
+// the CardWidget size args. `width`/`height` are kept as strings so they
+// round-trip cleanly through DOM data-attrs, where `notifyTargets` re-derives
+// format + style.
+function parseCardWidgetContent(content: string): {
+  cardId: string;
+  format?: BfmRefFormat;
+  width?: string;
+  height?: string;
+} {
+  let trimmed = content.trim();
+  let pipeIdx = trimmed.indexOf('|');
+  if (pipeIdx < 0) {
+    return { cardId: trimmed };
+  }
+  let cardId = trimmed.substring(0, pipeIdx).trim();
+  let spec = parseBfmSizeSpec(trimmed.substring(pipeIdx + 1).trim());
+  if (!spec) {
+    return { cardId };
+  }
+  return {
+    cardId,
+    format: spec.format,
+    width: spec.width !== undefined ? String(spec.width) : undefined,
+    height: spec.height !== undefined ? String(spec.height) : undefined,
+  };
+}
+
 function buildCardDecorations(
   state: EditorState,
   cursorLine: number,
@@ -620,103 +706,127 @@ function buildCardDecorations(
   let decos: DecoRange[] = [];
   let doc = state.doc;
   let text = doc.toString();
-
-  // Block cards: ::card[URL]
-  BLOCK_CARD_RE.lastIndex = 0;
   let match: RegExpExecArray | null;
-  while ((match = BLOCK_CARD_RE.exec(text)) !== null) {
-    let from = match.index;
-    let to = from + match[0].length;
-    if (isInsideCode(state, from, to)) continue;
 
-    let cardId = match[1].trim();
-    let pipeIdx = cardId.indexOf('|');
-    if (pipeIdx >= 0) {
-      cardId = cardId.substring(0, pipeIdx).trim();
+  for (let { refType, blockRe, inlineRe } of BFM_REF_CONFIGS) {
+    // Block refs: ::card[URL] / ::file[URL]
+    blockRe.lastIndex = 0;
+    while ((match = blockRe.exec(text)) !== null) {
+      let from = match.index;
+      let to = from + match[0].length;
+      if (isInsideCode(state, from, to)) continue;
+
+      let { cardId, format, width, height } = parseCardWidgetContent(match[1]);
+
+      let line = doc.lineAt(from);
+      let onCursor = livePreview && line.number === cursorLine;
+
+      if (!livePreview) {
+        // Source mode: show raw syntax with highlighting only
+        decos.push({
+          from,
+          to,
+          value: Decoration.mark({
+            class: 'cm-bfm-card-ref cm-bfm-card-ref--inline',
+          }),
+        });
+      } else if (onCursor) {
+        // Cursor on line: show raw syntax AND preview below
+        decos.push({
+          from,
+          to,
+          value: Decoration.mark({
+            class: 'cm-bfm-card-ref cm-bfm-card-ref--inline',
+          }),
+        });
+        let previewWidget = new CardWidget(
+          cardId,
+          'block',
+          refType,
+          format,
+          width,
+          height,
+        );
+        decos.push({
+          from: to,
+          to: to,
+          value: Decoration.widget({ widget: previewWidget, side: 1 }),
+        });
+      } else {
+        // Replace source text with widget
+        let widget = new CardWidget(
+          cardId,
+          'block',
+          refType,
+          format,
+          width,
+          height,
+        );
+        decos.push({
+          from,
+          to,
+          value: Decoration.replace({ widget }),
+        });
+      }
     }
 
-    let line = doc.lineAt(from);
-    let onCursor = livePreview && line.number === cursorLine;
+    // Inline refs: :card[URL] / :file[URL]
+    inlineRe.lastIndex = 0;
+    while ((match = inlineRe.exec(text)) !== null) {
+      let from = match.index;
+      let to = from + match[0].length;
+      if (isInsideCode(state, from, to)) continue;
 
-    if (!livePreview) {
-      // Source mode: show raw syntax with highlighting only
-      decos.push({
-        from,
-        to,
-        value: Decoration.mark({
-          class:
-            'cm-bfm-card-ref cm-bfm-card-ref--block cm-bfm-card-ref--active',
-        }),
-      });
-    } else if (onCursor) {
-      // Cursor on line: show raw syntax AND card preview below
-      decos.push({
-        from,
-        to,
-        value: Decoration.mark({
-          class:
-            'cm-bfm-card-ref cm-bfm-card-ref--block cm-bfm-card-ref--active',
-        }),
-      });
-      let previewWidget = new CardWidget(cardId, 'block');
-      decos.push({
-        from: to,
-        to: to,
-        value: Decoration.widget({ widget: previewWidget, side: 1 }),
-      });
-    } else {
-      // Replace source text with card widget
-      let widget = new CardWidget(cardId, 'block');
-      decos.push({
-        from,
-        to,
-        value: Decoration.replace({ widget }),
-      });
-    }
-  }
+      let { cardId, format, width, height } = parseCardWidgetContent(match[1]);
+      let onCursor = livePreview && isOnCursorLine(state, from, cursorLine);
 
-  // Inline cards: :card[URL]
-  INLINE_CARD_RE.lastIndex = 0;
-  while ((match = INLINE_CARD_RE.exec(text)) !== null) {
-    let from = match.index;
-    let to = from + match[0].length;
-    if (isInsideCode(state, from, to)) continue;
-
-    let cardId = match[1].trim();
-    let onCursor = livePreview && isOnCursorLine(state, from, cursorLine);
-
-    if (!livePreview) {
-      // Source mode: show raw syntax with highlighting only
-      decos.push({
-        from,
-        to,
-        value: Decoration.mark({
-          class: 'cm-bfm-card-ref cm-bfm-card-ref--inline',
-        }),
-      });
-    } else if (onCursor) {
-      // Cursor on line: show raw syntax AND card preview after
-      decos.push({
-        from,
-        to,
-        value: Decoration.mark({
-          class: 'cm-bfm-card-ref cm-bfm-card-ref--inline',
-        }),
-      });
-      let previewWidget = new CardWidget(cardId, 'inline');
-      decos.push({
-        from: to,
-        to: to,
-        value: Decoration.widget({ widget: previewWidget, side: 1 }),
-      });
-    } else {
-      // Replace source text with inline card widget
-      let widget = new CardWidget(cardId, 'inline');
-      decos.push({
-        from,
-        to,
-        value: Decoration.replace({ widget }),
-      });
+      if (!livePreview) {
+        // Source mode: show raw syntax with highlighting only
+        decos.push({
+          from,
+          to,
+          value: Decoration.mark({
+            class: 'cm-bfm-card-ref cm-bfm-card-ref--inline',
+          }),
+        });
+      } else if (onCursor) {
+        // Cursor on line: show raw syntax AND preview after
+        decos.push({
+          from,
+          to,
+          value: Decoration.mark({
+            class: 'cm-bfm-card-ref cm-bfm-card-ref--inline',
+          }),
+        });
+        let previewWidget = new CardWidget(
+          cardId,
+          'inline',
+          refType,
+          format,
+          width,
+          height,
+        );
+        decos.push({
+          from: to,
+          to: to,
+          value: Decoration.widget({ widget: previewWidget, side: 1 }),
+        });
+      } else {
+        // Replace source text with inline widget
+        let widget = new CardWidget(
+          cardId,
+          'inline',
+          refType,
+          format,
+          width,
+          height,
+        );
+        decos.push({
+          from,
+          to,
+          value: Decoration.replace({ widget }),
+        });
+      }
     }
   }
 
@@ -820,12 +930,30 @@ function createCardTargetNotifier(
           for (let el of widgetElements) {
             let cardId = el.getAttribute('data-card-id');
             let kind = el.getAttribute('data-card-kind') as 'inline' | 'block';
+            let refType =
+              (el.getAttribute('data-bfm-ref-type') as 'card' | 'file') ??
+              'card';
             if (cardId) {
+              // Re-derive format + sizing from the directive's size attributes,
+              // matching the saved/preview markdown renderers. Inline embeds
+              // default to atom, block embeds to embedded.
+              let { format, sizeStyle } = bfmRefFormatAndSize(
+                el.getAttribute('data-boxel-bfm-format') ?? undefined,
+                el.getAttribute('data-boxel-bfm-width') ?? undefined,
+                el.getAttribute('data-boxel-bfm-height') ?? undefined,
+                kind === 'inline' ? 'atom' : 'embedded',
+              );
+              // Non-atom slots carry a footprint so the resolved instance
+              // occupies a definite box instead of collapsing. Same helper as
+              // the saved/preview renderers so footprints stay in lockstep.
+              let style = bfmResolvedEmbedStyle(format, kind, sizeStyle);
               targets.push({
                 element: el as HTMLElement,
                 cardId,
-                format: kind === 'inline' ? 'atom' : 'embedded',
+                format,
                 kind,
+                refType,
+                style,
               });
             }
           }
@@ -839,7 +967,7 @@ function createCardTargetNotifier(
 // ── Slash command autocompletion ─────────────────────────────────────────────
 
 function createSlashCommandSource(
-  onOpenCardSearch: (pos: { from: number; to: number }) => void,
+  onOpenEmbedChooser: () => void,
 ): (context: CompletionContext) => CompletionResult | null {
   return function slashCommandSource(
     context: CompletionContext,
@@ -867,8 +995,10 @@ function createSlashCommandSource(
             from: number,
             to: number,
           ) => {
+            // Delete the typed `/…` so the caret sits where the directive
+            // should land, then open the chooser — it inserts at the selection.
             view.dispatch({ changes: { from, to, insert: '' } });
-            onOpenCardSearch({ from, to });
+            onOpenEmbedChooser();
           },
         },
       ],
@@ -881,9 +1011,17 @@ function createSlashCommandSource(
 function wrapWith(marker: string) {
   return (view: EditorView): boolean => {
     let { from, to } = view.state.selection.main;
-    if (from === to) return false;
-    let selected = view.state.sliceDoc(from, to);
     let len = marker.length;
+
+    // No selection: do nothing. Inserting an empty marker pair here leaves
+    // stray markers (e.g. **) visible in source and preview. Inline formatting
+    // applies to selected text only — the toolbar disables these buttons and
+    // the keyboard shortcut is a no-op until the user highlights something.
+    if (from === to) {
+      return true;
+    }
+
+    let selected = view.state.sliceDoc(from, to);
 
     // Case 1: Selection includes the markers (source mode selection)
     if (
@@ -928,6 +1066,69 @@ function wrapWith(marker: string) {
   };
 }
 
+// Find the markdown Link syntax node enclosing the given range, if any. Uses
+// the syntax tree — a string scan can match across unrelated brackets and
+// claim text the user never selected. Shared by toggleLink's unlink branch and
+// the selection-info emitter, so the toolbar's Link-button state can't drift
+// from what the command actually supports.
+function findEnclosingLink(
+  state: EditorState,
+  from: number,
+  to: number,
+): any | null {
+  let node: any = syntaxTree(state).resolveInner(from, 1);
+  for (let n: any = node; n; n = n.parent) {
+    if (n.name === 'Link' && from >= n.from && to <= n.to) {
+      return n;
+    }
+  }
+  return null;
+}
+
+// Toggle a markdown link around the selection. A caret or selection inside an
+// existing [text](url) unlinks it; a selection elsewhere wraps as a link.
+function toggleLink(view: EditorView): boolean {
+  let { from, to } = view.state.selection.main;
+
+  let link = findEnclosingLink(view.state, from, to);
+  if (link) {
+    // Unlink: replace the whole node with just its text (between [ and ]).
+    let marks: { from: number; to: number }[] = [];
+    let c = link.cursor();
+    if (c.firstChild()) {
+      do {
+        if (c.name === 'LinkMark') marks.push({ from: c.from, to: c.to });
+      } while (c.nextSibling());
+    }
+    if (marks.length >= 2) {
+      let text = view.state.sliceDoc(marks[0].to, marks[1].from);
+      view.dispatch({
+        changes: { from: link.from, to: link.to, insert: text },
+      });
+      return true;
+    }
+  }
+
+  if (from === to) {
+    // Caret outside any link: nothing to unlink, and inserting empty link
+    // syntax would leave a stray [](url) in the document. The wrap direction
+    // needs a selection.
+    return true;
+  }
+
+  // Wrap the selection as link text with a placeholder URL, selecting "url".
+  let selected = view.state.sliceDoc(from, to);
+  let insert = `[${selected}](url)`;
+  view.dispatch({
+    changes: { from, to, insert },
+    selection: {
+      anchor: from + selected.length + 3,
+      head: from + selected.length + 6,
+    },
+  });
+  return true;
+}
+
 const markdownKeymap = keymap.of([
   { key: 'Mod-b', run: wrapWith('**') },
   { key: 'Mod-i', run: wrapWith('*') },
@@ -938,6 +1139,8 @@ const markdownKeymap = keymap.of([
 
 export interface SelectionInfo {
   hasSelection: boolean;
+  /** Whether the editor currently holds focus. Drives toolbar enablement. */
+  hasFocus: boolean;
   from: number;
   to: number;
   /** Which inline formats are active in the current selection */
@@ -948,6 +1151,10 @@ export interface SelectionInfo {
     strikethrough: boolean;
     link: boolean;
   };
+  // BFM `:card[…]` / `::file[…]` directive the cursor head is currently
+  // inside. Undefined when the cursor is outside every directive. Drives
+  // the toolbar's Add-vs-Edit-embed swap.
+  currentRef?: BfmRefRange;
 }
 
 function detectFormats(
@@ -986,7 +1193,7 @@ export interface CreateEditorStateOptions {
   content: string;
   onDocChange: (text: string) => void;
   onCardTargetsChange: (targets: CardWidgetTarget[]) => void;
-  onOpenCardSearch: (pos: { from: number; to: number }) => void;
+  onOpenEmbedChooser: () => void;
   onSelectionChange?: (info: SelectionInfo) => void;
   /** When false, all syntax markers are visible (source mode). Default true. */
   livePreview?: boolean;
@@ -997,13 +1204,13 @@ function createEditorState(options: CreateEditorStateOptions): EditorState {
     content,
     onDocChange,
     onCardTargetsChange,
-    onOpenCardSearch,
+    onOpenEmbedChooser,
     onSelectionChange,
     livePreview = true,
   } = options;
 
   let decoField = createDecorationField(livePreview);
-  let slashSource = createSlashCommandSource(onOpenCardSearch);
+  let slashSource = createSlashCommandSource(onOpenEmbedChooser);
 
   let extensions: Extension[] = [
     markdown({ base: markdownLanguage }),
@@ -1022,29 +1229,58 @@ function createEditorState(options: CreateEditorStateOptions): EditorState {
       override: [slashSource],
       defaultKeymap: true,
     }),
-    EditorView.updateListener.of((update: ViewUpdate) => {
-      if (update.docChanged) {
-        onDocChange(update.state.doc.toString());
-      }
-      if (onSelectionChange && (update.selectionSet || update.docChanged)) {
-        let { from, to } = update.state.selection.main;
-        let hasSelection = from !== to;
-        onSelectionChange({
-          hasSelection,
-          from,
-          to,
-          formats: hasSelection
-            ? detectFormats(update.state, from, to)
-            : {
-                bold: false,
-                italic: false,
-                code: false,
-                strikethrough: false,
-                link: false,
-              },
-        });
-      }
-    }),
+    (() => {
+      // BFM ref ranges cached across selection-only updates — `extractBfmRefRanges`
+      // is a doc-wide string scan, so recompute only when the doc changes.
+      let cachedRanges: BfmRefRange[] = extractBfmRefRanges(content);
+
+      return EditorView.updateListener.of((update: ViewUpdate) => {
+        if (update.docChanged) {
+          let nextDoc = update.state.doc.toString();
+          onDocChange(nextDoc);
+          cachedRanges = extractBfmRefRanges(nextDoc);
+        }
+        if (
+          onSelectionChange &&
+          (update.selectionSet || update.docChanged || update.focusChanged)
+        ) {
+          let { from, to } = update.state.selection.main;
+          let hasSelection = from !== to;
+          let head = update.state.selection.main.head;
+          // Which directive, if any, owns the caret. A block directive is the
+          // only content on its line, so its whole span — end boundary included
+          // (`head == to`, e.g. caret at end-of-line or on the block widget) —
+          // reads as "inside". An inline directive is surrounded by prose, so
+          // its end boundary is exclusive: caret on the closing `]` (== to) is
+          // the seam where post-directive typing continues, not edit-this-embed.
+          let currentRef = cachedRanges.find((r) =>
+            r.kind === 'block'
+              ? head >= r.from && head <= r.to
+              : head >= r.from && head < r.to,
+          );
+          onSelectionChange({
+            hasSelection,
+            hasFocus: update.view.hasFocus,
+            from,
+            to,
+            formats: hasSelection
+              ? detectFormats(update.state, from, to)
+              : {
+                  // The wrap toggles no-op at a caret, so they read inactive.
+                  // Link is the exception: toggleLink can still unlink an
+                  // enclosing [text](url) from a bare caret, so report it
+                  // active — the toolbar keeps an active toggle clickable.
+                  bold: false,
+                  italic: false,
+                  code: false,
+                  strikethrough: false,
+                  link: !!findEnclosingLink(update.state, from, to),
+                },
+            currentRef,
+          });
+        }
+      });
+    })(),
     EditorView.lineWrapping,
   ];
 
@@ -1065,6 +1301,7 @@ export interface CodeMirrorContext {
   openCardSearchEffect: typeof openCardSearchEffect;
   focusChangeEffect: typeof focusChangeEffect;
   wrapWith: typeof wrapWith;
+  toggleLink: typeof toggleLink;
 }
 
 const codemirrorContext: CodeMirrorContext = {
@@ -1076,6 +1313,7 @@ const codemirrorContext: CodeMirrorContext = {
   openCardSearchEffect,
   focusChangeEffect,
   wrapWith,
+  toggleLink,
 };
 
 export default codemirrorContext;

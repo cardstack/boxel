@@ -2,19 +2,18 @@ import type Owner from '@ember/owner';
 import { setOwner } from '@ember/owner';
 import { service } from '@ember/service';
 
-import { md5 } from 'super-fast-md5';
-
 import {
-  APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
+  APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
-  baseRealm,
   codeRefWithAbsoluteIdentifier,
+  computeContentHash,
+  isSampledContentHash,
   getClass,
+  getToolDefinitions,
   inferContentType,
-  SupportedMimeType,
   relativeTo,
-  unresolveCardReference,
+  SupportedMimeType,
   type LooseSingleCardDocument,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
@@ -22,27 +21,20 @@ import {
 import { canonicalizeMatrixMediaKey } from '@cardstack/runtime-common/ai/matrix-utils';
 import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
 
-import type { default as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type * as FileAPI from 'https://cardstack.com/base/file-api';
-import type {
-  FileDef,
-  SerializedFile,
-} from 'https://cardstack.com/base/file-api';
-import type {
-  CommandDefinitionSchema,
-  Tool,
-} from 'https://cardstack.com/base/matrix-event';
-
-import type { MatrixEvent } from 'https://cardstack.com/base/matrix-event';
-import type * as SkillModule from 'https://cardstack.com/base/skill';
-
 import type CardService from '../services/card-service';
-import type CommandService from '../services/command-service';
 import type LoaderService from '../services/loader-service';
 import type { ExtendedClient } from '../services/matrix-sdk-loader';
 import type NetworkService from '../services/network';
+import type ToolService from '../services/tool-service';
+import type { default as Base64ImageFieldType } from '@cardstack/base/base64-image';
+import type { CardDef } from '@cardstack/base/card-api';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type * as FileAPI from '@cardstack/base/file-api';
+import type { FileDef, SerializedFile } from '@cardstack/base/file-api';
+import type { ToolDefinitionSchema, Tool } from '@cardstack/base/matrix-event';
+
+import type { MatrixEvent } from '@cardstack/base/matrix-event';
+import type * as SkillModule from '@cardstack/base/skill';
 
 export const isSkillCard = Symbol.for('is-skill-card');
 
@@ -64,11 +56,11 @@ export interface FileDefManager {
 
   /**
    * Uploads command definitions and returns their file definitions
-   * @param commandDefinitions Array of command definitions to upload
+   * @param toolDefinitionFileDefs Array of command definitions to upload
    * @returns Promise resolving to array of file definitions
    */
-  uploadCommandDefinitions(
-    commandDefinitions: SkillModule.CommandField[],
+  uploadToolDefinitions(
+    toolDefinitionFileDefs: SkillModule.ToolField[],
   ): Promise<FileDef[]>;
 
   /**
@@ -136,7 +128,7 @@ export default class FileDefManagerImpl
   private getFileAPI: () => typeof FileAPI;
 
   @service declare private cardService: CardService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private loaderService: LoaderService;
   @service declare private network: NetworkService;
 
@@ -178,13 +170,22 @@ export default class FileDefManagerImpl
   }
 
   async getContentHash(content: string | Uint8Array): Promise<string> {
-    return md5(content);
+    return computeContentHash(content);
   }
 
   private async getCachedUrlForContent(
     content: string | Uint8Array,
   ): Promise<string | null> {
     const hash = await this.getContentHash(content);
+    // A sampled fingerprint is not a total identity of the content, so it
+    // cannot answer "these are the same bytes" — and this cache acts on that
+    // answer by skipping the upload and handing back the earlier file's URL.
+    // A false match would therefore attach content the user never picked, with
+    // nothing surfacing the substitution. A miss only costs one redundant
+    // upload, so large media re-uploads rather than risk it.
+    if (isSampledContentHash(hash)) {
+      return null;
+    }
     let cachedUrl = this.contentHashCache.get(hash) || null;
     if (cachedUrl && !this.isMatrixMediaUrl(cachedUrl)) {
       // Self-heal stale/poisoned cache entries so uploads always produce
@@ -213,9 +214,12 @@ export default class FileDefManagerImpl
       throw new Error('Failed to convert mxcUrl to http');
     }
 
-    // Cache the content hash and URL
+    // Only a whole-content fingerprint may key this cache; see
+    // getCachedUrlForContent.
     const hash = await this.getContentHash(content);
-    this.contentHashCache.set(hash, url);
+    if (!isSampledContentHash(hash)) {
+      this.contentHashCache.set(hash, url);
+    }
 
     return url;
   }
@@ -269,6 +273,11 @@ export default class FileDefManagerImpl
     if (!this.isMatrixMediaUrl(url)) {
       return;
     }
+    // Same rule as the upload path: only a whole-content fingerprint is a
+    // safe key for content-addressed reuse.
+    if (isSampledContentHash(contentHash)) {
+      return;
+    }
     const canonicalKey = canonicalizeMatrixMediaKey(url) || url;
     if (this.invalidUrlCache.has(canonicalKey)) {
       // Skipping re-caching for this url as it was previously checked and is invalid
@@ -316,7 +325,7 @@ export default class FileDefManagerImpl
       serialization: LooseSingleCardDocument;
     }[] = await Promise.all(
       cards.map(async (card) => {
-        let opts: CardAPI.SerializeOpts = {
+        let opts: Omit<CardAPI.SerializeOpts, 'virtualNetwork'> = {
           useAbsoluteURL: true,
           includeComputeds: true,
         };
@@ -324,7 +333,7 @@ export default class FileDefManagerImpl
         let { default: Base64ImageField } =
           await this.loaderService.loader.import<{
             default: typeof Base64ImageFieldType;
-          }>(`${baseRealm.url}base64-image`);
+          }>('@cardstack/base/base64-image');
         let serialization = await this.cardService.serializeCard(card, {
           omitFields: [Base64ImageField],
           ...opts,
@@ -338,7 +347,9 @@ export default class FileDefManagerImpl
         const content = JSON.stringify(entry.serialization);
         const contentHash = await this.getContentHash(content);
         let fileDef = this.fileAPI.createFileDef({
-          sourceUrl: entry.card.id ? unresolveCardReference(entry.card.id) : '',
+          sourceUrl: entry.card.id
+            ? this.network.virtualNetwork.unresolveURL(entry.card.id)
+            : '',
           name: entry.card.cardTitle,
           contentType: SupportedMimeType.CardJson,
           contentHash,
@@ -352,29 +363,31 @@ export default class FileDefManagerImpl
     );
   }
 
-  async uploadCommandDefinitions(
-    commandDefinitions: SkillModule.CommandField[],
+  async uploadToolDefinitions(
+    toolDefinitionFileDefs: SkillModule.ToolField[],
   ): Promise<FileDef[]> {
-    if (!commandDefinitions.length) {
+    if (!toolDefinitionFileDefs.length) {
       return [];
     }
 
     // Create the command defs to get the json schema
-    let commandDefinitionSchemas: CommandDefinitionSchema[] = [];
+    let toolDefinitionSchemas: ToolDefinitionSchema[] = [];
     const mappings = await basicMappings(this.loaderService.loader);
 
-    for (let commandDef of commandDefinitions) {
+    for (let toolDef of toolDefinitionFileDefs) {
       let absoluteCodeRef = codeRefWithAbsoluteIdentifier(
-        commandDef.codeRef,
-        commandDef[relativeTo],
+        toolDef.codeRef,
+        toolDef[relativeTo],
+        undefined,
+        this.network.virtualNetwork,
       ) as ResolvedCodeRef;
       const Command = await getClass(
         absoluteCodeRef,
         this.loaderService.loader,
       );
-      const command = new Command(this.commandService.commandContext);
-      const name = commandDef.functionName;
-      const schema: CommandDefinitionSchema = {
+      const command = new Command(this.toolService.toolContext);
+      const name = toolDef.functionName;
+      const schema: ToolDefinitionSchema = {
         codeRef: absoluteCodeRef,
         tool: {
           type: 'function' as Tool['type'],
@@ -397,12 +410,12 @@ export default class FileDefManagerImpl
           },
         },
       };
-      commandDefinitionSchemas.push(schema);
+      toolDefinitionSchemas.push(schema);
     }
 
     // Upload each command definition schema as a file
     let fileDefs = await Promise.all(
-      commandDefinitionSchemas.map(async (schema) => {
+      toolDefinitionSchemas.map(async (schema) => {
         const name = schema.tool.function.name;
         const content = JSON.stringify(schema);
         const contentHash = await this.getContentHash(content);
@@ -693,7 +706,7 @@ export default class FileDefManagerImpl
       const skillsAndCommands = [
         ...(skillsContent.enabledSkillCards || []),
         ...(skillsContent.disabledSkillCards || []),
-        ...(skillsContent.commandDefinitions || []),
+        ...(getToolDefinitions<SerializedFile>(skillsContent) || []),
       ];
 
       for (const skillOrCommand of skillsAndCommands) {

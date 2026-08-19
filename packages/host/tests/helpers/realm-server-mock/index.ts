@@ -56,6 +56,7 @@ function ensureRealmServerMockState(
     };
     state = {
       realmPermissions,
+      archivedRealms: new Map<string, { archivedAt: string }>(),
       handler,
       ensureSessionRoom: sessionRoomEnsurer,
     };
@@ -84,6 +85,33 @@ export function setupAuthEndpoints(
       permissions as RealmAction[],
     );
   }
+}
+
+// Simulate a realm being archived or unarchived out of band (another tab, the
+// CLI, an AI agent): flip its membership in the archived set that the mock's
+// `_realm-auth` (active list) and `_archived-realms` endpoints read from,
+// without the current session performing the mutation. Mirrors what
+// handleArchiveToggle does when the POST endpoints are hit directly.
+export function setRealmArchived(realmURL: string, archived: boolean) {
+  let network = getService('network') as NetworkService;
+  let state = ensureRealmServerMockState(network);
+  let normalizedRealmURL = ensureTrailingSlash(realmURL);
+  if (archived) {
+    state.archivedRealms.set(normalizedRealmURL, {
+      archivedAt: new Date().toISOString(),
+    });
+  } else {
+    state.archivedRealms.delete(normalizedRealmURL);
+  }
+}
+
+// Simulate a trusted realm server going unreachable (or recovering) at its
+// `_realm-auth` endpoint, so boot-assembly graceful-degradation and retry can
+// be exercised deterministically.
+export function setRealmAuthFailure(shouldFail: boolean) {
+  let network = getService('network') as NetworkService;
+  let state = ensureRealmServerMockState(network);
+  state.failRealmAuth = shouldFail;
 }
 
 export function registerRealmAuthSessionRoomEnsurer(

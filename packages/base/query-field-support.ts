@@ -6,22 +6,24 @@ import type {
   StoreSearchResource,
 } from './card-api';
 import type {
+  ErrorEntry,
   FieldDefinition,
   LooseCardResource,
   Query,
   QueryWithInterpolations,
   RuntimeDependencyTrackingContext,
+  SerializedError,
 } from '@cardstack/runtime-common';
 import {
-  cardIdToURL,
   getField,
   getSingularRelationship,
   identifyCard,
   isCardInstance,
+  rri,
   THIS_INTERPOLATION_PREFIX,
   THIS_REALM_TOKEN,
   realmURL as realmURLSymbol,
-  parseSearchURL,
+  parseRealmsParam,
 } from '@cardstack/runtime-common';
 import {
   buildQuerySearchURL,
@@ -30,6 +32,12 @@ import {
 import { logger as runtimeLogger } from '@cardstack/runtime-common';
 import { runtimeQueryDependencyContext } from '@cardstack/runtime-common';
 import { initSharedState } from './shared-state';
+import {
+  bumpFieldLoadingSignal,
+  getDataBucket,
+  type LinkErrorValue,
+  type LinkNotFoundValue,
+} from './field-support';
 
 interface QueryFieldState {
   seedSearchURL?: string | null;
@@ -51,6 +59,19 @@ interface QueryFieldState {
   }>;
   searchResource?: StoreSearchResource;
   renderCycleBarrier?: Promise<void>;
+  // The sentinel `surfaceSearchResourceErrorState` planted on the most
+  // recent transition into an errored state, kept as an identity handle
+  // so the clear-on-recovery path can tell `our sentinel` apart from a
+  // hand-planted / deserialized / externally-set bucket entry it must
+  // leave alone.
+  surfacedErrorSentinel?: LinkErrorValue | LinkNotFoundValue;
+  // The `searchResource.errors` array reference we acted on the last
+  // time surface ran. Tracking this lets surface short-circuit on
+  // unchanged errors (the common per-render no-op case) and detect a
+  // real transition into / out of the errored state without reading
+  // the bucket on every call. Stored as-is — including `undefined` —
+  // so the steady-state no-errors render hits the identity check.
+  surfacedErrorSource?: readonly unknown[];
 }
 
 const queryFieldSeedFromSearchSymbol = Symbol.for(
@@ -114,12 +135,20 @@ export function ensureQueryFieldSearchResource(
     log.debug(
       `ensureQueryFieldSearchResource: reusing existing resource from fieldState for field=${field.name}`,
     );
+    surfaceSearchResourceErrorState(
+      fieldState,
+      instance,
+      field,
+      searchResource,
+    );
     return searchResource;
   }
 
   let seedRecords = fieldState?.seedRecords;
   let seedSearchURL = fieldState?.seedSearchURL;
-  let args = () => resolveQueryAndRealm(instance, field, fieldDefinition);
+  let args = () => {
+    return resolveQueryAndRealm(store, instance, field, fieldDefinition);
+  };
 
   // Inside a prerender the parent doc's `relationships.{field}.data` is
   // the authoritative cardinality for this field — the indexer just
@@ -143,8 +172,15 @@ export function ensureQueryFieldSearchResource(
     instance,
     () => args()?.query,
     () => {
-      let realm = args()?.realmHref;
-      return realm ? [realm] : undefined;
+      // Prefer the realm set the indexer resolved and advertised on
+      // `links.search`: it was derived where the realm mappings live, so it
+      // covers cross-realm references this side can't place on its own.
+      let seeded = fieldState?.seedRealms;
+      if (seeded?.length) {
+        return seeded;
+      }
+      let realms = args()?.realmHrefs;
+      return realms?.length ? realms : undefined;
     },
     {
       isLive,
@@ -162,8 +198,117 @@ export function ensureQueryFieldSearchResource(
   );
   fieldState.searchResource = searchResource;
   trackQueryFieldLoads(store, field.name, fieldState);
+  surfaceSearchResourceErrorState(fieldState, instance, field, searchResource);
+  // Bridge `getRelationshipMembershipState(...).isLoading` to this freshly-created resource:
+  // a `peek` before it existed entangled nothing, so nudge observers to
+  // re-read now that the resource (and its tracked running flag) is available.
+  bumpFieldLoadingSignal(instance, field.name);
 
   return searchResource;
+}
+
+// Peek at the search resource already created for a query field, without
+// triggering creation. Returns `undefined` when the resource hasn't been
+// instantiated yet (no consumer has read the field). Pure read — useful for
+// callers that want to inspect resolved state without registering as
+// reactive consumers of the field.
+export function peekQueryFieldSearchResource(
+  instance: BaseDef,
+  fieldName: string,
+): StoreSearchResource | undefined {
+  return queryFieldStates.get(instance)?.get(fieldName)?.searchResource;
+}
+
+// Mirror the SearchResource's resource-level error state onto the data bucket
+// so the field getter and `getRelationshipMembershipState` recognize the same sentinels they
+// already handle for direct `linksTo`. Reading `searchResource.errors` here
+// also entangles the calling field-getter render with the resource's tracked
+// failure channel — a later transition into or out of an errored state
+// re-invokes the getter without further plumbing.
+//
+// Ownership: the clear-on-recovery path acts only on sentinels we planted
+// ourselves (tracked by identity via `fieldState.surfacedErrorSentinel`). A
+// hand-planted or deserialized sentinel — or any other bucket entry that
+// happens to be in a sentinel shape — is left alone, so external producers
+// can put state into the bucket without surface racing them and erasing it.
+//
+// Short-circuit: the `errors` array carries identity across reads when the
+// SearchResource hasn't transitioned, so an unchanged snapshot lets surface
+// return without touching the bucket. The early-return is also what keeps
+// the first call (errors === undefined on a fresh resource, source ===
+// undefined on a fresh fieldState) from clobbering a sentinel that was put
+// in place before the field was first read.
+function surfaceSearchResourceErrorState(
+  fieldState: QueryFieldState,
+  instance: BaseDef,
+  field: Field,
+  searchResource: StoreSearchResource,
+): void {
+  let errors = searchResource.errors;
+  if (errors === fieldState.surfacedErrorSource) {
+    return;
+  }
+  // Store the snapshot as-is (including `undefined`) so the next-render
+  // identity check matches when `searchResource.errors` is still undefined —
+  // coercing to `null` would miss the early-return and force an extra
+  // bucket read per render.
+  fieldState.surfacedErrorSource = errors;
+
+  let bucket = getDataBucket(instance);
+  let existing = bucket.get(field.name);
+
+  if (!errors || errors.length === 0) {
+    if (
+      fieldState.surfacedErrorSentinel &&
+      existing === fieldState.surfacedErrorSentinel
+    ) {
+      bucket.delete(field.name);
+    }
+    fieldState.surfacedErrorSentinel = undefined;
+    return;
+  }
+
+  let sentinel = buildQueryFieldSentinel(instance, field, errors);
+  bucket.set(field.name, sentinel);
+  fieldState.surfacedErrorSentinel = sentinel;
+}
+
+function buildQueryFieldSentinel(
+  instance: BaseDef,
+  field: Field,
+  errors: ErrorEntry[],
+): LinkErrorValue | LinkNotFoundValue {
+  // A search resource fails as a unit, so we pick the first reported error
+  // for the discriminator (404 → `link-not-found`, anything else →
+  // `link-error`) and hand the entire SerializedError through as `errorDoc`.
+  // Picking the first error mirrors how `lazilyLoadLink` builds its sentinel
+  // from the single failing fetch, and keeps the surface uniform across the
+  // declared and query-field producers.
+  let firstError = errors[0].error;
+  let status = firstError.status;
+  let isMissing = status === 404;
+  let errorDoc: SerializedError = {
+    ...firstError,
+    additionalErrors: firstError.additionalErrors ?? null,
+  };
+  let reference = queryFieldErrorReference(instance, field);
+  return isMissing
+    ? { type: 'link-not-found', reference, errorDoc }
+    : { type: 'link-error', reference, errorDoc };
+}
+
+function queryFieldErrorReference(instance: BaseDef, field: Field): string {
+  // A query field has no single linked-card URL the way a declared `linksTo`
+  // does — the resource is the unit of failure. Use the owning card's id
+  // (qualified with the field name) when available so the reference is
+  // diagnosable in logs and persisted error docs. Unsaved owners fall back to
+  // a synthetic identifier; the reference is read by humans / by
+  // `getRelationshipMembershipState` consumers but never resolved as a URL.
+  let owner = (instance as CardDef).id;
+  if (typeof owner === 'string' && owner.length > 0) {
+    return `${owner}#${field.name}`;
+  }
+  return `query-field:${field.name}`;
 }
 
 function trackQueryFieldLoads(
@@ -409,17 +554,22 @@ export function captureQueryFieldSeedData(
   fieldState.seedSearchURL = shouldTreatEmptySeedAsUnresolved
     ? null
     : (relationship?.links?.search ?? null);
+  // Read the whole realm set off the seed URL's `realms` param, not just the
+  // realm the URL is addressed to: a query-backed field spanning realms
+  // advertises all of them, and keeping only the first would silently narrow
+  // the client's re-query back to one realm.
   fieldState.seedRealms = fieldState.seedSearchURL
-    ? [parseSearchURL(new URL(fieldState.seedSearchURL)).realm.href]
+    ? parseRealmsParam(new URL(fieldState.seedSearchURL))
     : [];
   fieldState.seedErrors = (relationship?.meta as any)?.errors ?? undefined;
 }
 
 function resolveQueryAndRealm(
+  store: CardStore,
   instance: BaseDef,
   field: Field,
   fieldDefinition: FieldDefinition,
-): { realmHref: string; searchURL: string; query: Query } | undefined {
+): { realmHrefs: string[]; searchURL: string; query: Query } | undefined {
   let realmURL: URL | undefined = (instance as any)[realmURLSymbol];
   if (!realmURL) {
     return undefined;
@@ -429,6 +579,10 @@ function resolveQueryAndRealm(
     ? field.name.slice(0, field.name.lastIndexOf('.'))
     : undefined;
 
+  // Resolve in RRI space (no VirtualNetwork): the instance's id is canonical
+  // (prefix form for mapped realms, URL otherwise) and is a valid base for
+  // relative code-ref resolution. The index and the client-side filter matcher
+  // both tolerate either spelling in the resulting query.
   let normalized = normalizeQueryDefinition({
     fieldDefinition,
     queryDefinition: field.queryDefinition ?? {},
@@ -437,8 +591,20 @@ function resolveQueryAndRealm(
     fieldPath,
     resolvePathValue: (path) => resolveInstancePathValue(instance, path),
     relativeTo: (instance as CardDef).id
-      ? cardIdToURL((instance as CardDef).id)
+      ? rri((instance as CardDef).id)
       : realmURL,
+    // A card definition never holds the realm mappings, so the store answers
+    // which realm a reference belongs to — the same boundary `resolveURL` and
+    // `canonicalizeId` sit on. A reference the store can't place falls back to
+    // the containing realm only when it actually lives there; otherwise the
+    // normalizer drops it rather than searching the wrong realm.
+    resolveRealmForReference: (reference) => {
+      let realm = store.realmForId(reference);
+      if (realm) {
+        return realm;
+      }
+      return reference.startsWith(realmURL.href) ? realmURL.href : undefined;
+    },
   });
 
   if (!normalized) {
@@ -446,8 +612,8 @@ function resolveQueryAndRealm(
   }
 
   return {
-    realmHref: normalized.realm,
-    searchURL: buildQuerySearchURL(normalized.realm, normalized.query),
+    realmHrefs: normalized.realms,
+    searchURL: buildQuerySearchURL(normalized.realms, normalized.query),
     query: normalized.query,
   };
 }

@@ -123,14 +123,14 @@ ruleTester.run('no-literal-realm-urls', rule, {
 
     // --- Custom realm mappings via options ---
     {
-      code: `let id = 'https://cardstack.com/base/card-api';`,
+      code: `let id = '@cardstack/base/card-api';`,
       output: `let id = '@cardstack/base/card-api';`,
       options: [
         {
           realmMappings: [
             {
               prefix: '@cardstack/base/',
-              urls: ['https://cardstack.com/base/'],
+              urls: ['@cardstack/base/'],
             },
           ],
         },

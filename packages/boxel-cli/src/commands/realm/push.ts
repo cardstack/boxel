@@ -3,22 +3,23 @@ import {
   RealmSyncBase,
   isProtectedFile,
   type SyncOptions,
-} from '../../lib/realm-sync-base';
+} from '../../lib/realm-sync-base.ts';
 import {
   CheckpointManager,
   type CheckpointChange,
-} from '../../lib/checkpoint-manager';
-import type { ProfileManager } from '../../lib/profile-manager';
-import type { RealmAuthenticator } from '../../lib/realm-authenticator';
-import { resolveRealmAuthenticator } from '../../lib/auth-resolver';
-import { resolveRealmSecretSeed } from '../../lib/prompt';
+} from '../../lib/checkpoint-manager.ts';
+import type { ProfileManager } from '../../lib/profile-manager.ts';
+import type { RealmAuthenticator } from '../../lib/realm-authenticator.ts';
+import { resolveRealmAuthenticator } from '../../lib/auth-resolver.ts';
+import { resolveRealmIdentifier } from '../../lib/resolve-realm-identifier.ts';
+import { resolveRealmSecretSeed } from '../../lib/prompt.ts';
 import {
   type SyncManifest,
   computeFileHash,
   loadManifest,
   saveManifest,
   pathExists,
-} from '../../lib/sync-manifest';
+} from '../../lib/sync-manifest.ts';
 
 interface PushOptions extends SyncOptions {
   deleteRemote?: boolean;
@@ -32,12 +33,11 @@ const REMOTE_DELETE_EXCLUSIONS = new Set(['index.json', 'realm.json']);
 
 class RealmPusher extends RealmSyncBase {
   hasError = false;
+  private pushOptions: PushOptions;
 
-  constructor(
-    private pushOptions: PushOptions,
-    authenticator: RealmAuthenticator,
-  ) {
+  constructor(pushOptions: PushOptions, authenticator: RealmAuthenticator) {
     super(pushOptions, authenticator);
+    this.pushOptions = pushOptions;
   }
 
   async sync(): Promise<void> {
@@ -206,11 +206,16 @@ class RealmPusher extends RealmSyncBase {
       // binary POST fails — dropping the manifest update in that
       // case would force a re-add on the next push (409 cascade).
       if (result.succeeded.length > 0) {
+        // Guard the map lookup: `succeeded` should only carry paths from
+        // `filesToUpload`, but a server response in an unexpected shape must
+        // degrade to a manifest gap (re-upload next push), not a crash.
         const uploaded = await Promise.all(
-          result.succeeded.map(async (rel) => ({
-            rel,
-            hash: await computeFileHash(filesToUpload.get(rel)!),
-          })),
+          result.succeeded
+            .filter((rel) => filesToUpload.has(rel))
+            .map(async (rel) => ({
+              rel,
+              hash: await computeFileHash(filesToUpload.get(rel)!),
+            })),
         );
         for (const { rel, hash } of uploaded) {
           newManifest.files[rel] = hash;
@@ -394,21 +399,25 @@ export async function pushCommand(
   realmUrl: string,
   options: PushCommandOptions,
 ): Promise<void> {
-  let authenticator: RealmAuthenticator;
-  if (options.authenticator) {
-    authenticator = options.authenticator;
-  } else {
-    const resolution = resolveRealmAuthenticator({
-      realmUrl,
-      realmSecretSeed: options.realmSecretSeed,
-      profileManager: options.profileManager,
-    });
-    if (!resolution.ok) {
-      console.error(`Error: ${resolution.error}`);
-      process.exit(1);
-    }
-    authenticator = resolution.authenticator;
+  const resolvedRealm = resolveRealmIdentifier(realmUrl, {
+    profileManager: options.profileManager,
+  });
+  if (!resolvedRealm.ok) {
+    console.error(`Error: ${resolvedRealm.error}`);
+    process.exit(1);
   }
+  realmUrl = resolvedRealm.url;
+  const resolution = resolveRealmAuthenticator({
+    realmUrl,
+    realmSecretSeed: options.realmSecretSeed,
+    profileManager: options.profileManager,
+    authenticator: options.authenticator,
+  });
+  if (!resolution.ok) {
+    console.error(`Error: ${resolution.error}`);
+    process.exit(1);
+  }
+  const authenticator = resolution.authenticator;
 
   if (!(await pathExists(localDir))) {
     console.error(`Local directory does not exist: ${localDir}`);

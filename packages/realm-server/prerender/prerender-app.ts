@@ -7,6 +7,7 @@ import {
   Deferred,
   type AffinityType,
   logger,
+  type PrerenderVisitType,
   type RenderRouteOptions,
   type ModuleRenderResponse,
   type RunCommandResponse,
@@ -17,11 +18,12 @@ import {
   fullRequestURL,
   livenessCheck,
   fetchRequestFromContext,
-} from '../middleware';
-import { Prerenderer } from './index';
-import type { Timings } from './render-runner';
-import { resolvePrerenderManagerURL } from './config';
+} from '../middleware/index.ts';
+import { Prerenderer } from './index.ts';
+import type { Timings } from './render-runner.ts';
+import { resolvePrerenderManagerURL } from './config.ts';
 import {
+  PRERENDER_HOST_SHELL_HASH_HEADER,
   PRERENDER_JOB_ID_HEADER,
   PRERENDER_REQUEST_ID_HEADER,
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
@@ -29,7 +31,7 @@ import {
   PRERENDER_SERVER_STATUS_HEADER,
   sanitizePrerenderJobId,
   sanitizePrerenderRequestId,
-} from './prerender-constants';
+} from './prerender-constants.ts';
 import { randomUUID } from 'crypto';
 
 type PrerenderServer = Server & {
@@ -41,7 +43,7 @@ const defaultPrerenderServerPort = 4221;
 
 // Stamp the per-request `requestId` onto `response.meta.requestId`
 // so it flows through the same channel as timings / host-side
-// diagnostics and ends up on `boxel_index.timing_diagnostics` for
+// diagnostics and ends up on `boxel_index.diagnostics` for
 // cross-log grepping. The launch/waits/render/total timings are
 // already attached inside Prerenderer (regardless of HTTP vs
 // in-process); this layer just adds the HTTP-only correlation id.
@@ -58,6 +60,30 @@ export function decorateRenderErrorDiagnostics(
     ...(response.meta ?? {}),
     requestId,
   };
+}
+
+// Pure decision for the host-shell recycle reconcile. Given the token the
+// manager last reported (`reported`, null when it doesn't know one yet) and
+// the token this server warmed against (`warmed`, undefined before the first
+// report), decide whether to recycle and what the baseline token becomes:
+//   - no report          → keep the current baseline, don't recycle
+//   - first report seen   → adopt it as the baseline, don't recycle (we just
+//                           warmed against whatever shell is current)
+//   - same as baseline    → no-op
+//   - differs from baseline → recycle and advance the baseline
+// Exported for unit testing; the live caller layers the draining / in-flight
+// guards and the async recycle on top.
+export function decideHostShellRecycle(
+  reported: string | null,
+  warmed: string | undefined,
+): { recycle: boolean; nextWarmed: string | undefined } {
+  if (!reported) {
+    return { recycle: false, nextWarmed: warmed };
+  }
+  if (warmed === undefined || warmed === reported) {
+    return { recycle: false, nextWarmed: reported };
+  }
+  return { recycle: true, nextWarmed: reported };
 }
 
 export function buildPrerenderApp(options: {
@@ -369,7 +395,9 @@ export function buildPrerenderApp(options: {
       let ac = new AbortController();
       const onClientClose = () => {
         if (ctxt.res.writableEnded) return;
-        ac.abort();
+        // The reason string rides on `PrerenderCancelledError.message`
+        // so cancel log lines say why the render was interrupted.
+        ac.abort('client disconnected');
       };
       ctxt.res.on('close', onClientClose);
       try {
@@ -474,7 +502,7 @@ export function buildPrerenderApp(options: {
         let poolFlagSuffix =
           poolFlags.length > 0 ? ` flags=[${poolFlags}]` : '';
         log.info(
-          '%s %s requestId=%s priority=%d total=%dms launch=%dms (semaphore=%dms, tabQueue=%dms, tabStartup=%dms) render=%dms pageId=%s affinityType=%s affinityValue=%s%s',
+          '%s %s requestId=%s priority=%d total=%dms launch=%dms (semaphore=%dms, tabQueue=%dms, tabStartup=%dms, tabProbe=%dms) render=%dms pageId=%s affinityType=%s affinityValue=%s%s',
           options.infoLabel,
           parsed.logTarget,
           requestId,
@@ -484,6 +512,7 @@ export function buildPrerenderApp(options: {
           timings.waits.semaphoreMs,
           timings.waits.tabQueueMs,
           timings.waits.tabStartupMs,
+          timings.waits.tabProbeMs,
           timings.renderMs,
           pool.pageId,
           pool.affinityType,
@@ -630,7 +659,9 @@ export function buildPrerenderApp(options: {
     let ac = new AbortController();
     const onClientClose = () => {
       if (ctxt.res.writableEnded) return;
-      ac.abort();
+      // The reason string rides on `PrerenderCancelledError.message`
+      // so cancel log lines say why the render was interrupted.
+      ac.abort('client disconnected');
     };
     ctxt.res.on('close', onClientClose);
     try {
@@ -661,6 +692,16 @@ export function buildPrerenderApp(options: {
           : {};
       let fileData = attrs.fileData;
       let types = attrs.types;
+      let rawVisitType = attrs.visitType;
+      let visitType: PrerenderVisitType | undefined =
+        rawVisitType === 'index' || rawVisitType === 'prerender-html'
+          ? rawVisitType
+          : undefined;
+      let cardTypes = Array.isArray(attrs.cardTypes)
+        ? (attrs.cardTypes as unknown[]).filter(
+            (t): t is string => typeof t === 'string',
+          )
+        : undefined;
 
       let isNonEmptyString = (value: unknown): value is string =>
         typeof value === 'string' && value.trim().length > 0;
@@ -678,6 +719,12 @@ export function buildPrerenderApp(options: {
         .filter(({ value }) => !isNonEmptyString(value))
         .map(({ name }) => name);
 
+      // A visitType value the server doesn't recognize would silently run
+      // the fused visit; reject instead so a caller skew is loud.
+      if (rawVisitType != null && visitType === undefined) {
+        missing.push(`visitType ('index' or 'prerender-html')`);
+      }
+
       // At least one pass must be requested
       if (
         !renderOptions.fileExtract &&
@@ -688,9 +735,12 @@ export function buildPrerenderApp(options: {
       }
 
       // If fileRender is requested without fileData, we need fileExtract so
-      // the composite can chain the extract's resource into render. When
-      // fileExtract isn't requested AND fileData isn't supplied, reject —
-      // the host route model hook requires fileData to populate its model.
+      // the composite can chain the extract's resource into render — a
+      // prerender-html visit included: requesting the extract is what makes
+      // the standalone visit self-sufficient, resolving the file's resource
+      // + types from source. When fileExtract isn't requested AND fileData
+      // isn't supplied, reject — the host route model hook requires fileData
+      // to populate its model.
       if (renderOptions.fileRender && !fileData && !renderOptions.fileExtract) {
         missing.push(
           'fileData (required when fileRender pass is requested without fileExtract)',
@@ -712,7 +762,7 @@ export function buildPrerenderApp(options: {
 
       let priority = parsePriority(attrs);
       log.debug(
-        `received visit prerender request ${rawUrl}: affinityType=${rawAffinityType} affinityValue=${rawAffinityValue} realm=${rawRealm} priority=${priority ?? 0} options=${JSON.stringify(renderOptions)}`,
+        `received visit prerender request ${rawUrl}: affinityType=${rawAffinityType} affinityValue=${rawAffinityValue} realm=${rawRealm} visitType=${visitType ?? 'fused'} priority=${priority ?? 0} options=${JSON.stringify(renderOptions)}`,
       );
       if (missing.length > 0) {
         ctxt.status = 400;
@@ -757,9 +807,11 @@ export function buildPrerenderApp(options: {
           realm,
           url,
           auth,
+          ...(visitType ? { visitType } : {}),
           renderOptions,
           ...(fileData ? { fileData } : {}),
           ...(Array.isArray(types) ? { types } : {}),
+          ...(cardTypes?.length ? { cardTypes } : {}),
           ...(batchId ? { batchId } : {}),
           ...(priority !== undefined ? { priority } : {}),
           ...(jobId ? { jobId } : {}),
@@ -806,7 +858,7 @@ export function buildPrerenderApp(options: {
         .join(', ');
       let poolFlagSuffix = poolFlags.length > 0 ? ` flags=[${poolFlags}]` : '';
       log.info(
-        'visit prerendered %s requestId=%s priority=%d total=%dms launch=%dms (semaphore=%dms, tabQueue=%dms, tabStartup=%dms) render=%dms pageId=%s affinityType=%s affinityValue=%s%s',
+        'visit prerendered %s requestId=%s priority=%d total=%dms launch=%dms (semaphore=%dms, tabQueue=%dms, tabStartup=%dms, tabProbe=%dms) render=%dms pageId=%s affinityType=%s affinityValue=%s%s',
         url,
         requestId,
         priority ?? 0,
@@ -815,6 +867,7 @@ export function buildPrerenderApp(options: {
         timings.waits.semaphoreMs,
         timings.waits.tabQueueMs,
         timings.waits.tabStartupMs,
+        timings.waits.tabProbeMs,
         timings.renderMs,
         pool.pageId,
         pool.affinityType,
@@ -1021,6 +1074,13 @@ export function createPrerenderHttpServer(options?: {
   let drainingResolved = false;
   let drainingDeferred = new Deferred<void>();
   let heartbeatTimer: NodeJS.Timeout | undefined;
+  // Host-shell token the standbys were last warmed against, learned from the
+  // manager's heartbeat responses (PRERENDER_HOST_SHELL_HASH_HEADER). When the
+  // manager reports a different token — the host was redeployed and the realm
+  // server is now serving a new shell — the browser is recycled so pages
+  // reload it. Undefined until the first heartbeat that carries a token.
+  let warmedHostShellHash: string | undefined;
+  let recyclingForHostChange = false;
   let isClosing = false;
   let fatalExitOnUncaught = options?.fatalExitOnUncaught ?? true;
   let serverURL = resolvePrerenderServerURL(options?.port);
@@ -1079,7 +1139,7 @@ export function createPrerenderHttpServer(options?: {
       log.debug(
         `POST heartbeat to ${managerURL}/prerender-servers with body:\n${JSON.stringify(body, null, 2)}`,
       );
-      await fetch(`${managerURL}/prerender-servers`, {
+      let response = await fetch(`${managerURL}/prerender-servers`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/vnd.api+json',
@@ -1088,11 +1148,52 @@ export function createPrerenderHttpServer(options?: {
         body: JSON.stringify(body),
       }).catch((e) => {
         log.debug('Prerender manager heartbeat request failed:', e);
+        return undefined;
       });
+      if (response) {
+        reconcileHostShell(
+          response.headers.get(PRERENDER_HOST_SHELL_HASH_HEADER),
+        );
+      }
     } catch (e) {
       // best-effort, but log for visibility
       log.debug('Error while attempting heartbeat with prerender manager:', e);
     }
+  }
+
+  // Compare the manager's current host-shell token against the one we warmed
+  // against. A change means the host was redeployed, so recycle the browser
+  // (fire-and-forget; the heartbeat itself must not block on the restart).
+  function reconcileHostShell(hash: string | null) {
+    if (draining || recyclingForHostChange) {
+      return;
+    }
+    let { recycle, nextWarmed } = decideHostShellRecycle(
+      hash,
+      warmedHostShellHash,
+    );
+    if (!recycle) {
+      // Either nothing reported, or we adopted a baseline / matched — record
+      // the (possibly newly-adopted) token and we're done.
+      warmedHostShellHash = nextWarmed;
+      return;
+    }
+    recyclingForHostChange = true;
+    log.info(
+      `host shell changed (${warmedHostShellHash} -> ${hash}); recycling prerender browser`,
+    );
+    void prerenderer
+      .recycle()
+      .then(() => {
+        warmedHostShellHash = nextWarmed;
+      })
+      .catch((e) => {
+        // Leave warmedHostShellHash unchanged so the next heartbeat retries.
+        log.error('Failed to recycle prerender browser on host change:', e);
+      })
+      .finally(() => {
+        recyclingForHostChange = false;
+      });
   }
 
   function startHeartbeatLoop() {

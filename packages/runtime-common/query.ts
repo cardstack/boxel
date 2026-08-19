@@ -1,8 +1,8 @@
-import isEqual from 'lodash/isEqual';
-import { assertJSONValue, assertJSONPrimitive } from './json-validation';
+import { isEqual } from 'lodash-es';
+import { assertJSONValue, assertJSONPrimitive } from './json-validation.ts';
 import qs from 'qs';
 
-import { type CodeRef, isCodeRef, generalSortFields } from './index';
+import { type CodeRef, isCodeRef, generalSortFields } from './index.ts';
 type JSONValue =
   | string
   | number
@@ -26,7 +26,7 @@ interface QueryCommon {
   page?: {
     number?: number; // page.number is 0-based
     size: number;
-    realmVersion?: number;
+    generation?: number;
   };
 }
 
@@ -49,13 +49,19 @@ interface QueryWithInterpolationsBase {
   page?: {
     number?: number; // page.number is 0-based
     size: number | string;
-    realmVersion?: number;
+    generation?: number;
   };
 }
 
+// `realms` accepts a bare string here, unlike the resolved `Query`: an
+// interpolation like `$this.someField` is a single placeholder standing in for
+// the whole list, and resolves to an array before the query is executed.
 export type QueryWithInterpolations =
   | (QueryWithInterpolationsBase & { realm?: string; realms?: never })
-  | (QueryWithInterpolationsBase & { realms?: string[]; realm?: never });
+  | (QueryWithInterpolationsBase & {
+      realms?: string | string[];
+      realm?: never;
+    });
 
 export type CardURL = string;
 export type Filter =
@@ -185,6 +191,17 @@ export function isInFilter(filter: Filter): filter is InFilter {
 }
 export function isMatchesFilter(filter: Filter): filter is MatchesFilter {
   return (filter as MatchesFilter).matches !== undefined;
+}
+
+// True when a filter path's leaf is a card/file reference (`id` / `url`). Such
+// leaves get canonical-RRI tolerance in `in` filters — a registered-prefix
+// value also matches its equivalent real-URL / virtual-alias spellings — while
+// `eq` and other operators stay exact. Both the index query engine and the
+// client-side instance-filter matcher key that tolerance off this predicate so
+// they agree on which paths it covers.
+export function isReferenceFilterField(path: string): boolean {
+  let leaf = path.split('.').pop();
+  return leaf === 'id' || leaf === 'url';
 }
 
 export function buildQueryParamValue(query: Query): string {
@@ -726,12 +743,11 @@ export function parseSearchURL(searchURL: string | URL): {
     ? parseQuery(queryParam)
     : parseQuery(url.search.slice(1));
 
-  // strip the trailing "_search" path segment to recover the realm URL
-  if (url.pathname.endsWith('_search')) {
-    url.pathname = url.pathname.replace(/_search$/, '');
-  } else if (url.pathname.endsWith('_search/')) {
-    url.pathname = url.pathname.replace(/_search\/$/, '/');
-  }
+  // Strip the trailing `/_search` path segment — with or without a trailing
+  // slash — to recover the realm URL. Matching the segment's leading slash
+  // and substituting a single `/` leaves exactly one separator (a trailing-
+  // slash input like `/realm/_search/` must not collapse to `/realm//`).
+  url.pathname = url.pathname.replace(/\/_search\/?$/, '/');
   url.search = '';
 
   return { query, realm: url };

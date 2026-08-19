@@ -14,7 +14,7 @@
  */
 export const BAD_LINT_GTS = `import {
   CardDef,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 let unusedVar = 42;
 

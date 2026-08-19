@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import supertest from 'supertest';
 import type { Test, SuperTest } from 'supertest';
 import { basename, join } from 'path';
@@ -12,7 +13,7 @@ import type {
 import { rri } from '@cardstack/runtime-common';
 import type { FederatedCardTypeSummaryEntry } from '@cardstack/runtime-common/document-types';
 import type { PgAdapter } from '@cardstack/postgres';
-import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
+import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.ts';
 import {
   closeServer,
   createVirtualNetwork,
@@ -20,9 +21,10 @@ import {
   matrixURL,
   realmSecretSeed,
   runTestRealmServerWithRealms,
-} from '../helpers';
-import { createJWT as createRealmServerJWT } from '../../utils/jwt';
-import type { RealmHttpServer as Server } from '../../server';
+  realmConfigCardJSON,
+} from '../helpers/index.ts';
+import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
+import type { RealmHttpServer as Server } from '../../server.ts';
 
 interface FederatedTypesResponse {
   data: FederatedCardTypeSummaryEntry[];
@@ -31,7 +33,7 @@ interface FederatedTypesResponse {
   };
 }
 
-module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
+module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
   module('Realm Server Endpoints | /_federated-types', function (hooks) {
     let testRealm: Realm;
     let secondaryRealm: Realm;
@@ -52,7 +54,7 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri('https://cardstack.com/base/card-api'),
+              module: rri('@cardstack/base/card-api'),
               name: 'CardDef',
             },
           },
@@ -85,7 +87,7 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
           {
             realmURL: testRealmURL,
             fileSystem: {
-              '.realm.json': JSON.stringify({ name: 'Primary Realm' }),
+              'realm.json': realmConfigCardJSON({ name: 'Primary Realm' }),
               ...realmFileSystem,
             },
             permissions: {
@@ -96,7 +98,7 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
           {
             realmURL: secondaryRealmURL,
             fileSystem: {
-              '.realm.json': JSON.stringify({ name: 'Secondary Realm' }),
+              'realm.json': realmConfigCardJSON({ name: 'Secondary Realm' }),
               ...realmFileSystem,
             },
             permissions: {

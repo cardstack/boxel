@@ -32,6 +32,7 @@ import {
 
 import ModalContainer from '../../modal-container';
 
+import focusWhenSelected from './focus-when-selected';
 import ItemContainer from './item-container';
 
 interface AddWorkspaceModalSignature {
@@ -179,6 +180,10 @@ class AddWorkspaceModal extends Component<AddWorkspaceModalSignature> {
 
 interface Signature {
   Element: HTMLButtonElement;
+  Args: {
+    isSelected?: boolean;
+    navIndex?: number;
+  };
 }
 
 export default class AddWorkspace extends Component<Signature> {
@@ -230,9 +235,12 @@ export default class AddWorkspace extends Component<Signature> {
   <template>
     <ItemContainer
       {{on 'click' (fn this.setIsModalOpen true)}}
-      class='container'
+      {{focusWhenSelected @isSelected}}
+      class='container {{if @isSelected "is-selected"}}'
       title='Create a New Workspace'
+      data-nav-index={{@navIndex}}
       data-test-add-workspace
+      data-test-add-workspace-selected={{if @isSelected 'selected'}}
     >
       <div class='content'>
         <IconPlus width='32px' height='32px' role='presentation' class='icon' />

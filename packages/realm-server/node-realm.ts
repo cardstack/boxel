@@ -18,8 +18,9 @@ import type { LocalPath } from '@cardstack/runtime-common/paths';
 import type { ServerResponse } from 'http';
 import sane, { type Watcher } from 'sane';
 
-import type { ReadStream } from 'fs-extra';
-import {
+import type { ReadStream, Stats } from 'fs-extra';
+import fsExtra from 'fs-extra';
+const {
   readdirSync,
   existsSync,
   writeFileSync,
@@ -28,7 +29,7 @@ import {
   ensureFileSync,
   createReadStream,
   removeSync,
-} from 'fs-extra';
+} = fsExtra;
 import { join } from 'path';
 import { Duplex } from 'node:stream';
 import type {
@@ -38,11 +39,47 @@ import type {
 import type {
   FileWatcherEventContent,
   RealmEventContent,
-} from 'https://cardstack.com/base/matrix-event';
+} from '@cardstack/base/matrix-event';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
-import { createJWT, verifyJWT } from './jwt';
+import { createJWT, verifyJWT } from './jwt.ts';
 
 const realmEventsLog = logger('realm:events');
+
+// A concurrent delete can remove a file between an existence check and the
+// stat call, so treat a vanished file as nonexistent rather than letting the
+// raw ENOENT escape. ENOTDIR is the same story via a different route: probing
+// a path nested under a regular file (e.g. `some.txt/nested`) throws it, and
+// such a path likewise just doesn't exist.
+function statIfExists(absolutePath: string): Stats | undefined {
+  try {
+    return statSync(absolutePath);
+  } catch (err: any) {
+    if (err?.code === 'ENOENT' || err?.code === 'ENOTDIR') {
+      return undefined;
+    }
+    throw err;
+  }
+}
+
+// The same vanishing-path race applies to a directory listing: a concurrent
+// delete — e.g. a published realm being unpublished while a mtimes traversal is
+// descending its tree — can remove a directory between a parent listing that
+// yielded it and the recursive read that opens it, so treat a vanished
+// directory as empty rather than letting the raw ENOENT escape. Only ENOENT is
+// swallowed: unlike statIfExists (whose callers probe arbitrary paths), the
+// traversal only ever reads directories it just listed, and ENOTDIR — the
+// target is a regular file — is a genuine not-a-directory that callers such as
+// directoryEntries must still see.
+function readdirIfExists(absolutePath: string) {
+  try {
+    return readdirSync(absolutePath, { withFileTypes: true });
+  } catch (err: any) {
+    if (err?.code === 'ENOENT') {
+      return undefined;
+    }
+    throw err;
+  }
+}
 
 function parseMatrixSendEventError(error: unknown): {
   status?: number;
@@ -79,10 +116,13 @@ function isRealmServerNotInRoomError(error: unknown, roomId: string): boolean {
 }
 
 export class NodeAdapter implements RealmAdapter {
-  constructor(
-    private realmDir: string,
-    private enableFileWatcher?: boolean,
-  ) {}
+  private realmDir: string;
+  private enableFileWatcher?: boolean;
+
+  constructor(realmDir: string, enableFileWatcher?: boolean) {
+    this.realmDir = realmDir;
+    this.enableFileWatcher = enableFileWatcher;
+  }
 
   get dir(): string {
     return this.realmDir;
@@ -100,7 +140,10 @@ export class NodeAdapter implements RealmAdapter {
       ensureDirSync(path);
     }
     let absolutePath = join(this.realmDir, path);
-    let entries = readdirSync(absolutePath, { withFileTypes: true });
+    let entries = readdirIfExists(absolutePath);
+    if (!entries) {
+      return;
+    }
     for await (let entry of entries) {
       let isDirectory = entry.isDirectory();
       let isFile = entry.isFile();
@@ -180,12 +223,9 @@ export class NodeAdapter implements RealmAdapter {
 
   async lastModified(path: string): Promise<number | undefined> {
     let absolutePath = join(this.realmDir, path);
-    if (!existsSync(absolutePath)) {
-      return undefined;
-    }
-    let stat = statSync(absolutePath);
-    // Case-insensitive file systems need this check
-    if (stat.isDirectory()) {
+    let stat = statIfExists(absolutePath);
+    // The directory check covers case-insensitive file systems
+    if (!stat || stat.isDirectory()) {
       return undefined;
     }
 
@@ -194,12 +234,9 @@ export class NodeAdapter implements RealmAdapter {
 
   async openFile(path: string): Promise<FileRef | undefined> {
     let absolutePath = join(this.realmDir, path);
-    if (!existsSync(absolutePath)) {
-      return undefined;
-    }
-    let stat = statSync(absolutePath);
-    // Case-insensitive file systems need this check
-    if (stat.isDirectory()) {
+    let stat = statIfExists(absolutePath);
+    // The directory check covers case-insensitive file systems
+    if (!stat || stat.isDirectory()) {
       return undefined;
     }
     let lazyStream: ReadStream;
@@ -215,6 +252,9 @@ export class NodeAdapter implements RealmAdapter {
         return lazyStream;
       },
       lastModified: unixTime(stat.mtime.getTime()),
+      size: stat.size,
+      createRangeStream: (start: number, end: number) =>
+        createReadStream(absolutePath, { start, end }),
     };
   }
 

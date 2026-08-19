@@ -6,8 +6,8 @@ import type {
   TestResultEntryData,
   TestRunAttributes,
   TestRunRealmOptions,
-} from './test-run-types';
-import { readCard, writeCard } from './workspace-fs';
+} from './test-run-types.ts';
+import { readCard, writeCard } from './workspace-fs.ts';
 
 /**
  * Create a `TestRun` card in the local workspace with `status: running`

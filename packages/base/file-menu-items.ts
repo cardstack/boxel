@@ -10,11 +10,11 @@ import Eye from '@cardstack/boxel-icons/eye';
 import LinkIcon from '@cardstack/boxel-icons/link';
 import Trash2Icon from '@cardstack/boxel-icons/trash-2';
 
-import CopyCardAsMarkdownCommand from '@cardstack/boxel-host/commands/copy-card-as-markdown';
-import CopyFileToRealmCommand from '@cardstack/boxel-host/commands/copy-file-to-realm';
-import OpenInInteractModeCommand from '@cardstack/boxel-host/commands/open-in-interact-mode';
-import ShowFileCommand from '@cardstack/boxel-host/commands/show-file';
-import SwitchSubmodeCommand from '@cardstack/boxel-host/commands/switch-submode';
+import CopyCardAsMarkdownTool from '@cardstack/boxel-host/commands/copy-card-as-markdown';
+import CopyFileToRealmTool from '@cardstack/boxel-host/commands/copy-file-to-realm';
+import OpenInInteractModeTool from '@cardstack/boxel-host/commands/open-in-interact-mode';
+import ShowFileTool from '@cardstack/boxel-host/commands/show-file';
+import SwitchSubmodeTool from '@cardstack/boxel-host/commands/switch-submode';
 
 import type { FileDef } from './card-api';
 import type { GetMenuItemParams } from './menu-items';
@@ -40,7 +40,7 @@ export function getDefaultFileMenuItems(
   if (params.menuContext === 'interact') {
     if (fileDefInstanceId) {
       // Mirror the CardDef menu so users get a consistent set of actions on
-      // file rows. `CopyCardAsMarkdownCommand` is generic — it fetches the
+      // file rows. `CopyCardAsMarkdownTool` is generic — it fetches the
       // URL with `Accept: text/markdown` — so a file URL works the same way
       // a card URL does, returning whatever the file row's `markdown`
       // column holds (populated by the FileRender pass; null today for
@@ -48,7 +48,7 @@ export function getDefaultFileMenuItems(
       menuItems.push({
         label: 'Copy as Markdown',
         action: () =>
-          new CopyCardAsMarkdownCommand(params.commandContext).execute({
+          new CopyCardAsMarkdownTool(params.toolContext).execute({
             cardId: fileDefInstanceId,
           }),
         icon: ClipboardCopy,
@@ -59,7 +59,7 @@ export function getDefaultFileMenuItems(
       menuItems.push({
         label: 'Open in Code Mode',
         action: async () => {
-          await new SwitchSubmodeCommand(params.commandContext).execute({
+          await new SwitchSubmodeTool(params.toolContext).execute({
             submode: 'code',
             codePath: fileDefInstanceId,
           });
@@ -88,14 +88,14 @@ export function getDefaultFileMenuItems(
     menuItems.push({
       label: 'Copy to Workspace',
       action: async () => {
-        let { newFileIdentifier } = await new CopyFileToRealmCommand(
-          params.commandContext,
+        let { newFileIdentifier } = await new CopyFileToRealmTool(
+          params.toolContext,
         ).execute({
           sourceFileIdentifier: fileDefInstance.sourceUrl,
           targetRealm: params.menuContextParams.activeRealmURL,
         });
 
-        await new ShowFileCommand(params.commandContext).execute({
+        await new ShowFileTool(params.toolContext).execute({
           fileIdentifier: newFileIdentifier,
         });
       },
@@ -108,7 +108,7 @@ export function getDefaultFileMenuItems(
     menuItems.push({
       label: 'Open in Interact Mode',
       action: () => {
-        new OpenInInteractModeCommand(params.commandContext).execute({
+        new OpenInInteractModeTool(params.toolContext).execute({
           cardId: fileDefInstanceId,
           format: params.format === 'edit' ? 'edit' : 'isolated',
         });
@@ -120,7 +120,7 @@ export function getDefaultFileMenuItems(
     menuItems.push({
       label: 'Open in Code Mode',
       action: async () => {
-        await new SwitchSubmodeCommand(params.commandContext).execute({
+        await new SwitchSubmodeTool(params.toolContext).execute({
           submode: 'code',
           codePath: fileDefInstanceId,
         });

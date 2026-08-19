@@ -17,7 +17,7 @@ module('Integration | codemirror-context', function (hooks) {
       content: '# Hello World',
       onDocChange: () => {},
       onCardTargetsChange: () => {},
-      onOpenCardSearch: () => {},
+      onOpenEmbedChooser: () => {},
     });
 
     assert.strictEqual(
@@ -32,7 +32,7 @@ module('Integration | codemirror-context', function (hooks) {
       content: '',
       onDocChange: () => {},
       onCardTargetsChange: () => {},
-      onOpenCardSearch: () => {},
+      onOpenEmbedChooser: () => {},
     });
 
     assert.strictEqual(state.doc.toString(), '', 'state has empty content');
@@ -47,7 +47,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: 'Some markdown text',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -84,7 +84,7 @@ module('Integration | codemirror-context', function (hooks) {
       content: markdown,
       onDocChange: () => {},
       onCardTargetsChange: () => {},
-      onOpenCardSearch: () => {},
+      onOpenEmbedChooser: () => {},
     });
 
     assert.strictEqual(
@@ -106,7 +106,7 @@ module('Integration | codemirror-context', function (hooks) {
           lastChange = text;
         },
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -153,7 +153,7 @@ module('Integration | codemirror-context', function (hooks) {
         onCardTargetsChange: (t: CardWidgetTarget[]) => {
           targets = t;
         },
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -198,7 +198,7 @@ module('Integration | codemirror-context', function (hooks) {
         onCardTargetsChange: (t: CardWidgetTarget[]) => {
           targets = t;
         },
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -230,6 +230,143 @@ module('Integration | codemirror-context', function (hooks) {
     }
   });
 
+  test('inline :file[URL] produces a file widget target', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let targets: CardWidgetTarget[] = [];
+      let state = cmContext.createEditorState({
+        content:
+          'Some intro text\n\nSee :file[https://example.com/docs/report.pdf] for details.',
+        onDocChange: () => {},
+        onCardTargetsChange: (t: CardWidgetTarget[]) => {
+          targets = t;
+        },
+        onOpenEmbedChooser: () => {},
+      });
+
+      let view = new cmContext.EditorView({ state, parent: element });
+
+      // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- waiting for rAF-based codemirror widget notification
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      await settled();
+
+      let inlineTarget = targets.find((t) => t.kind === 'inline');
+      assert.ok(inlineTarget, 'has an inline target');
+      assert.strictEqual(
+        inlineTarget?.cardId,
+        'https://example.com/docs/report.pdf',
+        'cardId matches the file URL',
+      );
+      assert.strictEqual(
+        inlineTarget?.refType,
+        'file',
+        'file ref carries refType "file"',
+      );
+      assert.strictEqual(
+        inlineTarget?.format,
+        'atom',
+        'inline files use atom format',
+      );
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
+  test('block ::file[URL] produces a file widget target', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let targets: CardWidgetTarget[] = [];
+      let state = cmContext.createEditorState({
+        content:
+          '# Title\n\n::file[https://example.com/data/sample.csv]\n\nMore text.',
+        onDocChange: () => {},
+        onCardTargetsChange: (t: CardWidgetTarget[]) => {
+          targets = t;
+        },
+        onOpenEmbedChooser: () => {},
+      });
+
+      let view = new cmContext.EditorView({ state, parent: element });
+
+      // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- waiting for rAF-based codemirror widget notification
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      await settled();
+
+      let blockTarget = targets.find((t) => t.kind === 'block');
+      assert.ok(blockTarget, 'has a block target');
+      assert.strictEqual(
+        blockTarget?.cardId,
+        'https://example.com/data/sample.csv',
+        'cardId matches the file URL',
+      );
+      assert.strictEqual(
+        blockTarget?.refType,
+        'file',
+        'file ref carries refType "file"',
+      );
+      assert.strictEqual(
+        blockTarget?.format,
+        'embedded',
+        'block files use embedded format',
+      );
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
+  test('card and file refs coexist with distinct refTypes', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let targets: CardWidgetTarget[] = [];
+      let state = cmContext.createEditorState({
+        content:
+          'Card: :card[https://example.com/Author/alice]\n\nFile: :file[https://example.com/docs/report.pdf]',
+        onDocChange: () => {},
+        onCardTargetsChange: (t: CardWidgetTarget[]) => {
+          targets = t;
+        },
+        onOpenEmbedChooser: () => {},
+      });
+
+      let view = new cmContext.EditorView({ state, parent: element });
+
+      // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- waiting for rAF-based codemirror widget notification
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      await settled();
+
+      let cardTarget = targets.find(
+        (t) => t.cardId === 'https://example.com/Author/alice',
+      );
+      let fileTarget = targets.find(
+        (t) => t.cardId === 'https://example.com/docs/report.pdf',
+      );
+      assert.strictEqual(
+        cardTarget?.refType,
+        'card',
+        'card ref → refType card',
+      );
+      assert.strictEqual(
+        fileTarget?.refType,
+        'file',
+        'file ref → refType file',
+      );
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
   test('card refs inside fenced code blocks are NOT decorated', async function (assert) {
     let element = document.createElement('div');
     document.body.appendChild(element);
@@ -242,7 +379,7 @@ module('Integration | codemirror-context', function (hooks) {
         onCardTargetsChange: (t: CardWidgetTarget[]) => {
           targets = t;
         },
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -279,7 +416,7 @@ module('Integration | codemirror-context', function (hooks) {
         onCardTargetsChange: (t: CardWidgetTarget[]) => {
           targets = t;
         },
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -305,6 +442,179 @@ module('Integration | codemirror-context', function (hooks) {
     }
   });
 
+  // ── BFM format/size threading (CS-12112) ──
+
+  async function collectTargets(content: string): Promise<{
+    targets: CardWidgetTarget[];
+    element: HTMLElement;
+    destroy: () => void;
+  }> {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+    let targets: CardWidgetTarget[] = [];
+    let state = cmContext.createEditorState({
+      content,
+      onDocChange: () => {},
+      onCardTargetsChange: (t: CardWidgetTarget[]) => {
+        targets = t;
+      },
+      onOpenEmbedChooser: () => {},
+    });
+    let view = new cmContext.EditorView({ state, parent: element });
+    // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- waiting for rAF-based codemirror widget notification
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    await settled();
+    return {
+      targets,
+      element,
+      destroy: () => {
+        view.destroy();
+        element.remove();
+      },
+    };
+  }
+
+  test('block fitted embed with explicit size threads format + size style', async function (assert) {
+    let { targets, element, destroy } = await collectTargets(
+      '::card[https://example.com/cards/1 | fitted w:400 h:300]',
+    );
+    try {
+      let target = targets.find((t) => t.kind === 'block');
+      assert.strictEqual(target?.format, 'fitted', 'format is fitted');
+      assert.ok(
+        target?.style?.includes('width: 400px'),
+        'style carries the width',
+      );
+      assert.ok(
+        target?.style?.includes('height: 300px'),
+        'style carries the height',
+      );
+      assert.ok(
+        target?.style?.includes('overflow: hidden'),
+        'fitted style carries overflow: hidden',
+      );
+
+      let widget = element.querySelector('.cm-card-widget--block');
+      assert.strictEqual(
+        widget?.getAttribute('data-boxel-bfm-format'),
+        'fitted',
+        'widget DOM carries the format attribute',
+      );
+      assert.strictEqual(
+        widget?.getAttribute('data-boxel-bfm-width'),
+        '400',
+        'widget DOM carries the width attribute',
+      );
+      assert.strictEqual(
+        widget?.getAttribute('data-boxel-bfm-height'),
+        '300',
+        'widget DOM carries the height attribute',
+      );
+    } finally {
+      destroy();
+    }
+  });
+
+  test('block isolated embed threads isolated format with a growable footprint', async function (assert) {
+    let { targets, destroy } = await collectTargets(
+      '::card[https://example.com/cards/1 | isolated]',
+    );
+    try {
+      let target = targets.find((t) => t.kind === 'block');
+      assert.strictEqual(target?.format, 'isolated', 'format is isolated');
+      // CS-12320: block isolated gets a growable min-height so it does not
+      // collapse (its default template lays out at height: 100%).
+      assert.strictEqual(
+        target?.style,
+        'min-height: 18.75rem',
+        'isolated embed carries a growable min-height footprint',
+      );
+    } finally {
+      destroy();
+    }
+  });
+
+  test('inline isolated / embedded embeds carry a definite footprint', async function (assert) {
+    // CS-12320: inline isolated/embedded collapse without a definite width +
+    // height (the default template lays out at 100% inside a shrink-wrapping
+    // inline-block wrapper).
+    let { targets, destroy } = await collectTargets(
+      ':card[https://example.com/cards/1 | isolated] and :card[https://example.com/cards/2 | embedded]',
+    );
+    try {
+      let isolated = targets.find((t) => t.format === 'isolated');
+      assert.strictEqual(
+        isolated?.style,
+        'width: 24rem; height: 18.75rem; overflow: hidden',
+        'inline isolated carries the shared footprint',
+      );
+      let embedded = targets.find((t) => t.format === 'embedded');
+      assert.strictEqual(
+        embedded?.style,
+        'width: 16rem; height: 9.375rem; overflow: hidden',
+        'inline embedded carries the shared footprint',
+      );
+    } finally {
+      destroy();
+    }
+  });
+
+  test('embeds without a size spec fall back to atom (inline) / embedded (block)', async function (assert) {
+    let { targets, destroy } = await collectTargets(
+      ':card[https://example.com/cards/1] and\n\n::card[https://example.com/cards/2]',
+    );
+    try {
+      let inline = targets.find((t) => t.kind === 'inline');
+      let block = targets.find((t) => t.kind === 'block');
+      assert.strictEqual(inline?.format, 'atom', 'inline default is atom');
+      assert.strictEqual(
+        block?.format,
+        'embedded',
+        'block default is embedded',
+      );
+    } finally {
+      destroy();
+    }
+  });
+
+  test('file embeds thread format + size style like card embeds', async function (assert) {
+    let { targets, destroy } = await collectTargets(
+      '::file[https://example.com/files/a.pdf | fitted w:400 h:300]\n\n::file[https://example.com/files/b.pdf | isolated]',
+    );
+    try {
+      let fitted = targets.find(
+        (t) => t.refType === 'file' && t.format === 'fitted',
+      );
+      assert.ok(fitted, 'a fitted file target is present');
+      assert.strictEqual(fitted?.refType, 'file', 'refType is file');
+      assert.ok(
+        fitted?.style?.includes('width: 400px'),
+        'file fitted target carries the width',
+      );
+      assert.ok(
+        fitted?.style?.includes('height: 300px'),
+        'file fitted target carries the height',
+      );
+      assert.ok(
+        fitted?.style?.includes('overflow: hidden'),
+        'file fitted target carries overflow: hidden',
+      );
+
+      let isolated = targets.find(
+        (t) => t.refType === 'file' && t.format === 'isolated',
+      );
+      assert.ok(isolated, 'isolated file target is present');
+      // CS-12320: block isolated gets a growable min-height footprint.
+      assert.strictEqual(
+        isolated?.style,
+        'min-height: 18.75rem',
+        'isolated file target carries a growable min-height footprint',
+      );
+    } finally {
+      destroy();
+    }
+  });
+
   // ── Text insertion for card refs ──
 
   test('inserting :card[URL] text creates inline card ref', async function (assert) {
@@ -319,7 +629,7 @@ module('Integration | codemirror-context', function (hooks) {
           docText = text;
         },
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -355,7 +665,7 @@ module('Integration | codemirror-context', function (hooks) {
           docText = text;
         },
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -389,7 +699,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: 'Hello World',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -428,7 +738,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: 'Original',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -513,7 +823,7 @@ module('Integration | codemirror-context', function (hooks) {
         onCardTargetsChange: (t: CardWidgetTarget[]) => {
           targets = t;
         },
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       // This is the critical line — the old ViewPlugin approach threw
@@ -569,7 +879,7 @@ module('Integration | codemirror-context', function (hooks) {
         onCardTargetsChange: (t: CardWidgetTarget[]) => {
           targets = t;
         },
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -612,7 +922,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: '# Hello World',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
         livePreview: false,
       });
 
@@ -645,7 +955,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: 'Some **bold** text',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
         livePreview: false,
       });
 
@@ -684,7 +994,7 @@ module('Integration | codemirror-context', function (hooks) {
         onCardTargetsChange: (t: CardWidgetTarget[]) => {
           targets = t;
         },
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
         livePreview: false,
       });
 
@@ -724,7 +1034,7 @@ module('Integration | codemirror-context', function (hooks) {
           'Text before\n\n::card[https://example.com/cards/1]\n\nText after',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
         livePreview: false,
       });
 
@@ -757,7 +1067,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: '# Hello World',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
         livePreview: true,
       });
 
@@ -788,7 +1098,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: '# Hello World',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
         livePreview: true,
       });
 
@@ -830,7 +1140,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: 'Hello World',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -863,7 +1173,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: 'Hello **World**',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -896,7 +1206,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: 'Hello **World** end',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -930,7 +1240,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: 'Hello World',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -962,7 +1272,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: 'Hello World',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -994,7 +1304,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: 'Hello World',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -1017,7 +1327,7 @@ module('Integration | codemirror-context', function (hooks) {
     }
   });
 
-  test('wrapWith does nothing when no text is selected', async function (assert) {
+  test('wrapWith does nothing when there is no selection', async function (assert) {
     let element = document.createElement('div');
     document.body.appendChild(element);
 
@@ -1026,7 +1336,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: 'Hello World',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -1038,12 +1348,15 @@ module('Integration | codemirror-context', function (hooks) {
       view.dispatch({ selection: { anchor: 6, head: 6 } });
       let result = cmContext.wrapWith('**')(view);
 
-      assert.false(result, 'returns false when no selection');
+      assert.true(result, 'returns true (shortcut consumed) without editing');
       assert.strictEqual(
         view.state.doc.toString(),
         'Hello World',
-        'document is unchanged',
+        'no stray markers are inserted when nothing is selected',
       );
+      let sel = view.state.selection.main;
+      assert.true(sel.empty, 'cursor is collapsed (no selection)');
+      assert.strictEqual(sel.from, 6, 'cursor stays where it was');
 
       view.destroy();
     } finally {
@@ -1067,7 +1380,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: 'Hello World',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
         onSelectionChange: (info) => {
           selectionInfo = info;
         },
@@ -1101,7 +1414,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: 'Hello World',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
         onSelectionChange: (info) => {
           selectionInfo = info;
         },
@@ -1142,7 +1455,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: 'Hello **World** end',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
         onSelectionChange: (info) => {
           formats = info.formats;
         },
@@ -1165,6 +1478,57 @@ module('Integration | codemirror-context', function (hooks) {
     }
   });
 
+  test('onSelectionChange reports link active at a bare caret inside a link', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let selectionInfo: {
+        hasSelection: boolean;
+        formats: { link: boolean; bold: boolean };
+      } | null = null;
+      let state = cmContext.createEditorState({
+        content: 'Click [here](https://example.com) for details',
+        onDocChange: () => {},
+        onCardTargetsChange: () => {},
+        onOpenEmbedChooser: () => {},
+        onSelectionChange: (info) => {
+          selectionInfo = info;
+        },
+      });
+
+      let view = new cmContext.EditorView({
+        state,
+        parent: element,
+      });
+
+      // Collapsed caret inside the link text "here"
+      view.dispatch({ selection: { anchor: 9, head: 9 } });
+
+      assert.ok(selectionInfo, 'onSelectionChange was called');
+      assert.false(selectionInfo!.hasSelection, 'no selection at a caret');
+      assert.true(
+        selectionInfo!.formats.link,
+        'link reads active — toggleLink can unlink from this caret, so the toolbar keeps the Link toggle clickable',
+      );
+      assert.false(
+        selectionInfo!.formats.bold,
+        'wrap toggles read inactive at a caret (they no-op there)',
+      );
+
+      // Caret outside the link
+      view.dispatch({ selection: { anchor: 2, head: 2 } });
+      assert.false(
+        selectionInfo!.formats.link,
+        'link reads inactive once the caret leaves the link',
+      );
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
   // ── Heading insertion (same logic as component's _insertHeading) ──
 
   test('heading prefix is added to line', async function (assert) {
@@ -1176,7 +1540,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: 'Hello World',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -1211,7 +1575,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: '# Hello World',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -1253,7 +1617,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: '# Hello World',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -1296,7 +1660,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: 'Item one\nItem two\nItem three',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -1342,7 +1706,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: '- Item one\n- Item two\n- Item three',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -1400,7 +1764,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: 'First\nSecond',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -1445,7 +1809,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: 'A quote\nAnother line',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -1490,7 +1854,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: '- Item one\nItem two\n- Item three',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -1549,7 +1913,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: 'Click here for details',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -1600,7 +1964,7 @@ module('Integration | codemirror-context', function (hooks) {
         content: 'Click [here](https://example.com) for details',
         onDocChange: () => {},
         onCardTargetsChange: () => {},
-        onOpenCardSearch: () => {},
+        onOpenEmbedChooser: () => {},
       });
 
       let view = new cmContext.EditorView({
@@ -1612,26 +1976,84 @@ module('Integration | codemirror-context', function (hooks) {
       // as a user would in live preview where [ and ](url) are hidden
       view.dispatch({ selection: { anchor: 7, head: 11 } });
 
-      // Simulate _toggleLink: scan for enclosing [text](url)
-      let doc = view.state.doc.toString();
-      let { from, to } = view.state.selection.main;
-      let bracketOpen = doc.lastIndexOf('[', from);
-      let parenClose = doc.indexOf(')', to - 1);
-      let between = doc.slice(bracketOpen, parenClose + 1);
-      let linkMatch = between.match(/^\[(.+)\]\(.*\)$/);
-      assert.ok(linkMatch, 'enclosing link pattern found');
-      view.dispatch({
-        changes: {
-          from: bracketOpen,
-          to: parenClose + 1,
-          insert: linkMatch![1],
-        },
-      });
+      let result = cmContext.toggleLink(view);
 
+      assert.true(result, 'returns true after unlinking');
       assert.strictEqual(
         view.state.doc.toString(),
         'Click here for details',
         'link syntax is removed, leaving just the text',
+      );
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
+  test('toggleLink does nothing at a caret outside any link', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let state = cmContext.createEditorState({
+        content: 'Hello World',
+        onDocChange: () => {},
+        onCardTargetsChange: () => {},
+        onOpenEmbedChooser: () => {},
+      });
+
+      let view = new cmContext.EditorView({
+        state,
+        parent: element,
+      });
+
+      // Cursor at position 6, no selection, no enclosing link
+      view.dispatch({ selection: { anchor: 6, head: 6 } });
+      let result = cmContext.toggleLink(view);
+
+      assert.true(result, 'returns true without editing');
+      assert.strictEqual(
+        view.state.doc.toString(),
+        'Hello World',
+        'no stray [](url) is inserted when nothing is selected',
+      );
+      let sel = view.state.selection.main;
+      assert.true(sel.empty, 'cursor is collapsed (no selection)');
+      assert.strictEqual(sel.from, 6, 'cursor stays where it was');
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
+  test('toggleLink unlinks from a bare caret inside a link', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let state = cmContext.createEditorState({
+        content: 'Click [here](https://example.com) for details',
+        onDocChange: () => {},
+        onCardTargetsChange: () => {},
+        onOpenEmbedChooser: () => {},
+      });
+
+      let view = new cmContext.EditorView({
+        state,
+        parent: element,
+      });
+
+      // Collapsed caret inside the link text "here" — no selection
+      view.dispatch({ selection: { anchor: 9, head: 9 } });
+      let result = cmContext.toggleLink(view);
+
+      assert.true(result, 'returns true after unlinking');
+      assert.strictEqual(
+        view.state.doc.toString(),
+        'Click here for details',
+        'the enclosing link is unwrapped, leaving just its text',
       );
 
       view.destroy();
@@ -1674,6 +2096,84 @@ module('Integration | codemirror-context', function (hooks) {
       );
     } finally {
       delete (globalThis as any).__loadCodeMirror;
+    }
+  });
+
+  // ── currentRef tracking (BFM directive under cursor) ──
+
+  test('onSelectionChange.currentRef reports the BFM directive under the cursor', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+    try {
+      let lastInfo: any = null;
+      let content = 'Inline :card[./mango] then more text';
+      let state = cmContext.createEditorState({
+        content,
+        onDocChange: () => {},
+        onCardTargetsChange: () => {},
+        onOpenEmbedChooser: () => {},
+        onSelectionChange: (info) => {
+          lastInfo = info;
+        },
+      });
+      let view = new cmContext.EditorView({ state, parent: element });
+
+      let directiveStart = content.indexOf(':card');
+      let directiveEnd = content.indexOf(']') + 1;
+
+      // Inside the directive — currentRef populated.
+      view.dispatch({
+        selection: { anchor: directiveStart + 2, head: directiveStart + 2 },
+      });
+      assert.ok(lastInfo?.currentRef, 'currentRef is set inside the directive');
+      assert.strictEqual(lastInfo.currentRef.refType, 'card');
+      assert.strictEqual(lastInfo.currentRef.url, './mango');
+      assert.strictEqual(lastInfo.currentRef.from, directiveStart);
+      assert.strictEqual(lastInfo.currentRef.to, directiveEnd);
+
+      // Outside the directive — currentRef cleared.
+      view.dispatch({ selection: { anchor: 0, head: 0 } });
+      assert.notOk(
+        lastInfo?.currentRef,
+        'currentRef is undefined outside any directive',
+      );
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
+  test('currentRef refreshes after a doc edit shifts the range', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+    try {
+      let lastInfo: any = null;
+      let state = cmContext.createEditorState({
+        content: ':card[./mango]',
+        onDocChange: () => {},
+        onCardTargetsChange: () => {},
+        onOpenEmbedChooser: () => {},
+        onSelectionChange: (info) => {
+          lastInfo = info;
+        },
+      });
+      let view = new cmContext.EditorView({ state, parent: element });
+
+      // Prepend text — the directive shifts right by 5 chars.
+      view.dispatch({ changes: { from: 0, to: 0, insert: 'pre: ' } });
+      view.dispatch({ selection: { anchor: 7, head: 7 } });
+
+      assert.ok(lastInfo?.currentRef, 'currentRef detected after the edit');
+      assert.strictEqual(
+        lastInfo.currentRef.from,
+        5,
+        'range start tracks the edit',
+      );
+
+      view.destroy();
+    } finally {
+      element.remove();
     }
   });
 });

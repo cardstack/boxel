@@ -2,7 +2,7 @@ import Component from '@glimmer/component';
 import type Owner from '@ember/owner';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
-import { debounce } from 'lodash';
+import { debounce } from 'lodash-es';
 import { eq, or, not } from '@cardstack/boxel-ui/helpers';
 import { ColorPicker } from '@cardstack/boxel-ui/components';
 

@@ -1,4 +1,4 @@
-import './setup-logger'; // This should be first
+import './setup-logger.ts'; // This should be first
 import * as Sentry from '@sentry/node';
 import { setErrorReporter } from '@cardstack/runtime-common/realm';
 

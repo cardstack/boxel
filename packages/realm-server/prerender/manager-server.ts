@@ -1,16 +1,16 @@
-import '../instrument';
-import '../setup-logger';
-import '../lib/wtfnode-on-signal';
+import '../instrument.ts';
+import '../setup-logger.ts';
+import '../lib/wtfnode-on-signal.ts';
 import { writeSync } from 'node:fs';
 import { logger } from '@cardstack/runtime-common';
 import type { Server } from 'http';
 import { createServer } from 'http';
 import yargs from 'yargs';
-import { buildPrerenderManagerApp } from './manager-app';
+import { buildPrerenderManagerApp } from './manager-app.ts';
 import {
   isEnvironmentMode,
   registerService,
-} from '../lib/dev-service-registry';
+} from '../lib/dev-service-registry.ts';
 
 // FD-level synchronous stderr write — `writeSync(2, ...)` calls the
 // write(2) syscall directly, bypassing Node's stream layer.

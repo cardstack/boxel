@@ -2,4 +2,4 @@
 #MISE description="Start the Matrix admin console (port 8080)"
 #MISE dir="packages/matrix"
 
-exec ts-node --transpileOnly ./scripts/admin-console
+exec node ./scripts/admin-console.ts

@@ -7,8 +7,8 @@ export const viewCardDemoCardSource = `
     field,
     contains,
     Component,
-  } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
   import { fn } from '@ember/helper'
 
   export class ViewCardDemo extends CardDef {

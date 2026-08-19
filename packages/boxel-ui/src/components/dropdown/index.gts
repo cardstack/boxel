@@ -1,0 +1,406 @@
+import { concat, fn, hash } from '@ember/helper';
+import { action } from '@ember/object';
+import { guidFor } from '@ember/object/internals';
+import Component from '@glimmer/component';
+import BasicDropdown from 'ember-basic-dropdown/components/basic-dropdown';
+import type { Dropdown } from 'ember-basic-dropdown/types';
+import focusTrap from 'ember-focus-trap/modifiers/focus-trap';
+import {
+  type FunctionBasedModifier,
+  modifier as createModifier,
+} from 'ember-modifier';
+
+import cn from '../../helpers/cn.ts';
+
+type DropdownTriggerElement = HTMLButtonElement | HTMLAnchorElement;
+type DropdownTriggerNamedArgs = {
+  [named: string]: unknown;
+  dropdown: Dropdown;
+  eventType?: 'click' | 'mousedown';
+  id: string;
+  stopPropagation?: boolean;
+};
+
+interface DropdownTriggerSignature {
+  Args: {
+    Named: DropdownTriggerNamedArgs;
+    Positional: unknown[];
+  };
+  Element: DropdownTriggerElement;
+}
+
+export type DropdownAPI = Dropdown;
+
+interface Signature {
+  Args: {
+    autoClose?: boolean;
+    contentClass?: string;
+    initiallyOpened?: boolean;
+    matchTriggerWidth?: boolean;
+    onClose?: () => void;
+    registerAPI?: (publicAPI: Dropdown) => void;
+  };
+  Blocks: {
+    content: [{ close: () => void }];
+    trigger: [
+      FunctionBasedModifier<{
+        Args: {
+          Positional: unknown[];
+        };
+        // note: the trigger should be an interactive element (Button or a
+        // component like Pill that renders one), but that isn't expressible
+        // here, so any element is accepted
+        Element: HTMLElement;
+      }>,
+    ];
+  };
+  Element: HTMLDivElement;
+}
+
+// Needs to be class, BasicDropdown doesn't work with const
+class BoxelDropdown extends Component<Signature> {
+  private dropdownId = guidFor(this);
+
+  get dropdownEl(): HTMLElement | null {
+    return document.getElementById(this.dropdownId);
+  }
+
+  get dropdownContainer(): HTMLElement | null {
+    return document.querySelector(
+      '#ember-basic-dropdown-wormhole',
+    ) as HTMLElement;
+  }
+
+  private syncCustomProps() {
+    if (!this.dropdownEl || !this.dropdownContainer) {
+      return;
+    }
+    const cs = getComputedStyle(this.dropdownEl);
+
+    const themeVars = [
+      '--background',
+      '--foreground',
+      '--border',
+      '--primary',
+      '--primary-foreground',
+      '--secondary',
+      '--secondary-foreground',
+      '--muted',
+      '--muted-foreground',
+      '--destructive',
+      '--destructive-foreground',
+    ];
+
+    // Get computed styles from the component element
+    themeVars.forEach((varName) => {
+      const value = cs.getPropertyValue(varName);
+      if (value.trim()) {
+        this.dropdownContainer?.style.setProperty(varName, value);
+      }
+    });
+  }
+
+  private detectAndSetThemeColors() {
+    if (!this.dropdownEl || !this.dropdownContainer) {
+      return;
+    }
+
+    const cs = getComputedStyle(this.dropdownEl);
+    const hasBackground = cs.getPropertyValue('--background').trim() !== '';
+    const hasForeground = cs.getPropertyValue('--foreground').trim() !== '';
+    const parentHasTheme =
+      this.dropdownEl.closest(
+        '[style*="--background"], [style*="--foreground"]',
+      ) !== null;
+
+    const hasThemeVariables = hasBackground || hasForeground || parentHasTheme;
+
+    if (hasThemeVariables) {
+      const bg = 'var(--background, var(--boxel-light))';
+      const fg = 'var(--foreground, var(--boxel-dark))';
+      const themeVars = {
+        '--theme-highlight': `color-mix(in oklch, ${bg} 92%, ${fg})`,
+        '--theme-highlight-hover': `color-mix(in oklch, ${bg} 88%, ${fg})`,
+        '--theme-hover': `color-mix(in oklch, ${bg} 94%, ${fg})`,
+      };
+      Object.entries(themeVars).forEach(([key, value]) => {
+        this.dropdownContainer?.style.setProperty(key, value);
+      });
+    } else {
+      ['--theme-highlight', '--theme-highlight-hover', '--theme-hover'].forEach(
+        (key) => {
+          this.dropdownContainer?.style.removeProperty(key);
+        },
+      );
+    }
+  }
+
+  // One-shot copy of the trigger's computed theme onto the shared wormhole.
+  // Every open re-syncs before the content renders, so a theme that changes
+  // while the dropdown is open corrects itself on the next open — no
+  // mutation observation needed.
+  private syncTheme() {
+    if (!this.dropdownEl) {
+      return;
+    }
+    this.syncCustomProps();
+    this.detectAndSetThemeColors();
+  }
+
+  @action registerAPI(publicAPI: DropdownAPI | null) {
+    if (publicAPI) {
+      this.args.registerAPI?.(publicAPI);
+    }
+  }
+
+  @action onMouseLeave(dropdown?: Dropdown) {
+    if (this.args.autoClose && dropdown) {
+      dropdown.actions.close();
+    }
+  }
+
+  @action onOpen() {
+    this.syncTheme();
+  }
+
+  @action onClose() {
+    this.args.onClose?.();
+  }
+
+  <template>
+    {{!--
+      Note:
+      ...attributes will only apply to BasicDropdown if @renderInPlace={{true}}
+      because otherwise it does not render any HTML elements of its own, only its yielded content
+    --}}
+    <BasicDropdown
+      @registerAPI={{this.registerAPI}}
+      @onClose={{this.onClose}}
+      @matchTriggerWidth={{@matchTriggerWidth}}
+      @initiallyOpened={{@initiallyOpened}}
+      @onOpen={{this.onOpen}}
+      as |dd|
+    >
+      {{#let
+        (modifier
+          this.dropdownModifier
+          dropdown=dd
+          id=this.dropdownId
+          eventType='click'
+          stopPropagation=false
+        )
+        as |ddModifier|
+      }}
+        {{! @glint-ignore }}
+        {{yield ddModifier to='trigger'}}
+      {{/let}}
+
+      <dd.Content
+        @onMouseLeave={{fn this.onMouseLeave dd}}
+        data-test-boxel-dropdown-content
+        class={{cn 'boxel-dropdown__content' @contentClass}}
+        {{focusTrap
+          isActive=dd.isOpen
+          focusTrapOptions=(hash
+            initialFocus=(concat
+              "[aria-controls='ember-basic-dropdown-content-" dd.uniqueId "']"
+            )
+            onDeactivate=dd.actions.close
+            allowOutsideClick=true
+            fallbackFocus=(concat '#ember-basic-dropdown-content-' dd.uniqueId)
+          )
+        }}
+      >
+        {{yield (hash close=dd.actions.close) to='content'}}
+      </dd.Content>
+    </BasicDropdown>
+
+    <style scoped>
+      @layer boxelComponentL1 {
+        .boxel-dropdown__content {
+          --boxel-dropdown-content-border-radius: var(--boxel-border-radius);
+          --dropdown-background-color: var(
+            --boxel-dropdown-background-color,
+            var(--background, var(--boxel-light))
+          );
+          --dropdown-border-color: var(
+            --boxel-dropdown-border-color,
+            var(--border)
+          );
+          --dropdown-text-color: var(
+            --boxel-dropdown-text-color,
+            var(--foreground, var(--boxel-dark))
+          );
+          /* The fallback keeps the hovered menu item from resolving an
+             undefined var. */
+          --dropdown-selected-text-color: var(
+            --boxel-dropdown-selected-text-color,
+            var(--dropdown-text-color)
+          );
+          --dropdown-shadow: 0 5px 15px 0 rgb(0 0 0 / 25%);
+          --dropdown-highlight-color: var(
+            --boxel-dropdown-highlight-color,
+            var(--theme-highlight, var(--boxel-highlight))
+          );
+
+          --dropdown-hover-color: var(
+            --boxel-dropdown-hover-color,
+            var(--theme-hover, var(--boxel-light-100))
+          );
+
+          background-color: var(--dropdown-background-color);
+          border: 1px solid var(--dropdown-border-color);
+          color: var(--dropdown-text-color);
+          border-radius: var(--boxel-dropdown-content-border-radius);
+          box-shadow: var(
+            --boxel-dropdown-box-shadow,
+            0 5px 15px 0 rgb(0 0 0 / 25%)
+          );
+        }
+
+        /* Menu styling cater for dropdown */
+        .boxel-dropdown__content :deep(.boxel-menu) {
+          --boxel-menu-color: var(--dropdown-background-color);
+          --boxel-menu-text-color: var(--dropdown-text-color);
+          --boxel-menu-current-color: var(--dropdown-hover-color);
+          --boxel-menu-selected-font-color: var(--dropdown-text-color);
+        }
+
+        /* Dangerous items keep their own destructive hover color, and
+           header items keep their own inert header colors. */
+        .boxel-dropdown__content
+          :deep(
+            .boxel-menu
+              .boxel-menu__item:not(
+                .boxel-menu__item--disabled,
+                .boxel-menu__item--dangerous,
+                .boxel-menu__item--header
+              ):hover
+          ) {
+          color: var(--dropdown-selected-text-color);
+        }
+
+        .boxel-dropdown__content :deep(.boxel-menu .boxel-menu__separator) {
+          border-bottom-color: var(--dropdown-border-color);
+        }
+
+        .ember-basic-dropdown-content--below.gap-above {
+          margin-top: 4px;
+        }
+
+        @media (prefers-reduced-motion: no-preference) {
+          .boxel-dropdown__content.ember-basic-dropdown-content--below.ember-basic-dropdown--transitioned-in {
+            animation: drop-fade-below var(--boxel-transition);
+          }
+
+          .boxel-dropdown__content.ember-basic-dropdown-content--below.ember-basic-dropdown--transitioning-out {
+            animation: drop-fade-below var(--boxel-transition) reverse;
+          }
+        }
+
+        @keyframes drop-fade-below {
+          0% {
+            opacity: 0;
+            transform: translateY(-20px);
+          }
+
+          100% {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      }
+    </style>
+  </template>
+
+  dropdownModifier = createModifier<DropdownTriggerSignature>(function (
+    element: DropdownTriggerElement,
+    _positional: unknown[],
+    named: DropdownTriggerNamedArgs,
+  ) {
+    const {
+      dropdown,
+      id,
+      eventType: desiredEventType,
+      stopPropagation,
+    } = named;
+
+    if (element.tagName.toUpperCase() !== 'BUTTON') {
+      throw new Error('Only buttons should be used with the dropdown modifier');
+    }
+
+    function updateAria() {
+      element.setAttribute('aria-expanded', dropdown.isOpen ? 'true' : 'false');
+      element.setAttribute(
+        'aria-disabled',
+        dropdown.disabled ? 'true' : 'false',
+      );
+    }
+
+    function handleMouseEvent(e: MouseEvent) {
+      if (typeof document === 'undefined') {
+        return;
+      }
+
+      if (!dropdown || dropdown.disabled) {
+        return;
+      }
+
+      const eventType = e.type;
+      const notLeftClick = e.button !== 0;
+      if (eventType !== desiredEventType || notLeftClick) {
+        return;
+      }
+
+      if (stopPropagation) {
+        e.stopPropagation();
+      }
+
+      dropdown.actions.toggle(e);
+      updateAria();
+    }
+
+    function handleKeyDown(e: KeyboardEvent): void {
+      const { disabled, actions } = dropdown;
+      if (disabled) {
+        return;
+      }
+      if (e.keyCode === 27) {
+        actions.close(e);
+      }
+      updateAria();
+    }
+    element.addEventListener(
+      'click',
+      handleMouseEvent as EventListenerOrEventListenerObject,
+    );
+    element.addEventListener(
+      'keydown',
+      handleKeyDown as EventListenerOrEventListenerObject,
+    );
+    element.setAttribute('id', id);
+    element.setAttribute('data-ebd-id', `${dropdown.uniqueId}-trigger`);
+    element.setAttribute(
+      'aria-owns',
+      `ember-basic-dropdown-content-${dropdown.uniqueId}`,
+    );
+    element.setAttribute(
+      'aria-controls',
+      `ember-basic-dropdown-content-${dropdown.uniqueId}`,
+    );
+    updateAria();
+
+    return function cleanup() {
+      element.removeEventListener(
+        'click',
+        handleMouseEvent as EventListenerOrEventListenerObject,
+      );
+      element.removeEventListener(
+        'keydown',
+        handleKeyDown as EventListenerOrEventListenerObject,
+      );
+    };
+  });
+}
+
+export default BoxelDropdown;

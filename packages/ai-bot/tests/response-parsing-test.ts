@@ -1,4 +1,5 @@
-import { module, test, assert } from 'qunit';
+import QUnit from 'qunit';
+const { module, test, assert } = QUnit;
 import { cleanContent } from '@cardstack/runtime-common/ai';
 
 module('cleanContent', () => {

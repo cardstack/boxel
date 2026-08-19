@@ -1,6 +1,6 @@
-import type { QueuePublisher } from '../queue';
-import type { RunCommandResponse, DBAdapter } from '../index';
-import type { RunCommandArgs } from '../tasks/run-command';
+import type { QueuePublisher } from '../queue.ts';
+import type { RunCommandResponse, DBAdapter } from '../index.ts';
+import type { RunCommandArgs } from '../tasks/run-command.ts';
 
 export const RUN_COMMAND_JOB_TIMEOUT_SEC = 60;
 

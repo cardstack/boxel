@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import supertest from 'supertest';
 import type { Test, SuperTest } from 'supertest';
 import { basename, join } from 'path';
@@ -9,19 +10,21 @@ import type {
   Realm,
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
-import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
+import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.ts';
 import {
+  assertRealmInfoExtras,
   closeServer,
   createVirtualNetwork,
   setupDB,
   matrixURL,
   realmSecretSeed,
   runTestRealmServerWithRealms,
-} from '../helpers';
-import { createJWT as createRealmServerJWT } from '../../utils/jwt';
-import type { RealmHttpServer as Server } from '../../server';
+  realmConfigCardJSON,
+} from '../helpers/index.ts';
+import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
+import type { RealmHttpServer as Server } from '../../server.ts';
 
-module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
+module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
   module('Realm Server Endpoints | /_federated-info', function (hooks) {
     let testRealm: Realm;
     let secondaryRealm: Realm;
@@ -51,7 +54,7 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
           {
             realmURL: testRealmURL,
             fileSystem: {
-              '.realm.json': JSON.stringify({ name: 'Primary Realm' }),
+              'realm.json': realmConfigCardJSON({ name: 'Primary Realm' }),
             },
             permissions: {
               '*': ['read'],
@@ -61,7 +64,7 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
           {
             realmURL: secondaryRealmURL,
             fileSystem: {
-              '.realm.json': JSON.stringify({ name: 'Secondary Realm' }),
+              'realm.json': realmConfigCardJSON({ name: 'Secondary Realm' }),
             },
             permissions: {
               [ownerUserId]: ['read', 'write', 'realm-owner'],
@@ -116,7 +119,11 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
 
       assert.strictEqual(response.status, 200, 'HTTP 200 status');
       let { data } = response.body as {
-        data: { id: string; type: string; attributes: { name: string } }[];
+        data: {
+          id: string;
+          type: string;
+          attributes: { name: string } & Record<string, unknown>;
+        }[];
       };
       assert.strictEqual(data.length, 2, 'returns info for both realms');
       let dataById = new Map(data.map((entry) => [entry.id, entry]));
@@ -130,6 +137,15 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
         'Secondary Realm',
         'secondary realm info included',
       );
+
+      // This endpoint — not each realm's own `/_info` — is what the host's
+      // workspace chooser reads, so it has to carry the tile metadata too.
+      for (let realmURL of [testRealm.url, secondaryRealm.url]) {
+        assertRealmInfoExtras(
+          assert,
+          dataById.get(realmURL)!.attributes as Record<string, unknown>,
+        );
+      }
 
       let publicHeader =
         response.headers['x-boxel-realms-public-readable'] ?? '';
@@ -207,7 +223,11 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
 
       assert.strictEqual(response.status, 200, 'HTTP 200 status');
       let { data } = response.body as {
-        data: { id: string; type: string; attributes: { name: string } }[];
+        data: {
+          id: string;
+          type: string;
+          attributes: { name: string } & Record<string, unknown>;
+        }[];
       };
       assert.strictEqual(data.length, 1, 'returns info for one realm');
       assert.strictEqual(data[0].id, testRealm.url, 'realm id is correct');

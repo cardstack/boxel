@@ -1,10 +1,10 @@
 import Helper from '@ember/component/helper';
 
-import { isEqual } from 'lodash';
+import { isEqual } from 'lodash-es';
 
 import { subscribeToRealm } from '@cardstack/runtime-common';
 
-import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 interface Signature {
   Args: {

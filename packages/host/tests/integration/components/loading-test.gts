@@ -1,10 +1,7 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
-
-import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import {
   testRealmURL,
@@ -15,17 +12,20 @@ import {
   setupOnSave,
   setupRealmCacheTeardown,
   withCachedRealmSetup,
+  realmConfigCardJSON,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type { CardDef } from '@cardstack/base/card-api';
 
 module('Integration | loading', function (hooks) {
   setupRenderingTest(hooks);
 
   const realmName = 'Operator Mode Workspace';
   let loader: Loader;
-  let cardApi: typeof import('https://cardstack.com/base/card-api');
+  let cardApi: typeof import('@cardstack/base/card-api');
 
   hooks.beforeEach(function () {
     loader = getService('loader-service').loader;
@@ -35,7 +35,7 @@ module('Integration | loading', function (hooks) {
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -50,7 +50,7 @@ module('Integration | loading', function (hooks) {
     let cardWithBrokenIconDefSource = `
       import NonExistentIcon from '@cardstack/boxel-icons/non-existent';
 
-      import { CardDef } from 'https://cardstack.com/base/card-api';
+      import { CardDef } from '@cardstack/base/card-api';
 
       export class CardWithBrokenIcon extends CardDef {
         static icon = NonExistentIcon;
@@ -62,14 +62,17 @@ module('Integration | loading', function (hooks) {
         mockMatrixUtils,
         contents: {
           'card-with-broken-icon.gts': cardWithBrokenIconDefSource,
-          '.realm.json': `{ "name": "${realmName}", "iconURL": "https://boxel-images.boxel.ai/icons/Letter-o.png" }`,
+          'realm.json': realmConfigCardJSON({
+            name: realmName,
+            iconURL: 'https://boxel-images.boxel.ai/icons/Letter-o.png',
+          }),
         },
       }),
     );
   });
 
   test('Cards attempting to import boxel icon that does not exist renders a 404 icon instead', async function (assert) {
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
+    cardApi = await loader.import('@cardstack/base/card-api');
     let { createFromSerialized } = cardApi;
     let doc = {
       data: {

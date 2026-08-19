@@ -9,7 +9,7 @@ import {
   type RunCommandResponse,
 } from '@cardstack/runtime-common';
 import { enqueueRunCommandJob } from '@cardstack/runtime-common/jobs/run-command';
-import type { BotTriggerContent as BotTriggerEventContent } from 'https://cardstack.com/base/matrix-event';
+import type { BotTriggerContent as BotTriggerEventContent } from '@cardstack/base/matrix-event';
 
 const log = logger('bot-runner');
 
@@ -63,12 +63,16 @@ export function makeEnqueueRunCommand(
 
 export class CommandRunner {
   private enqueueRunCommand: EnqueueRunCommandFn;
+  private dbAdapter: DBAdapter;
+  private handlers: BotCommandHandler[];
 
   constructor(
-    private dbAdapter: DBAdapter,
+    dbAdapter: DBAdapter,
     queuePublisher: QueuePublisher,
-    private handlers: BotCommandHandler[] = [],
+    handlers: BotCommandHandler[] = [],
   ) {
+    this.dbAdapter = dbAdapter;
+    this.handlers = handlers;
     this.enqueueRunCommand = makeEnqueueRunCommand(queuePublisher, dbAdapter);
   }
 

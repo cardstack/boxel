@@ -1,19 +1,21 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
 import {
   FactoryEntrypointUsageError,
   buildFactoryEntrypointSummary,
+  buildModelPolicy,
   getFactoryEntrypointUsage,
   parseFactoryEntrypointArgs,
   runFactoryEntrypoint,
   wantsFactoryEntrypointHelp,
-} from '../src/factory-entrypoint';
-import type { FactoryBrief } from '../src/factory-brief';
-import type { FactoryTargetRealmBootstrapResult } from '../src/factory-target-realm';
-import type { SeedIssueResult } from '../src/factory-seed';
-import { installTestProfile } from './helpers/test-profile';
+} from '../src/factory-entrypoint.ts';
+import type { FactoryBrief } from '../src/factory-brief.ts';
+import type { FactoryTargetRealmBootstrapResult } from '../src/factory-target-realm.ts';
+import type { SeedIssueResult } from '../src/factory-seed.ts';
+import { installTestProfile } from './helpers/test-profile.ts';
 
 const briefUrl =
   'https://briefs.example.test/software-factory/Wiki/sticky-note';
@@ -65,15 +67,17 @@ module('factory-entrypoint', function (hooks) {
       'https://realms.example.test/',
     ]);
 
-    assert.deepEqual(options, {
+    // Round-trip through JSON to drop undefined-valued optional flags, so
+    // this assertion pins the defined defaults without re-enumerating every
+    // optional flag the parser knows about.
+    assert.deepEqual(JSON.parse(JSON.stringify(options)), {
       briefUrl,
       targetRealm,
+      controlRealm: null,
       realmServerUrl: 'https://realms.example.test/',
       agent: 'claude',
-      openRouterModel: undefined,
-      openRouterApiKey: undefined,
-      debug: undefined,
       retryBlocked: true,
+      enableBoxelUiDiscovery: true,
     });
   });
 
@@ -211,7 +215,9 @@ module('factory-entrypoint', function (hooks) {
       () => parseFactoryEntrypointArgs(['--target-realm', targetRealm]),
       (error: unknown) =>
         error instanceof FactoryEntrypointUsageError &&
-        error.message === 'Missing required --brief-url',
+        /Missing required input: pass --brief-url .* or --repo-url/.test(
+          error.message,
+        ),
     );
   });
 
@@ -461,6 +467,406 @@ module('factory-entrypoint', function (hooks) {
     assert.strictEqual(
       capturedDarkfactoryModuleUrl,
       'https://realms.example.test/software-factory/darkfactory',
+    );
+  });
+
+  function briefFetch(): typeof globalThis.fetch {
+    return (async () =>
+      new Response(
+        JSON.stringify({
+          data: {
+            attributes: {
+              content: 'Brief content',
+              cardInfo: { name: 'Sticky Note', summary: 'summary' },
+              tags: [],
+            },
+          },
+        }),
+        { status: 200, headers: { 'content-type': SupportedMimeType.JSON } },
+      )) as unknown as typeof globalThis.fetch;
+  }
+
+  test('runFactoryEntrypoint sets the RealmDashboard index page for a freshly-created realm', async function (assert) {
+    useTestProfile();
+
+    let capturedWorkspaceDir: string | undefined;
+    let capturedRealmUrl: string | undefined;
+
+    await runFactoryEntrypoint(
+      { briefUrl, targetRealm, realmServerUrl: null, agent: 'claude' },
+      {
+        bootstrapTargetRealm: async (resolution) => ({
+          ...bootstrappedTargetRealm,
+          url: resolution.url,
+          serverUrl: resolution.serverUrl,
+          createdRealm: true,
+        }),
+        createSeed: async () => mockSeedResult,
+        pullTargetRealm: async () => {},
+        syncWorkspaceToRealm: async () => {},
+        writeRealmIndex: async (workspaceDir, realmUrl) => {
+          capturedWorkspaceDir = workspaceDir;
+          capturedRealmUrl = realmUrl;
+        },
+        linkRealmIndexBoard: async () => false,
+        linkBootstrapIssueProject: async () => false,
+        runIssueLoop: async () => ({
+          outcome: 'all_issues_done' as const,
+          outerCycles: 0,
+          issueResults: [],
+        }),
+        fetch: briefFetch(),
+      },
+    );
+
+    assert.ok(
+      capturedWorkspaceDir,
+      'writeRealmIndex runs for a freshly-created realm',
+    );
+    assert.strictEqual(capturedRealmUrl, targetRealm);
+  });
+
+  test('runFactoryEntrypoint links the index board after the loop and re-syncs when a board was found', async function (assert) {
+    useTestProfile();
+
+    let linkBoardCalled = false;
+    let syncCount = 0;
+
+    await runFactoryEntrypoint(
+      { briefUrl, targetRealm, realmServerUrl: null, agent: 'claude' },
+      {
+        bootstrapTargetRealm: async (resolution) => ({
+          ...bootstrappedTargetRealm,
+          url: resolution.url,
+          serverUrl: resolution.serverUrl,
+          createdRealm: true,
+        }),
+        createSeed: async () => mockSeedResult,
+        pullTargetRealm: async () => {},
+        syncWorkspaceToRealm: async () => {
+          syncCount++;
+        },
+        writeRealmIndex: async () => {},
+        linkRealmIndexBoard: async (options) => {
+          linkBoardCalled = true;
+          assert.strictEqual(
+            options.realmUrl,
+            targetRealm,
+            'board linker receives the target realm URL',
+          );
+          assert.strictEqual(
+            options.darkfactoryModuleUrl,
+            'https://realms.example.test/software-factory/darkfactory',
+            'board linker receives the darkfactory module URL',
+          );
+          // Report a modification so the entrypoint re-syncs the index.
+          return true;
+        },
+        // No project change here — this test isolates the board re-sync.
+        linkBootstrapIssueProject: async () => false,
+        runIssueLoop: async () => ({
+          outcome: 'all_issues_done' as const,
+          outerCycles: 0,
+          issueResults: [],
+        }),
+        fetch: briefFetch(),
+      },
+    );
+
+    assert.true(linkBoardCalled, 'linkRealmIndexBoard runs after the loop');
+    // One sync for the seed/index push, one for the board-linked index.
+    assert.strictEqual(syncCount, 2, 'the board-linked index is re-synced');
+  });
+
+  test('runFactoryEntrypoint links the seed issue project and re-syncs when a project was found', async function (assert) {
+    useTestProfile();
+
+    let linkProjectCalled = false;
+    let syncCount = 0;
+
+    await runFactoryEntrypoint(
+      { briefUrl, targetRealm, realmServerUrl: null, agent: 'claude' },
+      {
+        bootstrapTargetRealm: async (resolution) => ({
+          ...bootstrappedTargetRealm,
+          url: resolution.url,
+          serverUrl: resolution.serverUrl,
+          createdRealm: true,
+        }),
+        createSeed: async () => mockSeedResult,
+        pullTargetRealm: async () => {},
+        syncWorkspaceToRealm: async () => {
+          syncCount++;
+        },
+        writeRealmIndex: async () => {},
+        // No board change — this test isolates the seed-issue project link.
+        linkRealmIndexBoard: async () => false,
+        linkBootstrapIssueProject: async (options) => {
+          linkProjectCalled = true;
+          assert.strictEqual(
+            options.realmUrl,
+            targetRealm,
+            'project linker receives the target realm URL',
+          );
+          assert.strictEqual(
+            options.darkfactoryModuleUrl,
+            'https://realms.example.test/software-factory/darkfactory',
+            'project linker receives the darkfactory module URL',
+          );
+          // Report a modification so the entrypoint re-syncs the seed issue.
+          return true;
+        },
+        runIssueLoop: async () => ({
+          outcome: 'all_issues_done' as const,
+          outerCycles: 0,
+          issueResults: [],
+        }),
+        fetch: briefFetch(),
+      },
+    );
+
+    assert.true(
+      linkProjectCalled,
+      'linkBootstrapIssueProject runs for a freshly-created realm',
+    );
+    // One sync for the seed/index push, one for the project-linked seed issue.
+    assert.strictEqual(
+      syncCount,
+      2,
+      'the project-linked seed issue is re-synced',
+    );
+  });
+
+  test('runFactoryEntrypoint links the board as soon as the bootstrap issue completes, before the loop returns', async function (assert) {
+    useTestProfile();
+
+    let events: string[] = [];
+
+    await runFactoryEntrypoint(
+      { briefUrl, targetRealm, realmServerUrl: null, agent: 'claude' },
+      {
+        bootstrapTargetRealm: async (resolution) => ({
+          ...bootstrappedTargetRealm,
+          url: resolution.url,
+          serverUrl: resolution.serverUrl,
+          createdRealm: true,
+        }),
+        createSeed: async () => mockSeedResult,
+        pullTargetRealm: async () => {},
+        syncWorkspaceToRealm: async () => {
+          events.push('sync');
+        },
+        writeRealmIndex: async () => {},
+        linkRealmIndexBoard: async () => {
+          events.push('link');
+          return true;
+        },
+        linkBootstrapIssueProject: async () => false,
+        // The bootstrap issue finishes mid-run; a later implementation issue
+        // never completes, so the loop returns a non-complete outcome. The
+        // board must still be linked — via the bootstrap-complete hook the
+        // entrypoint passes in — before the loop returns.
+        runIssueLoop: async (config) => {
+          await config.onBootstrapComplete?.();
+          events.push('loop-returns');
+          return {
+            outcome: 'no_unblocked_issues' as const,
+            outerCycles: 2,
+            issueResults: [
+              {
+                issueId: 'Issues/bootstrap-seed',
+                issueSummary: 'bootstrap',
+                exitReason: 'done' as const,
+                innerIterations: 1,
+                toolCallLog: [],
+              },
+            ],
+          };
+        },
+        fetch: briefFetch(),
+      },
+    );
+
+    let firstLink = events.indexOf('link');
+    assert.notStrictEqual(firstLink, -1, 'the board was linked');
+    assert.ok(
+      firstLink < events.indexOf('loop-returns'),
+      'board linked via the bootstrap-complete hook, before the loop finished',
+    );
+  });
+
+  test('runFactoryEntrypoint leaves the index page untouched for a pre-existing realm', async function (assert) {
+    useTestProfile();
+
+    let writeRealmIndexCalled = false;
+    let linkBoardCalled = false;
+    let linkProjectCalled = false;
+
+    await runFactoryEntrypoint(
+      { briefUrl, targetRealm, realmServerUrl: null, agent: 'claude' },
+      {
+        bootstrapTargetRealm: async (resolution) => ({
+          ...bootstrappedTargetRealm,
+          url: resolution.url,
+          serverUrl: resolution.serverUrl,
+          createdRealm: false,
+        }),
+        createSeed: async () => mockSeedResult,
+        pullTargetRealm: async () => {},
+        syncWorkspaceToRealm: async () => {},
+        writeRealmIndex: async () => {
+          writeRealmIndexCalled = true;
+        },
+        linkRealmIndexBoard: async () => {
+          linkBoardCalled = true;
+          return false;
+        },
+        linkBootstrapIssueProject: async () => {
+          linkProjectCalled = true;
+          return false;
+        },
+        runIssueLoop: async () => ({
+          outcome: 'all_issues_done' as const,
+          outerCycles: 0,
+          issueResults: [],
+        }),
+        fetch: briefFetch(),
+      },
+    );
+
+    assert.false(
+      writeRealmIndexCalled,
+      'writeRealmIndex must not run for a pre-existing realm',
+    );
+    assert.false(
+      linkBoardCalled,
+      'linkRealmIndexBoard must not run for a pre-existing realm',
+    );
+    assert.false(
+      linkProjectCalled,
+      'linkBootstrapIssueProject must not run for a pre-existing realm',
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildModelPolicy — review turn budget
+// ---------------------------------------------------------------------------
+
+module('factory-entrypoint > buildModelPolicy review budget', function () {
+  test('review turn is unbudgeted by default (inherits flagship)', function (assert) {
+    let policy = buildModelPolicy({});
+    assert.strictEqual(policy?.acceptance, undefined);
+  });
+
+  test('--review-model opts the review turn into a cheaper budget', function (assert) {
+    let policy = buildModelPolicy({ reviewModel: 'claude-sonnet-5' });
+    assert.deepEqual(policy?.acceptance, {
+      model: 'claude-sonnet-5',
+      effort: 'medium',
+    });
+  });
+
+  test('review-model inherit keeps the flagship, effort-only budgets effort', function (assert) {
+    let policy = buildModelPolicy({
+      reviewModel: 'inherit',
+      reviewEffort: 'low',
+    });
+    assert.deepEqual(policy?.acceptance, { effort: 'low' });
+  });
+});
+
+module('factory-entrypoint > buildModelPolicy bootstrap budget', function () {
+  test('bootstrap defaults to claude-sonnet-5 at medium', function (assert) {
+    let policy = buildModelPolicy({});
+    assert.deepEqual(policy?.bootstrap, {
+      model: 'claude-sonnet-5',
+      effort: 'medium',
+    });
+  });
+
+  test('bootstrap-model inherit keeps the session flagship', function (assert) {
+    let policy = buildModelPolicy({ bootstrapModel: 'inherit' });
+    assert.deepEqual(policy?.bootstrap, { effort: 'medium' });
+  });
+
+  test('fix policy exists by default (effort medium, inherit model)', function (assert) {
+    assert.deepEqual(buildModelPolicy({})?.fix, { effort: 'medium' });
+  });
+
+  test('design turns are unbudgeted by default (inherit the session flagship)', function (assert) {
+    assert.strictEqual(buildModelPolicy({})?.design, undefined);
+  });
+
+  test('--design-model budgets both design turn types', function (assert) {
+    let policy = buildModelPolicy({ designModel: 'claude-sonnet-5' });
+    assert.deepEqual(policy?.design, {
+      model: 'claude-sonnet-5',
+      effort: 'medium',
+    });
+  });
+
+  test('design-model inherit with an effort budgets effort only', function (assert) {
+    let policy = buildModelPolicy({
+      designModel: 'inherit',
+      designEffort: 'high',
+    });
+    assert.deepEqual(policy?.design, { effort: 'high' });
+  });
+
+  test('hardening turns default to claude-sonnet-5 at medium', function (assert) {
+    assert.deepEqual(buildModelPolicy({})?.harden, {
+      model: 'claude-sonnet-5',
+      effort: 'medium',
+    });
+  });
+
+  test('non-claude backends get no Anthropic model defaults', function (assert) {
+    // The sonnet defaults are Anthropic-SDK ids; on opencode/OpenRouter
+    // they would resolve to "Model not found". Effort budgets still apply;
+    // explicit flags still pass through.
+    let policy = buildModelPolicy({ agent: 'openrouter', phaseSplit: true });
+    assert.deepEqual(policy?.bootstrap, { effort: 'medium' });
+    assert.deepEqual(policy?.build, { effort: 'medium' });
+    assert.deepEqual(policy?.harden, { effort: 'medium' });
+
+    let explicit = buildModelPolicy({
+      agent: 'openrouter',
+      buildModel: 'anthropic/claude-sonnet-4',
+    });
+    assert.strictEqual(explicit?.bootstrap?.model, undefined);
+  });
+});
+
+module('factory-entrypoint > --to-phase phase parsing', function () {
+  let base = [
+    '--brief-url',
+    'https://realms.example.test/wiki/brief',
+    '--target-realm',
+    'https://realms.example.test/user/realm/',
+  ];
+
+  test('defaults to undefined (loop applies implementation)', function (assert) {
+    let options = parseFactoryEntrypointArgs([...base]);
+    assert.strictEqual(options.toPhase, undefined);
+  });
+
+  test('accepts each lifecycle phase', function (assert) {
+    for (let phase of [
+      'design',
+      'implementation',
+      'hardening',
+      'polishing',
+    ] as const) {
+      let options = parseFactoryEntrypointArgs([...base, '--to-phase', phase]);
+      assert.strictEqual(options.toPhase, phase);
+    }
+  });
+
+  test('rejects an unknown phase', function (assert) {
+    assert.throws(
+      () => parseFactoryEntrypointArgs([...base, '--to-phase', 'shipping']),
+      /Invalid --to-phase/,
     );
   });
 });

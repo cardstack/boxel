@@ -1,10 +1,11 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import {
   computeBatchClearCacheGate,
   type BatchOwner,
-} from '../prerender/batch-ownership-gate';
-import { toAffinityKey } from '../prerender/affinity';
+} from '../prerender/batch-ownership-gate.ts';
+import { toAffinityKey } from '../prerender/affinity.ts';
 import type { PrerenderVisitArgs } from '@cardstack/runtime-common';
 
 // These tests exercise CS-10758 step 3 (`clearCache` batch ownership) at
@@ -29,7 +30,7 @@ function args(
   };
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module(
     'computeBatchClearCacheGate — clearCache batch ownership (CS-10758 step 3)',
     function () {

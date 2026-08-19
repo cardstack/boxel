@@ -2,15 +2,22 @@ name: boxel-cli publish
 
 # Single workflow file that owns both publish paths for @cardstack/boxel-cli:
 #
-#   • `unstable` job — on every merge to main that touches packages/boxel-cli/**,
-#     regenerate plugin skill content, decide per-surface version bumps from the
-#     merged PR's title (conventional-commit prefix), commit the bumps back to
-#     main, tag, and publish `@cardstack/boxel-cli@<v>-unstable.<n>` to npm under
-#     dist-tag `unstable`.
+#   • `unstable` job
+#       - On push to main touching `packages/boxel-cli/**` — regenerate plugin
+#         skill content, decide per-surface version bumps from the merged PR's
+#         title (conventional-commit prefix), commit the bumps back to main,
+#         tag, and publish `@cardstack/boxel-cli@<v>-unstable.<n>` under
+#         dist-tag `unstable`.
+#       - Via "Run workflow" with the `confirm` field left blank — skip the
+#         PR-driven bump/commit/tag dance, derive the next free
+#         `<base>-unstable.<n>` from npm (npm is the source of truth; the bump
+#         is not committed back to main), and publish it under dist-tag
+#         `unstable`. Resolving the counter from npm keeps the manual path from
+#         clobbering an existing version or colliding with the push path.
 #
-#   • `stable` job — manual workflow_dispatch that strips `-unstable.<n>` from the
-#     current version and publishes the resulting clean semver under dist-tag
-#     `latest`. The deliberate "cut a release" step.
+#   • `stable` job — "Run workflow" with `confirm = promote`. Strips
+#     `-unstable.<n>` from the current version and publishes the resulting
+#     clean semver under dist-tag `latest`. The deliberate "cut a release" step.
 #
 # Both flows live in one file so they share a single npm Trusted-Publisher rule
 # (registered against this filename). Splitting them into separate workflow files
@@ -33,8 +40,8 @@ on:
   workflow_dispatch:
     inputs:
       confirm:
-        description: "Type 'promote' to confirm publishing the latest unstable to npm latest"
-        required: true
+        description: "Leave blank to publish current main as unstable. Type 'promote' to strip -unstable.N and publish as latest."
+        required: false
         type: string
 
 permissions:
@@ -48,9 +55,29 @@ concurrency:
 
 jobs:
   unstable:
-    name: Regen, bump, publish unstable
-    if: github.event_name == 'push' && github.actor != 'github-actions[bot]'
+    name: Publish unstable
+    # Manual trigger is restricted to "Use workflow from: main" so the workflow
+    # YAML interpreting the publish is always main's (defense in depth — the
+    # checkout step below also pins `ref: main`).
+    if: >-
+      github.actor != 'github-actions[bot]'
+      && (
+        github.event_name == 'push'
+        || (inputs.confirm == '' && github.ref == 'refs/heads/main')
+      )
     runs-on: ubuntu-latest
+    outputs:
+      # Whether this run actually published a new version to npm, so the
+      # downstream verify job can skip when the push path no-op'd (no PR,
+      # or no npm-affecting bump) instead of re-testing a stale `unstable`.
+      published: ${{ steps.publish.outputs.published }}
+      # The exact version published this run. The verify job installs THIS
+      # version, not the `unstable` dist-tag — a dist-tag always resolves
+      # to some prior release, so waiting on it can't detect propagation of
+      # the new one and could smoke-test the previous artifact. Read from
+      # package.json in the publish step, so it's correct for both the push
+      # and manual paths.
+      version: ${{ steps.publish.outputs.version }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -69,6 +96,7 @@ jobs:
 
       - name: Fetch PR title from merge SHA
         id: pr
+        if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -94,7 +122,7 @@ jobs:
           echo "PR title: $PR_TITLE"
 
       - name: Regenerate plugin synopsis and skills
-        if: steps.pr.outputs.skip != 'true'
+        if: github.event_name == 'push' && steps.pr.outputs.skip != 'true'
         working-directory: packages/boxel-cli
         run: |
           pnpm run build:plugin
@@ -102,14 +130,14 @@ jobs:
 
       - name: Compute release
         id: release
-        if: steps.pr.outputs.skip != 'true'
+        if: github.event_name == 'push' && steps.pr.outputs.skip != 'true'
         working-directory: packages/boxel-cli
         env:
           PR_TITLE: ${{ steps.pr.outputs.title }}
           PR_BODY: ${{ steps.pr.outputs.body }}
         run: |
           set -euo pipefail
-          RESULT=$(NODE_NO_WARNINGS=1 pnpm exec ts-node --transpileOnly scripts/compute-release.ts)
+          RESULT=$(NODE_NO_WARNINGS=1 pnpm exec node scripts/compute-release.ts)
           echo "Compute result: $RESULT"
           {
             echo "json<<__REL_EOF__"
@@ -122,7 +150,7 @@ jobs:
           echo "nextPlugin=$(echo "$RESULT" | jq -r '.nextPlugin // ""')" >> "$GITHUB_OUTPUT"
 
       - name: Apply version bumps
-        if: steps.pr.outputs.skip != 'true' && (steps.release.outputs.npmBump != 'none' || steps.release.outputs.pluginBump != 'none')
+        if: github.event_name == 'push' && steps.pr.outputs.skip != 'true' && (steps.release.outputs.npmBump != 'none' || steps.release.outputs.pluginBump != 'none')
         env:
           NEXT_NPM: ${{ steps.release.outputs.nextNpm }}
           NEXT_PLUGIN: ${{ steps.release.outputs.nextPlugin }}
@@ -139,19 +167,24 @@ jobs:
             echo "package.json → $NEXT_NPM"
           fi
           if [ -n "$NEXT_PLUGIN" ]; then
-            node -e '
-              const fs = require("fs");
-              const p = "packages/boxel-cli/plugin/.claude-plugin/plugin.json";
-              const j = JSON.parse(fs.readFileSync(p, "utf8"));
-              j.version = process.env.NEXT_PLUGIN;
-              fs.writeFileSync(p, JSON.stringify(j, null, 2) + "\n");
-            '
-            echo "plugin.json → $NEXT_PLUGIN"
+            # The Claude and Codex manifests version together; build:plugin
+            # syncs the rest of the Codex manifest from the Claude one.
+            for p in packages/boxel-cli/plugin/.claude-plugin/plugin.json \
+                     packages/boxel-cli/plugin/.codex-plugin/plugin.json; do
+              PLUGIN_MANIFEST="$p" node -e '
+                const fs = require("fs");
+                const p = process.env.PLUGIN_MANIFEST;
+                const j = JSON.parse(fs.readFileSync(p, "utf8"));
+                j.version = process.env.NEXT_PLUGIN;
+                fs.writeFileSync(p, JSON.stringify(j, null, 2) + "\n");
+              '
+              echo "$p → $NEXT_PLUGIN"
+            done
           fi
 
       - name: Generate release notes
         id: notes
-        if: steps.pr.outputs.skip != 'true' && steps.release.outputs.npmBump != 'none'
+        if: github.event_name == 'push' && steps.pr.outputs.skip != 'true' && steps.release.outputs.npmBump != 'none'
         env:
           GH_TOKEN: ${{ github.token }}
           NEW_TAG: boxel-cli-v${{ steps.release.outputs.nextNpm }}
@@ -189,13 +222,13 @@ jobs:
           RELEASE_BODY_FILE="$BODY_FILE" \
           CHANGELOG_FRAGMENT_FILE="$FRAGMENT_FILE" \
           NODE_NO_WARNINGS=1 pnpm --filter @cardstack/boxel-cli exec \
-            ts-node --transpileOnly scripts/generate-release-notes.ts
+            node scripts/generate-release-notes.ts
           echo "has=true" >> "$GITHUB_OUTPUT"
           echo "body_file=$BODY_FILE" >> "$GITHUB_OUTPUT"
 
       - name: Commit, tag, and push
         id: commit
-        if: steps.pr.outputs.skip != 'true'
+        if: github.event_name == 'push' && steps.pr.outputs.skip != 'true'
         env:
           NEXT_NPM: ${{ steps.release.outputs.nextNpm }}
           NEXT_PLUGIN: ${{ steps.release.outputs.nextPlugin }}
@@ -203,7 +236,10 @@ jobs:
           set -euo pipefail
           git add packages/boxel-cli/package.json \
                   packages/boxel-cli/plugin/.claude-plugin/plugin.json \
-                  packages/boxel-cli/plugin/skills
+                  packages/boxel-cli/plugin/.codex-plugin/plugin.json \
+                  packages/boxel-cli/plugin/skills \
+                  packages/boxel-cli/plugin/README.md \
+                  packages/boxel-cli/scripts/.boxel-skills-manifest.json
           if git diff --cached --quiet; then
             echo "No changes to commit (regen produced no diff, bumps both none)."
             echo "pushed=false" >> "$GITHUB_OUTPUT"
@@ -225,8 +261,41 @@ jobs:
           git push origin main --follow-tags
           echo "pushed=true" >> "$GITHUB_OUTPUT"
 
+      - name: Bump to next unstable version
+        # Manual (`workflow_dispatch`, blank confirm) path only. The push path
+        # already computes a fresh `-unstable.<n>` via compute-release.ts; this
+        # step gives the manual path the same guarantee. The manual path
+        # deliberately doesn't commit the bump back to main, so the repo can't
+        # track the counter — npm is the source of truth. The script reads the
+        # published versions and picks the next free `<base>-unstable.<n>`, so a
+        # manual publish can never collide with an already-published version
+        # (the E403 this step exists to prevent). The push path resolves its
+        # counter from npm too (compute-release.ts), so they can't collide either.
+        if: github.event_name == 'workflow_dispatch'
+        working-directory: packages/boxel-cli
+        run: |
+          set -euo pipefail
+          node -e '
+            const { execSync } = require("child_process"), fs = require("fs");
+            const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+            // Drop any existing -unstable.<n> to get the base we iterate on.
+            const base = pkg.version.split("-unstable.")[0];
+            // `npm view ... versions --json` is an array, or a bare string when
+            // exactly one version is published; `[].concat` normalizes both.
+            // A non-zero exit (npm outage) is left to abort the run rather than
+            // be treated as "nothing published" — the latter would pick
+            // -unstable.0 and re-create the collision this step prevents.
+            const pub = [].concat(JSON.parse(execSync("npm view @cardstack/boxel-cli versions --json")));
+            const re = new RegExp("^" + base.replace(/\./g, "\\.") + "-unstable\\.(\\d+)$");
+            const ns = pub.filter((v) => typeof v === "string").map((v) => (v.match(re) || [])[1]).filter((x) => x != null).map(Number);
+            pkg.version = base + "-unstable." + (ns.length ? Math.max(...ns) + 1 : 0);
+            fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2) + "\n");
+            console.log("next unstable version → " + pkg.version);
+          '
+
       - name: Publish to npm
-        if: steps.pr.outputs.skip != 'true' && steps.release.outputs.npmBump != 'none'
+        id: publish
+        if: github.event_name == 'workflow_dispatch' || (steps.pr.outputs.skip != 'true' && steps.release.outputs.npmBump != 'none')
         working-directory: packages/boxel-cli
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -240,14 +309,38 @@ jobs:
           # because production strips the test entry (`tests/index.html`)
           # entirely. Only sourcemaps are dropped; the resulting harness
           # is ~60MB unpacked / ~15MB compressed.
+          #
+          # Build workspace deps in topological order before the host:
+          #   * @cardstack/boxel-icons — boxel-ui's `build:types` resolves
+          #     `@cardstack/boxel-icons/*` against its `declarations/`,
+          #     which only exists after the icons package is built.
+          #   * @cardstack/boxel-ui    — the host's vite build imports
+          #     `@cardstack/boxel-ui/styles/global.css`, which resolves
+          #     to the addon's `dist/`.
+          # Plain `pnpm --filter <name>` does NOT include workspace
+          # dependencies; they must be built explicitly (or with the
+          # `<name>...` syntax). Without this chain the host build fails
+          # with "Rolldown failed to resolve import
+          # @cardstack/boxel-ui/styles/global.css" — and before that,
+          # boxel-ui's own type build can fail on missing boxel-icons
+          # declarations.
+          pnpm --filter @cardstack/boxel-icons build
+          pnpm --filter @cardstack/boxel-ui build
           pnpm --filter @cardstack/host build
           pnpm run build
           # Use --no-git-checks because the workflow's commit + tag is already
           # pushed; pnpm's pre-publish git-state check would otherwise complain.
           pnpm publish --tag unstable --access public --provenance --no-git-checks
+          echo "published=true" >> "$GITHUB_OUTPUT"
+          # Surface the exact version just published so the verify job can
+          # wait for and install it specifically, rather than the moving
+          # `unstable` dist-tag. Read from package.json — correct for both
+          # the push path (bumped by compute-release) and the manual path
+          # (bumped by the step above).
+          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release (prerelease)
-        if: steps.pr.outputs.skip != 'true' && steps.release.outputs.npmBump != 'none' && steps.commit.outputs.tag != ''
+        if: github.event_name == 'push' && steps.pr.outputs.skip != 'true' && steps.release.outputs.npmBump != 'none' && steps.commit.outputs.tag != ''
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.commit.outputs.tag }}
@@ -272,8 +365,16 @@ jobs:
 
   stable:
     name: Promote latest unstable to stable
-    if: github.event_name == 'workflow_dispatch'
+    # Any non-empty `confirm` routes here so the validation step below can
+    # error loudly on a typo. Gating on `confirm == 'promote'` here would make
+    # a typo skip both jobs and look like a successful no-op run.
+    if: github.event_name == 'workflow_dispatch' && inputs.confirm != ''
     runs-on: ubuntu-latest
+    outputs:
+      # The exact promoted version, so the verify job installs it directly
+      # rather than the `latest` dist-tag (which resolves to a prior release
+      # until the new one propagates). See the unstable job's `version`.
+      version: ${{ steps.strip.outputs.version }}
     steps:
       - name: Validate confirmation
         run: |
@@ -324,10 +425,16 @@ jobs:
         working-directory: packages/boxel-cli
         run: |
           set -euo pipefail
-          # See the unstable job's "Publish to npm" step for the rationale —
-          # `build:test-harness` reads from `packages/host/dist/`, so the
-          # host's dev bundle has to exist before we can build the slim
-          # harness.
+          # See the unstable job's "Publish to npm" step for the full
+          # rationale on the dep ordering — `build:test-harness` reads from
+          # `packages/host/dist/`, so the host's dev bundle has to exist
+          # before we can build the bundled test harness, and the host's vite
+          # build in turn needs `@cardstack/boxel-ui`'s `dist/`, which itself
+          # needs `@cardstack/boxel-icons`'s `declarations/` for its type
+          # build. Plain `pnpm --filter <name>` does NOT include workspace
+          # deps, so they have to be built explicitly.
+          pnpm --filter @cardstack/boxel-icons build
+          pnpm --filter @cardstack/boxel-ui build
           pnpm --filter @cardstack/host build
           pnpm build
 
@@ -367,7 +474,7 @@ jobs:
           RELEASE_BODY_FILE="$BODY_FILE" \
           CHANGELOG_FRAGMENT_FILE="$FRAGMENT_FILE" \
           NODE_NO_WARNINGS=1 pnpm --filter @cardstack/boxel-cli exec \
-            ts-node --transpileOnly scripts/generate-release-notes.ts
+            node scripts/generate-release-notes.ts
           FRAG_FILE="$FRAGMENT_FILE" node -e '
             const fs = require("fs");
             const path = "packages/boxel-cli/CHANGELOG.md";
@@ -434,3 +541,48 @@ jobs:
               --title "@cardstack/boxel-cli v${VERSION}" \
               --notes "Promoted from unstable. Published to npm under dist-tag \`latest\`: ${NPM_URL}"
           fi
+
+  # ---------------------------------------------------------------------------
+  # Post-publish verification: install the just-published artifact from the
+  # registry (as an end user would, with npm's hoisted node_modules) and run
+  # the server-less CLI smoke — `boxel parse` over card-code fixtures plus the
+  # help/version/arg-validation checks. This is the exact layout where `boxel
+  # parse`'s glint type-check silently resolves nothing; the in-process tests
+  # never installed the package, so they couldn't catch it.
+  #
+  # Deliberately server-less: the full realm-touching suite already ran
+  # pre-merge against the identical bits (the `pnpm pack` tarball in ci.yaml's
+  # "Boxel CLI Tests"), so standing up Matrix + Postgres again on every publish
+  # would re-test the same behavior. What's genuinely new post-publish is the
+  # registry artifact + packaging + propagation — which parse (workspace mode,
+  # no realm) exercises directly.
+  verify-unstable:
+    name: Verify published unstable install
+    needs: unstable
+    if: needs.unstable.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: main
+      - uses: ./.github/actions/init
+      - name: Smoke-test the published artifact from npm
+        working-directory: packages/boxel-cli
+        run: NODE_NO_WARNINGS=1 node scripts/run-cli-suite.ts --source published --version "${{ needs.unstable.outputs.version }}" -- pnpm run test:cli:smoke
+
+  verify-stable:
+    name: Verify published stable install
+    needs: stable
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: main
+      - uses: ./.github/actions/init
+      - name: Smoke-test the published artifact from npm
+        working-directory: packages/boxel-cli
+        run: NODE_NO_WARNINGS=1 node scripts/run-cli-suite.ts --source published --version "${{ needs.stable.outputs.version }}" -- pnpm run test:cli:smoke

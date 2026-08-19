@@ -5,15 +5,20 @@ import type {
   ProjectData,
   TestResult,
   ValidationResults,
-} from './factory-agent';
+} from './factory-agent/index.ts';
 
-import type { ResolvedSkill } from './factory-agent';
+import type { ResolvedSkill } from './factory-agent/index.ts';
 
 import {
   enforceSkillBudget,
   type SkillLoaderInterface,
   type SkillResolver,
-} from './factory-skill-loader';
+} from './factory-skill-loader.ts';
+import { buildHostToolsSkill } from './host-import-manifest.ts';
+import { logger } from './logger.ts';
+import { startSpan } from './run-trace.ts';
+
+let log = logger('factory-context-builder');
 
 // ---------------------------------------------------------------------------
 // Issue relationship loader
@@ -42,6 +47,22 @@ export interface ContextBuilderConfig {
   maxSkillTokens?: number;
   /** Loader for traversing issue relationships (required for buildForIssue). */
   issueLoader?: IssueRelationshipLoader;
+  /**
+   * Feature flag — when true, the AgentContext carries
+   * `enableBoxelUiDiscovery: true` so the system prompt template enables the
+   * catalog-search exception. The resolver should also have been constructed
+   * with the same value so the discovery skill is included in the load list.
+   * See CS-10527.
+   */
+  enableBoxelUiDiscovery?: boolean;
+  /**
+   * Valid `@cardstack/boxel-host/tools/<name>` module names derived from
+   * the host build (import gate). When set, every built context gains
+   * a generated `host-tools-import-manifest` skill so the agent writes
+   * imports against the real catalogue instead of its prior — the
+   * `commands/`→`tools/` rename failure class.
+   */
+  hostToolImports?: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -53,12 +74,28 @@ export class ContextBuilder {
   private skillLoader: SkillLoaderInterface;
   private maxSkillTokens: number | undefined;
   private issueLoader: IssueRelationshipLoader | undefined;
+  private enableBoxelUiDiscovery: boolean;
+  private hostToolImports: string[] | undefined;
 
   constructor(config: ContextBuilderConfig) {
     this.skillResolver = config.skillResolver;
     this.skillLoader = config.skillLoader;
     this.maxSkillTokens = config.maxSkillTokens;
     this.issueLoader = config.issueLoader;
+    this.enableBoxelUiDiscovery = config.enableBoxelUiDiscovery === true;
+    this.hostToolImports = config.hostToolImports;
+  }
+
+  /**
+   * The generated host-tools manifest skill, appended AFTER the budget
+   * trim: it's the authoritative import catalogue and must never be the
+   * thing the token budget drops.
+   */
+  private withGeneratedSkills(skills: ResolvedSkill[]): ResolvedSkill[] {
+    if (!this.hostToolImports || this.hostToolImports.length === 0) {
+      return skills;
+    }
+    return [...skills, buildHostToolsSkill(this.hostToolImports)];
   }
 
   /**
@@ -92,7 +129,9 @@ export class ContextBuilder {
     );
 
     // Step 3: Enforce token budget if configured
-    skills = enforceSkillBudget(skills, this.maxSkillTokens);
+    skills = this.withGeneratedSkills(
+      enforceSkillBudget(skills, this.maxSkillTokens),
+    );
 
     // Step 4: Assemble the context
     let context: AgentContext = {
@@ -101,6 +140,7 @@ export class ContextBuilder {
       knowledge,
       skills,
       targetRealm,
+      enableBoxelUiDiscovery: this.enableBoxelUiDiscovery,
       ...(darkfactoryModuleUrl ? { darkfactoryModuleUrl } : {}),
     };
 
@@ -138,25 +178,62 @@ export class ContextBuilder {
       );
     }
 
+    let endContextSpan = startSpan('context', 'build-for-issue', {
+      issue: String(params.issue.id).split('/').filter(Boolean).pop(),
+    });
+    try {
+      return await this.#buildForIssueInner(params);
+    } finally {
+      endContextSpan();
+    }
+  }
+
+  async #buildForIssueInner(params: {
+    issue: IssueData;
+    targetRealm: string;
+    darkfactoryModuleUrl?: string;
+    validationResults?: ValidationResults;
+    validationContext?: string;
+    briefUrl?: string;
+  }): Promise<AgentContext> {
     let { issue, targetRealm, darkfactoryModuleUrl } = params;
+
+    // Re-assert for the type system — the public wrapper already threw if
+    // the loader is missing.
+    let issueLoader = this.issueLoader;
+    if (!issueLoader) {
+      throw new Error(
+        'buildForIssue() requires an issueLoader in ContextBuilderConfig',
+      );
+    }
 
     // Step 1: Traverse issue relationships
     let [project, knowledge] = await Promise.all([
-      this.issueLoader.loadProject(issue),
-      this.issueLoader.loadKnowledge(issue),
+      issueLoader.loadProject(issue),
+      issueLoader.loadKnowledge(issue),
     ]);
 
     if (!project) {
-      // Bootstrap issues have no project yet — the agent creates it.
-      // Supply a minimal stub so AgentContext.project stays required.
+      // A missing project link is normal on several paths — bootstrap
+      // (the agent creates the Project), PORT-0 analysis (runs ahead of
+      // bootstrap by blockedBy design), and agent-authored issues like
+      // the acceptance walkthrough's auto-filed defects, whose JSON may
+      // omit relationships entirely. Throwing here killed a whole run
+      // over one unlinked defect issue (wardrobe, 2026-07-17); the
+      // project is orientation context, not a correctness requirement,
+      // so degrade to a stub and log instead. AgentContext.project stays
+      // required.
       let issueType = (issue as Record<string, unknown>).issueType;
-      if (issueType === 'bootstrap') {
-        project = { id: 'bootstrap-pending' };
-      } else {
-        throw new Error(
-          `Issue "${issue.id}" has no linked project — cannot build context`,
+      if (
+        issueType !== 'bootstrap' &&
+        issueType !== 'analysis' &&
+        issueType !== 'design'
+      ) {
+        log.warn(
+          `Issue "${issue.id}" has no linked project — building context with a stub`,
         );
       }
+      project = { id: 'bootstrap-pending' };
     }
 
     // Step 2: Resolve and load skills
@@ -167,7 +244,9 @@ export class ContextBuilder {
     );
 
     // Step 3: Enforce token budget if configured
-    skills = enforceSkillBudget(skills, this.maxSkillTokens);
+    skills = this.withGeneratedSkills(
+      enforceSkillBudget(skills, this.maxSkillTokens),
+    );
 
     // Step 4: Assemble the context
     let context: AgentContext = {
@@ -176,6 +255,7 @@ export class ContextBuilder {
       knowledge,
       skills,
       targetRealm,
+      enableBoxelUiDiscovery: this.enableBoxelUiDiscovery,
       ...(darkfactoryModuleUrl ? { darkfactoryModuleUrl } : {}),
     };
 

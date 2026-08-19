@@ -5,7 +5,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
-  baseRealm,
+  baseRealmRRI,
   type FileExtractResponse,
   type RenderRouteOptions,
   type ResolvedCodeRef,
@@ -51,7 +51,7 @@ module('Acceptance | ts file def', function (hooks) {
   const makeFileURL = (path: string) => new URL(path, testRealmURL).href;
 
   const tsDefCodeRef = (): ResolvedCodeRef => ({
-    module: `${baseRealm.url}ts-file-def` as RealmResourceIdentifier,
+    module: `${baseRealmRRI}ts-file-def` as RealmResourceIdentifier,
     name: 'TsFileDef',
   });
 
@@ -137,6 +137,11 @@ export const MAX_RETRIES = 3;`,
     assert.ok(
       String(result.searchDoc?.content).includes('greet'),
       'content includes full source',
+    );
+    assert.strictEqual(
+      result.searchDoc?.lineCount,
+      5,
+      'line count is the source line count, without a trailing-newline inflation',
     );
     assert.strictEqual(result.searchDoc?.name, 'utils.ts');
   });

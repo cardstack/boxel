@@ -14,8 +14,8 @@ import {
   sendResponseForForbiddenRequest,
   sendResponseForSystemError,
   setContextResponse,
-} from '../middleware';
-import type { RealmServerTokenClaim } from '../utils/jwt';
+} from '../middleware/index.ts';
+import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 
 export default function handlePrerenderProxy({
   kind,

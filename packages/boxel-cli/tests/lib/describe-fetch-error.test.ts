@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { describeFetchError } from '../../src/lib/describe-fetch-error';
+import { describeFetchError } from '../../src/lib/describe-fetch-error.ts';
 
 describe('describeFetchError', () => {
   it('returns the message for a plain Error without a cause', () => {

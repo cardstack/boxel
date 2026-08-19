@@ -1,4 +1,4 @@
-import '../setup-logger'; // This should be first
+import '../setup-logger.ts'; // This should be first
 import { aiBotUsername } from '@cardstack/runtime-common';
 import { getRoomEvents } from '@cardstack/runtime-common/ai';
 import { createClient } from 'matrix-js-sdk';

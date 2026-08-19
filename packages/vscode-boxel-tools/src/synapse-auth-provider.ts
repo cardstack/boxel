@@ -8,8 +8,10 @@ export class SynapseAuthProvider implements vscode.AuthenticationProvider {
   private _onDidChangeSessions =
     new vscode.EventEmitter<vscode.AuthenticationProviderAuthenticationSessionsChangeEvent>();
   public readonly onDidChangeSessions = this._onDidChangeSessions.event;
+  private readonly context: vscode.ExtensionContext;
 
-  constructor(private readonly context: vscode.ExtensionContext) {
+  constructor(context: vscode.ExtensionContext) {
+    this.context = context;
     console.log('[SynapseAuthProvider] Constructor called');
     // Don't initialize in constructor, defer until needed
   }

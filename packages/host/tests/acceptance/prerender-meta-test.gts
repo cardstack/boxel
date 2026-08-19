@@ -1,11 +1,14 @@
-import { visit } from '@ember/test-helpers';
+import { visit, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
 import {
-  baseRealm,
+  baseRealmRRI,
+  diffDoc,
+  type FileExtractResponse,
+  type FusedIndexMeta,
   type PrerenderMeta,
   type RenderRouteOptions,
   rri,
@@ -23,6 +26,25 @@ import {
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
+// The prerender meta route generates the search doc via the searchable-driven
+// generator: every relationship is present (an unset link is `null`, a set one
+// expands per its `searchable` annotation), and every card carries its base-card
+// fields (`cardTheme`, `cardInfo.cardThumbnail`). The expected doc is the exact
+// generator output; `diffDoc(..., false)` reports any deviation as a readable
+// path-level diff.
+function expectMetaSearchDoc(
+  assert: Assert,
+  actual: Record<string, any> | null | undefined,
+  expected: Record<string, any>,
+  message?: string,
+) {
+  assert.deepEqual(
+    diffDoc(expected, actual ?? {}, false),
+    [],
+    message ?? 'search doc is correct',
+  );
+}
+
 module('Acceptance | prerender | meta', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -39,11 +61,36 @@ module('Acceptance | prerender | meta', function (hooks) {
     `/render/${encodeURIComponent(
       url,
     )}/${nonce}/${DEFAULT_RENDER_OPTIONS_SEGMENT}${suffix}`;
+  const customRenderPath = (
+    url: string,
+    renderOptions: RenderRouteOptions,
+    nonce: number,
+  ) =>
+    `/render/${encodeURIComponent(url)}/${nonce}/${encodeURIComponent(
+      JSON.stringify(renderOptions),
+    )}`;
+
+  async function captureFileExtractResult(): Promise<FileExtractResponse> {
+    await waitUntil(
+      () => {
+        let status = document
+          .querySelector('[data-prerender-file-extract]')
+          ?.getAttribute('data-prerender-file-extract-status');
+        return status === 'ready' || status === 'error';
+      },
+      { timeout: 5000 },
+    );
+    let text =
+      document
+        .querySelector('[data-prerender-file-extract] pre')
+        ?.textContent?.trim() ?? '';
+    return JSON.parse(text) as FileExtractResponse;
+  }
 
   hooks.beforeEach(async function () {
     let loader = getService('loader-service').loader;
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
+    let cardApi: typeof import('@cardstack/base/card-api');
+    cardApi = await loader.import('@cardstack/base/card-api');
 
     let {
       field,
@@ -83,14 +130,16 @@ module('Acceptance | prerender | meta', function (hooks) {
     class Cat extends Pet {
       static displayName = 'Cat';
       @field aliases = containsMany(StringField);
-      @field emergencyContacts = containsMany(EmergencyContact);
+      @field emergencyContacts = containsMany(EmergencyContact, {
+        searchable: 'contact',
+      });
     }
 
     class Person extends CardDef {
       static displayName = 'Person';
       @field name = contains(StringField);
-      @field pets = linksToMany(() => Pet);
-      @field friend = linksTo(() => Person);
+      @field pets = linksToMany(() => Pet, { searchable: true });
+      @field friend = linksTo(() => Person, { searchable: true });
       @field cardTitle = contains(StringField, {
         computeVia(this: Person) {
           return this.name;
@@ -332,7 +381,8 @@ module('Acceptance | prerender | meta', function (hooks) {
       [
         `${testRealmURL}cat/Cat`,
         `${testRealmURL}pet/Pet`,
-        `${baseRealm.url}card-api/CardDef`,
+        `${baseRealmRRI}card-api/CardDef`,
+        `${baseRealmRRI}card-api/BaseDef`,
       ],
       'types are correct',
     );
@@ -343,12 +393,14 @@ module('Acceptance | prerender | meta', function (hooks) {
     await visit(renderPath(url, '/meta'));
     let { value } = await capturePrerenderResult('textContent');
     let meta: PrerenderMeta = JSON.parse(value);
-    assert.deepEqual(
+    expectMetaSearchDoc(
+      assert,
       meta.searchDoc,
       {
         id: `${testRealmURL}Pet/mango`,
         _cardType: 'Pet',
-        cardInfo: {},
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
         name: 'Mango',
         cardTitle: 'Mango',
       },
@@ -361,12 +413,14 @@ module('Acceptance | prerender | meta', function (hooks) {
     await visit(renderPath(url, '/meta'));
     let { value } = await capturePrerenderResult('textContent');
     let meta: PrerenderMeta = JSON.parse(value);
-    assert.deepEqual(
+    expectMetaSearchDoc(
+      assert,
       meta.searchDoc,
       {
         id: `${testRealmURL}Pet/paper`,
         _cardType: 'Cat',
-        cardInfo: {},
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
         name: 'Paper',
         cardTitle: 'Paper',
         aliases: ['Satan', "Satan's Mistress"],
@@ -383,26 +437,26 @@ module('Acceptance | prerender | meta', function (hooks) {
     await visit(renderPath(url, '/meta'));
     let { value } = await capturePrerenderResult('textContent');
     let meta: PrerenderMeta = JSON.parse(value);
-    assert.deepEqual(
+    expectMetaSearchDoc(
+      assert,
       meta.searchDoc,
       {
         id: `${testRealmURL}Person/jade`,
         _cardType: 'Person',
-        cardInfo: {
-          theme: null,
-        },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
         name: 'Jade',
         cardTitle: 'Jade',
         pets: null,
         numOfPets: '0',
         friend: {
           id: `${testRealmURL}Person/hassan`,
-          cardInfo: {
-            theme: null,
-          },
+          cardTheme: null,
+          cardInfo: { cardThumbnail: null, theme: null },
           name: 'Hassan',
           cardTitle: 'Hassan',
           numOfPets: '3',
+          friend: null,
           pets: [
             {
               id: `${testRealmURL}Pet/mango`,
@@ -426,14 +480,14 @@ module('Acceptance | prerender | meta', function (hooks) {
     await visit(renderPath(url, '/meta'));
     let { value } = await capturePrerenderResult('textContent');
     let meta: PrerenderMeta = JSON.parse(value);
-    assert.deepEqual(
+    expectMetaSearchDoc(
+      assert,
       meta.searchDoc,
       {
         id: `${testRealmURL}Person/hassan`,
         _cardType: 'Person',
-        cardInfo: {
-          theme: null,
-        },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
         name: 'Hassan',
         cardTitle: 'Hassan',
         friend: null,
@@ -443,27 +497,22 @@ module('Acceptance | prerender | meta', function (hooks) {
             id: `${testRealmURL}Pet/mango`,
             name: 'Mango',
             cardTitle: 'Mango',
-            cardInfo: {
-              theme: null,
-            },
+            cardTheme: null,
+            cardInfo: { cardThumbnail: null, theme: null },
           },
           {
             id: `${testRealmURL}Pet/vangogh`,
             name: 'Van Gogh',
             cardTitle: 'Van Gogh',
-            cardInfo: {
-              theme: null,
-            },
+            cardTheme: null,
+            cardInfo: { cardThumbnail: null, theme: null },
           },
           {
             id: `${testRealmURL}Pet/paper`,
             name: 'Paper',
             cardTitle: 'Paper',
-            aliases: ['Satan', "Satan's Mistress"],
-            emergencyContacts: null,
-            cardInfo: {
-              theme: null,
-            },
+            cardTheme: null,
+            cardInfo: { cardThumbnail: null, theme: null },
           },
         ],
       },
@@ -477,14 +526,14 @@ module('Acceptance | prerender | meta', function (hooks) {
     await visit(renderPath(url, '/meta'));
     let { value } = await capturePrerenderResult('textContent');
     let meta: PrerenderMeta = JSON.parse(value);
-    assert.deepEqual(
+    expectMetaSearchDoc(
+      assert,
       meta.searchDoc,
       {
         _cardType: 'Cat',
         aliases: null,
-        cardInfo: {
-          theme: null,
-        },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
         emergencyContacts: [
           {
             phone: '01234',
@@ -494,9 +543,8 @@ module('Acceptance | prerender | meta', function (hooks) {
               cardTitle: 'Jade',
               numOfPets: '0',
               pets: null,
-              cardInfo: {
-                theme: null,
-              },
+              cardTheme: null,
+              cardInfo: { cardThumbnail: null, theme: null },
               friend: {
                 id: `${testRealmURL}Person/hassan`,
               },
@@ -508,10 +556,10 @@ module('Acceptance | prerender | meta', function (hooks) {
               id: `${testRealmURL}Person/hassan`,
               name: 'Hassan',
               cardTitle: 'Hassan',
-              cardInfo: {
-                theme: null,
-              },
+              cardTheme: null,
+              cardInfo: { cardThumbnail: null, theme: null },
               numOfPets: '3',
+              friend: null,
               pets: [
                 {
                   id: `${testRealmURL}Pet/mango`,
@@ -531,6 +579,70 @@ module('Acceptance | prerender | meta', function (hooks) {
         cardTitle: 'Molly',
       },
       'search doc is correct',
+    );
+  });
+
+  test('a render carrying both cardRender and fileExtract returns the file extract alongside the meta payload', async function (assert) {
+    let url = `${testRealmURL}Pet/paper.json`;
+
+    // The standalone file-extract route's payload for the same file is the
+    // reference the fused payload must reproduce.
+    await visit(
+      customRenderPath(url, { clearCache: true, fileExtract: true }, 1) +
+        '/file-extract',
+    );
+    let standalone = await captureFileExtractResult();
+
+    await visit(
+      customRenderPath(
+        url,
+        { clearCache: true, cardRender: true, fileExtract: true },
+        2,
+      ) + '/meta',
+    );
+    let { value } = await capturePrerenderResult('textContent');
+    let fused: FusedIndexMeta = JSON.parse(value);
+
+    assert.deepEqual(
+      fused.types,
+      [
+        `${testRealmURL}cat/Cat`,
+        `${testRealmURL}pet/Pet`,
+        `${baseRealmRRI}card-api/CardDef`,
+        `${baseRealmRRI}card-api/BaseDef`,
+      ],
+      'card meta types are present on the fused payload',
+    );
+    assert.ok(fused.serialized, 'card meta serialized doc is present');
+    assert.ok(fused.searchDoc, 'card meta search doc is present');
+    assert.strictEqual(
+      typeof fused.diagnostics?.fileExtractMs,
+      'number',
+      'the extract share of the transition is itemized in diagnostics',
+    );
+
+    let fileExtract = fused.fileExtract!;
+    assert.ok(fileExtract, 'file extract rides the meta payload');
+    // The nonce is per-visit and the deps have no ordering contract; every
+    // other field must match the standalone route byte for byte.
+    let { deps: fusedDeps, nonce: _fusedNonce, ...fusedRest } = fileExtract;
+    let {
+      deps: standaloneDeps,
+      nonce: _standaloneNonce,
+      ...standaloneRest
+    } = standalone;
+    assert.deepEqual(
+      fusedRest,
+      standaloneRest,
+      'fused extract payload matches the standalone file-extract route',
+    );
+    // The card side of the payload owns the hydration graph; the file side
+    // carries only the extract's own dependencies, so any hydration module
+    // leaking into the fused extract breaks this set-equality.
+    assert.deepEqual(
+      [...(fusedDeps ?? [])].sort(),
+      [...(standaloneDeps ?? [])].sort(),
+      'fused extract deps are set-equal to the standalone extract deps',
     );
   });
 });

@@ -1,5 +1,5 @@
-import type { MatrixClient } from './matrix-client';
-import type { RealmPermissions, RealmAction } from './index';
+import type { MatrixClient } from './matrix-client.ts';
+import type { RealmPermissions, RealmAction } from './index.ts';
 
 export default class RealmPermissionChecker {
   private realmPermissions: RealmPermissions = {};

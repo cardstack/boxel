@@ -12,22 +12,22 @@ import { consume } from 'ember-provide-consume-context';
 
 import { Avatar } from '@cardstack/boxel-ui/components';
 
-import { bool } from '@cardstack/boxel-ui/helpers';
+import { bool, cn } from '@cardstack/boxel-ui/helpers';
 
 import {
   type getCardCollection,
   GetCardCollectionContextName,
 } from '@cardstack/runtime-common';
 
-import type MessageCommand from '@cardstack/host/lib/matrix-classes/message-command';
+import type MessageTool from '@cardstack/host/lib/matrix-classes/message-tool';
 import type { RoomResource } from '@cardstack/host/resources/room';
-import type CommandService from '@cardstack/host/services/command-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
+import type ToolService from '@cardstack/host/services/tool-service';
 
 import AiAssistantMessage from '../ai-assistant/message';
 import { aiBotUserId } from '../ai-assistant/panel';
 
-import RoomMessageCommand from './room-message-command';
+import RoomMessageTool from './room-message-tool';
 
 interface Signature {
   Element: HTMLElement;
@@ -58,6 +58,10 @@ interface Signature {
 
 const STREAMING_TIMEOUT_MS = 3 * 60 * 1000;
 export const STREAMING_TIMEOUT_MINUTES = STREAMING_TIMEOUT_MS / 60_000;
+
+// A message from the same author landing within this window of the previous
+// message renders without its avatar/timestamp header.
+const MESSAGE_GROUPING_WINDOW_MS = 2 * 60 * 1000;
 
 export default class RoomMessage extends Component<Signature> {
   @consume(GetCardCollectionContextName)
@@ -163,9 +167,51 @@ export default class RoomMessage extends Component<Signature> {
     return undefined;
   }
 
-  private run = task(async (command: MessageCommand) => {
-    return this.commandService.run.unlinked().perform(command);
+  private run = task(async (command: MessageTool) => {
+    return this.toolService.run.unlinked().perform(command);
   });
+
+  // Correctness-check messages render all their tools compactly; bot-executed
+  // tools (e.g. readRealmFile) render compactly even inside a regular message,
+  // since they are status indicators rather than actionable tool calls.
+  private isCompactTool = (tool: MessageTool) =>
+    this.message.isCodePatchCorrectness || tool.isBotExecuted;
+
+  // A message carrying only bot-executed tool indicators — no prose,
+  // reasoning, or attachments — stacks flush against a neighboring message of
+  // the same kind, so a burst of readRealmFile calls reads as one list.
+  private get isBotToolsOnlyMessage() {
+    return (
+      !!this.message.tools?.length &&
+      this.message.tools.every((tool) => tool.isBotExecuted) &&
+      !this.message.htmlParts?.length &&
+      !this.message.reasoningContent &&
+      !this.message.attachedFiles?.length &&
+      !this.message.attachedCardsAsFiles?.length &&
+      !this.message.attachedCardIds?.length
+    );
+  }
+
+  // A quick succession of messages from one author reads as a single run of
+  // conversation, so only the first message in the run gets an avatar and
+  // timestamp header.
+  private get isGroupedWithPreviousMessage() {
+    let previousMessage = this.args.roomResource.messages[this.args.index - 1];
+    if (!previousMessage) {
+      return false;
+    }
+    return (
+      previousMessage.author.userId === this.message.author.userId &&
+      this.message.created.getTime() - previousMessage.created.getTime() <
+        MESSAGE_GROUPING_WINDOW_MS
+    );
+  }
+
+  private get hideMeta() {
+    return (
+      this.message.isCodePatchCorrectness || this.isGroupedWithPreviousMessage
+    );
+  }
 
   <template>
     {{! We Intentionally wait until message resources are loaded (i.e. have a value) before rendering the message.
@@ -208,21 +254,23 @@ export default class RoomMessage extends Component<Signature> {
         @retryAction={{@retryAction}}
         @waitAction={{if this.streamingTimeout this.waitLonger}}
         @isPending={{@isPending}}
-        @hideMeta={{this.message.isCodePatchCorrectness}}
+        @hideMeta={{this.hideMeta}}
         @isCodePatchCorrectness={{this.message.isCodePatchCorrectness}}
-        @commands={{this.message.commands}}
+        @commands={{this.message.tools}}
+        @usage={{this.message.usage}}
         data-test-boxel-message-from={{this.message.author.name}}
+        class={{cn bot-tools-only=this.isBotToolsOnlyMessage}}
         data-test-boxel-message-instance-id={{this.message.instanceId}}
         ...attributes
       >
-        {{#each this.message.commands as |command|}}
-          <RoomMessageCommand
-            @messageCommand={{command}}
+        {{#each this.message.tools as |command|}}
+          <RoomMessageTool
+            @messageTool={{command}}
             @roomResource={{@roomResource}}
             @runCommand={{fn (perform this.run) command}}
             @roomId={{@roomId}}
             @isPending={{@isPending}}
-            @isCompact={{this.message.isCodePatchCorrectness}}
+            @isCompact={{this.isCompactTool command}}
             @monacoSDK={{@monacoSDK}}
             @isError={{bool this.errorMessage}}
             @isStreaming={{@isStreaming}}
@@ -232,7 +280,7 @@ export default class RoomMessage extends Component<Signature> {
     {{/if}}
   </template>
 
-  @service declare commandService: CommandService;
+  @service declare toolService: ToolService;
 
   knownErrorMessagePrefixes: { [errorMessagePrefix: string]: string }[] = [
     {

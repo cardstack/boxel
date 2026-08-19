@@ -1,33 +1,41 @@
 import type { Command } from 'commander';
-import { registerCancelIndexingCommand } from './cancel-indexing';
-import { registerCreateCommand } from './create';
-import { registerHistoryCommand } from './history';
-import { registerListCommand } from './list';
-import { registerMilestoneCommand } from './milestone';
-import { registerPublishCommand } from './publish';
-import { registerPullCommand } from './pull';
-import { registerPushCommand } from './push';
-import { registerRemoveCommand } from './remove';
-import { registerStatusCommand } from './status';
-import { registerSyncCommand } from './sync';
-import { registerUnpublishCommand } from './unpublish';
-import { registerWaitForReadyCommand } from './wait-for-ready';
-import { registerWatchCommand } from './watch';
+import { registerArchiveCommand } from './archive.ts';
+import { registerCancelIndexingCommand } from './cancel-indexing.ts';
+import { registerCreateCommand } from './create.ts';
+import { registerHistoryCommand } from './history.ts';
+import { registerIndexingErrorsCommand } from './indexing-errors.ts';
+import { registerIngestCardCommand } from './ingest-card.ts';
+import { registerListCommand } from './list.ts';
+import { registerMilestoneCommand } from './milestone.ts';
+import { registerPublishCommand } from './publish.ts';
+import { registerPullCommand } from './pull.ts';
+import { registerPushCommand } from './push.ts';
+import { registerRemoveCommand } from './remove.ts';
+import { registerRestoreCommand } from './restore.ts';
+import { registerStatusCommand } from './status.ts';
+import { registerSyncCommand } from './sync.ts';
+import { registerUnpublishCommand } from './unpublish.ts';
+import { registerWaitForReadyCommand } from './wait-for-ready.ts';
+import { registerWatchCommand } from './watch/index.ts';
 
 export function registerRealmCommand(program: Command): void {
   let realm = program
     .command('realm')
     .description('Manage realms on the realm server');
 
+  registerArchiveCommand(realm);
   registerCancelIndexingCommand(realm);
   registerCreateCommand(realm);
   registerHistoryCommand(realm);
+  registerIndexingErrorsCommand(realm);
+  registerIngestCardCommand(realm);
   registerListCommand(realm);
   registerMilestoneCommand(realm);
   registerPublishCommand(realm);
   registerPullCommand(realm);
   registerPushCommand(realm);
   registerRemoveCommand(realm);
+  registerRestoreCommand(realm);
   const sync = registerSyncCommand(realm);
   registerStatusCommand(sync);
   registerUnpublishCommand(realm);

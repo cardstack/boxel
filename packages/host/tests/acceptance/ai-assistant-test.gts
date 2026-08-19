@@ -30,13 +30,11 @@ import {
   APP_BOXEL_REASONING_CONTENT_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
 
-import { skillsRealm } from '@cardstack/host/lib/utils';
+import { skillsRealmURL } from '@cardstack/host/lib/utils';
 
 import type AiAssistantPanelService from '@cardstack/host/services/ai-assistant-panel-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import { AiAssistantMessageDrafts } from '@cardstack/host/utils/local-storage-keys';
-
-import type { BoxelContext } from 'https://cardstack.com/base/matrix-event';
 
 import {
   setupLocalIndexing,
@@ -53,8 +51,9 @@ import {
   type TestContextWithSave,
   delay,
   getMonacoContent,
-  envSkillId,
-  catalogRealm,
+  skillsIndexId,
+  catalogRealmURL,
+  realmConfigCardJSON,
 } from '../helpers';
 
 import {
@@ -76,12 +75,14 @@ import { setupMockMatrix } from '../helpers/mock-matrix';
 import { getRoomIdForRealmAndUser } from '../helpers/mock-matrix/_utils';
 import { setupApplicationTest } from '../helpers/setup';
 
+import type { BoxelContext } from '@cardstack/base/matrix-event';
+
 async function selectCardFromCatalog(cardId: string) {
   await click('[data-test-attach-button]');
   await click('[data-test-attach-card-btn]');
   await fillIn('[data-test-search-field]', cardId);
-  await click(`[data-test-card-catalog-item="${cardId}"]`);
-  await click('[data-test-card-catalog-go-button]');
+  await click(`[data-test-item-button="${cardId}"]`);
+  await click('[data-test-card-chooser-go-button]');
 }
 
 async function waitForSessionPreparationToFinish(
@@ -97,8 +98,8 @@ async function waitForSessionPreparationToFinish(
   });
 }
 
-let countryDefinition = `import { field, contains, CardDef } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+let countryDefinition = `import { field, contains, CardDef } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
   export class Country extends CardDef {
     static displayName = 'Country';
     @field name = contains(StringField);
@@ -141,7 +142,13 @@ function modelNameFor(llmId: string): string {
 
 module('Acceptance | AI Assistant tests', function (hooks) {
   setupApplicationTest(hooks);
-  setupLocalIndexing(hooks);
+  // Every test in this module builds the same realm fixtures in the beforeEach
+  // below, so the realm is indexed once and that index restored for each
+  // subsequent test. What a test writes afterwards stays with that test — the
+  // snapshot is restored, not carried forward.
+  setupLocalIndexing(hooks, {
+    reuseIndexAcrossTests: 'aiAssistant',
+  });
   setupOnSave(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -164,6 +171,22 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       getResponse: async (req: Request) => {
         const body = await req.json();
 
+        // Message content arrives as a plain string or as a parts array (the
+        // prompt serializes history messages in the parts form); read the
+        // text out of either shape, the way the real endpoint would.
+        const contentText = (content: any): string => {
+          if (typeof content === 'string') {
+            return content;
+          }
+          if (Array.isArray(content)) {
+            return content
+              .filter((part: any) => part.type === 'text')
+              .map((part: any) => part.text ?? '')
+              .join('');
+          }
+          return '';
+        };
+
         // Handle summarization requests
         if (body.url.includes('openrouter.ai/api/v1/chat/completions')) {
           const requestBody = JSON.parse(body.requestBody);
@@ -171,10 +194,10 @@ module('Acceptance | AI Assistant tests', function (hooks) {
           // Check if this is a summarization request
           if (
             requestBody.messages &&
-            requestBody.messages.some(
-              (msg: any) =>
-                msg.content &&
-                msg.content.includes('Please provide a concise summary'),
+            requestBody.messages.some((msg: any) =>
+              contentText(msg.content).includes(
+                'Please provide a concise summary',
+              ),
             )
           ) {
             // Return a mock summary based on the conversation content
@@ -182,9 +205,11 @@ module('Acceptance | AI Assistant tests', function (hooks) {
               .filter(
                 (msg: any) =>
                   msg.role === 'user' &&
-                  !msg.content.includes('Please provide a concise summary'),
+                  !contentText(msg.content).includes(
+                    'Please provide a concise summary',
+                  ),
               )
-              .map((msg: any) => msg.content)
+              .map((msg: any) => contentText(msg.content))
               .join(' ');
 
             let summary = 'This conversation focused on general discussion.';
@@ -413,8 +438,8 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         'person.gts': { Person },
         'pet.gts': { Pet },
         'broken-card.gts': `
-          import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
-          import StringField from 'https://cardstack.com/base/string';
+          import { CardDef, field, contains } from '@cardstack/base/card-api';
+          import StringField from '@cardstack/base/string';
           import { BrokenField } from './does-not-exist';
           export class BrokenCard extends CardDef {
             static displayName = 'Broken Card';
@@ -464,7 +489,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
           friends: [mangoPet],
         }),
         'plant.gts': `
-          import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
+          import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
           export class Plant extends CardDef {
             static displayName = "Plant";
             @field commonName = contains(StringField);
@@ -496,7 +521,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/spec',
+                module: '@cardstack/base/spec',
                 name: 'Spec',
               },
             },
@@ -542,12 +567,12 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         'ModelConfiguration/gemini-2.5-flash.json': geminiFlashModel,
         'SystemCard/productivity.json': alternateSystemCard,
         'index.json': new CardsGrid(),
-        '.realm.json': {
+        'realm.json': realmConfigCardJSON({
           name: 'Test Workspace B',
           backgroundURL:
             'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
           iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-        },
+        }),
       },
     });
 
@@ -1004,6 +1029,39 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-close-ai-assistant]');
   });
 
+  test('"Go to current system card" closes the workspace chooser', async function (assert) {
+    await visitOperatorMode({
+      workspaceChooserOpened: true,
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    assert
+      .dom('[data-test-workspace-chooser]')
+      .exists('workspace chooser is open');
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-room-settled]');
+    await click('[data-test-llm-select-selected]');
+    await click('[data-test-go-to-system-card]');
+
+    assert
+      .dom('[data-test-workspace-chooser]')
+      .doesNotExist('workspace chooser is closed after going to system card');
+    assert
+      .dom(`[data-test-stack-card="${testRealmURL}SystemCard/default"]`)
+      .exists('the system card is shown on the stack');
+
+    await click('[data-test-pill-menu-button]');
+    await click('[data-test-close-ai-assistant]');
+  });
+
   test('LLM select footer shows "Restore default" when non-default system card is active', async function (assert) {
     await visitOperatorMode({
       stacks: [
@@ -1179,10 +1237,10 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-boxel-filter-list-button="All Cards"]');
     await click('[data-test-create-new-card-button]');
     await click(
-      `[data-test-card-catalog-item="https://cardstack.com/base/types/card"]`,
+      `[data-test-item-button="https://cardstack.com/base/types/card"]`,
     );
 
-    await click(`[data-test-card-catalog-go-button]`);
+    await click(`[data-test-card-chooser-go-button]`);
 
     await waitUntil(() => id);
     id = id!;
@@ -1396,12 +1454,11 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       `Expected at least 10 rooms, got ${initialRoomCount}`,
     );
 
-    let pastSessionsElement = document.querySelector(
-      '[data-test-past-sessions] .body ul',
-    );
-    if (pastSessionsElement) {
-      pastSessionsElement.scrollTop = pastSessionsElement.scrollHeight;
-    }
+    let pastSessionsElement = (await waitFor(
+      '[data-test-past-sessions] [data-test-panel-popover-body]',
+    )) as HTMLElement;
+    pastSessionsElement.scrollTop = pastSessionsElement.scrollHeight;
+    await triggerEvent(pastSessionsElement, 'scroll');
     await waitUntil(() => {
       return (
         document.querySelectorAll('[data-test-joined-room]').length >=
@@ -1468,6 +1525,31 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.dom('[data-test-ai-assistant-panel]').exists();
   });
 
+  test('ai assistant panel is closed by default when the URL omits aiAssistantOpen', async function (assert) {
+    // Hand-build the state so the aiAssistantOpen key is absent (visitOperatorMode
+    // always injects it), and leave localStorage unseeded — a first-ever visit.
+    let operatorModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    })!;
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    assert.dom('[data-test-ai-assistant-panel]').doesNotExist();
+    assert.false(
+      getService('operator-mode-state-service').aiAssistantOpen,
+      'panel is closed by default with no URL param and no persisted preference',
+    );
+  });
+
   test('auto-attached cards behaviour', async function (assert) {
     await visitOperatorMode({
       submode: 'interact',
@@ -1516,8 +1598,8 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-attach-button]');
     await click('[data-test-attach-card-btn]');
     await fillIn('[data-test-search-field]', 'Mango');
-    await click(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
-    await click('[data-test-card-catalog-go-button]');
+    await click(`[data-test-item-button="${testRealmURL}Pet/mango"]`);
+    await click('[data-test-card-chooser-go-button]');
     assert.dom('[data-test-autoattached-card]').exists({ count: 1 });
     assert
       .dom(
@@ -2285,15 +2367,15 @@ module('Acceptance | AI Assistant tests', function (hooks) {
           type: 'user-workspace',
           url: testRealmURL,
         },
-        catalogRealm && {
+        catalogRealmURL && {
           name: 'Cardstack Catalog',
           type: 'catalog-workspace',
-          url: catalogRealm.url,
+          url: catalogRealmURL,
         },
         {
           name: 'Boxel Skills',
           type: 'catalog-workspace',
-          url: skillsRealm.url,
+          url: skillsRealmURL,
         },
       ].filter(Boolean),
       'Context sent with message contains correct workspaces',
@@ -2579,8 +2661,8 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       await click('[data-test-attach-button]');
       await click('[data-test-attach-card-btn]');
       await fillIn('[data-test-search-field]', 'Plant spec');
-      await click(`[data-test-card-catalog-item="${autoAttachedSpecId}"]`);
-      await click('[data-test-card-catalog-go-button]');
+      await click(`[data-test-item-button="${autoAttachedSpecId}"]`);
+      await click('[data-test-card-chooser-go-button]');
 
       // Verify the spec card appears only once (not duplicated)
       let specCards = document.querySelectorAll(
@@ -2659,8 +2741,8 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-attach-button]');
     await click('[data-test-attach-card-btn]');
     await fillIn('[data-test-search-field]', 'Plant spec');
-    await click(`[data-test-card-catalog-item="${autoAttachedSpecId}"]`);
-    await click('[data-test-card-catalog-go-button]');
+    await click(`[data-test-item-button="${autoAttachedSpecId}"]`);
+    await click('[data-test-card-chooser-go-button]');
 
     await click('[data-test-attach-button]');
     await click('[data-test-attach-file-btn]');
@@ -2998,11 +3080,32 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     await click('[data-test-skill-menu][data-test-pill-menu-button]');
     await waitFor('[data-test-skill-menu]');
+    try {
+      await waitUntil(
+        () =>
+          document.querySelectorAll(
+            '[data-test-skill-menu] [data-test-attached-card]',
+          )?.length === 1,
+      );
+    } catch {
+      let attached = Array.from(
+        document.querySelectorAll(
+          '[data-test-skill-menu] [data-test-attached-card]',
+        ),
+      ).map((el) => el.getAttribute('data-test-attached-card'));
+      assert.ok(
+        false,
+        `Default skill never rendered on the new session's skill menu. Attached cards seen: ${JSON.stringify(attached)}; expected exactly [${skillsIndexId}].`,
+      );
+      return;
+    }
     assert
       .dom('[data-test-skill-menu] [data-test-attached-card]')
       .exists({ count: 1 });
     assert
-      .dom(`[data-test-skill-menu] [data-test-attached-card="${envSkillId}"]`)
+      .dom(
+        `[data-test-skill-menu] [data-test-attached-card="${skillsIndexId}"]`,
+      )
       .exists();
   });
 
@@ -3751,7 +3854,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       );
   });
 
-  test('shows an error and persists the prompt in case the message failed to send', async function (assert) {
+  test('failed send leaves a failed bubble + retry alert; input clears at click-time', async function (assert) {
     await visitOperatorMode({
       stacks: [
         [
@@ -3794,22 +3897,18 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
       await click('[data-test-send-message-btn]');
 
+      // New design: the optimistic bubble carries the failure + the retry
+      // affordance; the input clears at click-time and stays clear.
       await waitFor('[data-test-boxel-alert="error"]');
       assert.strictEqual(sendAttempts, 1, 'sendMessage was attempted once');
-      assert
-        .dom('[data-test-boxel-alert="error"] [data-test-alert-message="0"]')
-        .hasText(
-          'There was an error sending your message. This could be due to network issues, or serialization issues with the cards or files you are trying to send. It might be helpful to refresh the page and try again.',
-        );
-
-      await waitUntil(
-        () => matrixService.getMessageToSend(roomId!) === failingMessage,
-      );
+      assert.dom('[data-test-user-message]').exists({ count: 1 });
+      assert.dom('[data-test-card-error]').containsText('Failed to send');
+      assert.dom('[data-test-alert-action-button="Retry"]').exists();
       assert
         .dom(`[data-test-message-field="${roomId}"]`)
         .hasValue(
-          failingMessage,
-          'Draft message is restored after a failed send attempt',
+          '',
+          'input clears at click-time — the message lives in the bubble now',
         );
     } finally {
       matrixService.sendMessage = originalSendMessage;

@@ -1,13 +1,14 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 
 import {
   InstantiateValidationStep,
   type InstantiateValidationStepConfig,
   type InstantiateValidationDetails,
   type SpecInfo,
-} from '../src/validators/instantiate-step';
-import { createMockClient } from './helpers/mock-client';
-import { createTestWorkspace } from './helpers/workspace-fixture';
+} from '../src/validators/instantiate-step.ts';
+import { createMockClient } from './helpers/mock-client.ts';
+import { createTestWorkspace } from './helpers/workspace-fixture.ts';
 
 // ---------------------------------------------------------------------------
 // Mock helpers

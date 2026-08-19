@@ -5,7 +5,7 @@
 # directly; this file is local-only.
 #
 # Synapse exposes its metrics on container port 9001 (see
-# packages/matrix/docker/synapse/dev/homeserver.yaml). This Prometheus
+# packages/matrix/support/synapse/dev/homeserver.yaml). This Prometheus
 # joins the `boxel` Docker network where the synapse container also lives,
 # so the scrape target resolves via Docker DNS as `boxel-synapse:9001` —
 # no host port mapping needed.

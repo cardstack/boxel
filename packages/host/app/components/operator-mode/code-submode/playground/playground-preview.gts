@@ -1,5 +1,4 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-import { get } from '@ember/helper';
 
 import { CardContainer, CardHeader } from '@cardstack/boxel-ui/components';
 import type { MenuItem } from '@cardstack/boxel-ui/helpers';
@@ -17,12 +16,8 @@ import FittedFormatGallery from '@cardstack/host/components/operator-mode/previe
 import MarkdownPreview from '@cardstack/host/components/operator-mode/preview-panel/markdown-preview';
 import type { EnhancedRealmInfo } from '@cardstack/host/services/realm';
 
-import type {
-  CardDef,
-  FieldDef,
-  Format,
-} from 'https://cardstack.com/base/card-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
+import type { CardDef, FieldDef, Format } from '@cardstack/base/card-api';
+import type { FileDef } from '@cardstack/base/file-api';
 
 interface Signature {
   Args: {
@@ -41,6 +36,10 @@ interface Signature {
     onFinishEditing?: () => void;
   };
 }
+function fileDefName(card: CardDef | FieldDef | FileDef) {
+  return (card as FileDef).name;
+}
+
 const PlaygroundPreview: TemplateOnlyComponent<Signature> = <template>
   {{#if (or (eq @format 'isolated') (eq @format 'edit'))}}
     <CardContainer
@@ -58,7 +57,7 @@ const PlaygroundPreview: TemplateOnlyComponent<Signature> = <template>
           @cardTitle={{if
             (isCardInstance @card)
             @card.cardTitle
-            (if @isFileDef (get @card 'name') undefined)
+            (if @isFileDef (fileDefName @card) undefined)
           }}
           @realmInfo={{@realmInfo}}
           @onEdit={{@onEdit}}
@@ -91,7 +90,7 @@ const PlaygroundPreview: TemplateOnlyComponent<Signature> = <template>
         class='atom-preview'
         @card={{@card}}
         @format={{@format}}
-        @displayContainer={{false}}
+        @displayContainer={{unless @isFieldDef false}}
       />
       tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim
       veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea

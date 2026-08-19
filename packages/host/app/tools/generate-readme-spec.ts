@@ -1,0 +1,119 @@
+import { service } from '@ember/service';
+
+import type { RealmResourceIdentifier } from '@cardstack/runtime-common';
+
+import HostBaseTool from '../lib/host-base-tool';
+import { devSkillId } from '../lib/utils';
+
+import OneShotLlmRequestTool from './one-shot-llm-request';
+import PatchCardInstanceTool from './patch-card-instance';
+
+import type ToolService from '../services/tool-service';
+import type { CardDef } from '@cardstack/base/card-api';
+import type * as BaseToolModule from '@cardstack/base/command';
+import type { SpecType } from '@cardstack/base/spec';
+
+export default class GenerateReadmeSpecTool extends HostBaseTool<
+  typeof BaseToolModule.GenerateReadmeSpecInput,
+  typeof BaseToolModule.GenerateReadmeSpecResult
+> {
+  @service declare private toolService: ToolService;
+
+  private static getUserPrompt(
+    ref: {
+      name: string;
+      module: string;
+    },
+    specType: SpecType,
+  ) {
+    return `Generate README documentation for a spec of type ${specType} that has code ref of (name:${ref.name}, module:${ref.module}). Show how to import and use it in inside a consuming card.`;
+  }
+  private static SYSTEM_PROMPT = `YOU ARE a bot responsible to Github README documentation for specs/code.
+
+Reference the Spec Documentation inside boxel-development skill for understanding spec types, but focus ONLY on crafting usage documentation. Based upon specType, create documentation with these 4 sections:
+
+• **Summary**: Brief summary of what the spec does
+• **Import**: Show the ES6 import statmenet of the spec. Omit .gts extension.
+• **Usage as a Field**: Show how to use the spec as a field within a consuming card/field. Only display this section for card or field.
+• **Template Usage**: Show how to invoke the spec inside a template within a consuming card/field
+
+Requirements:
+- Keep examples simple and practical
+- DO NOT include title headers
+`;
+
+  static actionVerb = 'Generate README for Spec';
+  description =
+    'Generate a README for a spec and patch it to the spec readMe field';
+
+  async getInputType() {
+    let commandModule = await this.loadToolModule();
+    const { GenerateReadmeSpecInput } = commandModule;
+    return GenerateReadmeSpecInput;
+  }
+
+  protected async run(
+    input: BaseToolModule.GenerateReadmeSpecInput,
+  ): Promise<BaseToolModule.GenerateReadmeSpecResult> {
+    if (!input.spec) {
+      throw new Error('Spec is required');
+    }
+
+    // Generate the README using the existing command
+    const generateReadmeCommand = new OneShotLlmRequestTool(
+      this.toolService.toolContext,
+    );
+
+    let userPrompt = GenerateReadmeSpecTool.getUserPrompt(
+      input.spec.ref,
+      input.spec.specType as SpecType,
+    );
+    let systemPrompt = GenerateReadmeSpecTool.SYSTEM_PROMPT;
+
+    const result = await generateReadmeCommand.execute({
+      codeRef: {
+        name: input.spec.ref.name,
+        module: input.spec.moduleHref as RealmResourceIdentifier,
+      },
+      userPrompt,
+      systemPrompt,
+      llmModel: 'anthropic/claude-3-haiku',
+      skillCardIds: [devSkillId],
+    });
+
+    // Patch the spec's readMe field
+    if (input.spec.id) {
+      try {
+        const patchCardInstanceCommand = new PatchCardInstanceTool(
+          this.toolService.toolContext,
+          { cardType: input.spec.constructor as typeof CardDef }, //is this correct?
+        );
+
+        await patchCardInstanceCommand.execute({
+          cardId: input.spec.id,
+          patch: {
+            attributes: {
+              readMe: result.output,
+            },
+          },
+        });
+
+        console.log('README generated and spec updated successfully');
+      } catch (patchError) {
+        console.warn('README generated but could not update spec:', patchError);
+        // Still return the generated result even if patching fails
+      }
+    }
+
+    let commandModule = await this.loadToolModule();
+    const { GenerateReadmeSpecResult } = commandModule;
+
+    return new GenerateReadmeSpecResult({
+      readme: result.output,
+    });
+  }
+}
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { GenerateReadmeSpecTool as GenerateReadmeSpecCommand };

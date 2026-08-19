@@ -36,7 +36,6 @@ import {
   isSpecCard,
   isCardErrorJSONAPI,
   internalKeyFor,
-  GetCardsContextName,
   GetCardContextName,
   loadCardDef,
   rri,
@@ -44,10 +43,8 @@ import {
   localId,
   meta,
   hasExtension,
-  resolveCardReference,
 } from '@cardstack/runtime-common';
 
-import CreateSpecCommand from '@cardstack/host/commands/create-specs';
 import CardError from '@cardstack/host/components/operator-mode/card-error';
 import Playground from '@cardstack/host/components/operator-mode/code-submode/playground/playground';
 import SchemaEditor from '@cardstack/host/components/operator-mode/code-submode/schema-editor';
@@ -70,9 +67,9 @@ import {
   type ModuleDeclaration,
 } from '@cardstack/host/resources/module-contents';
 
-import type CommandService from '@cardstack/host/services/command-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
+import type NetworkService from '@cardstack/host/services/network';
 import { DEFAULT_MODULE_INSPECTOR_VIEW } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type { ModuleInspectorView } from '@cardstack/host/services/operator-mode-state-service';
@@ -81,18 +78,16 @@ import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
+import type ToolService from '@cardstack/host/services/tool-service';
+import CreateSpecTool from '@cardstack/host/tools/create-specs';
 
 import { idFromCardOrURL } from '@cardstack/host/utils/id-from-card-or-url';
 import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 import { runWhileActive } from '@cardstack/host/utils/run-while-active';
 
-import type {
-  CardDef,
-  Format,
-  ViewCardFn,
-} from 'https://cardstack.com/base/card-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-import type { Spec } from 'https://cardstack.com/base/spec';
+import type { CardDef, Format, ViewCardFn } from '@cardstack/base/card-api';
+import type { FileDef } from '@cardstack/base/file-api';
+import type { Spec } from '@cardstack/base/spec';
 
 import type { ComponentLike } from '@glint/template';
 
@@ -130,9 +125,10 @@ interface ModuleInspectorSignature {
 }
 
 export default class ModuleInspector extends Component<ModuleInspectorSignature> {
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private loaderService: LoaderService;
   @service declare private matrixService: MatrixService;
+  @service declare private network: NetworkService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private playgroundPanelService: PlaygroundPanelService;
   @service declare private realm: RealmService;
@@ -140,7 +136,6 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
   @service declare private specPanelService: SpecPanelService;
   @service declare private store: StoreService;
 
-  @consume(GetCardsContextName) declare private getCards: getCards;
   @consume(GetCardContextName) declare private getCard: getCard;
 
   @tracked private specSearch: ReturnType<getCards<Spec>> | undefined;
@@ -292,7 +287,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
           return false;
         }
 
-        return this.commandService.getCodePatchStatus(codeData) === 'ready';
+        return this.toolService.getCodePatchStatus(codeData) === 'ready';
       });
     }
 
@@ -324,8 +319,11 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     let moduleRef = adoptsFrom.module.endsWith('.gts')
       ? adoptsFrom.module
       : `${adoptsFrom.module}.gts`;
-    let moduleURLWithExtension = new URL(
-      resolveCardReference(moduleRef, this.args.currentOpenFile.url),
+    let moduleURLWithExtension = this.network.virtualNetwork.toURL(
+      this.network.virtualNetwork.resolveRRI(
+        moduleRef,
+        rri(this.args.currentOpenFile.url),
+      ),
     );
     return this.matrixService.fileAPI.createFileDef({
       sourceUrl: moduleURLWithExtension.href,
@@ -410,6 +408,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     const moduleId = internalKeyFor(
       this.selectedDeclarationAsCodeRef,
       undefined,
+      this.network.virtualNetwork,
     );
     const cardId = rri(id.replace(/\.json$/, ''));
 
@@ -461,8 +460,10 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     }
   };
 
+  // Host code-submode UI searches the store directly (uncapped); the card caps
+  // live on the `@context` surfaces this component does not consume.
   private findSpecsForSelectedDefinition = () => {
-    this.specSearch = this.getCards(
+    this.specSearch = this.store.getSearchResource(
       this,
       () => this.queryForSpecsForSelectedDefinition,
       () => this.realmServer.availableRealmIdentifiers,
@@ -515,8 +516,8 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
 
   private createSpecTask = task(async (ref: ResolvedCodeRef) => {
     try {
-      const createSpecCommand = new CreateSpecCommand(
-        this.commandService.commandContext,
+      const createSpecCommand = new CreateSpecTool(
+        this.toolService.toolContext,
       );
       let currentRealm = this.operatorModeStateService.realmURL;
       const result = await createSpecCommand.execute({
@@ -707,7 +708,6 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
         flex-wrap: wrap;
         gap: var(--boxel-sp-xs);
         padding: var(--boxel-sp-xs);
-        border-bottom: var(--boxel-border);
         background-color: transparent;
       }
 

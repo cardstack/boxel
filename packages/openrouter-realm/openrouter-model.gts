@@ -7,10 +7,11 @@ import {
   field,
   contains,
   containsMany,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
-import BooleanField from 'https://cardstack.com/base/boolean';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
+import BooleanField from '@cardstack/base/boolean';
+import { modelCostTier, modelCostTierLabel } from './model-cost';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 
@@ -1035,6 +1036,23 @@ export class OpenRouterModel extends CardDef {
       return (
         this.cardInfo?.name || this.name || this.modelId || 'OpenRouter Model'
       );
+    },
+  });
+
+  // Glanceable cost tier derived from this model's own blended pricing. Indexed
+  // here (rather than computed in the host) so it's queryable/sortable and the
+  // picker can read it straight off a catalog search. `undefined` when pricing
+  // is missing or unparseable, so callers render no badge rather than a wrong
+  // one. `costTier` is the sortable 0–4 rank; `costTierLabel` is the badge text.
+  @field costTier = contains(NumberField, {
+    computeVia: function (this: OpenRouterModel) {
+      return modelCostTier(this.pricing?.prompt, this.pricing?.completion)?.tier;
+    },
+  });
+
+  @field costTierLabel = contains(StringField, {
+    computeVia: function (this: OpenRouterModel) {
+      return modelCostTierLabel(this.pricing?.prompt, this.pricing?.completion);
     },
   });
 

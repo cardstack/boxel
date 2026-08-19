@@ -4,14 +4,14 @@ import {
   contains,
   field,
   linksTo,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import enumField from 'https://cardstack.com/base/enum';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import enumField from '@cardstack/base/enum';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 
-import ScreenshotCardCommand from '@cardstack/boxel-host/commands/screenshot-card';
+import ScreenshotCardTool from '@cardstack/boxel-host/commands/screenshot-card';
 import { Button } from '@cardstack/boxel-ui/components';
 
 type ScreenshotFormat = 'isolated' | 'embedded';
@@ -29,7 +29,7 @@ class Isolated extends Component<typeof ScreenshotCardDemo> {
   @tracked imageDefUrl: string | null = null;
 
   get hasCommandContext() {
-    return Boolean(this.args.context?.commandContext);
+    return Boolean(this.args.context?.toolContext);
   }
 
   get hasLinkedCard() {
@@ -47,9 +47,9 @@ class Isolated extends Component<typeof ScreenshotCardDemo> {
 
   @action
   async takeScreenshot() {
-    let commandContext = this.args.context?.commandContext;
+    let toolContext = this.args.context?.toolContext;
     let card = (this.args.model as any)?.card;
-    if (!commandContext) {
+    if (!toolContext) {
       this.errorMessage =
         'Command context is unavailable. Open this card in host interact mode.';
       return;
@@ -63,7 +63,7 @@ class Isolated extends Component<typeof ScreenshotCardDemo> {
     this.errorMessage = null;
     this.imageDefUrl = null;
     try {
-      let result = await new ScreenshotCardCommand(commandContext).execute({
+      let result = await new ScreenshotCardTool(toolContext).execute({
         card,
         format: this.effectiveFormat,
       });

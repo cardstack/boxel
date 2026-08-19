@@ -1,8 +1,13 @@
 import Modifier from 'ember-modifier';
 import GlimmerComponent from '@glimmer/component';
-import { isEqual } from 'lodash';
-import { WatchedArray } from './watched-array';
-import { BoxelInput, CopyButton } from '@cardstack/boxel-ui/components';
+import { isEqual } from 'lodash-es';
+import { WatchedArray, rawArrayValues } from './watched-array';
+import {
+  BoxelInput,
+  BrokenLinkTemplate,
+  CopyButton,
+  type BrokenLinkFormat,
+} from '@cardstack/boxel-ui/components';
 import {
   markdownEscape,
   type MenuItemOptions,
@@ -23,7 +28,7 @@ import {
   CardContextName,
   CardError,
   CodeRef,
-  CommandContext,
+  ToolContext,
   Deferred,
   byteStreamToUint8Array,
   fields,
@@ -36,6 +41,7 @@ import {
   getSerializer,
   humanReadable,
   identifyCard,
+  computeContentHash,
   inferContentType,
   isBaseInstance,
   isCardError,
@@ -72,7 +78,7 @@ import {
   type getCards,
   type getCardCollection,
   type Store,
-  type PrerenderedCardComponentSignature,
+  type SearchResultsComponentSignature,
   type ErrorEntry,
   type Query,
   type QueryWithInterpolations,
@@ -84,19 +90,25 @@ import {
   CardResource,
   LooseLinkableResource,
   LooseSingleResourceDocument,
+  shouldTrackRuntimeModuleGraph,
+  shouldTrackRuntimeRelationship,
   trackRuntimeFileDependency,
   trackRuntimeInstanceDependency,
   trackRuntimeModuleDependency,
   runtimeNonQueryDependencyContext,
   runtimeQueryDependencyContext,
   type RuntimeDependencyTrackingContext,
-  resolveCardReference,
   rri,
+  resolveRRIReference,
   type RealmResourceIdentifier,
+  type VirtualNetwork,
+  isDirectIndexedFieldKey,
+  cardTypeName,
 } from '@cardstack/runtime-common';
 import {
   captureQueryFieldSeedData,
   ensureQueryFieldSearchResource,
+  peekQueryFieldSearchResource,
   validateRelationshipQuery,
 } from './query-field-support';
 import { isSavedInstance } from './-private';
@@ -113,12 +125,15 @@ import MarkdownTemplate from './default-templates/markdown';
 import DefaultMarkdownFallbackTemplate from './default-templates/markdown-fallback';
 import { markdownImage } from './markdown-helpers';
 import FileDefEditTemplate from './default-templates/file-def-edit';
-import ImageDefAtomTemplate from './default-templates/image-def-atom';
-import ImageDefEmbeddedTemplate from './default-templates/image-def-embedded';
-import ImageDefFittedTemplate from './default-templates/image-def-fitted';
-import ImageDefIsolatedTemplate from './default-templates/image-def-isolated';
+import FileDefAtomTemplate from './default-templates/file-def-atom';
+import FileDefEmbeddedTemplate from './default-templates/file-def-embedded';
+import FileDefFittedTemplate from './default-templates/file-def-fitted';
+import FileDefIsolatedTemplate from './default-templates/file-def-isolated';
+import type { FilePreviewComponent } from './file-formats/file-preview-stage';
+import { ImagePreview } from './file-formats/image-preview';
 import CaptionsIcon from '@cardstack/boxel-icons/captions';
 import FileIcon from '@cardstack/boxel-icons/file';
+import ImageIcon from '@cardstack/boxel-icons/image';
 import LetterCaseIcon from '@cardstack/boxel-icons/letter-case';
 import MarkdownIcon from '@cardstack/boxel-icons/align-box-left-middle';
 import RectangleEllipsisIcon from '@cardstack/boxel-icons/rectangle-ellipsis';
@@ -129,9 +144,8 @@ import FilePencilIcon from '@cardstack/boxel-icons/file-pencil';
 import WandIcon from '@cardstack/boxel-icons/wand';
 import HashIcon from '@cardstack/boxel-icons/hash';
 // normalizeEnumOptions used by enum moved to packages/base/enum.gts
-import PatchThemeCommand from '@cardstack/boxel-host/commands/patch-theme';
-import CopyAndEditCommand from '@cardstack/boxel-host/commands/copy-and-edit';
-import { md5 } from 'super-fast-md5';
+import PatchThemeTool from '@cardstack/boxel-host/commands/patch-theme';
+import CopyAndEditTool from '@cardstack/boxel-host/commands/copy-and-edit';
 
 import {
   callSerializeHook,
@@ -139,6 +153,7 @@ import {
   deserialize,
   makeMetaForField,
   makeRelativeURL,
+  rebaseReferencesFor,
   serialize,
   serializeCard,
   serializeCardResource,
@@ -155,24 +170,38 @@ import {
   beginComputePass,
   endComputePass,
   entangleWithCardTracking,
+  getBrokenLinks,
   getDataBucket,
   getFieldDescription,
   getFieldOverrides,
   getFields,
+  getRelationshipMembershipState,
   getter,
+  registerRelationshipProbe,
+  relationshipStateForEntry,
+  readFieldLoadingSignal,
+  bumpFieldLoadingSignal,
   isArrayOfCardOrField,
   isCard,
   isCardOrField,
+  isLinkError,
+  isLinkNotFound,
+  isNonPresentLink,
   isNotLoadedValue,
+  markAuthoredEmptyLink,
   notifyCardTracking,
   peekAtField,
   propagateRealmContext,
   realmContext,
-  relationshipMeta,
   setFieldDescription,
   setRealmContextOnField,
+  type BrokenLinkFinding,
   type ComputePassSnapshot,
+  type LinkErrorValue,
+  type LinkNotFoundValue,
   type NotLoadedValue,
+  type RelationshipStatus,
+  type RelationshipState,
 } from './field-support';
 import { TextInputValidator } from './text-input-validator';
 import { type GetMenuItemParams, getDefaultCardMenuItems } from './menu-items';
@@ -181,6 +210,7 @@ import {
   LinkableDocument,
   SingleFileMetaDocument,
 } from '@cardstack/runtime-common/document-types';
+import type { MarkdownEmbedChooser } from '@cardstack/runtime-common/bfm-card-references';
 import type { FileMetaResource } from '@cardstack/runtime-common';
 
 export const BULK_GENERATED_ITEM_COUNT = 3;
@@ -195,10 +225,13 @@ export {
   beginComputePass,
   endComputePass,
   deserialize,
+  getBrokenLinks,
   getCardMeta,
   getDataBucket,
   getFieldDescription,
   getFields,
+  getRelationshipMembershipState,
+  isNonPresentLink,
   peekAtField,
   isCard,
   isField,
@@ -208,17 +241,19 @@ export {
   primitive,
   realmURL,
   relativeTo,
-  relationshipMeta,
   serialize,
   serializeCard,
   serializeFileDef,
   ensureQueryFieldSearchResource,
   getStore,
   type BoxComponent,
+  type BrokenLinkFinding,
   type ComputePassSnapshot,
   type DeserializeOpts,
   type GetMenuItemParams,
   type JSONAPISingleResourceDocument,
+  type RelationshipStatus,
+  type RelationshipState,
   type ResourceID,
   type SerializeOpts,
 };
@@ -289,15 +324,24 @@ export type SerializedFile<Extra extends object = {}> = {
 
 export type ByteStream = ReadableStream<Uint8Array> | Uint8Array;
 
+// Declares which links a field makes searchable — i.e. which linked cards are
+// pulled into the search doc rather than left as a bare `{ id }` reference.
+// `searchable` only ever governs links: a contained value is always included
+// once its owner is in the doc, so `searchable` never decides whether a
+// contained field appears. `true` makes the immediate ("self") link
+// searchable; a dotted path makes a deeper (n+1) link searchable, routed from
+// this field's target through its links — naming intermediate contained
+// fields as segments to reach a link beneath them; an array combines routes.
+// Omitted leaves the link as `{ id }` only. On a `contains`/`containsMany`
+// field (whose value is always present) a path is therefore only meaningful to
+// make a link reached *through* that contained value searchable.
+export type Searchable = true | string | string[];
+
 interface Options {
   computeVia?: () => unknown;
   description?: string;
-  // there exists cards that we only ever run in the host without
-  // the isolated renderer (RoomField), which means that we cannot
-  // use the rendering mechanism to tell if a card is used or not,
-  // in which case we need to tell the runtime that a card is
-  // explicitly being used.
-  isUsed?: true;
+  // Names which links this field makes searchable. See `Searchable`.
+  searchable?: Searchable;
   // Optional: per-usage configuration provider merged with FieldDef-level configuration
   configuration?: ConfigurationInput<any>;
 }
@@ -307,7 +351,11 @@ interface RelationshipOptions extends Options {
 }
 
 export interface CardContext<T extends CardDef = CardDef> {
-  commandContext?: CommandContext;
+  toolContext?: ToolContext;
+  // Pre-rename spelling of `toolContext`. Realm content reads
+  // `@context.commandContext`; populated with the same value until no
+  // deployed content references it.
+  commandContext?: ToolContext;
   cardComponentModifier?: typeof Modifier<{
     Args: {
       Named: {
@@ -319,11 +367,19 @@ export interface CardContext<T extends CardDef = CardDef> {
       };
     };
   }>;
-  prerenderedCardSearchComponent: typeof GlimmerComponent<PrerenderedCardComponentSignature>;
+  // The search rendering surface: renders the heterogeneous `entry`
+  // stream for an `entry`-rooted query — prerendered HTML inert (hydrated
+  // lazily) or a live card — so a card author renders results without ever
+  // branching on prerendered-vs-live. Supersedes `prerenderedCardSearchComponent`.
+  searchResultsComponent: typeof GlimmerComponent<SearchResultsComponentSignature>;
   getCard: getCard<T>;
   getCards: getCards;
   getCardCollection: getCardCollection;
   store: Store;
+  // Host bridge for the markdown editor's embed chooser. Provided by
+  // operator-mode; absent in contexts with no chooser modal (prerender,
+  // freestyle), so consumers guard on it.
+  markdownEmbedChooser?: MarkdownEmbedChooser;
   // Optional runtime mode/submode hints used by cards that render differently per context.
   mode?: 'host' | 'operator';
   submode?: 'interact' | 'code' | 'host';
@@ -333,8 +389,8 @@ export interface FieldConstructor<T> {
   cardThunk: () => T;
   computeVia: undefined | (() => unknown);
   declaredCardThunk?: () => T;
-  isUsed?: true;
   isPolymorphic?: true;
+  searchable?: Searchable;
   name: string;
   queryDefinition?: QueryWithInterpolations;
 }
@@ -452,6 +508,28 @@ export type GetSearchResourceFunc<T extends CardDef | FileDef = CardDef> = (
 ) => StoreSearchResource<T>;
 
 export interface CardStore {
+  // Resolve a (possibly relative or RRI) reference to a real, fetchable URL.
+  // Stores expose URL-resolution capability — never the VirtualNetwork object
+  // itself — so card code can satisfy boundaries that require a real URL (an
+  // `<img src>`, `new URL(...)`) without holding the network. Returns
+  // undefined when the reference can't be resolved (no network available, or
+  // an unresolvable reference) so callers can degrade to URL math.
+  resolveURL(reference: string, base?: string): URL | undefined;
+  // Fold an id to its canonical RRI form: a mapped realm's URL collapses to
+  // its `@scope/name/...` prefix, an already-canonical RRI is returned
+  // unchanged, and anything with no registered mapping (an unmapped realm's
+  // URL, a local id) passes through as-is. The inverse of `resolveURL`'s
+  // boundary role — card code canonicalizes an incoming id to the opaque
+  // interior form without holding the network. Returns the input unchanged
+  // when no network is available.
+  canonicalizeId(id: string): string;
+  // The realm holding `id`, as a real URL href, or undefined when this store's
+  // network can't place it. Completes the same boundary as the two above: card
+  // code can ask which realm a reference belongs to without holding the realm
+  // mappings itself. A realm root is whatever was registered, at whatever
+  // depth, so it can't be recovered from the path — `/user/alice/` is a realm
+  // and `/user/` is not.
+  realmForId(id: string): string | undefined;
   getCard(url: string): CardDef | undefined;
   getFileMeta(url: string): FileDef | undefined;
   setCard(url: string, instance: CardDef): void;
@@ -459,13 +537,27 @@ export interface CardStore {
   setCardNonTracked(id: string, instance: CardDef): void;
   setFileMetaNonTracked(id: string, instance: FileDef): void;
   makeTracked(id: string): void;
+  // `untracked` opts out of the store's load-generation tracking: safe only
+  // for a caller that awaits this promise inline and folds the resolved
+  // document into its own output, so the load-settle machinery (which exists
+  // to catch loads fired and abandoned by field getters) has nothing to wait
+  // for. The searchable generator's targeted link loads use this — it lets a
+  // walk whose targets all resolve immediately read as settled without a
+  // confirmation pass. Stores that don't implement the option simply keep
+  // tracking, which costs an extra settle pass and nothing else.
   loadCardDocument(
     url: string,
-    opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
+    opts?: {
+      dependencyTrackingContext?: RuntimeDependencyTrackingContext;
+      untracked?: true;
+    },
   ): Promise<SingleCardDocument | CardError>;
   loadFileMetaDocument(
     url: string,
-    opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
+    opts?: {
+      dependencyTrackingContext?: RuntimeDependencyTrackingContext;
+      untracked?: true;
+    },
   ): Promise<SingleFileMetaDocument | CardError>;
   trackLoad(load: Promise<unknown>): void;
   loaded(): Promise<void>;
@@ -524,13 +616,12 @@ export interface Field<
     value: any,
     resource: LooseCardResource,
   ): void;
-  // there exists cards that we only ever run in the host without
-  // the isolated renderer (RoomField), which means that we cannot
-  // use the rendering mechanism to tell if a card is used or not,
-  // in which case we need to tell the runtime that a card is
-  // explicitly being used.
-  isUsed?: true;
   isPolymorphic?: true;
+  // The links this field makes searchable. This descriptor is the source of
+  // truth; `getFieldDefinitions` mirrors it (raw) into the cached
+  // `FieldDefinition` for the loaderless query compiler and definition-build
+  // validation. See `Searchable`.
+  searchable?: Searchable;
   serialize(
     value: any,
     doc: JSONAPISingleResourceDocument,
@@ -602,21 +693,21 @@ class ContainsMany<FieldT extends FieldDefConstructor> implements Field<
   readonly computeVia: undefined | (() => unknown);
   readonly name: string;
   readonly description: string | undefined;
-  readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
+  readonly searchable: Searchable | undefined;
   configuration: ConfigurationInput<any> | undefined;
   constructor({
     cardThunk,
     computeVia,
     name,
-    isUsed,
     isPolymorphic,
+    searchable,
   }: FieldConstructor<FieldT>) {
     this.cardThunk = cardThunk;
     this.computeVia = computeVia;
     this.name = name;
-    this.isUsed = isUsed;
     this.isPolymorphic = isPolymorphic;
+    this.searchable = searchable;
   }
 
   get card(): FieldT {
@@ -929,21 +1020,21 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
   readonly computeVia: undefined | (() => unknown);
   readonly name: string;
   readonly description: string | undefined;
-  readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
+  readonly searchable: Searchable | undefined;
   configuration: ConfigurationInput<any> | undefined;
   constructor({
     cardThunk,
     computeVia,
     name,
-    isUsed,
     isPolymorphic,
+    searchable,
   }: FieldConstructor<CardT>) {
     this.cardThunk = cardThunk;
     this.computeVia = computeVia;
     this.name = name;
-    this.isUsed = isUsed;
     this.isPolymorphic = isPolymorphic;
+    this.searchable = searchable;
   }
 
   get card(): CardT {
@@ -1012,9 +1103,15 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
         return { attributes: { [this.name]: serialized } };
       }
     } else {
+      // `opts` reaches the nested resource so a composite field serializes the
+      // same way whether it is reached through `contains` or `containsMany` —
+      // most visibly `includeComputeds`, without which a computed declared
+      // inside a FieldDef is filtered out of the nested resource. `visited` is
+      // deliberately a fresh set here, matching the other three field
+      // serialize sites.
       let serialized: JSONAPISingleResourceDocument['data'] & {
         meta: Record<string, any>;
-      } = callSerializeHook(this.card, value, doc);
+      } = callSerializeHook(this.card, value, doc, undefined, opts);
       let resource: JSONAPIResource = {
         attributes: {
           [this.name]: serialized?.attributes,
@@ -1132,6 +1229,24 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
   }
 }
 
+// Wire fragment for a non-present link — the union of not-loaded and the
+// terminal link-error / link-not-found sentinels. All three serialize to the
+// identical not-loaded shape: the broken reference is preserved as a
+// relationship link (with no errorDoc or discriminator) so a save→reload cycle
+// reconstructs the state from the live target rather than persisting transient
+// failure data. Shared by the singular and plural linksTo serializers so the
+// two paths cannot drift.
+function serializeNonPresentLink(
+  reference: string,
+  relationshipType: string,
+  opts?: SerializeOpts,
+): Relationship {
+  return {
+    links: { self: makeRelativeURL(reference, opts) },
+    data: { type: relationshipType, id: reference },
+  };
+}
+
 class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
   readonly fieldType = 'linksTo';
   private cardThunk: () => CardT;
@@ -1139,8 +1254,8 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
   readonly computeVia: undefined | (() => unknown);
   readonly name: string;
   readonly description: string | undefined;
-  readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
+  readonly searchable: Searchable | undefined;
   readonly configuration?: ConfigurationInput<any>;
   readonly queryDefinition?: QueryWithInterpolations;
   constructor({
@@ -1148,16 +1263,16 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     declaredCardThunk,
     computeVia,
     name,
-    isUsed,
     isPolymorphic,
+    searchable,
     queryDefinition,
   }: FieldConstructor<CardT>) {
     this.cardThunk = cardThunk;
     this.declaredCardThunk = declaredCardThunk ?? cardThunk;
     this.computeVia = computeVia;
     this.name = name;
-    this.isUsed = isUsed;
     this.isPolymorphic = isPolymorphic;
+    this.searchable = searchable;
     this.queryDefinition = queryDefinition;
   }
 
@@ -1185,6 +1300,15 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
         this,
         dependencyTrackingContext,
       );
+      // `ensureQueryFieldSearchResource` mirrors the resource's error state
+      // into the bucket. The recognition pattern mirrors the declared
+      // `linksTo` path above — a terminal `link-error` / `link-not-found`
+      // sentinel surfaces as `undefined`, and `getRelationshipMembershipState` is the
+      // structured read.
+      let bucketEntry = deserialized.get(this.name);
+      if (isLinkError(bucketEntry) || isLinkNotFound(bucketEntry)) {
+        return undefined;
+      }
       let records = (searchResource as any)?.instances ?? ([] as any[]);
       let value = (records as any[])[0] as BaseInstanceType<CardT> | undefined;
       trackRuntimeRelationshipDependency(
@@ -1200,9 +1324,21 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
       lazilyLoadLink(instance, this, maybeNotLoaded.reference);
       return undefined;
     }
+    // link-error / link-not-found are terminal failure states planted by
+    // lazilyLoadLink. They surface to userland as `undefined` (the same shape a
+    // not-loaded link produces) and are NOT retried — re-reading must not kick
+    // off another fetch. `getRelationshipMembershipState` is the only way to observe the
+    // structured failure from outside this module.
+    if (isLinkError(maybeNotLoaded) || isLinkNotFound(maybeNotLoaded)) {
+      return undefined;
+    }
     let value = getter(instance, this);
     trackRuntimeRelationshipDependency(value, this.card);
-    return value;
+    // An unset linksTo falls through to LinksTo.emptyValue() which returns
+    // `null`; the userland contract is that every non-present state — including
+    // not-set — surfaces as `undefined`, so all four non-present discriminants
+    // collapse to one nullish shape.
+    return value ?? undefined;
   }
 
   queryableValue(instance: any, stack: CardDef[]): any {
@@ -1213,6 +1349,11 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     }
     if (instance == null) {
       return null;
+    }
+    // A terminal sentinel queries by its reference, the same as a not-loaded
+    // link — the broken reference is preserved in the search doc.
+    if (isNonPresentLink(instance)) {
+      return { id: instance.reference };
     }
     return this.card[queryableValue](instance, stack);
   }
@@ -1226,15 +1367,18 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     let relationshipType = isFileDef(this.card)
       ? FileMetaResourceType
       : CardResourceType;
-    if (isNotLoadedValue(value)) {
+    // A terminal sentinel (link-error / link-not-found) serializes the same way
+    // a not-loaded link does — the reference is preserved as a relationship
+    // link so a save→reload cycle keeps the broken reference rather than
+    // silently dropping it.
+    if (isNonPresentLink(value)) {
       return {
         relationships: {
-          [this.name]: {
-            links: {
-              self: makeRelativeURL(value.reference, opts),
-            },
-            data: { type: relationshipType, id: value.reference },
-          },
+          [this.name]: serializeNonPresentLink(
+            value.reference,
+            relationshipType,
+            opts,
+          ),
         },
       };
     }
@@ -1276,9 +1420,13 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
 
     visited.add(value.id ?? (value as CardDef)[localId]);
 
-    let serialized = callSerializeHook(this.card, value, doc, visited, opts) as
-      | (JSONAPIResource & { id: string; type: string })
-      | null;
+    let serialized = callSerializeHook(
+      this.card,
+      value,
+      doc,
+      visited,
+      rebaseReferencesFor(value, opts),
+    ) as (JSONAPIResource & { id: string; type: string }) | null;
     if (serialized) {
       let resource: JSONAPIResource = {
         relationships: {
@@ -1332,7 +1480,13 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     loadedValue: any,
     relativeTo: RealmResourceIdentifier | URL | undefined,
     opts: DeserializeOpts,
-  ): Promise<BaseInstanceType<CardT> | null | NotLoadedValue> {
+  ): Promise<
+    | BaseInstanceType<CardT>
+    | null
+    | NotLoadedValue
+    | LinkErrorValue
+    | LinkNotFoundValue
+  > {
     if (!isRelationship(value)) {
       throw new Error(
         `linkTo field '${
@@ -1351,7 +1505,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     if (reference == null || reference === '') {
       return null;
     }
-    let href = resolveCardReference(reference, relativeTo);
+    let href = resolveRef(reference, relativeTo);
     let cachedInstance = isFileDef(this.card)
       ? store.getFileMeta(href)
       : store.getCard(href);
@@ -1367,6 +1521,17 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     let resource =
       resourceId != null ? resourceFrom(doc, resourceId) : undefined;
     if (!resource) {
+      // A terminal sentinel (link-error / link-not-found) is carried forward only
+      // when the wire reference is unchanged, so a known-broken link is not
+      // re-armed to a fresh not-loaded marker — which the getter WOULD retry — on
+      // reload. A re-pointed reference re-arms (the sentinel no longer describes
+      // the target); a target that has since become resolvable is present in the
+      // reload document, so `resource` is truthy above and this branch never runs.
+      if (isLinkError(loadedValue) || isLinkNotFound(loadedValue)) {
+        return resolveRef(loadedValue.reference, relativeTo) === href
+          ? loadedValue
+          : { type: 'not-loaded', reference };
+      }
       if (loadedValue !== undefined) {
         return loadedValue;
       }
@@ -1403,7 +1568,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
       );
     }
     if (value) {
-      if (isNotLoadedValue(value)) {
+      if (isNonPresentLink(value)) {
         return value;
       }
       if (isFileDef(this.card) && !value.id) {
@@ -1482,6 +1647,8 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
           format?: Format;
           displayContainer?: boolean;
           typeConstraint?: ResolvedCodeRef;
+          lockConsumingRealm?: boolean;
+          consumingRealm?: URL;
         };
       };
       Blocks: {};
@@ -1489,30 +1656,45 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
       <template>
         <CardCrudFunctionsConsumer as |cardCrudFunctions|>
           <DefaultFormatsConsumer as |defaultFormats|>
-            {{#if
-              (shouldRenderEditor @format defaultFormats.cardDef isComputed)
-            }}
-              <LinksToEditor
-                @model={{(getInnerModel)}}
-                @field={{linksToField}}
-                @typeConstraint={{@typeConstraint}}
-                @createCard={{cardCrudFunctions.createCard}}
-                ...attributes
-              />
-            {{else}}
-              {{#let (fieldComponent linksToField model) as |FieldComponent|}}
-                <FieldComponent
-                  @format={{getChildFormat
-                    @format
-                    defaultFormats.cardDef
-                    model
-                    isFileDefField
-                  }}
-                  @displayContainer={{@displayContainer}}
+            {{#let (brokenSingularLink model linksToField.name) as |broken|}}
+              {{#if
+                (shouldRenderEditor @format defaultFormats.cardDef isComputed)
+              }}
+                <LinksToEditor
+                  @model={{(getInnerModel)}}
+                  @field={{linksToField}}
+                  @brokenLink={{broken}}
+                  @typeConstraint={{@typeConstraint}}
+                  @lockConsumingRealm={{@lockConsumingRealm}}
+                  @consumingRealm={{@consumingRealm}}
+                  @createCard={{cardCrudFunctions.createCard}}
                   ...attributes
                 />
-              {{/let}}
-            {{/if}}
+              {{else if broken}}
+                <BrokenLinkTemplate
+                  @brokenUrl={{broken.reference}}
+                  @errorDoc={{broken.errorDoc}}
+                  @state={{broken.kind}}
+                  @format={{brokenLinkFormat @format defaultFormats.cardDef}}
+                  @displayName={{cardTypeName broken.reference}}
+                  @viewCard={{cardCrudFunctions.viewCard}}
+                  ...attributes
+                />
+              {{else}}
+                {{#let (fieldComponent linksToField model) as |FieldComponent|}}
+                  <FieldComponent
+                    @format={{getChildFormat
+                      @format
+                      defaultFormats.cardDef
+                      model
+                      isFileDefField
+                    }}
+                    @displayContainer={{@displayContainer}}
+                    ...attributes
+                  />
+                {{/let}}
+              {{/if}}
+            {{/let}}
           </DefaultFormatsConsumer>
         </CardCrudFunctionsConsumer>
       </template>
@@ -1530,8 +1712,8 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
   private declaredCardCache: FieldT | undefined;
   readonly computeVia: undefined | (() => unknown);
   readonly name: string;
-  readonly isUsed: undefined | true;
   readonly isPolymorphic: undefined | true;
+  readonly searchable: Searchable | undefined;
   readonly configuration?: ConfigurationInput<any>;
   readonly queryDefinition?: QueryWithInterpolations;
   constructor({
@@ -1539,16 +1721,16 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
     declaredCardThunk,
     computeVia,
     name,
-    isUsed,
     isPolymorphic,
+    searchable,
     queryDefinition,
   }: FieldConstructor<FieldT>) {
     this.cardThunk = cardThunk;
     this.declaredCardThunk = declaredCardThunk ?? cardThunk;
     this.computeVia = computeVia;
     this.name = name;
-    this.isUsed = isUsed;
     this.isPolymorphic = isPolymorphic;
+    this.searchable = searchable;
     this.queryDefinition = queryDefinition;
   }
 
@@ -1587,6 +1769,14 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         this,
         dependencyTrackingContext,
       )!;
+      // Resource-level failure: `ensureQueryFieldSearchResource` plants a
+      // single whole-field sentinel in the bucket (the search fails as a
+      // unit, not per element). The empty array hands callers a usable
+      // shape; the structured failure surfaces through `getRelationshipMembershipState`.
+      let bucketEntry = deserialized.get(this.name);
+      if (isLinkError(bucketEntry) || isLinkNotFound(bucketEntry)) {
+        return this.emptyValue(instance) as BaseInstanceType<FieldT>;
+      }
       let records = searchResource.instances ?? ([] as any[]);
       trackRuntimeRelationshipDependencies(
         records,
@@ -1611,6 +1801,15 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
       return this.emptyValue(instance) as BaseInstanceType<FieldT>;
     }
 
+    // A whole-field terminal sentinel (a computed linksToMany that consumes an
+    // upstream link which resolved to an error / not-found) is terminal: surface
+    // an empty array to userland and do NOT retrigger the loader. Per-slot
+    // terminal sentinels living inside the array are handled below — they are
+    // simply skipped by the not-loaded retrigger scan.
+    if (isLinkError(value) || isLinkNotFound(value)) {
+      return this.emptyValue(instance) as BaseInstanceType<FieldT>;
+    }
+
     if (!Array.isArray(value)) {
       throw new Error(
         `LinksToMany field '${
@@ -1619,39 +1818,26 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
       );
     }
 
-    let notLoadedRefs: string[] = [];
-    for (let entry of value) {
+    // Sentinels live in the backing array, but the WatchedArray hides them from
+    // userland per-slot access (`arr[i]` is `Card | undefined`). Scan the raw
+    // backing array — not the hiding proxy — so the not-loaded slots are still
+    // visible to kick off their lazy load.
+    let rawEntries = rawArrayValues(value);
+    let hasNotLoaded = false;
+    for (let entry of rawEntries) {
       if (isNotLoadedValue(entry)) {
-        notLoadedRefs = [...notLoadedRefs, entry.reference];
+        hasNotLoaded = true;
+        break;
       }
     }
-    if (notLoadedRefs.length > 0) {
-      // Important: we intentionally leave the NotLoadedValue sentinels inside the
-      // WatchedArray so the lazy loader can swap them out in place once the linked
-      // cards finish loading. Because the array identity never changes, Glimmer’s
-      // tracking sees the mutation and re-renders when lazilyLoadLink replaces each
-      // sentinel with a CardDef instance. Callers should treat these entries as
-      // placeholders (e.g. check for constructor.getComponent) rather than assuming
-      // every element is immediately renderable. Ideally the .value refactor can
-      // iron out this kink.
-      // TODO
-      // Codex has offered a couple interim solutions to ease the burden on card
-      // authors around this:
-      // We can wrap the guard in a reusable helper/component so card authors don’t
-      // have to think about the sentinel:
-      //
-      // - Helper – export something like `has-card-component` (just checks
-      //   `value?.constructor?.getComponent`) from card-api. Then in templates
-      //   they write: `{{#if (has-card-component card)}}…{{/if}}` or
-      //   `{{#each (filter-loadable cards) as |c|}}`.
-      //
-      // - Component – provide a `LoadableCard` component that takes a card instance
-      //   and renders the correct `CardContainer` only when the component is ready;
-      //   otherwise it renders nothing or a skeleton. Card authors use
-      //   `<LoadableCard @card={{card}}/>` instead of calling `getComponent`
-      //   themselves.
-
-      for (let entry of value) {
+    if (hasNotLoaded) {
+      // Each not-loaded sentinel stays in place so the lazy loader can swap it
+      // for the resolved card (success) or a terminal error/not-found sentinel
+      // (failure). The array identity never changes, so Glimmer re-renders on
+      // the in-place swap. A failed slot becomes terminal and surfaces as
+      // `undefined` per-slot — `getRelationshipMembershipState` is the only way to read its
+      // structured failure state.
+      for (let entry of rawEntries) {
         if (isNotLoadedValue(entry) && !(entry as any).loading) {
           lazilyLoadLink(instance, this, entry.reference, { value });
           (entry as any).loading = true;
@@ -1659,11 +1845,26 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
       }
     }
 
-    trackRuntimeRelationshipDependencies(value, this.card);
+    trackRuntimeRelationshipDependencies(rawEntries, this.card);
     return value as BaseInstanceType<FieldT>;
   }
 
   queryableValue(instances: any[] | null, stack: CardDef[]): any[] | null {
+    // A whole-field sentinel (a query-field whose search resource errored, or
+    // a computed `linksToMany` that consumes an unresolved upstream link)
+    // arrives here as a single LinkErrorValue / LinkNotFoundValue / NotLoaded
+    // object — NOT an array. Without this guard, the `[...instances]` spread
+    // below would throw `instances is not iterable`, the render would fail,
+    // and the indexer would classify the consumer as instance-error — the
+    // exact cascade the field-getter side of the tolerance machine avoids.
+    // Treat a non-present whole-field sentinel as an empty plural for index
+    // purposes; the broken reference is preserved on the wire via the
+    // serializer (`relationships.{field}` carries the sentinel's `reference`),
+    // and `getRelationshipMembershipState` is the structured read surface for the failure
+    // state outside the index.
+    if (isNonPresentLink(instances)) {
+      return null;
+    }
     if (instances === null || instances.length === 0) {
       // we intentionally use a "null" to represent an empty plural field as
       // this is a limitation to SQLite's json_tree() function when trying to match
@@ -1671,11 +1872,11 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
       return null;
     }
 
-    // Need to replace the WatchedArray proxy with an actual array because the
-    // WatchedArray proxy is not structuredClone-able, and hence cannot be
-    // communicated over the postMessage boundary between worker and DOM.
-    // TODO: can this be simplified since we don't have the worker anymore?
-    let results = [...instances]
+    // Read the raw backing array (not the hiding proxy) so a broken slot still
+    // serializes its reference into the queryable value rather than dropping out
+    // as `undefined`. Replacing the WatchedArray proxy with a plain array also
+    // keeps the result structuredClone-able for the postMessage boundary.
+    let results = rawArrayValues(instances)
       .map((instance) => {
         if (instance == null) {
           return null;
@@ -1685,7 +1886,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
             `the linksToMany field '${this.name}' contains a primitive card '${instance.name}'`,
           );
         }
-        if (isNotLoadedValue(instance)) {
+        if (isNonPresentLink(instance)) {
           return { id: instance.reference };
         }
         return this.card[queryableValue](instance, stack);
@@ -1711,8 +1912,9 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
     }
 
     // this can be a not loaded value happen when the linksToMany is a
-    // computed that consumes a linkTo field that is not loaded
-    if (isNotLoadedValue(values)) {
+    // computed that consumes a linkTo field that is not loaded (or a terminal
+    // error / not-found sentinel surfacing through the same computed path)
+    if (isNonPresentLink(values)) {
       return { relationships: {} };
     }
 
@@ -1734,7 +1936,9 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
       ? FileMetaResourceType
       : CardResourceType;
     let relationships: Record<string, Relationship> = {};
-    values.map((value, i) => {
+    // Iterate the raw backing array so broken slots serialize their reference
+    // through `serializeNonPresentLink` instead of collapsing to `data: null`.
+    rawArrayValues(values).forEach((value, i) => {
       if (value == null) {
         relationships[`${this.name}\.${i}`] = {
           links: {
@@ -1744,13 +1948,12 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         };
         return;
       }
-      if (isNotLoadedValue(value)) {
-        relationships[`${this.name}\.${i}`] = {
-          links: {
-            self: makeRelativeURL(value.reference, opts),
-          },
-          data: { type: relationshipType, id: value.reference },
-        };
+      if (isNonPresentLink(value)) {
+        relationships[`${this.name}\.${i}`] = serializeNonPresentLink(
+          value.reference,
+          relationshipType,
+          opts,
+        );
         return;
       }
       if (isFileDef(this.card) && !value.id) {
@@ -1780,7 +1983,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         value,
         doc,
         visited,
-        opts,
+        rebaseReferencesFor(value, opts),
       );
       if (serialized.meta && Object.keys(serialized.meta).length === 0) {
         delete serialized.meta;
@@ -1843,14 +2046,21 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         );
       }
       if (!Array.isArray(values.data)) {
-        return [];
+        // A `{ links: { self: null } }` relationship (no `data` array) is an
+        // authored empty — no members. Fall through with an empty relationship
+        // list so the shared WatchedArray path below wraps (and tags) it the
+        // same as an empty `{ data: [] }`: a mutable, reactive backing array,
+        // not a bare `[]` (which would hand a later push/splice a plain array
+        // and skip the WatchedArray subscriber).
+        relationships = [];
+      } else {
+        relationships = values.data.map((entry) => ({
+          links: {
+            self: entry && 'id' in entry ? (entry.id ?? null) : null,
+          },
+          data: entry,
+        }));
       }
-      relationships = values.data.map((entry) => ({
-        links: {
-          self: entry && 'id' in entry ? (entry.id ?? null) : null,
-        },
-        data: entry,
-      }));
     }
 
     let resources: Promise<BaseInstanceType<FieldT> | NotLoadedValue>[] =
@@ -1878,7 +2088,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         if (reference == null) {
           return null;
         }
-        let normalizedReference = resolveCardReference(reference, relativeTo);
+        let normalizedReference = resolveRef(reference, relativeTo);
         let cachedInstance = isFileDef(this.card)
           ? store.getFileMeta(normalizedReference)
           : store.getCard(normalizedReference);
@@ -1903,6 +2113,24 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
           resource = resourceFrom(doc, reference);
         }
         if (!resource) {
+          // Carry a terminal sentinel (link-error / link-not-found) forward when
+          // the wire reference is unchanged, so a known-broken element is not
+          // re-armed to a fresh not-loaded marker — which the next render would
+          // re-fetch — on every reload. The WatchedArray hides sentinels from
+          // index access, so scan the raw backing array to find one. A target
+          // that has since become resolvable is present in the reload document,
+          // so `resource` is truthy above and this branch never runs: the element
+          // loads and the card heals.
+          if (Array.isArray(loadedValues)) {
+            let carried = rawArrayValues(loadedValues).find(
+              (v) =>
+                (isLinkError(v) || isLinkNotFound(v)) &&
+                resolveRef(v.reference, relativeTo) === normalizedReference,
+            );
+            if (carried) {
+              return carried;
+            }
+          }
           return {
             type: 'not-loaded',
             reference,
@@ -1926,7 +2154,8 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         return deserialized;
       });
 
-    return new WatchedArray(
+    let resolved = await Promise.all(resources);
+    let watched = new WatchedArray(
       (oldValue, value) =>
         instancePromise.then((instance) => {
           applySubscribersToInstanceValue(
@@ -1938,21 +2167,35 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
           notifySubscribers(instance, this.name, value);
           notifyCardTracking(instance);
         }),
-      await Promise.all(resources),
+      resolved,
+      { hideSlot: isNonPresentLink },
     );
+    // An authored-empty plural relationship (`{ data: [] }` or
+    // `{ links: { self: null } }` in the source) deserializes to an empty
+    // array — tag it authored so serialization keeps it as `{ self: null }`
+    // rather than dropping it like a never-set link. A computed field's
+    // emptiness is derived, never authored, so it is never tagged.
+    if (resolved.length === 0 && !this.computeVia) {
+      markAuthoredEmptyLink(watched);
+    }
+    return watched;
   }
 
   emptyValue(instance: BaseDef) {
-    return new WatchedArray((oldValue, value) => {
-      applySubscribersToInstanceValue(
-        instance,
-        this,
-        oldValue as BaseDef[],
-        value as BaseDef[],
-      );
-      notifySubscribers(instance, this.name, value);
-      notifyCardTracking(instance);
-    });
+    return new WatchedArray(
+      (oldValue, value) => {
+        applySubscribersToInstanceValue(
+          instance,
+          this,
+          oldValue as BaseDef[],
+          value as BaseDef[],
+        );
+        notifySubscribers(instance, this.name, value);
+        notifyCardTracking(instance);
+      },
+      [],
+      { hideSlot: isNonPresentLink },
+    );
   }
 
   validate(instance: BaseDef, values: any[] | null) {
@@ -1975,7 +2218,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
     let expectedCard = this.declaredCard;
     for (let value of values) {
       if (
-        !isNotLoadedValue(value) &&
+        !isNonPresentLink(value) &&
         value != null &&
         !instanceOf(value, expectedCard)
       ) {
@@ -1984,7 +2227,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         );
       }
       if (
-        !isNotLoadedValue(value) &&
+        !isNonPresentLink(value) &&
         value != null &&
         isFileDef(expectedCard) &&
         !value.id
@@ -1995,16 +2238,22 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
       }
     }
 
-    return new WatchedArray((oldValue, value) => {
-      applySubscribersToInstanceValue(
-        instance,
-        this,
-        oldValue as BaseDef[],
-        value as BaseDef[],
-      );
-      notifySubscribers(instance, this.name, value);
-      notifyCardTracking(instance);
-    }, values);
+    return new WatchedArray(
+      (oldValue, value) => {
+        applySubscribersToInstanceValue(
+          instance,
+          this,
+          oldValue as BaseDef[],
+          value as BaseDef[],
+        );
+        notifySubscribers(instance, this.name, value);
+        notifyCardTracking(instance);
+      },
+      // Read raw so re-assigning a field that already holds broken slots keeps
+      // the sentinels in the new backing array rather than baking in `undefined`.
+      rawArrayValues(values),
+      { hideSlot: isNonPresentLink },
+    );
   }
 
   captureQueryFieldSeedData(
@@ -2029,6 +2278,56 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
       field: this,
       cardTypeFor,
     });
+  }
+}
+
+// Read the singular `linksTo` relationship state for the field named
+// `fieldName` on the card that `model` boxes, returning the state only when it
+// is a terminal failure (`error` / `not-found`). Every other kind — including
+// `not-loaded` and `not-set`, which the field getter also surfaces as
+// `undefined` — yields `undefined` here so the caller falls through to the
+// normal render path. `getRelationshipMembershipState` is a pure read (it never retriggers
+// `lazilyLoadLink`), so this is the single call per render that distinguishes a
+// broken link from an absent one.
+function brokenSingularLink(
+  model: Box<CardDef>,
+  fieldName: string,
+): Extract<RelationshipState, { kind: 'error' | 'not-found' }> | undefined {
+  let owner = model.value;
+  if (owner == null) {
+    return undefined;
+  }
+  let slot = getRelationshipMembershipState(owner, fieldName).membership?.[0];
+  if (slot && (slot.kind === 'error' || slot.kind === 'not-found')) {
+    return slot;
+  }
+  return undefined;
+}
+
+// The broken-link placeholder stands in for the card that failed to load, so it
+// adopts the same footprint the card would have had. The placeholder defines
+// only four footprints (`isolated` / `fitted` / `embedded` / `atom`), so every
+// other reachable `Format` is mapped to its nearest stand-in rather than cast:
+// `edit` collapses to `fitted` (mirroring `getChildFormat`, since a computed
+// linksTo can reach the view path in edit format and a card def has no editable
+// slot when it can't load); `head` / `metadata` / `markdown` / `form` have no
+// dedicated placeholder footprint and fall back to the general-purpose
+// `embedded` layout.
+export function brokenLinkFormat(
+  format: Format | undefined,
+  defaultFormat: Format,
+): BrokenLinkFormat {
+  let effectiveFormat = format ?? defaultFormat;
+  switch (effectiveFormat) {
+    case 'isolated':
+    case 'fitted':
+    case 'atom':
+    case 'embedded':
+      return effectiveFormat;
+    case 'edit':
+      return 'fitted';
+    default:
+      return 'embedded';
   }
 }
 
@@ -2098,13 +2397,13 @@ export function containsMany<FieldT extends FieldDefConstructor>(
   options?: Options,
 ): BaseInstanceType<FieldT>[] {
   return {
-    setupField(fieldName: string, _ownerPrototype: BaseDef) {
-      let { computeVia, isUsed } = options ?? {};
+    setupField(fieldName: string, ownerPrototype: BaseDef) {
+      let { computeVia, searchable } = options ?? {};
       let instance = new ContainsMany({
-        cardThunk: cardThunk(field),
+        cardThunk: cardThunk(field, { fieldName, ownerPrototype }),
         computeVia,
         name: fieldName,
-        isUsed,
+        searchable,
       });
       (instance as any).configuration = options?.configuration;
       return makeDescriptor(instance);
@@ -2118,13 +2417,13 @@ export function contains<FieldT extends FieldDefConstructor>(
   options?: Options,
 ): BaseInstanceType<FieldT> {
   return {
-    setupField(fieldName: string, _ownerPrototype: BaseDef) {
-      let { computeVia, isUsed } = options ?? {};
+    setupField(fieldName: string, ownerPrototype: BaseDef) {
+      let { computeVia, searchable } = options ?? {};
       let instance = new Contains({
-        cardThunk: cardThunk(field),
+        cardThunk: cardThunk(field, { fieldName, ownerPrototype }),
         computeVia,
         name: fieldName,
-        isUsed,
+        searchable,
       });
       (instance as any).configuration = options?.configuration;
       return makeDescriptor(instance);
@@ -2139,8 +2438,11 @@ export function linksTo<CardT extends LinkableDefConstructor>(
 ): BaseInstanceType<CardT> {
   return {
     setupField(fieldName: string, ownerPrototype: BaseDef) {
-      let { computeVia, isUsed, query } = options ?? {};
-      let fieldCardThunk = cardThunk(cardOrThunk);
+      let { computeVia, searchable, query } = options ?? {};
+      let fieldCardThunk = cardThunk(cardOrThunk, {
+        fieldName,
+        ownerPrototype,
+      });
       if (query) {
         validateRelationshipQuery(ownerPrototype, fieldName, query);
       }
@@ -2149,7 +2451,7 @@ export function linksTo<CardT extends LinkableDefConstructor>(
         declaredCardThunk: fieldCardThunk,
         computeVia,
         name: fieldName,
-        isUsed,
+        searchable,
         queryDefinition: query,
       });
       (instance as any).configuration = options?.configuration;
@@ -2165,8 +2467,11 @@ export function linksToMany<CardT extends LinkableDefConstructor>(
 ): BaseInstanceType<CardT>[] {
   return {
     setupField(fieldName: string, ownerPrototype: BaseDef) {
-      let { computeVia, isUsed, query } = options ?? {};
-      let fieldCardThunk = cardThunk(cardOrThunk);
+      let { computeVia, searchable, query } = options ?? {};
+      let fieldCardThunk = cardThunk(cardOrThunk, {
+        fieldName,
+        ownerPrototype,
+      });
       if (query) {
         validateRelationshipQuery(ownerPrototype, fieldName, query);
       }
@@ -2175,7 +2480,7 @@ export function linksToMany<CardT extends LinkableDefConstructor>(
         declaredCardThunk: fieldCardThunk,
         computeVia,
         name: fieldName,
-        isUsed,
+        searchable,
         queryDefinition: query,
       });
       (instance as any).configuration = options?.configuration;
@@ -2252,14 +2557,25 @@ export class BaseDef {
         return null;
       }
       let valueId = (value as { id?: string }).id;
-      if (stack.includes(value)) {
+      // Cycle guard. `stack.includes(value)` alone is object-identity, which
+      // misses a logical cycle when the same card is re-entered as a DIFFERENT
+      // object instance (re-deserialization / query-resolution producing fresh
+      // objects mid-render) — recursing without bound. Also break by id, the
+      // same id-based `visited` guard `serialize` uses (`visited.has(value.id)`
+      // in the field `serialize` paths), so a fresh-object re-entry degrades to
+      // `{ id }` instead of recursing forever.
+      if (
+        stack.includes(value) ||
+        (valueId != null &&
+          stack.some((s) => (s as { id?: string }).id === valueId))
+      ) {
         return { id: valueId };
       }
       function makeAbsoluteURL(maybeRelativeReference: string) {
         if (!value[relativeTo]) {
           return maybeRelativeReference;
         }
-        return resolveCardReference(maybeRelativeReference, value[relativeTo]);
+        return resolveRef(maybeRelativeReference, value[relativeTo]);
       }
       return Object.fromEntries(
         Object.entries(
@@ -2267,37 +2583,42 @@ export class BaseDef {
             includeComputeds: true,
             usedLinksToFieldsOnly: true,
           }),
-        ).map(([fieldName, field]) => {
-          let rawValue = peekAtField(value, fieldName);
-          if (field?.fieldType === 'linksToMany') {
+        )
+          // A query-backed field is resolved live from a query; the index has no
+          // way to invalidate it when matching cards change, so its value in the
+          // search doc would always be stale. Skip it entirely rather than
+          // traverse (and deep-resolve) the query closure into the doc — the
+          // host re-resolves these fields at view time, and the indexer records
+          // membership from `relationships.{field}.data` separately.
+          .filter(([, field]) => !field?.queryDefinition)
+          .map(([fieldName, field]) => {
+            let rawValue = peekAtField(value, fieldName);
+            if (field?.fieldType === 'linksToMany') {
+              return [
+                fieldName,
+                field
+                  .queryableValue(rawValue, [value, ...stack])
+                  ?.map((v: any) => {
+                    return { ...v, id: makeAbsoluteURL(v.id) };
+                  }) ?? null,
+              ];
+            }
+            if (isNonPresentLink(rawValue)) {
+              let normalizedId = rawValue.reference;
+              if (value[relativeTo]) {
+                normalizedId = resolveRef(normalizedId, value[relativeTo]);
+              }
+              return [fieldName, { id: makeAbsoluteURL(rawValue.reference) }];
+            }
+            // Reuse the value we already peeked above instead of re-reading
+            // through the descriptor — for computed fields the descriptor
+            // get path re-invokes `computeVia`, doubling the work for every
+            // contains/contains-many/links-to field in the search doc.
             return [
               fieldName,
-              field
-                .queryableValue(rawValue, [value, ...stack])
-                ?.map((v: any) => {
-                  return { ...v, id: makeAbsoluteURL(v.id) };
-                }) ?? null,
+              getQueryableValue(field!, rawValue, [value, ...stack]),
             ];
-          }
-          if (isNotLoadedValue(rawValue)) {
-            let normalizedId = rawValue.reference;
-            if (value[relativeTo]) {
-              normalizedId = resolveCardReference(
-                normalizedId,
-                value[relativeTo],
-              );
-            }
-            return [fieldName, { id: makeAbsoluteURL(rawValue.reference) }];
-          }
-          // Reuse the value we already peeked above instead of re-reading
-          // through the descriptor — for computed fields the descriptor
-          // get path re-invokes `computeVia`, doubling the work for every
-          // contains/contains-many/links-to field in the search doc.
-          return [
-            fieldName,
-            getQueryableValue(field!, rawValue, [value, ...stack]),
-          ];
-        }),
+          }),
       );
     }
   }
@@ -2340,6 +2661,23 @@ export class BaseDef {
     }
   }
 }
+
+// @cardstack/bxl materializes `{ as: FieldDef }` expression results through
+// the platform's field metadata, but it cannot import this module — it also
+// loads outside a realm (node tooling, the realm-server), where `https:`
+// module specifiers are rejected at load time. The bridge is instance-carried:
+// every instance of this card-api copy inherits its own `getFields` under a
+// cross-realm symbol, so BXL always materializes through the copy that
+// created the instance it was handed — correct even when several loader
+// universes are alive at once. `globalThis.__cardstackGetFields` (registered
+// in field-support) remains as the fallback for consumers without an
+// instance in hand.
+Object.defineProperty(BaseDef.prototype, Symbol.for('cardstack.getFields'), {
+  value: getFields,
+  enumerable: false,
+  configurable: true,
+});
+
 export class Component<
   CardT extends BaseDefConstructor,
 > extends GlimmerComponent<SignatureFor<CardT>> {}
@@ -2622,6 +2960,14 @@ export class CSSField extends TextAreaField {
   };
 }
 
+// A plain markdown StringField. BFM embed directives (`:card[…]` / `:file[…]`)
+// in its content render as (correctly-sized) broken-link placeholders and do
+// NOT resolve: a StringField is a bare string with no `id` to resolve relative
+// refs against, no `linksToMany` storage to hold resolved instances, and no
+// query to populate them at index time. Resolution is an index-time
+// relationship concern — use `RichMarkdownField` (or a `.md` `MarkdownDef`
+// file), which own the `linkedCards`/`linkedFiles` relationships, when embeds
+// must render live.
 export class MarkdownField extends StringField {
   static displayName = 'Markdown';
   static icon = MarkdownIcon;
@@ -2734,7 +3080,11 @@ export class FileContentMismatchError extends Error {
 export class FileDef extends BaseDef {
   static displayName = 'File';
   static isFileDef = true;
-  static icon = FileIcon;
+  // Annotated with the declared type rather than inferred from the assignment:
+  // the shared format shells render whatever a subclass puts here, so a family
+  // must be free to supply any icon component, not just the
+  // `TemplateOnlyComponent` shape that inference would pin this to.
+  static icon: CardOrFieldTypeIcon = FileIcon;
   [isSavedInstance] = true;
 
   get [realmURL](): URL | undefined {
@@ -2767,14 +3117,30 @@ export class FileDef extends BaseDef {
   @field contentHash = contains(StringField);
   @field contentSize = contains(NumberField);
 
-  static embedded: BaseDefComponent = class View extends Component<
-    typeof this
-  > {
-    <template>{{@model.name}}</template>
-  };
-  static fitted = this.embedded;
-  static isolated = this.embedded;
-  static atom = this.embedded;
+  // The four shared format shells own identity, facts, budgets, and state for
+  // every file family. What they can't know is how to draw the file itself — a
+  // waveform, a page, a 3D scene — so a family supplies that one renderer here
+  // and inherits the rest. A family that hasn't landed a renderer yet gets an
+  // honest generic pane rather than a broken one.
+  //
+  // The shells take their glyph from this class's `static icon`, so a family
+  // declares its icon once and every format picks it up — and that icon's
+  // module stays in the family's own file rather than in card-api's dependency
+  // graph, which every card in every realm inherits.
+  static previewComponent?: FilePreviewComponent;
+  // Pin a profile axis when the file's MIME type is ambiguous — a `.ts` file
+  // served as `text/plain`, say. Left unset, these are derived from the file's
+  // name and content type by the taxonomy registry.
+  static fileKind?: string;
+  static fileFamily?: string;
+  static previewKind?: string;
+  static previewAdapter?: string;
+  static previewSource?: string;
+
+  static embedded: BaseDefComponent = FileDefEmbeddedTemplate;
+  static fitted: BaseDefComponent = FileDefFittedTemplate;
+  static isolated: BaseDefComponent = FileDefIsolatedTemplate;
+  static atom: BaseDefComponent = FileDefAtomTemplate;
   static edit: BaseDefComponent = FileDefEditTemplate;
   // Default `markdown` fallback (CS-10784): inherits from FieldDef but
   // restated explicitly so this class's own slot is set rather than relying on
@@ -2799,11 +3165,7 @@ export class FileDef extends BaseDef {
     if (!contentHash || contentSize === undefined) {
       let bytes = await byteStreamToUint8Array(await getStream());
       if (!contentHash) {
-        try {
-          contentHash = md5(bytes);
-        } catch {
-          contentHash = md5(new TextDecoder().decode(bytes));
-        }
+        contentHash = computeContentHash(bytes);
       }
       if (contentSize === undefined) {
         contentSize = bytes.byteLength;
@@ -2858,15 +3220,20 @@ export { getDefaultFileMenuItems } from './file-menu-items';
 
 export class ImageDef extends FileDef {
   static displayName = 'Image';
+  static icon: CardOrFieldTypeIcon = ImageIcon;
   static acceptTypes = 'image/*';
+  // An image whose content type never arrived — a hand-linked thumbnail, say —
+  // must still present as an image rather than a generic file, so the family
+  // is pinned instead of left to MIME/extension inference. `previewKind` stays
+  // inferred: photo, gif, and svg genuinely differ per instance.
+  static fileFamily = 'image';
 
   @field width = contains(NumberField);
   @field height = contains(NumberField);
 
-  static isolated: BaseDefComponent = ImageDefIsolatedTemplate;
-  static atom: BaseDefComponent = ImageDefAtomTemplate;
-  static embedded: BaseDefComponent = ImageDefEmbeddedTemplate;
-  static fitted: BaseDefComponent = ImageDefFittedTemplate;
+  // The four formats come from FileDef's shared shells; the family supplies
+  // only the renderer that draws its pixels.
+  static previewComponent: FilePreviewComponent = ImagePreview;
 
   // CS-10787: emit a markdown image reference. If no URL is available we
   // fall back to a placeholder that names the image — useful to downstream
@@ -3047,16 +3414,16 @@ export class Theme extends CardDef {
 
   [getMenuItems](params: GetMenuItemParams): MenuItemOptions[] {
     let menuItems = super[getMenuItems](params);
-    if (params.menuContext === 'interact' && params.commandContext && this.id) {
+    if (params.menuContext === 'interact' && params.toolContext && this.id) {
       menuItems = [
         ...menuItems,
         {
           label: 'Copy and Edit',
           action: async () => {
-            if (!params.commandContext || !this.id) {
+            if (!params.toolContext || !this.id) {
               return;
             }
-            let cmd = new CopyAndEditCommand(params.commandContext);
+            let cmd = new CopyAndEditTool(params.toolContext);
             await cmd.execute({
               card: this,
             });
@@ -3067,7 +3434,7 @@ export class Theme extends CardDef {
         {
           label: 'Modify Theme via AI',
           action: async () => {
-            let cmd = new PatchThemeCommand(params.commandContext);
+            let cmd = new PatchThemeTool(params.toolContext);
             await cmd.execute({
               cardId: this.id as unknown as string,
             });
@@ -3253,19 +3620,18 @@ function lazilyLoadLink(
     inflightLoads = new Map();
     inflightLinkLoads.set(instance, inflightLoads);
   }
-  let reference = resolveCardReference(
-    link,
-    instance.id ?? instance[relativeTo],
-  );
+  let store = getStore(instance);
+  let reference = resolveRef(link, instance.id ?? instance[relativeTo]);
   let key = `${field.name}/${reference}`;
   let promise = inflightLoads.get(key);
-  let store = getStore(instance);
   if (promise) {
     store.trackLoad(promise);
     return;
   }
   let deferred = new Deferred<void>();
   inflightLoads.set(key, deferred.promise);
+  // Surface the in-flight state to `getRelationshipMembershipState(...).isLoading` observers.
+  bumpFieldLoadingSignal(instance, field.name);
   store.trackLoad(
     // we wrap the promise with a catch that will prevent the rejections from bubbling up but
     // not interfere with the original deferred. this prevents QUnit from being really noisy
@@ -3285,7 +3651,49 @@ function lazilyLoadLink(
     let isFileLink = isFileDef(field.card);
     try {
       let fieldValue: CardDef | FileDef;
-      if (isFileLink) {
+      // Inside an indexing render the store is job-scoped: the prerender tab is
+      // reset (`render` route `clearCache` -> `store.resetCache()`) on the first
+      // render of each indexing job, so every instance in it was deserialized
+      // during THIS job, from a realm source that is immutable for the job's
+      // life. So an instance already in the store is current — reuse it directly
+      // instead of re-fetching its card+source and re-running the full field
+      // deserialization on every link edge that points at it. That per-edge
+      // redundancy is what makes a densely cross-linked render quadratic (the
+      // same target reached through many parents is rebuilt once per parent).
+      // The per-consumer dependency is still recorded so invalidation tracks
+      // this edge. Gated on BOTH the render flag AND `__boxelJobId`: outside a
+      // render (the live app) a link may be stale after invalidation and must
+      // reload, and a render with no job id has no job-scoped-store guarantee.
+      let inIndexingRender =
+        typeof globalThis !== 'undefined' &&
+        Boolean((globalThis as any).__boxelRenderContext) &&
+        Boolean((globalThis as any).__boxelJobId);
+      let reusable = inIndexingRender
+        ? isFileLink
+          ? store.getFileMeta(reference)
+          : store.getCard(reference)
+        : undefined;
+      // Only reuse an instance that finished deserializing. The job-scoped
+      // store also holds partially-built, non-tracked instances: a failed
+      // `_updateFromSerialized` leaves its half-built instance behind (the
+      // store keeps it so cyclic deserialization can resolve), with
+      // `isSavedInstance` still false — it flips true only at the end of a
+      // successful deserialize. Reusing such a partial would skip the
+      // load/error path that plants the broken-link sentinel and index an
+      // incomplete target; falling through re-attempts the load and re-plants
+      // the sentinel.
+      if (
+        reusable &&
+        reusable[isSavedInstance] === true &&
+        instanceOf(reusable, field.card)
+      ) {
+        if (isFileLink) {
+          trackRuntimeFileDependency(reference, dependencyTrackingContext);
+        } else {
+          trackRuntimeInstanceDependency(reference, dependencyTrackingContext);
+        }
+        fieldValue = reusable;
+      } else if (isFileLink) {
         let fileMetaDoc = await store.loadFileMetaDocument(reference, {
           dependencyTrackingContext,
         });
@@ -3320,12 +3728,15 @@ function lazilyLoadLink(
       }
       if (pluralArgs) {
         let { value } = pluralArgs;
+        // Match against the raw backing array — the proxy hides not-loaded
+        // sentinels from index access.
         let indices: number[] = [];
-        for (let [index, item] of value.entries()) {
+        let raw = rawArrayValues(value);
+        for (let [index, item] of raw.entries()) {
           if (!isNotLoadedValue(item)) {
             continue;
           }
-          let notLoadedRef = resolveCardReference(
+          let notLoadedRef = resolveRef(
             item.reference,
             instance.id ?? instance[relativeTo],
           );
@@ -3333,17 +3744,24 @@ function lazilyLoadLink(
             indices.push(index);
           }
         }
-        for (let index of indices) {
-          value[index] = fieldValue;
+        if (indices.length > 0) {
+          // Write into the backing array rather than through the proxy: the
+          // proxy's set trap announces a change to subscribers, which marks the
+          // instance dirty and auto-saves it — a write triggered by reading the
+          // card, exactly as in the singular case. The getter entangles card
+          // tracking, so notifying it is what re-renders.
+          for (let index of indices) {
+            raw[index] = fieldValue;
+          }
+          notifyCardTracking(instance);
         }
       } else {
-        (instance as any)[field.name] = fieldValue;
+        // Not `instance[field.name] = fieldValue`: assigning through the field
+        // setter announces a change, which marks the instance dirty and
+        // auto-saves it — a write triggered by reading the card.
+        setResolvedField(instance, field, fieldValue);
       }
     } catch (e) {
-      // we replace the node-loaded value with a null
-      // TODO in the future consider recording some link meta that this reference is actually missing
-      (instance as any)[field.name] = null;
-
       let error = e as Error;
       let isMissingFile =
         (isCardError(error) && error.status === 404) ||
@@ -3390,25 +3808,197 @@ function lazilyLoadLink(
         }
       }
       payloadError.deps = [...deps];
-      let payload = JSON.stringify({
-        type: 'error',
-        error: payloadError,
-      });
-      // We use a custom event for render errors--otherwise QUnit will report a "global error"
-      // when we use a promise rejection to signal to the prerender that there was an error
-      // even though everything is working as designed. QUnit is very noisy about these errors...
-      const event = new CustomEvent('boxel-render-error', {
-        detail: { reason: payload },
-      });
-      globalThis.dispatchEvent(event);
+
+      // Plant a typed sentinel into the data bucket (singular) or the failed
+      // array slot(s) (plural), replacing the legacy `field = null` write. The
+      // field getter surfaces these as `undefined` to userland — the same
+      // surface a not-loaded link produces — and never retriggers the loader
+      // for them; `getRelationshipMembershipState` is the only way to read the structured
+      // failure from outside this module. HTTP 404 → `link-not-found`, every
+      // other failure → `link-error`.
+      let errorDoc: SerializedError = {
+        ...payloadError,
+        additionalErrors: payloadError.additionalErrors ?? null,
+      };
+      let sentinel: LinkErrorValue | LinkNotFoundValue = isMissingFile
+        ? { type: 'link-not-found', reference, errorDoc }
+        : { type: 'link-error', reference, errorDoc };
+      if (pluralArgs) {
+        // Swap the sentinel into the slot(s) whose reference just failed,
+        // leaving the WatchedArray identity intact. We match the same
+        // not-loaded entries the success path would have replaced with the
+        // loaded card, and write into the backing array rather than through the
+        // proxy for the same reason the success path does: the proxy's set trap
+        // announces a change, which auto-saves a card that was only read.
+        let { value } = pluralArgs;
+        let raw = rawArrayValues(value);
+        let planted = false;
+        for (let [index, item] of raw.entries()) {
+          if (!isNotLoadedValue(item)) {
+            continue;
+          }
+          let notLoadedRef = resolveRef(
+            item.reference,
+            instance.id ?? instance[relativeTo],
+          );
+          if (reference === notLoadedRef) {
+            raw[index] = sentinel;
+            planted = true;
+          }
+        }
+        if (planted) {
+          notifyCardTracking(instance);
+        }
+      } else {
+        // Write the bucket and notify card tracking, but not change
+        // subscribers: a failed load is still the resolution of a link the
+        // instance already referenced, not an edit of it. No subscriber acts on
+        // a link-field change anyway — the recent-cards, spec-panel and
+        // playground listeners each ignore any field but `id` — so announcing
+        // it would only reach auto-save, writing the card back on read.
+        getDataBucket(instance).set(field.name, sentinel);
+        notifyCardTracking(instance);
+      }
     } finally {
       deferred.fulfill();
       inflightLoads.delete(key);
       if (inflightLoads.size === 0) {
         inflightLinkLoads.delete(instance);
       }
+      // The load settled — re-evaluate `getRelationshipMembershipState(...).isLoading`.
+      bumpFieldLoadingSignal(instance, field.name);
     }
   })();
+}
+
+// Whether a declared `linksTo` / `linksToMany` field has a lazy load in flight
+// right now. Pure read of the in-flight load registry — the observe-only signal
+// behind `getRelationshipMembershipState(...).isLoading` for declared links. A `not-loaded`
+// slot that nothing is fetching is NOT loading.
+function hasInflightLoadForField(
+  instance: CardDef,
+  fieldName: string,
+): boolean {
+  let loads = inflightLinkLoads.get(instance);
+  if (!loads) {
+    return false;
+  }
+  let prefix = `${fieldName}/`;
+  for (let key of loads.keys()) {
+    if (key.startsWith(prefix)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Supply `getRelationshipMembershipState` with the loading status and query-field membership
+// that live above field-support: in-flight link loads (here) and per-field
+// search resources (in query-field-support). Observe-only — this never starts a
+// load or a search; the template's field getter does that.
+registerRelationshipProbe((instance, field) => {
+  // Entangle the reading render with the field's loading signal so a deferred
+  // bump (load start / settle, or query resource creation) re-evaluates this.
+  readFieldLoadingSignal(instance, field.name);
+  if (field.queryDefinition) {
+    let resource = peekQueryFieldSearchResource(instance, field.name);
+    let isLoading = resource?.isLoading ?? false;
+    let bucketEntry = getDataBucket(instance).get(field.name);
+    let queryMembership: RelationshipState[] | undefined;
+    if (isLinkError(bucketEntry) || isLinkNotFound(bucketEntry)) {
+      // A search that failed as a unit surfaces one whole-field sentinel —
+      // independent of whether a live resource exists (it may have been planted
+      // directly), so this takes precedence.
+      queryMembership = [relationshipStateForEntry(bucketEntry)];
+    } else if (!isLoading && resource) {
+      queryMembership = (resource.instances ?? []).map((card) =>
+        relationshipStateForEntry(card),
+      );
+    }
+    // Otherwise membership stays undefined: in flight, or never queried.
+    return { isLoading, isQueryField: true, queryMembership };
+  }
+  return {
+    isLoading: hasInflightLoadForField(instance, field.name),
+    isQueryField: false,
+  };
+});
+
+// Replace any linksTo / linksToMany bucket entry on `consumer` that points
+// to `deletedRef` with a `link-not-found` sentinel, and notify subscribers
+// so the placeholder render takes over the slot. Returns true when at
+// least one slot was rewritten. The host's store calls this from its
+// realm-event handler when an instance is removed: the deleted target's
+// loaded card is still hard-referenced by every consumer that has it in
+// memory, and without this rewrite the consumer's render stays stale
+// until something else forces a re-render. Mirrors the sentinel shape
+// `lazilyLoadLink` plants for a 404 — same `link-not-found` discriminator,
+// same `errorDoc.status: 404`, same `deps` (both id and `.json` forms) so
+// downstream invalidation behaves identically to a real fetch failure.
+export function notifyLinksToTargetDeleted(
+  consumer: CardDef,
+  deletedRef: string,
+): boolean {
+  let bucket = getDataBucket(consumer);
+  let fields = getFields(consumer, { includeComputeds: false });
+  let referenceWithJson = deletedRef.endsWith('.json')
+    ? deletedRef
+    : `${deletedRef}.json`;
+  let referenceWithoutJson = deletedRef.replace(/\.json$/, '');
+  let buildSentinel = (): LinkNotFoundValue => ({
+    type: 'link-not-found',
+    reference: referenceWithoutJson,
+    errorDoc: {
+      title: 'Link Not Found',
+      status: 404,
+      message: `missing file ${referenceWithJson}`,
+      deps: [referenceWithoutJson, referenceWithJson],
+      additionalErrors: null,
+    } as SerializedError,
+  });
+  let changed = false;
+  for (let [fieldName, field] of Object.entries(fields)) {
+    if (!field) {
+      continue;
+    }
+    if (field.fieldType === 'linksTo') {
+      let current = bucket.get(fieldName);
+      if (
+        current &&
+        typeof current === 'object' &&
+        'id' in current &&
+        (current as { id?: unknown }).id === referenceWithoutJson
+      ) {
+        let sentinel = buildSentinel();
+        bucket.set(fieldName, sentinel);
+        notifySubscribers(consumer, fieldName, sentinel);
+        notifyCardTracking(consumer);
+        changed = true;
+      }
+    } else if (field.fieldType === 'linksToMany') {
+      let arr = bucket.get(fieldName);
+      if (Array.isArray(arr)) {
+        let arrChanged = false;
+        for (let [index, item] of arr.entries()) {
+          if (
+            item &&
+            typeof item === 'object' &&
+            'id' in item &&
+            (item as { id?: unknown }).id === referenceWithoutJson
+          ) {
+            arr[index] = buildSentinel();
+            arrChanged = true;
+          }
+        }
+        if (arrChanged) {
+          notifySubscribers(consumer, fieldName, arr);
+          notifyCardTracking(consumer);
+          changed = true;
+        }
+      }
+    }
+  }
+  return changed;
 }
 
 function trackRuntimeRelationshipDependency(
@@ -3416,11 +4006,19 @@ function trackRuntimeRelationshipDependency(
   declaredCard: LinkableDefConstructor,
   dependencyTrackingContext?: RuntimeDependencyTrackingContext,
 ): void {
-  if (!value || isNotLoadedValue(value)) {
+  if (!value || isNonPresentLink(value)) {
     return;
   }
   let id = (value as { id?: unknown }).id;
   if (typeof id !== 'string') {
+    return;
+  }
+  if (!shouldTrackRuntimeRelationship(id, dependencyTrackingContext)) {
+    // Already tracked this relationship target this session. A linksTo /
+    // linksToMany getter runs this on every read, and a dense graph re-reads
+    // the same targets combinatorially; a repeat would re-derive the identical
+    // instance/file + module-graph node set, so skipping it — and the
+    // prototype/identity lookups below — is a pure no-op.
     return;
   }
   if (isFileDef(declaredCard)) {
@@ -3467,19 +4065,41 @@ function trackRuntimeRelationshipModuleDependencies(
     return;
   }
 
-  trackRuntimeModuleDependency(identity.module, dependencyTrackingContext);
+  // This walk repeats once per element of a linksToMany (and again on every
+  // getter re-read), but records the identical node set every time, so it only
+  // needs to run once per (context, type module) per tracking session. The
+  // probe collapses each repeat to a single Set lookup — without it, a
+  // linksToMany of N same-typed cards re-tracks the type's entire module graph
+  // N times per read, and that per-call tracking overhead dominates aggregate
+  // renders.
+  if (
+    !shouldTrackRuntimeModuleGraph(
+      'relationship',
+      identity.module,
+      dependencyTrackingContext,
+    )
+  ) {
+    return;
+  }
 
+  // Loader identities and dependency lists are in canonical RRI form, while
+  // the dependency tracker keys module nodes by http(s) URL and drops
+  // anything else — so convert at this boundary via the loader's
+  // tracking-key form.
   let loader = Loader.getLoaderFor(ctor);
+  trackRuntimeModuleDependency(
+    loader ? loader.dependencyTrackingKey(identity.module) : identity.module,
+    dependencyTrackingContext,
+  );
   if (!loader) {
     return;
   }
 
-  // getKnownConsumedModules is fast now: the Loader caches the dependency
-  // graph traversal result in collectKnownModuleDependencies, and
-  // trimModuleIdentifier uses string ops + a cache instead of URL
-  // construction. No need for a caller-side skip cache here.
   for (let dep of loader.getKnownConsumedModules(identity.module)) {
-    trackRuntimeModuleDependency(dep, dependencyTrackingContext);
+    trackRuntimeModuleDependency(
+      loader.dependencyTrackingKey(dep),
+      dependencyTrackingContext,
+    );
   }
 }
 
@@ -3639,7 +4259,14 @@ export async function updateFromSerialized<T extends BaseDefConstructor>(
 ): Promise<BaseInstanceType<T>> {
   stores.set(instance, store);
   if (!instance[relativeTo] && doc.data.id) {
-    instance[relativeTo] = rri(doc.data.id);
+    // Card ids fold to canonical RRI; FileDef ids stay URL (see
+    // `_createFromSerialized`).
+    let isFileLike = isFileDef(
+      Reflect.getPrototypeOf(instance)!.constructor as typeof BaseDef,
+    );
+    instance[relativeTo] = rri(
+      isFileLike ? doc.data.id : store.canonicalizeId(doc.data.id),
+    );
   }
 
   if (isCardInstance(instance)) {
@@ -3686,20 +4313,30 @@ async function _createFromSerialized<T extends BaseDefConstructor>(
   if (!doc) {
     doc = { data: resource };
   }
+  let isFileLike = isFileMetaResource(resource) || isFileDef(card);
+  // Fold the incoming id onto the canonical interior form (RRI for a mapped
+  // realm; unchanged for an unmapped realm or a local id) at this ingest
+  // boundary, so the in-memory `id` field, the identity-map key, and the
+  // relative-resolution base all share one opaque spelling. Scoped to card
+  // instances; FileDef ids stay in URL form (their identity is entangled with
+  // the file-extract invalidation contract).
+  let canonicalId =
+    resource.id != null && !isFileLike
+      ? (store.canonicalizeId(resource.id) as typeof resource.id)
+      : resource.id;
   let instance: BaseInstanceType<T> | undefined;
-  if (resource.id != null || resource.lid != null) {
-    let resourceId = (resource.id ?? resource.lid)!;
-    let cachedInstance =
-      isFileMetaResource(resource) || isFileDef(card)
-        ? store.getFileMeta(resourceId)
-        : store.getCard(resourceId);
+  if (canonicalId != null || resource.lid != null) {
+    let resourceId = (canonicalId ?? resource.lid)!;
+    let cachedInstance = isFileLike
+      ? store.getFileMeta(resourceId)
+      : store.getCard(resourceId);
     if (cachedInstance && instanceOf(cachedInstance, card as any)) {
       instance = cachedInstance as BaseInstanceType<T>;
     }
   }
   if (!instance) {
     instance = new card({
-      id: resource.id,
+      id: canonicalId,
       [localId]: resource.lid,
     }) as BaseInstanceType<T>;
     instance[relativeTo] = _relativeTo;
@@ -3762,11 +4399,15 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
 
   let existingOverrides = getFieldOverrides(instance);
   let loadedValues = getDataBucket(instance);
+  // A resource's references (adoptsFrom, relationship links) are relative to the
+  // resource's own id, independent of the document that delivered it. So resolve
+  // them against this instance's own id when it is saved, and fall back to the
+  // threaded deserialization context only for an unsaved instance that has no id
+  // of its own.
   let instanceRelativeTo: RealmResourceIdentifier | URL | undefined =
-    instance[relativeTo] ??
     ('id' in instance && typeof instance.id === 'string'
       ? (instance.id as RealmResourceIdentifier)
-      : undefined);
+      : undefined) ?? instance[relativeTo];
 
   function getFieldMeta(
     fieldsMeta: CardFields | undefined,
@@ -3782,6 +4423,13 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
   ): Partial<Meta>[] | undefined {
     let entry = fieldsMeta?.[key];
     return Array.isArray(entry) ? entry : undefined;
+  }
+  function clearIndexedFieldOverrides(fieldName: string): void {
+    for (let key of existingOverrides.keys()) {
+      if (isDirectIndexedFieldKey(key, fieldName)) {
+        existingOverrides.delete(key);
+      }
+    }
   }
   function isAssignableToField(
     overrideCard: typeof BaseDef,
@@ -3832,8 +4480,9 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
     }
     let override = await loadCardDef(overrideMeta.adoptsFrom, {
       loader: myLoader(),
-      // Prefer the deserialization context (instanceRelativeTo) so overrides resolve
-      // relative to the document we fetched (e.g. catalog/index), then fall back to the resource id.
+      // A field override's module ref is relative to this resource's own id, the
+      // same rule as adoptsFrom; instanceRelativeTo already resolves to the
+      // instance's own id when saved, with resource.id as the fallback.
       relativeTo:
         instanceRelativeTo ?? (resource.id ? rri(resource.id) : undefined),
       dependencyTrackingContext: opts?.dependencyTrackingContext,
@@ -3881,7 +4530,14 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
       ...resource.attributes,
       ...nonNestedRelationships,
       ...linksToManyRelationships,
-      ...(resource.id !== undefined ? { id: resource.id } : {}),
+      ...(resource.id !== undefined
+        ? {
+            id:
+              isFileMetaResource(resource) || isFileDef(card)
+                ? resource.id
+                : store.canonicalizeId(resource.id),
+          }
+        : {}),
     }).map(async ([fieldName, value]) => {
       let field = getField(instance, fieldName);
       if (!field) {
@@ -3894,6 +4550,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
       let resourceMetaFields = resource.meta?.fields;
       let overrideApplied = false;
       if (field.fieldType === 'containsMany') {
+        clearIndexedFieldOverrides(fieldName);
         if (primitive in field.card) {
           if (Array.isArray(value)) {
             for (let [index] of value.entries()) {
@@ -3941,12 +4598,14 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
       if (overrideApplied) {
         field = (getField(instance, fieldName) ?? field) as Field<T>;
       }
-      // Prefer the deserialization context ([relativeTo]) when available; fall back to the instance id
+      // A resource's relationship links are relative to the resource's own id,
+      // independent of the document that delivered it — so resolve against this
+      // instance's own id when saved, falling back to the threaded context only
+      // for an unsaved instance with no id of its own.
       let relativeToVal: RealmResourceIdentifier | URL | undefined =
-        instance[relativeTo] ??
         ('id' in instance && typeof instance.id === 'string'
           ? (instance.id as RealmResourceIdentifier)
-          : undefined);
+          : undefined) ?? instance[relativeTo];
       let deserializedValue = await getDeserializedValue({
         card,
         loadedValue: loadedValues.get(fieldName),
@@ -4043,15 +4702,6 @@ export function setCardAsSavedForTest(instance: CardDef, id?: string): void {
   instance[isSavedInstance] = true;
 }
 
-export function searchDoc<CardT extends BaseDefConstructor>(
-  instance: InstanceType<CardT>,
-): Record<string, any> {
-  return getQueryableValue(instance.constructor, instance) as Record<
-    string,
-    any
-  >;
-}
-
 function makeDescriptor<
   CardT extends BaseDefConstructor,
   FieldT extends BaseDefConstructor,
@@ -4086,6 +4736,18 @@ function makeDescriptor<
   }
   (descriptor.get as any)[isField] = field;
   return descriptor;
+}
+
+// Fill in a field value that resolution produced rather than a user edit — the
+// loaded target of a link the instance already referenced. Change subscribers
+// drive auto-save, so announcing this as a change writes the card back to the
+// server merely because it was read, bumping its version and scheduling a
+// reindex. Glimmer's tracking is still notified, so rendering updates.
+function setResolvedField(instance: BaseDef, field: Field, value: any) {
+  propagateRealmContext(value, instance);
+  value = field.validate(instance, value);
+  getDataBucket(instance).set(field.name, value);
+  notifyCardTracking(instance);
 }
 
 function setField(instance: BaseDef, field: Field, value: any) {
@@ -4127,17 +4789,42 @@ function notifySubscribers(
 
 function cardThunk<CardT extends BaseDefConstructor>(
   cardOrThunk: CardT | (() => CardT),
+  // Where the field lives, so the thrown error can name the exact field
+  // instead of leaving the author to bisect their schema. The module the bad
+  // value came from isn't knowable here — by the time the value reaches us
+  // the import has already evaluated to undefined — so the message names the
+  // two ways that happens instead.
+  fieldContext: { fieldName: string; ownerPrototype: BaseDef },
 ): () => CardT {
+  // `||` rather than `??`: an anonymous class's `.name` is `''`, not nullish.
+  let fieldDescription = `field '${fieldContext.fieldName}' on '${
+    fieldContext.ownerPrototype.constructor?.name || 'unknown card'
+  }'`;
+  let causes = `Two common causes:
+      (1) the import doesn't match the module's export shape — e.g. \`import X from '…'\` where the module only has a named export; use \`import { X } from '…'\`;
+      (2) a cyclic dependency between cards — use the thunk form in all cards in the cycle, e.g. '@field friend = linksTo(() => Person)'.`;
   if (!cardOrThunk) {
     throw new Error(
-      `cardOrThunk was ${cardOrThunk}. There might be a cyclic dependency in one of your fields.
-      Use '() => CardName' format for the fields with the cycle in all related cards.
-      e.g.: '@field friend = linksTo(() => Person)'`,
+      `The card class for ${fieldDescription} was ${cardOrThunk}. ${causes}`,
     );
   }
-  return (
-    'baseDef' in cardOrThunk ? () => cardOrThunk : cardOrThunk
-  ) as () => CardT;
+  if ('baseDef' in cardOrThunk) {
+    return () => cardOrThunk as CardT;
+  }
+  // The thunk form fails the same two ways the eager form does, just later —
+  // at the first `field.card` read instead of at decoration. The accessors
+  // re-invoke the thunk on every read (nothing is memoized), so this adds a
+  // truthiness check per read, not an extra call.
+  let thunk = cardOrThunk as () => CardT;
+  return () => {
+    let card = thunk();
+    if (!card) {
+      throw new Error(
+        `The card class thunk for ${fieldDescription} returned ${card}. ${causes}`,
+      );
+    }
+    return card;
+  };
 }
 
 export type SignatureFor<CardT extends BaseDefConstructor> = {
@@ -4348,6 +5035,42 @@ function getStore(instance: BaseDef): CardStore {
   return stores.get(instance as BaseDef) ?? new FallbackCardStore();
 }
 
+// Resolve a (possibly relative or RRI) reference to a real, fetchable URL,
+// relative to the instance's own location. Card definitions that must hand a
+// real URL to a boundary that can't consume canonical RRI (an `<img src>`, the
+// AI source-file reader's `new URL(...)`) use this rather than reaching for the
+// VirtualNetwork object directly — they get back a URL, not the network itself.
+// Resolves through the instance's own store, which may carry realm mappings
+// the module loader's network does not (e.g. a card deserialized with an
+// explicit store). Returns undefined when none is available, or when the
+// reference can't be resolved, so callers can degrade to URL math.
+export function resolveInstanceURL(
+  instance: CardDef,
+  reference: string,
+): URL | undefined {
+  try {
+    return getStore(instance).resolveURL(
+      reference,
+      instance.id ?? instance[relativeTo],
+    );
+  } catch {
+    return undefined;
+  }
+}
+
+// Resolve a (possibly relative) reference to its absolute canonical RRI,
+// relative to `relativeTo`. Identifiers are canonical RRI by the time they
+// reach here, so this is pure form-preserving path math (see
+// `resolveRRIReference`) — no VirtualNetwork, no realm-mapping lookup. The
+// returned string is used as an opaque store key / "did this resolve?" signal.
+// Exported for `searchable.ts`'s search-doc absolutization.
+export function resolveRef(
+  reference: string,
+  relativeTo: RealmResourceIdentifier | URL | undefined,
+): string {
+  return resolveRRIReference(reference, relativeTo);
+}
+
 function myLoader(): Loader {
   // we know this code is always loaded by an instance of our Loader, which sets
   // import.meta.loader.
@@ -4365,29 +5088,87 @@ class FallbackCardStore implements CardStore {
   #inFlight: Set<Promise<unknown>> = new Set();
   #loadGeneration = 0; // mirrors host store tracking to detect new loads
 
-  getCard(id: string) {
+  #requireVirtualNetwork(): VirtualNetwork {
+    let vn = myLoader().getVirtualNetwork();
+    if (!vn) {
+      throw new Error(
+        `FallbackCardStore requires the active Loader to have a VirtualNetwork`,
+      );
+    }
+    return vn;
+  }
+
+  resolveURL(reference: string, base?: string): URL | undefined {
+    let vn: VirtualNetwork | undefined;
+    try {
+      vn = myLoader().getVirtualNetwork();
+    } catch {
+      return undefined;
+    }
+    if (!vn) {
+      return undefined;
+    }
+    try {
+      return vn.resolveURL(reference, base);
+    } catch {
+      return undefined;
+    }
+  }
+
+  canonicalizeId(id: string): string {
+    let vn: VirtualNetwork | undefined;
+    try {
+      vn = myLoader().getVirtualNetwork();
+    } catch {
+      return id;
+    }
+    return vn ? vn.unresolveURL(id) : id;
+  }
+
+  realmForId(id: string): string | undefined {
+    let vn: VirtualNetwork | undefined;
+    try {
+      vn = myLoader().getVirtualNetwork();
+    } catch {
+      return undefined;
+    }
+    return vn?.realmForReference(id);
+  }
+
+  // Mirror the host stores' bucket-key fold: every spelling of the same
+  // resource — canonical RRI, virtual/url-mapped alias, real URL — lands on
+  // one key, so a lookup by a card's canonical id finds an instance that was
+  // inserted under its raw URL form (and vice versa). Without this, a repeated
+  // or cyclic relationship misses the already-hydrated instance and reloads a
+  // duplicate instead of terminating at the identity map. Ids that don't
+  // resolve (local ids, or no VirtualNetwork available) key as-is.
+  #storeKey(id: string): string {
     id = id.replace(/\.json$/, '');
-    return this.#instances.get(id);
+    try {
+      let vn = myLoader().getVirtualNetwork();
+      return vn ? vn.toRealURLHref(id) : id;
+    } catch {
+      return id;
+    }
+  }
+
+  getCard(id: string) {
+    return this.#instances.get(this.#storeKey(id));
   }
   getFileMeta(id: string) {
-    id = id.replace(/\.json$/, '');
-    return this.#fileMetaInstances.get(id);
+    return this.#fileMetaInstances.get(this.#storeKey(id));
   }
   setCard(id: string, instance: CardDef) {
-    id = id.replace(/\.json$/, '');
-    return this.#instances.set(id, instance);
+    return this.#instances.set(this.#storeKey(id), instance);
   }
   setFileMeta(id: string, instance: FileDef) {
-    id = id.replace(/\.json$/, '');
-    return this.#fileMetaInstances.set(id, instance);
+    return this.#fileMetaInstances.set(this.#storeKey(id), instance);
   }
   setCardNonTracked(id: string, instance: CardDef) {
-    id = id.replace(/\.json$/, '');
-    return this.#instances.set(id, instance);
+    return this.#instances.set(this.#storeKey(id), instance);
   }
   setFileMetaNonTracked(id: string, instance: FileDef) {
-    id = id.replace(/\.json$/, '');
-    return this.#fileMetaInstances.set(id, instance);
+    return this.#fileMetaInstances.set(this.#storeKey(id), instance);
   }
   makeTracked(_id: string) {}
   trackLoad(load: Promise<unknown>) {
@@ -4423,7 +5204,7 @@ class FallbackCardStore implements CardStore {
     opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
   ) {
     trackRuntimeInstanceDependency(url, opts?.dependencyTrackingContext);
-    let promise = loadCardDocument(fetch, url);
+    let promise = loadCardDocument(fetch, url, this.#requireVirtualNetwork());
     this.trackLoad(promise);
     return await promise;
   }
@@ -4433,7 +5214,11 @@ class FallbackCardStore implements CardStore {
     opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
   ) {
     trackRuntimeFileDependency(url, opts?.dependencyTrackingContext);
-    let promise = loadFileMetaDocument(fetch, url);
+    let promise = loadFileMetaDocument(
+      fetch,
+      url,
+      this.#requireVirtualNetwork(),
+    );
     this.trackLoad(promise);
     return await promise;
   }

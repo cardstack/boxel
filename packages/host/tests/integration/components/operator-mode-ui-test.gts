@@ -95,8 +95,8 @@ module('Integration | operator-mode | ui', function (hooks) {
     await ctx.testRealm.write(
       'file-link-card.gts',
       `
-        import { CardDef, Component, field, contains, linksTo, StringField } from 'https://cardstack.com/base/card-api';
-        import { FileDef } from 'https://cardstack.com/base/file-api';
+        import { CardDef, Component, field, contains, linksTo, StringField } from '@cardstack/base/card-api';
+        import { FileDef } from '@cardstack/base/file-api';
 
         export class FileLinkCard extends CardDef {
           static displayName = 'File Link Card';
@@ -450,6 +450,32 @@ module('Integration | operator-mode | ui', function (hooks) {
       .hasValue(`${testRealmURL}BlogPost/1.json${someRandomText}`);
   });
 
+  test('cards-grid "All Cards" group stays cards-only', async function (assert) {
+    // Search spans card and file rows in one query, but the "All Cards"
+    // group's `not: { eq: { _cardType } }` filter keeps it cards-only:
+    // file rows (module files and the cards' own dual-indexed `.json`)
+    // never carry `_cardType`, so they drop out via NULL semantics.
+    ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await click(`[data-test-boxel-filter-list-button="All Cards"]`);
+    await waitFor(`[data-test-cards-grid-item]`);
+
+    assert
+      .dom(`[data-test-cards-grid-item="${testRealmURL}BlogPost/1"]`)
+      .exists(
+        { count: 1 },
+        'a card appears once — its `.json` file row is not a second grid item',
+      );
+    assert
+      .dom(`[data-test-cards-grid-item="${testRealmURL}blog-post"]`)
+      .doesNotExist('a module file row is not an "All Cards" grid item');
+  });
+
   test(`can open and close search sheet`, async function (assert) {
     ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
@@ -592,8 +618,8 @@ module('Integration | operator-mode | ui', function (hooks) {
     ).length;
     assert.strictEqual(
       allTypeOptions,
-      15,
-      `type picker shows 15 types (got ${allTypeOptions})`,
+      16,
+      `type picker shows 16 types (got ${allTypeOptions})`,
     );
   });
 
@@ -657,7 +683,7 @@ module('Integration | operator-mode | ui', function (hooks) {
       .doesNotExist('select-all checkbox is unchecked after selecting a realm');
   });
 
-  test('clicking outside search sheet resets search input and realm filter', async function (assert) {
+  test('clicking outside search sheet preserves the realm filter', async function (assert) {
     ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -696,22 +722,26 @@ module('Integration | operator-mode | ui', function (hooks) {
     await click(`[data-test-operator-mode-stack]`);
     assert.dom(`[data-test-search-sheet="closed"]`).exists();
 
-    // Reopen search sheet
+    // Reopen search sheet. A realm filter is an active search (the reopen gate
+    // keys on term OR type OR realm), so it reopens straight to the results
+    // view rather than the compact prompt.
     await click(`[data-test-open-search-field]`);
-    assert.dom(`[data-test-search-sheet="search-prompt"]`).exists();
+    assert.dom(`[data-test-search-sheet="search-results"]`).exists();
 
-    // Assert search input is cleared
+    // The realm filter is preserved across a plain close/reopen (only an
+    // explicit Cancel or Escape clears it). Reopen the picker and confirm the
+    // realm is still checked.
+    let reopenedRealmTrigger =
+      document.querySelector(
+        '[data-test-realm-picker] .ember-power-select-trigger',
+      ) ?? document.querySelector('[data-test-realm-picker]');
+    await click(reopenedRealmTrigger as HTMLElement);
+    await waitFor('.ember-power-select-option', { timeout: 3000 });
     assert
-      .dom('[data-test-search-field]')
-      .hasValue('', 'search input is cleared after clicking outside');
-
-    // Assert realm filter is reset — picker trigger should show "All"
-    assert
-      .dom('[data-test-realm-picker] [data-test-boxel-picker-selected-item]')
-      .hasText(
-        'All',
-        'realm filter is reset to select-all after clicking outside',
-      );
+      .dom(
+        `[data-test-boxel-picker-option-label="${ctx.realmName}"] .picker-option-row__checkbox--selected`,
+      )
+      .exists('realm selection is preserved after clicking outside');
   });
 
   test('displays card in interact mode when clicking `Open in Interact Mode` menu in preview panel', async function (assert) {
@@ -932,7 +962,7 @@ module('Integration | operator-mode | ui', function (hooks) {
     );
   });
 
-  test('clicking outside search sheet resets type filter selection', async function (assert) {
+  test('clicking outside search sheet preserves the type filter selection', async function (assert) {
     ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -971,25 +1001,24 @@ module('Integration | operator-mode | ui', function (hooks) {
     await click(`[data-test-operator-mode-stack]`);
     assert.dom(`[data-test-search-sheet="closed"]`).exists();
 
-    // Reopen search sheet
+    // Reopen — the persisted search term brings the sheet straight back to the
+    // results view with the type filter still applied (only an explicit Cancel
+    // or Escape clears it).
     await click(`[data-test-open-search-field]`);
-    assert.dom(`[data-test-search-sheet="search-prompt"]`).exists();
+    assert.dom(`[data-test-search-sheet="search-results"]`).exists();
+    assert
+      .dom('[data-test-search-field]')
+      .hasValue('Mango', 'the search term is preserved after clicking outside');
 
-    // Type filter should be reset — "Any" (select-all) is the only active selection.
-    // The Picker auto-selects the select-all option when @selected is empty, but
-    // select-all items never render a remove button, so its absence confirms no
-    // specific type filter is active.
-    assert
-      .dom('[data-test-type-picker] [data-test-boxel-picker-remove-button]')
-      .doesNotExist(
-        'specific type filter is cleared after closing the search sheet',
-      );
-    assert
-      .dom('[data-test-type-picker] [data-test-boxel-picker-selected-item]')
-      .hasText(
-        'Any',
-        'type picker shows shortLabel "Any" after reset to select-all',
-      );
+    if (typeOptions.length > 0) {
+      // A specific type is still selected — its remove button is present (the
+      // select-all "Any" option never renders one).
+      assert
+        .dom('[data-test-type-picker] [data-test-boxel-picker-remove-button]')
+        .exists(
+          'the type filter selection is preserved after clicking outside',
+        );
+    }
   });
 
   test('type options derived from realm types when no search term, sorted alphabetically', async function (assert) {
@@ -1026,7 +1055,7 @@ module('Integration | operator-mode | ui', function (hooks) {
     assert
       .dom('[data-test-boxel-picker-option-row="select-all"]')
       .containsText(
-        'Any Type (16)',
+        'Any Type (17)',
         'select-all shows count of all realm types',
       );
 
@@ -1087,7 +1116,7 @@ module('Integration | operator-mode | ui', function (hooks) {
     assert
       .dom('[data-test-boxel-picker-option-row="select-all"]')
       .containsText(
-        'Any Type (16)',
+        'Any Type (17)',
         'select-all shows count of all realm types',
       );
 
@@ -1096,7 +1125,7 @@ module('Integration | operator-mode | ui', function (hooks) {
     );
     assert.strictEqual(
       nonSelectAllOptions.length,
-      15,
+      16,
       'all realm types are shown even without recent cards',
     );
   });
@@ -1521,7 +1550,7 @@ module('Integration | operator-mode | ui', function (hooks) {
       assert
         .dom('[data-test-boxel-picker-option-row="select-all"]')
         .containsText(
-          'Any Type (16)',
+          'Any Type (17)',
           'select-all shows total count from API, not loaded options count',
         );
     } finally {

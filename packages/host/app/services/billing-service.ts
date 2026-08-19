@@ -13,7 +13,7 @@ import {
 import type MatrixService from './matrix-service';
 import type NetworkService from './network';
 import type RealmServerService from './realm-server';
-import type ResetService from './reset';
+import type SessionService from './session';
 
 interface SubscriptionData {
   plan: string | null;
@@ -34,7 +34,7 @@ export default class BillingService extends Service {
 
   @service declare private realmServer: RealmServerService;
   @service declare private network: NetworkService;
-  @service declare private reset: ResetService;
+  @service declare private session: SessionService;
   @service declare private matrixService: MatrixService;
 
   constructor(owner: Owner) {
@@ -43,11 +43,30 @@ export default class BillingService extends Service {
       'billing-notification',
       this.loadSubscriptionData.bind(this),
     );
-    this.reset.register(this);
+    this.session.register(this);
   }
 
   resetState() {
     this._subscriptionData = null;
+  }
+
+  sessionStarted() {
+    // resetState() clears the session-scoped subscription data on logout.
+    // Repopulate it eagerly on re-login rather than waiting for the next
+    // billing-notification push or a component re-mount. Fire-and-forget with
+    // an explicit catch: the SessionService broadcast's try/catch only guards
+    // synchronous throws, so an unhandled fetch rejection would otherwise
+    // escape here.
+    //
+    // On a cold boot this can issue a second /_user fetch alongside the index
+    // route's initializeSubscriptionData(). That duplicate is accepted, not a
+    // bug to coalesce away: this eager load is what repopulates the cleared
+    // data on re-login, where the index route's model() may not re-run.
+    // Coalescing was tried and reverted (it regressed the profile popover to
+    // stale credits) — see the note on loadSubscriptionData().
+    this.loadSubscriptionData().catch((e) => {
+      console.error('Failed to load subscription data on session start', e);
+    });
   }
 
   get extraCreditsPricingFormatted() {
@@ -126,6 +145,18 @@ export default class BillingService extends Service {
     });
   }
 
+  // Always fetches fresh: consumers reload on a billing-notification push, on a
+  // reload after an out-of-credits message, and on every profile-popover mount,
+  // each of which must observe current server state rather than a cached value.
+  //
+  // Deliberately NOT coalesced into a single in-flight request. Coalescing was
+  // tried and reverted: <WithSubscriptionData/> only mounts inside the profile
+  // popover / settings modal (both closed at boot, so there is no boot
+  // double-fetch to dedupe), and routing its mount through a coalesced/
+  // present-or-load path made the popover early-return on stale data and show
+  // outdated credits after a billing-notification push. Keep this fetching
+  // fresh; if you need a boot-time "load once" guard, that belongs in
+  // initializeSubscriptionData(), not here.
   async loadSubscriptionData() {
     this._loadingSubscriptionData = true;
     try {

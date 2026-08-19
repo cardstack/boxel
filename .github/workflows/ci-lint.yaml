@@ -14,6 +14,10 @@ on:
     paths-ignore:
       - "packages/observability/**"
 
+concurrency:
+  group: ci-lint-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
 permissions:
   checks: write
   contents: read
@@ -47,20 +51,28 @@ jobs:
       - name: Lint Boxel UI
         if: ${{ !cancelled() }}
         run: pnpm run lint
-        working-directory: packages/boxel-ui/addon
+        working-directory: packages/boxel-ui
+      - name: Lint Host
+        # Runs BEFORE Build Boxel UI so host type-checks against the Boxel UI
+        # source, exactly as local development does (declarations/ is never
+        # built locally). This also guards against declaration-emit
+        # regressions: an unresolvable import inside a .d.ts is silently
+        # suppressed under skipLibCheck and degrades every Boxel UI symbol to
+        # `any`, turning the host type check into a no-op (the emitted
+        # declaration import specifiers are rewritten by addon.declarations()
+        # in boxel-ui's rollup.config.mjs).
+        if: ${{ !cancelled() }}
+        run: pnpm run lint
+        working-directory: packages/host
       - name: Build Boxel UI
         # To faciliate linting of projects that depend on Boxel UI
         if: ${{ !cancelled() }}
         run: pnpm run build
-        working-directory: packages/boxel-ui/addon
+        working-directory: packages/boxel-ui
       - name: Lint Boxel UI Test App
         if: ${{ !cancelled() }}
         run: pnpm run lint
-        working-directory: packages/boxel-ui/test-app
-      - name: Lint Host
-        if: ${{ !cancelled() }}
-        run: pnpm run lint
-        working-directory: packages/host
+        working-directory: packages/boxel-ui/docs-app
       - name: Lint Matrix
         if: ${{ !cancelled() }}
         run: pnpm run lint
@@ -117,3 +129,7 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/boxel-cli
+      - name: Lint BXL
+        if: ${{ !cancelled() }}
+        run: pnpm run lint
+        working-directory: packages/bxl

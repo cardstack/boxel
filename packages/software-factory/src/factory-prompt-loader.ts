@@ -8,13 +8,13 @@ import type {
   ResolvedSkill,
   ToolManifest,
   ToolResult,
-} from './factory-agent';
+} from './factory-agent/index.ts';
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-const PROMPTS_DIR = resolve(__dirname, '../prompts');
+const PROMPTS_DIR = resolve(import.meta.dirname, '../prompts');
 
 // ---------------------------------------------------------------------------
 // PromptLoader
@@ -325,12 +325,6 @@ export interface AssembleIteratePromptOptions {
   loader: PromptLoader;
 }
 
-export interface AssembleTestPromptOptions {
-  context: AgentContext;
-  implementedFiles: { path: string; content: string; realm: string }[];
-  loader: PromptLoader;
-}
-
 /**
  * Build tool results data with outputFormat propagated from tool manifests.
  * Shared between assembleImplementPrompt and assembleIteratePrompt.
@@ -423,6 +417,29 @@ export function assembleSystemPrompt(
  * Includes tool results when present (e.g., after invoke_tool actions
  * from a prior plan() call that returned tool invocations before implementation).
  */
+/**
+ * Issue types that FIX broken behavior on a card that already shipped
+ * (as opposed to building a new one). These skip the design round — no
+ * mockups, no critique — and use the diagnose-and-fix prompt. Defects filed
+ * by the acceptance walkthrough carry `defect`; the rest are defensive
+ * synonyms a bootstrap agent might emit.
+ */
+const BUG_FIX_ISSUE_TYPES = new Set([
+  'defect',
+  'bug',
+  'regression',
+  'hotfix',
+  'fix',
+]);
+
+/** True for a bug-fix issue — see BUG_FIX_ISSUE_TYPES. */
+export function isBugFixIssue(
+  issue: { issueType?: string } | undefined,
+): boolean {
+  let t = issue?.issueType;
+  return typeof t === 'string' && BUG_FIX_ISSUE_TYPES.has(t.toLowerCase());
+}
+
 export function assembleImplementPrompt(
   options: AssembleImplementPromptOptions,
 ): string {
@@ -430,7 +447,18 @@ export function assembleImplementPrompt(
 
   let toolResultsData = buildToolResultsData(context);
 
-  return loader.load('issue-implement', {
+  // Prompt selection. Bug-fix issues take a diagnose-and-fix prompt with no
+  // design round (the card already shipped; only its behavior is broken).
+  // Otherwise, phase-split gives the design and build turns dedicated
+  // prompts; an unsplit turn keeps the combined design-first prompt.
+  let template = isBugFixIssue(context.issue as { issueType?: string })
+    ? 'issue-fix'
+    : context.phase === 'design'
+      ? 'issue-design'
+      : context.phase === 'build'
+        ? 'issue-build'
+        : 'issue-implement';
+  return loader.load(template, {
     project: context.project,
     issue: context.issue,
     knowledge: context.knowledge,
@@ -448,21 +476,12 @@ export function assembleBootstrapPrompt(
 ): string {
   let { context, loader } = options;
 
+  // The bootstrap prompt strips the QUnit/test requirements — the per-issue
+  // pipeline runs no tests, and baking them into issue descriptions made
+  // agents write .test.gts despite the skill's no-tests hard rule.
   return loader.load('bootstrap-implement', {
     briefUrl: context.briefUrl,
     issue: context.issue,
-  });
-}
-
-/**
- * Assemble the user prompt for a test generation pass.
- */
-export function assembleTestPrompt(options: AssembleTestPromptOptions): string {
-  let { context, implementedFiles, loader } = options;
-
-  return loader.load('issue-test', {
-    issue: context.issue,
-    implementedFiles,
   });
 }
 

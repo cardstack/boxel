@@ -4,6 +4,7 @@ import { TrackedMap } from 'tracked-built-ins';
 
 import {
   isPrimitive,
+  isCardError,
   isCardInstance,
   isFileDefInstance,
   isBaseInstance,
@@ -11,7 +12,6 @@ import {
   localId as localIdSymbol,
   loadCardDocument,
   loadFileMetaDocument,
-  rri,
   trackRuntimeFileDependency,
   trackRuntimeInstanceDependency,
   logger,
@@ -23,6 +23,7 @@ import {
   type CardError,
   type SingleCardDocument,
   type SingleFileMetaDocument,
+  type VirtualNetwork,
 } from '@cardstack/runtime-common';
 
 import type {
@@ -33,9 +34,9 @@ import type {
   QueryLoadInfo,
   QueryLoadMeta,
   StoreSearchResource,
-} from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
+} from '@cardstack/base/card-api';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type { FileDef } from '@cardstack/base/file-api';
 
 export type ReferenceCount = Map<string, number>;
 
@@ -72,10 +73,6 @@ type StoreHooks = {
     },
   ): StoreSearchResource<T>;
 };
-
-function isCardOrFileInstance(item: unknown): item is StoredInstance {
-  return isCardInstance(item) || isFileDefInstance(item);
-}
 
 // we use this 2 way mapping between local ID and remote ID because if we end up
 // trying to search thru all the entries in a single direction Map to find the
@@ -158,6 +155,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   #referenceCount: ReferenceCount;
   #idResolver = new IDResolver();
   #fetch: typeof globalThis.fetch;
+  #virtualNetwork: VirtualNetwork;
   #inFlight: Set<Promise<unknown>> = new Set();
   #loadGeneration = 0; // increments whenever a new load is tracked
   #nextLoadId = 1;
@@ -188,21 +186,173 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   // ones piling up in a fan-out.
   #cardDocStartedAt: Map<string, number> = new Map();
   #fileMetaStartedAt: Map<string, number> = new Map();
-  // Bounded "top-slowest" history of completed doc loads.
-  #recentCardDocLoads: Array<{ url: string; ms: number }> = [];
+  // Bounded "top-slowest" history of completed doc loads. Card-doc entries
+  // carry the load outcome so a consumer (client-telemetry's card-load event)
+  // can flag which of the slowest loads resolved to a card error rather than a
+  // card instance.
+  #recentCardDocLoads: Array<{
+    url: string;
+    ms: number;
+    outcome: 'ok' | 'error';
+    // Load generation at completion, so a consumer can scope entries to a window
+    // (e.g. client-telemetry's per-card-load slowest-loads list).
+    generation: number;
+  }> = [];
   #recentFileMetaLoads: Array<{ url: string; ms: number }> = [];
   static #MAX_DIAGNOSTIC_HISTORY = 20;
+
+  // ── Job-scoped wire-document cache ─────────────────────────────────────
+  // Successful card-source / file-meta documents fetched during an indexing
+  // render, keyed by URL and scoped to the indexing job identity
+  // (`__boxelJobId`), so a shared link target (one Policy referenced by
+  // hundreds of Claims) fetches once per job instead of once per
+  // referencing card. The identity map already short-circuits most repeat
+  // loads while a target instance stays resident; this cache covers the
+  // window after the GC sweep evicts an unreferenced target, turning its
+  // re-load into a local deserialize instead of a network round-trip.
+  //
+  // Staleness contract — one consistent view of every target per job. For
+  // the indexed realm's own files this is exact: the job serializes with
+  // that realm's writes, and a mid-job write is picked up by the follow-up
+  // job its invalidation enqueues. A cross-realm target CAN change mid-job,
+  // and the cache pins the version first observed — deliberately, matching
+  // the job-scoped instance reuse in the link getter's lazy-load path,
+  // which pins any target the moment its instance enters the store. The
+  // delta this cache adds is bounded to the job: only a post-GC-eviction
+  // re-load could have observed a newer cross-realm version mid-job, and
+  // one pinned version beats mixing pre- and post-write versions across a
+  // single job's rows. Across jobs nothing changes: entries die with the
+  // job, and cross-realm freshness between jobs is governed by what
+  // re-indexes the consumer (dep-driven invalidation fans out within a
+  // realm; a consumer of a peer realm's card is refreshed by its own
+  // realm's next index of it). This is a looser gate than the resolved-doc
+  // search cache's same-realm-only rule because the pinned unit is
+  // narrower: a document fetched by URL, not a query result whose
+  // membership can silently change under a peer realm's swap.
+  //
+  // Gated to prerender + job id, cleared the first time a different job id
+  // is observed, never consulted by the live app.
+  #jobScopedDocCache = new Map<
+    string,
+    SingleCardDocument | SingleFileMetaDocument
+  >();
+  #jobScopedDocCacheJobId: string | undefined;
+  // Bumped on every clear (the jobId-change clear and `reset()`). A load
+  // captures this alongside its cache key and skips its populate when the
+  // generation moved while the fetch was in flight — a document fetched
+  // under one job must not seed the next job's cache, whose realm sources
+  // may differ.
+  #jobScopedDocCacheGeneration = 0;
+  // Entry cap keeps a tab's memory flat on very large realms. The benchmark
+  // insurance realm (885 instances) shows ~255 distinct shared link targets
+  // per from-scratch job, so this holds several such working sets; beyond
+  // it, least-recently-used entries fall out first (Map iteration order is
+  // insertion order and hits re-insert), which preserves the hot shared
+  // targets that make the cache worthwhile. Public so the eviction test can
+  // size its fill against the real cap.
+  static MAX_JOB_SCOPED_DOC_CACHE_ENTRIES = 2048;
+
+  // Resolve the cache slot for a document load: undefined outside an
+  // indexing render (no `__boxelRenderContext`/`__boxelJobId`), so the live
+  // app and job-less renders never read or write the cache. Observing a
+  // different job id than the held one drops the previous job's entries —
+  // the entry-time clear that covers a prerender tab reused across jobs
+  // without any harder reset in between. The kind prefix keeps a card URL
+  // and a file-meta URL with the same string from sharing a slot.
+  #jobScopedDocCacheKey(
+    kind: 'card' | 'file',
+    url: string,
+  ): string | undefined {
+    let g = globalThis as unknown as {
+      __boxelRenderContext?: boolean;
+      __boxelJobId?: string;
+    };
+    if (g.__boxelRenderContext !== true || typeof g.__boxelJobId !== 'string') {
+      return undefined;
+    }
+    if (g.__boxelJobId !== this.#jobScopedDocCacheJobId) {
+      this.#jobScopedDocCache.clear();
+      this.#jobScopedDocCacheJobId = g.__boxelJobId;
+      this.#jobScopedDocCacheGeneration++;
+    }
+    return `${kind}:${url}`;
+  }
+
+  #readJobScopedDoc(
+    key: string,
+  ): SingleCardDocument | SingleFileMetaDocument | undefined {
+    let doc = this.#jobScopedDocCache.get(key);
+    if (doc === undefined) {
+      return undefined;
+    }
+    // LRU touch — re-insertion moves the entry behind the eviction horizon.
+    this.#jobScopedDocCache.delete(key);
+    this.#jobScopedDocCache.set(key, doc);
+    // Hand out a copy: consumers deserialize from (and may normalize) the
+    // returned document, and a shared mutable doc would leak one consumer's
+    // mutation into the next hit.
+    return structuredClone(doc);
+  }
+
+  #writeJobScopedDoc(
+    key: string,
+    doc: SingleCardDocument | SingleFileMetaDocument,
+  ): void {
+    // Store a private copy for the same mutation-isolation reason reads
+    // clone: the object returned to the fetching caller stays theirs.
+    this.#jobScopedDocCache.set(key, structuredClone(doc));
+    if (
+      this.#jobScopedDocCache.size >
+      CardStoreWithGarbageCollection.MAX_JOB_SCOPED_DOC_CACHE_ENTRIES
+    ) {
+      let oldest = this.#jobScopedDocCache.keys().next().value;
+      if (oldest !== undefined) {
+        this.#jobScopedDocCache.delete(oldest);
+      }
+    }
+  }
 
   #storeHooks: StoreHooks | undefined;
 
   constructor(
     referenceCount: ReferenceCount,
     fetch: typeof globalThis.fetch,
+    virtualNetwork: VirtualNetwork,
     storeHooks?: StoreHooks,
   ) {
     this.#referenceCount = referenceCount;
     this.#fetch = fetch;
+    this.#virtualNetwork = virtualNetwork;
     this.#storeHooks = storeHooks;
+  }
+
+  resolveURL(reference: string, base?: string): URL | undefined {
+    try {
+      return this.#virtualNetwork.resolveURL(reference, base);
+    } catch {
+      return undefined;
+    }
+  }
+
+  canonicalizeId(id: string): string {
+    return this.#virtualNetwork.unresolveURL(id);
+  }
+
+  realmForId(id: string): string | undefined {
+    return this.#virtualNetwork.realmForReference(id);
+  }
+
+  // Normalize an id to the store's bucket-key form. Mirrors `store.ts`'s
+  // `asURL` exactly (locals as-is; remotes folded via `toRealURLHref`) so the
+  // buckets key the same way the StoreService does — an RRI card id, its
+  // virtual/url-mapped alias, and the real URL all collapse to one key. NOT
+  // `unresolveURL`: that yields RRI for a prefix-mapped realm but leaves a
+  // url-mapped/virtual alias as-is, which disagrees with `asURL` and splits keys.
+  #storeKey(id: string): string {
+    if (isLocalId(id)) {
+      return id;
+    }
+    return this.#virtualNetwork.toRealURLHref(id);
   }
 
   getCard(id: string): CardDef | undefined {
@@ -235,20 +385,55 @@ export default class CardStoreWithGarbageCollection implements CardStore {
 
   async loadCardDocument(
     url: string,
-    opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
+    opts?: {
+      dependencyTrackingContext?: RuntimeDependencyTrackingContext;
+      untracked?: true;
+    },
   ) {
+    // Dependency tracking runs on every call — a cache hit is still a
+    // consumption of the target, and invalidation must record the edge.
     trackRuntimeInstanceDependency(url, opts?.dependencyTrackingContext);
+    let cacheKey = this.#jobScopedDocCacheKey('card', url);
+    let cacheGeneration = this.#jobScopedDocCacheGeneration;
+    if (cacheKey !== undefined) {
+      let cached = this.#readJobScopedDoc(cacheKey);
+      if (cached !== undefined) {
+        return cached as SingleCardDocument;
+      }
+    }
     let promise = this.#cardDocsInFlight.get(url);
     if (promise) {
-      this.trackLoad(promise);
+      if (!opts?.untracked) {
+        this.trackLoad(promise);
+      }
       return await promise;
     }
-    promise = loadCardDocument(this.#fetch, url);
+    promise = loadCardDocument(this.#fetch, url, this.#virtualNetwork);
     this.#cardDocsInFlight.set(url, promise);
     this.#cardDocStartedAt.set(url, Date.now());
-    this.trackLoad(promise);
+    if (!opts?.untracked) {
+      this.trackLoad(promise);
+    }
+    // Assume failure until the load resolves to a non-error document; a
+    // rejected promise leaves this 'error' for the diagnostic history.
+    let outcome: 'ok' | 'error' = 'error';
     try {
-      return await promise;
+      let doc = await promise;
+      outcome = isCardError(doc) ? 'error' : 'ok';
+      // Cache successful documents only: an error result may be transient
+      // (an auth hiccup, a fetch failure), and the broken-link degradation
+      // path stays live rather than pinned for the job. The generation check
+      // skips the populate when the cache was cleared while this fetch was
+      // in flight — the resolved document belongs to the job that started
+      // the load, not the one now holding the cache.
+      if (
+        cacheKey !== undefined &&
+        this.#jobScopedDocCacheGeneration === cacheGeneration &&
+        !isCardError(doc)
+      ) {
+        this.#writeJobScopedDoc(cacheKey, doc);
+      }
+      return doc;
     } finally {
       let startedAt = this.#cardDocStartedAt.get(url);
       this.#cardDocsInFlight.delete(url);
@@ -257,6 +442,8 @@ export default class CardStoreWithGarbageCollection implements CardStore {
         this.#recordDiagnosticHistory(this.#recentCardDocLoads, {
           url,
           ms: Date.now() - startedAt,
+          outcome,
+          generation: this.#loadGeneration,
         });
       }
     }
@@ -264,20 +451,46 @@ export default class CardStoreWithGarbageCollection implements CardStore {
 
   async loadFileMetaDocument(
     url: string,
-    opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
+    opts?: {
+      dependencyTrackingContext?: RuntimeDependencyTrackingContext;
+      untracked?: true;
+    },
   ): Promise<SingleFileMetaDocument | CardError> {
+    // Same shape as `loadCardDocument` above: dependency tracking on every
+    // call, job-scoped cache consulted before the in-flight map, successes
+    // cached, `untracked` skips the load-generation registration.
     trackRuntimeFileDependency(url, opts?.dependencyTrackingContext);
+    let cacheKey = this.#jobScopedDocCacheKey('file', url);
+    let cacheGeneration = this.#jobScopedDocCacheGeneration;
+    if (cacheKey !== undefined) {
+      let cached = this.#readJobScopedDoc(cacheKey);
+      if (cached !== undefined) {
+        return cached as SingleFileMetaDocument;
+      }
+    }
     let promise = this.#fileMetaDocsInFlight.get(url);
     if (promise) {
-      this.trackLoad(promise);
+      if (!opts?.untracked) {
+        this.trackLoad(promise);
+      }
       return await promise;
     }
-    promise = loadFileMetaDocument(this.#fetch, url);
+    promise = loadFileMetaDocument(this.#fetch, url, this.#virtualNetwork);
     this.#fileMetaDocsInFlight.set(url, promise);
     this.#fileMetaStartedAt.set(url, Date.now());
-    this.trackLoad(promise);
+    if (!opts?.untracked) {
+      this.trackLoad(promise);
+    }
     try {
-      return await promise;
+      let doc = await promise;
+      if (
+        cacheKey !== undefined &&
+        this.#jobScopedDocCacheGeneration === cacheGeneration &&
+        !isCardError(doc)
+      ) {
+        this.#writeJobScopedDoc(cacheKey, doc);
+      }
+      return doc;
     } finally {
       let startedAt = this.#fileMetaStartedAt.get(url);
       this.#fileMetaDocsInFlight.delete(url);
@@ -318,7 +531,12 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     }
     return out;
   }
-  recentCardDocLoads(): Array<{ url: string; ms: number }> {
+  recentCardDocLoads(): Array<{
+    url: string;
+    ms: number;
+    outcome: 'ok' | 'error';
+    generation: number;
+  }> {
     return [...this.#recentCardDocLoads];
   }
   recentFileMetaLoads(): Array<{ url: string; ms: number }> {
@@ -456,6 +674,40 @@ export default class CardStoreWithGarbageCollection implements CardStore {
       this.getCardItem('error', id)) as T | CardErrorJSONAPI | undefined;
   }
 
+  // All hydrated (non-error) card instances currently in the identity map.
+  // Reads the tracked `#cardInstances` map, so a caller that consumes the
+  // result inside an autotracked computation re-runs when an instance is
+  // added or removed — the candidate set for the client-side search filter.
+  // Field-level edits to an already-present instance don't change the map;
+  // those are surfaced separately by StoreService's mutation-version signal.
+  //
+  // A single instance is keyed under both its local and remote id (see
+  // setCardItem), so the map yields it more than once; collapse to a unique
+  // set so the candidate pool never contains the same card twice.
+  allCardInstances(): CardDef[] {
+    let result = new Set<CardDef>();
+    for (let instance of this.#cardInstances.values()) {
+      if (isCardInstance(instance)) {
+        result.add(instance);
+      }
+    }
+    return [...result];
+  }
+
+  // The file-meta counterpart of `allCardInstances`, reading the tracked
+  // `#fileMetaInstances` map so file-meta searches get the same client-side
+  // candidate set as card searches. Deduped to a unique set for the same
+  // reason — an instance can appear under more than one key.
+  allFileMetaInstances(): FileDef[] {
+    let result = new Set<FileDef>();
+    for (let instance of this.#fileMetaInstances.values()) {
+      if (isFileDefInstance(instance)) {
+        result.add(instance);
+      }
+    }
+    return [...result];
+  }
+
   addFileMetaInstanceOrError(
     id: string,
     instanceOrError: FileDef | CardErrorJSONAPI,
@@ -477,7 +729,19 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   }
 
   delete(id: string): void {
-    id = id.replace(/\.json$/, '');
+    // A `.json` url addresses the file-meta identity, never a card: card ids
+    // never carry an extension, while file-meta keeps its `.json`. The two
+    // share a stem (e.g. the card `…/realm` and its `…/realm.json` file — every
+    // card has a backing `.json`), so deleting the file must remove only the
+    // file-meta row. Stripping `.json` and running the card-identity logic
+    // below on the result would evict the same-named card.
+    if (/\.json$/.test(id)) {
+      this.#gcCandidates.delete(id);
+      this.deleteFileMeta(id);
+      return;
+    }
+    // Match the store's bucket-key form so a delete by any spelling clears it.
+    id = this.#storeKey(id);
     let localId = isLocalId(id) ? id : undefined;
     let remoteId = !isLocalId(id) ? id : undefined;
 
@@ -535,6 +799,14 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     this.#recentQueryLoads.length = 0;
     this.#recentCardDocLoads.length = 0;
     this.#recentFileMetaLoads.length = 0;
+    // The job-scoped doc cache holds wire documents, which module changes
+    // don't invalidate — but a store reset is a hard identity boundary, and
+    // holding entries across one risks serving a document whose realm state
+    // the resetter deliberately discarded. The generation bump makes any
+    // in-flight load skip its populate on resolve.
+    this.#jobScopedDocCache.clear();
+    this.#jobScopedDocCacheJobId = undefined;
+    this.#jobScopedDocCacheGeneration++;
     this.#idResolver.reset();
   }
 
@@ -666,7 +938,10 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   }
 
   makeTracked(remoteId: string) {
-    remoteId = remoteId.replace(/\.json$/, '');
+    // File-meta is keyed by the full URL; card buckets by the stripped,
+    // store-key form (see getCardItem / setCardItem).
+    let fileMetaId = remoteId;
+    remoteId = this.#storeKey(remoteId.replace(/\.json$/, ''));
     let instance = this.#nonTrackedCardInstances.get(remoteId);
     if (instance) {
       this.setCardItem(remoteId, instance);
@@ -679,17 +954,17 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     }
     this.#nonTrackedCardInstanceErrors.delete(remoteId);
 
-    let fileMetaInstance = this.#nonTrackedFileMetaInstances.get(remoteId);
+    let fileMetaInstance = this.#nonTrackedFileMetaInstances.get(fileMetaId);
     if (fileMetaInstance) {
-      this.setFileMetaItem(remoteId, fileMetaInstance);
+      this.setFileMetaItem(fileMetaId, fileMetaInstance);
     }
-    this.#nonTrackedFileMetaInstances.delete(remoteId);
+    this.#nonTrackedFileMetaInstances.delete(fileMetaId);
 
-    let fileMetaError = this.#nonTrackedFileMetaInstanceErrors.get(remoteId);
+    let fileMetaError = this.#nonTrackedFileMetaInstanceErrors.get(fileMetaId);
     if (fileMetaError) {
-      this.addFileMetaInstanceOrError(remoteId, fileMetaError);
+      this.addFileMetaInstanceOrError(fileMetaId, fileMetaError);
     }
-    this.#nonTrackedFileMetaInstanceErrors.delete(remoteId);
+    this.#nonTrackedFileMetaInstanceErrors.delete(fileMetaId);
   }
 
   consumersOf(api: typeof CardAPI, instance: CardDef) {
@@ -709,11 +984,25 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   }
 
   private deleteFromAll(id: string) {
-    id = id.replace(/\.json$/, '');
+    // `.json` deletes are routed to `deleteFileMeta` (a same-named card must
+    // not be evicted), so `id` here never carries a `.json` extension — the
+    // only ids that reach this are card ids/localIds and non-`.json` file urls
+    // (e.g. `…/x.png`). For those the card id and the file-meta key are
+    // identical, so one key clears both bucket sets.
     this.#cardInstances.delete(id);
     this.#cardInstanceErrors.delete(id);
     this.#nonTrackedCardInstances.delete(id);
     this.#nonTrackedCardInstanceErrors.delete(id);
+    this.#fileMetaInstances.delete(id);
+    this.#fileMetaInstanceErrors.delete(id);
+    this.#nonTrackedFileMetaInstances.delete(id);
+    this.#nonTrackedFileMetaInstanceErrors.delete(id);
+  }
+
+  // Delete only the file-meta buckets, keyed by the full URL (extension
+  // included). Used for `.json` deletes so a same-named card — e.g. the realm
+  // config card `…/realm` vs its `…/realm.json` file — is left intact.
+  private deleteFileMeta(id: string) {
     this.#fileMetaInstances.delete(id);
     this.#fileMetaInstanceErrors.delete(id);
     this.#nonTrackedFileMetaInstances.delete(id);
@@ -727,6 +1016,10 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     id: string,
   ): CardDef | CardErrorJSONAPI | undefined {
     id = id.replace(/\.json$/, '');
+    // Key card instances by the store-key form so a lookup lands regardless of
+    // the caller's spelling (a card's own RRI id, its resolved URL, or a
+    // url-mapped alias). File-meta buckets keep URL keys (handled separately).
+    id = this.#storeKey(id);
     let { item, localId } = this.tryFindingCardItem(type, id);
 
     if (!item && isLocalId(id)) {
@@ -751,7 +1044,10 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     type: 'instance' | 'error',
     id: string,
   ): FileDef | CardErrorJSONAPI | undefined {
-    id = id.replace(/\.json$/, '');
+    // File-meta rows are keyed by their full URL, extension included — unlike
+    // card ids, which never carry one. Stripping `.json` here would collapse a
+    // `…/x.json` FileDef onto the card id `…/x`, so a `.json` file that is also
+    // a card (e.g. a realm config) would misread as the other identity.
     let bucket =
       type === 'instance'
         ? this.#fileMetaInstances
@@ -789,14 +1085,18 @@ export default class CardStoreWithGarbageCollection implements CardStore {
       }
 
       localId = this.#idResolver.getLocalId(remoteId);
-      // try correlating the last part of the URL with a local ID to handle
-      // the scenario where the instance has a newly assigned remote id
+      // Correlate the last segment of the remote URL with a local ID to find an
+      // instance that was created locally and has since been given a remote id
+      // the resolver doesn't know about yet. This is a pure lookup: it does NOT
+      // reconcile the instance's `id` to the remote id, because it runs inside
+      // render-time reads (`store.peek`) and writing the tracked `id` mid-render
+      // trips Glimmer's backtracking re-render assertion. Identity reconciliation
+      // happens when the store learns the remote id out of band — at the realm
+      // invalidation event (StoreService.handleInvalidations) and the
+      // save/deserialize flow (api.setId / updateFromSerialized).
       if (!localId) {
         localId = remoteId.split('/').pop()!;
         item = bucket.get(localId) ?? silentBucket.get(localId);
-        if (item && type === 'instance' && isCardOrFileInstance(item)) {
-          item.id = rri(remoteId);
-        }
       }
     }
 
@@ -817,6 +1117,8 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     notTracked?: true,
   ) {
     id = id.replace(/\.json$/, '');
+    // Match the store-key form used by getCardItem so set/get agree.
+    id = this.#storeKey(id);
     let cardBucket = notTracked
       ? this.#nonTrackedCardInstances
       : this.#cardInstances;
@@ -893,7 +1195,8 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     item: StoredInstance | CardErrorJSONAPI,
     notTracked?: true,
   ) {
-    id = id.replace(/\.json$/, '');
+    // Key by the full URL (extension included). See getFileMetaItem: collapsing
+    // `…/x.json` onto `…/x` would collide with the card id `…/x`.
     let instanceBucket = notTracked
       ? this.#nonTrackedFileMetaInstances
       : this.#fileMetaInstances;
@@ -1032,10 +1335,10 @@ function findInstances(
   if (isFileDefInstance(obj)) {
     return [obj];
   }
-  if (
-    (obj as { type?: unknown; reference?: unknown }).type === 'not-loaded' &&
-    typeof (obj as { reference?: unknown }).reference === 'string'
-  ) {
+  // A sentinel in the bucket (not-loaded / link-error / link-not-found) is
+  // never an instance and never owns instance references — skip the recursion
+  // so its `errorDoc` and `reference` fields are not walked as a generic object.
+  if (api.isNonPresentLink(obj)) {
     return [];
   }
   if (isBaseDefInstance(obj)) {

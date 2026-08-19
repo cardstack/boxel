@@ -13,7 +13,6 @@ import {
   REPLACE_MARKER,
   SEARCH_MARKER,
   SEPARATOR_MARKER,
-  baseRealm,
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
@@ -30,6 +29,7 @@ import {
   setupOnSave,
   getMonacoContent,
   setupOperatorModeStateCleanup,
+  realmConfigCardJSON,
 } from '../../../helpers';
 import {
   CardDef,
@@ -61,7 +61,7 @@ module('Integration | ai-assistant-panel | codeblocks', function (hooks) {
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -89,6 +89,7 @@ module('Integration | ai-assistant-panel | codeblocks', function (hooks) {
       if (url.toString() === 'https://example.com/component.gts') {
         return {
           status: 200,
+          contentType: 'application/vnd.card+source',
           content: `import Component from '@glimmer/component';
 
 export default class MyComponent extends Component {
@@ -106,6 +107,7 @@ export default class MyComponent extends Component {
       }
       return {
         status: 404,
+        contentType: null,
         content: '',
       };
     };
@@ -167,7 +169,7 @@ export default class MyComponent extends Component {
             country: 'Indonesia',
           }),
         }),
-        '.realm.json': `{ "name": "${realmName}" }`,
+        'realm.json': realmConfigCardJSON({ name: realmName }),
       },
     });
 
@@ -433,7 +435,23 @@ const data = {
       'Monaco content should exactly match the HTML code block',
     );
 
-    await waitUntil(() => document.getElementsByClassName('view-lines')[1]);
+    // Monaco paints its virtualized `view-lines` asynchronously and outside
+    // Ember's settledness tracking, so the second editor's container can be in
+    // the DOM while only its first line ("// existing code ... ") has rendered.
+    // Wait for that container to exist, then best-effort for all of its lines
+    // to paint; if painting stalls, fall through so the assertion below reports
+    // whatever did render instead of throwing on a missing element.
+    await waitUntil(
+      () => document.getElementsByClassName('view-lines').length > 1,
+    );
+    try {
+      await waitUntil(() => {
+        let secondEditor = document.getElementsByClassName('view-lines')[1];
+        return secondEditor.querySelectorAll('.view-line').length > 4;
+      });
+    } catch {
+      // best-effort — the assertion below surfaces a partial render
+    }
     assert.strictEqual(
       (document.getElementsByClassName('view-lines')[1] as HTMLElement)
         .innerText,
@@ -649,8 +667,6 @@ Above code blocks are now complete`;
     assert.dom('.code-block-diff .editor.original').exists();
     assert.dom('.code-block-diff .editor.modified').exists();
     assert.dom('[data-test-apply-code-button]').exists();
-
-    await percySnapshot(assert);
   });
 
   test('it will render diff editor for a blank file', async function (assert) {

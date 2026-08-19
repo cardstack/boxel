@@ -5,8 +5,11 @@
 //
 // Import this for side effects at the top of each node entry point.
 
+import { createRequire } from 'module';
+
 if (process.env.BOXEL_WTFNODE === '1') {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  // `require` doesn't exist in ESM scope; recreate it for this lazy, opt-in load.
+  const require = createRequire(import.meta.url);
   const wtfnode = require('wtfnode');
   const tag =
     (process.argv[1] || 'node').split('/').pop() + `(pid=${process.pid})`;

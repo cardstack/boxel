@@ -21,6 +21,17 @@ on:
         description: Commit SHA the calling run is targeting
         required: true
         type: string
+      pr-number:
+        description: >-
+          PR number the calling run is targeting. Pass this whenever the
+          caller has it (i.e. on pull_request events) so the freshness check
+          uses the triggering PR directly. A single commit can be the head of
+          more than one open PR, so resolving the PR from the SHA alone is
+          ambiguous. Empty for non-PR (push) builds, which fall back to
+          SHA-based resolution.
+        required: false
+        type: string
+        default: ""
       slots:
         description: Space-separated list of slot names this invocation refreshes
         required: true
@@ -44,9 +55,17 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           SHA: ${{ inputs.head-sha }}
+          PR_NUMBER: ${{ inputs.pr-number }}
         run: |
           set -euo pipefail
-          pr=$(gh api "/repos/$REPO/commits/$SHA/pulls" --jq '.[0].number // empty')
+          pr="$PR_NUMBER"
+          if [ -z "$pr" ]; then
+            # No PR number from the triggering event (e.g. a push build);
+            # derive it from the commit, preferring the PR this SHA is the
+            # head of rather than any PR that merely contains the commit.
+            pr=$(gh api "/repos/$REPO/commits/$SHA/pulls" \
+                 --jq "map(select(.head.sha == \"$SHA\")) | .[0].number // empty")
+          fi
           if [ -z "$pr" ]; then
             echo "No PR for $SHA, skipping."
             echo "skip=true" >>"$GITHUB_OUTPUT"

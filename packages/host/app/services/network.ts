@@ -1,5 +1,8 @@
 import type Owner from '@ember/owner';
+import { getOwner } from '@ember/owner';
 import Service, { service } from '@ember/service';
+
+import { isTesting } from '@embroider/macros';
 
 import {
   VirtualNetwork,
@@ -12,21 +15,24 @@ import config from '@cardstack/host/config/environment';
 
 import { shimExternals } from '../lib/externals';
 import { authErrorEventMiddleware } from '../utils/auth-error-guard';
+import { scheduleNativeTimeout } from '../utils/render-timer-stub';
+
+import { createServerRequestTimingMiddleware } from './client-telemetry';
 
 import type LoaderService from './loader-service';
 import type RealmService from './realm';
-import type ResetService from './reset';
+import type SessionService from './session';
 
 export default class NetworkService extends Service {
   @service declare loaderService: LoaderService;
   @service declare realm: RealmService;
-  @service declare reset: ResetService;
+  @service declare session: SessionService;
 
   virtualNetwork = this.makeVirtualNetwork();
 
   constructor(owner: Owner) {
     super(owner);
-    this.reset.register(this);
+    this.session.register(this);
   }
 
   get fetch() {
@@ -38,10 +44,19 @@ export default class NetworkService extends Service {
   }
 
   get authedFetch() {
-    return fetcher(this.fetch, [
-      authorizationMiddleware(this.realm),
-      authErrorEventMiddleware(),
-    ]);
+    // The timing middleware is innermost (last): it wraps each real network
+    // attempt, so an auth-retry (the authorization middleware re-running the
+    // chain on a 401) is observed as a separate, retried-flagged attempt. It
+    // is a passive no-op whenever telemetry is disabled.
+    return fetcher(
+      this.fetch,
+      [
+        authorizationMiddleware(this.realm),
+        authErrorEventMiddleware(),
+        createServerRequestTimingMiddleware(getOwner(this)!),
+      ],
+      this.virtualNetwork,
+    );
   }
 
   get mount() {
@@ -49,7 +64,14 @@ export default class NetworkService extends Service {
   }
 
   private makeVirtualNetwork() {
-    let virtualNetwork = new VirtualNetwork(globalThis.fetch);
+    let virtualNetwork = new VirtualNetwork(globalThis.fetch, {
+      // Native (un-stubbed) timer so the fetch retry path's header-timeout
+      // abort and retry backoff still fire during prerender, where
+      // render-timer-stub disables the global setTimeout — otherwise a stalled
+      // fetch there can neither abort nor retry and hangs the render. Outside
+      // prerender this is the global setTimeout, so behavior is unchanged.
+      scheduleFetchTimer: (callback, ms) => scheduleNativeTimeout(callback, ms),
+    });
     let resolvedBaseRealmURL = new URL(
       withTrailingSlash(config.resolvedBaseRealmURL),
     );
@@ -81,6 +103,25 @@ export default class NetworkService extends Service {
         '@cardstack/openrouter/',
         config.resolvedOpenRouterRealmURL,
       );
+    }
+    // Some test fixture content (JSON card files under tests/cards/, embedded
+    // card ids in test data) refers to the live test realm by its standard-
+    // mode URL `https://localhost:4202/test/`. In environment mode the live
+    // test realm is served at a per-environment Traefik hostname. Mapping
+    // the standard-mode URL onto whatever the running test realm-server
+    // serves lets the same fixture content resolve under either mode.
+    // Gated on isTesting() so the mapping never reaches prod fetches.
+    if (isTesting()) {
+      let hardcodedTestRealmURL = new URL('https://localhost:4202/test/');
+      let resolvedTestRealmURL = new URL(
+        withTrailingSlash(config.resolvedTestRealmURL),
+      );
+      if (resolvedTestRealmURL.href !== hardcodedTestRealmURL.href) {
+        virtualNetwork.addURLMapping(
+          hardcodedTestRealmURL,
+          resolvedTestRealmURL,
+        );
+      }
     }
     return virtualNetwork;
   }

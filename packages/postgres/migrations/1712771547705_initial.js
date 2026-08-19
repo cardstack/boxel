@@ -142,3 +142,17 @@ exports.up = (pgm) => {
     LANGUAGE SQL;
   `);
 };
+
+// Explicit down because node-pg-migrate can't auto-infer a reversal for
+// the `ALTER TABLE … SET UNLOGGED` calls above; an inferred down would
+// crash mid-rollback. Order is the reverse of the up — types are dropped
+// after the tables that reference them.
+exports.down = (pgm) => {
+  pgm.sql('DROP FUNCTION IF EXISTS jsonb_tree(jsonb, text)');
+  pgm.dropTable('queues');
+  pgm.dropType('queue_statuses');
+  pgm.dropTable('jobs');
+  pgm.dropType('job_statuses');
+  pgm.dropTable('realm_versions');
+  pgm.dropTable('boxel_index');
+};

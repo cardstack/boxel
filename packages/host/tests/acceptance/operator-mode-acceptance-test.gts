@@ -6,6 +6,7 @@ import {
   fillIn,
   waitUntil,
   triggerEvent,
+  settled,
 } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
@@ -16,7 +17,6 @@ import { module, test } from 'qunit';
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 
 import {
-  baseRealm,
   ensureTrailingSlash,
   type Realm,
   type LooseSingleCardDocument,
@@ -31,11 +31,14 @@ import ENV from '@cardstack/host/config/environment';
 import { tokenRefreshPeriodSec } from '@cardstack/host/services/realm';
 
 import {
+  AiAssistantOpen,
   ScrollPositions,
   SessionLocalStorageKey,
 } from '@cardstack/host/utils/local-storage-keys';
 
 import {
+  withCachedRealmSetup,
+  setupRealmCacheTeardown,
   percySnapshot,
   setupLocalIndexing,
   setupOnSave,
@@ -49,6 +52,7 @@ import {
   setupAuthEndpoints,
   setupUserSubscription,
   setupRealmServerEndpoints,
+  realmConfigCardJSON,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import {
@@ -71,6 +75,7 @@ module('Acceptance | operator mode tests', function (hooks) {
   let testRealm: Realm;
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
+  setupRealmCacheTeardown(hooks);
   setupOnSave(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -97,10 +102,10 @@ module('Acceptance | operator mode tests', function (hooks) {
     setExpiresInSec(60 * 60);
 
     let loader = getService('loader-service').loader;
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
+    let cardApi: typeof import('@cardstack/base/card-api');
+    let string: typeof import('@cardstack/base/string');
+    cardApi = await loader.import('@cardstack/base/card-api');
+    string = await loader.import('@cardstack/base/string');
 
     let {
       field,
@@ -295,179 +300,199 @@ module('Acceptance | operator mode tests', function (hooks) {
       });
     }
 
-    ({ realm: testRealm } = await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'address.gts': { Address },
-        'boom-person.gts': { BoomPerson },
-        'country-with-no-embedded-template.gts': { CountryWithNoEmbedded },
-        'address-with-no-embedded-template.gts': { AddressWithNoEmbedded },
-        'person.gts': { Person },
-        'pet.gts': { Pet },
-        'shipping-info.gts': { ShippingInfo },
-        'README.txt': `Hello World`,
-        'person-entry.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              cardTitle: 'Person Card',
-              cardDescription: 'Spec for Person Card',
-              specType: 'card',
-              ref: {
-                module: testRRI('person'),
-                name: 'Person',
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/spec',
-                name: 'Spec',
-              },
-            },
-          },
+    // Throws during indexing when `status === 'boom'` so a seeded
+    // fixture lands directly as instance-error with no last-known-good
+    // HTML. cardTitle sits on the search-doc traversal, so the throw
+    // fires whether the indexer is rendering or building the search doc.
+    class ExplodingPerson extends CardDef {
+      static displayName = 'Exploding Person';
+      @field firstName = contains(StringField);
+      @field status = contains(StringField);
+      @field cardTitle = contains(StringField, {
+        computeVia: function (this: ExplodingPerson) {
+          if (this.status === 'boom') {
+            throw new Error('Boom!');
+          }
+          return this.firstName;
         },
-        'Pet/mango.json': {
-          data: {
-            attributes: {
-              name: 'Mango',
-            },
-            meta: {
-              adoptsFrom: {
-                module: testRRI('pet'),
-                name: 'Pet',
-              },
-            },
-          },
-        },
-        'Pet/vangogh.json': {
-          data: {
-            attributes: {
-              name: 'Van Gogh',
-            },
-            meta: {
-              adoptsFrom: {
-                module: testRRI('pet'),
-                name: 'Pet',
-              },
-            },
-          },
-        },
-        'Person/fadhlan.json': {
-          data: {
-            attributes: {
-              firstName: 'Fadhlan',
-              address: {
-                city: 'Bandung',
-                country: 'Indonesia',
-                shippingInfo: {
-                  preferredCarrier: 'DHL',
-                  remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
-                },
-              },
-            },
-            relationships: {
-              pet: {
-                links: {
-                  self: `${testRealmURL}Pet/mango`,
-                },
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: testRRI('person'),
-                name: 'Person',
-              },
-            },
-          },
-        },
-        'Person/error.json': {
-          data: {
-            attributes: {
-              firstName: 'Error',
-            },
-            relationships: {
-              pet: {
-                links: {
-                  self: './missing-link',
-                },
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: testRRI('person'),
-                name: 'Person',
-              },
-            },
-          },
-        },
-        'boom.json': {
-          data: {
-            attributes: {
-              firstName: 'Boom!',
-            },
-            meta: {
-              adoptsFrom: {
-                module: './boom-person',
-                name: 'BoomPerson',
-              },
-            },
-          },
-        },
-        'grid.json': {
-          data: {
-            type: 'card',
-            attributes: {},
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
-                name: 'CardsGrid',
-              },
-            },
-          },
-        },
-        'index.json': {
-          data: {
-            type: 'card',
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
-                name: 'CardsGrid',
-              },
-            },
-          },
-        },
-        '.realm.json': {
-          name: 'Test Workspace B',
-          backgroundURL:
-            'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-          iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-        },
-      },
-    }));
+      });
+    }
 
-    setActiveRealms([testRealmURL, realm2URL]);
-
-    await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      realmURL: realm2URL,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'person.gts': { Person },
-        'Person/1.json': {
-          data: {
-            attributes: {
-              firstName: 'Fadhlan',
+    // Both realms are the same for every test in this module, so the indexed
+    // result is cached and restored rather than rebuilt.
+    await withCachedRealmSetup(async () => {
+      ({ realm: testRealm } = await setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'address.gts': { Address },
+          'boom-person.gts': { BoomPerson },
+          'exploding-person.gts': { ExplodingPerson },
+          'country-with-no-embedded-template.gts': { CountryWithNoEmbedded },
+          'address-with-no-embedded-template.gts': { AddressWithNoEmbedded },
+          'person.gts': { Person },
+          'pet.gts': { Pet },
+          'shipping-info.gts': { ShippingInfo },
+          'README.txt': `Hello World`,
+          'person-entry.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                cardTitle: 'Person Card',
+                cardDescription: 'Spec for Person Card',
+                specType: 'card',
+                ref: {
+                  module: testRRI('person'),
+                  name: 'Person',
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '@cardstack/base/spec',
+                  name: 'Spec',
+                },
+              },
             },
-            meta: {
-              adoptsFrom: {
-                module: rri(`${realm2URL}person`),
-                name: 'Person',
+          },
+          'Pet/mango.json': {
+            data: {
+              attributes: {
+                name: 'Mango',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: testRRI('pet'),
+                  name: 'Pet',
+                },
+              },
+            },
+          },
+          'Pet/vangogh.json': {
+            data: {
+              attributes: {
+                name: 'Van Gogh',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: testRRI('pet'),
+                  name: 'Pet',
+                },
+              },
+            },
+          },
+          'Person/fadhlan.json': {
+            data: {
+              attributes: {
+                firstName: 'Fadhlan',
+                address: {
+                  city: 'Bandung',
+                  country: 'Indonesia',
+                  shippingInfo: {
+                    preferredCarrier: 'DHL',
+                    remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
+                  },
+                },
+              },
+              relationships: {
+                pet: {
+                  links: {
+                    self: `${testRealmURL}Pet/mango`,
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: testRRI('person'),
+                  name: 'Person',
+                },
+              },
+            },
+          },
+          'Person/error.json': {
+            // Lands as instance-error from the seed indexing pass — the
+            // cardTitle compute throws on `status: 'boom'`, and there is
+            // no prior clean render so the row has no last-known-good HTML.
+            data: {
+              attributes: {
+                firstName: 'Error',
+                status: 'boom',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: testRRI('exploding-person'),
+                  name: 'ExplodingPerson',
+                },
+              },
+            },
+          },
+          'boom.json': {
+            data: {
+              attributes: {
+                firstName: 'Boom!',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './boom-person',
+                  name: 'BoomPerson',
+                },
+              },
+            },
+          },
+          'grid.json': {
+            data: {
+              type: 'card',
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: '@cardstack/base/cards-grid',
+                  name: 'CardsGrid',
+                },
+              },
+            },
+          },
+          'index.json': {
+            data: {
+              type: 'card',
+              meta: {
+                adoptsFrom: {
+                  module: '@cardstack/base/cards-grid',
+                  name: 'CardsGrid',
+                },
+              },
+            },
+          },
+          'realm.json': realmConfigCardJSON({
+            name: 'Test Workspace B',
+            backgroundURL:
+              'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+            iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+          }),
+        },
+      }));
+
+      setActiveRealms([testRealmURL, realm2URL]);
+
+      await setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        realmURL: realm2URL,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'person.gts': { Person },
+          'Person/1.json': {
+            data: {
+              attributes: {
+                firstName: 'Fadhlan',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: rri(`${realm2URL}person`),
+                  name: 'Person',
+                },
               },
             },
           },
         },
-      },
+      });
     });
 
     setRealmPermissions({
@@ -544,25 +569,64 @@ module('Acceptance | operator mode tests', function (hooks) {
     assert.strictEqual(getPageTitle(), 'Mango');
   });
 
+  test('renaming a realm updates the index card title without a reload', async function (assert) {
+    await visit('/');
+    await click('[data-test-workspace-button="Test Workspace B"]');
+
+    assert.dom('[data-test-stack-card-index="0"]').exists();
+    assert.strictEqual(
+      getPageTitle(),
+      'Test Workspace B',
+      'index card title shows the original realm name',
+    );
+
+    // Rename the realm by editing its RealmConfig card; the resulting re-index
+    // should refresh the index card title reactively.
+    await testRealm.write(
+      'realm.json',
+      realmConfigCardJSON({
+        name: 'Renamed Workspace B',
+        backgroundURL:
+          'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+        iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+      }),
+    );
+    await settled();
+
+    assert.strictEqual(
+      getPageTitle(),
+      'Renamed Workspace B',
+      'index card title reflects the new realm name without a reload',
+    );
+  });
+
   module(
     'card with an error that has a last known good state',
     function (hooks) {
+      // The realm-building beforeEach above runs for these tests too, and caches
+      // under this module's name, so the top-level teardown's prefix — fixed at
+      // registration from the outer name — cannot match it. Without this the
+      // snapshot stays attached for the rest of the shard.
+      setupRealmCacheTeardown(hooks);
+
       hooks.beforeEach(async function () {
+        // Flip Person/fadhlan to ExplodingPerson with `status: 'boom'` so
+        // the cardTitle compute throws on re-index. The card's
+        // last-known-good HTML — captured by the prior clean indexing
+        // pass — survives the flip and is what the tests below assert
+        // against.
         await testRealm.write(
           'Person/fadhlan.json',
           JSON.stringify({
             data: {
-              relationships: {
-                pet: {
-                  links: {
-                    self: './missing-link',
-                  },
-                },
+              attributes: {
+                firstName: 'Fadhlan',
+                status: 'boom',
               },
               meta: {
                 adoptsFrom: {
-                  module: testRRI('person'),
-                  name: 'Person',
+                  module: testRRI('exploding-person'),
+                  name: 'ExplodingPerson',
                 },
               },
             },
@@ -595,7 +659,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         );
 
         assert.dom(`[data-test-card-error]`).exists();
-        assert.dom(`[data-test-error-message]`).includesText('missing file');
+        assert.dom(`[data-test-error-message]`).includesText('Boom!');
       });
 
       test('can delete a card', async function (assert) {
@@ -655,13 +719,9 @@ module('Acceptance | operator mode tests', function (hooks) {
         `[data-test-stack-card="${testRealmURL}Person/error"] [data-test-card-error]`,
       )
       .exists('the error state of the card is displayed');
-    assert
-      .dom('[data-test-error-message]')
-      .includesText(`missing file ${testRealmURL}Person/missing-link.json`);
+    assert.dom('[data-test-error-message]').includesText('Boom!');
     await click('[data-test-toggle-details]');
-    assert
-      .dom('[data-test-error-details]')
-      .includesText(`Person/missing-link.json not found`);
+    assert.dom('[data-test-error-details]').includesText('Boom!');
   });
 
   test('error card header more-options menu includes Copy Card URL', async function (assert) {
@@ -889,7 +949,13 @@ module('Acceptance | operator mode tests', function (hooks) {
     assert.dom('[data-test-code-mode]').doesNotExist();
   });
 
-  module('2 stacks', function () {
+  module('2 stacks', function (hooks) {
+    // The realm-building beforeEach above runs for these tests too, and caches
+    // under this module's name, so the top-level teardown's prefix — fixed at
+    // registration from the outer name — cannot match it. Without this the
+    // snapshot stays attached for the rest of the shard.
+    setupRealmCacheTeardown(hooks);
+
     test('Toggling submode will open code submode and toggling back will restore the stack', async function (assert) {
       await visitOperatorMode({
         stacks: [
@@ -942,6 +1008,12 @@ module('Acceptance | operator mode tests', function (hooks) {
   });
 
   module('realm session expiration', function (hooks) {
+    // The realm-building beforeEach above runs for these tests too, and caches
+    // under this module's name, so the top-level teardown's prefix — fixed at
+    // registration from the outer name — cannot match it. Without this the
+    // snapshot stays attached for the rest of the shard.
+    setupRealmCacheTeardown(hooks);
+
     let refreshInSec = 2;
 
     hooks.beforeEach(async function () {
@@ -971,6 +1043,12 @@ module('Acceptance | operator mode tests', function (hooks) {
   });
 
   module('account popover', function (hooks) {
+    // The realm-building beforeEach above runs for these tests too, and caches
+    // under this module's name, so the top-level teardown's prefix — fixed at
+    // registration from the outer name — cannot match it. Without this the
+    // snapshot stays attached for the rest of the shard.
+    setupRealmCacheTeardown(hooks);
+
     type UserResponseAttributes = {
       matrixUserId: string;
       stripeCustomerId: string;
@@ -1105,6 +1183,71 @@ module('Acceptance | operator mode tests', function (hooks) {
       },
     ]);
 
+    test('openProfileSettings deep link opens settings on the subscription section', async function (assert) {
+      await visit('/?openProfileSettings=subscription');
+
+      assert.dom('[data-test-settings-modal]').exists();
+      assert.strictEqual(
+        getService('operator-mode-state-service').profileSettingsSection,
+        'subscription',
+        'the modal opened targeting the subscription section',
+      );
+
+      assert.notOk(
+        currentURL().includes('openProfileSettings'),
+        'the param is consumed on arrival',
+      );
+    });
+
+    test('a closed settings modal stays closed when operator mode state persists', async function (assert) {
+      await visit('/?openProfileSettings=subscription');
+      assert.dom('[data-test-settings-modal]').exists();
+
+      await click('[data-test-confirm-cancel-button]');
+      assert.dom('[data-test-settings-modal]').doesNotExist();
+
+      // Persisting re-runs the route's model hook
+      getService('operator-mode-state-service').workspaceChooserOpened = true;
+      await settled();
+
+      assert.dom('[data-test-settings-modal]').doesNotExist();
+    });
+
+    test('a deep link arriving logged out waits for login, then opens the modal', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }]],
+      })!;
+      await click('[data-test-profile-icon-button]');
+      await click('[data-test-signout-button]');
+      assert.dom('[data-test-login-btn]').exists();
+
+      await visit('/?openProfileSettings=subscription');
+
+      // The model hook returns before the login form renders, so consuming
+      // the param there would swallow it with no modal to show.
+      assert.dom('[data-test-login-btn]').exists();
+      assert.dom('[data-test-settings-modal]').doesNotExist();
+      assert.ok(
+        currentURL().includes('openProfileSettings=subscription'),
+        'the param must outlive the login form',
+      );
+
+      await fillIn('[data-test-username-field]', 'testuser');
+      await fillIn('[data-test-password-field]', 'mock-password');
+      await click('[data-test-login-btn]');
+
+      assert.dom('[data-test-settings-modal]').exists();
+      assert.strictEqual(
+        getService('operator-mode-state-service').profileSettingsSection,
+        'subscription',
+        'the modal opened targeting the subscription section',
+      );
+      assert.notOk(
+        currentURL().includes('openProfileSettings'),
+        'the param is consumed once it has been acted on',
+      );
+    });
+
     test('can access and save settings via profile info popover', async function (assert) {
       await visitOperatorMode({
         stacks: [
@@ -1122,6 +1265,11 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       assert.dom('[data-test-profile-popover]').doesNotExist();
       assert.dom('[data-test-settings-modal]').exists();
+      assert.strictEqual(
+        getService('operator-mode-state-service').profileSettingsSection,
+        undefined,
+        'a plain open does not target a section',
+      );
 
       assert.dom('[data-test-profile-icon]').hasText('T'); // "T", from first letter of: @testuser:localhost
       assert.dom('[data-test-profile-display-name]').hasText(''); // No display name set yet
@@ -1535,6 +1683,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         ScrollPositions,
         JSON.stringify({ 'file-tree': [`${testRealmURL}Pet/mango.json`, 2] }),
       );
+      window.localStorage.setItem(AiAssistantOpen, 'true');
 
       await click('[data-test-profile-icon-button]');
       await click('[data-test-signout-button]');
@@ -1542,6 +1691,11 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.strictEqual(getRecentFiles(), null);
       assert.strictEqual(window.localStorage.getItem(ScrollPositions), null);
       assert.strictEqual(getPlaygroundSelections(), null);
+      assert.strictEqual(
+        window.localStorage.getItem(AiAssistantOpen),
+        null,
+        'AI assistant open preference is cleared on logout',
+      );
 
       assert.dom('[data-test-login-btn]').exists();
     });

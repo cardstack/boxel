@@ -18,8 +18,9 @@ import { module, test } from 'qunit';
 import stringify from 'safe-stable-stringify';
 
 import {
-  baseRealm,
+  baseRealmRRI,
   Deferred,
+  type Realm,
   type ResolvedCodeRef,
   rri,
   fileDefFormats,
@@ -51,6 +52,7 @@ import {
   setMonacoContent,
   withCachedRealmSetup,
   cardDefFieldCount,
+  realmConfigCardJSON,
 } from '../../helpers';
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -58,22 +60,23 @@ import { assertRecentFileURLs } from '../../helpers/recent-files-cards';
 import { setupApplicationTest } from '../../helpers/setup';
 
 import type { TestRealmAdapter } from '../../helpers/adapter';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 const testRealmURL2 = 'http://test-realm/test2/';
 const realmAFiles: Record<string, any> = {
-  '.realm.json': {
+  'realm.json': realmConfigCardJSON({
     name: 'Test Workspace A',
     backgroundURL:
       'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
     iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-  },
+  }),
   'index.json': {
     data: {
       type: 'card',
       attributes: {},
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/cards-grid',
+          module: '@cardstack/base/cards-grid',
           name: 'CardsGrid',
         },
       },
@@ -82,7 +85,7 @@ const realmAFiles: Record<string, any> = {
 };
 
 const indexCardSource = `
-  import { CardDef, Component } from "https://cardstack.com/base/card-api";
+  import { CardDef, Component } from "@cardstack/base/card-api";
 
   export class Index extends CardDef {
     static isolated = class Isolated extends Component<typeof this> {
@@ -96,8 +99,8 @@ const indexCardSource = `
 `;
 
 const personCardSource = `
-  import { contains, containsMany, field, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { contains, containsMany, field, linksToMany, CardDef, Component } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
   import { Friend } from './friend';
 
   export class Person extends CardDef {
@@ -131,8 +134,8 @@ const personCardSource = `
   }
 `;
 const petCardSource = `
-  import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { contains, field, Component, CardDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
 
   export class Pet extends CardDef {
     static displayName = 'Pet';
@@ -157,8 +160,8 @@ const employeeCardSource = `
     contains,
     field,
     Component,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
   import { Person } from './person';
 
   export class Employee extends Person {
@@ -177,14 +180,28 @@ const employeeCardSource = `
 
 const erroringModuleSource = `throw new Error('boom');`;
 
+// Initial source throws at module evaluation so the loader marks the entry
+// `state: 'broken'`. An external writer (the AI agent's card+source POST in
+// the real flow) then replaces it with a valid CardDef. A parse-level
+// failure would propagate as an uncaught error in qunit, so we use a
+// runtime throw — the loader-cache behaviour the regression guards is
+// identical for both failure modes.
+const brokenThenFixedSource = `throw new Error('initial broken module');`;
+const brokenThenFixedValidSource = `
+  import { CardDef } from '@cardstack/base/card-api';
+  export class BrokenThenFixed extends CardDef {
+    static displayName = 'Broken Then Fixed';
+  }
+`;
+
 const inThisFileSource = `
   import {
     contains,
     field,
     CardDef,
     FieldDef,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
 
   export const exportedVar = 'exported var';
 
@@ -248,9 +265,19 @@ const commandModuleSource = `
   }
 `;
 
+const componentModuleSource = `
+  import GlimmerComponent from '@glimmer/component';
+
+  export default class SampleComponent extends GlimmerComponent {
+    <template>
+      <div data-test-sample-component>Hello</div>
+    </template>
+  }
+`;
+
 const friendCardSource = `
-  import { contains, linksTo, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { contains, linksTo, field, CardDef, Component } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
 
   export class Friend extends CardDef {
     static displayName = 'Friend';
@@ -279,14 +306,47 @@ const friendCardSource = `
   }
 `;
 
+// A card whose template navigates through `viewCard`, the way the Workspace
+// card's pinned tiles and Library tiles do. Card templates receive that
+// function from the card-crud-functions context, so this fixture is what
+// proves the code-mode preview pane provides it.
+const navigatorCardSource = `
+  import { contains, field, linksTo, CardDef, Component } from "@cardstack/base/card-api";
+  import { on } from '@ember/modifier';
+  import StringField from "@cardstack/base/string";
+
+  export class Navigator extends CardDef {
+    static displayName = 'Navigator';
+    @field name = contains(StringField);
+    @field target = linksTo(() => Navigator);
+    static isolated = class Isolated extends Component<typeof this> {
+      openTarget = () => {
+        let { target } = this.args.model;
+        if (target) {
+          this.args.viewCard?.(target);
+        }
+      };
+      <template>
+        <div data-test-navigator>
+          <button
+            type='button'
+            data-test-open-target
+            {{on 'click' this.openTarget}}
+          >Open target</button>
+        </div>
+      </template>
+    };
+  }
+`;
+
 const exportsSource = `
   import {
     contains,
     field,
     CardDef,
     FieldDef
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
 
   export class AncestorCard1 extends CardDef {
     static displayName = 'AncestorCard1';
@@ -313,8 +373,8 @@ const specialExportsSource = `
     contains,
     field,
     CardDef
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
 
   class AncestorCard extends CardDef {
     static displayName = 'Ancestor';
@@ -339,7 +399,7 @@ const importsSource = `
     field,
     linksTo,
     linksToMany
-  } from 'https://cardstack.com/base/card-api';
+  } from '@cardstack/base/card-api';
 
   export class ChildCard1 extends AncestorCard2 {
     static displayName = 'ChildCard1';
@@ -376,9 +436,9 @@ const reExportSource = `
     FieldDef,
     BaseDef as BDef,
     contains,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
-  import NumberField from 'https://cardstack.com/base/number';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
+  import NumberField from '@cardstack/base/number';
 
   export const exportedVar = 'exported var';
 
@@ -391,16 +451,16 @@ const reExportSource = `
   export default NumberField;
   export { Person as Human } from './person';
 
-  export { default as Date } from 'https://cardstack.com/base/date';
+  export { default as Date } from '@cardstack/base/date';
 `;
 
 const fileDefSource = `
-  import { FileDef } from 'https://cardstack.com/base/file-api';
+  import { FileDef } from '@cardstack/base/file-api';
   import {
     contains,
     field,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
 
   export class CustomFileDef extends FileDef {
     static displayName = 'custom file';
@@ -409,7 +469,7 @@ const fileDefSource = `
 `;
 
 const pngDefModuleSource = `
-  export { PngDef } from 'https://cardstack.com/base/png-image-def';
+  export { PngDef } from '@cardstack/base/png-image-def';
 `;
 
 const localInheritSource = `
@@ -418,7 +478,7 @@ const localInheritSource = `
     field,
     CardDef,
     FieldDef,
-  } from 'https://cardstack.com/base/card-api';
+  } from '@cardstack/base/card-api';
 
   class GrandParent extends CardDef {
     static displayName = 'local grandparent';
@@ -446,6 +506,7 @@ const localInheritSource = `
 
 module('Acceptance | code submode | inspector tests', function (hooks) {
   let adapter: TestRealmAdapter;
+  let realm: Realm;
   let monacoService: MonacoService;
 
   setupApplicationTest(hooks);
@@ -476,7 +537,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
-    ({ adapter } = await withCachedRealmSetup(async () => {
+    ({ adapter, realm } = await withCachedRealmSetup(async () => {
       await setupAcceptanceTestRealm({
         mockMatrixUtils,
         contents: { ...SYSTEM_CARD_FIXTURE_CONTENTS, ...realmAFiles },
@@ -491,6 +552,26 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
           'person.gts': personCardSource,
           'pet.gts': petCardSource,
           'friend.gts': friendCardSource,
+          'navigator.gts': navigatorCardSource,
+          'Navigator/parent.json': {
+            data: {
+              attributes: { name: 'Parent' },
+              relationships: {
+                target: { links: { self: './child' } },
+              },
+              meta: {
+                adoptsFrom: { module: '../navigator', name: 'Navigator' },
+              },
+            },
+          },
+          'Navigator/child.json': {
+            data: {
+              attributes: { name: 'Child' },
+              meta: {
+                adoptsFrom: { module: '../navigator', name: 'Navigator' },
+              },
+            },
+          },
           'employee.gts': employeeCardSource,
           'in-this-file.gts': inThisFileSource,
           'exports.gts': exportsSource,
@@ -503,7 +584,9 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
           'images/sample.png': makeMinimalPng(),
           'images/logo.png': makeMinimalPng(2, 2),
           'command-module.gts': commandModuleSource,
+          'component-module.gts': componentModuleSource,
           'erroring-module.gts': erroringModuleSource,
+          'broken-then-fixed.gts': brokenThenFixedSource,
           'empty-file.gts': '',
           'sample-styles.css': 'body { color: red; }',
           'person-entry.json': {
@@ -520,7 +603,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
@@ -603,12 +686,12 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
           'z18.json': '{}',
           'z19.json': '{}',
           'zzz/zzz/file.json': '{}',
-          '.realm.json': {
+          'realm.json': realmConfigCardJSON({
             name: 'Test Workspace B',
             backgroundURL:
               'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
             iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-          },
+          }),
         },
       });
     }));
@@ -963,6 +1046,26 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.dom('[data-test-card-url-bar-input]').hasValue(`${id}.json`);
   });
 
+  test('a card in the preview pane can navigate through viewCard', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}Navigator/parent.json`,
+    });
+
+    await waitFor('[data-test-open-target]');
+    await click('[data-test-open-target]');
+
+    await waitFor(
+      `[data-test-code-mode-card-renderer-header="${testRealmURL}Navigator/child"]`,
+    );
+    assert
+      .dom('[data-test-card-url-bar-input]')
+      .hasValue(
+        `${testRealmURL}Navigator/child.json`,
+        'the in-card button opened the linked card, like the hover overlays do',
+      );
+  });
+
   test<TestContextWithSave>('can duplicate an instance in different realm', async function (assert) {
     assert.expect(8);
     let operatorModeStateParam = stringify({
@@ -1247,16 +1350,38 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       codePath: `${testRealmURL}command-module.gts`,
     });
 
-    await waitFor('[data-test-command-panel-header]');
+    await waitFor('[data-test-tool-panel-header]');
     assert
-      .dom('[data-test-command-panel-header]')
-      .hasText('Command', 'renders command panel');
+      .dom('[data-test-tool-panel-header]')
+      .hasText('Tool', 'renders tool panel');
     assert
       .dom('[data-test-card-module-definition]')
-      .hasTextContaining('SampleCommand', 'shows command definition details');
+      .hasTextContaining('SampleCommand', 'shows tool definition details');
     assert
       .dom('[data-test-boxel-selector-item-selected]')
-      .hasText('SampleCommand command', 'selector shows command type');
+      .hasText('SampleCommand tool', 'selector shows tool type');
+  });
+
+  test('shows component panel and Create Listing action for component declarations', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: Submodes.Code,
+      codePath: `${testRealmURL}component-module.gts`,
+    });
+
+    await waitFor('[data-test-component-panel-header]');
+    assert
+      .dom('[data-test-component-panel-header]')
+      .hasText('Component', 'renders component panel');
+    assert
+      .dom('[data-test-action-button="Create Listing"]')
+      .exists('Create Listing action is available for a component');
+
+    await click('[data-test-action-button="Create Listing"]');
+    await waitFor('[data-test-create-listing-modal]');
+    assert
+      .dom('[data-test-create-listing-modal]')
+      .exists('clicking Create Listing opens the create listing modal');
   });
 
   test('can delete a misc file', async function (assert) {
@@ -2029,7 +2154,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.expect(11);
     let expectedSrc = `
 import { ExportedCard } from './in-this-file';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 export class TestCard extends ExportedCard {
   static displayName = "Test Card";
 }`.trim();
@@ -2138,7 +2263,7 @@ export class TestCard extends ExportedCard {
         content,
         `
 import { ExportedField } from './in-this-file';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 export class TestField extends ExportedField {
   static displayName = "Test Field";
 }`.trim(),
@@ -2243,7 +2368,7 @@ export class TestFileDef extends CustomFileDef {
     assert.expect(4);
     let expectedSrc = `
 import { ExportedCard as ExportedCardParent } from './in-this-file';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 export class ExportedCard extends ExportedCardParent {
   static displayName = "Exported Card";
 }`.trim();
@@ -2531,6 +2656,47 @@ export class ExportedCard extends ExportedCardParent {
       .exists();
   });
 
+  test('find instances starts clean, ignoring a previously persisted search', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}pet`,
+    });
+
+    // Leftovers from an earlier search-sheet session: a term, a realm scope
+    // that matches nothing here, and a scroll offset. A triggered "Find
+    // instances" must inherit none of it — the trigger resets the service
+    // before applying its own type filter.
+    let searchSheetState = getService('search-sheet-state');
+    searchSheetState.searchKey = 'Mango';
+    searchSheetState.selectedRealms = [new URL('http://unrelated-realm/')];
+    searchSheetState.resultsScrollTop = 240;
+
+    await waitFor('[data-boxel-selector-item-text="Pet"]');
+    await click('[data-boxel-selector-item-text="Pet"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    await click('[data-test-action-button="Find instances"]');
+    await waitFor('[data-test-search-sheet-search-result]');
+
+    // Both instances appear — the stale realm scope did not narrow the search.
+    assert.dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`).exists();
+    assert
+      .dom(`[data-test-search-result="${testRealmURL}Pet/vangogh"]`)
+      .exists();
+
+    assert.deepEqual(
+      searchSheetState.selectedRealms,
+      [],
+      'the leftover realm scope was cleared',
+    );
+    assert.strictEqual(
+      searchSheetState.resultsScrollTop,
+      0,
+      'the leftover scroll offset was cleared',
+    );
+  });
+
   test('find instances action is not displayed for non-exported Card definition', async function (assert) {
     await visitOperatorMode({
       stacks: [[]],
@@ -2581,6 +2747,78 @@ export class ExportedCard extends ExportedCardParent {
     assert.dom('[data-test-in-this-file-selector]').doesNotExist();
     assert.dom('[data-test-inheritance-panel-header]').doesNotExist();
     assert.dom('[data-test-delete-module-button]').exists();
+  });
+
+  // When an external writer (e.g. the AI agent's card+source POST) replaces
+  // a previously-broken .gts with a valid one, the open code-mode view must
+  // reflect the fix without a page reload. Regression guard: the host's
+  // module loader caches compile failures under state: 'broken'; without an
+  // explicit loader reset on the FileResource invalidation path, the
+  // re-read would re-hit the cached broken entry and leave the
+  // module-inspector stuck on SyntaxErrorDisplay.
+  test('code mode recovers when a previously-broken module is fixed by an external write', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}broken-then-fixed.gts`,
+    });
+
+    await waitFor('[data-test-syntax-error]');
+    assert
+      .dom('[data-test-syntax-error]')
+      .exists('initial broken source surfaces a syntax error');
+
+    // Drop any pre-existing store subscriptions so the test exercises the
+    // path the fix protects — store.handleInvalidations only fires when the
+    // store has a subscription, and the regression originally surfaced in
+    // code mode where no card instance from the realm had been loaded.
+    let store = getService('store') as unknown as {
+      subscriptions: Map<string, { unsubscribe: () => void }>;
+    };
+    for (let [key, sub] of [...store.subscriptions]) {
+      sub.unsubscribe();
+      store.subscriptions.delete(key);
+    }
+    assert.strictEqual(
+      store.subscriptions.size,
+      0,
+      'store has no realm subscriptions before the external write',
+    );
+
+    let incrementalEvent = new Deferred<void>();
+    let unsubscribe = getService('message-service').subscribe(
+      testRealmURL,
+      (ev: RealmEventContent) => {
+        if (ev.eventName === 'index' && ev.indexType === 'incremental') {
+          unsubscribe();
+          incrementalEvent.fulfill();
+        }
+      },
+    );
+
+    // realm.write mirrors a card+source POST: the realm transpiles, indexes,
+    // and broadcasts the `incremental` invalidation event over matrix. No
+    // X-Boxel-Client-Request-Id is passed, so the FileResource subscription
+    // treats this as an external (anonymous) write — the same path the agent
+    // takes when patching a card def.
+    await realm.write('broken-then-fixed.gts', brokenThenFixedValidSource);
+    await incrementalEvent.promise;
+    await settled();
+
+    assert
+      .dom('[data-test-syntax-error]')
+      .doesNotExist(
+        'syntax error is cleared after the external write replaces the broken source with a valid one',
+      );
+    assert
+      .dom('[data-test-card-module-definition]')
+      .exists('the module inspector renders the fixed card definition');
+    assert
+      .dom('[data-test-card-module-definition]')
+      .includesText(
+        'Broken Then Fixed',
+        'the fixed displayName is reflected in the inspector',
+      );
   });
 
   test('can delete an erroring module file', async function (assert) {
@@ -2737,12 +2975,10 @@ export class ExportedCard extends ExportedCardParent {
       .dom('[data-test-create-listing-modal]')
       .exists('confirmation modal appears after clicking Create Listing');
 
-    await waitFor(
-      `[data-test-selected-example="${testRealmURL}Pet/mango.json"]`,
-    );
+    await waitFor(`[data-test-selected-example="${testRealmURL}Pet/mango"]`);
 
     assert
-      .dom(`[data-test-selected-example="${testRealmURL}Pet/mango.json"]`)
+      .dom(`[data-test-selected-example="${testRealmURL}Pet/mango"]`)
       .exists('the opened instance is pre-selected');
     assert
       .dom('[data-test-selected-examples] [data-test-card-format="atom"]')

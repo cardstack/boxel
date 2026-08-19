@@ -46,6 +46,11 @@ export interface WriteFilesToBranchParams {
   branch: string;
   files: { path: string; content: string; isBinary?: boolean }[];
   message: string;
+  // When set, the commit makes this folder mirror `files` exactly: any blob
+  // already on the branch under the folder whose path isn't among `files` is
+  // deleted in the same commit. Without it, a rewrite of an existing branch
+  // layers onto the previous tree and stale paths survive.
+  syncFolder?: string;
 }
 
 export interface WriteFilesToBranchResult {
@@ -66,7 +71,11 @@ export interface GitHubClient {
 }
 
 export class OctokitGitHubClient implements GitHubClient {
-  constructor(private token: string | undefined) {}
+  private token: string | undefined;
+
+  constructor(token: string | undefined) {
+    this.token = token;
+  }
 
   async openPullRequest(
     params: OpenPullRequestParams,
@@ -195,7 +204,12 @@ export class OctokitGitHubClient implements GitHubClient {
     });
     let baseTreeSha = parentCommit.tree.sha;
 
-    let tree = await Promise.all(
+    let tree: {
+      path: string;
+      mode: '100644';
+      type: 'blob';
+      sha: string | null;
+    }[] = await Promise.all(
       normalizedFiles.map(async (file) => {
         let blob = await this.request<{ sha: string }>({
           action: 'create blob',
@@ -215,6 +229,22 @@ export class OctokitGitHubClient implements GitHubClient {
         };
       }),
     );
+
+    if (params.syncFolder) {
+      let keptPaths = new Set(normalizedFiles.map((file) => file.path));
+      let existingPaths = await this.listBlobPathsUnder(
+        params.owner,
+        params.repo,
+        baseTreeSha,
+        params.syncFolder,
+      );
+      for (let path of existingPaths) {
+        if (!keptPaths.has(path)) {
+          // a null sha is the Git Data API's deletion entry
+          tree.push({ path, mode: '100644', type: 'blob', sha: null });
+        }
+      }
+    }
 
     let createdTree = await this.request<{
       sha: string;
@@ -252,6 +282,51 @@ export class OctokitGitHubClient implements GitHubClient {
     });
 
     return { commitSha: createdCommit.sha };
+  }
+
+  // Walks segment-by-segment to the folder's own tree before listing it
+  // recursively, so only the folder's subtree — never the whole repo — is
+  // subject to the recursive listing (and its truncation limit). Returns []
+  // when the folder doesn't exist on the branch yet.
+  private async listBlobPathsUnder(
+    owner: string,
+    repo: string,
+    rootTreeSha: string,
+    folder: string,
+  ): Promise<string[]> {
+    let segments = folder.split('/').filter(Boolean);
+    let treeSha = rootTreeSha;
+    for (let segment of segments) {
+      let { tree } = await this.request<{
+        tree: { path: string; type: string; sha: string }[];
+      }>({
+        action: 'get tree',
+        method: 'GET',
+        path: `/repos/${owner}/${repo}/git/trees/${treeSha}`,
+      });
+      let entry = tree.find((e) => e.path === segment && e.type === 'tree');
+      if (!entry) {
+        return [];
+      }
+      treeSha = entry.sha;
+    }
+    let { tree, truncated } = await this.request<{
+      tree: { path: string; type: string }[];
+      truncated?: boolean;
+    }>({
+      action: 'get folder tree',
+      method: 'GET',
+      path: `/repos/${owner}/${repo}/git/trees/${treeSha}?recursive=1`,
+    });
+    if (truncated) {
+      throw new Error(
+        `tree listing for "${folder}" was truncated; refusing to compute deletions from an incomplete listing`,
+      );
+    }
+    let prefix = segments.join('/');
+    return tree
+      .filter((e) => e.type === 'blob')
+      .map((e) => `${prefix}/${e.path}`);
   }
 
   private getToken(): string {
@@ -346,7 +421,5 @@ async function readErrorPayload(response: Response): Promise<unknown> {
 
 function toGitHubError(action: string, error: unknown): Error {
   let payload = error instanceof Error ? error.message : String(error);
-  return new Error(
-    `Failed to ${action} (unknown): ${JSON.stringify(payload)}`,
-  );
+  return new Error(`Failed to ${action} (unknown): ${JSON.stringify(payload)}`);
 }

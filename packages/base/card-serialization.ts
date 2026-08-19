@@ -21,7 +21,7 @@ import type { ResourceID } from '@cardstack/runtime-common';
 
 // --- Runtime Imports ---
 
-import { isEqual, merge } from 'lodash';
+import { isEqual, merge } from 'lodash-es';
 import {
   assertIsSerializerName,
   CardResourceType,
@@ -30,17 +30,15 @@ import {
   getSerializer,
   humanReadable,
   identifyCard,
-  isRegisteredPrefix,
-  cardIdToURL,
   isSingleCardDocument,
   isSingleFileMetaDocument,
   loadCardDef,
   localId,
   maybeRelativeReference,
-  maybeURL,
   meta,
   primitive,
   relativeTo,
+  resolveRRIReference,
   rri,
 } from '@cardstack/runtime-common';
 import { getFieldOverrides, getFields, serializedGet } from './field-support';
@@ -68,6 +66,11 @@ export interface JSONAPISingleResourceDocument {
 
 export interface SerializeOpts {
   includeComputeds?: boolean;
+  // Include link fields the card does not actually have. By default
+  // serialization keeps only the relationships present in the card's data — a
+  // set target or an authored empty `{ self: null }` — plus contained fields
+  // (always present); set this to serialize every declared relationship,
+  // including never-authored ones (as `{ self: null }`).
   includeUnrenderedFields?: boolean;
   useAbsoluteURL?: boolean;
   omitFields?: [typeof BaseDef];
@@ -115,7 +118,14 @@ export async function cardClassFromResource<CardT extends BaseDefConstructor>(
       resource.meta.adoptsFrom,
       {
         loader: myLoader(),
-        relativeTo: relativeTo ?? (resource.id ? rri(resource.id) : undefined),
+        // Every reference in a resource — its `adoptsFrom.module` and its
+        // relationship links alike — is transmitted relative to the resource's
+        // OWN id, independent of the document that delivered it. So a resource
+        // with an id resolves its module against that id, even when it arrived
+        // embedded in another document's `included[]`. The caller's `relativeTo`
+        // is the base only for an id-less resource (a contained field), which
+        // shares its parent's base.
+        relativeTo: resource.id ? rri(resource.id) : relativeTo,
       },
     );
     if (!card) {
@@ -207,9 +217,52 @@ export function resourceFrom(
   return res;
 }
 
+// Build the reference-relativizer for `model`. Every reference a resource
+// carries — its `adoptsFrom.module` and its relationship links — is
+// transmitted relative to that resource's OWN id, so each resource in a
+// document needs its own relativizer. `rebaseReferencesFor` re-binds this at
+// the boundary where a link target becomes an `included[]` resource.
+export function relativeReferenceFor(
+  model: CardDef | FileDef,
+): (possibleReference: string) => string {
+  let modelRelativeTo: RealmResourceIdentifier | URL | undefined =
+    model.id ?? model[relativeTo];
+  return (possibleReference: string) => {
+    // Prefix-form RRIs (e.g. @cardstack/catalog/foo) are already in their
+    // canonical portable form — return as-is.
+    if (possibleReference.startsWith('@')) {
+      return possibleReference;
+    }
+    // Identifiers are canonical RRI, so resolve relative refs to their
+    // absolute form with plain path math (no VirtualNetwork), then
+    // relativize against the model's own id.
+    let absolute = resolveRRIReference(possibleReference, modelRelativeTo);
+    if (!modelRelativeTo) {
+      return absolute;
+    }
+    const realmURLString = getCardMeta(model, 'realmURL');
+    const realmURL = realmURLString ? new URL(realmURLString) : undefined;
+    return maybeRelativeReference(rri(absolute), modelRelativeTo, realmURL);
+  };
+}
+
+// Re-base `opts`'s relativizer onto `value`, for serializing a link target as
+// its own `included[]` resource. A target without an id has no base of its
+// own and keeps the parent's, matching the index engine's `relativizeResource`
+// (`resource.id ? toURL(resource.id) : primaryURL`).
+export function rebaseReferencesFor(
+  value: CardDef | FileDef,
+  opts?: SerializeOpts,
+): SerializeOpts | undefined {
+  if (!opts?.maybeRelativeReference || opts.useAbsoluteURL || !value.id) {
+    return opts;
+  }
+  return { ...opts, maybeRelativeReference: relativeReferenceFor(value) };
+}
+
 export function serializeCard(
   model: CardDef,
-  opts?: SerializeOpts,
+  opts: SerializeOpts,
 ): LooseSingleCardDocument {
   let doc = {
     data: {
@@ -217,35 +270,9 @@ export function serializeCard(
       ...(model.id != null ? { id: model.id } : { lid: model[localId] }),
     },
   };
-  let modelRelativeTo: RealmResourceIdentifier | URL | undefined =
-    model.id ?? model[relativeTo];
   let data = serializeCardResource(model, doc, {
     ...opts,
-    ...{
-      maybeRelativeReference(possibleReference: string) {
-        // Registered prefix refs (e.g. @cardstack/catalog/foo) are already
-        // in their canonical portable form — return as-is
-        if (isRegisteredPrefix(possibleReference)) {
-          return possibleReference;
-        }
-        let modelRelativeToForURL =
-          typeof modelRelativeTo === 'string'
-            ? cardIdToURL(modelRelativeTo)
-            : modelRelativeTo;
-        let url = maybeURL(possibleReference, modelRelativeToForURL);
-        if (!url) {
-          throw new Error(
-            `could not determine url from '${possibleReference}' relative to ${modelRelativeTo}`,
-          );
-        }
-        if (!modelRelativeTo) {
-          return url.href;
-        }
-        const realmURLString = getCardMeta(model, 'realmURL');
-        const realmURL = realmURLString ? new URL(realmURLString) : undefined;
-        return maybeRelativeReference(url, modelRelativeTo, realmURL);
-      },
-    },
+    maybeRelativeReference: relativeReferenceFor(model),
   });
   merge(doc, { data });
   if (!isSingleCardDocument(doc)) {
@@ -280,7 +307,12 @@ export function serializeCardResource(
     usedLinksToFieldsOnly: !opts?.includeUnrenderedFields,
   });
   let overrides = getFieldOverrides(model);
-  opts = { ...(opts ?? {}), overrides };
+  // `serializeCardResource` is reachable without opts — both directly and
+  // through the `serialize` symbol, whose `opts` parameter is optional.
+  // That path doesn't read `opts.virtualNetwork`, so the synthesized
+  // working opts can lack it; cast through SerializeOpts | undefined to
+  // satisfy the required-VN type while preserving runtime behavior.
+  opts = { ...(opts ?? {}), overrides } as SerializeOpts | undefined;
   let fieldResources = Object.entries(fields)
     .filter(
       ([_fieldName, field]) =>
@@ -308,7 +340,7 @@ export function serializeCardResource(
 
 export function serializeFileDef(
   model: FileDef,
-  opts?: SerializeOpts,
+  opts: SerializeOpts,
 ): LooseSingleFileMetaDocument {
   let doc = {
     data: {
@@ -316,40 +348,12 @@ export function serializeFileDef(
       ...(model.id != null ? { id: model.id } : {}),
     },
   };
-  let modelRelativeTo: RealmResourceIdentifier | URL | undefined =
-    model.id ?? model[relativeTo];
   let data = serializeCardResource(
     model,
     doc,
     {
       ...opts,
-      ...{
-        maybeRelativeReference(possibleReference: string) {
-          // Registered prefix refs (e.g. @cardstack/catalog/foo) are already
-          // in their canonical portable form — return as-is
-          if (isRegisteredPrefix(possibleReference)) {
-            return possibleReference;
-          }
-          let modelRelativeToForURL =
-            typeof modelRelativeTo === 'string'
-              ? cardIdToURL(modelRelativeTo)
-              : modelRelativeTo;
-          let url = maybeURL(possibleReference, modelRelativeToForURL);
-          if (!url) {
-            throw new Error(
-              `could not determine url from '${possibleReference}' relative to ${modelRelativeTo}`,
-            );
-          }
-          if (!modelRelativeTo) {
-            return url.href;
-          }
-          const realmURLString = getCardMeta(model, 'realmURL');
-          const realmURL = realmURLString
-            ? new URL(realmURLString)
-            : undefined;
-          return maybeRelativeReference(url, modelRelativeTo, realmURL);
-        },
-      },
+      maybeRelativeReference: relativeReferenceFor(model),
     },
     undefined,
     FileMetaResourceType,

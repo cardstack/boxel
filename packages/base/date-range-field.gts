@@ -18,7 +18,21 @@ import { formatDateRangeForMarkdown } from './markdown-helpers';
 import { BusinessDays } from './components/business-days';
 
 interface DateRangeFieldConfiguration {
+  minDate?: 'today' | Date;
+  maxDate?: 'today' | Date;
   presentation?: 'standard' | 'businessDays';
+}
+
+function resolveConfiguredDate(
+  value: 'today' | Date | undefined,
+): Date | undefined {
+  if (!value) return undefined;
+  if (value === 'today') {
+    let today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today;
+  }
+  return value;
 }
 
 const Format = new Intl.DateTimeFormat('en-US', {
@@ -40,6 +54,18 @@ class Edit extends Component<typeof DateRangeField> {
 
   get formatted() {
     return getFormattedDate(this.range);
+  }
+
+  get config(): DateRangeFieldConfiguration | undefined {
+    return this.args.configuration as DateRangeFieldConfiguration | undefined;
+  }
+
+  get minDate(): Date | undefined {
+    return resolveConfiguredDate(this.config?.minDate);
+  }
+
+  get maxDate(): Date | undefined {
+    return resolveConfiguredDate(this.config?.maxDate);
   }
 
   @action onSelect(selected: any) {
@@ -93,6 +119,8 @@ class Edit extends Component<typeof DateRangeField> {
               @end={{this.range.end}}
               @onSelect={{this.onSelect}}
               @selected={{this.range}}
+              @minDate={{this.minDate}}
+              @maxDate={{this.maxDate}}
             />
           </div>
           <div class='dropdown-actions'>

@@ -12,14 +12,14 @@ import {
   sendResponseForBadRequest,
   sendResponseForSystemError,
   sendResponseForNotFound,
-} from '../middleware';
+} from '../middleware/index.ts';
 import { getStripe } from '@cardstack/billing/stripe-webhook-handlers/stripe';
 import {
   getPlanByName,
   getUserByMatrixUserId,
 } from '@cardstack/billing/billing-queries';
-import type { RealmServerTokenClaim } from '../utils/jwt';
-import type { CreateRoutesArgs } from '../routes';
+import type { RealmServerTokenClaim } from '../utils/jwt.ts';
+import type { CreateRoutesArgs } from '../routes.ts';
 
 export default function handleCreateStripeSessionRequest({
   dbAdapter,

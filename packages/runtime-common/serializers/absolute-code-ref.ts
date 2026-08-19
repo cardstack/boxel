@@ -3,4 +3,4 @@ export {
   serialize,
   deserializeAbsolute as deserialize,
   formatQuery,
-} from './code-ref';
+} from './code-ref.ts';

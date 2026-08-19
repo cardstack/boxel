@@ -11,24 +11,25 @@ import { isCardInstance, isLocalId, localId } from '@cardstack/runtime-common';
 
 import { SpecSelection } from '@cardstack/host/utils/local-storage-keys';
 
-import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-
 import type CardService from './card-service';
-import type ResetService from './reset';
+import type NetworkService from './network';
+import type SessionService from './session';
 import type StoreService from './store';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type { CardDef, BaseDef } from '@cardstack/base/card-api';
 
 export default class SpecPanelService extends Service {
   @tracked specSelection = window.localStorage.getItem(SpecSelection);
   @service declare private store: StoreService;
   @service declare private cardService: CardService;
-  @service declare private reset: ResetService;
+  @service declare private session: SessionService;
+  @service declare private network: NetworkService;
   private cachedAPI?: typeof CardAPI;
   private pendingCardIdSubscriptions = new Map<string, CardDef>();
 
   constructor(...args: ConstructorParameters<typeof Service>) {
     super(...args);
-    this.reset.register(this);
+    this.session.register(this);
     this.resetState();
     registerDestructor(this, () => {
       this.clearPendingCardIdSubscriptions();

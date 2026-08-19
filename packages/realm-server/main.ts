@@ -1,6 +1,6 @@
-import './instrument';
-import './setup-logger'; // This should be first
-import './lib/wtfnode-on-signal';
+import './instrument.ts';
+import './setup-logger.ts'; // This should be first
+import './lib/wtfnode-on-signal.ts';
 import { writeSync } from 'node:fs';
 import {
   Realm,
@@ -9,40 +9,45 @@ import {
   logger,
   Deferred,
   CachingDefinitionLookup,
+  DEFAULT_AUDIO_SIZE_LIMIT_BYTES,
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
+  DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
 } from '@cardstack/runtime-common';
-import { NodeAdapter } from './node-realm';
+import { NodeAdapter } from './node-realm.ts';
 import yargs from 'yargs';
-import { RealmServer } from './server';
+import { RealmServer } from './server.ts';
 import { join } from 'path';
 import * as Sentry from '@sentry/node';
 import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 
 import 'decorator-transforms/globals';
-import { createRemotePrerenderer } from './prerender/remote-prerenderer';
-import { buildCreatePrerenderAuth } from './prerender/auth';
+import { createRemotePrerenderer } from './prerender/remote-prerenderer.ts';
+import { buildCreatePrerenderAuth } from './prerender/auth.ts';
 import {
   isEnvironmentMode,
   getEnvironmentSlug,
   serviceURL,
   registerService,
   deregisterEnvironment,
-} from './lib/dev-service-registry';
-import { writeRuntimeMetadataFile } from './lib/runtime-metadata-file';
-import { runRegistryBackfillWithAdvisoryLock } from './lib/realm-registry-backfill';
-import { runRealmMetadataBackfillWithAdvisoryLock } from './lib/realm-metadata-backfill';
-import { runRealmConfigCardBackfillWithAdvisoryLock } from './lib/realm-config-card-backfill';
+} from './lib/dev-service-registry.ts';
+import { writeRuntimeMetadataFile } from './lib/runtime-metadata-file.ts';
+import { runRegistryBackfillWithAdvisoryLock } from './lib/realm-registry-backfill.ts';
 import {
   RealmRegistryReconciler,
   type RealmRegistryRow,
-} from './lib/realm-registry-reconciler';
-import { RealmFileChangesListener } from './lib/realm-file-changes-listener';
-import { RealmIndexUpdatedListener } from './lib/realm-index-updated-listener';
-import { ModuleCacheInvalidationListener } from './lib/module-cache-invalidation-listener';
-import { ModuleCacheCoordinator } from './lib/module-cache-coordination';
-import { resolveFullIndexOnStartup } from './lib/full-index-on-startup';
+} from './lib/realm-registry-reconciler.ts';
+import { RealmFileChangesListener } from './lib/realm-file-changes-listener.ts';
+import { RealmIndexUpdatedListener } from './lib/realm-index-updated-listener.ts';
+import { ModuleCacheInvalidationListener } from './lib/module-cache-invalidation-listener.ts';
+import { ModuleCacheCoordinator } from './lib/module-cache-coordination.ts';
+import { JobsFinishedListener } from './lib/jobs-finished-listener.ts';
+import { JobScopedSearchCache } from './job-scoped-search-cache.ts';
+import { startHealthSampler } from './health-sampler.ts';
+import { startEventLoopHeartbeat } from './liveness/event-loop-heartbeat.ts';
+import { startLivenessResponder } from './liveness/index.ts';
+import { resolveFullIndexOnStartup } from './lib/full-index-on-startup.ts';
 import { PUBLISHED_DIRECTORY_NAME } from '@cardstack/runtime-common';
 
 // FD-level synchronous stderr write — `writeSync(2, ...)` calls the
@@ -111,6 +116,21 @@ if (!REALM_SERVER_MATRIX_USERNAME) {
 const MATRIX_REGISTRATION_SHARED_SECRET =
   process.env.MATRIX_REGISTRATION_SHARED_SECRET;
 
+// Shared secret authenticating ai-bot's delegation requests (CS-11552).
+// Optional: when unset, the /_delegate-session endpoint responds 503 and mints
+// nothing, so the pull-model feature stays inert until the secret is
+// provisioned (and rotated, CS-11567) alongside ai-bot.
+const AI_BOT_DELEGATION_SECRET = process.env.AI_BOT_DELEGATION_SECRET;
+
+// Synapse admin credentials. Optional: only consumed by operator-action
+// endpoints that need to admin-impersonate a target user to read or write
+// their account_data on their behalf (synapse admin tokens can read but
+// not write another user's account_data). When unset on a localhost
+// matrix homeserver, the grafana upsert handler defaults to the dev
+// admin/password pair register-matrix-users.ts creates.
+const MATRIX_ADMIN_USERNAME = process.env.MATRIX_ADMIN_USERNAME;
+const MATRIX_ADMIN_PASSWORD = process.env.MATRIX_ADMIN_PASSWORD;
+
 if (process.env.DISABLE_MODULE_CACHING === 'true') {
   console.warn(
     `module caching has been disabled, module executables will be served directly from the filesystem`,
@@ -144,6 +164,14 @@ const FULL_INDEX_ON_STARTUP_OVERRIDE =
 // test's first lookupDefinition.
 const SKIP_MODULES_CACHE_CLEAR_ON_STARTUP =
   process.env.REALM_SERVER_SKIP_MODULES_CACHE_CLEAR_ON_STARTUP === 'true';
+// When set to 'true', every realm in this process mounts and serves source
+// without running a from-scratch index on startup (even on a new/empty index).
+// Definitions resolve lazily via the prerenderer on first lookup. Used by the
+// realm-server test stack's boot realm server: the suite runs its own
+// in-process realms and only needs the boot realms to serve source, so
+// skipping their boot index removes both the ~minutes-long startup wait and
+// the prerender-pool contention that index would create with the tests.
+const SKIP_BOOT_INDEX = process.env.REALM_SERVER_SKIP_BOOT_INDEX === 'true';
 // CS-10953 cross-process prerender coalesce. Off by default — flip on
 // after a stage burn-in. Effectively inert at N=1 (no contention; the
 // in-process #inFlight coalescer already dedups same-process callers),
@@ -172,6 +200,7 @@ let {
   migrateDB,
   workerManagerPort,
   workerManagerUrl,
+  livenessPort,
   prerendererUrl,
 } = yargs(process.argv.slice(2))
   .usage('Start realm server')
@@ -240,6 +269,11 @@ let {
         'The full URL of the worker manager. Used in branch mode instead of workerManagerPort.',
       type: 'string',
     },
+    livenessPort: {
+      description:
+        'Loopback-only port on which to answer GET /_liveness with this process’s main-thread liveness, served off a worker thread so the answer survives a saturated event loop. Omit to not serve it at all.',
+      type: 'number',
+    },
     prerendererUrl: {
       demandOption: true,
       description: 'URL of the prerender server to invoke',
@@ -289,6 +323,17 @@ for (let i = 0; i < fromUrls.length; i++) {
     let fromURL = new URL(from);
     virtualNetwork.addURLMapping(fromURL, to);
     urlMappings.push([fromURL, to]);
+    // Convention: https://cardstack.com/X/ aliases @cardstack/X/. Register
+    // the realm-prefix mapping too so unresolveURL on either form
+    // canonicalises to the same RRI form. This matters for cross-process
+    // cache keys (e.g. host prerender writes definitions cache keyed by
+    // internalKeyFor; realm-server reads back with the same VN). Without
+    // this, the realm-server would see only the URL mapping for base and
+    // the host's RRI-form keys would never match.
+    let m = from.match(/^https:\/\/cardstack\.com\/([^/]+)\/$/);
+    if (m) {
+      virtualNetwork.addRealmMapping(`@cardstack/${m[1]}/`, to.href);
+    }
   } else {
     virtualNetwork.addRealmMapping(from, to.href);
     urlMappings.push([to, to]); // use toUrl for both in hrefs
@@ -301,9 +346,27 @@ let autoMigrate = migrateDB || undefined;
 log.info(
   `Realm server boot config: port=${port} serverURL=${serverURL} distURL=${distURL} matrixURL=${matrixURL} realmsRootPath=${realmsRootPath} migrateDB=${Boolean(
     migrateDB,
-  )} workerManagerPort=${workerManagerPort ?? 'none'} prerendererUrl=${prerendererUrl} enableFileWatcher=${ENABLE_FILE_WATCHER} fullIndexOnStartupOverride=${FULL_INDEX_ON_STARTUP_OVERRIDE ?? 'unset (bootstrap-only)'}`,
+  )} workerManagerPort=${workerManagerPort ?? 'none'} livenessPort=${livenessPort ?? 'none'} prerendererUrl=${prerendererUrl} enableFileWatcher=${ENABLE_FILE_WATCHER} fullIndexOnStartupOverride=${FULL_INDEX_ON_STARTUP_OVERRIDE ?? 'unset (bootstrap-only)'}`,
 );
 log.info(`Realm paths: ${paths.map(String).join(', ')}`);
+
+// Start beating before anything else, so the shared buffer reflects a turning
+// event loop for the whole of boot rather than only from the point the server is
+// assembled. The responder reads that buffer from a thread of its own; when
+// `--livenessPort` is omitted there is no responder and the heartbeat is a
+// no-cost timer.
+const heartbeat = startEventLoopHeartbeat();
+// Guarded on a real port rather than merely present: yargs turns
+// `--livenessPort=` and `--no-livenessPort` into 0, and a bare `--livenessPort`
+// into NaN. Zero would bind an arbitrary ephemeral port and log it as a success
+// while a check aimed at the configured one is refused forever — a wedge that
+// never was, reported by logs that look fine.
+const livenessResponder =
+  typeof livenessPort === 'number' &&
+  Number.isInteger(livenessPort) &&
+  livenessPort > 0
+    ? startLivenessResponder({ buffer: heartbeat.buffer, port: livenessPort })
+    : undefined;
 
 const getIndexHTML = async () => {
   let response = await fetch(distURL);
@@ -345,6 +408,45 @@ const smokeTestHostApp = async () => {
   throw lastError ?? new Error('host app smoke test timed out');
 };
 
+// Report the host-shell token this realm server is serving to the prerender
+// manager. The manager echoes it on heartbeat responses so prerender servers
+// recycle their browsers when it changes — i.e. when a deploy ships a new
+// host bundle. Runs at boot (after the smoke test confirmed the shell is
+// reachable): a deploy restarts this process, so a new bundle is reported
+// here and picked up by the prerender fleet. Best-effort — a missing or
+// unreachable manager must never block realm-server boot.
+const reportHostShellToManager = async () => {
+  try {
+    let html = await getIndexHTML();
+    let { createHash } = await import('crypto');
+    let hash = createHash('md5').update(html).digest('hex').slice(0, 8);
+    // Report to the manager URL the realm server already uses (prerendererUrl);
+    // PRERENDER_MANAGER_URL is only set on the prerender-server tasks.
+    let managerURL = prerendererUrl.replace(/\/$/, '');
+    let response = await fetch(`${managerURL}/host-shell`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/vnd.api+json',
+        Accept: 'application/vnd.api+json',
+      },
+      body: JSON.stringify({ data: { attributes: { hash } } }),
+    });
+    if (response.ok) {
+      console.log(
+        `Reported host shell token ${hash} to prerender manager at ${managerURL}`,
+      );
+    } else {
+      console.warn(
+        `Prerender manager rejected host shell report: ${response.status}`,
+      );
+    }
+  } catch (e: any) {
+    console.warn(
+      `Failed to report host shell token to prerender manager: ${e?.message ?? e}`,
+    );
+  }
+};
+
 (async () => {
   try {
     await smokeTestHostApp();
@@ -360,9 +462,21 @@ const smokeTestHostApp = async () => {
   let realms: Realm[] = [];
   let dbAdapter = new PgAdapter({ autoMigrate });
   let queue = new PgQueuePublisher(dbAdapter);
+  // DB-backed job-scoped search cache, shared across replicas via Postgres.
+  // One instance per process, shared between the request handlers (via
+  // RealmServer → createRoutes) and the JobsFinishedListener so a
+  // `jobs_finished` NOTIFY evicts the same entries the handlers populate.
+  let searchCache = new JobScopedSearchCache(dbAdapter);
+  searchCache.startJanitor();
+  // Periodic event-loop-lag + in-flight-search sampler. Emits a
+  // `realm:health` line only during saturation windows, so a stalled
+  // `_search` can be checked against whether the process's event loop was
+  // starved at the time.
+  let stopHealthSampler = startHealthSampler();
   let reconciler: RealmRegistryReconciler | undefined;
   let fileChangesListener: RealmFileChangesListener | undefined;
   let indexUpdatedListener: RealmIndexUpdatedListener | undefined;
+  let jobsFinishedListener: JobsFinishedListener | undefined;
   let moduleCacheInvalidationListener:
     | ModuleCacheInvalidationListener
     | undefined;
@@ -418,34 +532,6 @@ const smokeTestHostApp = async () => {
   // Guarded by a pg advisory lock so, in a future multi-instance deployment,
   // only one process does the disk scan per startup wave (CS-10890).
   await runRegistryBackfillWithAdvisoryLock(dbAdapter, {
-    dbAdapter,
-    realmsRootPath,
-    serverURL: new URL(String(serverURL)),
-    bootstrapRealms: paths.map((p, i) => ({
-      diskPath: String(p),
-      url: hrefs[i][0],
-    })),
-  });
-
-  // CS-10053: copy showAsCatalog/publishable from .realm.json into the
-  // realm_metadata table on first boot, then trim those keys from the
-  // sidecar. Idempotent on subsequent boots.
-  await runRealmMetadataBackfillWithAdvisoryLock(dbAdapter, {
-    dbAdapter,
-    realmsRootPath,
-    serverURL: new URL(String(serverURL)),
-    bootstrapRealms: paths.map((p, i) => ({
-      diskPath: String(p),
-      url: hrefs[i][0],
-    })),
-  });
-
-  // CS-11150: materialize a RealmConfig card at /realm.json from the
-  // legacy .realm.json sidecar wherever the card is still absent, then
-  // trim the migrated keys from the sidecar. Unblocks the sidecar
-  // removal in CS-11131. Idempotent — once a realm has a card, future
-  // boots skip it.
-  await runRealmConfigCardBackfillWithAdvisoryLock(dbAdapter, {
     dbAdapter,
     realmsRootPath,
     serverURL: new URL(String(serverURL)),
@@ -535,9 +621,18 @@ const smokeTestHostApp = async () => {
           fileSizeLimitBytes: Number(
             process.env.FILE_SIZE_LIMIT_BYTES ?? DEFAULT_FILE_SIZE_LIMIT_BYTES,
           ),
+          audioSizeLimitBytes: Number(
+            process.env.AUDIO_SIZE_LIMIT_BYTES ??
+              DEFAULT_AUDIO_SIZE_LIMIT_BYTES,
+          ),
+          videoSizeLimitBytes: Number(
+            process.env.VIDEO_SIZE_LIMIT_BYTES ??
+              DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
+          ),
         },
         {
           ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),
+          ...(SKIP_BOOT_INDEX ? { skipBootIndex: true as const } : {}),
           ...(process.env.DISABLE_MODULE_CACHING === 'true'
             ? { disableModuleCaching: true }
             : {}),
@@ -573,8 +668,10 @@ const smokeTestHostApp = async () => {
     realmServerSecretSeed: REALM_SERVER_SECRET_SEED,
     realmSecretSeed: REALM_SECRET_SEED,
     grafanaSecret: GRAFANA_SECRET,
+    aiBotDelegationSecret: AI_BOT_DELEGATION_SECRET,
     dbAdapter,
     queue,
+    searchCache,
     definitionLookup,
     assetsURL: process.env.ASSETS_URL_OVERRIDE
       ? new URL(process.env.ASSETS_URL_OVERRIDE)
@@ -582,12 +679,15 @@ const smokeTestHostApp = async () => {
     getIndexHTML,
     serverURL: new URL(serverURL),
     matrixRegistrationSecret: MATRIX_REGISTRATION_SHARED_SECRET,
+    matrixAdminUsername: MATRIX_ADMIN_USERNAME,
+    matrixAdminPassword: MATRIX_ADMIN_PASSWORD,
     enableFileWatcher: ENABLE_FILE_WATCHER,
     domainsForPublishedRealms,
     getRegistrationSecret: useRegistrationSecretFunction
       ? getRegistrationSecret
       : undefined,
     prerenderer,
+    reportHostShell: reportHostShellToManager,
   });
 
   let httpServer = server.listen(port);
@@ -599,7 +699,12 @@ const smokeTestHostApp = async () => {
       port: actualPort,
     });
     if (isEnvironmentMode()) {
-      registerService(httpServer, serviceName, { wildcardSubdomains: true });
+      // The realm-server serves HTTP/2 over TLS in env mode (see
+      // createListener); Traefik must negotiate h2 to this backend.
+      registerService(httpServer, serviceName, {
+        wildcardSubdomains: true,
+        http2: true,
+      });
     }
   });
   let stopping = false;
@@ -624,23 +729,32 @@ const smokeTestHostApp = async () => {
         console.error(`error unsubscribing realm ${r.url}:`, err);
       }
     }
-    // Both the plain `http.Server` and the TLS-mode `net.Server`
-    // dispatcher (see `server.ts`) expose `closeAllConnections()`. The
-    // dispatcher's mirror force-closes in-flight TLS / HTTP/2 /
-    // keep-alive sessions instead of waiting for peers to release them
-    // — without it `close()` can hang for a tab-keep-alive lifetime.
+    // The plain `http.Server`, the standard-mode `net.Server` dispatcher,
+    // and the env-mode `Http2SecureServer` (see `server.ts`) all expose
+    // `closeAllConnections()`. It force-closes in-flight TLS / HTTP/2 /
+    // keep-alive sessions instead of waiting for peers to release them —
+    // without it `close()` can hang for a tab-keep-alive (or Traefik
+    // backend session) lifetime.
     if (typeof (httpServer as any).closeAllConnections === 'function') {
       (httpServer as any).closeAllConnections();
     }
+    searchCache.stopJanitor();
+    stopHealthSampler();
     httpServer.close(() => {
       (async () => {
         await Promise.all([
           reconciler?.shutDown(),
           fileChangesListener?.shutDown(),
           indexUpdatedListener?.shutDown(),
+          jobsFinishedListener?.shutDown(),
           moduleCacheInvalidationListener?.shutDown(),
           moduleCacheCoordinator?.shutDown(),
+          livenessResponder?.stop(),
         ]);
+        // Stopped only once the responder is gone, never before: the loop is
+        // still turning while the shutdown above runs, and a check arriving in
+        // that window should read a beating heartbeat rather than a frozen one.
+        heartbeat.stop();
         queue.destroy(); // warning this is async
         dbAdapter.close(); // warning this is async
         console.log(`realm server on port ${stopPort} has stopped`);
@@ -720,6 +834,16 @@ const smokeTestHostApp = async () => {
   // wait for first-request mount via reconciler.lookupOrMount().
   await server.start();
 
+  // Now that the HTTP listener is accepting traffic and serving the new host
+  // shell, tell the prerender manager which shell we're serving so the fleet
+  // recycles after a host redeploy. Reporting earlier (before the listener is
+  // live) races a rolling deploy: the manager could echo the new token while
+  // the load balancer still routes to the old task, so a prerender would
+  // recycle against the old shell, record the new token, and stop retrying.
+  // The post-deployment hook reports again once the service is fully stable.
+  // Fire-and-forget — a missing/unreachable manager must never affect serving.
+  void reportHostShellToManager();
+
   // Begin the reconciler's background poll loop (LISTEN realm_registry +
   // 30s safety poll). It picks up changes from peer instances (publish,
   // unpublish, delete) and reconciles them into local mounted state.
@@ -747,6 +871,17 @@ const smokeTestHostApp = async () => {
     lookupMountedRealm: (url) => realms.find((r) => r.url === url),
   });
   await indexUpdatedListener.start();
+
+  // CS-11179: NOTIFY-driven eviction for the DB-backed JobScopedSearchCache.
+  // On `jobs_finished` it drops the finished job's cache rows immediately
+  // instead of waiting for the janitor to reclaim them past their TTL. Shares
+  // the same searchCache instance the request handlers populate (passed into
+  // RealmServer above).
+  jobsFinishedListener = new JobsFinishedListener({
+    dbAdapter,
+    searchCache,
+  });
+  await jobsFinishedListener.start();
 
   // Cross-instance module-cache invalidation (CS-10952). When a peer
   // realm-server emits NOTIFY module_cache_invalidated, replay the bump on

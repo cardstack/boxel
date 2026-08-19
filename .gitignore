@@ -28,3 +28,7 @@ packages/observability/**/*.local.json
 # someone pointing it at the repo.
 boxel-dev-all.pids
 /boxel-dev-all.pids
+# Python bytecode cache from Synapse loading our user_mapping_provider via
+# the /custom/modules/ mount.
+__pycache__/
+*.pyc

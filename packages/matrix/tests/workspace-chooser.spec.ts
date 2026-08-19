@@ -1,10 +1,10 @@
-import { test, expect } from './fixtures';
-import { appURL } from '../helpers/isolated-realm-server';
+import { test, expect } from './fixtures.ts';
+import { appURL } from '../support/isolated-realm-server.ts';
 import {
   clearLocalStorage,
   createRealm,
   createSubscribedUserAndLogin,
-} from '../helpers';
+} from '../helpers/index.ts';
 
 test.describe('Workspace Chooser', () => {
   test('back button from a workspace returns to the workspace chooser', async ({

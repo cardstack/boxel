@@ -6,6 +6,7 @@ import {
   type Expression,
   type PgPrimitive,
   type PopulateCoordinator,
+  type Querier,
 } from '@cardstack/runtime-common';
 import type { NotificationSubscription, PgAdapter } from '@cardstack/postgres';
 
@@ -44,14 +45,18 @@ export function hashCoalesceKeyForAdvisoryLock(key: string): string {
 //     the coalesce key, and (if won) runs `fn` inside the BEGIN/COMMIT
 //     window with a `pg_notify` emit between persist and commit.
 //
-// The pinned connection ONLY holds the advisory lock and emits the
-// NOTIFY. The `fn` callback issues its DB work (readFromDatabaseCache,
-// persistDefinitionCacheEntry) through the shared dbAdapter — a separate
-// pool connection autocommits each query as today. Pool pressure is
-// bounded by N processes (each pins one extra client per concurrent
-// coordinated load) rather than N × M concurrent callers, since the
-// in-process #inFlight coalescer fans every same-key callers into one
-// coordinated load per process.
+// The pinned connection holds the advisory lock, emits the NOTIFY, and
+// is handed to `fn` as a querier so `fn` can run its own DB work
+// (cache re-read + persist) on that same connection instead of checking
+// out additional pool clients. This keeps a coordinated load to exactly
+// ONE pool connection: because each distinct coalesce key wins its own
+// lock, a burst of N distinct-key winners pins N connections, and if
+// each also needed a second client for its queries the pool would
+// deadlock once N approached the ceiling (the schema editor alone fans
+// out to ~31 distinct cold base modules). The in-process #inFlight
+// coalescer still fans same-key callers into one coordinated load per
+// process; `fn` callbacks that are not DB-bound (e.g. a prerender) may
+// ignore the querier and use the shared dbAdapter.
 //
 // `pg_try_advisory_xact_lock` is non-blocking by design: a blocking
 // `pg_advisory_xact_lock` would hold a pool client for the full
@@ -136,7 +141,7 @@ export class ModuleCacheCoordinator implements PopulateCoordinator {
   // PopulateCoordinator — winner path.
   async tryAcquireAndRun<T>(
     coalesceKey: string,
-    fn: () => Promise<T>,
+    fn: (querier: Querier) => Promise<T>,
   ): Promise<{ acquired: true; result: T } | { acquired: false }> {
     const lockKey = hashCoalesceKeyForAdvisoryLock(coalesceKey);
     return await this.#deps.dbAdapter.withConnection(async (queryFn) => {
@@ -162,11 +167,15 @@ export class ModuleCacheCoordinator implements PopulateCoordinator {
         return { acquired: false };
       }
       try {
-        const result = await fn();
+        const result = await fn(queryFn);
         // Emit pg_notify INSIDE the same transaction as the lock so
-        // peers only see the signal on commit. The persist itself ran
-        // through the shared dbAdapter (already autocommitted), so the
-        // row is visible by the time peers re-read on wake.
+        // peers only see the signal on commit. When `fn` persisted
+        // through the pinned `queryFn`, that write is part of THIS
+        // transaction and becomes visible to peers at the COMMIT below —
+        // which is also when the NOTIFY is delivered, so a woken peer's
+        // re-read always observes it. When `fn` persisted through the
+        // shared dbAdapter instead, the row autocommitted even earlier.
+        // Either way the row is visible by the time peers re-read on wake.
         //
         // We notify regardless of whether `fn` produced a row or
         // undefined — a "no row" outcome (all populationCandidates

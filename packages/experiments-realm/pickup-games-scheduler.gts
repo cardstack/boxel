@@ -4,11 +4,11 @@ import {
   field,
   linksToMany,
   CardDef,
-} from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
-import DateTimeField from 'https://cardstack.com/base/datetime';
+} from '@cardstack/base/card-api';
+import { Component } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
+import DateTimeField from '@cardstack/base/datetime';
 import { format as formatDate } from 'date-fns';
 import CalendarClockIcon from '@cardstack/boxel-icons/calendar-clock';
 
@@ -68,5 +68,5 @@ export class GameSlot extends CardDef {
 export class PickupGamesScheduler extends CardDef {
   static displayName = 'Pickup Games Scheduler';
   static icon = CalendarClockIcon;
-  @field gameSlots = linksToMany(GameSlot);
+  @field gameSlots = linksToMany(GameSlot, { searchable: true });
 }

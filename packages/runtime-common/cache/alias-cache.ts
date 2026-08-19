@@ -1,4 +1,4 @@
-import type { LocalPath } from '../paths';
+import type { LocalPath } from '../paths.ts';
 
 export interface CanonicalCacheEntry {
   canonicalPath: LocalPath;

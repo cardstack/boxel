@@ -6,11 +6,11 @@ import {
   linksToMany,
   Component,
   FieldDef,
-} from 'https://cardstack.com/base/card-api';
-import NumberField from 'https://cardstack.com/base/number';
-import BooleanField from 'https://cardstack.com/base/boolean';
-import DateRangeField from 'https://cardstack.com/base/date-range-field';
-import ColorField from 'https://cardstack.com/base/color';
+} from '@cardstack/base/card-api';
+import NumberField from '@cardstack/base/number';
+import BooleanField from '@cardstack/base/boolean';
+import DateRangeField from '@cardstack/base/date-range-field';
+import ColorField from '@cardstack/base/color';
 
 import { Tag } from './tag';
 import { User } from './user';
@@ -57,7 +57,10 @@ export class TaskStatusEdit extends Component<typeof TaskStatusField> {
     return (this.args.model.constructor as any).values as TaskStatusField[];
   }
 
-  @action onSelectStatus(status: TaskStatusField): void {
+  @action onSelectStatus(status: TaskStatusField | null): void {
+    if (!status) {
+      return;
+    }
     this.label = status.label;
     this.args.model.label = this.selectedStatus?.label;
     this.args.model.index = this.selectedStatus?.index;
@@ -529,10 +532,10 @@ export class TaskPriority extends FieldDef {
 
 export class Task extends Todo {
   static displayName = 'Task';
-  @field tags = linksToMany(() => Tag);
+  @field tags = linksToMany(() => Tag, { searchable: true });
   @field dateRange = contains(DateRangeField);
   @field status = contains(TaskStatusField);
-  @field assignee = linksTo(() => User);
+  @field assignee = linksTo(() => User, { searchable: true });
   @field priority = contains(TaskPriority);
 
   @field cardTitle = contains(StringField, {

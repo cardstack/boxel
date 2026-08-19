@@ -1,0 +1,22 @@
+{
+  "version": "v0.1.0",
+  "skills": [
+    "boxel",
+    "boxel-create-edit-cards",
+    "boxel-design",
+    "boxel-environment",
+    "boxel-file-def",
+    "boxel-flavored-markdown",
+    "boxel-markdown-format",
+    "boxel-patterns",
+    "boxel-skill-authoring",
+    "boxel-theme-development",
+    "boxel-ui-component-discovery",
+    "boxel-ui-guidelines",
+    "boxel-workspace-cardinal-rules",
+    "catalog-listing",
+    "ember-best-practices",
+    "glossary.md",
+    "source-code-editing"
+  ]
+}

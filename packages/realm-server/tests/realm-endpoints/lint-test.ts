@@ -1,17 +1,19 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
 import type { Realm } from '@cardstack/runtime-common';
-import { setupPermissionedRealmCached, createJWT } from '../helpers';
+import { setupPermissionedRealmCached, createJWT } from '../helpers/index.ts';
 import {
   benchmarkOperation,
   createConcurrentTestData,
   createErrorTestCases,
   createPerformanceAssertion,
-} from '../helpers/prettier-test-utils';
+  forceGc,
+} from '../helpers/prettier-test-utils.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
-module(`realm-endpoints/${basename(__filename)}`, function () {
+module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
   module('Realm-specific Endpoints | POST _lint', function (hooks) {
     let testRealm: Realm;
     let request: SuperTest<Test>;
@@ -75,7 +77,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       const testCases = [
         {
           name: 'Plain text request',
-          source: `import { CardDef } from 'https://cardstack.com/base/card-api';
+          source: `import { CardDef } from '@cardstack/base/card-api';
 export class MyCard extends CardDef {
   @field name = contains(StringField);
 }`,
@@ -227,7 +229,7 @@ computeVia.call({ title: 'Tic Tac Toe' });
     });
 
     test('fallback to eslint-only when prettier fails', async function (assert) {
-      const malformedSource = `import { CardDef } from 'https://cardstack.com/base/card-api';
+      const malformedSource = `import { CardDef } from '@cardstack/base/card-api';
 export class MyCard extends CardDef {
   @field name = contains(StringField);
   // Malformed syntax that prettier cannot parse
@@ -273,7 +275,7 @@ export class MyCard extends CardDef {
     });
 
     test('lint operations complete within performance threshold', async function (assert) {
-      const testSource = `import { CardDef } from 'https://cardstack.com/base/card-api';
+      const testSource = `import { CardDef } from '@cardstack/base/card-api';
 export class MyCard extends CardDef {
   @field name = contains(StringField);
 }`;
@@ -341,27 +343,43 @@ export class MyCard extends CardDef {
     });
 
     test('memory usage during lint operations', async function (assert) {
-      const initialMemory = process.memoryUsage().heapUsed;
-
-      const testSource = `import { CardDef } from 'https://cardstack.com/base/card-api';
+      const testSource = `import { CardDef } from '@cardstack/base/card-api';
 export class MyCard extends CardDef {
   @field name = contains(StringField);
 }`;
 
+      const lintOnce = () =>
+        request
+          .post('/_lint')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+          )
+          .set('X-HTTP-Method-Override', 'QUERY')
+          .set('Accept', 'application/json')
+          .send(testSource);
+
+      // Warm up first so one-time, legitimately-retained initialization (eslint
+      // rule definitions, prettier plugins, module caches) is established before
+      // the baseline reading and isn't misattributed to the measured loop.
+      const warmup = await lintOnce();
+      assert.strictEqual(
+        warmup.status,
+        200,
+        'warm-up lint request should succeed so the baseline is a steady-state lint path',
+      );
+
+      // Force a collection before each reading so the delta reflects retained
+      // memory, not transient garbage that GC simply hasn't reclaimed yet.
+      // Without this the reading is dominated by collectible allocations from
+      // ten concurrent lint requests, which is noise, not a leak signal.
+      const gcForced = forceGc();
+      const initialMemory = process.memoryUsage().heapUsed;
+
       // Run multiple lint operations to test memory usage
       const operations = [];
       for (let i = 0; i < 10; i++) {
-        operations.push(
-          request
-            .post('/_lint')
-            .set(
-              'Authorization',
-              `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
-            )
-            .set('X-HTTP-Method-Override', 'QUERY')
-            .set('Accept', 'application/json')
-            .send(testSource),
-        );
+        operations.push(lintOnce());
       }
 
       const results = await Promise.all(operations);
@@ -375,13 +393,29 @@ export class MyCard extends CardDef {
         );
       });
 
+      forceGc();
       const finalMemory = process.memoryUsage().heapUsed;
       const memoryIncrease = finalMemory - initialMemory;
+      const memoryIncreaseMb = memoryIncrease / 1024 / 1024;
 
-      // Memory increase should be reasonable (less than 45MB for lint operations)
+      // Always record the retained-growth number (and whether GC actually ran)
+      // so a CI failure — or a passing run drifting toward the bound — can be
+      // told apart from measurement noise without another CI cycle.
+      console.log(
+        `[lint-memory-test] initial=${(initialMemory / 1024 / 1024).toFixed(2)}MB ` +
+          `final=${(finalMemory / 1024 / 1024).toFixed(2)}MB ` +
+          `retainedGrowth=${memoryIncreaseMb.toFixed(2)}MB gcForced=${gcForced}`,
+      );
+
+      // The bound only means "retained memory" when a collection actually ran;
+      // with warm caches and a forced GC ten idempotent lint operations retain
+      // almost nothing, so 20MB is a generous leak guard. If GC could not be
+      // forced the delta still includes transient garbage, so fall back to the
+      // looser historical bound rather than flaking against the tight one.
+      const thresholdMb = gcForced ? 20 : 45;
       assert.ok(
-        memoryIncrease < 45 * 1024 * 1024,
-        `Memory increase should be under 45MB, got ${(memoryIncrease / 1024 / 1024).toFixed(2)}MB`,
+        memoryIncrease < thresholdMb * 1024 * 1024,
+        `Memory increase should be under ${thresholdMb}MB, got ${memoryIncreaseMb.toFixed(2)}MB (gcForced=${gcForced})`,
       );
     });
 
@@ -394,8 +428,8 @@ export class MyCard extends CardDef {
         )
         .set('X-HTTP-Method-Override', 'QUERY')
         .set('Accept', 'application/json')
-        .send(`import { CardDef } from 'https://cardstack.com/base/card-api';
-import { CardDef } from 'https://cardstack.com/base/card-api';
+        .send(`import { CardDef } from '@cardstack/base/card-api';
+import { CardDef } from '@cardstack/base/card-api';
 export class MyCard extends CardDef {
 @field name = contains(StringField)
 }
@@ -405,8 +439,8 @@ export class MyCard extends CardDef {
       let responseJson = JSON.parse(response.text);
       assert.strictEqual(
         responseJson.output,
-        `import StringField from 'https://cardstack.com/base/string';
-import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
+        `import StringField from '@cardstack/base/string';
+import { CardDef, field, contains } from '@cardstack/base/card-api';
 
 export class MyCard extends CardDef {
   @field name = contains(StringField);
@@ -452,7 +486,7 @@ import MyComponent from 'somewhere';
         )
         .set('X-HTTP-Method-Override', 'QUERY')
         .set('Accept', 'application/json')
-        .send(`import { CardDef } from 'https://cardstack.com/base/card-api';
+        .send(`import { CardDef } from '@cardstack/base/card-api';
 import MyComponent from 'somewhere';
 
 export class MyCard extends CardDef {
@@ -469,8 +503,8 @@ export class MyCard extends CardDef {
       assert.strictEqual(
         responseJson.output,
         `import { eq } from '@cardstack/boxel-ui/helpers';
-import StringField from 'https://cardstack.com/base/string';
-import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
+import StringField from '@cardstack/base/string';
+import { CardDef, field, contains } from '@cardstack/base/card-api';
 import MyComponent from 'somewhere';
 
 export class MyCard extends CardDef {
@@ -492,8 +526,8 @@ export class MyCard extends CardDef {
         )
         .set('X-HTTP-Method-Override', 'QUERY')
         .set('Accept', 'application/json')
-        .send(`import{CardDef}from 'https://cardstack.com/base/card-api';
-import{StringField}from 'https://cardstack.com/base/string';
+        .send(`import{CardDef}from '@cardstack/base/card-api';
+import{StringField}from '@cardstack/base/string';
 export class MyCard extends CardDef{
 @field name=contains(StringField);
 }`);
@@ -502,8 +536,8 @@ export class MyCard extends CardDef{
       let responseJson = JSON.parse(response.text);
       assert.strictEqual(
         responseJson.output,
-        `import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
-import { StringField } from 'https://cardstack.com/base/string';
+        `import { CardDef, field, contains } from '@cardstack/base/card-api';
+import { StringField } from '@cardstack/base/string';
 export class MyCard extends CardDef {
   @field name = contains(StringField);
 }
@@ -521,7 +555,7 @@ export class MyCard extends CardDef {
         )
         .set('X-HTTP-Method-Override', 'QUERY')
         .set('Accept', 'application/json')
-        .send(`import { CardDef } from 'https://cardstack.com/base/card-api';
+        .send(`import { CardDef } from '@cardstack/base/card-api';
 export class MyCard extends CardDef {
 }
 <template>
@@ -561,7 +595,7 @@ export class MyCard extends CardDef {
         )
         .set('X-HTTP-Method-Override', 'QUERY')
         .set('Accept', 'application/json')
-        .send(`import { CardDef } from 'https://cardstack.com/base/card-api';
+        .send(`import { CardDef } from '@cardstack/base/card-api';
 export class MyCard extends CardDef {
 }
 <template>
@@ -638,7 +672,7 @@ import MyComponent from 'somewhere';
         )
         .set('X-HTTP-Method-Override', 'QUERY')
         .set('Accept', 'application/json')
-        .send(`import { CardDef } from "https://cardstack.com/base/card-api";
+        .send(`import { CardDef } from "@cardstack/base/card-api";
 export class MyCard extends CardDef {
 @field name = contains(StringField, { cardDescription: "test description" });
 }`);
@@ -648,11 +682,11 @@ export class MyCard extends CardDef {
 
       // Should use single quotes based on prettier configuration
       assert.ok(
-        responseJson.output.includes("'https://cardstack.com/base/string'"),
+        responseJson.output.includes("'@cardstack/base/string'"),
         'Single quotes are used for imports',
       );
       assert.ok(
-        responseJson.output.includes("'https://cardstack.com/base/card-api'"),
+        responseJson.output.includes("'@cardstack/base/card-api'"),
         'Single quotes are used consistently',
       );
       assert.ok(
@@ -671,7 +705,7 @@ export class MyCard extends CardDef {
         .set('X-HTTP-Method-Override', 'QUERY')
         .set('Accept', 'application/json')
         .set('X-Filename', 'my-card.gts')
-        .send(`import { CardDef } from 'https://cardstack.com/base/card-api';
+        .send(`import { CardDef } from '@cardstack/base/card-api';
 export class MyCard extends CardDef {
 @field name = contains(StringField);
 }
@@ -681,8 +715,8 @@ export class MyCard extends CardDef {
       let responseJson = JSON.parse(response.text);
       assert.strictEqual(
         responseJson.output,
-        `import StringField from 'https://cardstack.com/base/string';
-import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
+        `import StringField from '@cardstack/base/string';
+import { CardDef, field, contains } from '@cardstack/base/card-api';
 export class MyCard extends CardDef {
   @field name = contains(StringField);
 }
@@ -691,9 +725,375 @@ export class MyCard extends CardDef {
       );
     });
 
+    // Verify /_lint loads host's actual lint config rather than a
+    // hand-maintained ESLint subset, and that ember-template-lint runs
+    // alongside ESLint. None of these rules fire if either piece is missing.
+
+    test('ember/no-empty-glimmer-component-classes fires (from host plugin:ember/recommended-gts)', async function (assert) {
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .set('X-Filename', 'sample.gts')
+        .send(`import Component from '@glimmer/component';
+
+export default class Sample extends Component {
+  <template>
+    <p>Hello</p>
+  </template>
+}
+`);
+      assert.strictEqual(response.status, 200);
+      let body = JSON.parse(response.text);
+      let messages = body.messages as { ruleId: string }[];
+      assert.ok(
+        messages.some(
+          (m) => m.ruleId === 'ember/no-empty-glimmer-component-classes',
+        ),
+        'host plugin:ember/recommended-gts rule should be reported',
+      );
+    });
+
+    test('@cardstack/boxel/no-raf-for-state fires (host rule, was missing from inline config)', async function (assert) {
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .set('X-Filename', 'sample.gts')
+        .send(`import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
+
+export default class Sample extends Component {
+  @tracked count = 0;
+  bump = () => {
+    requestAnimationFrame(() => { this.count = this.count + 1; });
+  };
+}
+`);
+      assert.strictEqual(response.status, 200);
+      let body = JSON.parse(response.text);
+      let messages = body.messages as { ruleId: string; severity: number }[];
+      let hit = messages.find(
+        (m) => m.ruleId === '@cardstack/boxel/no-raf-for-state',
+      );
+      assert.ok(hit, '@cardstack/boxel/no-raf-for-state should be reported');
+      assert.strictEqual(
+        hit?.severity,
+        2,
+        'no-raf-for-state is error severity',
+      );
+    });
+
+    test('ember-template-lint runs alongside ESLint (no-invalid-interactive)', async function (assert) {
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .set('X-Filename', 'interactive.gts').send(`<template>
+  <div onclick={{this.doThing}}>{{@arg}}</div>
+</template>
+`);
+      assert.strictEqual(response.status, 200);
+      let body = JSON.parse(response.text);
+      let messages = body.messages as {
+        source: string;
+        ruleId: string | null;
+      }[];
+      assert.ok(
+        messages.some(
+          (m) =>
+            m.source === 'template-lint' &&
+            m.ruleId === 'no-invalid-interactive',
+        ),
+        'template-lint no-invalid-interactive should be reported with source=template-lint',
+      );
+    });
+
+    test('no-unused-block-params allows underscore-prefixed params but still flags plain unused ones', async function (assert) {
+      // Underscore-prefixed block params are intentionally unused (matching the
+      // `^_` convention we already allow in ESLint), so they must NOT be
+      // flagged; a plain unused trailing param still must be.
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .set('X-Filename', 'block-params.gts').send(`<template>
+  {{#each this.rows as |_row|}}
+    <div class="dot"></div>
+  {{/each}}
+  {{#each this.rows as |row idx|}}
+    {{row}}
+  {{/each}}
+</template>
+`);
+      assert.strictEqual(response.status, 200);
+      let body = JSON.parse(response.text);
+      let messages = body.messages as {
+        source: string;
+        ruleId: string | null;
+        message: string;
+      }[];
+      let unusedFindings = messages.filter((m) =>
+        /is defined but never used/.test(m.message),
+      );
+      assert.notOk(
+        unusedFindings.some((m) => m.message.includes(`'_row'`)),
+        `underscore-prefixed '_row' should be allowed: ${JSON.stringify(
+          unusedFindings,
+        )}`,
+      );
+      assert.ok(
+        unusedFindings.some(
+          (m) =>
+            m.ruleId === 'no-unused-block-params-except-underscore' &&
+            m.message.includes(`'idx'`),
+        ),
+        `plain unused 'idx' should still be flagged: ${JSON.stringify(
+          messages,
+        )}`,
+      );
+      assert.notOk(
+        messages.some((m) => m.ruleId === 'no-unused-block-params'),
+        'the core no-unused-block-params rule is disabled (replaced by the underscore-aware variant)',
+      );
+    });
+
+    test('flags a `<style scoped>` nested inside an element (no-nested-scoped-style)', async function (assert) {
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .set('X-Filename', 'nested-style.gts').send(`<template>
+  <div class="my-card">
+    <style scoped>
+      .my-card { color: red; }
+    </style>
+  </div>
+</template>
+`);
+      assert.strictEqual(response.status, 200);
+      let body = JSON.parse(response.text);
+      let messages = body.messages as {
+        source: string;
+        ruleId: string | null;
+        severity: number;
+      }[];
+      let hit = messages.find(
+        (m) =>
+          m.source === 'template-lint' && m.ruleId === 'no-nested-scoped-style',
+      );
+      assert.ok(
+        hit,
+        `nested <style scoped> should be flagged by template-lint: ${JSON.stringify(
+          messages,
+        )}`,
+      );
+      assert.strictEqual(
+        hit?.severity,
+        2,
+        'no-nested-scoped-style is error severity (nested scoped styles fail transpilation)',
+      );
+    });
+
+    test('does not flag a `<style scoped>` at the template root (no-nested-scoped-style)', async function (assert) {
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .set('X-Filename', 'root-style.gts').send(`<template>
+  <div class="my-card">Hello</div>
+  <style scoped>
+    .my-card { color: red; }
+  </style>
+</template>
+`);
+      assert.strictEqual(response.status, 200);
+      let body = JSON.parse(response.text);
+      let messages = body.messages as { ruleId: string | null }[];
+      assert.notOk(
+        messages.some((m) => m.ruleId === 'no-nested-scoped-style'),
+        `root-level <style scoped> should not be flagged: ${JSON.stringify(
+          messages,
+        )}`,
+      );
+    });
+
+    test('flags a nested plain `<style>` that the fix pass auto-scopes (no-nested-scoped-style)', async function (assert) {
+      // The riskiest interaction between the two style rules: a nested
+      // `<style>` with no `scoped` attribute. `require-scoped-style` adds
+      // `scoped` during the fix pass, and the verify of the fixed output is
+      // what rejects the (now scoped) nested style — so this asserts the
+      // fix-then-reject combination survives changes to rule ordering or
+      // fix application.
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .set('X-Filename', 'nested-plain-style.gts').send(`<template>
+  <div class="my-card">
+    <style>
+      .my-card { color: red; }
+    </style>
+  </div>
+</template>
+`);
+      assert.strictEqual(response.status, 200);
+      let body = JSON.parse(response.text);
+      let messages = body.messages as {
+        source: string;
+        ruleId: string | null;
+        severity: number;
+      }[];
+      let hit = messages.find(
+        (m) =>
+          m.source === 'template-lint' && m.ruleId === 'no-nested-scoped-style',
+      );
+      assert.ok(
+        hit,
+        `auto-scoped nested <style> should be flagged by template-lint: ${JSON.stringify(
+          messages,
+        )}`,
+      );
+      assert.strictEqual(
+        hit?.severity,
+        2,
+        'the nesting error is not fixable, so it survives the fix pass at error severity',
+      );
+      assert.ok(
+        (body.output as string).includes('<style scoped>'),
+        `the fix pass still auto-scopes the style even though its placement is rejected: ${body.output}`,
+      );
+    });
+
+    test('lints .gjs files with the gts parser (host config has no .gjs override)', async function (assert) {
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .set('X-Filename', 'sample.gjs')
+        .send(`import Component from '@glimmer/component';
+
+export default class Sample extends Component {
+  <template>
+    <p>Hello</p>
+  </template>
+}
+`);
+      assert.strictEqual(response.status, 200);
+      let body = JSON.parse(response.text);
+      let messages = body.messages as {
+        ruleId: string | null;
+        message: string;
+      }[];
+      assert.notOk(
+        messages.some(
+          (m) =>
+            m.message.includes('Parsing error') ||
+            m.message.includes('ESLint failed'),
+        ),
+        `no parse errors for .gjs: ${JSON.stringify(messages)}`,
+      );
+      assert.ok(
+        messages.some(
+          (m) => m.ruleId === 'ember/no-empty-glimmer-component-classes',
+        ),
+        'ESLint rules fire on .gjs content',
+      );
+    });
+
+    test('host app/** overrides do not apply to realm files named app/*', async function (assert) {
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .set('X-Filename', 'app/sample.gts')
+        .send(`import { tracked } from '@glimmer/tracking';
+import Component from '@glimmer/component';
+
+export default class Sample extends Component {
+  @tracked count = 0;
+  <template>
+    <p>{{this.count}}</p>
+  </template>
+}
+`);
+      assert.strictEqual(response.status, 200);
+      let body = JSON.parse(response.text);
+      let messages = body.messages as { ruleId: string | null }[];
+      assert.notOk(
+        messages.some((m) => m.ruleId === 'import/order'),
+        'host app/**-only import/order should not fire on realm content',
+      );
+      assert.ok(
+        body.output.indexOf('@glimmer/tracking') <
+          body.output.indexOf('@glimmer/component'),
+        'imports not reordered by host app/**-only import/order autofix',
+      );
+    });
+
+    test('invalid X-Filename returns a lint error payload, not a failed job', async function (assert) {
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .set('X-Filename', '../../../etc/passwd.gts')
+        .send(`let x = 1;\n`);
+      assert.strictEqual(response.status, 200);
+      let body = JSON.parse(response.text);
+      assert.false(body.passed, 'lint reports failure');
+      assert.ok(
+        body.messages.some((m: { message: string }) =>
+          m.message.includes('invalid filename'),
+        ),
+        `payload carries the validation problem: ${JSON.stringify(
+          body.messages,
+        )}`,
+      );
+    });
+
     test('handles large files within reasonable time', async function (assert) {
       // Create a large file with many imports and classes
-      let largeContent = `import { CardDef } from 'https://cardstack.com/base/card-api';\n`;
+      let largeContent = `import { CardDef } from '@cardstack/base/card-api';\n`;
       for (let i = 0; i < 100; i++) {
         largeContent += `
 export class MyCard${i} extends CardDef {

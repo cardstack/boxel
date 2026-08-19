@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import type { PgAdapter } from '@cardstack/postgres';
 import type {
@@ -6,18 +7,25 @@ import type {
   DefinitionLookup,
   Prerenderer,
   QueuePublisher,
+  VirtualNetwork,
 } from '@cardstack/runtime-common';
 import {
+  archiveRealm,
   fullReindex,
   insertPermissions,
   logger,
+  unarchiveRealm,
   uuidv4,
 } from '@cardstack/runtime-common';
 
-import { upsertPublishedRealmInRegistry } from '../lib/realm-registry-writes';
-import { setupDB } from './helpers';
+import { getFullReindexRealmUrls } from '../lib/full-reindex-realm-urls.ts';
+import {
+  insertSourceRealmInRegistry,
+  upsertPublishedRealmInRegistry,
+} from '../lib/realm-registry-writes.ts';
+import { setupDB } from './helpers/index.ts';
 
-module(basename(__filename), function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   let dbAdapter: PgAdapter;
   let queuePublisher: QueuePublisher;
 
@@ -40,6 +48,7 @@ module(basename(__filename), function (hooks) {
       indexWriter: null as unknown as IndexWriter,
       prerenderer: null as unknown as Prerenderer,
       definitionLookup: null as unknown as DefinitionLookup,
+      virtualNetwork: null as unknown as VirtualNetwork,
       matrixURL: 'http://localhost:8008',
       getReader: () => {
         throw new Error('getReader is not used by full-reindex');
@@ -170,5 +179,50 @@ module(basename(__filename), function (hooks) {
       0,
       'no jobs are enqueued for bot-owned realms',
     );
+  });
+
+  module('getFullReindexRealmUrls', function () {
+    async function seedSourceRealm(realmURL: string) {
+      await insertSourceRealmInRegistry(dbAdapter, {
+        url: realmURL,
+        diskId: uuidv4(),
+        ownerUsername: '@owner:localhost',
+      });
+    }
+
+    test('returns only active realms from realm_registry', async function (assert) {
+      const activeA = 'http://example.com/active-a/';
+      const activeB = 'http://example.com/active-b/';
+      const archived = 'http://example.com/archived/';
+
+      await seedSourceRealm(activeA);
+      await seedSourceRealm(activeB);
+      await seedSourceRealm(archived);
+      await archiveRealm(dbAdapter, new URL(archived));
+
+      let urls = await getFullReindexRealmUrls(dbAdapter);
+      assert.deepEqual(
+        [...urls].sort(),
+        [activeA, activeB].sort(),
+        'archived realms are excluded from the sweep source',
+      );
+    });
+
+    test('an unarchived realm returns to the sweep source', async function (assert) {
+      const realmURL = 'http://example.com/restored/';
+
+      await seedSourceRealm(realmURL);
+      await archiveRealm(dbAdapter, new URL(realmURL));
+      assert.notOk(
+        (await getFullReindexRealmUrls(dbAdapter)).includes(realmURL),
+        'archived realm is absent',
+      );
+
+      await unarchiveRealm(dbAdapter, new URL(realmURL));
+      assert.ok(
+        (await getFullReindexRealmUrls(dbAdapter)).includes(realmURL),
+        'unarchived realm reappears',
+      );
+    });
   });
 });

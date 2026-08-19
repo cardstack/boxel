@@ -1,4 +1,4 @@
-import type { ToolArg, ToolManifest } from './factory-agent';
+import type { ToolArg, ToolManifest } from './factory-agent/index.ts';
 
 // ---------------------------------------------------------------------------
 // Built-in tool manifests

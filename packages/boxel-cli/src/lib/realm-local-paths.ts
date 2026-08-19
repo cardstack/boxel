@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { isQuiet } from './cli-log';
+import { isQuiet } from './cli-log.ts';
 
 export interface MisplacedLocalRealmEntry {
   manifestPath: string;

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cliLog, isQuiet, setQuiet } from '../../src/lib/cli-log';
+import { cliLog, isQuiet, setQuiet } from '../../src/lib/cli-log.ts';
 
 describe('cli-log', () => {
   // Use `any` for spy types to avoid friction with vitest's overloaded

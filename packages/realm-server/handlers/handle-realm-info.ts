@@ -1,12 +1,17 @@
 import type Koa from 'koa';
 import type { DBAdapter, RealmInfo } from '@cardstack/runtime-common';
-import { logger, SupportedMimeType } from '@cardstack/runtime-common';
+import {
+  logger,
+  sanitizeConsumingRealmHeader,
+  SupportedMimeType,
+  X_BOXEL_CONSUMING_REALM_HEADER,
+} from '@cardstack/runtime-common';
 
-import { setContextResponse } from '../middleware';
-import { getMultiRealmAuthorization } from '../middleware/multi-realm-authorization';
-import { resolveRealmsForFederatedRequest } from '../lib/realm-routing';
-import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler';
-import { getPublicReadableRealms } from '../utils/realm-readability';
+import { setContextResponse } from '../middleware/index.ts';
+import { getMultiRealmAuthorization } from '../middleware/multi-realm-authorization.ts';
+import { resolveRealmsForFederatedRequest } from '../lib/realm-routing.ts';
+import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.ts';
+import { getPublicReadableRealms } from '../utils/realm-readability.ts';
 
 const log = logger('realm-server');
 
@@ -19,9 +24,14 @@ export default function handleRealmInfo({
 }): (ctxt: Koa.Context) => Promise<void> {
   return async function (ctxt: Koa.Context) {
     let { realmList } = getMultiRealmAuthorization(ctxt);
+    let consumingRealm = sanitizeConsumingRealmHeader(
+      ctxt.get(X_BOXEL_CONSUMING_REALM_HEADER),
+    );
     let [publicReadableRealms, realmInstances] = await Promise.all([
       getPublicReadableRealms(dbAdapter, realmList),
-      resolveRealmsForFederatedRequest(reconciler, realmList),
+      resolveRealmsForFederatedRequest(reconciler, realmList, {
+        consumingRealm,
+      }),
     ]);
 
     let data: { id: string; type: 'realm-info'; attributes: RealmInfo }[] = [];
@@ -33,7 +43,9 @@ export default function handleRealmInfo({
         continue;
       }
       try {
-        let info = await realm.getRealmInfo();
+        // The detailed variant: this endpoint feeds the host's workspace
+        // chooser, which renders each realm's index counts and timestamps.
+        let info = await realm.getDetailedRealmInfo();
         data.push({ id: realmURL, type: 'realm-info', attributes: info });
       } catch (error) {
         log.warn(`Failed to fetch realm info for ${realmURL}: ${error}`);

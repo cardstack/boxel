@@ -5,7 +5,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
-  baseRealm,
+  baseRealmRRI,
   rri,
   trimExecutableExtension,
   type RenderRouteOptions,
@@ -50,7 +50,7 @@ module('Acceptance | prerender | module', function (hooks) {
     optionsSegment = DEFAULT_MODULE_OPTIONS_SEGMENT,
   ) => `/module/${encodeURIComponent(url)}/${nonce}/${optionsSegment}`;
   const PERSON_MODULE = `
-    import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
+    import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
 
     export class Person extends CardDef {
       static displayName = 'Person';
@@ -58,7 +58,7 @@ module('Acceptance | prerender | module', function (hooks) {
     }
   `;
   const PARENT_MODULE = `
-    import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
+    import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
 
     export class Parent extends CardDef {
       static displayName = 'Parent';
@@ -67,7 +67,7 @@ module('Acceptance | prerender | module', function (hooks) {
   `;
   const CHILD_MODULE = `
     import { Parent } from './parent';
-    import { field, contains, StringField } from 'https://cardstack.com/base/card-api';
+    import { field, contains, StringField } from '@cardstack/base/card-api';
 
     export class Child extends Parent {
       static displayName = 'Child';
@@ -75,6 +75,24 @@ module('Acceptance | prerender | module', function (hooks) {
     }
   `;
   const BROKEN_MODULE = `export const Broken = ;`;
+  // One resolvable `searchable` path (author → name) and one unresolvable one
+  // (reviewer → bogus). Definition-build validation records only the bad path
+  // on `meta.diagnostics.searchablePathIssues`, tagged with its owning def.
+  const SEARCHABLE_MODULE = `
+    import { CardDef, field, contains, linksTo, StringField } from '@cardstack/base/card-api';
+
+    export class SearchAuthor extends CardDef {
+      static displayName = 'SearchAuthor';
+      @field name = contains(StringField);
+    }
+
+    export class SearchArticle extends CardDef {
+      static displayName = 'SearchArticle';
+      @field title = contains(StringField);
+      @field author = linksTo(() => SearchAuthor, { searchable: 'name' });
+      @field reviewer = linksTo(() => SearchAuthor, { searchable: 'bogus' });
+    }
+  `;
 
   hooks.beforeEach(async function () {
     ({ adapter, realm } = await withCachedRealmSetup(async () =>
@@ -86,6 +104,7 @@ module('Acceptance | prerender | module', function (hooks) {
           'parent.gts': PARENT_MODULE,
           'child.gts': CHILD_MODULE,
           'broken.gts': BROKEN_MODULE,
+          'searchable-card.gts': SEARCHABLE_MODULE,
         },
       }),
     ));
@@ -127,7 +146,7 @@ module('Acceptance | prerender | module', function (hooks) {
       'types include the card itself',
     );
     assert.ok(
-      personEntry.types.includes(`${baseRealm.url}card-api/CardDef`),
+      personEntry.types.includes(`${baseRealmRRI}card-api/CardDef`),
       'types include base card',
     );
   });
@@ -186,8 +205,8 @@ module('Acceptance | prerender | module', function (hooks) {
   test('identifies shimmed modules', async function (assert) {
     let loaderService = getService('loader-service');
     let loader = loaderService.loader;
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
+    let cardApi: typeof import('@cardstack/base/card-api');
+    cardApi = await loader.import('@cardstack/base/card-api');
 
     let { field, contains, CardDef, StringField } = cardApi;
     class Shimmed extends CardDef {
@@ -311,7 +330,7 @@ module('Acceptance | prerender | module', function (hooks) {
     await adapter.write(
       'person.gts',
       `
-      import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
+      import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
 
       export class Person extends CardDef {
         static displayName = 'Updated Person';
@@ -357,6 +376,33 @@ module('Acceptance | prerender | module', function (hooks) {
         : undefined,
       'Updated Person',
       'updated display name observed after clearCache flag',
+    );
+  });
+
+  test('records unresolvable searchable paths on meta.diagnostics, tagged with the owning def', async function (assert) {
+    let moduleURL = `${testRealmURL}searchable-card.gts`;
+
+    await visit(modulePath(moduleURL));
+    let { status, model } = captureModuleResult();
+    assert.strictEqual(status, 'ready', 'module loads');
+
+    let articleKey = `${trimExecutableExtension(rri(moduleURL))}/SearchArticle`;
+    assert.deepEqual(
+      model.meta?.diagnostics?.searchablePathIssues,
+      [{ codeRef: articleKey, fieldName: 'reviewer', path: 'bogus' }],
+      'only the unresolvable path is recorded, tagged with its owning def — the resolvable author→name path is not',
+    );
+  });
+
+  test('a module with no searchable annotations produces no diagnostics meta (inert)', async function (assert) {
+    let moduleURL = `${testRealmURL}person.gts`;
+
+    await visit(modulePath(moduleURL));
+    let { model } = captureModuleResult();
+    assert.strictEqual(
+      model.meta?.diagnostics?.searchablePathIssues,
+      undefined,
+      'no searchablePathIssues meta when nothing is annotated',
     );
   });
 });

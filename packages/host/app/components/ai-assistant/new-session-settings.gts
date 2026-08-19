@@ -49,6 +49,7 @@ export default class NewSessionSettings extends Component<Signature> {
           @icon='close'
           @variant='ghost'
           @size='small'
+          @label='close new session options'
           class='new-session-settings-close-button'
           data-test-new-session-settings-close-button
           {{on 'click' @onClose}}
@@ -92,15 +93,14 @@ export default class NewSessionSettings extends Component<Signature> {
     </div>
     <style scoped>
       .new-session-settings-menu {
-        --new-sessions-menu-foreground: #e0e0e0;
-
-        background: var(--ai-assistant-menu-background);
+        position: relative;
+        background-color: var(--ai-assistant-menu-background);
         border-radius: var(--boxel-border-radius);
         box-shadow: 0 10px 15px 0 rgba(0, 0, 0, 0.25);
-        border: solid 1px rgba(0, 0, 0, 0.25);
+        border: 1px solid var(--ai-assistant-menu-border);
         padding: 6.5px 11px 11px 11px;
         min-width: 13.75rem;
-        color: var(--new-sessions-menu-foreground);
+        color: var(--ai-assistant-menu-foreground);
       }
       .new-session-settings-header {
         display: flex;
@@ -109,11 +109,13 @@ export default class NewSessionSettings extends Component<Signature> {
         margin-bottom: 6.5px;
       }
       .new-session-settings-title {
-        font-weight: 600;
+        font: 700 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-sm);
       }
-      .new-session-settings-close-button:hover {
-        color: var(--boxel-light);
+      .new-session-settings-close-button {
+        position: absolute;
+        top: var(--boxel-sp-4xs);
+        right: var(--boxel-sp-4xs);
       }
       .new-session-settings-options {
         display: flex;

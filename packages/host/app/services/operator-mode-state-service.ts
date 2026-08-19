@@ -16,7 +16,7 @@ import type {
   RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import {
-  cardIdToURL,
+  ri,
   rri,
   RealmPaths,
   type LocalPath,
@@ -51,18 +51,14 @@ import type RealmServer from '@cardstack/host/services/realm-server';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
-import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
-
-import type { BoxelContext } from 'https://cardstack.com/base/matrix-event';
-
-import { removeFileExtension } from '../utils/card-search/types';
-
+import { removeTopmost, unwindOrPush } from '../utils/host-mode-stack';
 import {
   AiAssistantOpen,
   ModuleInspectorSelections,
 } from '../utils/local-storage-keys';
 
 import { normalizeDirPath } from '../utils/normalized-dir-path';
+import { removeCardJsonExtension } from '../utils/search/types';
 
 import type CardService from './card-service';
 import type CodeSemanticsService from './code-semantics-service';
@@ -70,17 +66,20 @@ import type ErrorDisplayService from './error-display';
 import type MatrixService from './matrix-service';
 import type NetworkService from './network';
 import type { RecentFile } from './recent-files-service';
-import type ResetService from './reset';
+import type SessionService from './session';
 import type SpecPanelService from './spec-panel-service';
 import type StoreService from './store';
 import type { Stack } from '../components/operator-mode/interact-submode';
 
 import type IndexController from '../controllers';
+import type { CardDef, Format } from '@cardstack/base/card-api';
+import type { BoxelContext } from '@cardstack/base/matrix-event';
 
 export interface CreateListingModalPayload {
   codeRef: CodeRef;
   targetRealm: string;
   openCardIds?: RealmResourceIdentifier[];
+  supportingCardIds?: RealmResourceIdentifier[];
   declarationKind: 'card' | 'field';
 }
 
@@ -119,6 +118,8 @@ interface SerializedExpandedStackItem {
 
 export type FileView = 'inspector' | 'browser';
 
+export type ProfileSettingsSection = 'subscription';
+
 type SerializedItem = CardItem;
 type SerializedStack = SerializedItem[];
 
@@ -146,12 +147,13 @@ export type ModuleInspectorView = 'schema' | 'spec' | 'preview';
 export const DEFAULT_MODULE_INSPECTOR_VIEW: ModuleInspectorView = 'schema';
 
 // Read the user's persisted AI Assistant open/closed preference. Defaults to
-// `true` for first-ever visits; URL state still takes precedence over this.
+// `false` for first-ever visits, so the panel is closed unless the URL state
+// (which takes precedence) or a remembered preference opens it.
 function readPersistedAiAssistantOpen(): boolean {
   let raw = window.localStorage.getItem(AiAssistantOpen);
   if (raw === 'true') return true;
   if (raw === 'false') return false;
-  return true;
+  return false;
 }
 
 export default class OperatorModeStateService extends Service {
@@ -160,7 +162,9 @@ export default class OperatorModeStateService extends Service {
     submode: Submodes.Interact,
     codePath: null,
     hostModePrimaryCard: null,
-    hostModeStack: [],
+    // TrackedArray like the ones restoreState installs, so mutations before the
+    // first restore are reactive too
+    hostModeStack: new TrackedArray<string>([]),
     openDirs: new TrackedMap<string, string[]>(),
     aiAssistantOpen: readPersistedAiAssistantOpen(),
     newFileDropdownOpen: false,
@@ -174,6 +178,7 @@ export default class OperatorModeStateService extends Service {
   private moduleInspectorHistory: Record<string, ModuleInspectorView>;
 
   @tracked profileSettingsOpen = false;
+  @tracked profileSettingsSection: ProfileSettingsSection | undefined;
   @tracked createListingModalPayload?: CreateListingModalPayload;
 
   // Per-card expanded-mode intent. Keyed by stack-item instance id so the
@@ -233,7 +238,7 @@ export default class OperatorModeStateService extends Service {
   @service declare private recentCardsService: RecentCardsService;
   @service declare private recentFilesService: RecentFilesService;
   @service declare private router: RouterService;
-  @service declare private reset: ResetService;
+  @service declare private session: SessionService;
   @service declare private network: NetworkService;
   @service declare private matrixService: MatrixService;
   @service declare private store: StoreService;
@@ -242,7 +247,7 @@ export default class OperatorModeStateService extends Service {
 
   constructor(owner: Owner) {
     super(owner);
-    this.reset.register(this);
+    this.session.register(this);
 
     let moduleInspectorHistory = window.localStorage.getItem(
       ModuleInspectorSelections,
@@ -254,6 +259,14 @@ export default class OperatorModeStateService extends Service {
 
   toggleProfileSettings = () => {
     this.profileSettingsOpen = !this.profileSettingsOpen;
+    if (!this.profileSettingsOpen) {
+      this.profileSettingsSection = undefined;
+    }
+  };
+
+  openProfileSettings = (section?: ProfileSettingsSection) => {
+    this.profileSettingsSection = section;
+    this.profileSettingsOpen = true;
   };
 
   get state() {
@@ -329,6 +342,7 @@ export default class OperatorModeStateService extends Service {
     this.cardTitles = new TrackedMap();
     this.moduleInspectorHistory = {};
     this.profileSettingsOpen = false;
+    this.profileSettingsSection = undefined;
     this.createListingModalPayload = undefined;
     this.expandedStackItems.clear();
     window.localStorage.removeItem(ModuleInspectorSelections);
@@ -399,14 +413,14 @@ export default class OperatorModeStateService extends Service {
     for (let stack of this._state.stacks || []) {
       items.push(
         ...(stack.filter(
-          (i: StackItem) => i.id && removeFileExtension(i.id) === cardId,
+          (i: StackItem) => i.id && removeCardJsonExtension(i.id) === cardId,
         ) as StackItem[]),
       );
     }
     for (let item of items) {
       this.trimItemsFromStack(item);
     }
-    let realmPaths = new RealmPaths(new URL(cardRealmUrl));
+    let realmPaths = new RealmPaths(ri(cardRealmUrl));
     let cardPath = realmPaths.local(rri(`${cardId}.json`));
     this.recentFilesService.removeRecentFile(cardPath);
     this.recentCardsService.remove(cardId);
@@ -448,7 +462,11 @@ export default class OperatorModeStateService extends Service {
 
     if (this._state.stacks.length === 0) {
       const realmURL = this.getRealmURLFromItemId(item.id);
-      const isIndexCard = isRealmIndexCardId(item.id, realmURL);
+      const isIndexCard = isRealmIndexCardId(
+        item.id,
+        realmURL,
+        this.network.virtualNetwork,
+      );
       if (isIndexCard) {
         // Only open workspace chooser if the trimmed item was an index card
         this._state.workspaceChooserOpened = true;
@@ -617,15 +635,21 @@ export default class OperatorModeStateService extends Service {
       .map((stack) => stack[stack.length - 1]);
   }
 
+  // Opening a card that is already behind you in the trail is a navigation
+  // *back* to it — an in-page "up" link, or a second visit to the same page —
+  // so unwind to it rather than stacking another copy of a page the user is
+  // already inside. Pushing is only right for a card not yet on the trail.
   addToHostModeStack(cardId: string) {
-    this._state.hostModeStack.push(cardId);
+    unwindOrPush(
+      this._state.hostModeStack,
+      cardId,
+      this._state.hostModePrimaryCard,
+    );
     this.schedulePersist();
   }
 
   removeFromHostModeStack(cardId: string) {
-    let index = this._state.hostModeStack.findIndex((item) => item === cardId);
-    if (index !== -1) {
-      this._state.hostModeStack.splice(index, 1);
+    if (removeTopmost(this._state.hostModeStack, cardId)) {
       this.schedulePersist();
     }
   }
@@ -747,13 +771,9 @@ export default class OperatorModeStateService extends Service {
     return this.schedulePersist();
   }
 
-  async updateSubmode(submode: Submode) {
+  updateSubmode(submode: Submode) {
     this._state.submode = submode;
     this.schedulePersist();
-
-    if (submode === Submodes.Code) {
-      await this.matrixService.activateCodingSkill();
-    }
   }
 
   async updateModuleInspectorView(view: ModuleInspectorView) {
@@ -803,11 +823,11 @@ export default class OperatorModeStateService extends Service {
 
   get codePathRelativeToRealm() {
     if (this._state.codePath && this.realmURL) {
-      let realmPath = new RealmPaths(new URL(this.realmURL));
+      let realmPath = new RealmPaths(ri(this.realmURL));
 
       if (realmPath.inRealm(this._state.codePath)) {
         try {
-          return realmPath.local(this._state.codePath!);
+          return realmPath.local(rri(this._state.codePath!.href));
         } catch (err: any) {
           if (err.status === 404) {
             return undefined;
@@ -827,7 +847,7 @@ export default class OperatorModeStateService extends Service {
   }
 
   onFileSelected = async (entryPath: LocalPath) => {
-    let fileUrl = new RealmPaths(new URL(this.realmURL)).fileURL(entryPath);
+    let fileUrl = new RealmPaths(ri(this.realmURL)).fileRRI(entryPath);
     await this.updateCodePath(fileUrl);
   };
 
@@ -836,7 +856,9 @@ export default class OperatorModeStateService extends Service {
     moduleInspectorView?: ModuleInspectorView,
   ) {
     let codePathURL =
-      typeof codePath === 'string' ? cardIdToURL(codePath) : codePath;
+      typeof codePath === 'string'
+        ? this.network.virtualNetwork.toURL(codePath)
+        : codePath;
     let canonicalCodePath = await this.determineCanonicalCodePath(codePathURL);
     this._state.codePath = canonicalCodePath;
     this.updateOpenDirsForNestedPath();
@@ -1452,7 +1474,11 @@ export default class OperatorModeStateService extends Service {
         return playgroundSelections[this.codePathString];
       }
       let selectedCodeRefUrl = this.codeSemanticsService.selectedCodeRef
-        ? internalKeyFor(this.codeSemanticsService.selectedCodeRef!, undefined)
+        ? internalKeyFor(
+            this.codeSemanticsService.selectedCodeRef!,
+            undefined,
+            this.network.virtualNetwork,
+          )
         : null;
       if (selectedCodeRefUrl && playgroundSelections[selectedCodeRefUrl]) {
         return playgroundSelections[selectedCodeRefUrl];

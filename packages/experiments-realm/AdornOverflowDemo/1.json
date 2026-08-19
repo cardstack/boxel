@@ -1,0 +1,56 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "Adorn Overflow Demo",
+        "notes": null,
+        "summary": "Kanban-style layout that reproduces leftward clipping of the Adorn hover label when a card sits flush against an overflow:hidden container.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "backlog.0": {
+        "links": {
+          "self": "../ProjectInitiativeTask/1"
+        }
+      },
+      "backlog.1": {
+        "links": {
+          "self": "../ProjectInitiativeTask/2"
+        }
+      },
+      "inProgress.0": {
+        "links": {
+          "self": "../ProjectInitiativeTask/3"
+        }
+      },
+      "inProgress.1": {
+        "links": {
+          "self": "../ProjectInitiativeTask/4"
+        }
+      },
+      "done.0": {
+        "links": {
+          "self": "../ProjectInitiativeTask/5"
+        }
+      },
+      "done.1": {
+        "links": {
+          "self": "../ProjectInitiativeTask/6"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../adorn-overflow-demo",
+        "name": "AdornOverflowDemo"
+      }
+    }
+  }
+}

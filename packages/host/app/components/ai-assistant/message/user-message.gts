@@ -18,6 +18,7 @@ interface Signature {
 const UserMessage: TemplateOnlyComponent<Signature> = <template>
   <Message
     class={{cn 'user-message-bubble' is-pending=@isPending}}
+    data-theme='light'
     data-test-user-message
     ...attributes
   >
@@ -37,8 +38,12 @@ const UserMessage: TemplateOnlyComponent<Signature> = <template>
       border-top-left-radius: var(--boxel-border-radius-xs);
     }
     .is-pending {
-      --pill-background-color: var(--boxel-200);
-      --pill-font-color: var(--boxel-500);
+      /* `--boxel-pill-*` overrides win over the variant-class `--pill-*`
+         declarations on the Pill element itself; setting the inner
+         `--pill-*` vars here would be shadowed by `.variant-default` /
+         `.variant-muted` further down the tree. */
+      --boxel-pill-background-color: var(--boxel-200);
+      --boxel-pill-font-color: var(--boxel-500);
       background-color: var(--boxel-200);
       color: var(--boxel-500);
     }

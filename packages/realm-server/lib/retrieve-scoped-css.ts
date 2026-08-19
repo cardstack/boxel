@@ -6,7 +6,7 @@ import { decodeScopedCSSRequest, isScopedCSSRequest } from 'glimmer-scoped-css';
 import {
   indexURLCandidates,
   indexCandidateExpressions,
-} from './index-url-utils';
+} from './index-url-utils.ts';
 
 export async function retrieveScopedCSS({
   cardURL,
@@ -26,18 +26,26 @@ export async function retrieveScopedCSS({
     return null;
   }
 
+  // The scoped-CSS URLs needed to serve a card's HTML ride on the
+  // prerendered_html `deps` / `last_known_good_deps` — the deps captured by
+  // the render that produced the HTML being served. The boxel_index join
+  // scopes the lookup to a live instance row and supplies the generation.
   let scopedCSSQuery: Expression = [
     `
-      SELECT deps, last_known_good_deps, realm_version
-      FROM boxel_index
-      WHERE type = 'instance'
-        AND is_deleted IS NOT TRUE
-        AND (deps IS NOT NULL OR last_known_good_deps IS NOT NULL)
+      SELECT ph.deps AS deps,
+             ph.last_known_good_deps AS last_known_good_deps,
+             i.generation
+      FROM boxel_index AS i
+      JOIN prerendered_html AS ph
+        ON ph.url = i.url AND ph.realm_url = i.realm_url AND ph.type = i.type
+      WHERE i.type = 'instance'
+        AND i.is_deleted IS NOT TRUE
+        AND (ph.deps IS NOT NULL OR ph.last_known_good_deps IS NOT NULL)
         AND
     `,
-    ...indexCandidateExpressions(candidates),
+    ...indexCandidateExpressions(candidates, 'i'),
     `
-      ORDER BY realm_version DESC
+      ORDER BY i.generation DESC
       LIMIT 1
     `,
   ];
@@ -60,7 +68,7 @@ export async function retrieveScopedCSS({
     | {
         deps?: string[] | string | null;
         last_known_good_deps?: string[] | string | null;
-        realm_version?: string | number;
+        generation?: string | number;
       }
     | undefined;
 

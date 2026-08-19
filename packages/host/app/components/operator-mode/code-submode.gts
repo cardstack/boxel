@@ -19,7 +19,7 @@ import { consume, provide } from 'ember-provide-consume-context';
 import { use, resource } from 'ember-resources';
 import window from 'ember-window-mock';
 
-import startCase from 'lodash/startCase';
+import { startCase } from 'lodash-es';
 import { TrackedObject } from 'tracked-built-ins';
 
 import {
@@ -35,6 +35,8 @@ import {
   isCardErrorJSONAPI,
   rri,
   RealmPaths,
+  ri,
+  type RealmIdentifier,
   PermissionsContextName,
   GetCardContextName,
   type ResolvedCodeRef,
@@ -64,14 +66,7 @@ import type RealmService from '@cardstack/host/services/realm';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
-
-import type {
-  BaseDef,
-  CardDef,
-  Format,
-  CardContext,
-} from 'https://cardstack.com/base/card-api';
-import type { SpecType } from 'https://cardstack.com/base/spec';
+import type { SearchResultKind } from '@cardstack/host/utils/search/types';
 
 import {
   CodeModePanelWidths,
@@ -94,6 +89,13 @@ import DetailPanel from './detail-panel';
 import SubmodeLayout from './submode-layout';
 
 import type { NewFileOptions } from './new-file-button';
+import type {
+  BaseDef,
+  CardDef,
+  Format,
+  CardContext,
+} from '@cardstack/base/card-api';
+import type { SpecType } from '@cardstack/base/spec';
 
 interface Signature {
   Args: {
@@ -207,11 +209,16 @@ export default class CodeSubmode extends Component<Signature> {
         rightPanel: !this.codePath ? 0 : persistedDefaultPanelWidths.rightPanel,
       }) <= 100
         ? persistedDefaultPanelWidths
-        : defaultPanelWidths;
+        : // Copy rather than alias. The layout callbacks below mutate whichever
+          // object lands here, and `defaultPanelWidths` is module-level state
+          // shared by every instance that ever falls back to it — mutating it
+          // would make one instance's final layout the next one's starting
+          // point, with nothing but a page load to clear it.
+          { ...defaultPanelWidths };
     this.defaultPanelHeights =
       persistedDefaultPanelHeights && sum(persistedDefaultPanelHeights) <= 100
         ? persistedDefaultPanelHeights
-        : defaultPanelHeights;
+        : { ...defaultPanelHeights };
 
     registerDestructor(this, () => {
       this.operatorModeStateService.unsubscribeFromOpenFileStateChanges(this);
@@ -588,21 +595,37 @@ export default class CodeSubmode extends Component<Signature> {
 
   @action
   private triggerUploadFile() {
-    let realmURL = this.operatorModeStateService.realmURL;
-    if (!realmURL) {
+    let realm = this.operatorModeStateService.realmURL;
+    if (!realm) {
       throw new Error('No realm available for upload');
     }
-    let task = this.fileUpload.uploadFile({ realmURL: new URL(realmURL) });
-    task.result
-      .then((fileDef) => {
-        if (fileDef?.url) {
-          this.operatorModeStateService.updateCodePath(new URL(fileDef.url));
-        }
-      })
-      .catch((error) => {
-        console.error('Unexpected error during file upload', error);
-      });
+    this.uploadFiles.perform(ri(realm)).catch((error) => {
+      console.error('Unexpected error during file upload', error);
+    });
   }
+
+  private uploadFiles = dropTask(async (realm: RealmIdentifier) => {
+    let files = await this.fileUpload.pickLocalFiles({});
+    if (files.length === 0) {
+      return;
+    }
+    // Parallel POSTs are correct on the server: the realm advisory
+    // lock (packages/runtime-common/realm.ts:1746) serializes writes
+    // and each upload emits its own incremental-index event. A
+    // separate live file-tree refresh race (uploads AND deletes both
+    // leave the tree stale until the user refreshes / toggles views)
+    // is tracked in CS-11295.
+    let tasks = files.map((file) =>
+      this.fileUpload.uploadProvidedFile({ realm, file }),
+    );
+    let results = await Promise.all(tasks.map((task) => task.result));
+    let firstSuccess = results.find((fileDef) => fileDef?.url);
+    if (firstSuccess?.url) {
+      await this.operatorModeStateService.updateCodePath(
+        new URL(firstSuccess.url),
+      );
+    }
+  });
 
   private async withTestWaiters<T>(cb: () => Promise<T>) {
     let token = waiter.beginAsync();
@@ -629,10 +652,20 @@ export default class CodeSubmode extends Component<Signature> {
     this.updateCursorByName = updateCursorByName;
   };
 
-  @action private async openSearchResultInEditor(cardId: string) {
-    let codePath = cardId.endsWith('.json')
-      ? rri(cardId)
-      : rri(`${cardId}.json`);
+  @action private async openSearchResultInEditor(
+    cardId: string,
+    kind?: SearchResultKind,
+  ) {
+    // A card instance's id is the URL without `.json`, so its source file is
+    // `<id>.json`; a file result's id is already the real file URL and opens
+    // as-is. The search result carries its own card/file `kind`, so the target
+    // is resolved from that rather than guessed from the id string. `kind` is
+    // absent only for a selection that never came from a search entry — fall
+    // back to the id's own `.json` shape there.
+    let codePath =
+      kind === 'file'
+        ? rri(cardId)
+        : rri(cardId.endsWith('.json') ? cardId : `${cardId}.json`);
     await this.operatorModeStateService.updateCodePath(codePath);
   }
 
@@ -896,7 +929,7 @@ export default class CodeSubmode extends Component<Signature> {
               </ResizablePanel>
             {{else}}
               <ResizablePanel
-                @defaultLengthFraction={{this.defaultPanelWidths.emptyCodeModePanel}}
+                @defaultSize={{this.defaultPanelWidths.emptyCodeModePanel}}
               >
                 <InnerContainer
                   class='empty-container'

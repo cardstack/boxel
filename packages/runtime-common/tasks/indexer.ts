@@ -1,20 +1,24 @@
 import type * as JSONTypes from 'json-typescript';
-import type { Task, WorkerArgs } from './index';
+import type { Task, WorkerArgs } from './index.ts';
 import {
   jobIdentity,
   notifyAllFileChanges,
+  notifyRealmIndexUpdated,
   userIdFromUsername,
   fetchUserPermissions,
   type RealmPermissions,
-} from '../index';
+} from '../index.ts';
 import {
+  systemInitiatedPriority,
   type QueueCoalesceCandidate,
   type QueueCoalesceContext,
   type QueueCoalesceDecision,
   registerQueueJobDefinition,
-} from '../queue';
-import { IndexRunner } from '../index-runner';
-import type { Stats } from '../worker';
+} from '../queue.ts';
+import { IndexRunner } from '../index-runner.ts';
+import { INCREMENTAL_INDEX_JOB_TIMEOUT_SEC } from '../jobs/indexing.ts';
+import { enqueuePrerenderHtmlJob } from '../jobs/prerender-html.ts';
+import type { Stats, IndexPhaseTimings } from '../worker.ts';
 
 export { fromScratchIndex, incrementalIndex };
 const DEFAULT_FROM_SCRATCH_JOB_TIMEOUT_SEC = 60 * 60;
@@ -50,6 +54,12 @@ export interface IncrementalResult {
   invalidations: string[];
   ignoreData: Record<string, string>;
   stats: Stats;
+  // The realm generation this pass committed. Optional so a result produced
+  // by an older worker mid-deploy still parses.
+  generation?: number;
+  // Between-visit phase decomposition of the job wall (see IndexPhaseTimings).
+  // Optional so a result from a worker predating the instrumentation parses.
+  phaseTimings?: IndexPhaseTimings;
 }
 
 export interface IncrementalDoneResult extends IncrementalResult {
@@ -69,17 +79,21 @@ export interface FromScratchArgs extends WorkerArgs {
   clearLastModified: boolean;
 }
 
-export interface FromScratchResult extends JSONTypes.Object {
+export interface FromScratchResult {
   invalidations: string[];
   ignoreData: Record<string, string>;
   stats: Stats;
+  // See IncrementalResult.generation.
+  generation?: number;
+  // See IncrementalResult.phaseTimings.
+  phaseTimings?: IndexPhaseTimings;
 }
 
-function isObjectLike(value: unknown): value is JSONTypes.Object {
+export function isObjectLike(value: unknown): value is JSONTypes.Object {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
-function maxPriorityAndTimeout(
+export function maxPriorityAndTimeout(
   existing: QueueCoalesceCandidate,
   incoming: { priority: number; timeout: number },
 ) {
@@ -89,7 +103,7 @@ function maxPriorityAndTimeout(
   };
 }
 
-function mergeIncrementalChanges(
+export function mergeIncrementalChanges(
   existing: IncrementalChange[],
   incoming: IncrementalChange[],
 ): IncrementalChange[] {
@@ -165,7 +179,7 @@ function parseIncrementalArgsForCoalesce(
   };
 }
 
-function incrementalChangesCover(
+export function incrementalChangesCover(
   existing: IncrementalChange[],
   incoming: IncrementalChange[],
 ): boolean {
@@ -306,6 +320,14 @@ function incomingClearsLastModified(args: unknown): boolean {
   return isObjectLike(args) && args.clearLastModified === true;
 }
 
+// A publish sets this on its from-scratch args so the prerender-html job the
+// pass spawns runs co-equal with indexing (the publish blocks on that HTML)
+// rather than one tier below. Absent on every other index path. Read loosely
+// so a job enqueued before this field existed reads as false.
+function argsAwaitedByPublish(args: unknown): boolean {
+  return isObjectLike(args) && args.awaitedByPublish === true;
+}
+
 registerQueueJobDefinition({
   jobType: 'incremental-index',
   coalesce: chooseIncrementalCoalesceDecision,
@@ -326,6 +348,8 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
   getAuthedFetch,
   prerenderer,
   definitionLookup,
+  virtualNetwork,
+  queuePublisher,
   createPrerenderAuth,
 }) =>
   async function (args) {
@@ -349,16 +373,43 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
       reader,
       indexWriter,
       definitionLookup,
+      virtualNetwork,
       jobInfo,
       jobPriority: jobInfo?.priority,
       reportStatus,
       onProgress: reportProgress,
+      // Fire-and-forget: the index pass must not block on — or fail with —
+      // the prerender enqueue. Fires as soon as the invalidation set is
+      // known, so HTML rendering can start concurrently with the pass.
+      onInvalidationsReady: ({ changes, generation, loaderEpoch }) => {
+        enqueuePrerenderHtmlJob(queuePublisher, {
+          realmURL,
+          realmUsername,
+          changes: changes.map(({ url, operation }) => ({ url, operation })),
+          generation,
+          loaderEpoch,
+          spawningJobId: jobInfo?.jobId ?? null,
+          spawningPriority: jobInfo?.priority ?? systemInitiatedPriority,
+          timeoutSec: FROM_SCRATCH_JOB_TIMEOUT_SEC,
+          // A publish awaits this HTML, so its render is on the publish's
+          // critical path and runs co-equal with indexing (see
+          // prerenderHtmlPriority). Only the publish flow sets this.
+          awaitedByPublish: argsAwaitedByPublish(args),
+          // From-scratch: the prerender job runs the realm-wide module
+          // pre-warm sweep before its format renders.
+          preWarm: true,
+        }).catch((e) => {
+          log.warn(
+            `${jobIdentity(jobInfo)} failed to enqueue prerender_html job for ${realmURL}: ${(e as Error)?.message}`,
+          );
+        });
+      },
       auth,
       fetch: _fetch,
       prerenderer,
       realmOwnerUserId: userId,
     });
-    let { stats, ignoreData, invalidations } =
+    let { stats, ignoreData, invalidations, generation, phaseTimings } =
       await IndexRunner.fromScratch(currentRun);
 
     log.debug(
@@ -380,11 +431,22 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
     // fall back to a bounded staleness window because the next
     // reader's transpile path re-tombstones the L2 row.
     await notifyAllFileChanges(dbAdapter, args.realmURL);
+    // Same chokepoint, index-derived caches: emit realm_index_updated so
+    // every mounted Realm drops `#inFlightSearch`, `#cachedRealmInfo`, and
+    // `#cachedHostRoutingMap`. The from-scratch swap may have changed
+    // realm.json (RealmInfo, hostRoutingRules) or the index contents these
+    // caches derive from. The byte-cache wildcard above does not cover them,
+    // and the from-scratch reindex paths (`/_reindex`, `/_full-reindex`, the
+    // Grafana variants, direct `enqueueReindexRealmJob`) don't otherwise run
+    // `clearRealmIndexCachesAndBroadcast()`. Best-effort, same as above.
+    await notifyRealmIndexUpdated(dbAdapter, args.realmURL);
     reportStatus(args.jobInfo, 'finish');
     return {
       invalidations,
       ignoreData: { ...ignoreData },
       stats,
+      ...(generation !== undefined ? { generation } : {}),
+      ...(phaseTimings !== undefined ? { phaseTimings } : {}),
     };
   };
 
@@ -399,6 +461,8 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
   getAuthedFetch,
   prerenderer,
   definitionLookup,
+  virtualNetwork,
+  queuePublisher,
   createPrerenderAuth,
 }) =>
   async function (args) {
@@ -423,25 +487,51 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       reader,
       indexWriter,
       definitionLookup,
+      virtualNetwork,
       jobInfo,
       jobPriority: jobInfo?.priority,
       reportStatus,
       onProgress: reportProgress,
+      // See fromScratchIndex — same fire-and-forget early enqueue.
+      onInvalidationsReady: ({
+        changes: htmlChanges,
+        generation,
+        loaderEpoch,
+      }) => {
+        enqueuePrerenderHtmlJob(queuePublisher, {
+          realmURL,
+          realmUsername,
+          changes: htmlChanges.map(({ url, operation }) => ({
+            url,
+            operation,
+          })),
+          generation,
+          loaderEpoch,
+          spawningJobId: jobInfo?.jobId ?? null,
+          spawningPriority: jobInfo?.priority ?? systemInitiatedPriority,
+          timeoutSec: INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
+          // Incremental: no realm-wide sweep — its cost is O(realm module
+          // count), deliberately not paid on incrementals.
+          preWarm: false,
+        }).catch((e) => {
+          log.warn(
+            `${jobIdentity(jobInfo)} failed to enqueue prerender_html job for ${realmURL}: ${(e as Error)?.message}`,
+          );
+        });
+      },
       auth,
       fetch: _fetch,
       prerenderer,
       ignoreData: args.ignoreData,
       realmOwnerUserId: userId,
     });
-    let { stats, invalidations, ignoreData } = await IndexRunner.incremental(
-      currentRun,
-      {
+    let { stats, invalidations, ignoreData, generation, phaseTimings } =
+      await IndexRunner.incremental(currentRun, {
         changes: changes.map(({ operation, url }) => ({
           operation,
           url: new URL(url),
         })),
-      },
-    );
+      });
 
     log.debug(
       `${jobIdentity(jobInfo)} completed incremental indexing for ${changes
@@ -453,10 +543,12 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       ignoreData: { ...ignoreData },
       invalidations,
       stats,
+      ...(generation !== undefined ? { generation } : {}),
+      ...(phaseTimings !== undefined ? { phaseTimings } : {}),
     };
   };
 
-function ensureRealmOwnerPermissions(
+export function ensureRealmOwnerPermissions(
   permissions: RealmPermissions,
   realmURL: string,
 ): RealmPermissions {

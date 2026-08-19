@@ -13,12 +13,14 @@ on:
       - "packages/base/**"
       - "packages/boxel-icons/**"
       - "packages/host/**"
-      - "packages/matrix/**"
+      - "packages/matrix/support/**"
       - "packages/postgres/**"
       - "packages/realm-server/**"
+      - "packages/realm-test-harness/**"
       - "packages/software-factory/**"
       - "package.json"
       - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
       # CI boot path: see comment on the equivalent block in ci.yaml.
       - ".mise.toml"
       - ".github/actions/**"
@@ -74,7 +76,10 @@ jobs:
           shopt -s dotglob
           cp -a .test-web-assets-artifact/. ./
       - name: Install Playwright Browsers
-        run: pnpm exec playwright install
+        # --with-deps also apt-installs the system libraries Playwright needs;
+        # without it CI fails with "Host system is missing dependencies to run
+        # browsers".
+        run: pnpm exec playwright install --with-deps
         working-directory: packages/software-factory
       - name: Run Node tests
         if: ${{ matrix.shard.index == 1 }}

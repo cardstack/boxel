@@ -1,17 +1,17 @@
-import { RealmPaths, ensureTrailingSlash } from './paths';
-import { baseRealm } from './index';
-import {
-  registerCardReferencePrefix,
-  type RealmIdentifier,
-} from './card-reference-resolver';
-import type { ModuleDescriptor } from './package-shim-handler';
+import { RealmPaths, ensureTrailingSlash } from './paths.ts';
+import { baseRealm } from './index.ts';
+import type {
+  RealmIdentifier,
+  RealmResourceIdentifier,
+} from './realm-identifiers.ts';
+import type { ModuleDescriptor } from './package-shim-handler.ts';
 import {
   PackageShimHandler,
   PACKAGES_FAKE_ORIGIN,
   type ModuleLike,
-} from './package-shim-handler';
+} from './package-shim-handler.ts';
 import type { Readable } from 'stream';
-import { fetcher, type FetcherMiddlewareHandler } from './fetcher';
+import { fetcher, type FetcherMiddlewareHandler } from './fetcher.ts';
 import { createEnvironmentAwareFetch } from '#fetch';
 
 export interface ResponseWithNodeStream extends Response {
@@ -25,10 +25,83 @@ export class VirtualNetwork {
   private urlMappings: [string, string][] = [];
   private importMap: Map<string, (rest: string) => string> = new Map();
   private realmMappings = new Map<string, string>();
+  // Memo for toURLHref. Hot paths (module-graph walks, per-instance realm
+  // membership checks) resolve the same identifiers over and over and only
+  // ever need the href STRING, yet toURL pays a native `new URL()` per call —
+  // in large renders that constructor shows up as a top self-time frame, and
+  // the discarded URL objects feed GC pressure. Caching the resolved href
+  // turns every repeat into a Map lookup with zero allocation. Resolution is
+  // a pure function of the realm mappings, so entries stay valid until a
+  // mapping is added or removed (both clear the cache).
+  private toURLHrefCache = new Map<string, string>();
+  // Memo for unresolveURL, the inverse of toURLHref. It runs on hot store and
+  // indexing paths and each miss pays a native `new URL()` in the virtual→real
+  // mapping chase. Same pure-function-of-mappings contract as toURLHrefCache:
+  // entries stay valid until a realm or URL mapping changes.
+  private unresolveURLCache = new Map<string, RealmResourceIdentifier>();
+  // Memo for toRealURLHref — the single canonical STORE KEY. It folds every id
+  // spelling (RRI, virtual alias, url-mapped alias, real URL) onto the real
+  // served URL, so the stores bucket a card the same way regardless of which
+  // form a lookup arrives in. Same pure-function-of-mappings contract as the
+  // memos above.
+  private realURLHrefCache = new Map<string, string>();
+  // Cap on the URL memos above. A VirtualNetwork is process-long-lived (notably
+  // in the realm server), and toURLHref/unresolveURL are called with distinct
+  // card, index, and request URLs — unique or nonexistent inputs would
+  // otherwise accumulate for the lifetime of the process. On overflow the
+  // oldest entry is evicted (Map preserves insertion order), which suits the
+  // "same identifiers resolved repeatedly" pattern these memos target.
+  private static readonly MAX_URL_CACHE = 20_000;
 
-  constructor(nativeFetch = createEnvironmentAwareFetch()) {
+  private setBoundedCache<V>(cache: Map<string, V>, key: string, value: V): V {
+    if (cache.size >= VirtualNetwork.MAX_URL_CACHE) {
+      let oldest = cache.keys().next().value;
+      if (oldest !== undefined) {
+        cache.delete(oldest);
+      }
+    }
+    cache.set(key, value);
+    return value;
+  }
+
+  // Notified whenever a realm-prefix mapping changes — added, removed, or
+  // re-registered against a new target. Consumers that key caches by the RRI
+  // form a mapping produces (e.g. the Loader's module cache) subscribe here to
+  // discard those entries when the mapping set changes — the RRI→URL
+  // relationship is only stable between changes.
+  private mappingChangeListeners = new Set<() => void>();
+
+  constructor(
+    nativeFetch = createEnvironmentAwareFetch(),
+    opts?: {
+      fetchHeaderTimeoutMs?: number;
+      // A timer scheduler for the fetch retry path. Defaults to the global
+      // setTimeout; the host passes a NATIVE (un-stubbed) scheduler so the
+      // header-timeout abort and retry backoff still fire during prerender,
+      // where render-timer-stub disables the global setTimeout.
+      scheduleFetchTimer?: (callback: () => void, ms: number) => unknown;
+    },
+  ) {
     this.nativeFetch = nativeFetch;
+    this.fetchHeaderTimeoutMs =
+      opts?.fetchHeaderTimeoutMs ?? defaultFetchHeaderTimeoutMs;
+    this.scheduleFetchTimer =
+      opts?.scheduleFetchTimer ?? ((callback, ms) => setTimeout(callback, ms));
     this.mount(this.packageShimHandler.handle);
+  }
+
+  private scheduleFetchTimer: (callback: () => void, ms: number) => unknown;
+
+  // Subscribe to realm-mapping changes; returns an unsubscribe function.
+  onMappingChange(listener: () => void): () => void {
+    this.mappingChangeListeners.add(listener);
+    return () => this.mappingChangeListeners.delete(listener);
+  }
+
+  private notifyMappingChange() {
+    for (let listener of this.mappingChangeListeners) {
+      listener();
+    }
   }
 
   resolveImport = (moduleIdentifier: string) => {
@@ -55,6 +128,13 @@ export class VirtualNetwork {
 
   addURLMapping(from: URL, to: URL) {
     this.urlMappings.push([from.href, to.href]);
+    // unresolveURL and toRealURLHref chase through urlMappings (the latter via
+    // its virtual→real mapURL step), so a new URL mapping invalidates their
+    // memos. toURLHref resolves only through realmMappings, so clearing its
+    // cache here is purely defensive.
+    this.toURLHrefCache.clear();
+    this.unresolveURLCache.clear();
+    this.realURLHrefCache.clear();
   }
 
   mapURL(
@@ -73,31 +153,377 @@ export class VirtualNetwork {
   }
 
   /**
-   * Register a scoped realm prefix and its target URL. This populates the
-   * import map (for module loading) and global prefix mappings (for card
-   * reference resolution). It does NOT add a URL-to-URL mapping — use
-   * `addURLMapping` separately when a virtual URL (e.g.
-   * `https://cardstack.com/base/`) needs to map to a real URL.
+   * Register a scoped realm prefix and its target URL. Populates the
+   * realm mapping (used by `resolveURL` / `toURL` / `unresolveURL` /
+   * `isRegisteredPrefix`) and the import map (used by module loading).
+   * Does NOT add a URL-to-URL mapping — use `addURLMapping` separately
+   * when a virtual URL (e.g. `https://cardstack.com/base/`) needs to
+   * map to a real URL.
    */
   addRealmMapping(realmIdentifier: string, targetURL: string): void {
     let normalizedId = ensureTrailingSlash(realmIdentifier);
     let normalizedTarget = ensureTrailingSlash(targetURL);
     this.realmMappings.set(normalizedId, normalizedTarget);
-
-    // Backward compat bridge: populate both existing registration systems
-    // so that resolveImport and resolveCardReference continue to work
+    this.toURLHrefCache.clear();
+    this.unresolveURLCache.clear();
+    this.realURLHrefCache.clear();
     this.addImportMap(
       normalizedId,
       (rest) => new URL(rest, normalizedTarget).href,
     );
-    registerCardReferencePrefix(normalizedId, normalizedTarget);
+    this.notifyMappingChange();
+  }
+
+  /**
+   * Remove a previously-registered realm prefix mapping. Companion to
+   * `addRealmMapping`. Used today by tests that scope a temporary prefix
+   * to a single test and clean up afterwards so the VN doesn't carry
+   * the mapping into sibling tests.
+   */
+  removeRealmMapping(realmIdentifier: string): void {
+    let normalizedId = ensureTrailingSlash(realmIdentifier);
+    this.realmMappings.delete(normalizedId);
+    this.importMap.delete(normalizedId);
+    this.toURLHrefCache.clear();
+    this.unresolveURLCache.clear();
+    this.realURLHrefCache.clear();
+    this.notifyMappingChange();
   }
 
   knownRealms(): RealmIdentifier[] {
     return [...this.realmMappings.keys()] as RealmIdentifier[];
   }
 
+  /**
+   * Whether `reference` starts with one of this VN's registered realm
+   * prefixes (e.g. `@cardstack/base/foo` against a registered
+   * `@cardstack/base/` mapping).
+   */
+  isRegisteredPrefix(reference: string): boolean {
+    for (let [prefix] of this.realmMappings) {
+      if (reference.startsWith(prefix)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * The realm holding `reference`, as a real URL href, or undefined when no
+   * registered realm does.
+   *
+   * Matches either spelling — a prefix-form RRI against the registered realm
+   * identifiers, a URL against those identifiers' targets — and always answers
+   * in URL form so callers can compare against a realm's own URL.
+   *
+   * Longest match wins, because a realm's identifier can be a prefix of
+   * another's: `@cardstack/base/` and `@cardstack/base-extras/` both match a
+   * reference into the latter, and the deeper one is the real holder. This is
+   * why a realm can't be recovered by counting path segments — realm roots are
+   * whatever was registered, at whatever depth.
+   */
+  realmForReference(reference: string): string | undefined {
+    // A realm can be addressed several ways, and which ones exist depends on
+    // how it was registered. A prefix mapping contributes its `@scope/name/`
+    // spelling and its target; a URL mapping contributes the virtual space and
+    // the real one. Realms registered only by URL — everything that isn't
+    // `@cardstack/<name>/` or a scoped prefix — appear solely in the latter, so
+    // matching `realmMappings` alone would fail to place them at all.
+    let candidates: [string, string][] = [];
+    for (let [prefix, target] of this.realmMappings) {
+      candidates.push([prefix, target], [target, target]);
+    }
+    for (let [virtual, real] of this.urlMappings) {
+      candidates.push([virtual, real], [real, real]);
+    }
+
+    let best: string | undefined;
+    let bestLength = -1;
+    for (let [addressable, realmHref] of candidates) {
+      if (
+        reference.startsWith(addressable) &&
+        addressable.length > bestLength
+      ) {
+        bestLength = addressable.length;
+        best = realmHref;
+      }
+    }
+    if (!best) {
+      return undefined;
+    }
+    // A prefix mapping points at where the realm is *reachable*, which is not
+    // always the URL the realm calls itself. The base realm is served as
+    // `https://cardstack.com/base/` and merely mapped to a real host, and its
+    // index rows are stored under that virtual URL — so answering with the
+    // mapping target would name a realm the index has never heard of, and the
+    // search would come back empty. Fold back to the virtual form when one
+    // exists; every other realm maps to itself and is unaffected.
+    let virtual = this.mapURL(ensureTrailingSlash(best), 'real-to-virtual');
+    return ensureTrailingSlash(virtual ? virtual.href : best);
+  }
+
+  /**
+   * Convert a URL back to its registered prefix form when one matches,
+   * e.g. `http://localhost:4201/catalog/foo` → `@cardstack/catalog/foo`.
+   *
+   * If the input doesn't directly match any realm-prefix target, and the
+   * input is URL-shaped, chase through any virtual→real URL mapping (e.g.
+   * `https://cardstack.com/base/X` → `http://localhost:4201/base/X`) and
+   * retry the realm-prefix match. This bridges the gap when a realm
+   * prefix is registered against the resolved URL but the caller hands
+   * us the unresolved virtual URL.
+   *
+   * Inputs that match no prefix and no URL mapping are returned as-is.
+   */
+  unresolveURL(url: string): RealmResourceIdentifier {
+    let cached = this.unresolveURLCache.get(url);
+    if (cached !== undefined) {
+      return cached;
+    }
+    let result = this.computeUnresolveURL(url);
+    return this.setBoundedCache(this.unresolveURLCache, url, result);
+  }
+
+  private computeUnresolveURL(url: string): RealmResourceIdentifier {
+    for (let [prefix, target] of this.realmMappings) {
+      if (url.startsWith(target)) {
+        return (prefix + url.slice(target.length)) as RealmResourceIdentifier;
+      }
+    }
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      let resolved: string | undefined;
+      try {
+        resolved = this.resolveURLMapping(url, 'virtual-to-real');
+      } catch {
+        resolved = undefined;
+      }
+      if (resolved && resolved !== url) {
+        for (let [prefix, target] of this.realmMappings) {
+          if (resolved.startsWith(target)) {
+            return (prefix +
+              resolved.slice(target.length)) as RealmResourceIdentifier;
+          }
+        }
+      }
+    }
+    return url as RealmResourceIdentifier;
+  }
+
+  /**
+   * Canonicalize a set of identifiers to RRI form, deduped. Distinct
+   * spellings of the same module (a real URL and its virtual alias) collapse
+   * to one RRI, so the result is uniqued — callers consume these as sets
+   * (dependency lists, etc.) and would otherwise carry duplicates.
+   */
+  unresolveURLs(urls: string[]): RealmResourceIdentifier[] {
+    return [
+      ...new Set(urls.map((url) => this.unresolveURL(url))),
+    ] as RealmResourceIdentifier[];
+  }
+
+  /**
+   * All known spellings of a (resolved) URL: the URL itself, its RRI-prefix
+   * form, and any registered virtual-alias form. Lets callers match index
+   * data persisted before references were canonicalized to RRI — which may
+   * hold the virtual-alias or real-URL spelling of a key — against the
+   * RRI-form key produced today. Returns just the input for URLs that belong
+   * to no registered realm, so normal realms are unaffected.
+   */
+  equivalentURLForms(url: string): string[] {
+    let forms = new Set<string>([url]);
+    forms.add(this.unresolveURL(url));
+    let virtual: string | undefined;
+    try {
+      virtual = this.resolveURLMapping(url, 'real-to-virtual');
+    } catch {
+      virtual = undefined;
+    }
+    if (virtual) {
+      forms.add(virtual);
+    }
+    return [...forms];
+  }
+
+  /**
+   * Resolve `reference` (relative path, prefix-form RRI, or URL string)
+   * to a canonical URL object using `relativeTo` as the base when
+   * `reference` is relative. Composes `resolveRRI` + `toURL`, with a
+   * direct URL-join path for the `/`-rooted-reference cases that
+   * `resolveRRI` declines to handle (see the body comment below).
+   */
+  resolveURL(reference: string, relativeTo: URL | string | undefined): URL {
+    let base: RealmResourceIdentifier | undefined;
+    if (relativeTo instanceof URL) {
+      base = relativeTo.href as RealmResourceIdentifier;
+    } else if (typeof relativeTo === 'string') {
+      base = relativeTo as RealmResourceIdentifier;
+    }
+    // `/`-rooted references are not valid RRI forms — `resolveRRI`
+    // rejects them — but they're legitimate URL-form inputs. Handle
+    // them here: if the base is URL-form, URL-join directly; if it's a
+    // registered prefix, resolve the prefix to its mapped URL first
+    // and then join. Unmapped prefix-form bases fall through to
+    // `resolveRRI`, which raises "no matching prefix mapping".
+    if (
+      reference.startsWith('/') &&
+      !reference.startsWith('//') &&
+      typeof base === 'string'
+    ) {
+      if (base.startsWith('http://') || base.startsWith('https://')) {
+        return new URL(reference, base);
+      }
+      let mapped = this.resolveRRIToURL(base);
+      if (mapped !== undefined) {
+        return new URL(reference, mapped);
+      }
+    }
+    return this.toURL(this.resolveRRI(reference, base));
+  }
+
+  /**
+   * Convert an RRI to a URL object. If the RRI is in prefix form, resolves
+   * via the registered realm mappings; if it's already a URL form, parses
+   * directly. Throws if the prefix is unregistered and the value isn't a
+   * parseable URL — that's intentional: bare local identifiers can't be
+   * resolved to a realm location.
+   */
+  toURL(rri: string): URL {
+    let resolved = this.resolveRRIToURL(rri);
+    if (resolved !== undefined) {
+      return new URL(resolved);
+    }
+    // Not a registered prefix; parse as a plain URL.
+    return new URL(rri);
+  }
+
+  /**
+   * `toURL().href` without constructing a URL object on repeats. Same
+   * resolution and same throw-on-unresolvable behavior as `toURL`, but
+   * memoized — for callers that only need the href string this turns the
+   * per-call native URL construction into a Map lookup. Failures are not
+   * cached, so an identifier that becomes resolvable after a mapping is
+   * registered resolves normally.
+   */
+  toURLHref(rri: string): string {
+    let cached = this.toURLHrefCache.get(rri);
+    if (cached !== undefined) {
+      return cached;
+    }
+    let href = this.toURL(rri).href;
+    return this.setBoundedCache(this.toURLHrefCache, rri, href);
+  }
+
+  /**
+   * Fold any id spelling onto the real served URL — the single canonical key
+   * the stores bucket by. `toURL` first resolves an RRI prefix (or leaves a
+   * URL alone); `mapURL(·, 'virtual-to-real')` then collapses a virtual or
+   * url-mapped alias onto its real backing URL. The composition is total: an
+   * RRI, its virtual alias, a url-mapped alias, and the real URL all converge,
+   * so a lookup by `card.id`, a link's `self`, or a requested URL lands on the
+   * same entry. `unresolveURL` alone is NOT usable as the key — it leaves a
+   * virtual/url-mapped alias unchanged, so those spellings split from the RRI.
+   */
+  toRealURLHref(id: string): string {
+    let cached = this.realURLHrefCache.get(id);
+    if (cached !== undefined) {
+      return cached;
+    }
+    let viaToURL = this.toURL(id).href;
+    let real = this.mapURL(viaToURL, 'virtual-to-real')?.href ?? viaToURL;
+    return this.setBoundedCache(this.realURLHrefCache, id, real);
+  }
+
+  /**
+   * Resolve a reference to an absolute `RealmResourceIdentifier`.
+   *
+   * Resolution rules:
+   * - Absolute URL or registered prefix → return as-is
+   * - Relative (`./`, `../`, bare name) → resolve against `relativeTo`
+   * - `$REALM/` → resolve against the realm root of `relativeTo`
+   * - `/` or `~/` prefixed → throw (not valid RRI forms)
+   */
+  resolveRRI(
+    reference: string,
+    relativeTo?: RealmResourceIdentifier,
+  ): RealmResourceIdentifier {
+    // Absolute URL — already resolved
+    if (reference.startsWith('http://') || reference.startsWith('https://')) {
+      return reference as RealmResourceIdentifier;
+    }
+
+    // Starts with a registered prefix — already resolved
+    if (this.isRegisteredPrefix(reference)) {
+      return reference as RealmResourceIdentifier;
+    }
+
+    // "/" and "~/" are not valid RRI reference forms
+    if (reference.startsWith('/') || reference.startsWith('~/')) {
+      throw new Error(
+        `Invalid RRI reference "${reference}" — "/" and "~/" prefixes are not supported`,
+      );
+    }
+
+    if (!relativeTo) {
+      throw new Error(`Cannot resolve "${reference}" without a relativeTo`);
+    }
+
+    let isUrlRelativeTo =
+      relativeTo.startsWith('http://') || relativeTo.startsWith('https://');
+
+    // $REALM/ — resolve against the realm root
+    if (reference.startsWith('$REALM/')) {
+      let path = reference.slice('$REALM/'.length);
+      if (isUrlRelativeTo) {
+        for (let [, target] of this.realmMappings) {
+          if (relativeTo.startsWith(target)) {
+            return new URL(path, target).href as RealmResourceIdentifier;
+          }
+        }
+        throw new Error(
+          `Cannot resolve "$REALM/" — no realm root found for "${relativeTo}"`,
+        );
+      }
+      for (let [prefix] of this.realmMappings) {
+        if (relativeTo.startsWith(prefix)) {
+          return (
+            prefix.endsWith('/') ? prefix + path : prefix + '/' + path
+          ) as RealmResourceIdentifier;
+        }
+      }
+      throw new Error(
+        `Cannot resolve "${reference}" — relativeTo "${relativeTo}" has no matching prefix mapping`,
+      );
+    }
+
+    // relativeTo is a URL — standard URL resolution
+    if (isUrlRelativeTo) {
+      return new URL(reference, relativeTo).href as RealmResourceIdentifier;
+    }
+
+    // relativeTo starts with a registered prefix — resolve in prefix space
+    // by round-tripping through URL space: prefix→URL, resolve, URL→prefix
+    for (let [prefix, target] of this.realmMappings) {
+      if (relativeTo.startsWith(prefix)) {
+        let baseURL = new URL(relativeTo.slice(prefix.length), target);
+        let resolved = new URL(reference, baseURL);
+        // Convert back to scoped form if the resolved URL matches a mapping
+        for (let [p, t] of this.realmMappings) {
+          if (resolved.href.startsWith(t)) {
+            return (p +
+              resolved.href.slice(t.length)) as RealmResourceIdentifier;
+          }
+        }
+        return resolved.href as RealmResourceIdentifier;
+      }
+    }
+
+    throw new Error(
+      `Cannot resolve "${reference}" — relativeTo "${relativeTo}" has no matching prefix mapping`,
+    );
+  }
+
   private nativeFetch: typeof globalThis.fetch;
+  private fetchHeaderTimeoutMs: number;
 
   private resolveURLMapping(
     url: string,
@@ -107,10 +533,12 @@ export class VirtualNetwork {
     for (let [virtual, real] of this.urlMappings) {
       let sourcePath = new RealmPaths(
         new URL(direction === 'virtual-to-real' ? virtual : real),
+        this,
       );
       if (sourcePath.inRealm(absoluteURL)) {
         let toPath = new RealmPaths(
           new URL(direction === 'virtual-to-real' ? real : virtual),
+          this,
         );
         if (absoluteURL.href.endsWith('/')) {
           return toPath.directoryURL(sourcePath.local(absoluteURL)).href;
@@ -199,8 +627,23 @@ export class VirtualNetwork {
       return next(await this.mapRequest(request, 'virtual-to-real'));
     });
 
-    return withRetries(new URL(request.url), () =>
-      fetcher(this.nativeFetch, handlers)(request, init),
+    return withRetries(
+      new URL(request.url),
+      this.fetchHeaderTimeoutMs,
+      this.scheduleFetchTimer,
+      (attemptSignal?: AbortSignal) => {
+        // Each attempt gets its own abort signal (see withRetries) so that a
+        // fetch aborted for stalling on one attempt doesn't poison the next.
+        // Rebuild the Request from a clone rather than mutating the original:
+        // the original is reused across attempts and constructing a Request
+        // consumes its body.
+        let attemptRequest = attemptSignal
+          ? new Request(request.clone(), {
+              signal: mergeAbortSignals(request.signal, attemptSignal),
+            })
+          : request;
+        return fetcher(this.nativeFetch, handlers, this)(attemptRequest, init);
+      },
     );
   }
 
@@ -288,7 +731,83 @@ const maxAttempts = 10;
 const backOffMs = 100;
 const retryableLocalHosts = new Set(['localhost', '127.0.0.1']);
 
-function shouldRetryFetch(url: URL) {
+// Longest a retryable base-realm fetch may wait for response headers in the
+// browser test suite before it is aborted and retried (see withRetries). A
+// stall where the response headers never arrive is the failure mode the
+// thrown-error retry net above does not cover: the fetch neither resolves nor
+// rejects. Comfortably above normal base-artifact header latency (sub-second)
+// yet far below a per-test timeout, so it only ever fires on a genuine stall,
+// and the retry then gets its headers on a fresh connection.
+const defaultFetchHeaderTimeoutMs = 10_000;
+
+// Whether a retryable fetch should also be bounded by a header-arrival timeout.
+// Browser test suite only: `document` is absent in node / worker / env-mode
+// processes, where a legitimately slow response (e.g. a heavy `_search`) must
+// never be aborted and retried. `__environment === 'test'` is the same gate
+// shouldRetryFetch uses to decide base-realm retryability in the host.
+export function shouldTimeoutRetryableFetch(url: URL): boolean {
+  let g = globalThis as { document?: unknown; __environment?: string };
+  return (
+    typeof g.document !== 'undefined' &&
+    g.__environment === 'test' &&
+    shouldRetryFetch(url)
+  );
+}
+
+// Combine an optional caller-supplied signal with the per-attempt timeout
+// signal so a fetch is aborted when either fires.
+function mergeAbortSignals(
+  a: AbortSignal | null | undefined,
+  b: AbortSignal | null | undefined,
+): AbortSignal | undefined {
+  let signals = [a, b].filter((s): s is AbortSignal => Boolean(s));
+  if (signals.length <= 1) {
+    return signals[0];
+  }
+  let combine = (
+    AbortSignal as unknown as {
+      any?: (signals: AbortSignal[]) => AbortSignal;
+    }
+  ).any;
+  if (typeof combine === 'function') {
+    return combine(signals);
+  }
+  // Fallback for a runtime without AbortSignal.any: mirror both signals onto a
+  // single controller so either firing aborts the fetch, carrying its reason.
+  let controller = new AbortController();
+  for (let signal of signals) {
+    if (signal.aborted) {
+      controller.abort(signal.reason);
+      break;
+    }
+    signal.addEventListener('abort', () => controller.abort(signal.reason), {
+      once: true,
+    });
+  }
+  return controller.signal;
+}
+
+export function shouldRetryFetch(url: URL): boolean {
+  // Env-mode services live at `<service>.<slug>.localhost` and are
+  // reached through a local Traefik. The realm-server worker fetches
+  // its own realm's `_mtimes` via this hostname on boot, and if Traefik
+  // hasn't picked up the dynamic route file yet the first attempt fails
+  // with ECONNRESET. Without a retry, that single failure rejects the
+  // from-scratch-index job and leaves the realm mounted but unindexed.
+  // Gate on `BOXEL_ENVIRONMENT` rather than the `__environment === 'test'`
+  // global below: worker processes don't set that global (only `main.ts`
+  // does), and the standard-mode realm-server tests do set it — those
+  // tests POST to `testuser.localhost:4445` and rely on no-retry
+  // behavior for their publish/unpublish flows, so we must scope this
+  // retry to env-mode runs only.
+  if (
+    typeof process !== 'undefined' &&
+    process.env?.BOXEL_ENVIRONMENT &&
+    url.hostname.endsWith('.localhost')
+  ) {
+    return true;
+  }
+
   if ((globalThis as any).__environment !== 'test') {
     return false;
   }
@@ -301,18 +820,63 @@ function shouldRetryFetch(url: URL) {
     return true;
   }
 
+  // The env-mode service stack (including env-mode CI) serves the base realm
+  // at a `*.localhost` host (e.g. https://realm-server.ci.localhost/base/...)
+  // rather than the virtual https://cardstack.com/base/ URL that
+  // `baseRealm.inRealm` recognizes above. The env-mode `.localhost` branch at
+  // the top of this function only fires in node/worker processes — it reads
+  // `process.env.BOXEL_ENVIRONMENT`, which a browser host test can't see — so
+  // without this clause a transient base-realm fetch-vanish in the browser
+  // escapes unretried. Match base artifacts by their `/base/` path so sibling
+  // realms on the same host (e.g. /testuser/personal/) keep no-retry behavior.
+  if (
+    url.hostname.endsWith('.localhost') &&
+    (url.pathname === '/base' || url.pathname.startsWith('/base/'))
+  ) {
+    return true;
+  }
+
   return url.href.startsWith('https://boxel-icons.boxel.ai/');
 }
 
 async function withRetries(
   url: URL,
-  fetchFn: () => ReturnType<typeof globalThis.fetch>,
+  timeoutMs: number,
+  scheduleTimer: (callback: () => void, ms: number) => unknown,
+  fetchFn: (attemptSignal?: AbortSignal) => ReturnType<typeof globalThis.fetch>,
 ) {
   let attempt = 0;
   for (;;) {
+    // For a retryable fetch in the browser test suite, bound how long this
+    // attempt may wait for response headers. A stall where the headers never
+    // arrive would otherwise leave the fetch neither resolved nor rejected,
+    // hanging the fetcher test-waiter until QUnit's global timeout; the abort
+    // turns that into the same retryable failure the catch below recovers
+    // from. The timer is cleared the moment the fetch settles, so a resolved
+    // response's body stream is never aborted (withRetries only awaits the
+    // response's headers, not its body).
+    let controller: AbortController | undefined;
+    let timeoutId: unknown;
+    if (shouldTimeoutRetryableFetch(url)) {
+      controller = new AbortController();
+      timeoutId = scheduleTimer(() => {
+        let timeoutError = new Error(
+          `fetch for ${url.href} exceeded ${timeoutMs}ms without response headers`,
+        );
+        timeoutError.name = 'FetchHeaderTimeout';
+        controller!.abort(timeoutError);
+      }, timeoutMs);
+    }
     try {
-      return await fetchFn();
+      return await fetchFn(controller?.signal);
     } catch (err: any) {
+      // A caller-initiated abort is not a transient failure — surface it at
+      // once rather than retrying the already-aborted request. The per-attempt
+      // header-stall abort names its error `FetchHeaderTimeout`, so it falls
+      // through to the retry path below.
+      if (err?.name === 'AbortError') {
+        throw err;
+      }
       if (!shouldRetryFetch(url) || ++attempt > maxAttempts) {
         if (shouldRetryFetch(url) && attempt > maxAttempts) {
           // Final-exhaustion log: distinct from the per-attempt warning so
@@ -325,17 +889,26 @@ async function withRetries(
         }
         throw err;
       }
+      // Include the error so a failure surfaces which shape it took — a thrown
+      // `TypeError: Failed to fetch` or an aborted header stall
+      // (`FetchHeaderTimeout`).
       console.error(
-        `Encountered fetch failed for ${
-          url.href
-        } retry attempt #${attempt} in ${attempt * backOffMs}ms`,
+        `Encountered fetch failed for ${url.href} (${err?.name ?? 'Error'}: ${
+          err?.message ?? String(err)
+        }) retry attempt #${attempt} in ${attempt * backOffMs}ms`,
       );
-      await new Promise((r) => setTimeout(r, attempt * backOffMs));
+      await new Promise((r) =>
+        scheduleTimer(() => r(undefined), attempt * backOffMs),
+      );
+    } finally {
+      if (timeoutId !== undefined) {
+        clearTimeout(timeoutId as Parameters<typeof clearTimeout>[0]);
+      }
     }
   }
 }
 
-async function buildRequest(url: string, originalRequest: Request) {
+export async function buildRequest(url: string, originalRequest: Request) {
   if (url === originalRequest.url) {
     return originalRequest;
   }
@@ -368,5 +941,11 @@ async function buildRequest(url: string, originalRequest: Request) {
     cache: originalRequest.cache,
     redirect: originalRequest.redirect,
     integrity: originalRequest.integrity,
+    // Carry the abort signal across the remap so a caller's abort — and the
+    // per-attempt header-stall timeout in withRetries — still cancels the
+    // native fetch. The host maps virtual base-realm URLs
+    // (https://cardstack.com/base/...) to the resolved realm URL here, so
+    // without this the base fetch that reaches the network has no signal.
+    signal: originalRequest.signal,
   });
 }

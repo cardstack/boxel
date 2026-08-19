@@ -28,6 +28,7 @@ import {
   CardContainer,
   CardHeader,
   LoadingIndicator,
+  SelectionCheckmark,
 } from '@cardstack/boxel-ui/components';
 import {
   MenuDivider,
@@ -40,7 +41,7 @@ import { cn, cssVar, optional, not } from '@cardstack/boxel-ui/helpers';
 
 import { IconLink, IconTrash } from '@cardstack/boxel-ui/icons';
 
-import type { CommandContext } from '@cardstack/runtime-common';
+import type { ToolContext } from '@cardstack/runtime-common';
 import {
   type Permissions,
   type getCard,
@@ -69,27 +70,28 @@ import {
 } from '@cardstack/host/lib/stack-item';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
-import type {
-  CardContext,
-  CardCrudFunctions,
-  CardDef,
-} from 'https://cardstack.com/base/card-api';
-
 import consumeContext from '../../helpers/consume-context';
 import ElementTracker, {
   type RenderedCardForOverlayActions,
 } from '../../resources/element-tracker';
 import CardRenderer from '../card-renderer';
 
+import ArchivedRealmState from './archived-realm-state';
 import CardError from './card-error';
 import DeleteModal from './delete-modal';
 
 import OperatorModeOverlays from './operator-mode-overlays';
 
 import type CardService from '../../services/card-service';
+import type NetworkService from '../../services/network';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RealmService from '../../services/realm';
 import type StoreService from '../../services/store';
+import type {
+  CardContext,
+  CardCrudFunctions,
+  CardDef,
+} from '@cardstack/base/card-api';
 
 export interface StackItemComponentAPI {
   clearSelections: () => void;
@@ -103,7 +105,7 @@ interface Signature {
     stackItems: StackItem[];
     index: number;
     requestDeleteCard?: (card: CardDef | URL | string) => Promise<void>;
-    commandContext: CommandContext;
+    toolContext: ToolContext;
     close: (item: StackItem) => void;
     dismissStackedCardsAbove: (stackIndex: number) => Promise<void>;
     onSelectedCards: (
@@ -133,6 +135,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   declare private cardCrudFunctions: CardCrudFunctions;
 
   @service declare private cardService: CardService;
+  @service declare private network: NetworkService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
   @service declare private store: StoreService;
@@ -281,7 +284,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private get isIndexCard() {
-    return isRealmIndexCardId(this.url, this.realmURL);
+    return isRealmIndexCardId(
+      this.url,
+      this.realmURL,
+      this.network.virtualNetwork,
+    );
   }
 
   // Element ref captured by submode-layout's expanded-card-header-slot.
@@ -547,6 +554,17 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
     const menuItems: (MenuItem | MenuDivider)[] = [];
 
+    // Inert teal header echoing the chip's count — uses the same
+    // dark-circle-with-teal-check artwork as the per-card selection chip.
+    menuItems.push(
+      new MenuItem({
+        label: `${selectedCount} Selected`,
+        action: () => {},
+        icon: SelectionCheckmark,
+        header: true,
+      }),
+    );
+
     // Add "Select All" option if not all cards are selected
     if (!allSelected && totalAvailableCount > selectedCount) {
       menuItems.push(
@@ -581,8 +599,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
     );
 
     return {
-      triggerText: `${selectedCount} Selected`,
+      selectedCount,
       menuItems,
+      label: `Selection menu, ${selectedCount} card${
+        selectedCount === 1 ? '' : 's'
+      } selected`,
     };
   }
 
@@ -649,7 +670,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
         canEdit: this.url ? this.realm.canWrite(this.url as string) : false,
         cardCrudFunctions: this.cardCrudFunctions,
         menuContext: 'interact',
-        commandContext: this.args.commandContext,
+        toolContext: this.args.toolContext,
         format: this.cardFormat,
         useBaseTemplate: this.args.item.useBaseTemplate,
       }) ?? [],
@@ -692,6 +713,18 @@ export default class OperatorModeStackItem extends Component<Signature> {
   @cached
   private get cardError() {
     return this.cardResource?.cardError;
+  }
+
+  // A realm that responds 403 (archived) carries the X-Boxel-Realm-Archived
+  // marker (exposed to cross-origin clients via Access-Control-Expose-Headers).
+  // The realm only returns this to callers it has already authorized, so its
+  // presence is an unambiguous signal to render the sealed state rather than a
+  // generic card error.
+  private get isArchivedRealmError() {
+    return (
+      this.cardError?.meta?.responseHeaders?.['x-boxel-realm-archived'] ===
+      'true'
+    );
   }
 
   private get isWideFormat() {
@@ -965,36 +998,66 @@ export default class OperatorModeStackItem extends Component<Signature> {
         {{else if this.showError}}
           {{! this is for types--this.cardError is always true in this case !}}
           {{#if this.cardError}}
-            <CardError
-              @error={{this.cardError}}
-              @viewInCodeMode={{true}}
-              @headerOptions={{this.cardErrorHeaderOptions}}
-              class='stack-item-header'
-              style={{cssVar
-                boxel-card-header-icon-container-min-width=(if
-                  this.isBuried '50px' '95px'
-                )
-                boxel-card-header-actions-min-width=(if
-                  this.isBuried '50px' '95px'
-                )
-                boxel-card-header-background-color=this.headerColor
-                boxel-card-header-text-color=(getContrastColor this.headerColor)
-                realm-icon-background-color=(getContrastColor
-                  this.headerColor 'transparent'
-                )
-                realm-icon-border-color=(getContrastColor
-                  this.headerColor 'transparent' 'rgba(0 0 0 / 15%)'
-                )
-              }}
-              role={{if this.isBuried 'button' 'banner'}}
-              {{on
-                'click'
-                (optional
-                  (if this.isBuried (fn @dismissStackedCardsAbove @index))
-                )
-              }}
-              data-test-stack-card-header
-            />
+            {{#if this.isArchivedRealmError}}
+              <ArchivedRealmState
+                @error={{this.cardError}}
+                @headerOptions={{this.cardErrorHeaderOptions}}
+                class='stack-item-header'
+                style={{cssVar
+                  boxel-card-header-icon-container-min-width=(if
+                    this.isBuried '50px' '95px'
+                  )
+                  boxel-card-header-actions-min-width=(if
+                    this.isBuried '50px' '95px'
+                  )
+                  boxel-card-header-background-color=this.headerColor
+                  boxel-card-header-text-color=(getContrastColor
+                    this.headerColor
+                  )
+                }}
+                role={{if this.isBuried 'button' 'banner'}}
+                {{on
+                  'click'
+                  (optional
+                    (if this.isBuried (fn @dismissStackedCardsAbove @index))
+                  )
+                }}
+                data-test-stack-card-header
+              />
+            {{else}}
+              <CardError
+                @error={{this.cardError}}
+                @viewInCodeMode={{true}}
+                @headerOptions={{this.cardErrorHeaderOptions}}
+                class='stack-item-header'
+                style={{cssVar
+                  boxel-card-header-icon-container-min-width=(if
+                    this.isBuried '50px' '95px'
+                  )
+                  boxel-card-header-actions-min-width=(if
+                    this.isBuried '50px' '95px'
+                  )
+                  boxel-card-header-background-color=this.headerColor
+                  boxel-card-header-text-color=(getContrastColor
+                    this.headerColor
+                  )
+                  realm-icon-background-color=(getContrastColor
+                    this.headerColor 'transparent'
+                  )
+                  realm-icon-border-color=(getContrastColor
+                    this.headerColor 'transparent' 'rgba(0 0 0 / 15%)'
+                  )
+                }}
+                role={{if this.isBuried 'button' 'banner'}}
+                {{on
+                  'click'
+                  (optional
+                    (if this.isBuried (fn @dismissStackedCardsAbove @index))
+                  )
+                }}
+                data-test-stack-card-header
+              />
+            {{/if}}
           {{/if}}
         {{else if this.card}}
           {{this.setWindowTitle}}

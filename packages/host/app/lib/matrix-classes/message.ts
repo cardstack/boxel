@@ -11,13 +11,13 @@ import {
   type HtmlTagGroup,
 } from '@cardstack/host/lib/formatted-message/utils';
 
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-
 import type { RoomMember } from './member';
 
 import type MessageCodePatchResult from './message-code-patch-result';
 
-import type MessageCommand from './message-command';
+import type MessageTool from './message-tool';
+import type { FileDef } from '@cardstack/base/file-api';
+import type { TokenUsage } from '@cardstack/base/matrix-event';
 import type { EventStatus } from 'matrix-js-sdk';
 
 const ErrorMessage: Record<string, string> = {
@@ -51,12 +51,13 @@ interface RoomMessageOptional {
   continuationOf?: string | null;
   agentId?: string;
   isCodePatchCorrectness?: boolean;
+  usage?: TokenUsage;
 }
 
 export class Message implements RoomMessageInterface {
   @tracked _body: string;
   @tracked _reasoningContent?: string | null;
-  @tracked _commands: TrackedArray<MessageCommand>;
+  @tracked _tools: TrackedArray<MessageTool>;
   @tracked codePatchResults: TrackedArray<MessageCodePatchResult>;
   @tracked created: Date;
   @tracked _isStreamingFinished?: boolean;
@@ -83,6 +84,9 @@ export class Message implements RoomMessageInterface {
   eventId: string;
   roomId: string;
   agentId?: string;
+  // Tracked because the counts arrive on a late streamed edit, after the
+  // message is already rendered.
+  @tracked private _usage?: TokenUsage;
 
   //This property is used for testing purpose
   instanceId: string;
@@ -90,7 +94,7 @@ export class Message implements RoomMessageInterface {
   constructor(init: RoomMessageInterface) {
     this._body = init.body;
     this._reasoningContent = init.reasoningContent;
-    this._commands = new TrackedArray<MessageCommand>();
+    this._tools = new TrackedArray<MessageTool>();
     this.author = init.author;
     this.eventId = init.eventId;
     this.created = init.created;
@@ -98,11 +102,12 @@ export class Message implements RoomMessageInterface {
     this.status = init.status;
     this.roomId = init.roomId;
     this.agentId = init.agentId;
+    this._usage = init.usage;
     this.attachedFiles = init.attachedFiles;
     this.hasContinuation = init.hasContinuation;
     this.continuationOf = init.continuationOf;
     this._reasoningContent = init.reasoningContent;
-    this._commands = new TrackedArray<MessageCommand>();
+    this._tools = new TrackedArray<MessageTool>();
     this.codePatchResults = new TrackedArray<MessageCodePatchResult>();
     this.instanceId = guidFor(this);
     this.isCodePatchCorrectness = false;
@@ -145,18 +150,29 @@ export class Message implements RoomMessageInterface {
     return this.continuedInMessage?.body;
   }
 
-  get commands(): MessageCommand[] {
-    return (this.continuedInMessage?.commands?.length ?? 0) > 0
-      ? this.continuedInMessage!.commands
-      : (this._commands ?? []);
+  get tools(): MessageTool[] {
+    return (this.continuedInMessage?.tools?.length ?? 0) > 0
+      ? this.continuedInMessage!.tools
+      : (this._tools ?? []);
   }
 
-  setCommands(commands: MessageCommand[]) {
-    this._commands = new TrackedArray<MessageCommand>(commands);
+  setTools(tools: MessageTool[]) {
+    this._tools = new TrackedArray<MessageTool>(tools);
   }
 
   get continuedCommands() {
-    return this.continuedInMessage?.commands;
+    return this.continuedInMessage?.tools;
+  }
+
+  // Like tools and body, the usage of a split answer lives on the final part
+  // of the continuation chain; the head chases it so callers see one value
+  // per answer.
+  get usage(): TokenUsage | undefined {
+    return this.continuedInMessage?.usage ?? this._usage;
+  }
+
+  setUsage(usage: TokenUsage) {
+    this._usage = usage;
   }
 
   setIsStreamingFinished(isStreamingFinished: boolean | undefined) {

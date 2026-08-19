@@ -52,15 +52,19 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
     {{else if (eq @state 'invalid')}}
       <Exclamation width='16' height='16' />
     {{else if (eq @state 'preparing')}}
-      <BoxelButton
-        @kind='secondary-dark'
-        @size='auto'
-        class='apply-button'
-        tabindex='-1'
-        disabled
-      >
-        Working…
-      </BoxelButton>
+      {{#if @isCompact}}
+        <CircleSpinner width='18' height='18' />
+      {{else}}
+        <BoxelButton
+          @kind='secondary-dark'
+          @size='auto'
+          class='apply-button'
+          tabindex='-1'
+          disabled
+        >
+          Working…
+        </BoxelButton>
+      {{/if}}
     {{/if}}
   </div>
   <style scoped>
@@ -101,7 +105,9 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
       width: 58px;
       border-radius: 100px;
     }
-    .state-indicator.compact.applying {
+    .state-indicator.compact.applying,
+    .state-indicator.compact.preparing {
+      --icon-stroke-width: 5;
       width: 1rem;
       height: 1rem;
       min-width: 1rem;
@@ -111,14 +117,25 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
       overflow: hidden;
     }
 
-    .state-indicator.preparing {
+    /* The "Working…" pill with its animated gradient border only fits the
+      full-size layout; compact mode renders a spinner instead, so keep all
+      pill styling scoped to non-compact. */
+    .state-indicator.preparing:not(.compact) {
       width: 78px;
       padding: 1px;
       border-radius: 100px;
     }
     .state-indicator.preparing .apply-button {
+      --boxel-button-font: 600 0.625rem / calc(15 / 11) var(--boxel-font-family);
       --boxel-button-color: transparent;
       --boxel-button-text-color: var(--boxel-200);
+      /* The theme's disabled-button tokens are light-theme values; on this
+        always-dark pill they would paint an opaque light-gray capsule over
+        the dark background and its gradient ring, so pin the disabled look
+        to the pill's own transparent/dark styling. */
+      --boxel-button-disabled-background: transparent;
+      --boxel-button-disabled-foreground: var(--boxel-200);
+      --boxel-button-disabled-border: 0;
       border: 0;
       min-width: 74px;
     }
@@ -129,7 +146,7 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
       filter: none;
       cursor: not-allowed;
     }
-    .state-indicator.preparing::before {
+    .state-indicator.preparing:not(.compact)::before {
       content: '';
       position: absolute;
       top: -105px;
@@ -151,7 +168,7 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
       animation: spin 4s infinite linear;
     }
 
-    .state-indicator.preparing::after {
+    .state-indicator.preparing:not(.compact)::after {
       content: '';
       position: absolute;
       top: 1px;
@@ -163,7 +180,7 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
       z-index: -1;
     }
 
-    .state-indicator.preparing {
+    .state-indicator.preparing:not(.compact) {
       position: relative;
       display: inline-block;
       border-radius: 3rem;

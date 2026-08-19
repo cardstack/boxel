@@ -1,22 +1,26 @@
-import '../helpers/setup-realm-server';
+import '../helpers/setup-realm-server.ts';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { sync } from '../../src/commands/realm/sync';
-import { pushCommand } from '../../src/commands/realm/push';
-import { createRealm } from '../../src/commands/realm/create';
-import { CheckpointManager } from '../../src/lib/checkpoint-manager';
+import { CheckpointManager } from '../../src/lib/checkpoint-manager.ts';
 import {
   startTestRealmServer,
   stopTestRealmServer,
-  createTestProfileDir,
+  createTestHome,
+  reloadProfile,
   setupTestProfile,
-  uniqueRealmName,
-} from '../helpers/integration';
-import type { ProfileManager } from '../../src/lib/profile-manager';
+  createTestRealmViaCli,
+} from '../helpers/integration.ts';
+import { runBoxel } from '../helpers/run-boxel.ts';
 
-let profileManager: ProfileManager;
+// `boxel realm sync <local-dir> <realm-url>` is driven as a subprocess. The
+// local working dir, `.boxel-sync.json` manifest, and CheckpointManager
+// history are inspected in-process; realm state is set up / verified with a
+// fresh profile loaded from the CLI's home. Only the sync/push COMMANDs go
+// through the binary.
+
+let home: string;
 let cleanupProfile: () => void;
 let localDirs: string[] = [];
 
@@ -40,6 +44,15 @@ function localFileExists(localDir: string, relPath: string): boolean {
   return fs.existsSync(path.join(localDir, relPath));
 }
 
+// Drive the sync subprocess against the CLI-authenticated home.
+function runSync(
+  localDir: string,
+  realmUrl: string,
+  flags: string[] = [],
+): ReturnType<typeof runBoxel> {
+  return runBoxel(['realm', 'sync', localDir, realmUrl, ...flags], { home });
+}
+
 interface SyncManifest {
   realmUrl: string;
   files: Record<string, string>;
@@ -57,16 +70,8 @@ function manifestExists(localDir: string): boolean {
 }
 
 async function createTestRealm(): Promise<string> {
-  let name = uniqueRealmName();
-  await createRealm(name, `Test ${name}`, { profileManager });
-
-  let realmTokens =
-    profileManager.getActiveProfile()!.profile.realmTokens ?? {};
-  let entry = Object.entries(realmTokens).find(([url]) => url.includes(name));
-  if (!entry) {
-    throw new Error(`No realm JWT stored for ${name}`);
-  }
-  return entry[0];
+  let { realmUrl } = await createTestRealmViaCli(home);
+  return realmUrl;
 }
 
 function buildFileUrl(realmUrl: string, relPath: string): string {
@@ -79,7 +84,7 @@ async function fetchRemoteFile(
   relPath: string,
 ): Promise<string> {
   let url = buildFileUrl(realmUrl, relPath);
-  let response = await profileManager.authedRealmFetch(url, {
+  let response = await reloadProfile(home).authedRealmFetch(url, {
     headers: { Accept: 'application/vnd.card+source' },
   });
   if (!response.ok) {
@@ -95,7 +100,7 @@ async function remoteFileExists(
   relPath: string,
 ): Promise<boolean> {
   let url = buildFileUrl(realmUrl, relPath);
-  let response = await profileManager.authedRealmFetch(url, {
+  let response = await reloadProfile(home).authedRealmFetch(url, {
     headers: { Accept: 'application/vnd.card+source' },
   });
   return response.ok;
@@ -108,9 +113,12 @@ async function remoteFileExists(
 async function fetchRemoteMtimesRaw(realmUrl: string): Promise<string> {
   try {
     let base = realmUrl.endsWith('/') ? realmUrl : `${realmUrl}/`;
-    let response = await profileManager.authedRealmFetch(`${base}_mtimes`, {
-      headers: { Accept: 'application/vnd.api+json' },
-    });
+    let response = await reloadProfile(home).authedRealmFetch(
+      `${base}_mtimes`,
+      {
+        headers: { Accept: 'application/vnd.api+json' },
+      },
+    );
     return await response.text();
   } catch (err) {
     return `<fetch error: ${err instanceof Error ? err.message : String(err)}>`;
@@ -123,7 +131,7 @@ async function writeRemoteFile(
   content: string,
 ): Promise<void> {
   let url = buildFileUrl(realmUrl, relPath);
-  let response = await profileManager.authedRealmFetch(url, {
+  let response = await reloadProfile(home).authedRealmFetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'text/plain;charset=UTF-8',
@@ -143,7 +151,7 @@ async function deleteRemoteFile(
   relPath: string,
 ): Promise<void> {
   let url = buildFileUrl(realmUrl, relPath);
-  let response = await profileManager.authedRealmFetch(url, {
+  let response = await reloadProfile(home).authedRealmFetch(url, {
     method: 'DELETE',
     headers: { Accept: 'application/vnd.card+source' },
   });
@@ -169,17 +177,21 @@ async function establishBaseline(
   for (const [relPath, content] of Object.entries(files)) {
     writeLocalFile(localDir, relPath, content);
   }
-  await pushCommand(localDir, realmUrl, { profileManager });
+  let res = await runBoxel(['realm', 'push', localDir, realmUrl], { home });
+  expect(res.ok, res.stderr).toBe(true);
   await sleep(1100);
 }
 
-// Read a remote source file, retrying for up to `timeoutMs` if the body
-// doesn't yet contain `expectedSubstring`. Returns the final body either way
-// — callers assert on it. `retries` is the number of additional fetches
-// performed beyond the first attempt (0 = matched on first read), so
-// `retries > 0` is the unambiguous signal that the post-sync read had to
-// wait for the realm to settle. `elapsedMs` is for context only; it tracks
-// network + sleep, so it is non-zero even on a first-shot success.
+// Read a remote source file, retrying for up to `timeoutMs` until the body
+// contains `expectedSubstring`. A non-OK response (e.g. a transient 404 while
+// a freshly-written file is not yet visible during the brief post-write
+// window) is treated as a "not yet" signal and keeps the loop polling rather
+// than throwing — so callers tolerate both stale content and a not-yet-visible
+// file. Returns the final body either way — callers assert on it. `retries` is
+// the number of additional fetches performed beyond the first attempt (0 =
+// matched on first read), so `retries > 0` is the unambiguous signal that the
+// read had to wait for the realm to settle. `elapsedMs` is for context only;
+// it tracks network + sleep, so it is non-zero even on a first-shot success.
 async function fetchRemoteFileEventually(
   realmUrl: string,
   relPath: string,
@@ -189,10 +201,16 @@ async function fetchRemoteFileEventually(
   const start = Date.now();
   let attempts = 0;
   let body = '';
+  let url = buildFileUrl(realmUrl, relPath);
   while (Date.now() - start < timeoutMs) {
     attempts++;
-    body = await fetchRemoteFile(realmUrl, relPath);
-    if (body.includes(expectedSubstring)) {
+    let response = await reloadProfile(home).authedRealmFetch(url, {
+      headers: { Accept: 'application/vnd.card+source' },
+    });
+    // Drain the body so the connection can be reused, and keep it for the
+    // caller's on-miss diagnostic dump.
+    body = await response.text().catch(() => '');
+    if (response.ok && body.includes(expectedSubstring)) {
       return { body, elapsedMs: Date.now() - start, retries: attempts - 1 };
     }
     await sleep(100);
@@ -235,7 +253,7 @@ async function remoteFileGoneEventually(
   let finalBody = '';
   while (Date.now() - start < timeoutMs) {
     attempts++;
-    let response = await profileManager.authedRealmFetch(url, {
+    let response = await reloadProfile(home).authedRealmFetch(url, {
       headers: { Accept: 'application/vnd.card+source' },
     });
     finalStatus = response.status;
@@ -271,10 +289,10 @@ async function remoteFileGoneEventually(
 beforeAll(async () => {
   await startTestRealmServer();
 
-  let testProfile = createTestProfileDir();
-  profileManager = testProfile.profileManager;
-  cleanupProfile = testProfile.cleanup;
-  await setupTestProfile(profileManager);
+  let testHome = createTestHome();
+  home = testHome.home;
+  cleanupProfile = testHome.cleanup;
+  await setupTestProfile(testHome.profileManager);
 });
 
 afterAll(async () => {
@@ -293,10 +311,8 @@ describe('realm sync (integration)', () => {
     writeLocalFile(localDir, 'card.gts', 'export const card = true;\n');
     writeLocalFile(localDir, 'data.json', '{"title":"Hello"}\n');
 
-    await sync(localDir, realmUrl, {
-      preferLocal: true,
-      profileManager,
-    });
+    let res = await runSync(localDir, realmUrl, ['--prefer-local']);
+    expect(res.ok, res.stderr).toBe(true);
 
     expect(await remoteFileExists(realmUrl, 'card.gts')).toBe(true);
     expect(await remoteFileExists(realmUrl, 'data.json')).toBe(true);
@@ -318,10 +334,8 @@ describe('realm sync (integration)', () => {
     // Write files directly to remote
     await writeRemoteFile(realmUrl, 'remote-only.gts', 'export const r = 1;\n');
 
-    await sync(localDir, realmUrl, {
-      preferRemote: true,
-      profileManager,
-    });
+    let res = await runSync(localDir, realmUrl, ['--prefer-remote']);
+    expect(res.ok, res.stderr).toBe(true);
 
     expect(localFileExists(localDir, 'remote-only.gts')).toBe(true);
     expect(readLocalFile(localDir, 'remote-only.gts')).toContain('r = 1');
@@ -341,7 +355,8 @@ describe('realm sync (integration)', () => {
     writeLocalFile(localDir, 'a.gts', 'export const a = 2;\n');
     await writeRemoteFile(realmUrl, 'b.gts', 'export const b = 2;\n');
 
-    await sync(localDir, realmUrl, { profileManager });
+    let res = await runSync(localDir, realmUrl);
+    expect(res.ok, res.stderr).toBe(true);
 
     // a.gts should be pushed (local change)
     expect(await fetchRemoteFile(realmUrl, 'a.gts')).toContain('a = 2');
@@ -372,10 +387,8 @@ describe('realm sync (integration)', () => {
     const preLocal = readLocalFile(localDir, 'conflict.gts');
     const preRemote = await fetchRemoteFile(realmUrl, 'conflict.gts');
 
-    await sync(localDir, realmUrl, {
-      preferLocal: true,
-      profileManager,
-    });
+    let res = await runSync(localDir, realmUrl, ['--prefer-local']);
+    expect(res.ok, res.stderr).toBe(true);
 
     // Poll-retry to distinguish "sync didn't push" from "push landed but a
     // brief visibility race made the GET read stale bytes". `retries > 0`
@@ -425,10 +438,8 @@ describe('realm sync (integration)', () => {
     const preLocal = readLocalFile(localDir, 'conflict.gts');
     const preRemote = await fetchRemoteFile(realmUrl, 'conflict.gts');
 
-    await sync(localDir, realmUrl, {
-      preferRemote: true,
-      profileManager,
-    });
+    let res = await runSync(localDir, realmUrl, ['--prefer-remote']);
+    expect(res.ok, res.stderr).toBe(true);
 
     // For prefer-remote the local file is overwritten by the pulled
     // remote bytes. The local-side read is a direct fs read with no
@@ -463,10 +474,8 @@ describe('realm sync (integration)', () => {
     // Delete locally
     fs.unlinkSync(path.join(localDir, 'to-delete.gts'));
 
-    await sync(localDir, realmUrl, {
-      preferLocal: true,
-      profileManager,
-    });
+    let res = await runSync(localDir, realmUrl, ['--prefer-local']);
+    expect(res.ok, res.stderr).toBe(true);
 
     expect(await remoteFileExists(realmUrl, 'to-delete.gts')).toBe(false);
     expect(await remoteFileExists(realmUrl, 'keep.gts')).toBe(true);
@@ -484,10 +493,8 @@ describe('realm sync (integration)', () => {
     // Delete remotely
     await deleteRemoteFile(realmUrl, 'to-delete.gts');
 
-    await sync(localDir, realmUrl, {
-      preferRemote: true,
-      profileManager,
-    });
+    let res = await runSync(localDir, realmUrl, ['--prefer-remote']);
+    expect(res.ok, res.stderr).toBe(true);
 
     expect(localFileExists(localDir, 'to-delete.gts')).toBe(false);
     expect(localFileExists(localDir, 'keep.gts')).toBe(true);
@@ -507,10 +514,8 @@ describe('realm sync (integration)', () => {
     fs.unlinkSync(path.join(localDir, 'local-del.gts'));
     await deleteRemoteFile(realmUrl, 'remote-del.gts');
 
-    await sync(localDir, realmUrl, {
-      delete: true,
-      profileManager,
-    });
+    let res = await runSync(localDir, realmUrl, ['--delete']);
+    expect(res.ok, res.stderr).toBe(true);
 
     // local-del should be deleted from remote
     expect(await remoteFileExists(realmUrl, 'local-del.gts')).toBe(false);
@@ -532,11 +537,11 @@ describe('realm sync (integration)', () => {
       'export const ro = 1;\n',
     );
 
-    await sync(localDir, realmUrl, {
-      preferLocal: true,
-      dryRun: true,
-      profileManager,
-    });
+    let res = await runSync(localDir, realmUrl, [
+      '--prefer-local',
+      '--dry-run',
+    ]);
+    expect(res.ok, res.stderr).toBe(true);
 
     // Nothing should have changed
     expect(await remoteFileExists(realmUrl, 'local-only.gts')).toBe(false);
@@ -561,7 +566,8 @@ describe('realm sync (integration)', () => {
     writeLocalFile(localDir, 'a.gts', 'export const a = 2;\n');
     await writeRemoteFile(realmUrl, 'b.gts', 'export const b = 2;\n');
 
-    await sync(localDir, realmUrl, { profileManager });
+    let res = await runSync(localDir, realmUrl);
+    expect(res.ok, res.stderr).toBe(true);
 
     let newManifest = readManifest(localDir);
     // Both hashes should have changed
@@ -585,34 +591,34 @@ describe('realm sync (integration)', () => {
     });
 
     // First sync to pull any realm-default files (e.g. index.json) and stabilize
-    await sync(localDir, realmUrl, { profileManager });
+    let res1 = await runSync(localDir, realmUrl);
+    expect(res1.ok, res1.stderr).toBe(true);
 
     let cm = new CheckpointManager(localDir);
     let before = await cm.getCheckpoints();
 
     // Sync again with no changes
-    await sync(localDir, realmUrl, { profileManager });
+    let res2 = await runSync(localDir, realmUrl);
+    expect(res2.ok, res2.stderr).toBe(true);
 
     let after = await cm.getCheckpoints();
     // No new checkpoint should be created
     expect(after.length).toBe(before.length);
   });
 
-  it('protected files (.realm.json) are never synced', async () => {
+  it('dotfiles are never synced', async () => {
     let realmUrl = await createTestRealm();
     let localDir = makeLocalDir();
 
-    writeLocalFile(localDir, '.realm.json', '{"name":"hacked"}\n');
+    writeLocalFile(localDir, '.gitkeep', 'marker\n');
     writeLocalFile(localDir, 'normal.gts', 'export const n = 1;\n');
 
-    await sync(localDir, realmUrl, {
-      preferLocal: true,
-      profileManager,
-    });
+    let res = await runSync(localDir, realmUrl, ['--prefer-local']);
+    expect(res.ok, res.stderr).toBe(true);
 
-    // .realm.json should not appear in manifest
+    // dotfiles should not appear in manifest
     let manifest = readManifest(localDir);
-    expect(manifest.files['.realm.json']).toBeUndefined();
+    expect(manifest.files['.gitkeep']).toBeUndefined();
   });
 
   it('creates checkpoint after sync with changes', async () => {
@@ -621,10 +627,8 @@ describe('realm sync (integration)', () => {
 
     writeLocalFile(localDir, 'new-file.gts', 'export const nf = 1;\n');
 
-    await sync(localDir, realmUrl, {
-      preferLocal: true,
-      profileManager,
-    });
+    let res = await runSync(localDir, realmUrl, ['--prefer-local']);
+    expect(res.ok, res.stderr).toBe(true);
 
     let cm = new CheckpointManager(localDir);
     let checkpoints = await cm.getCheckpoints();
@@ -643,15 +647,48 @@ describe('realm sync (integration)', () => {
       'export const v = "remote";\n',
     );
 
-    await sync(localDir, realmUrl, {
-      preferLocal: true,
-      profileManager,
-    });
-
-    // Local should win
-    expect(await fetchRemoteFile(realmUrl, 'overlap.gts')).toContain(
-      'v = "local"',
+    // Pre-sync snapshot — confirm each side holds the bytes we just wrote
+    // before syncing. The remote read polls because writeRemoteFile just
+    // *created* overlap.gts: under the same brief post-write visibility lag
+    // this test guards against, an immediate single-shot GET of a
+    // freshly-created file can 404 (which would throw and reintroduce a
+    // setup flake). fetchRemoteFileEventually returns the last body without
+    // throwing, so the snapshot stays diagnostic-only. If a future failure
+    // shows mismatched state here, the bug is upstream of sync
+    // (writeLocalFile / writeRemoteFile didn't land), not conflict resolution.
+    const preLocal = readLocalFile(localDir, 'overlap.gts');
+    const { body: preRemote } = await fetchRemoteFileEventually(
+      realmUrl,
+      'overlap.gts',
+      'v = "remote"',
     );
+
+    let res = await runSync(localDir, realmUrl, ['--prefer-local']);
+    expect(res.ok, res.stderr).toBe(true);
+
+    // Local should win. Poll-retry the remote read to distinguish "sync didn't
+    // push" from "push landed but a brief post-write visibility race made the
+    // GET read stale bytes" — the same race-prone shape (concurrent
+    // local+remote mutation immediately followed by sync) the baseline
+    // conflict test guards against. `retries > 0` on a passing assertion
+    // points at the visibility race; a miss with retries exhausted means the
+    // bytes never settled within the timeout.
+    const {
+      body: remoteAfter,
+      elapsedMs,
+      retries,
+    } = await fetchRemoteFileEventually(realmUrl, 'overlap.gts', 'v = "local"');
+
+    if (!remoteAfter.includes('v = "local"')) {
+      console.error(
+        `[first-sync-overlap-prefer-local diagnostics] preLocal=${JSON.stringify(preLocal)} ` +
+          `preRemote=${JSON.stringify(preRemote)} ` +
+          `remoteAfter=${JSON.stringify(remoteAfter)} ` +
+          `retries=${retries} elapsedMs=${elapsedMs} realmUrl=${realmUrl}`,
+      );
+    }
+
+    expect(remoteAfter).toContain('v = "local"');
   });
 
   it('delete-vs-change conflict with --prefer-local deletes remote', async () => {
@@ -671,10 +708,8 @@ describe('realm sync (integration)', () => {
     let preSyncLocalExists = localFileExists(localDir, 'dvc.gts');
     let preSyncRemote = await fetchRemoteFile(realmUrl, 'dvc.gts');
 
-    await sync(localDir, realmUrl, {
-      preferLocal: true,
-      profileManager,
-    });
+    let res = await runSync(localDir, realmUrl, ['--prefer-local']);
+    expect(res.ok, res.stderr).toBe(true);
 
     // Local delete wins - remote should be gone. Poll up to 2s rather than
     // a single immediate read: the realm's DELETE handler is observed in
@@ -713,10 +748,8 @@ describe('realm sync (integration)', () => {
     writeLocalFile(localDir, 'cvd.gts', 'export const cvd = 2;\n');
     await deleteRemoteFile(realmUrl, 'cvd.gts');
 
-    await sync(localDir, realmUrl, {
-      preferRemote: true,
-      profileManager,
-    });
+    let res = await runSync(localDir, realmUrl, ['--prefer-remote']);
+    expect(res.ok, res.stderr).toBe(true);
 
     // Remote delete wins - local should be gone
     expect(localFileExists(localDir, 'cvd.gts')).toBe(false);

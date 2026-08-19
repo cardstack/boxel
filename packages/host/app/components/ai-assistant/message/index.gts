@@ -6,11 +6,12 @@ import { scheduleOnce } from '@ember/runloop';
 import { service } from '@ember/service';
 import type { SafeString } from '@ember/template';
 import Component from '@glimmer/component';
+import { cached } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import Modifier from 'ember-modifier';
-import throttle from 'lodash/throttle';
+import { throttle } from 'lodash-es';
 
 import { Alert } from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
@@ -21,20 +22,22 @@ import {
   type getCardCollection,
 } from '@cardstack/runtime-common';
 
+import { formatTokenUsage } from '@cardstack/host/lib/format-token-usage';
 import type { HtmlTagGroup } from '@cardstack/host/lib/formatted-message/utils';
 import type { Message } from '@cardstack/host/lib/matrix-classes/message';
-import type MessageCommand from '@cardstack/host/lib/matrix-classes/message-command';
+import type MessageTool from '@cardstack/host/lib/matrix-classes/message-tool';
 import type BillingService from '@cardstack/host/services/billing-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-
 import AiBotMessage from './aibot-message';
 import Attachments from './attachments';
 import Meta from './meta';
 import UserMessage from './user-message';
+
+import type { FileDef } from '@cardstack/base/file-api';
+import type { TokenUsage } from '@cardstack/base/matrix-event';
 
 import type { ComponentLike } from '@glint/template';
 
@@ -75,7 +78,8 @@ interface Signature {
     waitAction?: () => void;
     hideMeta?: boolean;
     isCodePatchCorrectness?: boolean;
-    commands?: MessageCommand[];
+    commands?: MessageTool[];
+    usage?: TokenUsage;
   };
   Blocks: { default: [] };
 }
@@ -201,13 +205,55 @@ class ScrollPosition extends Modifier<ScrollPositionSignature> {
       ) <= BOTTOM_THRESHOLD;
     setScrollPosition({ isBottom });
   }, 500);
+  // The conversation is the `1fr` row of the room's grid, so anything that
+  // makes the footer taller — an action bar appearing, attached-file pills, a
+  // taller chat input — shrinks the conversation's viewport. Shrinking the
+  // viewport leaves `scrollTop` alone, so a conversation sitting at the bottom
+  // quietly ends up short of it: `scrollHeight` and `scrollTop` are unchanged
+  // while the distance to the bottom grows by whatever height the viewport
+  // lost. Nothing else re-scrolls for this, since a viewport resize is neither
+  // a scroller registration nor a message-subtree mutation. So re-pin against
+  // the pre-resize height — a conversation the reader had parked away from the
+  // bottom stays where they left it.
+  private clientHeightBeforeResize?: number;
+  private handleResize = () => {
+    let element = this.element;
+    if (!element) {
+      return;
+    }
+    let previousClientHeight = this.clientHeightBeforeResize;
+    this.clientHeightBeforeResize = element.clientHeight;
+    if (
+      previousClientHeight == null ||
+      previousClientHeight === element.clientHeight
+    ) {
+      return;
+    }
+    // Signed, unlike the scrolled-to-bottom checks elsewhere, which compare a
+    // single layout where a negative means over-scrolled. This measures a fresh
+    // `scrollHeight` against the pre-resize height, and `scrollHeight` reports
+    // `max(content height, padding box)`: a conversation whose messages all fit
+    // reports the viewport height, and shrinking the viewport releases that
+    // clamp so `scrollHeight` drops alongside `clientHeight`. A negative
+    // therefore means the content fit the old viewport with room to spare —
+    // nothing was below the fold, so the conversation counts as pinned.
+    let wasAtBottom =
+      element.scrollHeight - previousClientHeight - element.scrollTop <=
+      BOTTOM_THRESHOLD;
+    if (wasAtBottom) {
+      element.scrollTop = element.scrollHeight - element.clientHeight;
+    }
+  };
+  private resizeObserver = new ResizeObserver(() => this.handleResize());
   private cleanup() {
     if (this.element) {
       this.element.removeEventListener('scroll', this.detectPosition);
     }
     this.detectPosition.cancel();
+    this.resizeObserver.disconnect();
     this.element = undefined;
     this.setScrollPosition = undefined;
+    this.clientHeightBeforeResize = undefined;
   }
   modify(
     element: HTMLElement,
@@ -235,6 +281,13 @@ class ScrollPosition extends Modifier<ScrollPositionSignature> {
       this.element?.removeEventListener('scroll', this.detectPosition);
       this.element = element;
       element.addEventListener('scroll', this.detectPosition);
+      // Seed the pre-resize height at registration rather than leaving the
+      // first ResizeObserver callback to establish it: the auto-scroll to the
+      // newest message can land before that callback runs, and a resize in the
+      // same frame would then have no earlier height to compare against.
+      this.clientHeightBeforeResize = element.clientHeight;
+      this.resizeObserver.disconnect();
+      this.resizeObserver.observe(element);
     }
   }
 }
@@ -485,6 +538,12 @@ export default class AiAssistantMessage extends Component<Signature> {
             </Alert>
           {{/if}}
         {{/if}}
+
+        {{#if this.tokenUsage}}
+          <div class='token-usage' data-test-token-usage>
+            {{this.tokenUsage}}
+          </div>
+        {{/if}}
       </div>
     </section>
 
@@ -508,7 +567,7 @@ export default class AiAssistantMessage extends Component<Signature> {
       }
       .ai-assistant-message.code-patch-correctness
         .content
-        > :deep(.room-message-command.compact + .room-message-command.compact) {
+        > :deep(.room-message-tool.compact + .room-message-tool.compact) {
         margin-top: 0;
       }
       :deep(pre) {
@@ -551,11 +610,40 @@ export default class AiAssistantMessage extends Component<Signature> {
         font-size: var(--boxel-font-size-xs);
         font-weight: bold;
       }
+      .token-usage {
+        width: fit-content;
+        margin-left: auto;
+        /* Bare muted text, no surface: it should read like the timestamp
+           meta above the message, not like content — but one step brighter
+           and heavier than the meta, since the counts are what a reader in
+           debug mode came for. The assistant panel is a fixed dark surface,
+           so this follows its local palette rather than the light-themed
+           semantic role tokens. */
+        color: var(--boxel-400);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
+      }
     </style>
   </template>
 
   private get hasBotMessage() {
     return this.args.messageHTMLParts?.length || this.args.reasoningContent;
+  }
+
+  // The provider's token counts for the turn that produced this message.
+  // Shown only behind the `showTokens` query param: it is a diagnostic for
+  // measuring prompt cost, not something every reader needs to see.
+  @cached
+  private get tokenUsage() {
+    if (!this.operatorModeStateService.operatorModeController.showTokens) {
+      return undefined;
+    }
+    let { usage } = this.args;
+    if (usage?.promptTokens == null && usage?.completionTokens == null) {
+      return undefined;
+    }
+    return formatTokenUsage(usage);
   }
 
   private get isAvatarAnimated() {
@@ -668,6 +756,14 @@ const AiAssistantConversation: TemplateOnlyComponent<AiAssistantConversationSign
       }
       .ai-assistant-conversation > :deep(* + .meta-hidden) {
         margin-top: var(--boxel-sp-xs);
+      }
+      /* a headerless bot-tool indicator message stacks flush against a
+         preceding message of the same kind — headered or not, since the run's
+         first message may carry the header — so a burst of reads presents as
+         one list */
+      .ai-assistant-conversation
+        > :deep(.bot-tools-only + .bot-tools-only.meta-hidden) {
+        margin-top: 0;
       }
       .ai-assistant-conversation > :deep(* + .code-patch-correctness) {
         margin-top: var(--boxel-sp-xxs);

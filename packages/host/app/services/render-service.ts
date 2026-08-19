@@ -11,12 +11,11 @@ import voidMap from '@simple-dom/void-map';
 
 import { tokenize } from 'simple-html-tokenizer';
 
-import type { RealmPaths } from '@cardstack/runtime-common';
+import type { RealmPaths, VirtualNetwork } from '@cardstack/runtime-common';
 import {
   isLocalId,
   loadCardDocument,
   loadFileMetaDocument,
-  resolveCardReference,
   type CardError,
   type CodeRef,
   type RuntimeDependencyTrackingContext,
@@ -26,18 +25,17 @@ import {
 
 import config from '@cardstack/host/config/environment';
 
+import { render, teardown } from '../lib/isolated-render';
+
+import type CardService from './card-service';
+import type LoaderService from './loader-service';
 import type {
   CardDef,
   Format,
   CardStore,
   BoxComponent,
-} from 'https://cardstack.com/base/card-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-
-import { render, teardown } from '../lib/isolated-render';
-
-import type CardService from './card-service';
-import type LoaderService from './loader-service';
+} from '@cardstack/base/card-api';
+import type { FileDef } from '@cardstack/base/file-api';
 import type { ComponentLike } from '@glint/template';
 import type {
   SimpleDocument,
@@ -55,6 +53,7 @@ export class CardStoreWithErrors implements CardStore {
   #cards = new Map<string, CardDef>();
   #fileMetaInstances = new Map<string, FileDef>();
   #fetch: typeof globalThis.fetch;
+  #virtualNetwork: VirtualNetwork;
   #inFlight: Promise<unknown>[] = [];
   #cardDocsInFlight: Map<string, Promise<SingleCardDocument | CardError>> =
     new Map();
@@ -63,32 +62,49 @@ export class CardStoreWithErrors implements CardStore {
     Promise<SingleFileMetaDocument | CardError>
   > = new Map();
 
-  constructor(fetch: typeof globalThis.fetch) {
+  constructor(fetch: typeof globalThis.fetch, virtualNetwork: VirtualNetwork) {
     this.#fetch = fetch;
+    this.#virtualNetwork = virtualNetwork;
+  }
+
+  resolveURL(reference: string, base?: string): URL | undefined {
+    try {
+      return this.#virtualNetwork.resolveURL(reference, base);
+    } catch {
+      return undefined;
+    }
+  }
+
+  canonicalizeId(id: string): string {
+    return this.#virtualNetwork.unresolveURL(id);
+  }
+
+  realmForId(id: string): string | undefined {
+    return this.#virtualNetwork.realmForReference(id);
   }
 
   getCard(id: string): CardDef | undefined {
-    id = normalizeCardStoreKey(id);
+    id = this.normalizeKey(id);
     return this.#cards.get(id);
   }
   getFileMeta(id: string): FileDef | undefined {
-    id = normalizeCardStoreKey(id);
+    id = this.normalizeKey(id);
     return this.#fileMetaInstances.get(id);
   }
   setCard(id: string, instance: CardDef): void {
-    id = normalizeCardStoreKey(id);
+    id = this.normalizeKey(id);
     this.#cards.set(id, instance);
   }
   setFileMeta(id: string, instance: FileDef): void {
-    id = normalizeCardStoreKey(id);
+    id = this.normalizeKey(id);
     this.#fileMetaInstances.set(id, instance);
   }
   setCardNonTracked(id: string, instance: CardDef) {
-    id = normalizeCardStoreKey(id);
+    id = this.normalizeKey(id);
     return this.#cards.set(id, instance);
   }
   setFileMetaNonTracked(id: string, instance: FileDef) {
-    id = normalizeCardStoreKey(id);
+    id = this.normalizeKey(id);
     return this.#fileMetaInstances.set(id, instance);
   }
   makeTracked(_id: string) {}
@@ -99,13 +115,13 @@ export class CardStoreWithErrors implements CardStore {
     url: string,
     _opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
   ) {
-    url = normalizeCardStoreURL(url);
+    url = this.normalizeURL(url);
     let promise = this.#cardDocsInFlight.get(url);
     if (promise) {
       return await promise;
     }
     try {
-      promise = loadCardDocument(this.#fetch, url);
+      promise = loadCardDocument(this.#fetch, url, this.#virtualNetwork);
       this.#cardDocsInFlight.set(url, promise);
       return await promise;
     } finally {
@@ -117,18 +133,33 @@ export class CardStoreWithErrors implements CardStore {
     url: string,
     _opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
   ) {
-    url = normalizeCardStoreURL(url);
+    url = this.normalizeURL(url);
     let promise = this.#fileMetaDocsInFlight.get(url);
     if (promise) {
       return await promise;
     }
     try {
-      promise = loadFileMetaDocument(this.#fetch, url);
+      promise = loadFileMetaDocument(this.#fetch, url, this.#virtualNetwork);
       this.#fileMetaDocsInFlight.set(url, promise);
       return await promise;
     } finally {
       this.#fileMetaDocsInFlight.delete(url);
     }
+  }
+
+  private normalizeKey(id: string): string {
+    return this.normalizeURL(id).replace(/\.json$/, '');
+  }
+
+  private normalizeURL(id: string): string {
+    let key = id.replace(/\.json$/, '');
+    // Local IDs pass through; remote IDs fold onto the real served URL via
+    // `toRealURLHref` — the same total fold StoreService/gc-card-store use, so
+    // an RRI `card.id`, a virtual/url-mapped alias, and the real URL all share
+    // one key. Plain `toURL` is NOT a total fold (an RRI resolves to its
+    // virtual alias while a real URL stays real, splitting the two), which
+    // orphaned inflight-load deferreds during render.
+    return isLocalId(key) ? id : this.#virtualNetwork.toRealURLHref(id);
   }
 
   trackLoad(load: Promise<unknown>) {
@@ -151,15 +182,6 @@ export class CardStoreWithErrors implements CardStore {
       errors: undefined,
     } as any;
   }
-}
-
-function normalizeCardStoreKey(id: string): string {
-  return normalizeCardStoreURL(id).replace(/\.json$/, '');
-}
-
-function normalizeCardStoreURL(id: string): string {
-  let key = id.replace(/\.json$/, '');
-  return isLocalId(key) ? id : resolveCardReference(id, undefined);
 }
 
 export interface RenderCardParams {

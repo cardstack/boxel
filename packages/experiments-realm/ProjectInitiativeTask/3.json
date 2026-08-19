@@ -1,0 +1,14 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Investigate Slow Queries"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../adorn-overflow-demo",
+        "name": "ProjectInitiativeTask"
+      }
+    }
+  }
+}

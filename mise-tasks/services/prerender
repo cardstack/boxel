@@ -44,7 +44,7 @@ fi
 # host is actually browser-ready.
 if [ -z "$ENV_MODE" ]; then
   HOST_URL="${BOXEL_HOST_URL:-$DEFAULT_HOST_URL}" \
-    ts-node --transpileOnly ./scripts/wait-for-host-standby.ts || exit $?
+    node ./scripts/wait-for-host-standby.ts || exit $?
 fi
 
 # In local HTTPS dev (vite on https://localhost:4200 with HTTP/2),
@@ -61,8 +61,8 @@ NODE_ENV=development \
   NODE_NO_WARNINGS=1 \
   BOXEL_HOST_URL="${BOXEL_HOST_URL:-$DEFAULT_HOST_URL}" \
   PRERENDER_STANDBY_TIMEOUT_MS="${PRERENDER_STANDBY_TIMEOUT_MS:-}" \
-  ts-node \
-  --transpileOnly prerender/prerender-server \
+  node \
+  prerender/prerender-server.ts \
   --port="${PRERENDER_PORT}" \
   --count="${PRERENDER_COUNT:-1}" \
   2>&1 | "$LOG_TEE" prerender

@@ -1,16 +1,12 @@
-/* eslint-disable ember/no-empty-glimmer-component-classes */
 import { getOwner } from '@ember/owner';
 import Service from '@ember/service';
 import { click, waitFor, type RenderingTestContext } from '@ember/test-helpers';
-
-import GlimmerComponent from '@glimmer/component';
 
 import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
 import {
-  baseRealm,
   CardContextName,
   PermissionsContextName,
   type CommandContext,
@@ -67,8 +63,6 @@ class StubRealmService extends Service {
   };
 }
 
-class DummyPrerenderedCardSearch extends GlimmerComponent {}
-
 module('Integration | components | realm field', function (hooks) {
   setupRenderingTest(hooks);
   hooks.beforeEach(function (this: RenderingTestContext) {
@@ -78,25 +72,24 @@ module('Integration | components | realm field', function (hooks) {
   setupBaseRealm(hooks);
 
   let loader: Loader;
-  let commandContext: CommandContext;
+  let toolContext: CommandContext;
 
   setupCardLogs(hooks, async () => {
     return await getService('loader-service').loader.import(
-      `${baseRealm.url}card-api`,
+      '@cardstack/base/card-api',
     );
   });
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;
 
-    const commandService = getService('command-service');
-    commandContext = commandService.commandContext;
+    const toolService = getService('tool-service');
+    toolContext = toolService.toolContext;
 
     const store = getService('store');
 
     provideConsumeContext(CardContextName, {
-      commandContext,
-      prerenderedCardSearchComponent: DummyPrerenderedCardSearch,
+      toolContext,
       getCard: () => undefined,
       getCards: () => [],
       getCardCollection: () => undefined,

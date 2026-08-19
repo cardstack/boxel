@@ -8,41 +8,40 @@ import { isTesting } from '@embroider/macros';
 
 import { parse } from 'date-fns';
 
-import isEqual from 'lodash/isEqual';
+import { isEqual } from 'lodash-es';
 
 import {
-  type Definition,
+  baseCardRef,
+  CardError,
+  Deferred,
+  getFieldDefinitions,
+  identifyCard,
+  internalKeyFor,
+  isBaseDef,
+  isCardDef,
+  isCardError,
+  loadCardDef,
+  parseRenderRouteOptions,
+  rri,
+  SupportedMimeType,
+  trimExecutableExtension,
   type CodeRef,
-  type ResolvedCodeRef,
+  type Definition,
   type ErrorEntry,
   type ModuleDefinitionResult,
-  isBaseDef,
-  baseCardRef,
-  baseRealm,
-  Deferred,
-  loadCardDef,
-  internalKeyFor,
-  rri,
-  trimExecutableExtension,
-  isCardError,
-  isCardDef,
-  identifyCard,
-  parseRenderRouteOptions,
-  SupportedMimeType,
-  getFieldDefinitions,
-  CardError,
-  unixTime,
+  type PrerenderResponseMeta,
   type RealmResourceIdentifier,
   type RenderRouteOptions,
+  type ResolvedCodeRef,
+  type SearchablePathDiagnostic,
+  unixTime,
+  validateSearchablePaths,
 } from '@cardstack/runtime-common';
 import {
   serializableError,
   isCardErrorJSONAPI,
   type SerializedError,
 } from '@cardstack/runtime-common/error';
-
-import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import { createAuthErrorGuard } from '../utils/auth-error-guard';
 import { registerBoxelTransitionTo } from '../utils/register-boxel-transition';
@@ -56,6 +55,8 @@ import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
 import type RealmService from '../services/realm';
 import type RenderStoreService from '../services/render-store';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type { CardDef, BaseDef } from '@cardstack/base/card-api';
 
 export type Model = {
   id: string;
@@ -68,7 +69,16 @@ export type Model = {
   definitions: {
     [name: string]: ModuleDefinitionResult | ErrorEntry;
   };
+  // All export names of the module — `definitions` only covers BaseDef
+  // exports, so this is the only signal for validating non-card exports
+  // (e.g. skill command classes). Absent on error models.
+  exports?: string[];
   error?: ErrorEntry;
+  // Definition-build diagnostics (currently the `searchable`-path validation
+  // findings) ride here so they JSON-round-trip into the `ModuleRenderResponse`
+  // and persist to `modules.diagnostics` via `flattenPrerenderMeta`. Absent
+  // when there's nothing to report.
+  meta?: PrerenderResponseMeta;
 };
 
 interface CardType {
@@ -325,10 +335,16 @@ export async function buildModuleModel(
           let codeRef = internalKeyFor(
             { module: id as RealmResourceIdentifier, name },
             undefined,
+            context.network.virtualNetwork,
           );
           definitions[codeRef] = definition;
         }
       }
+
+      let searchablePathIssues = await validateModuleSearchablePaths(
+        definitions,
+        context,
+      );
 
       return {
         id,
@@ -339,6 +355,10 @@ export async function buildModuleModel(
         createdAt,
         isShimmed,
         definitions,
+        exports: Object.keys(module),
+        ...(searchablePathIssues.length > 0
+          ? { meta: { diagnostics: { searchablePathIssues } } }
+          : {}),
       };
     });
   } catch (err: any) {
@@ -353,6 +373,75 @@ export async function buildModuleModel(
     }
     throw err;
   }
+}
+
+// Validate the `searchable` annotations on every definition this module built,
+// resolving each dotted path against the definition graph. Findings are
+// recorded (never thrown) onto `meta.diagnostics` so an un-routable path
+// surfaces in `modules.diagnostics` rather than silently making nothing
+// searchable. Inert until a field actually declares `searchable`: when no
+// built definition carries one we return before importing card-api or touching
+// the loader at all. The whole pass is best-effort — any failure is logged and
+// yields no findings rather than breaking the definition build.
+async function validateModuleSearchablePaths(
+  definitions: { [name: string]: ModuleDefinitionResult | ErrorEntry },
+  context: ModuleModelContext,
+): Promise<SearchablePathDiagnostic[]> {
+  let issues: SearchablePathDiagnostic[] = [];
+  let hasAnnotation = Object.values(definitions).some(
+    (entry) =>
+      entry.type === 'definition' &&
+      Object.values(entry.definition.fieldDefs).some(
+        (fieldDef) => fieldDef.searchable != null,
+      ),
+  );
+  if (!hasAnnotation) {
+    return issues;
+  }
+  try {
+    let loader = context.loaderService.loader;
+    let api = await loader.import<typeof CardAPI>('@cardstack/base/card-api');
+    let lookupDefinition = async (
+      codeRef: CodeRef,
+    ): Promise<Definition | undefined> => {
+      try {
+        let card = await loadCardDef(codeRef, { loader });
+        let { fields, fieldDefs } = getFieldDefinitions(api, card);
+        return {
+          codeRef,
+          fields,
+          fieldDefs,
+          type: isCardDef(card) ? 'card-def' : 'field-def',
+          displayName: isCardDef(card) ? card.displayName : null,
+        };
+      } catch (err: any) {
+        console.warn(
+          `searchable validation: could not resolve definition ${JSON.stringify(
+            codeRef,
+          )}: ${err.message}`,
+        );
+        return undefined;
+      }
+    };
+    for (let [codeRef, entry] of Object.entries(definitions)) {
+      if (entry.type !== 'definition') {
+        continue;
+      }
+      let found = await validateSearchablePaths(
+        entry.definition,
+        lookupDefinition,
+      );
+      for (let { fieldName, path } of found) {
+        console.warn(
+          `searchable validation: unresolvable path "${path}" on field "${fieldName}" of ${codeRef}`,
+        );
+        issues.push({ codeRef, fieldName, path });
+      }
+    }
+  } catch (err: any) {
+    console.warn(`searchable validation: unexpected failure: ${err.message}`);
+  }
+  return issues;
 }
 
 async function makeDefinition(
@@ -370,7 +459,7 @@ async function makeDefinition(
   let urlString = url instanceof URL ? url.href : url;
   try {
     let api = await context.loaderService.loader.import<typeof CardAPI>(
-      `${baseRealm.url}card-api`,
+      '@cardstack/base/card-api',
     );
     let { fields, fieldDefs } = getFieldDefinitions(api, cardOrFieldDef);
     let codeRef = identifyCard(cardOrFieldDef) as ResolvedCodeRef;
@@ -480,7 +569,11 @@ async function getTypes(
       }
 
       types.push({
-        refURL: internalKeyFor(loadedCardRef, undefined),
+        refURL: internalKeyFor(
+          loadedCardRef,
+          undefined,
+          context.network.virtualNetwork,
+        ),
         codeRef: loadedCardRef,
         displayName: getDisplayName(loadedCard),
       });

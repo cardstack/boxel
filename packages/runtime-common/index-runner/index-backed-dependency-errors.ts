@@ -1,42 +1,50 @@
-import type { DependencyIndexRow, SearchIndexErrorEntry } from '../index';
-import type { DefinitionCacheEntries } from '../definition-lookup';
-import type { SerializedError } from '../error';
-import { cardIdToURL } from '../card-reference-resolver';
-import { canonicalURL } from './dependency-url';
+import type { DependencyIndexRow, SearchIndexErrorEntry } from '../index.ts';
+import type { DefinitionCacheEntries } from '../definition-lookup.ts';
+import type { SerializedError } from '../error.ts';
+import type { VirtualNetwork } from '../virtual-network.ts';
+import { canonicalURL, type CanonicalURLMemo } from './dependency-url.ts';
 import {
   canTraverseRelationshipDependency,
   normalizeDependencyForLookup,
   normalizeStoredDependency,
-} from './dependency-normalization';
+} from './dependency-normalization.ts';
 
 interface IndexBackedDependencyErrorOptions {
   realmURL: URL;
+  virtualNetwork: VirtualNetwork;
   readDefinitionCacheEntries(
     moduleIds: string[],
   ): Promise<DefinitionCacheEntries>;
   getDependencyRows(urls: string[]): Promise<DependencyIndexRow[]>;
   getInvalidations(): string[];
+  canonicalURLMemo: CanonicalURLMemo;
 }
 
 export class IndexBackedDependencyErrors {
   #realmURL: URL;
+  #virtualNetwork: VirtualNetwork;
   #readDefinitionCacheEntries: (
     moduleIds: string[],
   ) => Promise<DefinitionCacheEntries>;
   #getDependencyRows: (urls: string[]) => Promise<DependencyIndexRow[]>;
   #getInvalidations: () => string[];
+  #canonicalURLMemo: CanonicalURLMemo;
   #relationshipDependencyRows = new Map<string, DependencyIndexRow[]>();
 
   constructor({
     realmURL,
+    virtualNetwork,
     readDefinitionCacheEntries,
     getDependencyRows,
     getInvalidations,
+    canonicalURLMemo,
   }: IndexBackedDependencyErrorOptions) {
     this.#realmURL = realmURL;
+    this.#virtualNetwork = virtualNetwork;
     this.#readDefinitionCacheEntries = readDefinitionCacheEntries;
     this.#getDependencyRows = getDependencyRows;
     this.#getInvalidations = getInvalidations;
+    this.#canonicalURLMemo = canonicalURLMemo;
   }
 
   reset(): void {
@@ -44,7 +52,12 @@ export class IndexBackedDependencyErrors {
   }
 
   invalidateRelationshipDependencyRowCache(url: URL): void {
-    let canonical = canonicalURL(url.href, this.#realmURL.href);
+    let canonical = canonicalURL(
+      url.href,
+      this.#realmURL.href,
+      this.#virtualNetwork,
+      this.#canonicalURLMemo,
+    );
     this.#relationshipDependencyRows.delete(canonical);
   }
 
@@ -220,7 +233,12 @@ export class IndexBackedDependencyErrors {
     let pending = new Set<string>();
     let visited = new Set<string>();
     let enqueue = (dep: string, base: URL) => {
-      let normalized = normalizeDependencyForLookup(dep, base);
+      let normalized = normalizeDependencyForLookup(
+        dep,
+        base,
+        this.#virtualNetwork,
+        this.#canonicalURLMemo,
+      );
       if (!normalized || normalized.endsWith('.json')) {
         return;
       }
@@ -251,7 +269,7 @@ export class IndexBackedDependencyErrors {
         let base = relativeTo;
         if (error.id) {
           try {
-            base = cardIdToURL(error.id);
+            base = this.#virtualNetwork.toURL(error.id);
           } catch (_err) {
             base = relativeTo;
           }
@@ -272,8 +290,19 @@ export class IndexBackedDependencyErrors {
     let pending = new Set<string>();
     let visited = new Set<string>();
     let enqueue = (dep: string, base: URL) => {
-      let normalized = normalizeStoredDependency(dep, base);
-      if (!canTraverseRelationshipDependency(normalized, this.#realmURL)) {
+      let normalized = normalizeStoredDependency(
+        dep,
+        base,
+        this.#virtualNetwork,
+        this.#canonicalURLMemo,
+      );
+      if (
+        !canTraverseRelationshipDependency(
+          normalized,
+          this.#realmURL,
+          this.#virtualNetwork,
+        )
+      ) {
         return;
       }
       if (visited.has(normalized)) {
@@ -303,7 +332,17 @@ export class IndexBackedDependencyErrors {
           continue;
         }
 
-        if (selected.hasError && selected.errorDoc) {
+        // Instance→instance error doc propagation terminates here. A broken
+        // linksTo target is surfaced inline at the broken slot by the
+        // placeholder render (via the Relationship API), so dragging the
+        // upstream instance's error_doc into the consumer's additionalErrors
+        // would duplicate diagnostics rather than add to them. Module-deps
+        // reachable through this instance still resolve below.
+        if (
+          selected.hasError &&
+          selected.errorDoc &&
+          selected.type !== 'instance'
+        ) {
           let normalized = {
             ...selected.errorDoc,
             additionalErrors: selected.errorDoc.additionalErrors ?? null,
@@ -329,8 +368,21 @@ export class IndexBackedDependencyErrors {
     relativeTo: URL,
   ): Promise<SerializedError[]> {
     let urls = [...new Set(deps)]
-      .map((dep) => normalizeStoredDependency(dep, relativeTo))
-      .filter((dep) => canTraverseRelationshipDependency(dep, this.#realmURL));
+      .map((dep) =>
+        normalizeStoredDependency(
+          dep,
+          relativeTo,
+          this.#virtualNetwork,
+          this.#canonicalURLMemo,
+        ),
+      )
+      .filter((dep) =>
+        canTraverseRelationshipDependency(
+          dep,
+          this.#realmURL,
+          this.#virtualNetwork,
+        ),
+      );
     if (urls.length === 0) {
       return [];
     }
@@ -340,7 +392,12 @@ export class IndexBackedDependencyErrors {
     let seenErrors = new Set<string>();
     let pendingInvalidations = new Set(
       this.#getInvalidations().map((href) =>
-        normalizeStoredDependency(href, this.#realmURL),
+        normalizeStoredDependency(
+          href,
+          this.#realmURL,
+          this.#virtualNetwork,
+          this.#canonicalURLMemo,
+        ),
       ),
     );
     for (let dep of urls) {
@@ -354,6 +411,14 @@ export class IndexBackedDependencyErrors {
         rowsByUrl.get(dep) ?? [],
       );
       if (!selected?.hasError || !selected.errorDoc) {
+        continue;
+      }
+      // Instance→instance error doc propagation terminates here. The consumer
+      // stays indexable through the broken-link placeholder render; the
+      // referenced instance's error_doc reaches AI / humans via the
+      // placeholder's own `getRelationshipMembershipState(...)` read — its
+      // `membership[i].reference` / `.errorDoc`.
+      if (selected.type === 'instance') {
         continue;
       }
       let normalized = {

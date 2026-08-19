@@ -40,6 +40,7 @@ import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 import type { ModuleDeclaration } from '@cardstack/host/resources/module-contents';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
+import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type { ModuleInspectorView } from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
@@ -48,15 +49,14 @@ import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
 import { runWhileActive } from '@cardstack/host/utils/run-while-active';
 
-import type { CardContext } from 'https://cardstack.com/base/card-api';
-import type { Spec } from 'https://cardstack.com/base/spec';
-
 import ElementTracker, {
   type RenderedCardForOverlayActions,
 } from '../../../resources/element-tracker';
 import Overlays from '../overlays';
 
 import type { CardDefOrId } from '../stack-item';
+import type { CardContext } from '@cardstack/base/card-api';
+import type { Spec } from '@cardstack/base/spec';
 import type { WithBoundArgs } from '@glint/template';
 
 interface Signature {
@@ -95,18 +95,13 @@ interface ContentSignature {
     showCreateSpec: boolean;
     errorMessage?: string;
     canWrite: boolean;
-    onSelectSpec: (spec: Spec) => void;
+    onSelectSpec: (spec: Spec | null) => void;
     allSpecs: Spec[];
     activeSpec: Spec | undefined;
     isLoading: boolean;
     viewSpecInPlayground: (cardDefOrId: CardDefOrId) => void;
   };
 }
-
-type SpecPreviewCardContext = Omit<
-  CardContext,
-  'prerenderedCardSearchComponent'
->;
 
 class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
   @consume(GetCardContextName) declare private getCard: getCard;
@@ -118,6 +113,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private specPanelService: SpecPanelService;
   @service declare private store: StoreService;
+  @service declare private network: NetworkService;
 
   private cardTracker = new ElementTracker();
 
@@ -127,7 +123,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
 
   @provide(CardContextName)
   // @ts-ignore "context" is declared but not used
-  private get context(): SpecPreviewCardContext {
+  private get context(): CardContext {
     return {
       ...this.cardContext,
       cardComponentModifier: this.cardTracker.trackElement,
@@ -365,7 +361,10 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     return state;
   });
 
-  @action private onSelectSpec(spec: Spec): void {
+  @action private onSelectSpec(spec: Spec | null): void {
+    if (!spec) {
+      return;
+    }
     this.specPanelService.setSelection(spec.id);
   }
 

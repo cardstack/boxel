@@ -2,7 +2,8 @@ import { mkdtempSync, rmSync, symlinkSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { z, type ZodType } from 'zod';
 
 import type { Options } from '@anthropic-ai/claude-agent-sdk';
@@ -11,14 +12,14 @@ import {
   ClaudeCodeFactoryAgent,
   buildSdkToolsFromFactoryTools,
   buildWorkspaceScopedCanUseTool,
-} from '../src/factory-agent/claude-code';
-import type { AgentContext } from '../src/factory-agent';
+} from '../src/factory-agent/claude-code.ts';
+import type { AgentContext } from '../src/factory-agent/index.ts';
 import {
   CLARIFICATION_SIGNAL,
   DONE_SIGNAL,
   type FactoryTool,
-} from '../src/factory-tool-builder';
-import type { PromptLoader } from '../src/factory-prompt-loader';
+} from '../src/factory-tool-builder.ts';
+import type { PromptLoader } from '../src/factory-prompt-loader.ts';
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -441,7 +442,12 @@ module('factory-agent-claude-code', function () {
         'function',
         'canUseTool is wired so native fs ops can be scoped to the workspace',
       );
-      assert.deepEqual(capturedOptions!.settingSources, []);
+      // 'project' (not 'user'/'local'): the factory materializes its
+      // skill catalog into `<workspace>/.claude/skills/` and the harness
+      // discovers it natively, while staying isolated from the host
+      // user's own Claude settings. This agent has a workspaceDir, so
+      // project settings load; without one it stays [].
+      assert.deepEqual(capturedOptions!.settingSources, ['project']);
     });
 
     test('native fs tools are NOT auto-approved so canUseTool can gate them (CS-11033)', async function (assert) {

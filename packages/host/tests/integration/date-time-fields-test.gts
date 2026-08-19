@@ -479,6 +479,68 @@ module('Integration | date-time fields', function (hooks) {
     assert.dom('[data-test-relative-time-embedded]').hasText('In 30 minutes');
   });
 
+  test('date range edit calendar disables days outside configured minDate/maxDate', async function (assert) {
+    let pad = (n: number) => String(n).padStart(2, '0');
+    let toDataDate = (d: Date) =>
+      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    // Anchor on mid-month days so all asserted cells are guaranteed to be
+    // rendered in the calendar pane that centers on the current month.
+    let now = new Date();
+    let day14 = new Date(now.getFullYear(), now.getMonth(), 14);
+    let day15 = new Date(now.getFullYear(), now.getMonth(), 15);
+    let day16 = new Date(now.getFullYear(), now.getMonth(), 16);
+
+    await renderConfiguredField(
+      DateRangeField,
+      buildField(DateRangeField, {}),
+      { minDate: day15 },
+      'edit',
+    );
+    await click('[data-test-field-container] button');
+    assert
+      .dom(`.ember-power-calendar-day[data-date="${toDataDate(day14)}"]`)
+      .isDisabled('day before minDate is not selectable');
+    assert
+      .dom(`.ember-power-calendar-day[data-date="${toDataDate(day15)}"]`)
+      .isNotDisabled('minDate itself is selectable');
+    assert
+      .dom(`.ember-power-calendar-day[data-date="${toDataDate(day16)}"]`)
+      .isNotDisabled('day after minDate is selectable');
+
+    await renderConfiguredField(
+      DateRangeField,
+      buildField(DateRangeField, {}),
+      { maxDate: day15 },
+      'edit',
+    );
+    await click('[data-test-field-container] button');
+    assert
+      .dom(`.ember-power-calendar-day[data-date="${toDataDate(day16)}"]`)
+      .isDisabled('day after maxDate is not selectable');
+    assert
+      .dom(`.ember-power-calendar-day[data-date="${toDataDate(day14)}"]`)
+      .isNotDisabled('day before maxDate is selectable');
+
+    await renderConfiguredField(
+      DateRangeField,
+      buildField(DateRangeField, {}),
+      { minDate: 'today' },
+      'edit',
+    );
+    await click('[data-test-field-container] button');
+    assert
+      .dom(`.ember-power-calendar-day[data-date="${toDataDate(now)}"]`)
+      .isNotDisabled("'today' sentinel keeps today selectable");
+    if (now.getDate() > 1) {
+      let firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      assert
+        .dom(
+          `.ember-power-calendar-day[data-date="${toDataDate(firstOfMonth)}"]`,
+        )
+        .isDisabled("'today' sentinel disables earlier days this month");
+    }
+  });
+
   test('edit mode for partial calendar fields renders correctly', async function (assert) {
     await renderField(
       YearField,

@@ -1,4 +1,4 @@
-import NumberField from 'https://cardstack.com/base/number';
+import NumberField from '@cardstack/base/number';
 import {
   CardDef,
   FieldDef,
@@ -7,8 +7,8 @@ import {
   containsMany,
   linksTo,
   linksToMany,
-} from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 import { Product as ProductCard } from './product';
 import { MonetaryAmount, MonetaryAmountEmbedded } from './monetary-amount';
 import { Currency } from './asset';
@@ -220,6 +220,6 @@ export class ShoppingCart extends CardDef {
   static isolated = ShoppingCartIsolated;
 
   @field lineItems = containsMany(LineItem);
-  @field preferredCurrency = linksTo(Currency);
-  @field exchangeRates = linksToMany(ExchangeRate);
+  @field preferredCurrency = linksTo(Currency, { searchable: true });
+  @field exchangeRates = linksToMany(ExchangeRate, { searchable: true });
 }

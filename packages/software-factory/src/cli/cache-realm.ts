@@ -1,15 +1,15 @@
 // This should be first
-import '../setup-logger';
+import '../setup-logger.ts';
 
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { basename, dirname, resolve } from 'node:path';
+import { basename, resolve } from 'node:path';
 
 import {
   ensureCombinedFactoryRealmTemplate,
   isFactorySupportContext,
   readSupportContext,
+  writeMetadataFileAtomically,
 } from '@cardstack/realm-test-harness';
-import { logger } from '../logger';
+import { logger } from '../logger.ts';
 
 let log = logger('cache-realm');
 
@@ -20,8 +20,7 @@ const KNOWN_FLAGS = new Set(['--force']);
 // documents) which tests don't depend on and which would slow indexing.
 // Format: space-separated patterns; prefix with `!` to exclude. Last
 // matching pattern wins.
-const SF_CARD_DEFINITIONS_GLOB =
-  '*.gts .realm.json realm.json !document.gts !wiki.gts';
+const SF_CARD_DEFINITIONS_GLOB = '*.gts realm.json !document.gts !wiki.gts';
 
 function cardDefinitionsOnly(relativePath: string): boolean {
   let filename = relativePath.split('/').pop() ?? relativePath;
@@ -163,12 +162,9 @@ async function main(): Promise<void> {
   };
 
   if (process.env.TEST_HARNESS_METADATA_FILE) {
-    mkdirSync(dirname(process.env.TEST_HARNESS_METADATA_FILE), {
-      recursive: true,
-    });
-    writeFileSync(
+    writeMetadataFileAtomically(
       process.env.TEST_HARNESS_METADATA_FILE,
-      JSON.stringify(payload, null, 2),
+      payload,
     );
   }
 

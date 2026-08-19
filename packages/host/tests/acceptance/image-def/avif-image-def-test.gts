@@ -5,7 +5,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
-  baseRealm,
+  baseRealmRRI,
   type FileExtractResponse,
   type RenderRouteOptions,
   type ResolvedCodeRef,
@@ -137,7 +137,7 @@ module('Acceptance | avif image def', function (hooks) {
   const makeFileURL = (path: string) => new URL(path, testRealmURL).href;
 
   const avifDefCodeRef = (): ResolvedCodeRef => ({
-    module: `${baseRealm.url}avif-image-def` as RealmResourceIdentifier,
+    module: `${baseRealmRRI}avif-image-def` as RealmResourceIdentifier,
     name: 'AvifDef',
   });
 
@@ -363,7 +363,7 @@ module('Acceptance | avif image def', function (hooks) {
     let { status } = await capturePrerenderResult('innerHTML');
     assert.strictEqual(status, 'ready', 'render completed');
 
-    let imgSelector = '[data-prerender] .image-isolated__img';
+    let imgSelector = '[data-prerender] [data-test-image-preview]';
     let img = document.querySelector(imgSelector) as HTMLImageElement | null;
     assert.ok(img, 'img element is rendered');
     assert.ok(

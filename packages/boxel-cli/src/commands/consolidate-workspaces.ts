@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import type { Command } from 'commander';
-import { findMisplacedLocalRealmDirs } from '../lib/realm-local-paths';
+import { findMisplacedLocalRealmDirs } from '../lib/realm-local-paths.ts';
 
 export interface ConsolidateWorkspacesOptions {
   dryRun?: boolean;

@@ -3,10 +3,10 @@ import {
   Component,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api';
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import StringField from 'https://cardstack.com/base/string';
-import DateTimeField from 'https://cardstack.com/base/datetime';
+} from '@cardstack/base/card-api';
+import MarkdownField from '@cardstack/base/markdown';
+import StringField from '@cardstack/base/string';
+import DateTimeField from '@cardstack/base/datetime';
 
 export class Comment extends FieldDef {
   static displayName = 'Comment';

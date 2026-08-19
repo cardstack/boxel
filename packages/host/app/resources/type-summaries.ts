@@ -19,9 +19,10 @@ import {
 import {
   getBaseFilterTypeKeys,
   getFilterTypeRefs,
-  ROOT_TYPE_KEYS,
-} from '../utils/card-search/type-filter';
+  getRootTypeKeys,
+} from '../utils/search/type-filter';
 
+import type NetworkService from '../services/network';
 import type RealmServerService from '../services/realm-server';
 
 /** Domain-level representation of a type option (no PickerOption dependency). */
@@ -34,7 +35,15 @@ export interface TypeOption {
 type TypeSummaryItem = {
   id: string;
   type: string;
-  attributes: { displayName: string; total: number; iconHTML: string };
+  attributes: {
+    displayName: string;
+    total: number;
+    iconHTML: string;
+    // The `_federated-types` response tags each entry as a card-instance or a
+    // file type. A cards-only chooser hides the file entries. Optional for
+    // back-compat with the legacy response (no kind — treated as 'instance').
+    kind?: 'instance' | 'file';
+  };
   meta?: { realmURL: string };
 };
 
@@ -43,11 +52,15 @@ export interface TypeSummariesArgs {
     realmURLs: string[];
     baseFilter: Filter | undefined;
     initialSelectedTypes: ResolvedCodeRef[] | undefined;
+    // When true (a cards-only chooser), file-type entries are excluded from the
+    // picker options so a file type can't be selected against a card scope.
+    cardsOnly?: boolean;
     owner: Owner;
   };
 }
 
 export class TypeSummariesResource extends Resource<TypeSummariesArgs> {
+  @service declare private network: NetworkService;
   @service declare private realmServer: RealmServerService;
 
   static PAGE_SIZE = 25;
@@ -79,12 +92,16 @@ export class TypeSummariesResource extends Resource<TypeSummariesArgs> {
     });
   }
 
+  #cardsOnly = false;
+
   modify(_positional: never[], named: TypeSummariesArgs['named']) {
-    let { realmURLs, baseFilter, initialSelectedTypes, owner } = named;
+    let { realmURLs, baseFilter, initialSelectedTypes, cardsOnly, owner } =
+      named;
     setOwner(this, owner);
 
     this.#baseFilter = baseFilter;
     this.#initialSelectedTypes = initialSelectedTypes;
+    this.#cardsOnly = cardsOnly ?? false;
 
     // Only re-fetch when realmURLs change (search key changes are handled by onSearchChange)
     let realmURLsKey = realmURLs.join(',');
@@ -124,7 +141,10 @@ export class TypeSummariesResource extends Resource<TypeSummariesArgs> {
   }
 
   get hasNonRootBaseFilter(): boolean {
-    return getBaseFilterTypeKeys(this.#baseFilter) !== undefined;
+    return (
+      getBaseFilterTypeKeys(this.#baseFilter, this.network.virtualNetwork) !==
+      undefined
+    );
   }
 
   // -- Public methods --
@@ -143,7 +163,9 @@ export class TypeSummariesResource extends Resource<TypeSummariesArgs> {
 
   updateSelected(selected: ResolvedCodeRef[]): void {
     this._previousSelectedKeys = new Set(
-      selected.map((ref) => internalKeyFor(ref, undefined)),
+      selected.map((ref) =>
+        internalKeyFor(ref, undefined, this.network.virtualNetwork),
+      ),
     );
     this._selected = selected;
   }
@@ -217,7 +239,9 @@ export class TypeSummariesResource extends Resource<TypeSummariesArgs> {
       const initialTypes = this.#initialSelectedTypes;
       if (initialTypes) {
         for (const ref of initialTypes) {
-          selectedIds.add(internalKeyFor(ref, undefined));
+          selectedIds.add(
+            internalKeyFor(ref, undefined, this.network.virtualNetwork),
+          );
         }
       }
 
@@ -278,7 +302,9 @@ export class TypeSummariesResource extends Resource<TypeSummariesArgs> {
   // -- Type filter computation --
 
   private recomputeTypeFilter(): void {
-    const allowedCodeRefs = getBaseFilterTypeKeys(this.#baseFilter);
+    const vn = this.network.virtualNetwork;
+    const allowedCodeRefs = getBaseFilterTypeKeys(this.#baseFilter, vn);
+    const rootTypeKeys = getRootTypeKeys(vn);
     const optionsById = new Map<string, TypeOption>();
 
     for (const item of this._typeSummariesData) {
@@ -288,8 +314,15 @@ export class TypeSummariesResource extends Resource<TypeSummariesArgs> {
         continue;
       }
 
+      // A cards-only chooser offers card types only — hide file-type entries so
+      // one can't be picked against the card scope (which would just return no
+      // results).
+      if (this.#cardsOnly && item.attributes.kind === 'file') {
+        continue;
+      }
+
       // Never show root types — they are internal meta types
-      if (ROOT_TYPE_KEYS.has(codeRef)) {
+      if (rootTypeKeys.has(codeRef)) {
         continue;
       }
 
@@ -334,7 +367,9 @@ export class TypeSummariesResource extends Resource<TypeSummariesArgs> {
       const baseRefs =
         baseTypeRefs
           ?.filter((r) => !r.negated && isResolvedCodeRef(r.ref))
-          .map((r) => internalKeyFor(r.ref, undefined)) ?? [];
+          .map((r) =>
+            internalKeyFor(r.ref, undefined, this.network.virtualNetwork),
+          ) ?? [];
       if (baseRefs.length > 0) {
         const autoSelected = baseRefs
           .filter((ref) => optionsById.has(ref))
@@ -357,7 +392,9 @@ export class TypeSummariesResource extends Resource<TypeSummariesArgs> {
     }
 
     this._previousSelectedKeys = new Set(
-      this._selected.map((ref) => internalKeyFor(ref, undefined)),
+      this._selected.map((ref) =>
+        internalKeyFor(ref, undefined, this.network.virtualNetwork),
+      ),
     );
   }
 }
@@ -369,6 +406,7 @@ export function getTypeSummaries(
     realmURLs: string[];
     baseFilter: Filter | undefined;
     initialSelectedTypes: ResolvedCodeRef[] | undefined;
+    cardsOnly?: boolean;
   },
 ) {
   let resource = TypeSummariesResource.from(parent, () => ({
@@ -376,6 +414,7 @@ export function getTypeSummaries(
       realmURLs: getArgs().realmURLs,
       baseFilter: getArgs().baseFilter,
       initialSelectedTypes: getArgs().initialSelectedTypes,
+      cardsOnly: getArgs().cardsOnly,
       owner,
     },
   }));

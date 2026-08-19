@@ -2,10 +2,10 @@ import type {
   BoxelContext,
   MatrixEvent as DiscreteMatrixEvent,
   Tool,
-} from 'https://cardstack.com/base/matrix-event';
+} from '@cardstack/base/matrix-event';
 import type { ReasoningEffort } from 'openai/resources/shared';
-import type { ToolChoice } from '../helpers/ai';
-import type { CardResource } from '../resource-types';
+import type { ToolChoice } from '../helpers/ai.ts';
+import type { CardResource } from '../resource-types.ts';
 
 export interface ChatCompletionMessageToolCall {
   id: string;

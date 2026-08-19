@@ -1,9 +1,13 @@
-import { expect, test } from './fixtures';
-import { updateAccountData } from '../docker/synapse';
-import { createSubscribedUser, login, updateSynapseUser } from '../helpers';
+import { expect, test } from './fixtures.ts';
+import { updateAccountData } from '../support/synapse/index.ts';
+import {
+  createSubscribedUser,
+  login,
+  updateSynapseUser,
+} from '../helpers/index.ts';
 
-import { appURL } from '../helpers/isolated-realm-server';
-import { APP_BOXEL_REALMS_EVENT_TYPE } from '../helpers/matrix-constants';
+import { appURL } from '../support/isolated-realm-server.ts';
+import { APP_BOXEL_REALMS_EVENT_TYPE } from '../support/matrix-constants.ts';
 
 test.describe('Realm URLs in Matrix account data', () => {
   let user: {

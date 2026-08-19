@@ -2,7 +2,7 @@ import { parsePhoneNumber } from 'awesome-phonenumber';
 import type {
   BaseDefConstructor,
   BaseInstanceType,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 export function queryableValue(value: unknown): string | undefined {
   let normalized = deserializeSync(value);

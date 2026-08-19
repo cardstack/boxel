@@ -11,7 +11,7 @@ import { triggerEvent } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import window from 'ember-window-mock';
-import { module, skip, test } from 'qunit';
+import { module, test } from 'qunit';
 
 import type { SingleCardDocument } from '@cardstack/runtime-common';
 import { Deferred, isLocalId } from '@cardstack/runtime-common';
@@ -20,6 +20,7 @@ import { claimsFromRawToken } from '@cardstack/host/services/realm';
 import { RecentCards } from '@cardstack/host/utils/local-storage-keys';
 
 import {
+  setupRealmCacheTeardown,
   assertMessages,
   percySnapshot,
   testRealmURL,
@@ -43,7 +44,11 @@ module(
       },
     );
 
-    module('1 stack creation flows', function () {
+    module('1 stack creation flows', function (hooks) {
+      // The helper's realm-building beforeEach runs for these tests too, and
+      // caches under this module's name, which the outer prefix cannot match.
+      setupRealmCacheTeardown(hooks);
+
       test<TestContextWithSave>('can create a card from the index stack item', async function (assert) {
         assert.expect(7);
         await visitOperatorMode({
@@ -69,16 +74,14 @@ module(
         await click('[data-test-boxel-filter-list-button="All Cards"]');
         await click('[data-test-create-new-card-button]');
         assert
-          .dom('[data-test-card-catalog-item-selected]')
+          .dom('[data-test-item-button-selected]')
           .doesNotExist('No card is pre-selected');
-        assert.dom('[data-test-card-catalog-item]').exists();
+        assert.dom('[data-test-item-button]').exists();
         assert
           .dom('[data-test-show-more-cards]')
           .containsText('not shown', 'Entries are paginated');
-        await click(
-          `[data-test-card-catalog-item="${testRealmURL}person-entry"]`,
-        );
-        await click('[data-test-card-catalog-go-button]');
+        await click(`[data-test-item-button="${testRealmURL}person-entry"]`);
+        await click('[data-test-card-chooser-go-button]');
 
         await fillIn(`[data-test-field="firstName"] input`, 'Hassan');
         await click(
@@ -118,16 +121,14 @@ module(
         await click('[data-test-boxel-filter-list-button="All Cards"]');
         await click('[data-test-create-new-card-button]');
         assert
-          .dom('[data-test-card-catalog-item-selected]')
+          .dom('[data-test-item-button-selected]')
           .doesNotExist('No card is pre-selected');
-        assert.dom('[data-test-card-catalog-item]').exists();
+        assert.dom('[data-test-item-button]').exists();
         assert
           .dom('[data-test-show-more-cards]')
           .containsText('not shown', 'Entries are paginated');
-        await click(
-          `[data-test-card-catalog-item="${testRealmURL}person-entry"]`,
-        );
-        await click('[data-test-card-catalog-go-button]');
+        await click(`[data-test-item-button="${testRealmURL}person-entry"]`);
+        await click('[data-test-card-chooser-go-button]');
 
         await fillIn(`[data-test-field="firstName"] input`, 'Hassan');
 
@@ -151,12 +152,12 @@ module(
         assert.dom('[data-test-stack-card-index]').exists({ count: 1 });
         await click('[data-test-boxel-filter-list-button="All Cards"]');
         await click('[data-test-create-new-card-button]');
-        assert.dom('[data-test-card-catalog-item]').exists();
-        await click('[data-test-card-catalog-cancel-button]');
+        assert.dom('[data-test-item-button]').exists();
+        await click('[data-test-card-chooser-cancel-button]');
 
         await click('[data-test-boxel-filter-list-button="Person"]');
         await click('[data-test-create-new-card-button]');
-        assert.dom('[data-test-card-catalog-item]').doesNotExist();
+        assert.dom('[data-test-item-button]').doesNotExist();
         assert.dom('[data-test-stack-card-index]').exists({ count: 2 });
         assert
           .dom(
@@ -191,10 +192,10 @@ module(
         await fillIn('[data-test-search-field]', 'Skill');
         // Select a card from catalog entries
         await click(
-          `[data-test-card-catalog-item="https://cardstack.com/base/cards/skill"]`,
+          `[data-test-item-button="https://cardstack.com/base/cards/skill"]`,
         );
 
-        await click(`[data-test-card-catalog-go-button]`);
+        await click(`[data-test-card-chooser-go-button]`);
 
         await fillIn('[data-test-field="cardTitle"] input', 'new skill');
         assert.dom(`[data-test-attached-card]`).containsText('new skill');
@@ -216,7 +217,7 @@ module(
         await click('[data-test-create-new-card-button]');
         await fillIn('[data-test-search-field]', 'Skill');
         await click(
-          `[data-test-card-catalog-item="https://cardstack.com/base/cards/skill"]`,
+          `[data-test-item-button="https://cardstack.com/base/cards/skill"]`,
         );
 
         let id: string | undefined;
@@ -225,7 +226,7 @@ module(
         });
 
         // intentionally not awaiting the click
-        click(`[data-test-card-catalog-go-button]`);
+        click(`[data-test-card-chooser-go-button]`);
 
         // new card is not serialized into the url before it is saved
         assert.operatorModeParametersMatch(currentURL(), {
@@ -282,9 +283,7 @@ module(
           }
         });
         await click('[data-test-add-new="friends"]');
-        await click(
-          `[data-test-card-catalog-create-new-button="${testRealmURL}"]`,
-        );
+        await click(`[data-test-item-button-create-new="${testRealmURL}"]`);
       });
 
       test<TestContextWithSave>('new card can enter edit mode', async function (assert) {
@@ -302,7 +301,7 @@ module(
         await click('[data-test-create-new-card-button]');
         await fillIn('[data-test-search-field]', 'Skill');
         await click(
-          `[data-test-card-catalog-item="https://cardstack.com/base/cards/skill"]`,
+          `[data-test-item-button="https://cardstack.com/base/cards/skill"]`,
         );
 
         let id: string | undefined;
@@ -310,7 +309,7 @@ module(
           id = url.href;
         });
 
-        await click(`[data-test-card-catalog-go-button]`);
+        await click(`[data-test-card-chooser-go-button]`);
         await waitUntil(() => id);
         await click(`[data-test-edit-button]`);
         assert
@@ -380,9 +379,7 @@ module(
         assert
           .dom(`[data-test-realm="Test Workspace C"] header`)
           .containsText('Test Workspace C No results');
-        await click(
-          `[data-test-card-catalog-create-new-button="${testRealm3URL}"]`,
-        );
+        await click(`[data-test-item-button-create-new="${testRealm3URL}"]`);
         await consumerSaved.promise;
       });
 
@@ -431,6 +428,10 @@ module(
     });
 
     module('1 stack, when the user lacks write permissions', function (hooks) {
+      // The helper's realm-building beforeEach runs for these tests too, and
+      // caches under this module's name, which the outer prefix cannot match.
+      setupRealmCacheTeardown(hooks);
+
       hooks.beforeEach(async function () {
         setRealmPermissions({
           [testRealmURL]: ['read'],
@@ -596,24 +597,24 @@ module(
         await click('[data-test-stack-card-index="0"] [data-test-edit-button]');
         await click('[data-test-add-new="friends"]');
 
-        await waitFor('[data-test-card-catalog-modal]');
+        await waitFor('[data-test-card-chooser-modal]');
         await waitFor('[data-test-realm="Test Workspace A"]');
         await waitFor('[data-test-realm="Test Workspace B"]');
 
         assert
-          .dom(`[data-test-card-catalog-create-new-button="${testRealm2URL}"]`)
+          .dom(`[data-test-item-button-create-new="${testRealm2URL}"]`)
           .exists('create button is shown for writable realm');
 
         assert
-          .dom(`[data-test-card-catalog-create-new-button="${testRealmURL}"]`)
+          .dom(`[data-test-item-button-create-new="${testRealmURL}"]`)
           .doesNotExist('create button is hidden for read-only realm');
 
         await triggerKeyEvent(
-          '[data-test-card-catalog-modal]',
+          '[data-test-card-chooser-modal]',
           'keydown',
           'Escape',
         );
-        await waitFor('[data-test-card-catalog-modal]', { count: 0 });
+        await waitFor('[data-test-card-chooser-modal]', { count: 0 });
       });
 
       test('the delete item is not present in "..." menu of stack item', async function (assert) {
@@ -669,11 +670,14 @@ module(
         assert
           .dom(`[data-test-overlay-card="${testRealmURL}Pet/mango"]`)
           .exists();
+        await click(
+          `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-more-options]`,
+        );
         assert
-          .dom(
-            `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-edit]`,
-          )
-          .doesNotExist('edit icon not displayed for linked card');
+          .dom('[data-test-boxel-menu-item-text="Edit"]')
+          .doesNotExist(
+            'Edit menu item not displayed for read-only linked card',
+          );
         await click(
           `[data-test-links-to-editor="pet"] [data-test-field-component-card]`,
         );
@@ -688,6 +692,10 @@ module(
     });
 
     module('2 stacks with differing permissions', function (hooks) {
+      // The helper's realm-building beforeEach runs for these tests too, and
+      // caches under this module's name, which the outer prefix cannot match.
+      setupRealmCacheTeardown(hooks);
+
       hooks.beforeEach(async function () {
         setRealmPermissions({
           [testRealmURL]: ['read'],
@@ -827,7 +835,11 @@ module(
       });
     });
 
-    module('workspace index card', function () {
+    module('workspace index card', function (hooks) {
+      // The helper's realm-building beforeEach runs for these tests too, and
+      // caches under this module's name, which the outer prefix cannot match.
+      setupRealmCacheTeardown(hooks);
+
       test('cannot be deleted', async function (assert) {
         await visitOperatorMode({
           stacks: [
@@ -920,17 +932,13 @@ module(
           .dom('[data-test-highlights-card-container="ai-app-generator"]')
           .exists();
         assert
-          .dom(
-            '[data-test-card="https://cardstack.com/base/ai-app-generator"] textarea',
-          )
+          .dom('[data-test-card="@cardstack/base/ai-app-generator"] textarea')
           .hasValue(
             'Create a sprint-planning tool that lets users define backlogs, estimate stories, assign owners, and track burndown.',
           );
         await click('[data-test-boxel-button][title="About Me"]');
         assert
-          .dom(
-            '[data-test-card="https://cardstack.com/base/ai-app-generator"] textarea',
-          )
+          .dom('[data-test-card="@cardstack/base/ai-app-generator"] textarea')
           .hasValue(
             'Build a personal portfolio page with your background, skills, and contact information',
           );
@@ -1010,42 +1018,6 @@ module(
         assert.dom('[data-test-highlights-layout]').exists();
         assert.dom('[data-test-section-header]').exists({ count: 3 });
         assert.dom('[data-test-community-link]').exists({ count: 4 });
-      });
-
-      skip('sends typed prompt to ask ai when creating app', async function (assert) {
-        await visitOperatorMode({
-          stacks: [[{ id: `${personalRealmURL}index`, format: 'isolated' }]],
-          selectAllCardsFilter: false,
-        });
-
-        await click('[data-test-boxel-button][title="About Me"]');
-        let typedPrompt =
-          'Design a travel planner dashboard that tracks itineraries, bookings, and budgets';
-
-        await fillIn(
-          '[data-test-card="https://cardstack.com/base/ai-app-generator"] textarea',
-          typedPrompt,
-        );
-        assert
-          .dom(
-            '[data-test-card="https://cardstack.com/base/ai-app-generator"] textarea',
-          )
-          .hasValue(typedPrompt);
-
-        await click('[data-test-create-this-for-me]');
-        await waitFor('[data-test-message-idx="0"] [data-test-attached-card]');
-        assertMessages(assert, [
-          {
-            from: 'testuser',
-            message: typedPrompt,
-            cards: [
-              {
-                id: `${personalRealmURL}index`,
-                cardTitle: 'Test Personal Workspace',
-              },
-            ],
-          },
-        ]);
       });
     });
   },

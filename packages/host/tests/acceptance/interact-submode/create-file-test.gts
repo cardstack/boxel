@@ -17,6 +17,7 @@ import {
   setupUserSubscription,
   type TestContextWithSave,
   withCachedRealmSetup,
+  realmConfigCardJSON,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import {
@@ -28,12 +29,12 @@ import { setupApplicationTest } from '../../helpers/setup';
 const userRealm = 'http://test-realm/user/apple-grove/';
 
 const testRealmFiles: Record<string, any> = {
-  '.realm.json': {
+  'realm.json': realmConfigCardJSON({
     name: 'Test Workspace',
     iconURL: 'https://boxel-images.boxel.ai/icons/Letter-t.png',
-  },
+  }),
   'pet.gts': `
-    import { CardDef, Component } from "https://cardstack.com/base/card-api";
+    import { CardDef, Component } from "@cardstack/base/card-api";
     export default class Pet extends CardDef {
       static displayName = 'Pet';
       static embedded = class Embedded extends Component<typeof this> {
@@ -44,7 +45,7 @@ const testRealmFiles: Record<string, any> = {
     }
   `,
   'person.gts': `
-    import { linksTo, field, CardDef } from "https://cardstack.com/base/card-api";
+    import { linksTo, field, CardDef } from "@cardstack/base/card-api";
     import Pet from "./pet";
     export class Person extends CardDef {
       static displayName = 'Person';
@@ -52,7 +53,7 @@ const testRealmFiles: Record<string, any> = {
     }
   `,
   'author.gts': `
-    import { Component, field, contains, StringField } from 'https://cardstack.com/base/card-api';
+    import { Component, field, contains, StringField } from '@cardstack/base/card-api';
     import { Person } from './person';
     export class Author extends Person {
       static displayName = "Author";
@@ -150,19 +151,19 @@ const testRealmFiles: Record<string, any> = {
 };
 
 const userRealmFiles: Record<string, any> = {
-  '.realm.json': {
+  'realm.json': realmConfigCardJSON({
     name: 'Apple Grove',
     iconURL: 'https://boxel-images.boxel.ai/icons/Letter-a.png',
-  },
+  }),
   'plant.gts': `
-    import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
+    import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
     export class Plant extends CardDef {
       static displayName = "Plant";
       @field commonName = contains(StringField);
     }
   `,
   'garden.gts': `
-    import { CardDef, field, linksToMany } from 'https://cardstack.com/base/card-api';
+    import { CardDef, field, linksToMany } from '@cardstack/base/card-api';
     import { Plant } from './plant';
     export class Garden extends CardDef {
       static displayName = "Garden";
@@ -219,8 +220,8 @@ module('Acceptance | interact submode | create-file tests', function (hooks) {
 
   hooks.beforeEach(async function () {
     let loader = getService('loader-service').loader;
-    let cardsGrid: typeof import('https://cardstack.com/base/cards-grid');
-    cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
+    let cardsGrid: typeof import('@cardstack/base/cards-grid');
+    cardsGrid = await loader.import('@cardstack/base/cards-grid');
     let { CardsGrid } = cardsGrid;
 
     await withCachedRealmSetup(async () => {
@@ -314,8 +315,8 @@ module('Acceptance | interact submode | create-file tests', function (hooks) {
 
     await click('[data-test-new-file-button]');
     await click('[data-test-boxel-menu-item-text="Choose a card type..."]');
-    await click(`[data-test-card-catalog-item="${testRealmURL}spec/person"]`);
-    await click('[data-test-card-catalog-go-button]');
+    await click(`[data-test-item-button="${testRealmURL}spec/person"]`);
+    await click('[data-test-card-chooser-go-button]');
     await assertCardCreated(assert, 'Person', testRealmURL, 0, 1);
     assert.dom(`[data-test-stack-card-index]`).exists({ count: 2 });
   });
@@ -346,8 +347,8 @@ module('Acceptance | interact submode | create-file tests', function (hooks) {
 
     await click('[data-test-new-file-button]');
     await click('[data-test-boxel-menu-item-text="Choose a card type..."]');
-    await click(`[data-test-card-catalog-item="${testRealmURL}spec/person"]`);
-    await click('[data-test-card-catalog-go-button]');
+    await click(`[data-test-item-button="${testRealmURL}spec/person"]`);
+    await click('[data-test-card-chooser-go-button]');
     await assertCardCreated(assert, 'Person', testRealmURL, 1, 2);
     assert
       .dom('[data-test-operator-mode-stack="1"] [data-test-stack-card-index]')

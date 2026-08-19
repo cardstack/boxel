@@ -15,11 +15,10 @@ import { format, subMinutes } from 'date-fns';
 
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import {
-  APP_BOXEL_COMMAND_REQUESTS_KEY,
+  APP_BOXEL_TOOL_REQUESTS_KEY,
   APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
   APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
@@ -44,6 +43,7 @@ import {
   setMonacoContent,
   setupRealmServerEndpoints,
   setupOperatorModeStateCleanup,
+  realmConfigCardJSON,
 } from '../../../helpers';
 import {
   CardDef,
@@ -78,7 +78,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -97,7 +97,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     createAndJoinRoom,
     simulateRemoteMessage,
     setReadReceipt,
-    getRoomEvents,
+    waitForRoomMessages,
   } = mockMatrixUtils;
 
   // Setup realm server endpoints for summarization tests
@@ -272,7 +272,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
         'example-file.gts': `
           @field name = contains(StringField);
         `,
-        '.realm.json': `{ "name": "${realmName}" }`,
+        'realm.json': realmConfigCardJSON({ name: realmName }),
       },
     });
   });
@@ -427,7 +427,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
         rel_type: 'm.replace',
       },
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           name: 'patchCardInstance',
           arguments: {
@@ -1018,7 +1018,9 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
         format: 'org.matrix.custom.html',
       },
       {
-        origin_server_ts: new Date(2024, 0, 3, 12, 31).getTime(),
+        // beyond the same-author grouping window, so this message keeps
+        // the timestamp header the assertion below looks for
+        origin_server_ts: new Date(2024, 0, 3, 12, 34).getTime(),
       },
     );
     simulateRemoteMessage(
@@ -1047,7 +1049,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       );
     assert
       .dom('[data-test-message-idx="1"]')
-      .containsText('Wednesday Jan 3, 2024, 12:31 PM Second message body');
+      .containsText('Wednesday Jan 3, 2024, 12:34 PM Second message body');
   });
 
   test('it displays a toast if there is an activity that was not seen by the user yet', async function (assert) {
@@ -1299,6 +1301,10 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       'First message with card',
     );
     await click('[data-test-send-message-btn]');
+    // Wait out each send before clicking the next: while a send pipeline is
+    // in flight the send button is a no-op, so a premature click would drop
+    // the message instead of queueing it.
+    await waitForRoomMessages(roomId, 1);
 
     // Send second message with the same card
     await fillIn(
@@ -1308,9 +1314,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     await click('[data-test-send-message-btn]');
 
     // Get the first two message events
-    let messageEvents = getRoomEvents(roomId).filter(
-      (e) => e.type === 'm.room.message',
-    );
+    let messageEvents = await waitForRoomMessages(roomId, 2);
     let firstMessageEvent = messageEvents[0];
     let secondMessageEvent = messageEvents[1];
     let firstMessageData = firstMessageEvent.content.data
@@ -1352,9 +1356,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     await click('[data-test-send-message-btn]');
 
     // Get the third message event
-    messageEvents = getRoomEvents(roomId).filter(
-      (e) => e.type === 'm.room.message',
-    );
+    messageEvents = await waitForRoomMessages(roomId, 3);
     let thirdMessageEvent = messageEvents[2];
     let thirdMessageData = thirdMessageEvent.content.data
       ? JSON.parse(thirdMessageEvent.content.data)
@@ -1391,6 +1393,10 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       'First message with file',
     );
     await click('[data-test-send-message-btn]');
+    // Wait out each send before clicking the next: while a send pipeline is
+    // in flight the send button is a no-op, so a premature click would drop
+    // the message instead of queueing it.
+    await waitForRoomMessages(roomId, 1);
 
     // Send second message with the same file
     await fillIn(
@@ -1400,9 +1406,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     await click('[data-test-send-message-btn]');
 
     // Get the first two message events
-    let messageEvents = getRoomEvents(roomId).filter(
-      (e) => e.type === 'm.room.message',
-    );
+    let messageEvents = await waitForRoomMessages(roomId, 2);
     let firstMessageEvent = messageEvents[0];
     let secondMessageEvent = messageEvents[1];
     let firstMessageData = firstMessageEvent.content.data
@@ -1447,12 +1451,9 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       'Third message with modified file',
     );
     await click('[data-test-send-message-btn]');
-    await waitFor('[data-test-message-idx="2"]');
 
     // Get the third message event
-    messageEvents = getRoomEvents(roomId).filter(
-      (e) => e.type === 'm.room.message',
-    );
+    messageEvents = await waitForRoomMessages(roomId, 3);
     let thirdMessageEvent = messageEvents[2];
     let thirdMessageData = thirdMessageEvent.content.data
       ? JSON.parse(thirdMessageEvent.content.data)

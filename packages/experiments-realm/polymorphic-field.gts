@@ -6,7 +6,7 @@ import {
   StringField,
   FieldDef,
   linksToMany,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import { on } from '@ember/modifier';
 
 export class TestField extends FieldDef {
@@ -83,7 +83,7 @@ export class CardWithSpecialFields extends CardDef {
 export class PolymorphicFieldExample extends CardDef {
   static displayName = 'PolymorphicFieldExample';
   @field specialField = contains(TestField);
-  @field cardsWithSpecialFields = linksToMany(() => CardWithSpecialFields);
+  @field cardsWithSpecialFields = linksToMany(() => CardWithSpecialFields, { searchable: true });
 
   static isolated = class Isolated extends Component<typeof this> {
     setSubclass = () => {

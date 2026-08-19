@@ -14,10 +14,10 @@ import {
   sendResponseForSystemError,
   sendResponseForUnprocessableEntity,
   setContextResponse,
-} from '../middleware';
-import type { RealmServerTokenClaim } from '../utils/jwt';
-import type { CreateRoutesArgs } from '../routes';
-import { validateSubdomain } from '../lib/user-subdomain-validation';
+} from '../middleware/index.ts';
+import type { RealmServerTokenClaim } from '../utils/jwt.ts';
+import type { CreateRoutesArgs } from '../routes.ts';
+import { validateSubdomain } from '../lib/user-subdomain-validation.ts';
 
 interface ClaimedBoxelDomainJSON {
   data: {

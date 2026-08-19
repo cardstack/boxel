@@ -3,19 +3,19 @@ import {
   field,
   contains,
   linksTo,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import { Currency } from './asset';
-import NumberField from 'https://cardstack.com/base/number';
-import StringField from 'https://cardstack.com/base/string';
-import { MonetaryAmount } from './monetary-amount';
+import NumberField from '@cardstack/base/number';
+import StringField from '@cardstack/base/string';
+import type { MonetaryAmount } from './monetary-amount';
 import ExchangeIcon from '@cardstack/boxel-icons/exchange';
 
 export class ExchangeRate extends CardDef {
   static displayName = 'Exchange Rate';
   static icon = ExchangeIcon;
 
-  @field asset1 = linksTo(Currency);
-  @field asset2 = linksTo(Currency);
+  @field asset1 = linksTo(Currency, { searchable: true });
+  @field asset2 = linksTo(Currency, { searchable: true });
   @field conversionRate = contains(NumberField);
   @field cardTitle = contains(StringField, {
     computeVia(this: ExchangeRate) {

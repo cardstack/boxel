@@ -1,6 +1,9 @@
-import type { ValidationStep, ValidationStepResult } from '../factory-agent';
+import type {
+  ValidationStep,
+  ValidationStepResult,
+} from '../factory-agent/index.ts';
 
-import type { ValidationStepRunner } from './validation-pipeline';
+import type { ValidationStepRunner } from './validation-pipeline.ts';
 
 /**
  * No-op validation step that always passes.

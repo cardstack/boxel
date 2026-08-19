@@ -1,7 +1,8 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 
-import { createServeIndex } from '../handlers/serve-index';
+import { createServeIndex } from '../handlers/serve-index.ts';
 
 function buildDeps(getIndexHTML: () => Promise<string>) {
   return {
@@ -17,6 +18,8 @@ function buildDeps(getIndexHTML: () => Promise<string>) {
     getIndexHTML,
     cardSizeLimitBytes: 0,
     fileSizeLimitBytes: 0,
+    audioSizeLimitBytes: 0,
+    videoSizeLimitBytes: 0,
   };
 }
 
@@ -32,7 +35,7 @@ function validIndexHTML(): string {
   )}"></head><body></body></html>`;
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   test('a thrown error in retrieveIndexHTML clears the cache so the next call retries', async function (assert) {
     let calls = 0;
     let { retrieveIndexHTML } = createServeIndex(

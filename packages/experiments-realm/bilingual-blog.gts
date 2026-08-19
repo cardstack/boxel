@@ -2,7 +2,7 @@ import {
   field,
   contains,
   StringField,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import { BlogPost } from './blog-post';
 import Langugages from '@cardstack/boxel-icons/languages';
 

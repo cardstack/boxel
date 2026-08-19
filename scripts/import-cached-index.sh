@@ -9,9 +9,29 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/env-slug.sh"
 
-DB_NAME="${PGDATABASE:-boxel}"
+# The database to load into. Defaults to the dev realms' database; the live
+# test realms keep their index in a separate one, so a caller importing that
+# snapshot passes INDEX_CACHE_DB=$PGDATABASE_TEST.
+DB_NAME="${INDEX_CACHE_DB:-${PGDATABASE:-boxel}}"
 REPO="cardstack/boxel"
-ARTIFACT_NAME="boxel-index-cache"
+# Artifacts to try, in order. `boxel-index-cache` carries every realm the
+# export job indexes; `boxel-index-cache-host` carries only the realms a host
+# test stack serves and is a fraction of the size, so a caller that serves
+# just those asks for it via INDEX_CACHE_ARTIFACT. The full snapshot stays the
+# fallback: a caller that wants the scoped one still works when it is missing
+# or expired, just with more rows than it needs. Each artifact holds a single
+# `<artifact-name>.sql.gz`.
+#
+# `boxel-index-cache-test` (the live test realms) is deliberately NOT given
+# that fallback: it targets a different database, and loading the dev realms'
+# rows there would be wrong rather than merely wasteful. A caller naming it
+# gets it or gets nothing.
+DEFAULT_ARTIFACT="boxel-index-cache"
+ARTIFACT_NAMES="${INDEX_CACHE_ARTIFACT:-$DEFAULT_ARTIFACT}"
+case "$ARTIFACT_NAMES" in
+  "$DEFAULT_ARTIFACT" | boxel-index-cache-test) ;;
+  *) ARTIFACT_NAMES="$ARTIFACT_NAMES $DEFAULT_ARTIFACT" ;;
+esac
 DOWNLOAD_DIR="/tmp/boxel-index-cache-$$"
 
 cleanup() {
@@ -21,9 +41,9 @@ trap cleanup EXIT
 
 # Check if the database already has index data — if so, skip.
 ROW_COUNT=$(docker exec boxel-pg psql -U postgres -d "$DB_NAME" -tAc \
-  "SELECT COUNT(*) FROM realm_versions" 2>/dev/null) || ROW_COUNT=""
+  "SELECT COUNT(*) FROM realm_generations" 2>/dev/null) || ROW_COUNT=""
 if [ -n "$ROW_COUNT" ] && [ "$ROW_COUNT" -gt 0 ] 2>/dev/null; then
-  echo "Database already has index data ($ROW_COUNT realm versions), skipping cache import."
+  echo "Database already has index data ($ROW_COUNT realm generations), skipping cache import."
   exit 0
 fi
 
@@ -33,32 +53,54 @@ if ! command -v gh >/dev/null 2>&1; then
   exit 1
 fi
 
-# Find the latest successful CI run on main that produced the cache artifact.
+# Find a recent successful CI run on main that produced the cache artifact.
+# Not every successful main run has one — the cache-index job is skipped
+# when change-check decides nothing boxel-related changed — so walk the
+# most recent runs until a download succeeds instead of pinning to the
+# single latest run.
 echo "Looking for cached index from CI..."
-RUN_ID=$(gh run list -w ci.yaml -b main -s success -L 1 \
-  --json databaseId -q '.[0].databaseId' -R "$REPO" 2>/dev/null) || RUN_ID=""
-if [ -z "$RUN_ID" ]; then
-  echo "No CI run with index cache found, skipping."
+RUN_IDS=$(gh run list -w ci.yaml -b main -s success -L 10 \
+  --json databaseId -q '.[].databaseId' -R "$REPO" 2>/dev/null) || RUN_IDS=""
+if [ -z "$RUN_IDS" ]; then
+  echo "No successful CI runs on main found, skipping."
   exit 1
 fi
 
-# Download the artifact
-echo "Downloading index cache from CI run $RUN_ID..."
-if ! gh run download "$RUN_ID" -n "$ARTIFACT_NAME" -D "$DOWNLOAD_DIR" -R "$REPO" 2>/dev/null; then
-  echo "Failed to download index cache artifact, skipping."
-  exit 1
-fi
+# Phase timings: this script is on the critical path of every CI shard that
+# uses it, and "the import took a while" is not actionable — the download and
+# the replay have different fixes (a smaller artifact vs. a cheaper load).
+# Report them separately, with the size that explains both.
+DOWNLOAD_START=$(date +%s)
+CACHE_FILE=""
+for ARTIFACT_NAME in $ARTIFACT_NAMES; do
+  CANDIDATE="$DOWNLOAD_DIR/${ARTIFACT_NAME}.sql.gz"
+  for RUN_ID in $RUN_IDS; do
+    echo "Trying artifact ${ARTIFACT_NAME} from CI run $RUN_ID..."
+    if gh run download "$RUN_ID" -n "$ARTIFACT_NAME" -D "$DOWNLOAD_DIR" -R "$REPO" 2>/dev/null \
+      && [ -f "$CANDIDATE" ]; then
+      echo "Downloaded ${ARTIFACT_NAME} from CI run $RUN_ID."
+      CACHE_FILE="$CANDIDATE"
+      break
+    fi
+    rm -rf "$DOWNLOAD_DIR"
+  done
+  if [ -n "$CACHE_FILE" ]; then
+    break
+  fi
+done
 
-CACHE_FILE="$DOWNLOAD_DIR/boxel-index-cache.sql.gz"
-if [ ! -f "$CACHE_FILE" ]; then
-  echo "Cache file not found in artifact, skipping."
+if [ -z "$CACHE_FILE" ] || [ ! -f "$CACHE_FILE" ]; then
+  echo "No index cache artifact found in recent CI runs, skipping."
   exit 1
 fi
+echo "Index cache download took $(( $(date +%s) - DOWNLOAD_START ))s ($(du -h "$CACHE_FILE" | cut -f1) compressed)."
+
+REPLAY_START=$(date +%s)
 
 # Clear any partial data before importing.
 echo "Truncating index tables..."
 docker exec boxel-pg psql -U postgres -d "$DB_NAME" --quiet --no-psqlrc -c \
-  "TRUNCATE boxel_index, realm_versions, realm_meta"
+  "TRUNCATE boxel_index, prerendered_html, realm_generations, realm_meta"
 
 # Import the cache into the local database.
 # In BOXEL_ENVIRONMENT mode, remap URLs from CI standard mode (localhost:4201)
@@ -70,15 +112,27 @@ if [ -n "${BOXEL_ENVIRONMENT:-}" ]; then
   # Match both http and https canonicals — local dev now stores
   # https://localhost:4201/... in the index (CS-11114), but older
   # cached snapshots still have http://. Either prefix in the snapshot
-  # gets remapped to the env-mode Traefik hostname.
+  # gets remapped to the env-mode Traefik hostname. Use `sed -E` (POSIX
+  # ERE) so the optional-`s` quantifier works under BSD sed too — the
+  # basic-regex `\?` form is a GNU extension that macOS sed treats as a
+  # literal, silently skipping the remap. The destinations are https:
+  # the env-mode realm server and icons host register their realms and
+  # URLs under https://<service>.<slug>.localhost, so http-form rows
+  # would never match a served realm and the cache would be ignored.
+  #
+  # 4202 is the live test realms' port. Their snapshot also carries base-realm
+  # references pointing at the dev server (4201) and icon URLs (4206), so every
+  # rule applies to every snapshot; a rule that matches nothing is a no-op.
   gunzip -c "$CACHE_FILE" \
-    | sed \
-      -e "s|https\\?://localhost:4201|http://realm-server.${SLUG}.localhost|g" \
-      -e "s|http://localhost:4206|http://icons.${SLUG}.localhost|g" \
+    | sed -E \
+      -e "s|https?://localhost:4201|https://realm-server.${SLUG}.localhost|g" \
+      -e "s|https?://localhost:4202|https://realm-test.${SLUG}.localhost|g" \
+      -e "s|https?://localhost:4206|https://icons.${SLUG}.localhost|g" \
     | docker exec -i boxel-pg psql $PSQL_OPTS
 else
   gunzip -c "$CACHE_FILE" \
     | docker exec -i boxel-pg psql $PSQL_OPTS
 fi
 
+echo "Index cache replay took $(( $(date +%s) - REPLAY_START ))s."
 echo "Index cache imported successfully."

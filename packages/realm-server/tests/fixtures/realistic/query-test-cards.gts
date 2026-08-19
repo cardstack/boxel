@@ -6,12 +6,12 @@ import {
   containsMany,
   FieldDef,
   CardDef,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import CodeRefField from 'https://cardstack.com/base/code-ref';
-import DateField from 'https://cardstack.com/base/date';
-import NumberField from 'https://cardstack.com/base/number';
-import BooleanField from 'https://cardstack.com/base/boolean';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import CodeRefField from '@cardstack/base/code-ref';
+import DateField from '@cardstack/base/date';
+import NumberField from '@cardstack/base/number';
+import BooleanField from '@cardstack/base/boolean';
 
 export class Address extends FieldDef {
   @field street = contains(StringField);

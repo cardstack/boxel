@@ -1,22 +1,19 @@
 import type {
   BaseDefConstructor,
   BaseInstanceType,
-} from 'https://cardstack.com/base/card-api';
+  CardStore,
+} from '@cardstack/base/card-api';
 import {
   type ResolvedCodeRef,
   isUrlLike,
   isResolvedCodeRef,
   executableExtensions,
-} from '../index';
-import {
-  resolveCardReference,
-  cardIdToURL,
-  rri,
-  type RealmResourceIdentifier,
-} from '../card-reference-resolver';
+  resolveRRIReference,
+} from '../index.ts';
+import { rri, type RealmResourceIdentifier } from '../realm-identifiers.ts';
 // We only use a subset of SerializeOpts here; accept any to align with the
 // serializer interface without surfacing unused properties.
-import type { SerializeOpts } from 'https://cardstack.com/base/card-api';
+import type { SerializeOpts } from '@cardstack/base/card-api';
 
 export function queryableValue(
   codeRef: ResolvedCodeRef | {} | undefined,
@@ -29,24 +26,48 @@ export function serialize(
   codeRef: ResolvedCodeRef | {},
   doc: any,
   _visited?: Set<string>,
-  opts?: SerializeOpts & {
+  opts?: Omit<SerializeOpts, 'virtualNetwork'> & {
     relativeTo?: RealmResourceIdentifier | URL;
     trimExecutableExtension?: true;
     maybeRelativeReference?: (reference: string) => string;
     allowRelative?: true;
   },
 ): ResolvedCodeRef | {} {
-  let baseURL: URL | undefined;
-  if (opts?.relativeTo instanceof URL) {
-    baseURL = opts.relativeTo;
-  } else if (typeof opts?.relativeTo === 'string') {
-    baseURL = cardIdToURL(opts.relativeTo);
-  } else if (doc?.data?.id && typeof doc.data.id === 'string') {
-    baseURL = cardIdToURL(doc.data.id);
+  // The recursive serialize path through a non-primitive `Contains` field
+  // intentionally isolates the inner card's serialization from the outer
+  // card's opts (see `Contains.serialize` in card-api.gts), so opts can
+  // arrive here as `undefined` or as a synthesized `{ overrides }` object.
+  // Identifiers are canonical RRI, so this is pure URL/path math: URL-form
+  // refs resolve against a URL base; prefix-form refs are already portable
+  // and are preserved by `codeRefAdjustments`.
+  if (!opts) {
+    return { ...codeRef };
+  }
+  // Preserve the base's form: a prefix-form RRI base stays prefix-form so a
+  // relative module resolves against it in RRI space (`codeRefAdjustments`
+  // handles both forms). Falls back to the doc's own (canonical) id.
+  let base: RealmResourceIdentifier | URL | undefined;
+  if (opts.relativeTo instanceof URL) {
+    base = opts.relativeTo;
+  } else if (
+    typeof opts.relativeTo === 'string' &&
+    (opts.relativeTo.startsWith('http://') ||
+      opts.relativeTo.startsWith('https://') ||
+      opts.relativeTo.startsWith('@'))
+  ) {
+    base = rri(opts.relativeTo);
+  } else if (
+    doc?.data?.id &&
+    typeof doc.data.id === 'string' &&
+    (doc.data.id.startsWith('http://') ||
+      doc.data.id.startsWith('https://') ||
+      doc.data.id.startsWith('@'))
+  ) {
+    base = rri(doc.data.id);
   }
   return {
     ...codeRef,
-    ...codeRefAdjustments(codeRef, baseURL, opts),
+    ...codeRefAdjustments(codeRef, base, opts),
   };
 }
 
@@ -66,17 +87,26 @@ export async function deserializeAbsolute<T extends BaseDefConstructor>(
   this: T,
   codeRef: ResolvedCodeRef | {},
   relativeTo: RealmResourceIdentifier | URL | undefined,
+  _doc?: unknown,
+  store?: CardStore,
 ): Promise<BaseInstanceType<T>> {
+  if (!store) {
+    // Reached only by direct test callers that bypass the framework
+    // protocol; the framework's field-deserialize path always supplies a
+    // store. Preserve the historical "leave the codeRef untouched" behavior
+    // for that path.
+    return { ...codeRef } as BaseInstanceType<T>;
+  }
   return {
     ...codeRef,
-    ...codeRefAdjustments(codeRef, relativeTo),
+    ...codeRefAdjustments(codeRef, relativeTo, {}),
   } as BaseInstanceType<T>;
 }
 
 function codeRefAdjustments(
   codeRef: any,
-  relativeTo?: RealmResourceIdentifier | URL,
-  opts?: SerializeOpts & {
+  relativeTo: RealmResourceIdentifier | URL | undefined,
+  opts?: Omit<SerializeOpts, 'virtualNetwork'> & {
     trimExecutableExtension?: true;
     maybeRelativeReference?: (reference: string) => string;
     allowRelative?: true;
@@ -88,27 +118,11 @@ function codeRefAdjustments(
   if (!isResolvedCodeRef(codeRef)) {
     return {};
   }
-  if (!isUrlLike(codeRef.module)) {
-    // Try resolving via registered prefix mappings (e.g., @cardstack/catalog/)
-    try {
-      let resolved = resolveCardReference(codeRef.module, relativeTo);
-      if (resolved !== codeRef.module) {
-        let module: string = resolved;
-        if (opts?.trimExecutableExtension) {
-          module = trimExecutableExtension(rri(module));
-        }
-        if (opts?.allowRelative && opts?.maybeRelativeReference) {
-          module = opts.maybeRelativeReference(module);
-        }
-        return { module };
-      }
-    } catch {
-      // not resolvable, skip
-    }
-    return {};
-  }
-  if (relativeTo) {
-    let module: string = resolveCardReference(codeRef.module, relativeTo);
+  // Identifiers are canonical RRI here, so resolution is RRI-space reference
+  // math — no VirtualNetwork. `resolveRRIReference` joins a relative module
+  // against either a URL-form base or a prefix-form RRI base, and returns
+  // absolute (URL- or prefix-form) references unchanged.
+  let finalize = (module: string) => {
     if (opts?.trimExecutableExtension) {
       module = trimExecutableExtension(rri(module));
     }
@@ -116,6 +130,30 @@ function codeRefAdjustments(
       module = opts.maybeRelativeReference(module);
     }
     return { module };
+  };
+  if (!isUrlLike(codeRef.module)) {
+    // A scoped RRI (e.g. `@cardstack/base/card-api`) is already the canonical,
+    // deployment-independent portable form. Preserve it verbatim rather than
+    // resolving it to a concrete realm URL: resolution would bake an
+    // environment-specific (and possibly cross-origin) URL into the stored
+    // card and defeat the portability the RRI exists to provide. (No
+    // `maybeRelativeReference` — a scoped RRI is already portable.)
+    if (codeRef.module.startsWith('@')) {
+      let module: string = codeRef.module;
+      if (opts?.trimExecutableExtension) {
+        module = trimExecutableExtension(rri(module));
+      }
+      return { module };
+    }
+    // Otherwise it is a non-scoped bare specifier (e.g. an npm package import).
+    // Leave it for the loader's importMap shim.
+    return {};
+  }
+  if (relativeTo) {
+    // URL-form or `./`/`../`/`/`-relative module. Resolve in RRI space so a
+    // relative module resolves against a prefix-form RRI base (e.g. `./person`
+    // relative to `@cardstack/catalog/specs/foo`) as well as a URL base.
+    return finalize(resolveRRIReference(codeRef.module, relativeTo));
   }
   return {};
 }
@@ -127,15 +165,17 @@ function maybeSerializeCodeRef(
   if (codeRef && isResolvedCodeRef(codeRef)) {
     let base =
       stack.length > 0 ? stack.find((i) => (i as any).id)?.id : undefined;
-    try {
-      let moduleHref = resolveCardReference(
-        codeRef.module,
-        base && typeof base === 'string' ? base : undefined,
-      );
-      return `${moduleHref}/${codeRef.name}`;
-    } catch {
-      return `${codeRef.module}/${codeRef.name}`;
+    // `queryableValue` / `formatQuery` don't receive a VirtualNetwork, so
+    // we can't resolve registered prefixes here. URL-like refs join
+    // against the base; bare specifiers and absolute URLs pass through.
+    if (isUrlLike(codeRef.module) && typeof base === 'string') {
+      try {
+        return `${new URL(codeRef.module, base).href}/${codeRef.name}`;
+      } catch {
+        // fall through to the as-is shape below
+      }
     }
+    return `${codeRef.module}/${codeRef.name}`;
   }
   return undefined;
 }

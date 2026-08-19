@@ -31,12 +31,12 @@ import { parseSearchReplace } from '@cardstack/host/lib/search-replace-block-par
 
 import { getCodeDiffResultResource } from '@cardstack/host/resources/code-diff';
 
-import type CommandService from '@cardstack/host/services/command-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
-
-import type { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
+import type ToolService from '@cardstack/host/services/tool-service';
 
 import Message from './text-content';
+
+import type { CodePatchStatus } from '@cardstack/base/matrix-event';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -60,7 +60,7 @@ interface Signature {
 }
 
 export default class FormattedAiBotMessage extends Component<Signature> {
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
 
   @cached
   private get reasoningHtml() {
@@ -80,7 +80,7 @@ export default class FormattedAiBotMessage extends Component<Signature> {
   };
 
   private codePatchStatus = (codeData: CodeData) => {
-    return this.commandService.getCodePatchStatus(codeData);
+    return this.toolService.getCodePatchStatus(codeData);
   };
 
   <template>
@@ -122,17 +122,18 @@ export default class FormattedAiBotMessage extends Component<Signature> {
         {{#if (isHtmlPreTagGroup htmlPart)}}
           <HtmlGroupCodeBlock
             @codeData={{htmlPart.codeData}}
-            @codePatchResult={{this.commandService.getCodePatchResult
+            @codePatchResult={{this.toolService.getCodePatchResult
               htmlPart.codeData
             }}
             @onPatchCode={{fn
-              this.commandService.patchCode
+              this.toolService.patchCode
               htmlPart.codeData.roomId
               htmlPart.codeData.fileUrl
               (array htmlPart.codeData)
             }}
             @monacoSDK={{@monacoSDK}}
             @isLastAssistantMessage={{@isLastAssistantMessage}}
+            @isStreaming={{@isStreaming}}
             @userMessageThisMessageIsRespondingTo={{@userMessageThisMessageIsRespondingTo}}
             @index={{this.preTagGroupIndex index}}
             @codePatchStatus={{this.codePatchStatus htmlPart.codeData}}
@@ -192,6 +193,7 @@ interface HtmlGroupCodeBlockSignature {
     onPatchCode: (codeData: CodeData) => void;
     monacoSDK: MonacoSDK;
     isLastAssistantMessage: boolean;
+    isStreaming: boolean;
     userMessageThisMessageIsRespondingTo?: MatrixMessage;
     index: number;
     codePatchStatus: CodePatchStatus | 'applying' | 'ready';
@@ -252,6 +254,20 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
       : null;
   }
 
+  // A block that opened a SEARCH marker but never resolved into a complete
+  // search/replace block is unapplyable, and without this reads as an ordinary
+  // code block with stray box-drawing characters in it. Wait for streaming to
+  // finish first, since a patch mid-stream is incomplete for a moment.
+  private get showMalformedPatchError() {
+    return !this.args.isStreaming && this.args.codeData.malformedPatch;
+  }
+
+  private get malformedPatchMessage() {
+    return this.errorMessage(
+      'the search/replace markers in this block are malformed, so it cannot be applied automatically.',
+    );
+  }
+
   private get codePatchErrorMessage() {
     if (this.args.codePatchStatus === 'applied') {
       return null;
@@ -287,7 +303,9 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
 
             <codeBlock.actions as |actions|>
               <actions.copyCode
-                @code={{this.extractReplaceCode @codeData.searchReplaceBlock}}
+                @textToCopy={{this.extractReplaceCode
+                  @codeData.searchReplaceBlock
+                }}
               />
               {{! This is just to show the ✅ icon to signalize that the code patch has been applied }}
               <actions.applyCodePatch
@@ -325,7 +343,9 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
             />
 
             <codeBlock.actions as |actions|>
-              <actions.copyCode @code={{this.codeDiffResource.modifiedCode}} />
+              <actions.copyCode
+                @textToCopy={{this.codeDiffResource.modifiedCode}}
+              />
 
               <actions.applyCodePatch
                 @codeData={{@codeData}}
@@ -366,8 +386,20 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
         {{/if}}
         <codeBlock.editor @code={{this.codeForEditor}} />
         <codeBlock.actions as |actions|>
-          <actions.copyCode @code={{@codeData.code}} />
+          <actions.copyCode @textToCopy={{@codeData.code}} />
         </codeBlock.actions>
+        {{#if this.showMalformedPatchError}}
+          <codeBlock.patchFooter>
+            <Alert
+              @type='error'
+              class='code-patch-error'
+              data-test-malformed-patch-error
+              as |Alert|
+            >
+              <Alert.Messages @messages={{array this.malformedPatchMessage}} />
+            </Alert>
+          </codeBlock.patchFooter>
+        {{/if}}
       {{/if}}
     </CodeBlock>
   </template>

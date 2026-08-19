@@ -24,10 +24,11 @@ import {
   type DBAdapter,
   type RealmPermissions,
   CachingDefinitionLookup,
-} from '.';
-import { MatrixClient } from './matrix-client';
-import * as Tasks from './tasks';
-import type { WorkerArgs, TaskArgs } from './tasks';
+} from './index.ts';
+import { MatrixClient } from './matrix-client.ts';
+import * as Tasks from './tasks/index.ts';
+import type { WorkerArgs, TaskArgs } from './tasks/index.ts';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 export interface Stats extends JSONTypes.Object {
   instancesIndexed: number;
@@ -35,6 +36,45 @@ export interface Stats extends JSONTypes.Object {
   instanceErrors: number;
   fileErrors: number;
   totalIndexEntries: number;
+}
+
+// Wall-clock of each phase of an index job outside the per-row server render.
+// Populated by the IndexRunner and returned alongside `stats` on the job
+// result (persisted to `jobs.result.phaseTimings`), so the ~one-in-four of the
+// job wall that falls between server renders decomposes into measured buckets.
+// The per-row server render and per-visit client overhead
+// (`boxel_index.diagnostics`) account for the rest. Kept off `Stats` — which is
+// a `JSONTypes.Object` embedded in other job results and deep-compared in
+// tests — so it carries no non-deterministic timing there. All fields
+// optional: incremental jobs skip the from-scratch-only phases (mtimes read,
+// module pre-warm), and any phase that didn't run stays absent.
+export interface IndexPhaseTimings {
+  // Whole-job wall, kickoff to return.
+  totalMs?: number;
+  // Batch setup before any phase below: `IndexWriter.createBatch` (generation
+  // bump + resumable working-row scan). Non-trivial on a retry job or under DB
+  // slowness, so it's bucketed rather than left as residue in `totalMs`.
+  setupMs?: number;
+  // Reading the index's per-file modified times up front (from-scratch only).
+  mtimesMs?: number;
+  // Invalidation discovery: the from-scratch filesystem walk, or the
+  // incremental invalidation fan-out.
+  discoverMs?: number;
+  // Ordering the invalidation set by dependency so files precede the cards
+  // that consume them.
+  orderMs?: number;
+  // The whole serial visit loop wall. Equals Σ server render
+  // (`boxel_index.diagnostics.totalElapsedMs`) + Σ per-visit
+  // `indexVisitClientMs` + `writeMs`.
+  visitLoopMs?: number;
+  // Aggregate row-write time across the loop — the Σ of every
+  // `batch.updateEntry` INSERT. Tracked here rather than per row because a row
+  // cannot time its own write. This is the I/O the visit's tab does not need,
+  // so it is the primary candidate to overlap with the next visit.
+  writeMs?: number;
+  // The final atomic swap: `batch.done()` (realm-meta update, working → main
+  // promotion, obsolete-row prune) in one transaction.
+  swapMs?: number;
 }
 
 export interface StreamFileRef {
@@ -55,9 +95,9 @@ export interface JobInfo extends JSONTypes.Object {
   jobId: number;
   reservationId: number;
   // Priority of the job this handler is running for, threaded from
-  // the queue row. `0` is the system default; user-initiated jobs use
-  // `10`. Forwarded into the prerenderer call chain so the prerender
-  // server can route by priority. Required because
+  // the queue row (the tier constants live in `queue.ts`). Forwarded
+  // into the prerenderer call chain so the prerender server can route
+  // by priority. Required because
   // `JSONTypes.Object`'s index signature doesn't accept `undefined`;
   // the queue layer always supplies the value from the row, and tests
   // / non-job callers that mint a synthetic JobInfo can pass
@@ -85,6 +125,17 @@ export interface IndexingProgressEvent {
   stats?: Stats;
 }
 
+// The job types an `indexJobsOnly` worker registers. The queue's claim
+// query only dequeues job types a worker has registered handlers for, so
+// restricting registration is what makes such a worker an indexing-only
+// lane: it can never be held by a prerender-html sweep (or any other job
+// type), no matter how the priority tiers are configured.
+export const INDEX_JOB_TYPES = [
+  'from-scratch-index',
+  'incremental-index',
+  'copy-index',
+] as const;
+
 export class Worker {
   #log = logger('worker');
   #indexWriter: IndexWriter;
@@ -99,7 +150,9 @@ export class Worker {
   #secretSeed: string;
   #reportStatus: ((args: StatusArgs) => void) | undefined;
   #reportProgress: ((event: IndexingProgressEvent) => void) | undefined;
+  #reportRealmEvent: ((event: RealmEventContent) => void) | undefined;
   #realmServerMatrixUsername;
+  #indexJobsOnly: boolean;
   #createPrerenderAuth: (
     userId: string,
     permissions: RealmPermissions,
@@ -116,8 +169,10 @@ export class Worker {
     secretSeed,
     reportStatus,
     reportProgress,
+    reportRealmEvent,
     prerenderer,
     createPrerenderAuth,
+    indexJobsOnly,
   }: {
     indexWriter: IndexWriter;
     queue: QueueRunner;
@@ -130,6 +185,10 @@ export class Worker {
     prerenderer: Prerenderer;
     reportStatus?: (args: StatusArgs) => void;
     reportProgress?: (event: IndexingProgressEvent) => void;
+    reportRealmEvent?: (event: RealmEventContent) => void;
+    // When true, register handlers only for INDEX_JOB_TYPES so this worker
+    // is a dedicated indexing lane — see INDEX_JOB_TYPES above.
+    indexJobsOnly?: boolean;
     createPrerenderAuth: (
       userId: string,
       permissions: RealmPermissions,
@@ -142,11 +201,13 @@ export class Worker {
     this.#secretSeed = secretSeed;
     this.#reportStatus = reportStatus;
     this.#reportProgress = reportProgress;
+    this.#reportRealmEvent = reportRealmEvent;
     this.#realmServerMatrixUsername = realmServerMatrixUsername;
     this.#dbAdapter = dbAdapter;
     this.#queuePublisher = queuePublisher;
     this.#prerenderer = prerenderer;
     this.#createPrerenderAuth = createPrerenderAuth;
+    this.#indexJobsOnly = indexJobsOnly ?? false;
   }
 
   async run() {
@@ -164,35 +225,59 @@ export class Worker {
       indexWriter: this.#indexWriter,
       prerenderer: this.#prerenderer,
       definitionLookup,
+      virtualNetwork: this.#virtualNetwork,
       queuePublisher: this.#queuePublisher,
       getAuthedFetch: this.makeAuthedFetch.bind(this),
       reportStatus: this.reportStatus.bind(this),
       reportProgress: this.reportProgress.bind(this),
+      reportRealmEvent: this.reportRealmEvent.bind(this),
       createPrerenderAuth: this.#createPrerenderAuth,
     };
 
-    await Promise.all([
-      this.#queue.register(
-        `from-scratch-index`,
-        Tasks['fromScratchIndex'](taskArgs),
-      ),
-      this.#queue.register(
-        `incremental-index`,
-        Tasks['incrementalIndex'](taskArgs),
-      ),
-      this.#queue.register(`copy-index`, Tasks['copy'](taskArgs)),
-      this.#queue.register(`lint-source`, Tasks['lintSource'](taskArgs)),
-      this.#queue.register(`full-reindex`, Tasks['fullReindex'](taskArgs)),
-      this.#queue.register(
-        `daily-credit-grant`,
-        Tasks['dailyCreditGrant'](taskArgs),
-      ),
-      this.#queue.register(`run-command`, Tasks['runCommand'](taskArgs)),
-      this.#queue.register(
-        `screenshot-card`,
-        Tasks['screenshotCard'](taskArgs),
-      ),
-    ]);
+    let registrations: Record<string, () => Promise<unknown> | unknown> = {
+      'from-scratch-index': () =>
+        this.#queue.register(
+          `from-scratch-index`,
+          Tasks['fromScratchIndex'](taskArgs),
+        ),
+      'incremental-index': () =>
+        this.#queue.register(
+          `incremental-index`,
+          Tasks['incrementalIndex'](taskArgs),
+        ),
+      prerender_html: () =>
+        this.#queue.register(
+          `prerender_html`,
+          Tasks['prerenderHtml'](taskArgs),
+        ),
+      'prerender-html-reconcile': () =>
+        this.#queue.register(
+          `prerender-html-reconcile`,
+          Tasks['prerenderHtmlReconcile'](taskArgs),
+        ),
+      'copy-index': () =>
+        this.#queue.register(`copy-index`, Tasks['copy'](taskArgs)),
+      'lint-source': () =>
+        this.#queue.register(`lint-source`, Tasks['lintSource'](taskArgs)),
+      'full-reindex': () =>
+        this.#queue.register(`full-reindex`, Tasks['fullReindex'](taskArgs)),
+      'daily-credit-grant': () =>
+        this.#queue.register(
+          `daily-credit-grant`,
+          Tasks['dailyCreditGrant'](taskArgs),
+        ),
+      'run-command': () =>
+        this.#queue.register(`run-command`, Tasks['runCommand'](taskArgs)),
+      'screenshot-card': () =>
+        this.#queue.register(
+          `screenshot-card`,
+          Tasks['screenshotCard'](taskArgs),
+        ),
+    };
+    let jobTypes = this.#indexJobsOnly
+      ? (INDEX_JOB_TYPES as readonly string[])
+      : Object.keys(registrations);
+    await Promise.all(jobTypes.map((jobType) => registrations[jobType]()));
     await this.#queue.start();
   }
 
@@ -239,16 +324,20 @@ export class Worker {
       args.realmUsername,
       this.#matrixURL.href,
     );
-    _fetch = fetcher(this.#virtualNetwork.fetch, [
-      async (req, next) => {
-        req.headers.set('X-Boxel-Assume-User', realmUserId);
-        return next(req);
-      },
-      async (req, next) => {
-        return (await maybeHandleScopedCSSRequest(req)) || next(req);
-      },
-      authorizationMiddleware(realmAuthDataSource),
-    ]);
+    _fetch = fetcher(
+      this.#virtualNetwork.fetch,
+      [
+        async (req, next) => {
+          req.headers.set('X-Boxel-Assume-User', realmUserId);
+          return next(req);
+        },
+        async (req, next) => {
+          return (await maybeHandleScopedCSSRequest(req)) || next(req);
+        },
+        authorizationMiddleware(realmAuthDataSource),
+      ],
+      this.#virtualNetwork,
+    );
     return _fetch;
   }
 
@@ -261,12 +350,17 @@ export class Worker {
   private reportProgress(event: IndexingProgressEvent) {
     this.#reportProgress?.(event);
   }
+
+  private reportRealmEvent(event: RealmEventContent) {
+    this.#reportRealmEvent?.(event);
+  }
 }
 
 export function getReader(
   _fetch: typeof globalThis.fetch,
   realmURL: string,
 ): Reader {
+  let readerLog = logger('worker');
   let parseResponseMetadata = (
     response: Response,
     url: URL,
@@ -312,12 +406,29 @@ export function getReader(
         return undefined;
       }
       let content: string;
-      if ('nodeStream' in response && response.nodeStream) {
-        content = await fileContentToText({
-          content: response.nodeStream,
-        });
-      } else {
-        content = await response.text();
+      try {
+        if ('nodeStream' in response && response.nodeStream) {
+          content = await fileContentToText({
+            content: response.nodeStream,
+          });
+        } else {
+          content = await response.text();
+        }
+      } catch (err: any) {
+        // An in-process realm serves file bodies as lazy node streams: the
+        // realm checks existence when it builds the response, but the
+        // underlying open() happens only when we consume the body here. A
+        // file deleted in that window surfaces as an ENOENT on the body
+        // read even though the response itself was ok. That is a
+        // not-found, same as the !response.ok branch above — callers
+        // already treat undefined as "file no longer exists".
+        if (err?.code === 'ENOENT') {
+          readerLog.info(
+            `file ${url.href} disappeared while reading its body (ENOENT); treating as not found`,
+          );
+          return undefined;
+        }
+        throw err;
       }
       let { lastModified, created, path } = parseResponseMetadata(
         response,
@@ -384,21 +495,56 @@ export function getReader(
     },
 
     mtimes: async () => {
-      let response = await _fetch(`${realmURL}_mtimes`, {
-        headers: {
-          Accept: SupportedMimeType.Mtimes,
-        },
-      });
-      if (!response.ok) {
+      // Env-mode boot race: the realm-server writes its Traefik dynamic
+      // route file in `registerService`, but Traefik picks the file up
+      // via inotify a short moment later. A worker that begins indexing
+      // immediately after the realm-server's `listening` callback fires
+      // can hit Traefik's default "404 page not found" before its own
+      // route is live. With the current handler logging and returning
+      // {} on that response, the from-scratch index finishes with zero
+      // files and the realm stays mounted but unindexed for the rest
+      // of the process's life. Distinguish the intermediary 404 from a
+      // genuine realm-server 404 by checking for the `X-Boxel-Realm-Url`
+      // header (every realm-server response carries it; Traefik's
+      // default response doesn't). Retry with backoff while the header
+      // is absent, so the eventual route-live state resolves naturally
+      // and the index actually walks the realm.
+      const MAX_ATTEMPTS = 10;
+      const BACKOFF_MS = 200;
+      let response: Response | undefined;
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        response = await _fetch(`${realmURL}_mtimes`, {
+          headers: {
+            Accept: SupportedMimeType.Mtimes,
+          },
+        });
+        if (response.ok) break;
+        let fromRealmServer = response.headers.has('X-Boxel-Realm-Url');
+        if (fromRealmServer || attempt === MAX_ATTEMPTS) break;
+        console.warn(
+          `mtimes for ${realmURL}_mtimes got ${response.status} from intermediary (no X-Boxel-Realm-Url header), retrying (attempt ${attempt}/${MAX_ATTEMPTS}) after ${attempt * BACKOFF_MS}ms`,
+        );
+        // Cancel the body before backing off — undici holds the
+        // underlying connection in a reserved state until the body is
+        // consumed or cancelled, and a 10-attempt loop on each indexed
+        // realm at boot would otherwise pin sockets across the backoff
+        // window for no benefit (the body is Traefik's "404 page not
+        // found" which we never use).
+        await response.body?.cancel().catch(() => {});
+        await new Promise((resolve) =>
+          setTimeout(resolve, attempt * BACKOFF_MS),
+        );
+      }
+      if (!response!.ok) {
         let responseText = '';
         try {
-          responseText = await response.text();
+          responseText = await response!.text();
         } catch {
           responseText = '';
         }
         let details = responseText ? `: ${responseText}` : '';
         console.warn(
-          `mtimes request failed for ${realmURL}_mtimes (${response.status} ${response.statusText})${details}`,
+          `mtimes request failed for ${realmURL}_mtimes (${response!.status} ${response!.statusText})${details}`,
         );
         return {};
       }
@@ -406,7 +552,7 @@ export function getReader(
         data: {
           attributes: { mtimes },
         },
-      } = (await response.json()) as {
+      } = (await response!.json()) as {
         data: { attributes: { mtimes: { [url: string]: number } } };
       };
       return mtimes;

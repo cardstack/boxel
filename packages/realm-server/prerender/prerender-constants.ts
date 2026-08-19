@@ -2,6 +2,16 @@ export const PRERENDER_SERVER_STATUS_HEADER = 'X-Boxel-Prerender-Server-Status';
 export const PRERENDER_SERVER_STATUS_DRAINING = 'draining';
 export const PRERENDER_SERVER_DRAINING_STATUS_CODE = 410;
 
+// Opaque token for the current host shell (the realm server's rewritten
+// index.html). The realm server reports it to the manager at boot
+// (POST /host-shell); the manager echoes the latest value on every
+// heartbeat response via this header, and a prerender server recycles its
+// browser when the value differs from the shell it last warmed against —
+// i.e. the host was redeployed. The token only has to change when the host
+// bundle changes; prerender servers treat it opaquely.
+export const PRERENDER_HOST_SHELL_HASH_HEADER =
+  'X-Boxel-Prerender-Host-Shell-Hash';
+
 // CS-10872: correlates one client-initiated prerender call across
 // remote-prerenderer → manager → prerender-server. The client assigns
 // the ID on the first request; the manager and prerender-server echo
@@ -68,23 +78,19 @@ export {
 // Re-exported here for the host fetch wrapper's import-locality.
 export { DURING_PRERENDER_HEADER } from '@cardstack/runtime-common';
 
-// Sanitize the inbound job-id header. Format is `<digits>.<digits>`
-// (job.id + reservation.id, both bigint-shaped); accept up to 32
-// digits per side (so up to 65 chars total including the separator)
-// to be defensive without admitting newlines or other log-injection.
-const JOB_ID_PATTERN = /^[0-9]{1,32}\.[0-9]{1,32}$/;
-export function sanitizePrerenderJobId(
-  raw: string | null | undefined,
-): string | null {
-  if (typeof raw !== 'string') return null;
-  let trimmed = raw.trim();
-  if (!trimmed) return null;
-  return JOB_ID_PATTERN.test(trimmed) ? trimmed : null;
-}
+// Sanitize the inbound job-id header (`<digits>.<digits>` = job.id +
+// reservation.id). Defined in runtime-common alongside
+// `X_BOXEL_JOB_ID_HEADER` so the Realm class can normalize the identity
+// without depending on realm-server; re-exported here for import-locality.
+export { sanitizePrerenderJobId } from '@cardstack/runtime-common';
 
 // Base timeout for a single prerender capture on the prerender server
-// (DOM rendering + data loading inside the headless browser).
-const DEFAULT_RENDER_TIMEOUT_MS = 90_000;
+// (DOM rendering + data loading inside the headless browser). A healthy
+// render completes in well under 30s; 60s cleanly separates a genuine
+// wedge from the slowest legitimate cards, and (with the request-timeout
+// overhead below) fires the render-level timeout — and its hang
+// diagnostics — before the request-level abort gives up on the render.
+const DEFAULT_RENDER_TIMEOUT_MS = 60_000;
 // Additional budget for request-level timeouts that wrap render work across
 // process/network boundaries (manager proxying, serialization, retries, etc).
 // Request timeout defaults are computed as:

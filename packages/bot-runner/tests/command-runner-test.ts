@@ -1,4 +1,5 @@
-import { module, test, skip } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import type {
   DBAdapter,
   ExecuteOptions,
@@ -6,12 +7,12 @@ import type {
   QueuePublisher,
   RunCommandResponse,
 } from '@cardstack/runtime-common';
-import type { GitHubClient } from '../lib/github';
-import { CommandRunner, makeEnqueueRunCommand } from '../lib/command-runner';
+import type { GitHubClient } from '../lib/github.ts';
+import { CommandRunner, makeEnqueueRunCommand } from '../lib/command-runner.ts';
 import {
   PrListingWorkflowHandler,
   type LintSubmissionFilesFn,
-} from '../lib/pr-listing/pr-listing-workflow-handler';
+} from '../lib/pr-listing/pr-listing-workflow-handler.ts';
 
 const passThroughLint: LintSubmissionFilesFn = async (files) => ({
   passed: true,
@@ -270,8 +271,8 @@ module('command runner', () => {
 
     assert.strictEqual(
       publishedJobs.length,
-      5,
-      'enqueues collect-files, lintStatus=passed patch, create-pr-card, prCard-link patch, and clear-error patch (lint step skipped)',
+      6,
+      'enqueues collect-files, two lintStatus patches, create-pr-card, prCard-link patch, and clear-error patch',
     );
     assert.strictEqual(createdBranches.length, 1, 'creates branch');
     assert.strictEqual(branchWrites.length, 1, 'writes files to branch');
@@ -283,42 +284,76 @@ module('command runner', () => {
       'command:http://localhost:4201/test/',
       'Job 1 (collect-files) uses default realm concurrency group',
     );
-    // TEMP: lint step skipped — the lintStatus=in-progress patch is not
-    // enqueued. Uncomment and shift indices below back up by 1 when the
-    // lint step is restored in command-runner.ts.
-    // assert.strictEqual(
-    //   (publishedJobs[1] as { concurrencyGroup: string }).concurrencyGroup,
-    //   'command:http://localhost:4201/test/',
-    //   'Job 2 (lintStatus in-progress) uses default realm concurrency group',
-    // );
-    // Job 2: patch lintStatus=passed — user realm
+    // Job 2: patch lintStatus=in-progress — user realm
     assert.strictEqual(
       (publishedJobs[1] as { concurrencyGroup: string }).concurrencyGroup,
       'command:http://localhost:4201/test/',
-      'Job 2 (lintStatus passed) uses default realm concurrency group',
+      'Job 2 (lintStatus in-progress) uses default realm concurrency group',
     );
-    // Job 3: create-pr-card — submissions realm
+    // Job 3: patch lintStatus=passed — user realm
     assert.strictEqual(
       (publishedJobs[2] as { concurrencyGroup: string }).concurrencyGroup,
-      `command:${SUBMISSION_REALM_URL}`,
-      'Job 3 (create-pr-card) uses submissions realm concurrency group',
+      'command:http://localhost:4201/test/',
+      'Job 3 (lintStatus passed) uses default realm concurrency group',
     );
-    // Job 4: prCard link patch — user realm. Persisted immediately after
-    // create-pr-card so retry on a later GitHub failure can find it.
+    // Job 4: create-pr-card — submissions realm
     assert.strictEqual(
       (publishedJobs[3] as { concurrencyGroup: string }).concurrencyGroup,
-      'command:http://localhost:4201/test/',
-      'Job 4 (prCard link patch) uses default realm concurrency group',
+      `command:${SUBMISSION_REALM_URL}`,
+      'Job 4 (create-pr-card) uses submissions realm concurrency group',
     );
-    // Job 5: clear-error patch — user realm
+    // Job 5: prCard link patch — user realm. Persisted immediately after
+    // create-pr-card so retry on a later GitHub failure can find it.
     assert.strictEqual(
       (publishedJobs[4] as { concurrencyGroup: string }).concurrencyGroup,
       'command:http://localhost:4201/test/',
-      'Job 5 (clear-error patch) uses default realm concurrency group',
+      'Job 5 (prCard link patch) uses default realm concurrency group',
+    );
+    // Job 6: clear-error patch — user realm
+    assert.strictEqual(
+      (publishedJobs[5] as { concurrencyGroup: string }).concurrencyGroup,
+      'command:http://localhost:4201/test/',
+      'Job 6 (clear-error patch) uses default realm concurrency group',
     );
 
     assert.deepEqual(
+      (publishedJobs[1] as { args: Record<string, unknown> }).args,
+      {
+        realmURL: 'http://localhost:4201/test/',
+        realmUsername: '@alice:localhost',
+        runAs: '@alice:localhost',
+        command: '@cardstack/boxel-host/commands/patch-card-instance/default',
+        commandInput: {
+          cardId: submissionCardUrl,
+          patch: {
+            attributes: { lintStatus: 'in-progress', lintErrors: [] },
+          },
+        },
+      },
+      'marks lint in-progress on the workflow card before linting',
+    );
+    assert.deepEqual(
       (publishedJobs[2] as { args: Record<string, unknown> }).args,
+      {
+        realmURL: 'http://localhost:4201/test/',
+        realmUsername: '@alice:localhost',
+        runAs: '@alice:localhost',
+        command: '@cardstack/boxel-host/commands/patch-card-instance/default',
+        commandInput: {
+          cardId: submissionCardUrl,
+          patch: {
+            attributes: {
+              lintStatus: 'passed',
+              lintErrors: [],
+              lintFixedCount: 0,
+            },
+          },
+        },
+      },
+      'marks lint passed on the workflow card',
+    );
+    assert.deepEqual(
+      (publishedJobs[3] as { args: Record<string, unknown> }).args,
       {
         realmURL: SUBMISSION_REALM_URL,
         realmUsername: SUBMISSION_BOT_USER_ID,
@@ -329,18 +364,19 @@ module('command runner', () => {
           branchName: 'a1b2c3-my-listing-name',
           submittedBy: '@alice:localhost',
           prSummary: `## Summary\nMy listing Summary\n\n---\n- Listing Name: My Listing Name\n- Room ID: \`!abc123:localhost\`\n- User ID: \`@alice:localhost\`\n- Number of Files: 1\n- Workflow Card: [${submissionCardUrl}](${submissionCardUrl})`,
-          allFileContents: [
+          fileManifest: [
             {
               filename: 'catalog/MyListing/listing.json',
-              contents: '{"data":{"type":"card"}}',
+              size: Buffer.byteLength('{"data":{"type":"card"}}', 'utf8'),
+              kind: 'text',
             },
           ],
         },
       },
-      'enqueues PR card creation in submissions realm',
+      'enqueues PR card creation in submissions realm with a manifest instead of file contents',
     );
     assert.deepEqual(
-      (publishedJobs[3] as { args: Record<string, unknown> }).args,
+      (publishedJobs[4] as { args: Record<string, unknown> }).args,
       {
         realmURL: 'http://localhost:4201/test/',
         realmUsername: '@alice:localhost',
@@ -362,7 +398,7 @@ module('command runner', () => {
       'persists prCard link on the workflow card immediately after create-pr-card succeeds (so retry on later failure can reuse the existing PrCard)',
     );
     assert.deepEqual(
-      (publishedJobs[4] as { args: Record<string, unknown> }).args,
+      (publishedJobs[5] as { args: Record<string, unknown> }).args,
       {
         realmURL: 'http://localhost:4201/test/',
         realmUsername: '@alice:localhost',
@@ -600,8 +636,7 @@ module('command runner', () => {
     assert.strictEqual(openedPRs.length, 0, 'does not open pull request');
   });
 
-  // TEMP: Re-enable this test when lint is restored.
-  skip('patches prCreationError when create-pr-card fails after lint passes', async (assert) => {
+  test('patches prCreationError when create-pr-card fails after lint passes', async (assert) => {
     let submissionCardUrl =
       'http://localhost:4201/submissions/SubmissionWorkflowCard/abc-123';
     let publishedJobs: Array<{
@@ -778,7 +813,7 @@ module('command runner', () => {
     );
   });
 
-  test('pr-listing-retry with existing PrCard skips collect-files + create-pr-card', async (assert) => {
+  test('pr-listing-retry with existing PrCard re-collects but skips create-pr-card', async (assert) => {
     let workflowCardUrl =
       'http://localhost:4201/test/SubmissionWorkflowCard/abc-123';
     let prCardUrl = 'http://localhost:4201/submissions/PrCard/pr-1';
@@ -791,7 +826,7 @@ module('command runner', () => {
       publish: async (job: any) => {
         publishedJobs.push(job);
         let command = (job.args.command as string | undefined) ?? '';
-        let url = (job.args.commandInput as any)?.url;
+        let url = (job.args.commandInput as any)?.cardIdentifier;
 
         if (command.endsWith('/fetch-card-json/default')) {
           if (url === workflowCardUrl) {
@@ -810,8 +845,7 @@ module('command runner', () => {
                             // title is the display-formatted "Submit <X>";
                             // retry must NOT derive branchName from it.
                             title: 'Submit My Listing',
-                            branchName:
-                              'a1b2c3-my-listing',
+                            branchName: 'a1b2c3-my-listing',
                           },
                           relationships: {
                             listing: {
@@ -829,35 +863,28 @@ module('command runner', () => {
               }),
             } as any;
           }
-          if (url === prCardUrl) {
-            return {
-              id: publishedJobs.length,
-              done: Promise.resolve({
-                status: 'ready',
-                cardResultString: JSON.stringify({
-                  data: {
-                    attributes: {
-                      document: {
-                        data: {
-                          id: prCardUrl,
-                          attributes: {
-                            allFileContents: [
-                              {
-                                filename: 'catalog/MyListing/listing.json',
-                                contents: '{"data":{"type":"card"}}',
-                              },
-                            ],
-                          },
-                        },
-                      },
-                    },
-                  },
-                }),
-              }),
-            } as any;
-          }
         }
-        // patch-card-instance — final link/clear patch
+        if (command.endsWith('/collect-submission-files/default')) {
+          return {
+            id: publishedJobs.length,
+            done: Promise.resolve({
+              status: 'ready',
+              cardResultString: JSON.stringify({
+                data: {
+                  attributes: {
+                    allFileContents: [
+                      {
+                        filename: 'catalog/MyListing/listing.json',
+                        contents: '{"data":{"type":"card"}}',
+                      },
+                    ],
+                  },
+                },
+              }),
+            }),
+          } as any;
+        }
+        // patch-card-instance — lint status, link, and clear patches
         return {
           id: publishedJobs.length,
           done: Promise.resolve({ status: 'ready', cardResultString: null }),
@@ -938,24 +965,48 @@ module('command runner', () => {
     );
 
     let commands = publishedJobs.map((j) => j.args.command);
-    assert.notOk(
+    assert.ok(
       commands.some((c: string) =>
         c.endsWith('/collect-submission-files/default'),
       ),
-      'retry skips collect-submission-files',
+      'retry re-collects submission files from the source realm',
     );
     assert.notOk(
       commands.some((c: string) => c.endsWith('/create-pr-card/default')),
-      'retry skips create-pr-card',
+      'retry skips create-pr-card and reuses the linked PrCard',
     );
     assert.strictEqual(
       commands.filter((c: string) => c.endsWith('/fetch-card-json/default'))
         .length,
-      2,
-      'retry fetches workflow card AND existing PrCard',
+      1,
+      'retry fetches only the workflow card, never the PrCard contents',
+    );
+    let patchAttrs = publishedJobs
+      .filter((j) =>
+        (j.args.command as string).endsWith('/patch-card-instance/default'),
+      )
+      .map(
+        (j) => j.args.commandInput.patch.attributes as Record<string, unknown>,
+      );
+    assert.deepEqual(
+      patchAttrs[0],
+      { prCreationError: null, failedStep: null },
+      'retry clears the stale error before running the steps',
     );
     assert.strictEqual(createdBranches.length, 1, 'creates GitHub branch');
     assert.strictEqual(branchWrites.length, 1, 'writes files to branch');
+    assert.deepEqual(
+      (
+        branchWrites[0] as { files: { path: string; content: string }[] }
+      ).files.map((f) => ({ path: f.path, content: f.content })),
+      [
+        {
+          path: 'a1b2c3-my-listing/catalog/MyListing/listing.json',
+          content: '{"data":{"type":"card"}}',
+        },
+      ],
+      'pushed files come from the fresh collection, not the PrCard',
+    );
     assert.strictEqual(openedPRs.length, 1, 'opens pull request');
     // Regression: retry must reuse the *persisted* branchName, not recompute
     // from the workflow card's display-formatted title. Without this guard,
@@ -1087,6 +1138,542 @@ module('command runner', () => {
       typeof attrs.prCreationError === 'string' &&
         (attrs.prCreationError as string).includes('collect crashed'),
       'prCreationError carries the underlying message',
+    );
+  });
+
+  test('lint failure blocks PR creation and records lint errors', async (assert) => {
+    let workflowCardUrl =
+      'http://localhost:4201/test/SubmissionWorkflowCard/abc-123';
+    let lintError =
+      'catalog/MyListing/component.gts:3:7 [no-literal-realm-urls] Do not hardcode realm URLs';
+    let failingLint: LintSubmissionFilesFn = async (files) => ({
+      passed: false,
+      fixedFiles: files.map((f) => ({
+        filename: f.filename,
+        contents: f.contents ?? '',
+      })),
+      lintErrors: [lintError],
+      fixedFileCount: 0,
+    });
+
+    let publishedJobs: Array<{
+      args: Record<string, any>;
+      concurrencyGroup: string;
+    }> = [];
+    let queuePublisher: QueuePublisher = {
+      publish: async (job: any) => {
+        publishedJobs.push(job);
+        let command = (job.args.command as string | undefined) ?? '';
+        if (command.endsWith('/collect-submission-files/default')) {
+          return {
+            id: publishedJobs.length,
+            done: Promise.resolve({
+              status: 'ready',
+              cardResultString: JSON.stringify({
+                data: {
+                  id: workflowCardUrl,
+                  attributes: {
+                    allFileContents: [
+                      {
+                        filename: 'catalog/MyListing/component.gts',
+                        contents: 'export const x = 1',
+                      },
+                    ],
+                  },
+                },
+              }),
+            }),
+          } as any;
+        }
+        return {
+          id: publishedJobs.length,
+          done: Promise.resolve({ status: 'ready', cardResultString: null }),
+        } as any;
+      },
+      destroy: async () => {},
+    };
+
+    let createdBranches: unknown[] = [];
+    let openedPRs: unknown[] = [];
+    let githubClient: GitHubClient = {
+      createBranch: async (params) => {
+        createdBranches.push(params);
+        return { ref: 'refs/heads/test', sha: 'abc123' };
+      },
+      writeFileToBranch: async () => ({ commitSha: 'def456' }),
+      writeFilesToBranch: async () => ({ commitSha: 'def456' }),
+      openPullRequest: async (params) => {
+        openedPRs.push(params);
+        return { number: 1, html_url: 'https://example/pr/1' };
+      },
+    };
+
+    let commandsByRegistrationId = new Map<
+      string,
+      Record<string, PgPrimitive>[]
+    >([
+      [
+        'bot-registration-lint-fail',
+        [
+          {
+            command_filter: {
+              type: 'matrix-event',
+              event_type: 'app.boxel.bot-trigger',
+              content_type: 'pr-listing-create',
+            },
+            command:
+              '@cardstack/catalog/commands/collect-submission-files/default',
+          },
+        ],
+      ],
+    ]);
+    let dbAdapter = {
+      kind: 'pg',
+      notify: async () => {},
+      isClosed: false,
+      execute: async (sql: string, opts?: ExecuteOptions) => {
+        if (sql.includes('FROM bot_commands WHERE bot_id =')) {
+          let registrationId = opts?.bind?.[0];
+          if (typeof registrationId !== 'string') {
+            return [];
+          }
+          return commandsByRegistrationId.get(registrationId) ?? [];
+        }
+        return [];
+      },
+      close: async () => {},
+      getColumnNames: async () => [],
+      withWriteLock: async (_url, fn) => fn(undefined),
+      withUserCostLock: async (_userId, fn) => fn(),
+    } as DBAdapter;
+
+    let commandRunner = makeRunner(
+      dbAdapter,
+      queuePublisher,
+      githubClient,
+      failingLint,
+    );
+
+    await assert.rejects(
+      commandRunner.maybeEnqueueCommand(
+        '@alice:localhost',
+        {
+          type: 'pr-listing-create',
+          realm: 'http://localhost:4201/test/',
+          userId: '@alice:localhost',
+          input: {
+            roomId: '!abc123:localhost',
+            listingId: 'http://localhost:4201/test/Listing/1',
+            listingName: 'My Listing',
+            workflowCardUrl,
+          },
+        },
+        'bot-registration-lint-fail',
+      ),
+      /Lint failed with 1 unfixable error/,
+      'lint failure bubbles up',
+    );
+
+    let commands = publishedJobs.map((j) => j.args.command as string);
+    assert.notOk(
+      commands.some((c) => c.endsWith('/create-pr-card/default')),
+      'no PrCard is created after lint failure',
+    );
+    assert.strictEqual(createdBranches.length, 0, 'no GitHub branch created');
+    assert.strictEqual(openedPRs.length, 0, 'no pull request opened');
+
+    let patchAttrs = publishedJobs
+      .filter((j) =>
+        (j.args.command as string).endsWith('/patch-card-instance/default'),
+      )
+      .map(
+        (j) => j.args.commandInput.patch.attributes as Record<string, unknown>,
+      );
+    assert.deepEqual(
+      patchAttrs[0],
+      { lintStatus: 'in-progress', lintErrors: [] },
+      'lint marked in-progress before running',
+    );
+    assert.deepEqual(
+      patchAttrs[1],
+      { lintStatus: 'failed', lintErrors: [lintError] },
+      'lint failure and errors recorded on the workflow card',
+    );
+    let failurePatch = patchAttrs[patchAttrs.length - 1];
+    assert.strictEqual(
+      failurePatch.failedStep,
+      'lint',
+      'failedStep tagged as lint',
+    );
+  });
+
+  test('a binary-flagged text-extension file skips lint and commits as binary', async (assert) => {
+    let workflowCardUrl =
+      'http://localhost:4201/test/SubmissionWorkflowCard/abc-123';
+    let base64Js = Buffer.from('export const model = 1;').toString('base64');
+    let lintedFilenames: string[] = [];
+    let capturingLint: LintSubmissionFilesFn = async (files) => {
+      lintedFilenames.push(...files.map((f) => f.filename));
+      return {
+        passed: true,
+        fixedFiles: files.map((f) => ({
+          filename: f.filename,
+          contents: f.contents ?? '',
+        })),
+        lintErrors: [],
+        fixedFileCount: 0,
+      };
+    };
+
+    let publishedJobs: Array<{
+      args: Record<string, any>;
+      concurrencyGroup: string;
+    }> = [];
+    let queuePublisher: QueuePublisher = {
+      publish: async (job: any) => {
+        publishedJobs.push(job);
+        let command = (job.args.command as string | undefined) ?? '';
+        if (command.endsWith('/collect-submission-files/default')) {
+          return {
+            id: publishedJobs.length,
+            done: Promise.resolve({
+              status: 'ready',
+              cardResultString: JSON.stringify({
+                data: {
+                  attributes: {
+                    allFileContents: [
+                      {
+                        filename: 'catalog/MyListing/listing.json',
+                        contents: '{"data":{"type":"card"}}',
+                        isBinary: false,
+                      },
+                      {
+                        filename: 'catalog/MyListing/exports/model.js',
+                        contents: base64Js,
+                        isBinary: true,
+                      },
+                    ],
+                  },
+                },
+              }),
+            }),
+          } as any;
+        }
+        if (command.endsWith('/create-pr-card/default')) {
+          return {
+            id: publishedJobs.length,
+            done: Promise.resolve({
+              status: 'ready',
+              cardResultString: JSON.stringify({
+                data: {
+                  id: 'http://localhost:4201/submissions/PrCard/pr-1',
+                  attributes: {},
+                },
+              }),
+            }),
+          } as any;
+        }
+        return {
+          id: publishedJobs.length,
+          done: Promise.resolve({ status: 'ready', cardResultString: null }),
+        } as any;
+      },
+      destroy: async () => {},
+    };
+
+    let branchWrites: {
+      files: { path: string; content: string; isBinary?: boolean }[];
+    }[] = [];
+    let githubClient: GitHubClient = {
+      createBranch: async () => ({ ref: 'refs/heads/test', sha: 'abc123' }),
+      writeFileToBranch: async () => ({ commitSha: 'def456' }),
+      writeFilesToBranch: async (params) => {
+        branchWrites.push({ files: params.files });
+        return { commitSha: 'def456' };
+      },
+      openPullRequest: async () => ({
+        number: 1,
+        html_url: 'https://example/pr/1',
+      }),
+    };
+
+    let commandsByRegistrationId = new Map<
+      string,
+      Record<string, PgPrimitive>[]
+    >([
+      [
+        'bot-registration-binary-flag',
+        [
+          {
+            command_filter: {
+              type: 'matrix-event',
+              event_type: 'app.boxel.bot-trigger',
+              content_type: 'pr-listing-create',
+            },
+            command:
+              '@cardstack/catalog/commands/collect-submission-files/default',
+          },
+        ],
+      ],
+    ]);
+    let dbAdapter = {
+      kind: 'pg',
+      notify: async () => {},
+      isClosed: false,
+      execute: async (sql: string, opts?: ExecuteOptions) => {
+        if (sql.includes('FROM bot_commands WHERE bot_id =')) {
+          let registrationId = opts?.bind?.[0];
+          if (typeof registrationId !== 'string') {
+            return [];
+          }
+          return commandsByRegistrationId.get(registrationId) ?? [];
+        }
+        return [];
+      },
+      close: async () => {},
+      getColumnNames: async () => [],
+      withWriteLock: async (_url, fn) => fn(undefined),
+      withUserCostLock: async (_userId, fn) => fn(),
+    } as DBAdapter;
+
+    let commandRunner = makeRunner(
+      dbAdapter,
+      queuePublisher,
+      githubClient,
+      capturingLint,
+    );
+
+    await commandRunner.maybeEnqueueCommand(
+      '@alice:localhost',
+      {
+        type: 'pr-listing-create',
+        realm: 'http://localhost:4201/test/',
+        userId: '@alice:localhost',
+        input: {
+          roomId: '!abc123:localhost',
+          listingId: 'http://localhost:4201/test/Listing/1',
+          listingName: 'My Listing',
+          branchName: 'a1b2c3-my-listing',
+          workflowCardUrl,
+        },
+      },
+      'bot-registration-binary-flag',
+    );
+
+    assert.deepEqual(
+      lintedFilenames,
+      ['catalog/MyListing/listing.json'],
+      'the binary-flagged .js never reaches lint',
+    );
+
+    let createPrCardJob = publishedJobs.find((j) =>
+      (j.args.command as string).endsWith('/create-pr-card/default'),
+    );
+    assert.deepEqual(
+      createPrCardJob!.args.commandInput.fileManifest,
+      [
+        {
+          filename: 'catalog/MyListing/listing.json',
+          size: Buffer.byteLength('{"data":{"type":"card"}}', 'utf8'),
+          kind: 'text',
+        },
+        {
+          filename: 'catalog/MyListing/exports/model.js',
+          size: Buffer.byteLength('export const model = 1;', 'utf8'),
+          kind: 'binary',
+        },
+      ],
+      'manifest records the .js as binary with its decoded byte size',
+    );
+
+    let written = branchWrites[0].files.find((f) =>
+      f.path.endsWith('exports/model.js'),
+    );
+    assert.strictEqual(
+      written?.isBinary,
+      true,
+      'the .js is committed through the binary path (base64 blob), not as text',
+    );
+    assert.strictEqual(
+      written?.content,
+      base64Js,
+      'the committed payload is the untouched base64',
+    );
+  });
+
+  test('lint auto-fixes are forwarded to the GitHub commit and the PrCard manifest', async (assert) => {
+    let workflowCardUrl =
+      'http://localhost:4201/test/SubmissionWorkflowCard/abc-123';
+    let prCardUrl = 'http://localhost:4201/submissions/PrCard/pr-1';
+    let fixingLint: LintSubmissionFilesFn = async (files) => ({
+      passed: true,
+      fixedFiles: files.map((f) => ({
+        filename: f.filename,
+        contents: 'export const x = 1; // fixed',
+      })),
+      lintErrors: [],
+      fixedFileCount: 1,
+    });
+
+    let publishedJobs: Array<{
+      args: Record<string, any>;
+      concurrencyGroup: string;
+    }> = [];
+    let queuePublisher: QueuePublisher = {
+      publish: async (job: any) => {
+        publishedJobs.push(job);
+        let command = (job.args.command as string | undefined) ?? '';
+        if (command.endsWith('/collect-submission-files/default')) {
+          return {
+            id: publishedJobs.length,
+            done: Promise.resolve({
+              status: 'ready',
+              cardResultString: JSON.stringify({
+                data: {
+                  id: workflowCardUrl,
+                  attributes: {
+                    allFileContents: [
+                      {
+                        filename: 'catalog/MyListing/component.gts',
+                        contents: 'export const x=1',
+                      },
+                    ],
+                  },
+                },
+              }),
+            }),
+          } as any;
+        }
+        if (command.endsWith('/create-pr-card/default')) {
+          return {
+            id: publishedJobs.length,
+            done: Promise.resolve({
+              status: 'ready',
+              cardResultString: JSON.stringify({
+                data: { id: prCardUrl, attributes: {} },
+              }),
+            }),
+          } as any;
+        }
+        return {
+          id: publishedJobs.length,
+          done: Promise.resolve({ status: 'ready', cardResultString: null }),
+        } as any;
+      },
+      destroy: async () => {},
+    };
+
+    let branchWrites: unknown[] = [];
+    let githubClient: GitHubClient = {
+      createBranch: async () => ({ ref: 'refs/heads/test', sha: 'abc123' }),
+      writeFileToBranch: async () => ({ commitSha: 'def456' }),
+      writeFilesToBranch: async (params) => {
+        branchWrites.push(params);
+        return { commitSha: 'def456' };
+      },
+      openPullRequest: async () => ({
+        number: 1,
+        html_url: 'https://example/pr/1',
+      }),
+    };
+
+    let commandsByRegistrationId = new Map<
+      string,
+      Record<string, PgPrimitive>[]
+    >([
+      [
+        'bot-registration-lint-fix',
+        [
+          {
+            command_filter: {
+              type: 'matrix-event',
+              event_type: 'app.boxel.bot-trigger',
+              content_type: 'pr-listing-create',
+            },
+            command:
+              '@cardstack/catalog/commands/collect-submission-files/default',
+          },
+        ],
+      ],
+    ]);
+    let dbAdapter = {
+      kind: 'pg',
+      notify: async () => {},
+      isClosed: false,
+      execute: async (sql: string, opts?: ExecuteOptions) => {
+        if (sql.includes('FROM bot_commands WHERE bot_id =')) {
+          let registrationId = opts?.bind?.[0];
+          if (typeof registrationId !== 'string') {
+            return [];
+          }
+          return commandsByRegistrationId.get(registrationId) ?? [];
+        }
+        return [];
+      },
+      close: async () => {},
+      getColumnNames: async () => [],
+      withWriteLock: async (_url, fn) => fn(undefined),
+      withUserCostLock: async (_userId, fn) => fn(),
+    } as DBAdapter;
+
+    let commandRunner = makeRunner(
+      dbAdapter,
+      queuePublisher,
+      githubClient,
+      fixingLint,
+    );
+
+    await commandRunner.maybeEnqueueCommand(
+      '@alice:localhost',
+      {
+        type: 'pr-listing-create',
+        realm: 'http://localhost:4201/test/',
+        userId: '@alice:localhost',
+        input: {
+          roomId: '!abc123:localhost',
+          listingId: 'http://localhost:4201/test/Listing/1',
+          listingName: 'My Listing',
+          workflowCardUrl,
+        },
+      },
+      'bot-registration-lint-fix',
+    );
+
+    let createPrCardJob = publishedJobs.find((j) =>
+      (j.args.command as string).endsWith('/create-pr-card/default'),
+    );
+    assert.ok(createPrCardJob, 'create-pr-card job is enqueued');
+    assert.deepEqual(
+      createPrCardJob!.args.commandInput.fileManifest,
+      [
+        {
+          filename: 'catalog/MyListing/component.gts',
+          size: Buffer.byteLength('export const x = 1; // fixed', 'utf8'),
+          kind: 'text',
+        },
+      ],
+      'manifest reflects the auto-fixed contents, not the originals',
+    );
+    assert.deepEqual(
+      (
+        branchWrites[0] as { files: { path: string; content: string }[] }
+      ).files.map((f) => f.content),
+      ['export const x = 1; // fixed'],
+      'auto-fixed contents (not originals) are committed to GitHub',
+    );
+
+    let passedPatch = publishedJobs
+      .filter((j) =>
+        (j.args.command as string).endsWith('/patch-card-instance/default'),
+      )
+      .map(
+        (j) => j.args.commandInput.patch.attributes as Record<string, unknown>,
+      )
+      .find((attrs) => attrs?.lintStatus === 'passed');
+    assert.deepEqual(
+      passedPatch,
+      { lintStatus: 'passed', lintErrors: [], lintFixedCount: 1 },
+      'lintFixedCount recorded and a prior run’s errors cleared, so a passing card never carries stale findings',
     );
   });
 });

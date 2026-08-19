@@ -13,6 +13,16 @@ if (typeof module !== 'undefined') {
     browser_timeout: 120,
     browser_no_activity_timeout: 120,
     browser_disconnect_timeout: 60,
+    // socket.io pingTimeout. testem otherwise derives this from
+    // browser_disconnect_timeout (60s), which is too tight for this suite: on
+    // a CI runner the whole service stack and Chrome contend for two vCPUs, so
+    // the browser can be too starved to answer a socket.io ping within 60s
+    // even while every test is still passing — the control socket then drops
+    // and testem reports the browser dead mid-run. browser_no_activity_timeout
+    // (120s) still bounds a genuinely stuck browser that stops producing
+    // results, so widening the ping tolerance only keeps a slow-but-
+    // progressing browser connected.
+    socket_heartbeat_timeout: 300,
     launch_in_ci: ['Chrome'],
     launch_in_dev: ['Chrome'],
     browser_start_timeout: 240,
@@ -78,6 +88,54 @@ if (typeof module !== 'undefined') {
     const multiReporter = new MultiReporter({ reporters });
 
     config.reporter = multiReporter;
+
+    // Capture testem's own server-side log of the browser↔testem control
+    // channel — socket attach / reconnect (`tryAttach`), the `socket
+    // reconnection limit has been exceeded` refusal, `Browser … finished all
+    // tests`, and process exit. These events are the only record of the
+    // handshake behind a `Browser timeout exceeded` failure (the socket drop
+    // the socket_heartbeat_timeout above guards against); the TAP output shows
+    // the passing tests but nothing about the socket afterward. It is kept so
+    // any such failure is diagnosable directly from the CI artifact.
+    //
+    // A file-level `debug` option can't reach this: testem's
+    // `Api.configureLogging()` binds the log output stream from CLI/default
+    // options *before* it reads this config file, so the assignment is
+    // ignored. But testem's `log` is a singleton EventEmitter that emits a
+    // `log.<level>` event on every message regardless of that stream, so
+    // subscribe to those events directly and tee them to a file (uploaded as
+    // a CI artifact). `Browser … finished all tests` here is also the
+    // authoritative signal that the browser reported suite completion —
+    // browser-side `console.log` after the last test isn't reliably flushed
+    // into the TAP output, so it can't stand in for this.
+    const testemInternalLog = require('testem/lib/log');
+    const debugStream = fs.createWriteStream(
+      path.join(
+        junitDir,
+        `host-testem-debug-${process.env.HOST_TEST_PARTITION}.log`,
+      ),
+    );
+    for (const level of [
+      'error',
+      'warn',
+      'notice',
+      'info',
+      'verbose',
+      'http',
+      'timing',
+    ]) {
+      testemInternalLog.on(`log.${level}`, (record) => {
+        try {
+          const prefix = record && record.prefix ? `${record.prefix} ` : '';
+          const message = record ? record.message : '';
+          debugStream.write(
+            `${new Date().toISOString()} [${level}] ${prefix}${message}\n`,
+          );
+        } catch (e) {
+          // best-effort diagnostics — never let logging break the run
+        }
+      });
+    }
   }
 
   module.exports = config;

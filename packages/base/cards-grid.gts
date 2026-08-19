@@ -16,10 +16,9 @@ import AllFilesIcon from '@cardstack/boxel-icons/files';
 import FileIcon from '@cardstack/boxel-icons/file';
 
 import {
-  cardIdToURL,
   chooseCard,
   specRef,
-  baseRealm,
+  baseRealmRRI,
   baseFileRef,
   isCardInstance,
   SupportedMimeType,
@@ -176,6 +175,13 @@ class Isolated extends Component<typeof CardsGrid> {
       displayName: 'All Cards',
       icon: AllCardsIcon,
       query: {
+        // Cards-only by construction: file rows (both plain files and a
+        // card's dual-indexed `.json`) never carry `_cardType`, so the
+        // `not eq` excludes them via NULL semantics even though search is
+        // mixed by default — while errored instances (which have `_cardType`
+        // but may lack a `types` array) are kept, since this is a field
+        // filter with no type-anchor cross-join. The "All Files" group
+        // (`type: baseFileRef`) owns the file side.
         filter: {
           not: {
             eq: {
@@ -307,7 +313,9 @@ class Isolated extends Component<typeof CardsGrid> {
     }
 
     if (spec && isCardInstance<Spec>(spec)) {
-      await this.args.createCard?.(spec.ref, cardIdToURL(spec.id!), {
+      // Resolve `spec.ref` relative to the spec's (canonical) id in RRI space —
+      // no VirtualNetwork. `createCard` resolves the ref against this base.
+      await this.args.createCard?.(spec.ref, spec.id, {
         realmURL: this.args.model[realmURL],
       });
     } else if (activeFilterRef) {
@@ -355,12 +363,12 @@ class Isolated extends Component<typeof CardsGrid> {
       };
     }[];
     let excludedCardTypeIds = [
-      `${baseRealm.url}card-api/CardDef`,
-      `${baseRealm.url}cards-grid/CardsGrid`,
+      `${baseRealmRRI}card-api/CardDef`,
+      `${baseRealmRRI}cards-grid/CardsGrid`,
     ];
     // The "All Files" group already represents the bare FileDef root — listing
     // it again as a leaf would just be a duplicate row.
-    let excludedFileTypeIds = [`${baseRealm.url}card-api/FileDef`];
+    let excludedFileTypeIds = [`${baseRealmRRI}card-api/FileDef`];
 
     this.cardTypeFilters.splice(0, this.cardTypeFilters.length);
     this.fileTypeFilters.splice(0, this.fileTypeFilters.length);

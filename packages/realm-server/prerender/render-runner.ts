@@ -1,8 +1,10 @@
 import {
+  type FusedIndexMeta,
   type PrerenderMeta,
   type PrerenderTypes,
   type RenderError,
   type RenderResponse,
+  type RenderTimeoutDiagnostics,
   type ModuleRenderResponse,
   type FileExtractResponse,
   type FileRenderResponse,
@@ -18,9 +20,13 @@ import {
   logger,
 } from '@cardstack/runtime-common';
 import type { SerializedError } from '@cardstack/runtime-common/error';
-import type { ConsoleErrorEntry, PagePool } from './page-pool';
-import { toAffinityKey } from './affinity';
-import { throwIfAborted } from './prerender-cancel';
+import type { ConsoleErrorEntry, PagePool } from './page-pool.ts';
+import { toAffinityKey } from './affinity.ts';
+import {
+  abortable,
+  PrerenderCancelledError,
+  throwIfAborted,
+} from './prerender-cancel.ts';
 import {
   captureResult,
   captureModule,
@@ -43,8 +49,10 @@ import {
   buildCommandRunnerURL,
   buildInvalidModuleResponseError,
   buildInvalidFileExtractResponseError,
-} from './utils';
+  type RenderProfileContext,
+} from './utils.ts';
 import { randomUUID } from 'crypto';
+import type { Page } from 'puppeteer';
 
 const log = logger('prerenderer');
 const reproduceLog = logger('prerenderer-reproduce');
@@ -54,12 +62,14 @@ const commandRequestStorageKeyPrefix = 'boxel-command-request:';
 // operators can tell "waited for the render semaphore" (saturation) apart
 // from "waited for the per-affinity file-admission cap" apart from
 // "waited for an affinity tab" (warm-tab serialization) apart from
-// "warmed a new tab". All four arrive tagged on every prerender response.
+// "warmed a new tab" apart from "probed a warm tab for liveness". All five
+// arrive tagged on every prerender response.
 export type LaunchWaits = {
   semaphoreMs: number;
   admissionMs: number;
   tabQueueMs: number;
   tabStartupMs: number;
+  tabProbeMs: number;
 };
 
 export type Timings = {
@@ -75,6 +85,16 @@ type PoolInfo = {
   reused: boolean;
   evicted: boolean;
   timedOut: boolean;
+};
+
+// One indexing job's icon renderings for one affinity: the captured icon
+// markup keyed by the type's internal key, plus hit/miss counters for the
+// stats line emitted when the memo is replaced or released.
+type IconMemo = {
+  jobKey: string;
+  icons: Map<string, string>;
+  hits: number;
+  misses: number;
 };
 
 const CLEAR_CACHE_RETRY_SIGNATURES: readonly (readonly string[])[] = [
@@ -130,6 +150,17 @@ export class RenderRunner {
     byAffinity: new Map<string, { unusable: number; timeout: number }>(),
   };
   #lastAuthByAffinity = new Map<string, string>();
+  // Job-scoped icon memo, one slot per affinity. Icon HTML is a pure
+  // function of the card's type — the type's static `icon` component, never
+  // the instance — so within one indexing job the first visit for a type
+  // renders the icon and every later visit of that type reuses the captured
+  // markup, skipping the icon route. Indexing serializes per realm (= per
+  // affinity), so at most one job is active per slot: a visit carrying a
+  // different job key (jobId + loader epoch) replaces the slot outright. A
+  // module edit arrives as a new job with a new key, so stale markup cannot
+  // leak across module changes. Visits without a jobId (on-demand renders)
+  // never touch the memo.
+  #iconMemoByAffinity = new Map<string, IconMemo>();
 
   constructor(options: { pagePool: PagePool; boxelHostURL: string }) {
     this.#pagePool = options.pagePool;
@@ -167,6 +198,87 @@ export class RenderRunner {
 
   clearAuthCache(affinityKey: string) {
     this.#lastAuthByAffinity.delete(affinityKey);
+  }
+
+  // Resolve the icon memo for a visit. Only indexing visits participate
+  // (they carry a jobId); the loader epoch rides the job key as
+  // belt-and-braces so a memo can never outlive the module surface it was
+  // rendered against.
+  #iconMemoFor(
+    affinityKey: string,
+    jobId: string | undefined,
+    loaderEpoch: string | undefined,
+  ): IconMemo | undefined {
+    if (!jobId) {
+      return undefined;
+    }
+    let jobKey = `${jobId}|${loaderEpoch ?? ''}`;
+    let memo = this.#iconMemoByAffinity.get(affinityKey);
+    if (!memo || memo.jobKey !== jobKey) {
+      if (memo) {
+        this.#logIconMemoStats(affinityKey, memo, 'superseded');
+      }
+      memo = { jobKey, icons: new Map(), hits: 0, misses: 0 };
+      this.#iconMemoByAffinity.set(affinityKey, memo);
+    }
+    return memo;
+  }
+
+  // Drop an affinity's icon memo. Called when the indexing batch that owns
+  // the affinity releases it; the job-key check in #iconMemoFor already
+  // guarantees a later job never reads another job's entries, so this is
+  // memory hygiene, not a correctness gate.
+  clearIconMemo(affinityKey: string) {
+    let memo = this.#iconMemoByAffinity.get(affinityKey);
+    if (memo) {
+      this.#logIconMemoStats(affinityKey, memo, 'released');
+      this.#iconMemoByAffinity.delete(affinityKey);
+    }
+  }
+
+  // Read-only observability accessor used by tests. Callers outside of
+  // tests should not rely on this shape; it's a debugging surface, not a
+  // stable API.
+  getIconMemo(affinityKey: string):
+    | {
+        jobKey: string;
+        types: string[];
+        hits: number;
+        misses: number;
+      }
+    | undefined {
+    let memo = this.#iconMemoByAffinity.get(affinityKey);
+    return memo
+      ? {
+          jobKey: memo.jobKey,
+          types: [...memo.icons.keys()],
+          hits: memo.hits,
+          misses: memo.misses,
+        }
+      : undefined;
+  }
+
+  #logIconMemoStats(affinityKey: string, memo: IconMemo, reason: string) {
+    log.debug(
+      `icon memo stats affinity=${affinityKey} types=${memo.icons.size} hits=${memo.hits} misses=${memo.misses} (${reason})`,
+    );
+  }
+
+  // Builds the per-render profile context threaded into `withTimeout`.
+  // The affinity key drives the airtight affinity-scoped CPU-profiler
+  // gate (only the render whose affinity exactly matches
+  // `PRERENDER_PROFILE_AFFINITY` is ever profiled); the label keys the
+  // profiler's per-render log line by card url + render step.
+  #profileContext(
+    affinityKey: string,
+    url: string,
+    step: string,
+    jobId?: string,
+  ): RenderProfileContext {
+    // `card`/`step` mirror what `label` concatenates but stay structured so
+    // the artifact sink can key on them; `jobId` is threaded only by the
+    // visit path (on-demand screenshot/module/command renders carry none).
+    return { affinityKey, label: `${url} ${step}`, card: url, step, jobId };
   }
 
   #authKeys(auth: string): string[] | null {
@@ -241,27 +353,31 @@ export class RenderRunner {
       let requestId = randomUUID();
       let nonce = String(this.#nonce);
       let storageKey = `${commandRequestStorageKeyPrefix}${requestId}`;
-      await page.evaluate(
-        (sessionAuth, key, commandToRun, input, requestNonce, createdAt) => {
-          localStorage.setItem('boxel-session', sessionAuth);
-          localStorage.setItem(
-            key,
-            JSON.stringify({
-              command: commandToRun,
-              input,
-              nonce: requestNonce,
-              createdAt,
-            }),
-          );
-        },
-        auth,
-        storageKey,
-        command,
-        commandInput ?? null,
-        nonce,
-        Date.now(),
+      await abortable(signal, () =>
+        page.evaluate(
+          (sessionAuth, key, commandToRun, input, requestNonce, createdAt) => {
+            localStorage.setItem('boxel-session', sessionAuth);
+            localStorage.setItem(
+              key,
+              JSON.stringify({
+                command: commandToRun,
+                input,
+                nonce: requestNonce,
+                createdAt,
+              }),
+            );
+          },
+          auth,
+          storageKey,
+          command,
+          commandInput ?? null,
+          nonce,
+          Date.now(),
+        ),
       );
-      await transitionTo(page, 'command-runner', requestId, nonce);
+      await abortable(signal, () =>
+        transitionTo(page, 'command-runner', requestId, nonce),
+      );
       log.info(
         'command-runner url: %s',
         buildCommandRunnerURL(page, nonce, requestId),
@@ -326,6 +442,8 @@ export class RenderRunner {
           }
         },
         opts?.timeoutMs,
+        this.#profileContext(affinityKey, command, 'command-runner'),
+        signal,
       );
 
       if (isRenderError(waitResult)) {
@@ -373,6 +491,13 @@ export class RenderRunner {
         pool: poolInfo,
       };
     } catch (e) {
+      // Cancellations must reach the Prerenderer's cancel handler —
+      // converting one into an error response here would return the
+      // abandoned (possibly wedged) tab to the pool with no disposal,
+      // and there is no caller left to read the response anyway.
+      if (e instanceof PrerenderCancelledError) {
+        throw e;
+      }
       log.error('Error running command in headless chrome:', e);
       let response: RunCommandResponse = {
         status: 'error',
@@ -447,9 +572,11 @@ export class RenderRunner {
       // try so `finally { release() }` frees the tab slot if the caller
       // aborted during the getPage handoff.
       throwIfAborted(signal, 'queued');
-      await page.evaluate((sessionAuth) => {
-        localStorage.setItem('boxel-session', sessionAuth);
-      }, auth);
+      await abortable(signal, () =>
+        page.evaluate((sessionAuth) => {
+          localStorage.setItem('boxel-session', sessionAuth);
+        }, auth),
+      );
 
       let renderStart = Date.now();
       let nonce = String(this.#nonce);
@@ -477,6 +604,8 @@ export class RenderRunner {
           return await captureScreenshot(page, format, 0, captureOptions);
         },
         opts?.timeoutMs,
+        this.#profileContext(affinityKey, url, `screenshot ${format}`),
+        signal,
       );
 
       let response: ScreenshotPrerenderResponse;
@@ -586,9 +715,11 @@ export class RenderRunner {
       // inside the try so `finally { release() }` frees the tab slot
       // if the caller aborted during the getPage handoff.
       throwIfAborted(signal, 'queued');
-      await page.evaluate((sessionAuth) => {
-        localStorage.setItem('boxel-session', sessionAuth);
-      }, auth);
+      await abortable(signal, () =>
+        page.evaluate((sessionAuth) => {
+          localStorage.setItem('boxel-session', sessionAuth);
+        }, auth),
+      );
 
       let renderStart = Date.now();
       let options = renderOptions ?? {};
@@ -613,6 +744,8 @@ export class RenderRunner {
           return await captureModule(page, captureOptions);
         },
         opts?.timeoutMs,
+        this.#profileContext(affinityKey, url, 'module'),
+        signal,
       );
 
       let response: ModuleRenderResponse;
@@ -706,22 +839,37 @@ export class RenderRunner {
   // fileExtract/cardRender/fileRender passes the caller requests, returning a
   // union response. Passes execute in VISIT_PASS_ORDER and short-circuit when
   // the page becomes unusable (eviction or auth failure).
+  //
+  // `visitType` bifurcates the pass internals along the search-doc/HTML seam
+  // (see PrerenderVisitType): an 'index' visit runs the extract, the card's
+  // icon + meta and the file's icon — never the `html` route; a
+  // 'prerender-html' visit runs only the `html` route formats + markdown for
+  // the card and file renderings. No `visitType` runs the fused union.
   async prerenderVisitAttempt({
     affinityType,
     affinityValue,
     realm,
     url,
     auth,
+    visitType,
     opts,
     renderOptions,
     fileData,
     types,
+    cardTypes,
     priority,
     jobId,
     signal,
     onTabAcquired,
   }: PrerenderVisitArgs & {
-    opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
+    opts?: {
+      timeoutMs?: number;
+      simulateTimeoutMs?: number;
+      // Test-only: pretend the page's host build doesn't advertise the
+      // `fusedIndexMeta` capability, exercising the per-pass transition
+      // path a page pinned to such a build takes.
+      simulateLegacyHost?: true;
+    };
     signal?: AbortSignal;
     // See the matching param on `prerenderModuleAttempt`.
     onTabAcquired?: (info: { pageId: string }) => void;
@@ -731,15 +879,27 @@ export class RenderRunner {
     pool: PoolInfo;
   }> {
     let affinityKey = toAffinityKey({ affinityType, affinityValue });
+    // Which halves of the bifurcated visit run. The fused visit (no
+    // visitType) runs both.
+    let runIndexSteps = visitType !== 'prerender-html';
+    let runHtmlSteps = visitType !== 'index';
     let requested = {
-      fileExtract: Boolean(renderOptions?.fileExtract),
+      // The extract belongs to the index half. A standalone 'prerender-html'
+      // visit still runs it when its fileRender pass wasn't handed
+      // `fileData` — that is what makes the visit self-sufficient: it
+      // resolves the file's resource + types from source instead of
+      // chaining off a prior index visit's outputs.
+      fileExtract:
+        Boolean(renderOptions?.fileExtract) &&
+        (runIndexSteps ||
+          (Boolean(renderOptions?.fileRender) && fileData == null)),
       cardRender: Boolean(renderOptions?.cardRender),
       fileRender: Boolean(renderOptions?.fileRender),
     };
     log.info(
-      `visit prerender url=${url} affinity=${affinityKey} realm=${realm} passes=${VISIT_PASS_ORDER.filter(
-        (p) => requested[p],
-      ).join(',')}`,
+      `visit prerender url=${url} affinity=${affinityKey} realm=${realm} visitType=${
+        visitType ?? 'fused'
+      } passes=${VISIT_PASS_ORDER.filter((p) => requested[p]).join(',')}`,
     );
 
     const { page, reused, launchMs, waits, pageId, release } =
@@ -770,6 +930,47 @@ export class RenderRunner {
     let response: RenderVisitResponse = {};
     let baseOptions: RenderRouteOptions = { ...(renderOptions ?? {}) };
     let didStashFileRenderData = false;
+    // Per-format wall-clock of the html-route steps, recorded directly onto
+    // `response.meta.diagnostics.renderFormatsMs` as each step completes so
+    // every return path — including the early short-circuits — carries
+    // whatever formats had run by then. A step that errors still records:
+    // its time-to-failure is exactly what a triage of `renderElapsedMs`
+    // wants to see. `decorateRenderErrorsWithTimings` merges its own timing
+    // fields around this block without disturbing it.
+    let recordFormatMs = (
+      rendering: 'card' | 'file',
+      format: string,
+      ms: number,
+    ) => {
+      let meta = (response.meta ??= {});
+      let diagnostics = (meta.diagnostics ??= {});
+      let renderFormatsMs: NonNullable<
+        RenderTimeoutDiagnostics['renderFormatsMs']
+      > = (diagnostics.renderFormatsMs ??= {});
+      (renderFormatsMs[rendering] ??= {})[format] = ms;
+    };
+    // The index-half sibling of `recordFormatMs`: per-route wall-clock of the
+    // index-visit route steps (`meta` / `icon` for a card, `fileExtract` /
+    // `icon` for a file), recorded onto `response.meta.diagnostics.indexRoutesMs`
+    // as each step completes. Decomposes the index visit's per-visit floor
+    // into measured route buckets instead of leaving it inferred from
+    // `renderElapsedMs`. Recorded wherever the step runs — a fused index
+    // pass folds the extract into the `meta` bucket (no `fileExtract` leg;
+    // the extract's share is itemized as `diagnostics.fileExtractMs`); a
+    // self-sufficient prerender-html visit records only its `fileExtract`
+    // leg.
+    let recordIndexRouteMs = (
+      rendering: 'card' | 'file',
+      route: string,
+      ms: number,
+    ) => {
+      let meta = (response.meta ??= {});
+      let diagnostics = (meta.diagnostics ??= {});
+      let indexRoutesMs: NonNullable<
+        RenderTimeoutDiagnostics['indexRoutesMs']
+      > = (diagnostics.indexRoutesMs ??= {});
+      (indexRoutesMs[rendering] ??= {})[route] = ms;
+    };
 
     try {
       // Page acquired but untouched — tag as 'queued'. The between-pass
@@ -789,33 +990,67 @@ export class RenderRunner {
       // originating priority instead of silently dropping to 0. Always
       // overwrite (including with undefined) so a tab reused across
       // multiple visits never bleeds a prior visit's values into the
-      // next render.
-      await page.evaluate(
-        (
-          sessionAuth: string,
-          id: string | undefined,
-          jobPriority: number | undefined,
-        ) => {
-          localStorage.setItem('boxel-session', sessionAuth);
-          (globalThis as unknown as { __boxelJobId?: string }).__boxelJobId =
-            id;
+      // next render. The same round-trip reads back the page's host
+      // capabilities: the page pins whatever host build it loaded, and the
+      // host deploys independently of this server, so render strategies the
+      // host must understand are gated per page on its advertised
+      // `__boxelHostCapabilities`.
+      let hostCapabilities = await abortable(signal, () =>
+        page.evaluate(
           (
-            globalThis as unknown as { __boxelJobPriority?: number }
-          ).__boxelJobPriority = jobPriority;
-        },
-        auth,
-        jobId,
-        priority,
+            sessionAuth: string,
+            id: string | undefined,
+            jobPriority: number | undefined,
+          ) => {
+            localStorage.setItem('boxel-session', sessionAuth);
+            (globalThis as unknown as { __boxelJobId?: string }).__boxelJobId =
+              id;
+            (
+              globalThis as unknown as { __boxelJobPriority?: number }
+            ).__boxelJobPriority = jobPriority;
+            return (
+              (
+                globalThis as unknown as {
+                  __boxelHostCapabilities?: Record<string, boolean>;
+                }
+              ).__boxelHostCapabilities ?? {}
+            );
+          },
+          auth,
+          jobId,
+          priority,
+        ),
       );
+      // A card-instance index visit fuses the file extract into the
+      // render.meta transition — one transition + settle for both the
+      // instance row and the file row — when the page's host build supports
+      // it. Other visit shapes keep per-pass transitions: the fused (union)
+      // visit runs meta last (after the html renders mark linksTo fields
+      // used), and a prerender-html visit's extract is its own
+      // self-sufficiency step.
+      let fusedIndexPass =
+        visitType === 'index' &&
+        requested.cardRender &&
+        requested.fileExtract &&
+        Boolean(hostCapabilities?.fusedIndexMeta) &&
+        !opts?.simulateLegacyHost;
+      if (fusedIndexPass) {
+        requested.fileExtract = false;
+        log.debug(
+          `visit prerender url=${url} affinity=${affinityKey} fusing fileExtract into render.meta`,
+        );
+      }
       // defense-in-depth: clear any stale file render data left on globalThis
       // from a prior visit before we start running passes.
-      await page
-        .evaluate(() => {
-          delete (globalThis as any).__boxelFileRenderData;
-        })
-        .catch(() => {
-          /* best-effort */
-        });
+      await abortable(signal, () =>
+        page
+          .evaluate(() => {
+            delete (globalThis as any).__boxelFileRenderData;
+          })
+          .catch(() => {
+            /* best-effort */
+          }),
+      );
 
       // Serialized options carry the pass flags into the route — the host
       // render/module routes consume these to decide which mode to run. The
@@ -823,16 +1058,20 @@ export class RenderRunner {
       // must not attempt another loader reset, so we strip it after first use.
       let clearCacheConsumed = false;
       let optionsForPass = (
-        pass: 'fileExtract' | 'cardRender' | 'fileRender',
+        pass: 'fileExtract' | 'cardRender' | 'fileRender' | 'fusedIndex',
       ) => {
         let optionsForThisPass: RenderRouteOptions = {
           ...baseOptions,
-          // Always set only the flag for the current pass so the host route
+          // Set only the flag(s) for the current pass so the host route
           // picks the right branch in #buildModel regardless of what other
-          // passes are part of this visit.
-          fileExtract: pass === 'fileExtract' ? true : undefined,
+          // passes are part of this visit. The fused index pass carries both
+          // flags — the host serves it from the card branch and folds the
+          // file extract into the render.meta payload.
+          fileExtract:
+            pass === 'fileExtract' || pass === 'fusedIndex' ? true : undefined,
           fileRender: pass === 'fileRender' ? true : undefined,
-          cardRender: pass === 'cardRender' ? true : undefined,
+          cardRender:
+            pass === 'cardRender' || pass === 'fusedIndex' ? true : undefined,
         };
         if (!clearCacheConsumed && baseOptions.clearCache) {
           optionsForThisPass.clearCache = true;
@@ -851,8 +1090,13 @@ export class RenderRunner {
         return optionsForThisPass;
       };
 
-      // ── fileExtract pass ───────────────────────────────────────────────
-      if (requested.fileExtract) {
+      // Runs a standalone render.file-extract transition and stores its
+      // result on `response.fileExtract`. Serves the fileExtract pass and
+      // the fused-index fallback (a card render error must still yield a
+      // file row). Returns 'short-circuit' when the visit must stop here:
+      // the page was evicted (unusable), or the extract hit an auth wall
+      // every later pass would hit too.
+      let runFileExtractPass = async (): Promise<'ok' | 'short-circuit'> => {
         let extractOptions = optionsForPass('fileExtract');
         let serializedOptions = serializeRenderRouteOptions(extractOptions);
         let captureOptions: CaptureOptions = {
@@ -861,6 +1105,7 @@ export class RenderRunner {
           simulateTimeoutMs: opts?.simulateTimeoutMs,
           timeoutMs: opts?.timeoutMs,
         };
+        let extractStart = Date.now();
         let capture = await withTimeout(
           page,
           async () => {
@@ -874,7 +1119,10 @@ export class RenderRunner {
             return await captureFileExtract(page, captureOptions);
           },
           opts?.timeoutMs,
+          this.#profileContext(affinityKey, url, 'file-extract', jobId),
+          signal,
         );
+        recordIndexRouteMs('file', 'fileExtract', Date.now() - extractStart);
         let extractResponse: FileExtractResponse;
         if (isRenderError(capture)) {
           let renderError = capture as RenderError;
@@ -899,14 +1147,7 @@ export class RenderRunner {
           if (poolInfo.evicted) {
             response.fileExtract = extractResponse;
             response.pageUnusableError = renderError;
-            return this.#finalizeVisit(
-              response,
-              pageId,
-              renderStart,
-              launchMs,
-              waits,
-              poolInfo,
-            );
+            return 'short-circuit';
           }
           if (this.#isAuthError(renderError)) {
             // Auth failure means the caller isn't allowed — the page itself
@@ -914,14 +1155,7 @@ export class RenderRunner {
             // subsequent passes (they'd hit the same auth failure) without
             // marking the page unusable.
             response.fileExtract = extractResponse;
-            return this.#finalizeVisit(
-              response,
-              pageId,
-              renderStart,
-              launchMs,
-              waits,
-              poolInfo,
-            );
+            return 'short-circuit';
           }
         } else {
           let fileCapture = capture as FileExtractCapture;
@@ -980,14 +1214,30 @@ export class RenderRunner {
             };
           }
         }
-        extractResponse.error = this.#mergeConsoleErrors(
+        // The merge always runs so the pass drains the page's console-error
+        // buffer, but only a produced error is assigned: an unconditional
+        // assignment would plant an `error: undefined` own-key, making a
+        // standalone extract deep-unequal to a fused one that carries no
+        // error key at all.
+        let mergedExtractError = this.#mergeConsoleErrors(
           pageId,
           extractResponse.error,
         );
+        if (mergedExtractError) {
+          extractResponse.error = mergedExtractError;
+        }
         response.fileExtract = extractResponse;
         if (poolInfo.evicted) {
           response.pageUnusableError =
             extractResponse.error ?? response.pageUnusableError;
+          return 'short-circuit';
+        }
+        return 'ok';
+      };
+
+      // ── fileExtract pass ───────────────────────────────────────────────
+      if (requested.fileExtract) {
+        if ((await runFileExtractPass()) === 'short-circuit') {
           return this.#finalizeVisit(
             response,
             pageId,
@@ -1002,7 +1252,9 @@ export class RenderRunner {
       // ── cardRender pass ────────────────────────────────────────────────
       throwIfAborted(signal, 'rendering');
       if (requested.cardRender) {
-        let cardOptions = optionsForPass('cardRender');
+        let cardOptions = optionsForPass(
+          fusedIndexPass ? 'fusedIndex' : 'cardRender',
+        );
         let serializedOptions = serializeRenderRouteOptions(cardOptions);
         let optionsSegment = encodeURIComponent(serializedOptions);
         let nonce = String(++this.#nonce);
@@ -1012,13 +1264,17 @@ export class RenderRunner {
           simulateTimeoutMs: opts?.simulateTimeoutMs,
           timeoutMs: opts?.timeoutMs,
         };
-        reproduceLog.debug(
-          `manually visit prerendered url ${url} at: ${this.#boxelHostURL}/render/${encodeURIComponent(url)}/${nonce}/${optionsSegment}/html/isolated/0 with boxel-session = ${auth}`,
-        );
+        if (runHtmlSteps) {
+          reproduceLog.debug(
+            `manually visit prerendered url ${url} at: ${this.#boxelHostURL}/render/${encodeURIComponent(url)}/${nonce}/${optionsSegment}/html/isolated/0 with boxel-session = ${auth}`,
+          );
+        }
 
         let cardError: RenderError | undefined;
         let cardShortCircuit = false;
         let isolatedHTML: string | null = null;
+        let iconHTML: string | null = null;
+        let capturedDeps: string[] | null = null;
         let applyStepError = (stepError: RenderError, evicted: boolean) => {
           cardError = cardError ?? stepError;
           markTimeout(stepError);
@@ -1033,48 +1289,35 @@ export class RenderRunner {
         let runTimedStep = async <T>(
           step: string,
           fn: () => Promise<T | RenderError>,
+          format?: string,
+          indexRoute?: string,
         ): Promise<T | undefined> => {
           if (cardShortCircuit) {
             return;
           }
+          let stepStart = Date.now();
           let stepResult = await this.#step(affinityKey, step, () =>
-            withTimeout(page, fn, opts?.timeoutMs),
+            withTimeout(
+              page,
+              fn,
+              opts?.timeoutMs,
+              this.#profileContext(affinityKey, url, step, jobId),
+              signal,
+            ),
           );
+          let elapsed = Date.now() - stepStart;
+          if (format) {
+            recordFormatMs('card', format, elapsed);
+          }
+          if (indexRoute) {
+            recordIndexRouteMs('card', indexRoute, elapsed);
+          }
           if (stepResult.ok) {
             return stepResult.value as T;
           }
           applyStepError(stepResult.error, stepResult.evicted);
           return;
         };
-
-        let isolatedResult = await withTimeout(
-          page,
-          async () => {
-            await transitionTo(
-              page,
-              'render.html',
-              url,
-              nonce,
-              serializedOptions,
-              'isolated',
-              '0',
-            );
-            return await renderHTML(page, 'isolated', 0, captureOptions);
-          },
-          opts?.timeoutMs,
-        );
-        if (isRenderError(isolatedResult)) {
-          cardShortCircuit = true;
-          let renderError = isolatedResult as RenderError;
-          let evicted = await this.#maybeEvict(
-            affinityKey,
-            'visit card isolated render',
-            renderError,
-          );
-          applyStepError(renderError, evicted);
-        } else {
-          isolatedHTML = isolatedResult as string;
-        }
 
         let emptyMeta: PrerenderMeta = {
           serialized: null,
@@ -1084,22 +1327,159 @@ export class RenderRunner {
           types: null,
         };
         let meta: PrerenderMeta = emptyMeta;
+
+        if (runHtmlSteps) {
+          let isolatedStart = Date.now();
+          let isolatedResult = await withTimeout(
+            page,
+            async () => {
+              await transitionTo(
+                page,
+                'render.html',
+                url,
+                nonce,
+                serializedOptions,
+                'isolated',
+                '0',
+              );
+              return await renderHTML(page, 'isolated', 0, captureOptions);
+            },
+            opts?.timeoutMs,
+            this.#profileContext(affinityKey, url, 'card isolated/0', jobId),
+            signal,
+          );
+          recordFormatMs('card', 'isolated', Date.now() - isolatedStart);
+          if (isRenderError(isolatedResult)) {
+            cardShortCircuit = true;
+            let renderError = isolatedResult as RenderError;
+            let evicted = await this.#maybeEvict(
+              affinityKey,
+              'visit card isolated render',
+              renderError,
+            );
+            applyStepError(renderError, evicted);
+          } else {
+            isolatedHTML = isolatedResult as string;
+          }
+          if (visitType === 'prerender-html' && !cardShortCircuit) {
+            // The card's runtime deps normally ride on render.meta, which a
+            // prerender-html visit never runs. The render route publishes the
+            // settle-time dependency snapshot (unresolved form) on a global;
+            // read it here so the HTML rendering still reports what it
+            // pulled in — the indexing job unions this with the index
+            // visit's meta deps.
+            capturedDeps = await abortable(signal, () =>
+              this.#readCapturedDeps(page),
+            );
+          }
+        } else {
+          // An index visit never touches the html route, so render.meta is
+          // its entry into the render app; the icon runs after it as an
+          // in-page child transition. Meta goes first because the icon is a
+          // pure function of the card's type (`types[0]`, which meta
+          // resolves): the job-scoped memo lets the first visit for a type
+          // render the icon and every later visit of that type reuse the
+          // captured markup, skipping the icon route. On a fused index pass
+          // this one transition also returns the file row's extract inside
+          // the payload.
+          let metaResult = await runTimedStep<FusedIndexMeta>(
+            'visit card render.meta',
+            async () => {
+              await transitionTo(
+                page,
+                'render.meta',
+                url,
+                nonce,
+                serializedOptions,
+              );
+              return await renderMeta(page, captureOptions);
+            },
+            undefined,
+            'meta',
+          );
+          if (metaResult !== undefined) {
+            // Split the extract off before `meta` is spread into
+            // `cardResponse` below — the card row's payload must never
+            // carry the file half.
+            let { fileExtract: fusedExtract, ...cardMeta } = metaResult;
+            meta = cardMeta;
+            if (fusedExtract) {
+              response.fileExtract = fusedExtract;
+            }
+          } else {
+            // The entry step failed, so the page is showing the error
+            // route: a subsequent capture would wait on fresh render
+            // output the page can no longer produce and ride out the
+            // full render timeout, evicting the tab. Skip the icon —
+            // the row is an error row either way. (A card whose meta
+            // errors deterministically — e.g. a computed that reads a
+            // broken link — takes this path on every visit.)
+            cardShortCircuit = true;
+          }
+          if (!cardShortCircuit) {
+            let iconMemo = this.#iconMemoFor(
+              affinityKey,
+              jobId,
+              baseOptions.loaderEpoch,
+            );
+            let iconTypeKey = meta.types?.[0];
+            // A clearCache visit is asked for a pristine render, so it
+            // bypasses the memo read; its fresh capture overwrites the
+            // entry below.
+            let memoizedIconHTML =
+              iconMemo && iconTypeKey !== undefined && !baseOptions.clearCache
+                ? iconMemo.icons.get(iconTypeKey)
+                : undefined;
+            if (memoizedIconHTML !== undefined) {
+              iconMemo!.hits++;
+              iconHTML = memoizedIconHTML;
+              log.debug(
+                `card icon memo hit type=${iconTypeKey} url=${url} affinity=${affinityKey}`,
+              );
+            } else {
+              let iconResult = await runTimedStep<string>(
+                'visit card icon render',
+                () => renderIcon(page, captureOptions),
+                undefined,
+                'icon',
+              );
+              if (iconResult !== undefined) {
+                iconHTML = iconResult;
+                if (iconMemo && iconTypeKey !== undefined) {
+                  iconMemo.misses++;
+                  iconMemo.icons.set(iconTypeKey, iconHTML);
+                }
+              }
+            }
+          }
+        }
+
         let typesForAncestors: PrerenderTypes = { types: null };
         let headHTML: string | null = null;
         let atomHTML: string | null = null;
-        let iconHTML: string | null = null;
         let embeddedHTML: Record<string, string> | null = null;
         let fittedHTML: Record<string, string> | null = null;
         let markdown: string | null = null;
 
-        if (!cardShortCircuit) {
-          const formatSteps = [
+        if (!cardShortCircuit && runHtmlSteps) {
+          const formatSteps: Array<{
+            name: string;
+            cb: () => Promise<string | RenderError>;
+            assign: (v: string) => void;
+            // html-route format key for `renderFormatsMs`; the icon step is
+            // index-half work and records an `indexRoutesMs` route timing
+            // instead of a format one.
+            format?: string;
+            // index-route key for `indexRoutesMs` (the icon step).
+            indexRoute?: string;
+          }> = [
             {
               name: 'visit card head render',
               cb: () => renderHTML(page, 'head', 0, captureOptions),
               assign: (v: string) => {
                 headHTML = v;
               },
+              format: 'head',
             },
             {
               name: 'visit card atom render',
@@ -1107,51 +1487,64 @@ export class RenderRunner {
               assign: (v: string) => {
                 atomHTML = v;
               },
+              format: 'atom',
             },
-            {
-              name: 'visit card icon render',
-              cb: () => renderIcon(page, captureOptions),
-              assign: (v: string) => {
-                iconHTML = v;
-              },
-            },
+            // The icon belongs to the index half; the fused visit renders it
+            // between atom and markdown.
+            ...(runIndexSteps
+              ? [
+                  {
+                    name: 'visit card icon render',
+                    cb: () => renderIcon(page, captureOptions),
+                    assign: (v: string) => {
+                      iconHTML = v;
+                    },
+                    indexRoute: 'icon',
+                  },
+                ]
+              : []),
             {
               name: 'visit card markdown render',
               cb: () => renderHTML(page, 'markdown', 0, captureOptions),
               assign: (v: string) => {
                 markdown = v;
               },
+              format: 'markdown',
             },
           ];
           for (let step of formatSteps) {
             if (cardShortCircuit) break;
-            let v = await runTimedStep<string>(step.name, step.cb);
+            let v = await runTimedStep<string>(
+              step.name,
+              step.cb,
+              step.format,
+              step.indexRoute,
+            );
             if (v !== undefined) step.assign(v);
           }
         }
 
-        // First pass is the lightweight /types route — just the type
-        // chain the ancestor renders below need. The full render.meta
-        // (serialized + searchDoc + deps + displayNames) runs once
-        // afterwards, because the fitted/embedded ancestor renders are
-        // what mark linksTo / linksToMany fields as "used"; the final
-        // renderMeta's queryableValue then includes those linked fields
-        // in the search doc. Running render.meta before the ancestor
-        // renders breaks the isUsed-via-non-isolated-render contract
-        // that
-        // `non-isolated formats render linked fields and those links appear in search doc`
-        // covers.
-        if (!cardShortCircuit) {
-          let typesResult = await runTimedStep<PrerenderTypes>(
-            'visit card render.types',
-            () => renderTypes(page, captureOptions),
-          );
-          if (typesResult !== undefined) {
-            typesForAncestors = typesResult;
+        // The ancestor type chain drives the fitted/embedded format renders.
+        // A caller that already holds the chain passes it in (the indexing
+        // job forwards the index visit's types); otherwise the lightweight
+        // /types route resolves it — just the chain, not the full
+        // render.meta (serialized + searchDoc + deps + displayNames), which
+        // belongs to the index half.
+        if (!cardShortCircuit && runHtmlSteps) {
+          if (cardTypes?.length) {
+            typesForAncestors = { types: cardTypes };
+          } else {
+            let typesResult = await runTimedStep<PrerenderTypes>(
+              'visit card render.types',
+              () => renderTypes(page, captureOptions),
+            );
+            if (typesResult !== undefined) {
+              typesForAncestors = typesResult;
+            }
           }
         }
 
-        if (!cardShortCircuit && typesForAncestors.types) {
+        if (!cardShortCircuit && runHtmlSteps && typesForAncestors.types) {
           const ancestorSteps = [
             {
               name: 'visit card fitted render',
@@ -1165,6 +1558,7 @@ export class RenderRunner {
               assign: (v: Record<string, string>) => {
                 fittedHTML = v;
               },
+              format: 'fitted',
             },
             {
               name: 'visit card embedded render',
@@ -1178,6 +1572,7 @@ export class RenderRunner {
               assign: (v: Record<string, string>) => {
                 embeddedHTML = v;
               },
+              format: 'embedded',
             },
           ];
           for (let step of ancestorSteps) {
@@ -1185,15 +1580,21 @@ export class RenderRunner {
             let v = await runTimedStep<Record<string, string>>(
               step.name,
               step.cb,
+              step.format,
             );
             if (v !== undefined) step.assign(v);
           }
         }
 
-        if (!cardShortCircuit) {
+        // The fused visit runs meta last, after the format renders above
+        // marked the linksTo / linksToMany fields they read as "used"; the
+        // index visit ran meta as its entry instead.
+        if (!cardShortCircuit && runIndexSteps && runHtmlSteps) {
           let finalMetaResult = await runTimedStep<PrerenderMeta>(
             'visit card render.meta',
             () => renderMeta(page, captureOptions),
+            undefined,
+            'meta',
           );
           if (finalMetaResult !== undefined) {
             meta = finalMetaResult;
@@ -1202,6 +1603,7 @@ export class RenderRunner {
 
         let cardResponse: RenderResponse = {
           ...(meta as PrerenderMeta),
+          ...(capturedDeps ? { deps: capturedDeps } : {}),
           ...(cardError ? { error: cardError } : {}),
           iconHTML,
           isolatedHTML,
@@ -1227,6 +1629,52 @@ export class RenderRunner {
             waits,
             poolInfo,
           );
+        }
+
+        // ── fused-extract fallback ─────────────────────────────────────
+        // A fused index pass carries the file extract inside render.meta,
+        // so a card render error leaves the file half missing. The page is
+        // still operational here — the eviction path returned above, and
+        // eviction is reserved for errors that wedge the Ember run loop
+        // (the window-level trap in the host's render route); a route-level
+        // card error leaves the page fully able to serve transitions. A
+        // broken card must still yield a good file row, so run the
+        // standalone extract transition. On the eviction path no fallback
+        // is possible (nothing can run on an unusable page), so the file
+        // half is absent for that attempt and its row degrades to an error
+        // row until the next index of the file. Auth failure is the other
+        // exception: the extract would hit the same wall, so mirror the
+        // card error onto the file half and end the visit — the same
+        // short-circuit a standalone extract pass takes on auth failure.
+        if (fusedIndexPass && !response.fileExtract) {
+          if (cardError && this.#isAuthError(cardError)) {
+            response.fileExtract = {
+              id: url,
+              nonce,
+              status: 'error',
+              searchDoc: null,
+              deps: cardError.error.deps ?? [],
+              error: cardError,
+            };
+            return this.#finalizeVisit(
+              response,
+              pageId,
+              renderStart,
+              launchMs,
+              waits,
+              poolInfo,
+            );
+          }
+          if ((await runFileExtractPass()) === 'short-circuit') {
+            return this.#finalizeVisit(
+              response,
+              pageId,
+              renderStart,
+              launchMs,
+              waits,
+              poolInfo,
+            );
+          }
         }
       }
 
@@ -1281,11 +1729,30 @@ export class RenderRunner {
             timeoutMs: opts?.timeoutMs,
           };
 
-          // stash file data for the render route model hook to consume
-          await page.evaluate((data) => {
-            (globalThis as any).__boxelFileRenderData = data;
-          }, effectiveFileData);
-          didStashFileRenderData = true;
+          // The index visit's only page work for a file is its icon, which
+          // is a pure function of the file's type (`effectiveTypes[0]`,
+          // resolved by the extract pass): on a memo hit the pass touches
+          // the page not at all — including the file-data stash, which only
+          // the render routes consume. A clearCache visit bypasses the memo
+          // read (see the card pass).
+          let iconMemo = runHtmlSteps
+            ? undefined
+            : this.#iconMemoFor(affinityKey, jobId, baseOptions.loaderEpoch);
+          let iconTypeKey = effectiveTypes?.[0];
+          let memoizedIconHTML =
+            iconMemo && iconTypeKey !== undefined && !baseOptions.clearCache
+              ? iconMemo.icons.get(iconTypeKey)
+              : undefined;
+
+          if (memoizedIconHTML === undefined) {
+            // stash file data for the render route model hook to consume
+            await abortable(signal, () =>
+              page.evaluate((data) => {
+                (globalThis as any).__boxelFileRenderData = data;
+              }, effectiveFileData),
+            );
+            didStashFileRenderData = true;
+          }
 
           let fileError: RenderError | undefined;
           let fileShortCircuit = false;
@@ -1309,48 +1776,98 @@ export class RenderRunner {
             }
           };
 
-          let isolatedResult = await withTimeout(
-            page,
-            async () => {
-              await transitionTo(
-                page,
-                'render.html',
-                url,
-                nonce,
-                serializedOptions,
-                'isolated',
-                '0',
-              );
-              return await captureResult(page, 'innerHTML', captureOptions);
-            },
-            opts?.timeoutMs,
-          );
-          if (isRenderError(isolatedResult)) {
-            let renderError = isolatedResult as RenderError;
-            let evicted = await this.#maybeEvict(
-              affinityKey,
-              'visit file isolated render',
-              renderError,
+          if (runHtmlSteps) {
+            let isolatedStart = Date.now();
+            let isolatedResult = await withTimeout(
+              page,
+              async () => {
+                await transitionTo(
+                  page,
+                  'render.html',
+                  url,
+                  nonce,
+                  serializedOptions,
+                  'isolated',
+                  '0',
+                );
+                return await captureResult(page, 'innerHTML', captureOptions);
+              },
+              opts?.timeoutMs,
+              this.#profileContext(affinityKey, url, 'file isolated/0', jobId),
+              signal,
             );
-            applyStepError(renderError, evicted);
-          } else {
-            let capture = isolatedResult as RenderCapture;
-            if (capture.status === 'ready') {
-              isolatedHTML = capture.value;
-            } else {
-              let capErr = this.#captureToError(capture);
+            recordFormatMs('file', 'isolated', Date.now() - isolatedStart);
+            if (isRenderError(isolatedResult)) {
+              let renderError = isolatedResult as RenderError;
               let evicted = await this.#maybeEvict(
                 affinityKey,
                 'visit file isolated render',
-                capErr,
+                renderError,
               );
-              if (capErr) {
-                applyStepError(capErr, evicted);
+              applyStepError(renderError, evicted);
+            } else {
+              let capture = isolatedResult as RenderCapture;
+              if (capture.status === 'ready') {
+                isolatedHTML = capture.value;
+              } else {
+                let capErr = this.#captureToError(capture);
+                let evicted = await this.#maybeEvict(
+                  affinityKey,
+                  'visit file isolated render',
+                  capErr,
+                );
+                if (capErr) {
+                  applyStepError(capErr, evicted);
+                }
+              }
+            }
+          } else if (memoizedIconHTML !== undefined) {
+            iconMemo!.hits++;
+            iconHTML = memoizedIconHTML;
+            log.debug(
+              `file icon memo hit type=${iconTypeKey} url=${url} affinity=${affinityKey}`,
+            );
+          } else {
+            // The file's icon belongs to the index half, and an index visit
+            // never touches the html route — so the icon render is its entry
+            // into the render app for this file.
+            let iconStart = Date.now();
+            let iconResult = await withTimeout(
+              page,
+              async () => {
+                await transitionTo(
+                  page,
+                  'render.icon',
+                  url,
+                  nonce,
+                  serializedOptions,
+                );
+                return await renderIcon(page, captureOptions);
+              },
+              opts?.timeoutMs,
+              this.#profileContext(affinityKey, url, 'file icon', jobId),
+              signal,
+            );
+            recordIndexRouteMs('file', 'icon', Date.now() - iconStart);
+            if (isRenderError(iconResult)) {
+              let renderError = iconResult as RenderError;
+              let evicted = await this.#maybeEvict(
+                affinityKey,
+                'visit file icon render',
+                renderError,
+              );
+              applyStepError(renderError, evicted);
+            } else {
+              iconHTML = iconResult as string;
+              if (iconMemo && iconTypeKey !== undefined) {
+                iconMemo.misses++;
+                iconMemo.icons.set(iconTypeKey, iconHTML);
               }
             }
           }
 
-          if (!fileShortCircuit) {
+          if (!fileShortCircuit && runHtmlSteps) {
+            let headStart = Date.now();
             let headHTMLResult = await this.#step(
               affinityKey,
               'visit file head render',
@@ -1359,8 +1876,11 @@ export class RenderRunner {
                   page,
                   () => renderHTML(page, 'head', 0, captureOptions),
                   opts?.timeoutMs,
+                  this.#profileContext(affinityKey, url, 'file head/0', jobId),
+                  signal,
                 ),
             );
+            recordFormatMs('file', 'head', Date.now() - headStart);
             if (headHTMLResult.ok) {
               headHTML = headHTMLResult.value as string;
             } else {
@@ -1368,11 +1888,17 @@ export class RenderRunner {
             }
           }
 
-          if (!fileShortCircuit) {
+          if (!fileShortCircuit && runHtmlSteps) {
             let steps: Array<{
               name: string;
               cb: () => Promise<string | Record<string, string> | RenderError>;
               assign: (value: string | Record<string, string>) => void;
+              // html-route format key for `renderFormatsMs`; the icon step
+              // is index-half work and records an `indexRoutesMs` route
+              // timing instead of a format one.
+              format?: string;
+              // index-route key for `indexRoutesMs` (the icon step).
+              indexRoute?: string;
             }> = [];
 
             if (effectiveTypes && effectiveTypes.length > 0) {
@@ -1389,6 +1915,7 @@ export class RenderRunner {
                   assign: (v) => {
                     fittedHTML = v as Record<string, string>;
                   },
+                  format: 'fitted',
                 },
                 {
                   name: 'visit file embedded render',
@@ -1402,39 +1929,59 @@ export class RenderRunner {
                   assign: (v) => {
                     embeddedHTML = v as Record<string, string>;
                   },
+                  format: 'embedded',
                 },
               );
             }
 
-            steps.push(
-              {
-                name: 'visit file atom render',
-                cb: () => renderHTML(page, 'atom', 0, captureOptions),
-                assign: (v) => {
-                  atomHTML = v as string;
-                },
+            steps.push({
+              name: 'visit file atom render',
+              cb: () => renderHTML(page, 'atom', 0, captureOptions),
+              assign: (v) => {
+                atomHTML = v as string;
               },
-              {
+              format: 'atom',
+            });
+            if (runIndexSteps) {
+              // The icon belongs to the index half; the fused visit renders
+              // it between atom and markdown.
+              steps.push({
                 name: 'visit file icon render',
                 cb: () => renderIcon(page, captureOptions),
                 assign: (v) => {
                   iconHTML = v as string;
                 },
+                indexRoute: 'icon',
+              });
+            }
+            steps.push({
+              name: 'visit file markdown render',
+              cb: () => renderHTML(page, 'markdown', 0, captureOptions),
+              assign: (v) => {
+                markdown = v as string;
               },
-              {
-                name: 'visit file markdown render',
-                cb: () => renderHTML(page, 'markdown', 0, captureOptions),
-                assign: (v) => {
-                  markdown = v as string;
-                },
-              },
-            );
+              format: 'markdown',
+            });
 
             for (let step of steps) {
               if (fileShortCircuit) break;
+              let stepStart = Date.now();
               let res = await this.#step(affinityKey, step.name, () =>
-                withTimeout(page, step.cb, opts?.timeoutMs),
+                withTimeout(
+                  page,
+                  step.cb,
+                  opts?.timeoutMs,
+                  this.#profileContext(affinityKey, url, step.name, jobId),
+                  signal,
+                ),
               );
+              let elapsed = Date.now() - stepStart;
+              if (step.format) {
+                recordFormatMs('file', step.format, elapsed);
+              }
+              if (step.indexRoute) {
+                recordIndexRouteMs('file', step.indexRoute, elapsed);
+              }
               if (res.ok) {
                 step.assign(res.value);
               } else {
@@ -1476,13 +2023,24 @@ export class RenderRunner {
       );
     } finally {
       if (didStashFileRenderData) {
-        await page
-          .evaluate(() => {
-            delete (globalThis as any).__boxelFileRenderData;
-          })
-          .catch(() => {
-            /* best-effort cleanup */
-          });
+        // The stash only matters to a page that will render again, and
+        // against a wedged page this evaluate can hang until the
+        // protocol timeout — so race it against the signal and swallow
+        // the cancellation: a cancelled visit's page is about to be
+        // disposed, and holding up `release()` (and the disposal
+        // behind it) for cosmetic cleanup would pin the affinity for
+        // exactly the window this cancellation exists to reclaim.
+        await abortable(signal, () =>
+          page
+            .evaluate(() => {
+              delete (globalThis as any).__boxelFileRenderData;
+            })
+            .catch(() => {
+              /* best-effort cleanup */
+            }),
+        ).catch(() => {
+          /* caller gone — the page is being disposed, stash and all */
+        });
       }
       release();
     }
@@ -1542,6 +2100,26 @@ export class RenderRunner {
   #isAuthError(err?: RenderError): boolean {
     let status = Number(err?.error?.status);
     return status === 401 || status === 403;
+  }
+
+  // Settle-time runtime-dependency snapshot the render route publishes on
+  // `globalThis.__boxelRenderCapturedDeps` (already in unresolved/prefix
+  // form). Best-effort: a page that died mid-read reports null rather than
+  // failing the visit.
+  async #readCapturedDeps(page: Page): Promise<string[] | null> {
+    try {
+      let deps = await page.evaluate(
+        () =>
+          (globalThis as { __boxelRenderCapturedDeps?: unknown })
+            .__boxelRenderCapturedDeps ?? null,
+      );
+      if (!Array.isArray(deps)) {
+        return null;
+      }
+      return deps.filter((dep): dep is string => typeof dep === 'string');
+    } catch (_e) {
+      return null;
+    }
   }
 
   async #step<T>(

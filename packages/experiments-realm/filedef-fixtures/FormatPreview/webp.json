@@ -1,0 +1,47 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "webp · Format Preview",
+      "cardInfo": {
+        "name": "webp · Format Preview",
+        "summary": "Simple, moderate, and complex webp fixtures across atom, embedded, isolated, and the 16 fitted envelopes."
+      }
+    },
+    "relationships": {
+      "previewFiles.0": {
+        "links": {
+          "self": "../samples/webp-simple.webp"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/webp-simple.webp"
+        }
+      },
+      "previewFiles.1": {
+        "links": {
+          "self": "../samples/webp-moderate.webp"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/webp-moderate.webp"
+        }
+      },
+      "previewFiles.2": {
+        "links": {
+          "self": "../samples/webp-complex.webp"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/webp-complex.webp"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../format-preview",
+        "name": "FileDefFormatPreview"
+      }
+    }
+  }
+}

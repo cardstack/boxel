@@ -6,12 +6,10 @@ import type { RealmInfo } from '@cardstack/runtime-common';
 import {
   identifyCard,
   internalKeyFor,
-  baseRealm,
   moduleFrom,
   getAncestor,
   SupportedMimeType,
   isResolvedCodeRef,
-  cardIdToURL,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import { isCodeRef, type CodeRef } from '@cardstack/runtime-common/code-ref';
@@ -19,16 +17,11 @@ import type { Loader } from '@cardstack/runtime-common/loader';
 
 import type CardService from '@cardstack/host/services/card-service';
 
-import type {
-  BaseDef,
-  Field,
-  FieldType,
-} from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-
 import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
-import type ResetService from '../services/reset';
+import type SessionService from '../services/session';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type { BaseDef, Field, FieldType } from '@cardstack/base/card-api';
 
 export type CodeRefType = CodeRef & {
   displayName: string;
@@ -63,7 +56,7 @@ export default class CardTypeService extends Service {
   @service declare private cardService: CardService;
   @service declare private network: NetworkService;
   @service declare private loaderService: LoaderService;
-  @service declare private reset: ResetService;
+  @service declare private session: SessionService;
 
   private typeCache: Map<string, Type> = new Map();
   private moduleInfoCache: Map<string, ModuleInfo> = new Map();
@@ -71,7 +64,7 @@ export default class CardTypeService extends Service {
 
   constructor(owner: Owner) {
     super(owner);
-    this.reset.register(this);
+    this.session.register(this);
   }
 
   resetState() {
@@ -114,18 +107,18 @@ export default class CardTypeService extends Service {
         localName: card.name,
       };
     }
-    let id = internalKeyFor(ref, undefined);
+    let id = internalKeyFor(ref, undefined, this.network.virtualNetwork);
     let cached = this.typeCache.get(id);
     if (cached) {
       return cached;
     }
     let moduleIdentifier = moduleFrom(ref);
-    let moduleURL = cardIdToURL(moduleIdentifier);
+    let moduleURL = this.network.virtualNetwork.toURL(moduleIdentifier);
     let moduleInfo =
       this.moduleInfoCache.get(moduleURL.href) ??
       (await this.fetchModuleInfo(moduleURL));
 
-    let api = await loader.import<typeof CardAPI>(`${baseRealm.url}card-api`);
+    let api = await loader.import<typeof CardAPI>('@cardstack/base/card-api');
     let { id: _remove, ...fields } = api.getFields(card, {
       includeComputeds: true,
     });

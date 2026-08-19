@@ -1,4 +1,4 @@
-import merge from 'lodash/merge';
+import { merge } from 'lodash-es';
 
 import {
   jobIdentity,
@@ -11,18 +11,18 @@ import {
   type LocalPath,
   type LooseCardResource,
   type RenderResponse,
-  type TimingDiagnostics,
-} from '../index';
+  type Diagnostics,
+} from '../index.ts';
 import {
   CardError,
   coerceErrorMessage,
   isCardError,
   serializableError,
-} from '../error';
-import { unresolveResourceInstanceURLs } from '../url';
-import type { IndexRunnerDependencyManager } from './dependency-resolver';
-import { uniqueDeps } from './dependency-collections';
-import { canonicalURL } from './dependency-url';
+} from '../error.ts';
+import { unresolveResourceInstanceURLs } from '../url.ts';
+import type { VirtualNetwork } from '../virtual-network.ts';
+import type { IndexRunnerDependencyManager } from './dependency-resolver.ts';
+import { uniqueDeps } from './dependency-collections.ts';
 
 export interface CardIndexerOptions {
   path: LocalPath;
@@ -34,13 +34,14 @@ export interface CardIndexerOptions {
   realmURL: URL;
   auth: string;
   jobInfo: JobInfo;
-  // Render result from the fused visit's cardRender pass. Always supplied
-  // by the fused indexer.
+  // Merged card result from the file's index + prerender-html visits.
+  // Always supplied by the visit-file indexer.
   precomputedRenderResult: RenderResponse;
-  // Timing / diagnostic payload attached to the fused-visit
-  // response; persisted onto `boxel_index.timing_diagnostics`.
-  timingDiagnostics?: TimingDiagnostics;
+  // Timing / diagnostic payload attached to the visit
+  // responses; persisted onto `boxel_index.diagnostics`.
+  diagnostics?: Diagnostics;
   dependencyResolver: IndexRunnerDependencyManager;
+  virtualNetwork: VirtualNetwork;
   updateEntry(
     instanceURL: URL,
     entry: InstanceEntry | InstanceErrorIndexEntry,
@@ -59,11 +60,29 @@ export async function performCardIndexing({
   auth: _auth,
   jobInfo,
   precomputedRenderResult,
-  timingDiagnostics,
+  diagnostics,
   dependencyResolver,
+  virtualNetwork,
   updateEntry,
   logWarn,
 }: CardIndexerOptions): Promise<void> {
+  // Post-render bookkeeping for this row starts now — dependency resolution and
+  // entry construction between the render completing and the row write. Stamped
+  // onto the diagnostics blob just before each write (which ends the
+  // bookkeeping window and starts the write the row can't time itself).
+  let bookkeepingStart = Date.now();
+  let withBookkeeping = (
+    d: Diagnostics | undefined,
+  ): Diagnostics | undefined =>
+    d
+      ? {
+          ...d,
+          indexVisitClientMs: {
+            ...(d.indexVisitClientMs ?? {}),
+            bookkeeping: Date.now() - bookkeepingStart,
+          },
+        }
+      : d;
   let uncaughtError: Error | undefined;
   let renderResult: RenderResponse = precomputedRenderResult;
 
@@ -83,7 +102,7 @@ export async function performCardIndexing({
       // Convert instance URLs (id, relationship links/data) from resolved HTTP
       // URLs to registered prefix form (e.g. @cardstack/catalog/...) so that
       // stored card data is portable across environments.
-      unresolveResourceInstanceURLs(serialized.data);
+      unresolveResourceInstanceURLs(serialized.data, virtualNetwork);
     }
   } catch (err: unknown) {
     uncaughtError = uncaughtError ?? (err as Error);
@@ -145,12 +164,17 @@ export async function performCardIndexing({
     renderError = normalizeToErrorEntry(renderResult?.error, uncaughtError);
     let runtimeErrorDeps = renderResult?.deps ?? [];
     let metaModuleDeps = modulesConsumedInMeta(resource.meta).map((m) =>
-      canonicalURL(m, instanceURL.href),
+      dependencyResolver.canonicalURL(m, instanceURL.href),
     );
     let errorIdDep =
       renderError.error.id &&
       renderError.error.id.replace(/\.json$/, '') !== instanceURL.href
-        ? [canonicalURL(renderError.error.id, instanceURL.href)]
+        ? [
+            dependencyResolver.canonicalURL(
+              renderError.error.id,
+              instanceURL.href,
+            ),
+          ]
         : undefined;
 
     let queryFieldPaths = dependencyResolver.extractQueryFieldRelationshipPaths(
@@ -199,7 +223,10 @@ export async function performCardIndexing({
     logWarn(
       `${jobIdentity(jobInfo)} encountered error indexing card instance ${path}: ${renderError.error.message}`,
     );
-    await updateEntry(instanceURL, { ...renderError, timingDiagnostics });
+    await updateEntry(instanceURL, {
+      ...renderError,
+      diagnostics: withBookkeeping(diagnostics),
+    });
     return;
   }
 
@@ -244,7 +271,7 @@ export async function performCardIndexing({
         typeof searchDoc?._cardType === 'string'
           ? searchDoc._cardType
           : undefined,
-      timingDiagnostics,
+      diagnostics: withBookkeeping(diagnostics),
     });
     return;
   }
@@ -265,6 +292,6 @@ export async function performCardIndexing({
     types: types!,
     displayNames: displayNames ?? [],
     deps,
-    timingDiagnostics,
+    diagnostics: withBookkeeping(diagnostics),
   });
 }

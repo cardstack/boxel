@@ -1,7 +1,8 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
-import type { RealmHttpServer as Server } from '../server';
+import type { RealmHttpServer as Server } from '../server.ts';
 import type { DirResult } from 'tmp';
 
 import type { Realm } from '@cardstack/runtime-common';
@@ -9,10 +10,10 @@ import {
   setupPermissionedRealmCached,
   testRealmHref,
   createJWT,
-} from './helpers';
+} from './helpers/index.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('Realm-specific Endpoints | card dependencies requests', function () {
     let testRealm: Realm;
     let request: SuperTest<Test>;
@@ -61,7 +62,7 @@ module(basename(__filename), function () {
           let result: string[] = JSON.parse(response.text.trim());
 
           assert.ok(
-            result.includes('https://cardstack.com/base/card-api'),
+            result.includes('@cardstack/base/card-api'),
             'card-api is a dependency',
           );
           assert.false(
@@ -81,7 +82,7 @@ module(basename(__filename), function () {
           let result: string[] = JSON.parse(response.text.trim());
 
           assert.ok(
-            result.includes('https://cardstack.com/base/card-api'),
+            result.includes('@cardstack/base/card-api'),
             'card-api is a dependency',
           );
           assert.false(

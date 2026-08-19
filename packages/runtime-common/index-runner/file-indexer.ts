@@ -10,20 +10,23 @@ import {
   type JobInfo,
   type LocalPath,
   type ResolvedCodeRef,
-  type TimingDiagnostics,
-} from '../index';
+  type Diagnostics,
+} from '../index.ts';
 import {
   CardError,
   coerceErrorMessage,
   isCardError,
   serializableError,
-} from '../error';
-import type { IndexRunnerDependencyManager } from './dependency-resolver';
-import { uniqueDeps } from './dependency-collections';
+} from '../error.ts';
+import type { IndexRunnerDependencyManager } from './dependency-resolver.ts';
+import { uniqueDeps } from './dependency-collections.ts';
 import {
   BASE_FILE_DEF_CODE_REF,
   resolveFileDefCodeRef,
-} from '../file-def-code-ref';
+} from '../file-def-code-ref.ts';
+import { baseRef } from '../constants.ts';
+import { CARD_INSTANCE_FILE_KEY } from '../search-doc-keys.ts';
+import type { VirtualNetwork } from '../virtual-network.ts';
 
 export interface FileIndexerOptions {
   path: LocalPath;
@@ -31,19 +34,23 @@ export interface FileIndexerOptions {
   lastModified: number;
   resourceCreatedAt: number;
   hasModulePrerender?: boolean;
+  // True when this file is a card-instance .json — the fused visit dual-
+  // indexes those (an `instance` row plus this `file` row).
+  isCardInstance?: boolean;
   realmURL: URL;
   auth: string;
   jobInfo: JobInfo;
-  // Extract / render results from the fused visit. extractResult may be
-  // undefined if the visit short-circuited before the fileExtract pass ran;
-  // renderResult may be undefined if the visit skipped fileRender (e.g. for
-  // module files, which produce HTML via their own module prerender).
+  // Extract result from the index visit and merged render result from the
+  // index + prerender-html visits. extractResult may be undefined if the
+  // visit short-circuited before the fileExtract pass ran; renderResult may
+  // be undefined if no visit produced a file rendering.
   precomputedExtractResult: FileExtractResponse | undefined;
   precomputedRenderResult?: FileRenderResponse;
-  // Timing / diagnostic payload attached to the fused-visit response;
-  // persisted onto `boxel_index.timing_diagnostics` for this file's row.
-  timingDiagnostics?: TimingDiagnostics;
+  // Timing / diagnostic payload attached to the visit responses;
+  // persisted onto `boxel_index.diagnostics` for this file's row.
+  diagnostics?: Diagnostics;
   dependencyResolver: IndexRunnerDependencyManager;
+  virtualNetwork: VirtualNetwork;
   updateEntry(
     entryURL: URL,
     entry: FileEntry | FileErrorIndexEntry,
@@ -57,21 +64,38 @@ export async function performFileIndexing({
   lastModified,
   resourceCreatedAt,
   hasModulePrerender,
+  isCardInstance,
   realmURL: _realmURL,
   auth: _auth,
   jobInfo,
   precomputedExtractResult,
   precomputedRenderResult,
-  timingDiagnostics,
+  diagnostics,
   dependencyResolver,
+  virtualNetwork,
   updateEntry,
   logWarn,
 }: FileIndexerOptions): Promise<'indexed' | 'error'> {
+  // See the card indexer: bookkeeping is the post-render, pre-write window for
+  // this file's row, stamped onto the diagnostics blob just before each write.
+  let bookkeepingStart = Date.now();
+  let withBookkeeping = (
+    d: Diagnostics | undefined,
+  ): Diagnostics | undefined =>
+    d
+      ? {
+          ...d,
+          indexVisitClientMs: {
+            ...(d.indexVisitClientMs ?? {}),
+            bookkeeping: Date.now() - bookkeepingStart,
+          },
+        }
+      : d;
   let entryURL = new URL(fileURL);
   let name = path.split('/').pop() ?? path;
   let contentType = inferContentType(name);
 
-  let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL));
+  let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL), virtualNetwork);
   let fileTypeRefs = [fileDefCodeRef];
   if (
     fileDefCodeRef.module !== BASE_FILE_DEF_CODE_REF.module ||
@@ -79,6 +103,12 @@ export async function performFileIndexing({
   ) {
     fileTypeRefs.push(BASE_FILE_DEF_CODE_REF);
   }
+  // Terminate the chain at BaseDef (the common ancestor of FileDef and CardDef)
+  // so a `{ type: baseRef }` filter matches both file and card-instance rows —
+  // e.g. `scope: 'all'` searches wanting one type ref for "everything". The
+  // instance chain (render/meta.ts `getTypes`) and the extractor chain
+  // (file-def-attributes-extractor.ts `getTypes`) append it too.
+  fileTypeRefs.push(baseRef);
 
   let extractResult: FileExtractResponse | undefined = precomputedExtractResult;
   let uncaughtError: Error | undefined;
@@ -145,7 +175,10 @@ export async function performFileIndexing({
     logWarn(
       `${jobIdentity(jobInfo)} encountered error indexing file ${path}: ${renderError.error.message}`,
     );
-    await updateEntry(entryURL, { ...renderError, timingDiagnostics });
+    await updateEntry(entryURL, {
+      ...renderError,
+      diagnostics: withBookkeeping(diagnostics),
+    });
     return 'error';
   }
 
@@ -156,10 +189,58 @@ export async function performFileIndexing({
   }
 
   let fallbackTypes = fileTypeRefs.map((ref: ResolvedCodeRef) =>
-    internalKeyFor(ref, undefined),
+    internalKeyFor(ref, undefined, virtualNetwork),
   );
   let fileTypes = extractResult.types ?? fallbackTypes;
   let deps = new Set(extractResult.deps ?? []);
+
+  // Shared by the success entry and the dependency-error entry below, so the
+  // two rows carry the same search keys. Two of them are synthetic (stamped
+  // after the extractor's searchDoc so they win deterministically):
+  // - `_isCardInstanceFile` marks the `file` row of a dual-indexed card-instance
+  //   .json so mixed cards+files search can exclude it (the card already
+  //   appears via its `instance` row). It rides on the dependency-error entry
+  //   too, so a card .json whose card is in an error state stays out of file
+  //   search. Stamped only when true; plain file docs don't carry the key — so
+  //   `eq: { _isCardInstanceFile: false }` (absent-as-false) keeps cards + plain
+  //   files and drops this row.
+  // - `_title` is the row's display title (a file's is its name) under a
+  //   neutral key that card docs also carry (stamped alongside `_cardType`
+  //   during card render), so one mixed query can substring-match
+  //   (`contains: {_title}`) and A-Z sort (`search_doc->>'_title'`, NULLS
+  //   LAST) cards and files uniformly.
+  let searchData = {
+    url: fileURL,
+    sourceUrl: fileURL,
+    name,
+    contentType,
+    ...(extractResult.searchDoc ?? {}),
+    ...(isCardInstance ? { [CARD_INSTANCE_FILE_KEY]: true } : {}),
+    _title: name,
+    // Stamp `id` (the file's own URL) so a file row is addressable by
+    // `eq: { id }` the same way a card instance row is — `FileDef` already
+    // declares an `id` field, the search_doc just never carried it. Placed
+    // last (like `_title`) so it deterministically equals the file URL
+    // regardless of what the extractor's searchDoc contained.
+    id: fileURL,
+  };
+
+  // A frontmatter parse failure — or any diagnostics bag the frontmatter
+  // contributed (e.g. a skill's tool schema failures) — doesn't fail the
+  // file (it still indexes), so each rides on the row's diagnostics —
+  // mirroring brokenLinks — where `/_indexing-errors` surfaces it for the
+  // author. Merge them onto whatever render-side diagnostics the visit
+  // already produced. Computed before the dependency-error branch below so
+  // those findings persist on dependency-error rows too.
+  let { frontmatterParseError, frontmatterDiagnostics } = extractResult;
+  let fileDiagnostics: Diagnostics | undefined =
+    frontmatterParseError || frontmatterDiagnostics
+      ? {
+          ...(diagnostics ?? {}),
+          ...(frontmatterDiagnostics ?? {}),
+          ...(frontmatterParseError ? { frontmatterParseError } : {}),
+        }
+      : diagnostics;
 
   // Runtime deps are the source of truth. Use index-backed lookup only to
   // detect whether any dependency currently has an errored row.
@@ -176,30 +257,24 @@ export async function performFileIndexing({
     await updateEntry(entryURL, {
       type: 'file-error',
       error: normalizedDependencyError,
-      searchData: {
-        url: fileURL,
-        sourceUrl: fileURL,
-        name,
-        contentType,
-        ...(extractResult.searchDoc ?? {}),
-      },
+      searchData,
       types: fileTypes,
-      timingDiagnostics,
+      diagnostics: withBookkeeping(fileDiagnostics),
     });
     return 'error';
   }
 
-  // HTML for the file entry comes from the fused visit's fileRender pass
-  // (when the visit chose to run it — modules skip fileRender since their
-  // module prerender already produces HTML).
+  // HTML for the file entry comes from the visits' fileRender passes (icon
+  // from the index visit, html formats + markdown from the prerender-html
+  // visit).
   let renderResult: FileRenderResponse | undefined = precomputedRenderResult;
   if (renderResult?.error) {
     logWarn(
       `${jobIdentity(jobInfo)} file render produced error for ${path}, retaining partial HTML: ${renderResult.error.error?.message}`,
     );
   }
-  // hasModulePrerender is retained on the options as a hint for callers but
-  // is no longer acted on here — the fused visit already gates fileRender.
+  // hasModulePrerender remains on the options as a hint for callers; the visit
+  // itself gates fileRender, so this path does not act on it.
   void hasModulePrerender;
 
   await updateEntry(entryURL, {
@@ -208,13 +283,7 @@ export async function performFileIndexing({
     resourceCreatedAt,
     deps,
     resource: extractResult.resource ?? null,
-    searchData: {
-      url: fileURL,
-      sourceUrl: fileURL,
-      name,
-      contentType,
-      ...(extractResult.searchDoc ?? {}),
-    },
+    searchData,
     types: fileTypes,
     displayNames: extractResult.displayNames ?? [],
     isolatedHtml: renderResult?.isolatedHTML ?? undefined,
@@ -224,7 +293,7 @@ export async function performFileIndexing({
     fittedHtml: renderResult?.fittedHTML ?? undefined,
     iconHTML: renderResult?.iconHTML ?? undefined,
     markdown: renderResult?.markdown ?? undefined,
-    timingDiagnostics,
+    diagnostics: withBookkeeping(fileDiagnostics),
   });
 
   return 'indexed';

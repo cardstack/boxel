@@ -1,9 +1,10 @@
-import { module, test } from 'qunit';
-import type { GitHubClient } from '../lib/github';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
+import type { GitHubClient } from '../lib/github.ts';
 import {
   CreateListingPRHandler,
   type BotTriggerEventContent,
-} from '../lib/pr-listing/create-listing-pr-handler';
+} from '../lib/pr-listing/create-listing-pr-handler.ts';
 
 const BRANCH_PATTERN = /^[a-f0-9]{6}-/;
 
@@ -35,23 +36,15 @@ module('create-listing-pr handler', () => {
     let result = await handler.openCreateListingPR(
       eventContent,
       '@alice:localhost',
-      {
-        status: 'ready',
-        cardResultString: JSON.stringify({
-          data: {
-            attributes: {
-              allFileContents: [
-                { filename: 'catalog/Listing/listing.json', contents: '{}' },
-                { filename: 'catalog/Listing/readme.md', contents: '# readme' },
-              ],
-            },
-          },
-        }),
-      },
+      2,
     );
 
     assert.strictEqual(result?.prNumber, 1, 'returns PR number');
-    assert.strictEqual(result?.prUrl, 'https://example.com/pr/1', 'returns PR URL');
+    assert.strictEqual(
+      result?.prUrl,
+      'https://example.com/pr/1',
+      'returns PR URL',
+    );
     assert.strictEqual(
       result?.prTitle,
       'Add My Listing listing',
@@ -133,19 +126,7 @@ module('create-listing-pr handler', () => {
     let result = await handler.openCreateListingPR(
       eventContent,
       '@alice:localhost',
-      {
-        status: 'ready',
-        cardResultString: JSON.stringify({
-          data: {
-            id: workflowCardUrl,
-            attributes: {
-              allFileContents: [
-                { filename: 'catalog/Listing/listing.json', contents: '{}' },
-              ],
-            },
-          },
-        }),
-      },
+      1,
       workflowCardUrl,
     );
     assert.strictEqual(result?.prNumber, 2, 'returns PR metadata when opened');
@@ -156,7 +137,10 @@ module('create-listing-pr handler', () => {
     );
 
     assert.strictEqual(opened.length, 1, 'opens exactly one PR');
-    let body = (opened[0] as { params: Record<string, unknown> }).params.body?.toString() ?? '';
+    let body =
+      (
+        opened[0] as { params: Record<string, unknown> }
+      ).params.body?.toString() ?? '';
     assert.true(
       body.includes(`[${workflowCardUrl}](${workflowCardUrl})`),
       'summary body includes workflow card URL as a markdown link',
@@ -187,19 +171,28 @@ module('create-listing-pr handler', () => {
     let result = await handler.openCreateListingPR(
       eventContent,
       '@alice:localhost',
+      0,
     );
 
     assert.strictEqual(result, null, 'returns null when PR already exists');
   });
 
   test('addContentsToCommit wraps files under the {hash}-{slug} folder', async (assert) => {
-    let writeCalls: { files: { path: string; content: string }[]; message: string }[] = [];
+    let writeCalls: {
+      files: { path: string; content: string }[];
+      message: string;
+      syncFolder?: string;
+    }[] = [];
     let githubClient: GitHubClient = {
       openPullRequest: async () => ({ number: 1, html_url: 'x' }),
       createBranch: async () => ({ ref: 'refs/heads/test', sha: 'abc123' }),
       writeFileToBranch: async () => ({ commitSha: 'def456' }),
       writeFilesToBranch: async (params) => {
-        writeCalls.push({ files: params.files, message: params.message });
+        writeCalls.push({
+          files: params.files,
+          message: params.message,
+          syncFolder: params.syncFolder,
+        });
         return { commitSha: 'def456' };
       },
     };
@@ -217,20 +210,11 @@ module('create-listing-pr handler', () => {
     };
 
     let handler = new CreateListingPRHandler(githubClient);
-    await handler.addContentsToCommit(eventContent, {
-      status: 'ready',
-      cardResultString: JSON.stringify({
-        data: {
-          attributes: {
-            allFileContents: [
-              { filename: 'CardListing/abc.json', contents: '{}' },
-              { filename: 'Spec/def.json', contents: '{}' },
-              { filename: 'Recipe.gts', contents: 'export const x = 1;' },
-            ],
-          },
-        },
-      }),
-    });
+    await handler.addContentsToCommit(eventContent, [
+      { path: 'CardListing/abc.json', content: '{}' },
+      { path: 'Spec/def.json', content: '{}' },
+      { path: 'Recipe.gts', content: 'export const x = 1;' },
+    ]);
 
     assert.strictEqual(writeCalls.length, 1, 'writes once');
     assert.deepEqual(
@@ -241,6 +225,11 @@ module('create-listing-pr handler', () => {
         `${branchName}/Spec/def.json`,
       ],
       'every file is prefixed with the branch-name folder, inner layout preserved',
+    );
+    assert.strictEqual(
+      writeCalls[0].syncFolder,
+      branchName,
+      'the write syncs the submission folder so a retry drops paths missing from the fresh collection',
     );
   });
 
@@ -268,18 +257,9 @@ module('create-listing-pr handler', () => {
     };
 
     let handler = new CreateListingPRHandler(githubClient);
-    let runResult = {
-      status: 'ready' as const,
-      cardResultString: JSON.stringify({
-        data: {
-          attributes: {
-            allFileContents: [{ filename: 'Recipe.gts', contents: 'x' }],
-          },
-        },
-      }),
-    };
-    await handler.addContentsToCommit(eventContent, runResult);
-    await handler.addContentsToCommit(eventContent, runResult);
+    let files = [{ path: 'Recipe.gts', content: 'x' }];
+    await handler.addContentsToCommit(eventContent, files);
+    await handler.addContentsToCommit(eventContent, files);
 
     assert.strictEqual(writeCalls.length, 2, 'writes twice');
     assert.deepEqual(
@@ -302,16 +282,7 @@ module('create-listing-pr handler', () => {
     };
 
     let handler = new CreateListingPRHandler(githubClient);
-    let runResult = {
-      status: 'ready' as const,
-      cardResultString: JSON.stringify({
-        data: {
-          attributes: {
-            allFileContents: [{ filename: 'Recipe.gts', contents: 'x' }],
-          },
-        },
-      }),
-    };
+    let files = [{ path: 'Recipe.gts', content: 'x' }];
 
     await handler.addContentsToCommit(
       {
@@ -320,7 +291,7 @@ module('create-listing-pr handler', () => {
         userId: '@alice:localhost',
         input: { roomId: '!room-a:localhost', listingName: 'My Listing' },
       },
-      runResult,
+      files,
     );
 
     assert.strictEqual(folders.length, 1, 'wrote once');
@@ -358,12 +329,9 @@ module('create-listing-pr handler', () => {
     let result = await handler.openCreateListingPR(
       eventContent,
       '@alice:localhost',
+      0,
     );
 
-    assert.strictEqual(
-      result,
-      null,
-      'returns null when no PR can be opened',
-    );
+    assert.strictEqual(result, null, 'returns null when no PR can be opened');
   });
 });

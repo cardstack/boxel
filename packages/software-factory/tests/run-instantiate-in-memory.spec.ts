@@ -2,16 +2,17 @@ import { resolve } from 'node:path';
 
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 
-import { expect, test } from './fixtures';
+import { expect, test } from './fixtures.ts';
 
-import { runInstantiateInMemory } from '../src/instantiate-execution';
+import { runInstantiateInMemory } from '../src/instantiate-execution.ts';
 import {
   seedTagsCardWithBrokenExampleAndSpec,
+  seedValidCardWithMixedSpecs,
   seedValidCardWithSpec,
   overwriteTagsExampleWithBadShape,
-} from './helpers/instantiate-test-fixtures';
-import { buildTestClient } from './helpers/test-client';
-import { createTestWorkspace } from './helpers/workspace-fixture';
+} from './helpers/instantiate-test-fixtures.ts';
+import { buildTestClient } from './helpers/test-client.ts';
+import { createTestWorkspace } from './helpers/workspace-fixture.ts';
 
 const fixtureRealmDir = resolve(
   process.cwd(),
@@ -64,6 +65,46 @@ test.describe('runInstantiateInMemory e2e', () => {
         f.startsWith('Validations/instantiate_'),
       );
       expect(validationArtifacts).toEqual([]);
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('component and command Specs are skipped, not failed', async ({
+    realm,
+  }) => {
+    let realmUrl = realm.realmURL.href;
+    let realmServerUrl = realm.realmServerURL.href;
+    let authorization = realm.authorizationHeaders()['Authorization'];
+    let serverToken = `Bearer ${realm.serverToken}`;
+
+    let { client, cleanup } = buildTestClient({
+      realmUrl,
+      realmToken: authorization,
+      realmServerUrl,
+      realmServerToken: serverToken,
+    });
+
+    try {
+      await seedValidCardWithMixedSpecs(client, realmUrl);
+
+      let workspace = createTestWorkspace();
+      await client.pull(realmUrl, workspace.dir);
+
+      let result = await runInstantiateInMemory({
+        targetRealm: realmUrl,
+        realmServerUrl,
+        client,
+        workspaceDir: workspace.dir,
+      });
+
+      // The card Spec's example instantiates; the component and command
+      // Specs are not instantiable and must be skipped rather than
+      // failing the run (the catalog mortgage-calculator shape).
+      expect(result.failures).toEqual([]);
+      expect(result.status).toBe('passed');
+      expect(result.instancesChecked).toBe(1);
+      expect(result.instanceFiles).toEqual(['ValidCard/example-1.json']);
     } finally {
       cleanup();
     }

@@ -24,7 +24,10 @@ import {
   APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
-  APP_BOXEL_COMMAND_REQUESTS_KEY,
+  APP_BOXEL_TOOL_REQUESTS_KEY,
+  APP_BOXEL_LLM_MODE,
+  APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
+  APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import {
@@ -40,6 +43,7 @@ import {
   setupUserSubscription,
   getMonacoContent,
   withCachedRealmSetup,
+  realmConfigCardJSON,
 } from '../helpers';
 
 import { CardsGrid, setupBaseRealm } from '../helpers/base-realm';
@@ -52,8 +56,8 @@ import type { TestContextWithSave } from '../helpers';
 let mockedFileContent = 'Hello, world!';
 
 const testCardContent = `
-import { CardDef, Component, field, contains } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+import { CardDef, Component, field, contains } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 
 export class TestCard extends CardDef {
   static displayName = 'Test Card';
@@ -110,12 +114,12 @@ module('Acceptance | Code patches tests', function (hooks) {
         contents: {
           ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'index.json': new CardsGrid(),
-          '.realm.json': {
+          'realm.json': realmConfigCardJSON({
             name: 'Test Workspace B',
             backgroundURL:
               'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
             iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-          },
+          }),
           'hello.txt': 'Hello, world!',
           'hi.txt': 'Hi, world!\nHow are you?',
           'empty-file.gts': '',
@@ -129,7 +133,7 @@ module('Acceptance | Code patches tests', function (hooks) {
                 commands: [
                   {
                     codeRef: {
-                      name: 'SearchCardsByTypeAndTitleCommand',
+                      name: 'SearchCardsByTypeAndTitleTool',
                       module: '@cardstack/boxel-host/commands/search-cards',
                     },
                     requiresApproval: true,
@@ -281,9 +285,11 @@ ${REPLACE_MARKER}\n\`\`\``;
       'updated file should be attached 2',
     );
 
-    let commandService = getService('command-service') as any;
-    let requestIdsByRoom =
-      commandService.aiAssistantClientRequestIdsByRoom as Map<string, any>;
+    let toolService = getService('tool-service') as any;
+    let requestIdsByRoom = toolService.aiAssistantClientRequestIdsByRoom as Map<
+      string,
+      any
+    >;
     let roomRequestIds = requestIdsByRoom?.get(roomId);
     assert.ok(
       roomRequestIds,
@@ -397,7 +403,7 @@ ${REPLACE_MARKER}
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: 'abc123',
           name: 'show-card_566f',
@@ -651,7 +657,7 @@ ${REPLACE_MARKER}
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: 'abc123',
           name: 'show-card_566f',
@@ -1601,6 +1607,122 @@ ${REPLACE_MARKER}
       );
   });
 
+  test('a patch split across continuation events is still auto-applied in act mode', async function (assert) {
+    // An answer too long for one event is cut at a character count that knows
+    // nothing about what it is cutting through, so a SEARCH/REPLACE block ends
+    // up straddling the boundary: no single event holds all three markers, and
+    // only the head of the chain carries the joined body the patch is parsed
+    // from. The UI reads that joined body and offers an apply button, so a
+    // patch that never reached the queue looks identical to one waiting to be
+    // applied — in act mode it should simply apply.
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}hello.txt`,
+    });
+    await click('[data-test-open-ai-assistant]');
+    let roomId = getRoomIds().pop()!;
+
+    await click('[data-test-llm-mode-option="act"]');
+
+    let head = `\`\`\`
+http://test-realm/test/hello.txt
+${SEARCH_MARKER}
+Hello, world!
+`;
+    let tail = `${SEPARATOR_MARKER}
+Hi, from across the split!
+${REPLACE_MARKER}
+\`\`\``;
+
+    let agentId = getService('matrix-service').agentId;
+    let headEventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: head,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY]: true,
+      data: { context: { agentId } },
+    });
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: tail,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_CONTINUATION_OF_CONTENT_KEY]: headEventId,
+      data: { context: { agentId } },
+    });
+
+    await waitFor('[data-test-apply-state="applied"]', { timeout: 5000 });
+    assert
+      .dom('[data-test-apply-state="applied"]')
+      .exists('the patch applies even though it was split across two events');
+  });
+
+  test('LLM mode for a message is resolved by room order, not just timestamp', async function (assert) {
+    // Matrix origin_server_ts has millisecond resolution, so a message and a
+    // mode transition can share a timestamp. The active mode for a message must
+    // be decided by where the transition sits relative to the message in the
+    // timeline, not by a bare timestamp comparison. Inject events with explicit
+    // (and deliberately colliding) timestamps so the tie-break is exercised
+    // deterministically rather than by chance.
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}hello.txt`,
+    });
+    await click('[data-test-open-ai-assistant]');
+    let roomId = getRoomIds().pop()!;
+
+    let llmMode = (mode: 'ask' | 'act', ts: number) =>
+      simulateRemoteMessage(
+        roomId,
+        '@testuser:localhost',
+        { mode },
+        { type: APP_BOXEL_LLM_MODE, state_key: '', origin_server_ts: ts },
+      );
+    let aiMessage = (ts: number) =>
+      simulateRemoteMessage(
+        roomId,
+        '@aibot:localhost',
+        {
+          body: 'hello',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+        },
+        { origin_server_ts: ts },
+      );
+
+    // Injection order is room order; for equal timestamps a stable sort keeps it.
+    llmMode('act', 1000);
+    let msgActBeforeTie = aiMessage(2000); // act@1000 precedes; ask@2000 below comes later
+    llmMode('ask', 2000); // shares the message's ms but lands after it
+    llmMode('act', 2000); // ask -> act, both at 2000, act inserted later
+    let msgActWinsTie = aiMessage(2000); // act@2000 precedes it in room order
+    llmMode('ask', 3000);
+    let msgAskBeforeLateAct = aiMessage(4000);
+    llmMode('act', 4000); // shares the message's ms but lands after it
+
+    await settled();
+
+    let roomResource = getService('matrix-service').roomResources.get(roomId)!;
+
+    assert.strictEqual(
+      roomResource.getActiveLLMModeForMessage(msgActBeforeTie),
+      'act',
+      'a later same-ms switch to ask does not retroactively change the message',
+    );
+    assert.strictEqual(
+      roomResource.getActiveLLMModeForMessage(msgActWinsTie),
+      'act',
+      'on a same-ms ask->act tie the later transition (act) wins for a following message',
+    );
+    assert.strictEqual(
+      roomResource.getActiveLLMModeForMessage(msgAskBeforeLateAct),
+      'ask',
+      'a same-ms switch to act after the message does not back-date onto it',
+    );
+  });
+
   test<TestContextWithSave>('automatic Accept All spinner appears in Act mode for multiple patches', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
@@ -1659,7 +1781,7 @@ ${REPLACE_MARKER}
     });
 
     // Wait for the patches to be processed - the spinner should appear during automatic execution
-    // This test should FAIL until we implement the CommandService state tracking
+    // This test should FAIL until we implement the ToolService state tracking
     await waitFor(
       '[data-test-ai-assistant-action-bar] [data-test-loading-indicator]',
       {

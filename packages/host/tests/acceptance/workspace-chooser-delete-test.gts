@@ -16,6 +16,7 @@ import {
   setupUserSubscription,
   testRealmSecretSeed,
   visitOperatorMode,
+  realmConfigCardJSON,
 } from '../helpers';
 import { setupBaseRealm } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
@@ -50,17 +51,13 @@ module('Acceptance | workspace-chooser-delete', function (hooks) {
         '@testuser:localhost': ['read', 'write', 'realm-owner'],
       },
       contents: {
-        '.realm.json': {
-          name: 'Owned Workspace',
-          backgroundURL: null,
-          iconURL: null,
-        },
+        'realm.json': realmConfigCardJSON({ name: 'Owned Workspace' }),
         'index.json': {
           data: {
             type: 'card',
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
+                module: '@cardstack/base/cards-grid',
                 name: 'CardsGrid',
               },
             },
@@ -71,13 +68,13 @@ module('Acceptance | workspace-chooser-delete', function (hooks) {
             type: 'card',
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: '@cardstack/base/card-api',
                 name: 'CardDef',
               },
             },
           },
         },
-        'person.gts': `import { CardDef } from "https://cardstack.com/base/card-api";
+        'person.gts': `import { CardDef } from "@cardstack/base/card-api";
 
 export class Person extends CardDef {}
 `,
@@ -92,17 +89,13 @@ export class Person extends CardDef {}
         '@otheruser:localhost': ['read', 'write', 'realm-owner'],
       },
       contents: {
-        '.realm.json': {
-          name: 'Shared Workspace',
-          backgroundURL: null,
-          iconURL: null,
-        },
+        'realm.json': realmConfigCardJSON({ name: 'Shared Workspace' }),
         'index.json': {
           data: {
             type: 'card',
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
+                module: '@cardstack/base/cards-grid',
                 name: 'CardsGrid',
               },
             },
@@ -119,17 +112,15 @@ export class Person extends CardDef {}
         '@otheruser:localhost': ['read', 'write', 'realm-owner'],
       },
       contents: {
-        '.realm.json': {
+        'realm.json': realmConfigCardJSON({
           name: 'Delegated Owner Workspace',
-          backgroundURL: null,
-          iconURL: null,
-        },
+        }),
         'index.json': {
           data: {
             type: 'card',
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
+                module: '@cardstack/base/cards-grid',
                 name: 'CardsGrid',
               },
             },

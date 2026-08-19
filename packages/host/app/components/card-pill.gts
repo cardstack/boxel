@@ -18,11 +18,10 @@ import { FailureBordered, IconX } from '@cardstack/boxel-ui/icons';
 
 import { type getCard, GetCardContextName } from '@cardstack/runtime-common';
 
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-
 import AttachedFileDropdownMenu from './ai-assistant/attached-file-dropdown-menu';
 
 import type RealmService from '../services/realm';
+import type { FileDef } from '@cardstack/base/file-api';
 
 interface CardPillSignature {
   Element: HTMLDivElement | HTMLButtonElement;
@@ -166,8 +165,6 @@ export default class CardPill extends Component<CardPillSignature> {
       .fallback-card-icon {
         display: block;
         flex-shrink: 0;
-        --icon-background-color: var(--boxel-error-500);
-        --icon-color: var(--boxel-light);
       }
       .card-content {
         max-width: 100px;

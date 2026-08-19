@@ -126,20 +126,16 @@ module('Integration | components | create-listing-modal', function (hooks) {
     });
 
     await waitFor('[data-test-create-listing-modal]');
-    await waitFor(
-      `[data-test-selected-example="${testRealmURL}Pet/mango.json"]`,
-    );
+    await waitFor(`[data-test-selected-example="${testRealmURL}Pet/mango"]`);
 
     assert
-      .dom(`[data-test-selected-example="${testRealmURL}Pet/mango.json"]`)
+      .dom(`[data-test-selected-example="${testRealmURL}Pet/mango"]`)
       .exists();
     assert
       .dom('[data-test-selected-examples] [data-test-card-format="atom"]')
       .exists({ count: 1 });
     assert
-      .dom(
-        `[data-test-selected-example-remove="${testRealmURL}Pet/mango.json"]`,
-      )
+      .dom(`[data-test-selected-example-remove="${testRealmURL}Pet/mango"]`)
       .exists();
     assert.dom('[data-test-choose-examples-button]').hasText('Add Examples');
   });
@@ -163,15 +159,15 @@ module('Integration | components | create-listing-modal', function (hooks) {
 
     await waitFor('[data-test-create-listing-modal]');
     await waitFor(
-      `[data-test-selected-example-remove="${testRealmURL}Pet/mango.json"]`,
+      `[data-test-selected-example-remove="${testRealmURL}Pet/mango"]`,
     );
 
     await click(
-      `[data-test-selected-example-remove="${testRealmURL}Pet/mango.json"]`,
+      `[data-test-selected-example-remove="${testRealmURL}Pet/mango"]`,
     );
 
     assert
-      .dom(`[data-test-selected-example="${testRealmURL}Pet/mango.json"]`)
+      .dom(`[data-test-selected-example="${testRealmURL}Pet/mango"]`)
       .doesNotExist();
     assert.dom('[data-test-choose-examples-button]').hasText('Add Examples');
   });
@@ -196,5 +192,91 @@ module('Integration | components | create-listing-modal', function (hooks) {
 
     assert.dom('[data-test-create-listing-examples]').doesNotExist();
     assert.dom('[data-test-choose-examples-button]').doesNotExist();
+  });
+
+  test('shows supporting cards row for a card type', async function (assert) {
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+
+    ctx.operatorModeStateService.showCreateListingModal({
+      codeRef: {
+        module: testRRI('pet'),
+        name: 'Pet',
+      },
+      targetRealm: testRealmURL,
+      declarationKind: 'card',
+    });
+
+    await waitFor('[data-test-create-listing-modal]');
+    await waitFor('[data-test-create-listing-supporting-cards]');
+
+    assert.dom('[data-test-create-listing-supporting-cards]').exists();
+    assert
+      .dom('[data-test-create-listing-supporting-cards]')
+      .includesText('not shown on the listing page');
+    assert
+      .dom('[data-test-selected-supporting-cards]')
+      .doesNotExist('no supporting cards are preselected');
+    assert
+      .dom('[data-test-choose-supporting-cards-button]')
+      .hasText('Add Supporting Cards');
+  });
+
+  test('shows seeded supporting card atom from payload', async function (assert) {
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+
+    ctx.operatorModeStateService.showCreateListingModal({
+      codeRef: {
+        module: testRRI('pet'),
+        name: 'Pet',
+      },
+      targetRealm: testRealmURL,
+      openCardIds: [rri(`${testRealmURL}Pet/mango`)],
+      supportingCardIds: [rri(`${testRealmURL}Pet/jackie`)],
+      declarationKind: 'card',
+    });
+
+    await waitFor('[data-test-create-listing-modal]');
+    await waitFor(
+      `[data-test-selected-supporting-card="${testRealmURL}Pet/jackie"]`,
+    );
+
+    assert
+      .dom(`[data-test-selected-supporting-card="${testRealmURL}Pet/jackie"]`)
+      .exists();
+    assert
+      .dom(
+        `[data-test-selected-supporting-card-remove="${testRealmURL}Pet/jackie"]`,
+      )
+      .exists();
+  });
+
+  test('hides supporting cards for field listings', async function (assert) {
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+
+    ctx.operatorModeStateService.showCreateListingModal({
+      codeRef: {
+        module: testRRI('pet'),
+        name: 'PetName',
+      },
+      targetRealm: testRealmURL,
+      declarationKind: 'field',
+    });
+
+    await waitFor('[data-test-create-listing-modal]');
+
+    assert.dom('[data-test-create-listing-supporting-cards]').doesNotExist();
+    assert.dom('[data-test-choose-supporting-cards-button]').doesNotExist();
   });
 });

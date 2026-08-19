@@ -25,28 +25,24 @@
     "skipLibCheck": true,
     "strict": true,
     "paths": {
-      "https://cardstack.com/base/*": [
+      "@cardstack/base/*": [
+        "../base/*.gts",
+        "../base/*.ts",
+        "../base/*.d.ts",
         "../base/*"
       ],
-      "@cardstack/boxel-ui": [
-        "../boxel-ui/addon"
+      "https://cardstack.com/base/*": [
+        "../base/*.gts",
+        "../base/*.ts",
+        "../base/*.d.ts",
+        "../base/*"
       ],
-      "@cardstack/boxel-ui/*": [
-        "../boxel-ui/addon/*"
-      ],
-      "*": [
-        "types/*"
-      ]
+      "@cardstack/boxel-ui": ["../boxel-ui"],
+      "@cardstack/boxel-ui/*": ["../boxel-ui/*"],
+      "*": ["types/*"]
     },
-    "types": [
-      "@cardstack/local-types"
-    ]
+    "types": ["@cardstack/local-types"]
   },
-  "include": [
-    "../base/**/*",
-    "./**/*"
-  ],
-  "exclude": [
-    "../base/**/__boxel/**"
-  ]
+  "include": ["../base/**/*", "./**/*"],
+  "exclude": ["../base/**/__boxel/**"]
 }

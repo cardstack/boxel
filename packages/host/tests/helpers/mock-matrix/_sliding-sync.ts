@@ -14,6 +14,7 @@ export class MockSlidingSync extends SlidingSync {
   private _client: MatrixSDK.MatrixClient;
   private _lists: Record<string, MSC3575List>;
   private lifecycleCallbacks: Function[] = [];
+  setListCalls: Array<{ listKey: string; list: MSC3575List }> = [];
 
   constructor(
     proxyBaseUrl: string,
@@ -79,6 +80,12 @@ export class MockSlidingSync extends SlidingSync {
   async setListRanges(listKey: string, ranges: number[][]) {
     this._lists[listKey].ranges = ranges;
     return await this.resend();
+  }
+
+  setList(listKey: string, list: MSC3575List) {
+    this.setListCalls.push({ listKey, list });
+    this._lists[listKey] = list;
+    void this.resend();
   }
 
   async resend() {

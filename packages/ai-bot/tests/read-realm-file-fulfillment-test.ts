@@ -1,0 +1,467 @@
+import QUnit from 'qunit';
+const { module, test, assert } = QUnit;
+
+import { fulfillReadRealmFileCalls } from '../lib/read-realm-file-fulfillment.ts';
+import { READ_REALM_FILE_TOOL_NAME } from '../lib/read-realm-file.ts';
+import {
+  APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+  APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+  APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
+} from '@cardstack/runtime-common/matrix-constants';
+
+const ON_BEHALF_OF = '@user:localhost';
+const AGENT_ID = 'agent-1';
+const ROOM_ID = '!room:localhost';
+const REQUEST_EVENT_ID = '$request:localhost';
+const FILE_URL =
+  'https://localhost:4201/user/jane/skills/trip-planner/SKILL.md';
+
+function readRealmFileCall(id: string, args: object) {
+  return {
+    id,
+    type: 'function',
+    function: {
+      name: READ_REALM_FILE_TOOL_NAME,
+      arguments: JSON.stringify(args),
+    },
+  } as any;
+}
+
+// A fake Matrix client that records sent events and uploads. sendMatrixEvent
+// JSON-stringifies content.data on the way out, so the recorded data is a
+// string — tests parse it back.
+function fakeClient() {
+  let sent: { eventType: string; content: any }[] = [];
+  let uploads: { content: any; opts: any }[] = [];
+  let client = {
+    sendEvent: async (_roomId: string, eventType: string, content: any) => {
+      sent.push({ eventType, content });
+      return { event_id: `$sent-${sent.length}:localhost` };
+    },
+    uploadContent: async (content: any, opts: any) => {
+      uploads.push({ content, opts });
+      return { content_uri: `mxc://localhost/upload-${uploads.length}` };
+    },
+    mxcUrlToHttp: (uri: string) =>
+      `https://localhost/_matrix/media/v3/download/${uri.replace(
+        'mxc://',
+        '',
+      )}`,
+  } as any;
+  return { client, sent, uploads };
+}
+
+function sessions() {
+  return {
+    getToken: async () => 'tok',
+    invalidate: () => {},
+  };
+}
+
+function baseDeps(client: any, extra: object = {}) {
+  return {
+    client,
+    roomId: ROOM_ID,
+    requestEventId: REQUEST_EVENT_ID,
+    agentId: AGENT_ID,
+    onBehalfOf: ON_BEHALF_OF,
+    delegatedUserRealmSessions: sessions(),
+    ...extra,
+  };
+}
+
+// Reads the (stringified) data payload back off a recorded event.
+function dataOf(sentEvent: { content: any }) {
+  return JSON.parse(sentEvent.content.data);
+}
+
+module('fulfillReadRealmFileCalls', () => {
+  const STAMPED_TOOL = {
+    codeRef: {
+      module: 'https://localhost:4201/user/jane/tools/plan-trip',
+      name: 'default',
+    },
+    functionName: 'plan-trip_ab12',
+    requiresApproval: false,
+    definition: {
+      type: 'function',
+      function: {
+        name: 'plan-trip_ab12',
+        description: 'Plans a trip',
+        parameters: { type: 'object', properties: {} },
+      },
+    },
+  };
+
+  // A skill entry the index has not (yet) enriched: no definition, so the
+  // fulfillment layer must not embed it.
+  const UNSTAMPED_TOOL = {
+    codeRef: {
+      module: 'https://localhost:4201/user/jane/tools/book-hotel',
+      name: 'default',
+    },
+  };
+
+  function fileMetaFetch(
+    tools: unknown[],
+    frontmatterKey: 'tools' | 'commands' = 'tools',
+  ) {
+    return (async () =>
+      new Response(
+        JSON.stringify({
+          data: {
+            id: FILE_URL,
+            type: 'file-meta',
+            attributes: {
+              sourceUrl: FILE_URL,
+              content: '# Trip Planner',
+              frontmatter: { [frontmatterKey]: tools },
+            },
+          },
+        }),
+        { status: 200 },
+      )) as unknown as typeof globalThis.fetch;
+  }
+
+  test('a skill read embeds its usable tool definitions beside the attachments', async () => {
+    let { client, sent } = fakeClient();
+
+    let outcomes = await fulfillReadRealmFileCalls(
+      [readRealmFileCall('c1', { urls: [FILE_URL] })],
+      baseDeps(client, {
+        fetch: fileMetaFetch([STAMPED_TOOL, UNSTAMPED_TOOL]),
+        uploadText: async () => 'https://localhost/media/trip-planner',
+      }),
+    );
+
+    assert.deepEqual(outcomes, [{ commandRequestId: 'c1', ok: true }]);
+    let data = dataOf(sent[0]);
+    assert.strictEqual(
+      data.attachedFiles.length,
+      1,
+      'the attachment path is unchanged',
+    );
+    assert.deepEqual(
+      data.discoveredTools,
+      [{ sourceSkillUrl: FILE_URL, ...STAMPED_TOOL }],
+      'stamped definitions ride the result tagged with the skill URL; the ' +
+        'unstamped entry is dropped',
+    );
+    assert.true(
+      sent[0].content.failureReason.includes(FILE_URL) &&
+        sent[0].content.failureReason.includes('1 of 2') &&
+        sent[0].content.failureReason.includes('reindex'),
+      'the dropped entry is named in the failure note so the model can ' +
+        'surface the stale index instead of hunting for the tool',
+    );
+  });
+
+  test('a skill whose declared tools all lack definitions carries a degradation note', async () => {
+    let { client, sent } = fakeClient();
+
+    let outcomes = await fulfillReadRealmFileCalls(
+      [readRealmFileCall('c1', { urls: [FILE_URL] })],
+      baseDeps(client, {
+        fetch: fileMetaFetch([UNSTAMPED_TOOL]),
+        uploadText: async () => 'https://localhost/media/trip-planner',
+      }),
+    );
+
+    assert.deepEqual(
+      outcomes,
+      [{ commandRequestId: 'c1', ok: true }],
+      'a degraded skill read is still a successful file read',
+    );
+    let { content } = sent[0];
+    assert.strictEqual(
+      content['m.relates_to'].key,
+      'applied',
+      'the file content still comes back',
+    );
+    assert.true(
+      content.failureReason.includes(FILE_URL) &&
+        content.failureReason.includes('1 of 1') &&
+        content.failureReason.includes('reindex'),
+      'the note names the skill, the count, and the remedy',
+    );
+    let data = dataOf(sent[0]);
+    assert.strictEqual(data.attachedFiles.length, 1);
+    assert.false(
+      'discoveredTools' in data,
+      'no usable definitions means no discoveredTools key',
+    );
+  });
+
+  test('a pre-rename index row (frontmatter.commands) degrades with a note instead of silently', async () => {
+    let { client, sent } = fakeClient();
+
+    await fulfillReadRealmFileCalls(
+      [readRealmFileCall('c1', { urls: [FILE_URL] })],
+      baseDeps(client, {
+        fetch: fileMetaFetch([UNSTAMPED_TOOL, UNSTAMPED_TOOL], 'commands'),
+        uploadText: async () => 'https://localhost/media/trip-planner',
+      }),
+    );
+
+    let { content } = sent[0];
+    assert.strictEqual(content['m.relates_to'].key, 'applied');
+    assert.true(
+      content.failureReason.includes('2 of 2') &&
+        content.failureReason.includes('reindex'),
+      'entries under the legacy key count as declared tools',
+    );
+  });
+
+  test('no discoveredTools key when the read carries no definitions', async () => {
+    let { client, sent } = fakeClient();
+    let fetch = (async () =>
+      new Response('# Plain notes', {
+        status: 200,
+      })) as unknown as typeof globalThis.fetch;
+
+    await fulfillReadRealmFileCalls(
+      [readRealmFileCall('c1', { urls: [FILE_URL] })],
+      baseDeps(client, {
+        fetch,
+        uploadText: async () => 'https://localhost/media/notes',
+      }),
+    );
+
+    let data = dataOf(sent[0]);
+    assert.false(
+      'discoveredTools' in data,
+      'the result data stays exactly as before for tool-less reads',
+    );
+  });
+
+  test('a successful read attaches the file to an applied command-result event', async () => {
+    let { client, sent } = fakeClient();
+    let fetch = (async () =>
+      new Response('# Trip Planner', {
+        status: 200,
+      })) as unknown as typeof globalThis.fetch;
+
+    let outcomes = await fulfillReadRealmFileCalls(
+      [readRealmFileCall('c1', { urls: [FILE_URL] })],
+      baseDeps(client, {
+        fetch,
+        // Inject the uploader so this case doesn't touch the dedup cache.
+        uploadText: async () => 'https://localhost/media/trip-planner',
+      }),
+    );
+
+    assert.deepEqual(outcomes, [{ commandRequestId: 'c1', ok: true }]);
+    assert.strictEqual(sent.length, 1, 'one command-result event posted');
+    let { eventType, content } = sent[0];
+    assert.strictEqual(eventType, APP_BOXEL_TOOL_RESULT_EVENT_TYPE);
+    assert.strictEqual(
+      content.msgtype,
+      APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
+    );
+    assert.strictEqual(content.commandRequestId, 'c1');
+    assert.strictEqual(content['m.relates_to'].key, 'applied');
+    assert.strictEqual(content['m.relates_to'].event_id, REQUEST_EVENT_ID);
+    let data = dataOf(sent[0]);
+    assert.strictEqual(data.attachedFiles.length, 1);
+    assert.strictEqual(
+      data.attachedFiles[0].sourceUrl,
+      FILE_URL,
+      'attachment keeps the realm source url for scoping/supersession',
+    );
+    assert.strictEqual(
+      data.attachedFiles[0].url,
+      'https://localhost/media/trip-planner',
+      'attachment points at the uploaded media url',
+    );
+    assert.strictEqual(data.context.agentId, AGENT_ID);
+  });
+
+  test('one call with many urls reads them all into a single result event', async () => {
+    let { client, sent } = fakeClient();
+    let otherUrl = 'https://localhost:4201/user/jane/notes.md';
+    let fetch = (async (input: any) => {
+      let url = typeof input === 'string' ? input : input.url;
+      return new Response(`content of ${url}`, { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+
+    let outcomes = await fulfillReadRealmFileCalls(
+      // The same url twice: within-call dedup keeps it from attaching twice.
+      [readRealmFileCall('c1', { urls: [FILE_URL, otherUrl, FILE_URL] })],
+      baseDeps(client, {
+        fetch,
+        uploadText: async (content: string) =>
+          `https://localhost/media/${content.length}`,
+      }),
+    );
+
+    assert.deepEqual(outcomes, [{ commandRequestId: 'c1', ok: true }]);
+    assert.strictEqual(sent.length, 1, 'all files ride one result event');
+    let { content } = sent[0];
+    assert.strictEqual(
+      content.msgtype,
+      APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
+    );
+    assert.strictEqual(content['m.relates_to'].key, 'applied');
+    assert.notOk(content.failureReason, 'a clean read carries no failure note');
+    let data = dataOf(sent[0]);
+    assert.deepEqual(
+      data.attachedFiles.map((f: any) => f.sourceUrl),
+      [FILE_URL, otherUrl],
+      'one attachment per distinct url',
+    );
+  });
+
+  test('a partial read attaches what succeeded and names what failed', async () => {
+    let { client, sent } = fakeClient();
+    let missingUrl = 'https://localhost:4201/user/jane/missing.md';
+    let fetch = (async (input: any) => {
+      let url = typeof input === 'string' ? input : input.url;
+      return url === missingUrl
+        ? new Response('nope', { status: 404 })
+        : new Response('# Trip Planner', { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+
+    let outcomes = await fulfillReadRealmFileCalls(
+      [readRealmFileCall('c1', { urls: [FILE_URL, missingUrl] })],
+      baseDeps(client, {
+        fetch,
+        uploadText: async () => 'https://localhost/media/trip-planner',
+      }),
+    );
+
+    assert.false(outcomes[0].ok, 'a partial read is not reported as clean');
+    assert.true(
+      outcomes[0].error!.includes(missingUrl),
+      'the outcome names the failed file',
+    );
+    assert.strictEqual(sent.length, 1);
+    let { content } = sent[0];
+    assert.strictEqual(
+      content.msgtype,
+      APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
+      'the successful file still comes back with output',
+    );
+    assert.strictEqual(
+      content['m.relates_to'].key,
+      'applied',
+      'partial results resolve the request so the turn can continue',
+    );
+    assert.true(
+      content.failureReason.includes(missingUrl) &&
+        content.failureReason.includes('404'),
+      'the failure note names the file and why it failed',
+    );
+    let data = dataOf(sent[0]);
+    assert.deepEqual(
+      data.attachedFiles.map((f: any) => f.sourceUrl),
+      [FILE_URL],
+      'only the readable file is attached',
+    );
+  });
+
+  test('a failed read posts an invalid result carrying the reason, no attachment', async () => {
+    let { client, sent } = fakeClient();
+    let fetch = (async () =>
+      new Response('nope', {
+        status: 404,
+      })) as unknown as typeof globalThis.fetch;
+
+    let outcomes = await fulfillReadRealmFileCalls(
+      [readRealmFileCall('c1', { urls: [FILE_URL] })],
+      baseDeps(client, { fetch }),
+    );
+
+    assert.false(outcomes[0].ok, 'a 404 read is reported as failed');
+    assert.strictEqual(sent.length, 1);
+    let { content } = sent[0];
+    assert.strictEqual(
+      content.msgtype,
+      APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+    );
+    assert.strictEqual(content['m.relates_to'].key, 'invalid');
+    assert.true(
+      content.failureReason.includes('404'),
+      'the reason rides along so the user sees why it failed',
+    );
+    assert.strictEqual(dataOf(sent[0]).attachedFiles, undefined);
+  });
+
+  test('malformed arguments fail without fetching', async () => {
+    let { client, sent } = fakeClient();
+    let fetched = false;
+    let fetch = (async () => {
+      fetched = true;
+      return new Response('x', { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+
+    let outcomes = await fulfillReadRealmFileCalls(
+      [
+        {
+          id: 'c1',
+          type: 'function',
+          function: {
+            name: READ_REALM_FILE_TOOL_NAME,
+            arguments: '{not json',
+          },
+        } as any,
+      ],
+      baseDeps(client, { fetch }),
+    );
+
+    assert.false(outcomes[0].ok);
+    assert.false(fetched, 'never fetched for malformed arguments');
+    assert.strictEqual(sent[0].content['m.relates_to'].key, 'invalid');
+  });
+
+  test('an empty urls list fails without fetching', async () => {
+    let { client, sent } = fakeClient();
+    let fetched = false;
+    let fetch = (async () => {
+      fetched = true;
+      return new Response('x', { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+
+    let outcomes = await fulfillReadRealmFileCalls(
+      [readRealmFileCall('c1', { urls: [] })],
+      baseDeps(client, { fetch }),
+    );
+
+    assert.false(outcomes[0].ok);
+    assert.false(fetched, 'never fetched for an empty list');
+    assert.strictEqual(sent[0].content['m.relates_to'].key, 'invalid');
+    assert.true(sent[0].content.failureReason.includes('urls'));
+  });
+
+  test('identical content is uploaded once and re-referenced (dedup)', async () => {
+    let { client, sent, uploads } = fakeClient();
+    // Content unique to this test so the module-level hash cache is exercised
+    // cleanly regardless of other tests (this is the only test that uploads via
+    // the real, caching uploader).
+    let body = '# Dedup Fixture — reuse-me-across-rooms';
+    let fetch = (async () =>
+      new Response(body, {
+        status: 200,
+      })) as unknown as typeof globalThis.fetch;
+
+    await fulfillReadRealmFileCalls(
+      [readRealmFileCall('c1', { urls: [FILE_URL] })],
+      baseDeps(client, { fetch }),
+    );
+    await fulfillReadRealmFileCalls(
+      [readRealmFileCall('c2', { urls: [FILE_URL] })],
+      baseDeps(client, { fetch }),
+    );
+
+    assert.strictEqual(sent.length, 2, 'both reads post their own result');
+    assert.strictEqual(
+      uploads.length,
+      1,
+      'the same bytes are uploaded to Matrix only once',
+    );
+    // Both results point at the same uploaded media url.
+    assert.strictEqual(
+      dataOf(sent[0]).attachedFiles[0].url,
+      dataOf(sent[1]).attachedFiles[0].url,
+    );
+  });
+});

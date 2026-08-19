@@ -21,7 +21,7 @@
 // Safe to re-run: rows already in the target scheme are left
 // untouched, and the PUT only fires when at least one URL changed.
 
-import { getSynapseURL } from '../helpers/environment-config';
+import { getSynapseURL } from '../support/environment-config.ts';
 
 const ADMIN_USERNAME = 'admin';
 const ADMIN_PASSWORD = 'password';
@@ -122,9 +122,7 @@ async function impersonate(
 ): Promise<string> {
   // Synapse admin endpoint that returns an access token for any user.
   let response = await fetch(
-    `${synapseURL}/_synapse/admin/v1/users/${encodeURIComponent(
-      userId,
-    )}/login`,
+    `${synapseURL}/_synapse/admin/v1/users/${encodeURIComponent(userId)}/login`,
     {
       method: 'POST',
       headers: { Authorization: `Bearer ${adminToken}` },
@@ -259,7 +257,9 @@ async function main(): Promise<void> {
   console.log(`  Users migrated:       ${migratedUsers}`);
   console.log(`  URLs rewritten:       ${totalURLsChanged}`);
   console.log(`  Skipped (no data):    ${skippedNoData}`);
-  console.log(`  Skipped (${TO_SCHEME.padEnd(5)}):${' '.repeat(8 - TO_SCHEME.length)}${skippedAlreadyOnTargetScheme}`);
+  console.log(
+    `  Skipped (${TO_SCHEME.padEnd(5)}):${' '.repeat(8 - TO_SCHEME.length)}${skippedAlreadyOnTargetScheme}`,
+  );
 }
 
 main().catch((err) => {

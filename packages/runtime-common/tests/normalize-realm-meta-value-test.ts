@@ -1,8 +1,8 @@
-import type { SharedTests } from '../helpers';
+import type { SharedTests } from '../helpers/index.ts';
 import {
   normalizeRealmMetaValue,
   type CardTypeSummary,
-} from '../index-structure';
+} from '../index-structure.ts';
 
 const personSummary: CardTypeSummary = {
   code_ref: 'http://example.test/realm/person/Person',
@@ -12,7 +12,7 @@ const personSummary: CardTypeSummary = {
 };
 
 const markdownSummary: CardTypeSummary = {
-  code_ref: 'https://cardstack.com/base/markdown-file-def/MarkdownDef',
+  code_ref: '@cardstack/base/markdown-file-def/MarkdownDef',
   display_name: 'Markdown',
   total: 5,
   icon_html: '<svg />',

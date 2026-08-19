@@ -5,7 +5,7 @@ import {
   composeReleaseBody,
   type Deps,
   type Inputs,
-} from '../../scripts/generate-release-notes';
+} from '../../scripts/generate-release-notes.ts';
 
 function baseInputs(overrides: Partial<Inputs> = {}): Inputs {
   return {

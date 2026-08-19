@@ -1,8 +1,8 @@
 import { resolve } from 'node:path';
 
-import { expect, test } from './fixtures';
+import { expect, test } from './fixtures.ts';
 
-import { buildTestClient } from './helpers/test-client';
+import { buildTestClient } from './helpers/test-client.ts';
 
 const fixtureRealmDir = resolve(
   process.cwd(),
@@ -17,8 +17,8 @@ const SOURCE_GTS = `import {
   field,
   contains,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 
 export class TranspiledCheck extends CardDef {
   static displayName = 'Transpiled Check';

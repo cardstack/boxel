@@ -1,7 +1,7 @@
-import type { DBAdapter } from '../db';
+import type { DBAdapter } from '../db.ts';
 
-import { query, asExpressions, insert, param } from '../expression';
-import type { User } from './db-types';
+import { query, asExpressions, insert, param } from '../expression.ts';
+import type { User } from './db-types.ts';
 
 export async function insertUser(
   dbAdapter: DBAdapter,
@@ -76,6 +76,65 @@ export async function getOrCreateUser(
   }
 
   return { user: existing as unknown as User, created: false };
+}
+
+// Marks every session token already issued to this user as unusable, by
+// recording the instant of revocation in epoch seconds. Tokens minted after
+// this instant are unaffected, so a user holding a live matrix session simply
+// re-authenticates; a bearer holding only a copied realm JWT cannot, because
+// minting requires the matrix openid handshake. Revoking a user who has no
+// `users` row still needs to take effect — realm session tokens are minted
+// without one — so insert the row when it is missing.
+//
+// Returns the epoch second that was recorded.
+export async function revokeUserSessions(
+  dbAdapter: DBAdapter,
+  matrixUserId: string,
+): Promise<number> {
+  let [row] = await query(dbAdapter, [
+    `INSERT INTO users (matrix_user_id, sessions_revoked_at) VALUES (`,
+    param(matrixUserId),
+    `, EXTRACT(EPOCH FROM now())::bigint)`,
+    `ON CONFLICT (matrix_user_id) DO UPDATE SET sessions_revoked_at = EXTRACT(EPOCH FROM now())::bigint`,
+    `RETURNING sessions_revoked_at`,
+  ]);
+
+  if (row?.sessions_revoked_at == null) {
+    throw new Error(
+      `revokeUserSessions: failed to record revocation for matrix_user_id="${matrixUserId}"`,
+    );
+  }
+
+  return Number(row.sessions_revoked_at);
+}
+
+// True when `issuedAt` (a JWT `iat`, in epoch seconds) predates the user's
+// recorded revocation. Read fresh on every call rather than memoized: a
+// revocation issued against one replica has to take effect on every other
+// replica immediately, which is the same reason realm permissions are not
+// cached.
+export async function isSessionRevoked(
+  dbAdapter: DBAdapter,
+  matrixUserId: string,
+  issuedAt: number | undefined,
+): Promise<boolean> {
+  let [row] = await query(dbAdapter, [
+    'SELECT sessions_revoked_at FROM users WHERE matrix_user_id =',
+    param(matrixUserId),
+  ]);
+
+  let revokedAt = row?.sessions_revoked_at;
+  if (revokedAt == null) {
+    return false;
+  }
+
+  // A token with no `iat` cannot be placed relative to the revocation, so treat
+  // it as revoked. Every token this server mints carries one.
+  if (issuedAt == null) {
+    return true;
+  }
+
+  return issuedAt < Number(revokedAt);
 }
 
 export async function userExists(

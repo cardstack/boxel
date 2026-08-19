@@ -11,8 +11,6 @@ import type { Realm } from '@cardstack/runtime-common/realm';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-
 import {
   testRealmURL,
   testModuleRealm,
@@ -21,6 +19,7 @@ import {
   setupOnSave,
   setupIntegrationTestRealm,
   setupOperatorModeStateCleanup,
+  realmConfigCardJSON,
 } from '../../helpers';
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -28,9 +27,10 @@ import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
 import type { TestRealmAdapter } from '../../helpers/adapter';
+import type { CardDef } from '@cardstack/base/card-api';
 
 let loader: Loader;
-let cardApi: typeof import('https://cardstack.com/base/card-api');
+let cardApi: typeof import('@cardstack/base/card-api');
 let setCardInOperatorModeState: (
   leftCards: string[],
   rightCards?: string[],
@@ -61,13 +61,13 @@ module('Integration | card-delete', function (hooks) {
   setupOperatorModeStateCleanup(hooks);
   hooks.beforeEach(async function () {
     loader = getService('loader-service').loader;
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
+    cardApi = await loader.import('@cardstack/base/card-api');
   });
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -101,10 +101,10 @@ module('Integration | card-delete', function (hooks) {
       ].filter((a) => a.length > 0);
       operatorModeStateService.restore({ stacks });
     };
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
+    let cardApi: typeof import('@cardstack/base/card-api');
+    let string: typeof import('@cardstack/base/string');
+    cardApi = await loader.import('@cardstack/base/card-api');
+    string = await loader.import('@cardstack/base/string');
 
     let { field, contains, CardDef, Component } = cardApi;
     let { default: StringField } = string;
@@ -137,7 +137,7 @@ module('Integration | card-delete', function (hooks) {
             type: 'card',
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
+                module: '@cardstack/base/cards-grid',
                 name: 'CardsGrid',
               },
             },
@@ -171,12 +171,12 @@ module('Integration | card-delete', function (hooks) {
             },
           },
         },
-        '.realm.json': {
+        'realm.json': realmConfigCardJSON({
           name: 'Test Workspace 1',
           backgroundURL:
             'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
           iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-        },
+        }),
       },
     }));
   });
@@ -213,7 +213,7 @@ module('Integration | card-delete', function (hooks) {
       () =>
         document.querySelectorAll(
           `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item]`,
-        ).length === 1,
+        ).length === 2,
     );
     let notFound = await adapter.openFile('Pet/mango.json');
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
@@ -437,13 +437,13 @@ module('Integration | card-delete', function (hooks) {
       () =>
         document.querySelectorAll(
           `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item]`,
-        ).length === 1,
+        ).length === 2,
     );
     await waitUntil(
       () =>
         document.querySelectorAll(
           `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]`,
-        ).length === 1,
+        ).length === 2,
     );
     let notFound = await adapter.openFile('Pet/mango.json');
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
@@ -501,7 +501,7 @@ module('Integration | card-delete', function (hooks) {
       () =>
         document.querySelectorAll(
           `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item]`,
-        ).length === 1,
+        ).length === 2,
     );
     assert
       .dom(
@@ -554,7 +554,7 @@ module('Integration | card-delete', function (hooks) {
       () =>
         document.querySelectorAll(
           `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item]`,
-        ).length === 1,
+        ).length === 2,
     );
     let notFound = await adapter.openFile('Pet/mango.json');
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
@@ -567,7 +567,7 @@ module('Integration | card-delete', function (hooks) {
   test('can delete a card that is a selected item', async function (assert) {
     setCardInOperatorModeState(
       [`${testRealmURL}index`],
-      [`https://localhost:4202/test/`],
+      [`${testModuleRealm}index`],
     );
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -597,6 +597,12 @@ module('Integration | card-delete', function (hooks) {
     assert
       .dom('[data-test-copy-button]')
       .containsText('Copy 2 Cards', 'button text is correct');
+    // The per-card more-options menu lives inside the type-label tab, which
+    // only renders on hover — re-hover Pet/mango to surface it again.
+    await triggerEvent(
+      `[data-test-cards-grid-item="${testRealmURL}Pet/mango"] .field-component-card`,
+      'mouseenter',
+    );
     await click(
       `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-more-options]`,
     );
@@ -611,7 +617,7 @@ module('Integration | card-delete', function (hooks) {
       () =>
         document.querySelectorAll(
           `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item]`,
-        ).length === 1,
+        ).length === 2,
     );
     let notFound = await adapter.openFile('Pet/mango.json');
     assert.strictEqual(notFound, undefined, 'file ref does not exist');

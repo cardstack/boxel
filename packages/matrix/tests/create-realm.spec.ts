@@ -1,10 +1,10 @@
-import { test, expect } from './fixtures';
-import { appURL } from '../helpers/isolated-realm-server';
+import { test, expect } from './fixtures.ts';
+import { appURL } from '../support/isolated-realm-server.ts';
 import {
   clearLocalStorage,
   createRealm,
   createSubscribedUserAndLogin,
-} from '../helpers';
+} from '../helpers/index.ts';
 
 test.describe('Create Realm via Dashboard', () => {
   test('it can create a new realm', async ({ page }) => {
@@ -32,9 +32,8 @@ test.describe('Create Realm via Dashboard', () => {
     await expect(
       page.locator(`[data-test-stack-card="${newRealmURL}index"]`),
     ).toBeVisible();
-    await expect(
-      page.locator(`[data-test-boxel-filter-list-button]`),
-    ).toHaveCount(3);
+    // A newly created realm defaults to a Workspace index card.
+    await expect(page.locator(`[data-test-workspace-index]`)).toBeVisible();
 
     await page.locator('[data-test-submode-switcher] button').click();
     await page.locator('[data-test-boxel-menu-item-text="Host"]').click();

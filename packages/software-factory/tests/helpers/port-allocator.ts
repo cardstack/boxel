@@ -92,11 +92,16 @@ export type PortHolder = {
 
 export type TestWorkerPortReservation = TestWorkerPortSet & {
   /**
-   * Release the compat + realm-server port holders right before spawning
-   * a realm child that will bind to those ports. Must be paired with
+   * Release the realm-server port holder right before spawning a realm
+   * child that will bind to that port. Must be paired with
    * `reacquireRealmServerPorts()` once the child exits (typically inside
    * the realm's `stop()` method), so the next test in this worker starts
-   * with the ports held again.
+   * with the port held again.
+   *
+   * The compat-realm-server port is NOT released here — that holder is
+   * released once at worker setup time via `releaseCompatRealmServerPort`
+   * and the worker-scoped compat proxy owns the port for the rest of the
+   * worker's lifetime.
    */
   releaseRealmServerPorts(): Promise<void>;
   reacquireRealmServerPorts(): Promise<void>;
@@ -106,6 +111,14 @@ export type TestWorkerPortReservation = TestWorkerPortSet & {
    * intentionally no matching reacquire.
    */
   releasePrerenderPort(): Promise<void>;
+  /**
+   * Release the compat-realm-server port holder once. The worker-scoped
+   * compat proxy takes ownership for the remainder of the worker's
+   * lifetime (so the stable compat port has no listener gap between
+   * per-test realm-server restarts), so there is intentionally no
+   * matching reacquire.
+   */
+  releaseCompatRealmServerPort(): Promise<void>;
   /** Stop all port holders. Called at worker-fixture teardown. */
   stop(): Promise<void>;
 };
@@ -236,16 +249,16 @@ export async function allocateTestWorkerPortSet(
     return {
       ...candidate,
       async releaseRealmServerPorts() {
-        await Promise.all([holders.compat.release(), holders.realm.release()]);
+        await holders.realm.release();
       },
       async reacquireRealmServerPorts() {
-        await Promise.all([
-          holders.compat.reacquire(),
-          holders.realm.reacquire(),
-        ]);
+        await holders.realm.reacquire();
       },
       async releasePrerenderPort() {
         await holders.prerender.release();
+      },
+      async releaseCompatRealmServerPort() {
+        await holders.compat.release();
       },
       async stop() {
         await Promise.allSettled([

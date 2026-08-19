@@ -13,21 +13,23 @@
  */
 
 // This should be first
-import '../../src/setup-logger';
+import '../../src/setup-logger.ts';
 
 import { parseArgs } from 'node:util';
-import { logger } from '../../src/logger';
+import { logger } from '../../src/logger.ts';
 
-import type { AgentAction, AgentContext } from '../../src/factory-agent';
+import type {
+  AgentAction,
+  AgentContext,
+} from '../../src/factory-agent/index.ts';
 
 import {
   assembleImplementPrompt,
   assembleIteratePrompt,
   assembleSystemPrompt,
-  assembleTestPrompt,
   buildOneShotMessages,
   FilePromptLoader,
-} from '../../src/factory-prompt-loader';
+} from '../../src/factory-prompt-loader.ts';
 
 // ---------------------------------------------------------------------------
 // Sample data
@@ -71,7 +73,7 @@ const SAMPLE_CONTEXT: AgentContext = {
   ],
   skills: [
     {
-      name: 'boxel-development',
+      name: 'boxel',
       content:
         'Follow Boxel card patterns: use CardDef base class, @field decorators, ' +
         'Component<typeof T> for templates, and scoped CSS.',
@@ -115,8 +117,8 @@ const SAMPLE_PREVIOUS_ACTIONS: AgentAction[] = [
     type: 'create_file',
     path: 'sticky-note.gts',
     content:
-      'import { contains, field, CardDef } from "https://cardstack.com/base/card-api";\n' +
-      'import StringField from "https://cardstack.com/base/string";\n\n' +
+      'import { contains, field, CardDef } from "@cardstack/base/card-api";\n' +
+      'import StringField from "@cardstack/base/string";\n\n' +
       'export class StickyNote extends CardDef {\n' +
       '  @field title = contains(StringField);\n' +
       '}',
@@ -231,18 +233,17 @@ function main(): void {
   }
 
   if (stage === 'all' || stage === 'test') {
-    separator('STAGE: test (generate tests for existing implementation)');
+    separator('STAGE: harden (QUnit test pass over a shipped card)');
 
-    let userPrompt = assembleTestPrompt({
-      context: ctx,
-      implementedFiles: [
-        {
-          path: 'sticky-note.gts',
-          content: SAMPLE_PREVIOUS_ACTIONS[0].content!,
-          realm: 'target',
-        },
-      ],
-      loader,
+    let userPrompt = loader.load('issue-harden', {
+      project: ctx.project,
+      issue: {
+        id: 'Issues/harden-sticky-note',
+        summary: 'Harden: Implement Sticky Note card',
+        description: 'Write QUnit tests for the shipped work of SN-1.',
+        acceptanceCriteria: '- [ ] run_tests passes',
+      },
+      knowledge: ctx.knowledge,
     });
     let messages = buildOneShotMessages(systemPrompt, userPrompt);
     printMessages(messages);

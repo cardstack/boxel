@@ -1,7 +1,8 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
-import type { RealmHttpServer as Server } from '../server';
+import type { RealmHttpServer as Server } from '../server.ts';
 import type { DirResult } from 'tmp';
 import type { PgAdapter } from '@cardstack/postgres';
 import type { Realm, RealmAdapter } from '@cardstack/runtime-common';
@@ -16,7 +17,7 @@ import {
   type RealmRequest,
   waitUntil,
   withRealmPath,
-} from './helpers';
+} from './helpers/index.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 type DiskSnapshot =
@@ -55,7 +56,7 @@ function formatDiskSnapshot(snapshot: DiskSnapshot): string {
 }
 
 // Read the raw rows for a URL from boxel_index + boxel_index_working,
-// plus realm_versions, so we can tell whether a stale GET is the index
+// plus realm_generations, so we can tell whether a stale GET is the index
 // being out of date or the GET path picking up the wrong row.
 async function readIndexSnapshot(
   dbAdapter: PgAdapter,
@@ -63,17 +64,17 @@ async function readIndexSnapshot(
   cardURL: string,
   fileURL: string,
 ): Promise<{
-  realmVersion: unknown;
+  generation: unknown;
   stable: unknown[];
   working: unknown[];
 }> {
   let [versionRow] = (await dbAdapter.execute(
-    `SELECT current_version FROM realm_versions WHERE realm_url = $1`,
+    `SELECT current_generation FROM realm_generations WHERE realm_url = $1`,
     { bind: [realmHref] },
-  )) as { current_version: number }[];
+  )) as { current_generation: number }[];
 
   let stable = (await dbAdapter.execute(
-    `SELECT url, file_alias, type, realm_version, is_deleted,
+    `SELECT url, file_alias, type, generation, is_deleted,
             pristine_doc, last_modified
        FROM boxel_index
       WHERE realm_url = $1 AND (url = $2 OR url = $3 OR file_alias = $2 OR file_alias = $3)`,
@@ -81,7 +82,7 @@ async function readIndexSnapshot(
   )) as unknown[];
 
   let working = (await dbAdapter.execute(
-    `SELECT url, file_alias, type, realm_version, is_deleted,
+    `SELECT url, file_alias, type, generation, is_deleted,
             pristine_doc, last_modified
        FROM boxel_index_working
       WHERE realm_url = $1 AND (url = $2 OR url = $3 OR file_alias = $2 OR file_alias = $3)`,
@@ -89,13 +90,13 @@ async function readIndexSnapshot(
   )) as unknown[];
 
   return {
-    realmVersion: versionRow?.current_version ?? null,
+    generation: versionRow?.current_generation ?? null,
     stable,
     working,
   };
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module(
     'Realm-specific Endpoints: can make request to post /_atomic',
     function () {
@@ -131,8 +132,8 @@ module(basename(__filename), function () {
         });
         test('can write single new module', async function (assert) {
           let source = `
-              import { field, CardDef, contains } from "https://cardstack.com/base/card-api";
-              import StringField from "https://cardstack.com/base/string";
+              import { field, CardDef, contains } from "@cardstack/base/card-api";
+              import StringField from "@cardstack/base/string";
               export class Place extends CardDef {
                 static displayName = 'Place';
                 @field name = contains(StringField);
@@ -188,24 +189,24 @@ module(basename(__filename), function () {
         });
         test('can write multiple new modules', async function (assert) {
           let place1Source = `
-              import { field, CardDef, contains } from "https://cardstack.com/base/card-api";
-              import StringField from "https://cardstack.com/base/string";
+              import { field, CardDef, contains } from "@cardstack/base/card-api";
+              import StringField from "@cardstack/base/string";
               export class Place extends CardDef {
                 static displayName = 'Place';
                 @field name = contains(StringField);
               }
               `.trim();
           let place2Source = `
-              import { field, CardDef, contains } from "https://cardstack.com/base/card-api";
-              import StringField from "https://cardstack.com/base/string";
+              import { field, CardDef, contains } from "@cardstack/base/card-api";
+              import StringField from "@cardstack/base/string";
               export class Place2 extends CardDef {
                 static displayName = 'Place2';
                 @field name = contains(StringField);
               }
               `.trim();
           let countrySource = `
-              import { field, contains } from "https://cardstack.com/base/card-api";
-              import StringField from "https://cardstack.com/base/string";
+              import { field, contains } from "@cardstack/base/card-api";
+              import StringField from "@cardstack/base/string";
               export class Country extends CardDef {
                 static displayName = 'Country';
                 @field name = contains(StringField);
@@ -416,16 +417,16 @@ module(basename(__filename), function () {
         });
         test('can write multiple modules that depend on each other', async function (assert) {
           let place1Source = `
-            import { field, CardDef, contains } from "https://cardstack.com/base/card-api";
-            import StringField from "https://cardstack.com/base/string";
+            import { field, CardDef, contains } from "@cardstack/base/card-api";
+            import StringField from "@cardstack/base/string";
             export class Place extends CardDef {
               static displayName = 'Place';
               @field name = contains(StringField);
             }
             `.trim();
           let place2Source = `
-            import { field, CardDef, contains } from "https://cardstack.com/base/card-api";
-            import StringField from "https://cardstack.com/base/string";
+            import { field, CardDef, contains } from "@cardstack/base/card-api";
+            import StringField from "@cardstack/base/string";
             import { Place } from './place'
             export class Place2 extends Place {
               static displayName = 'Place2';
@@ -510,8 +511,8 @@ module(basename(__filename), function () {
 
         test('can write multiple instances that depend on each other', async function (assert) {
           let placeSource = `
-              import { field, CardDef, contains, linksTo } from "https://cardstack.com/base/card-api";
-              import StringField from "https://cardstack.com/base/string";
+              import { field, CardDef, contains, linksTo } from "@cardstack/base/card-api";
+              import StringField from "@cardstack/base/string";
               import { Country } from './country'
               export class Place extends CardDef {
                 static displayName = 'Place';
@@ -520,8 +521,8 @@ module(basename(__filename), function () {
               }
               `.trim();
           let countrySource = `
-              import { field, CardDef, contains } from "https://cardstack.com/base/card-api";
-              import StringField from "https://cardstack.com/base/string";
+              import { field, CardDef, contains } from "@cardstack/base/card-api";
+              import StringField from "@cardstack/base/string";
               export class Country extends CardDef {
                 static displayName = 'Country';
                 @field name = contains(StringField);
@@ -553,8 +554,19 @@ module(basename(__filename), function () {
               },
             ],
           };
+          // This module batch is setup for the instance batch below, which
+          // adopts from Place/Country. /_atomic returns as soon as writes are
+          // durable — not indexed — and a subsequent /_atomic write does not
+          // wait for a prior write's indexing to settle. Without waitForIndex
+          // the modules can still be indexing when the instance batch's
+          // fileSerialization looks up the Place definition; that lookup then
+          // races the in-flight module index (generation bump discards the
+          // on-demand prerender result) and the batch fails with
+          // FilterRefersToNonexistentTypeError. waitForIndex makes the modules
+          // indexed before we move on, which is what a caller writing modules
+          // then dependent instances across separate batches must do.
           let response = await request
-            .post('/_atomic')
+            .post('/_atomic?waitForIndex=true')
             .set('Accept', SupportedMimeType.JSONAPI)
             .set(
               'Authorization',
@@ -636,13 +648,19 @@ module(basename(__filename), function () {
               `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
             )
             .send(JSON.stringify(instanceDoc));
-          assert.strictEqual(instanceResponse.status, 201);
+          assert.strictEqual(
+            instanceResponse.status,
+            201,
+            `expected 201, got ${instanceResponse.status}: ${JSON.stringify(
+              instanceResponse.body,
+            )}`,
+          );
           assert.strictEqual(instanceResponse.body['atomic:results'].length, 2);
         });
         test('can write new instance with new module', async function (assert) {
           let source = `
-            import { field, CardDef, contains } from "https://cardstack.com/base/card-api";
-            import StringField from "https://cardstack.com/base/string";
+            import { field, CardDef, contains } from "@cardstack/base/card-api";
+            import StringField from "@cardstack/base/string";
             export class Place extends CardDef {
               static displayName = 'Place';
               @field name = contains(StringField);
@@ -718,8 +736,8 @@ module(basename(__filename), function () {
           // realm is free to write them in any order so long as the
           // observable result is "all or nothing".
           let source = `
-            import { field, CardDef, contains } from "https://cardstack.com/base/card-api";
-            import StringField from "https://cardstack.com/base/string";
+            import { field, CardDef, contains } from "@cardstack/base/card-api";
+            import StringField from "@cardstack/base/string";
             export class Town extends CardDef {
               static displayName = 'Town';
               @field name = contains(StringField);
@@ -789,8 +807,8 @@ module(basename(__filename), function () {
 
         test('update is a no-op when content is unchanged', async function (assert) {
           let source = `
-              import { field, CardDef, contains } from "https://cardstack.com/base/card-api";
-              import StringField from "https://cardstack.com/base/string";
+              import { field, CardDef, contains } from "@cardstack/base/card-api";
+              import StringField from "@cardstack/base/string";
               export class Place extends CardDef {
                 static displayName = 'Place';
                 @field name = contains(StringField);
@@ -891,6 +909,134 @@ module(basename(__filename), function () {
             testRealmAdapter.write = originalWrite;
           }
         });
+
+        test('waitForIndex write preserves compound field values backed by an unexported FieldDef', async function (assert) {
+          let logSource = `
+              import {
+                contains,
+                containsMany,
+                field,
+                CardDef,
+                FieldDef,
+              } from "@cardstack/base/card-api";
+              import StringField from "@cardstack/base/string";
+              import DatetimeField from "@cardstack/base/datetime";
+
+              class Entry extends FieldDef {
+                @field kind = contains(StringField);
+                @field at = contains(DatetimeField);
+                @field headline = contains(StringField);
+              }
+
+              export class Log extends CardDef {
+                @field logTitle = contains(StringField);
+                @field entries = containsMany(Entry);
+              }
+              `.trim();
+          let moduleDoc = {
+            'atomic:operations': [
+              {
+                op: 'add',
+                href: 'log.gts',
+                data: {
+                  type: 'source',
+                  attributes: {
+                    content: logSource,
+                  },
+                  meta: {},
+                },
+              },
+            ],
+          };
+          await request
+            .post('/_atomic?waitForIndex=true')
+            .set('Accept', SupportedMimeType.JSONAPI)
+            .set(
+              'Authorization',
+              `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+            )
+            .send(JSON.stringify(moduleDoc))
+            .expect(201);
+
+          // Instance pushed as a raw `source` resource — the shape realm
+          // sync tools send — so the handler re-serializes it through
+          // fileSerialization before writing to disk.
+          let instanceContent = JSON.stringify(
+            {
+              data: {
+                type: 'card',
+                attributes: {
+                  logTitle: 'Probe',
+                  entries: [
+                    {
+                      kind: 'phase',
+                      at: '2026-07-17T02:45:29.259Z',
+                      headline: 'probe entry',
+                    },
+                  ],
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: '../log',
+                    name: 'Log',
+                  },
+                },
+              },
+            },
+            null,
+            2,
+          );
+          let instanceDoc = {
+            'atomic:operations': [
+              {
+                op: 'add',
+                href: 'Log/log-1.json',
+                data: {
+                  type: 'source',
+                  attributes: {
+                    content: instanceContent,
+                  },
+                  meta: {},
+                },
+              },
+            ],
+          };
+          let response = await request
+            .post('/_atomic?waitForIndex=true')
+            .set('Accept', SupportedMimeType.JSONAPI)
+            .set(
+              'Authorization',
+              `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+            )
+            .send(JSON.stringify(instanceDoc));
+          assert.strictEqual(
+            response.status,
+            201,
+            `expected 201, got ${response.status}: ${JSON.stringify(response.body)}`,
+          );
+
+          let sourceResponse = await request
+            .get('/Log/log-1.json')
+            .set('Accept', SupportedMimeType.CardSource);
+          assert.strictEqual(sourceResponse.status, 200);
+          let storedDoc = JSON.parse(sourceResponse.text);
+          assert.deepEqual(
+            storedDoc.data.attributes?.entries,
+            [
+              {
+                kind: 'phase',
+                at: '2026-07-17T02:45:29.259Z',
+                headline: 'probe entry',
+              },
+            ],
+            'containsMany compound entries survive the waitForIndex write',
+          );
+          assert.strictEqual(
+            storedDoc.data.attributes?.logTitle,
+            'Probe',
+            'top-level attribute survives the waitForIndex write',
+          );
+        });
       });
       module('error handling', function (hooks) {
         setupPermissionedRealmCached(hooks, {
@@ -903,8 +1049,8 @@ module(basename(__filename), function () {
         });
         test('returns error when resource already exists', async function (assert) {
           let source = `
-              import { field, CardDef, contains } from "https://cardstack.com/base/card-api";
-              import StringField from "https://cardstack.com/base/string";
+              import { field, CardDef, contains } from "@cardstack/base/card-api";
+              import StringField from "@cardstack/base/string";
               export class Place extends CardDef {
                 static displayName = 'Place';
                 @field name = contains(StringField);

@@ -6,8 +6,9 @@ import { module, test } from 'qunit';
 import { md5 } from 'super-fast-md5';
 
 import {
-  baseRealm,
+  baseRealmRRI,
   baseCardRef,
+  ensureTrailingSlash,
   internalKeyFor,
   ri,
   rri,
@@ -16,12 +17,19 @@ import {
   type LooseSingleCardDocument,
   type IndexedInstance,
   type Realm,
+  type Relationship,
+  diffDoc,
 } from '@cardstack/runtime-common';
 import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
-import { windowErrorHandler } from '@cardstack/host/lib/window-error-handler';
+import ENV from '@cardstack/host/config/environment';
 import { REALM_INDEX_BOILERPLATE_HTML } from '@cardstack/host/utils/realm-index-boilerplate';
+
+// Standard mode: `http://localhost:4206/`; env mode:
+// `https://icons.<slug>.localhost/`. ENV.iconsURL is the resolved
+// value populated by environment.js from ICONS_URL or BOXEL_ENVIRONMENT.
+const iconsBase = ensureTrailingSlash(ENV.iconsURL);
 
 import {
   testRealmURL,
@@ -40,6 +48,7 @@ import {
   Component,
   contains,
   linksTo,
+  linksToMany,
   containsMany,
   DateTimeField,
   field,
@@ -49,10 +58,10 @@ import {
   StringField,
 } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
+import { searchCardsForTest } from '../helpers/search-cards';
 import { setupRenderingTest } from '../helpers/setup';
 
 let loader: Loader;
-let onError: (event: Event) => void;
 
 function unwrap(html: string): string {
   return html
@@ -77,29 +86,32 @@ function assertInnerHtmlMatches(
   assert.strictEqual(cleanedActual, cleanedExpected, message);
 }
 
+// Asserts the indexed search doc exactly equals `expected`. Search docs are
+// generated solely by the searchable-driven generator, so `expected` is that
+// generator's output: every relationship is present (a non-`searchable` link is
+// `{ id }` for a set target / `null` for an unset one; a `searchable` link is
+// expanded), and base-card links like `cardTheme` / `cardInfo.cardThumbnail`
+// appear too. `diffDoc(..., false)` is an exact comparison (no tolerance) that
+// reports a readable field-by-field diff on failure.
+function expectSearchDoc(
+  assert: Assert,
+  actual: Record<string, any> | null | undefined,
+  expected: Record<string, any>,
+  message?: string,
+) {
+  assert.deepEqual(
+    diffDoc(expected, actual ?? {}, false),
+    [],
+    message ?? 'indexed search doc matches the searchable-driven generator',
+  );
+}
+
 module(`Integration | realm indexing`, function (hooks) {
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;
-    onError = function (event: Event) {
-      let localIndexer = getService('local-indexer');
-      windowErrorHandler({
-        event,
-        setStatusToUnusable() {
-          localIndexer.prerenderStatus = 'unusable';
-        },
-        setError(error) {
-          localIndexer.renderError = error;
-        },
-      });
-    };
-    window.addEventListener('boxel-render-error', onError);
-  });
-
-  hooks.afterEach(function (this: RenderingTestContext) {
-    window.removeEventListener('boxel-render-error', onError);
   });
 
   setupLocalIndexing(hooks);
@@ -107,7 +119,7 @@ module(`Integration | realm indexing`, function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   async function getInstance(
@@ -129,7 +141,7 @@ module(`Integration | realm indexing`, function (hooks) {
           data: {
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: '@cardstack/base/card-api',
                 name: 'CardDef',
               },
             },
@@ -138,7 +150,11 @@ module(`Integration | realm indexing`, function (hooks) {
       },
     });
     let queryEngine = realm.realmIndexQueryEngine;
-    let { data: cards } = await queryEngine.searchCards({});
+    // anchored to cards — an unanchored entry query also returns the card
+    // `.json` file rows
+    let { data: cards } = await searchCardsForTest(queryEngine, {
+      filter: { type: baseCardRef },
+    });
     assert.deepEqual(cards, [
       {
         id: testRRI('empty'),
@@ -149,21 +165,16 @@ module(`Integration | realm indexing`, function (hooks) {
           cardDescription: null,
           cardThumbnailURL: null,
         },
-        relationships: {
-          'cardInfo.theme': { links: { self: null } },
-        },
         meta: {
           adoptsFrom: {
-            module: rri('https://cardstack.com/base/card-api'),
+            module: rri('@cardstack/base/card-api'),
             name: 'CardDef',
           },
           realmURL: ri('http://test-realm/test/'),
           realmInfo: {
             backgroundURL: null,
-            hostHome: null,
             iconURL: null,
             includePrerenderedDefaultRealmIndex: null,
-            interactHome: null,
             lastPublishedAt: null,
             name: 'Unnamed Workspace',
             publishable: null,
@@ -242,7 +253,7 @@ module(`Integration | realm indexing`, function (hooks) {
       'search doc includes contentHash',
     );
     assert.ok(
-      fileEntry?.deps?.includes(`${baseRealm.url}file-api`),
+      fileEntry?.deps?.includes(`${baseRealmRRI}file-api`),
       'deps include base file-api module',
     );
     let includesSelfFileDependency = fileEntry?.deps?.includes(fileURL.href);
@@ -257,7 +268,7 @@ module(`Integration | realm indexing`, function (hooks) {
           data: {
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: '@cardstack/base/card-api',
                 name: 'CardDef',
               },
             },
@@ -267,15 +278,15 @@ module(`Integration | realm indexing`, function (hooks) {
           data: {
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: '@cardstack/base/card-api',
                 name: 'CardDef',
               },
             },
           },
         },
         'pet.gts': `
-          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, CardDef } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
 
           export class Pet extends CardDef {
             @field firstName = contains(StringField);
@@ -307,7 +318,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri('https://cardstack.com/base/card-api'),
+              module: rri('@cardstack/base/card-api'),
               name: 'CardDef',
             },
           },
@@ -330,7 +341,7 @@ module(`Integration | realm indexing`, function (hooks) {
     );
   });
 
-  test('can recover from indexing a card with a broken link', async function (assert) {
+  test('a card with a broken linksTo target indexes cleanly, and invalidation fan-out re-indexes it when the target is later created', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
@@ -349,7 +360,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/pet',
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -362,23 +373,30 @@ module(`Integration | realm indexing`, function (hooks) {
       let mango = await queryEngine.cardDocument(
         new URL(`${testRealmURL}Pet/mango`),
       );
-      if (mango?.type === 'error') {
-        assert.deepEqual(
-          mango.error.errorDetail.message,
-          `missing file ${testRealmURL}Person/owner.json`,
-        );
-        assert.deepEqual(
-          [...(mango.error.errorDetail.deps ?? [])].sort(),
-          [
-            `${testRealmURL}Person/owner`,
-            `${testRealmURL}Person/owner.json`,
-            'https://localhost:4202/test/pet',
-          ].sort(),
-          'error deps are correct',
+      if (mango?.type === 'doc') {
+        let owner = mango.doc.data.relationships?.owner;
+        assert.strictEqual(
+          (Array.isArray(owner) ? owner[0] : owner)?.links?.self,
+          `../Person/owner`,
+          'broken owner reference is preserved on the wire so the consumer can render the placeholder',
         );
       } else {
-        assert.ok(false, `expected search entry to be an error doc`);
+        assert.ok(
+          false,
+          `mango with a missing linksTo target indexes as a clean instance, got: ${mango?.error?.errorDetail.message}`,
+        );
       }
+      let mangoInstance = await queryEngine.instance(
+        new URL(`${testRealmURL}Pet/mango`),
+      );
+      assert.ok(
+        (mangoInstance?.deps ?? []).some(
+          (dep) =>
+            dep === `${testRealmURL}Person/owner.json` ||
+            dep === `${testRealmURL}Person/owner`,
+        ),
+        'deps include the unresolved owner link so invalidation can reach mango when the target is created',
+      );
     }
     await realm.write(
       'Person/owner.json',
@@ -390,7 +408,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri('https://localhost:4202/test/person'),
+              module: rri(`${testModuleRealm}person`),
               name: 'Person',
             },
           },
@@ -421,11 +439,10 @@ module(`Integration | realm indexing`, function (hooks) {
                 self: `../Person/owner`,
               },
             },
-            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
-              module: rri('https://localhost:4202/test/pet'),
+              module: rri(`${testModuleRealm}pet`),
               name: 'Pet',
             },
             lastModified: adapter.lastModifiedMap.get(
@@ -435,10 +452,8 @@ module(`Integration | realm indexing`, function (hooks) {
             realmURL: ri('http://test-realm/test/'),
             realmInfo: {
               backgroundURL: null,
-              hostHome: null,
               iconURL: null,
               includePrerenderedDefaultRealmIndex: null,
-              interactHome: null,
               lastPublishedAt: null,
               name: 'Unnamed Workspace',
               publishable: null,
@@ -469,7 +484,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/pet',
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -489,7 +504,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri('https://localhost:4202/test/pet'),
+              module: rri(`${testModuleRealm}pet`),
               name: 'Pet',
             },
           },
@@ -515,26 +530,16 @@ module(`Integration | realm indexing`, function (hooks) {
           cardThumbnailURL: null,
           cardInfo,
         },
-        relationships: {
-          owner: {
-            links: {
-              self: null,
-            },
-          },
-          'cardInfo.theme': { links: { self: null } },
-        },
         meta: {
           adoptsFrom: {
-            module: rri('https://localhost:4202/test/pet'),
+            module: rri(`${testModuleRealm}pet`),
             name: 'Pet',
           },
           realmURL: ri('http://test-realm/test/'),
           realmInfo: {
             backgroundURL: null,
-            hostHome: null,
             iconURL: null,
             includePrerenderedDefaultRealmIndex: null,
-            interactHome: null,
             lastPublishedAt: null,
             name: 'Unnamed Workspace',
             publishable: null,
@@ -573,26 +578,16 @@ module(`Integration | realm indexing`, function (hooks) {
             cardThumbnailURL: null,
             cardInfo,
           },
-          relationships: {
-            owner: {
-              links: {
-                self: null,
-              },
-            },
-            'cardInfo.theme': { links: { self: null } },
-          },
           meta: {
             adoptsFrom: {
-              module: rri('https://localhost:4202/test/pet'),
+              module: rri(`${testModuleRealm}pet`),
               name: 'Pet',
             },
             realmURL: ri('http://test-realm/test/'),
             realmInfo: {
               backgroundURL: null,
-              hostHome: null,
               iconURL: null,
               includePrerenderedDefaultRealmIndex: null,
-              interactHome: null,
               lastPublishedAt: null,
               name: 'Unnamed Workspace',
               publishable: null,
@@ -623,7 +618,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/pet',
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -643,7 +638,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri('https://localhost:4202/test/pet'),
+              module: rri(`${testModuleRealm}pet`),
               name: 'Pet',
             },
           },
@@ -693,7 +688,7 @@ module(`Integration | realm indexing`, function (hooks) {
             attributes: { firstName: 'Mango' },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/pet',
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -764,7 +759,7 @@ module(`Integration | realm indexing`, function (hooks) {
             attributes: { firstName: 'Mango' },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/pet',
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -795,7 +790,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/pet',
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -814,7 +809,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri('https://localhost:4202/test/pet'),
+              module: rri(`${testModuleRealm}pet`),
               name: 'Pet',
             },
           },
@@ -841,7 +836,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/person',
+                module: `${testModuleRealm}person`,
                 name: 'Person',
               },
             },
@@ -862,7 +857,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/pet',
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -894,11 +889,10 @@ module(`Integration | realm indexing`, function (hooks) {
               self: `../Person/owner`,
             },
           },
-          'cardInfo.theme': { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
-            module: rri('https://localhost:4202/test/pet'),
+            module: rri(`${testModuleRealm}pet`),
             name: 'Pet',
           },
           lastModified: adapter.lastModifiedMap.get(
@@ -908,10 +902,8 @@ module(`Integration | realm indexing`, function (hooks) {
           realmURL: ri('http://test-realm/test/'),
           realmInfo: {
             backgroundURL: null,
-            hostHome: null,
             iconURL: null,
             includePrerenderedDefaultRealmIndex: null,
-            interactHome: null,
             lastPublishedAt: null,
             name: 'Unnamed Workspace',
             publishable: null,
@@ -941,7 +933,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/person',
+                module: `${testModuleRealm}person`,
                 name: 'Person',
               },
             },
@@ -962,7 +954,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/pet',
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -992,11 +984,10 @@ module(`Integration | realm indexing`, function (hooks) {
               self: `../Person/owner`,
             },
           },
-          'cardInfo.theme': { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
-            module: rri('https://localhost:4202/test/pet'),
+            module: rri(`${testModuleRealm}pet`),
             name: 'Pet',
           },
           lastModified: adapter.lastModifiedMap.get(
@@ -1006,10 +997,8 @@ module(`Integration | realm indexing`, function (hooks) {
           realmURL: ri('http://test-realm/test/'),
           realmInfo: {
             backgroundURL: null,
-            hostHome: null,
             iconURL: null,
             includePrerenderedDefaultRealmIndex: null,
-            interactHome: null,
             lastPublishedAt: null,
             name: 'Unnamed Workspace',
             publishable: null,
@@ -1049,7 +1038,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/spec',
+                module: '@cardstack/base/spec',
                 name: 'Spec',
               },
             },
@@ -1085,13 +1074,9 @@ module(`Integration | realm indexing`, function (hooks) {
           containedExamples: [],
           cardInfo,
         },
-        relationships: {
-          'cardInfo.theme': { links: { self: null } },
-          linkedExamples: { links: { self: null } },
-        },
         meta: {
           adoptsFrom: {
-            module: rri('https://cardstack.com/base/spec'),
+            module: rri('@cardstack/base/spec'),
             name: 'Spec',
           },
           lastModified: adapter.lastModifiedMap.get(
@@ -1101,10 +1086,8 @@ module(`Integration | realm indexing`, function (hooks) {
           realmURL: testRealmURL,
           realmInfo: {
             backgroundURL: null,
-            hostHome: null,
             iconURL: null,
             includePrerenderedDefaultRealmIndex: null,
-            interactHome: null,
             lastPublishedAt: null,
             name: 'Unnamed Workspace',
             publishable: null,
@@ -1117,7 +1100,7 @@ module(`Integration | realm indexing`, function (hooks) {
       let instance = await indexer.instance(
         new URL(`${testRealmURL}person-spec`),
       );
-      assert.deepEqual(instance?.searchDoc, {
+      expectSearchDoc(assert, instance?.searchDoc, {
         _cardType: 'Spec',
         cardDescription: 'Spec for Person card',
         id: `${testRealmURL}person-spec`,
@@ -1130,7 +1113,8 @@ module(`Integration | realm indexing`, function (hooks) {
         isCard: true,
         isComponent: false,
         isField: false,
-        cardInfo: { theme: null },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
       });
     } else {
       assert.ok(
@@ -1162,7 +1146,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/spec',
+                module: '@cardstack/base/spec',
                 name: 'Spec',
               },
             },
@@ -1216,13 +1200,9 @@ module(`Integration | realm indexing`, function (hooks) {
           containedExamples: [],
           cardInfo,
         },
-        relationships: {
-          'cardInfo.theme': { links: { self: null } },
-          linkedExamples: { links: { self: null } },
-        },
         meta: {
           adoptsFrom: {
-            module: rri('https://cardstack.com/base/spec'),
+            module: rri('@cardstack/base/spec'),
             name: 'Spec',
           },
           lastModified: adapter.lastModifiedMap.get(
@@ -1232,10 +1212,8 @@ module(`Integration | realm indexing`, function (hooks) {
           realmURL: testRealmURL,
           realmInfo: {
             backgroundURL: null,
-            hostHome: null,
             iconURL: null,
             includePrerenderedDefaultRealmIndex: null,
-            interactHome: null,
             lastPublishedAt: null,
             name: 'Unnamed Workspace',
             publishable: null,
@@ -1248,7 +1226,7 @@ module(`Integration | realm indexing`, function (hooks) {
       let instance = await indexer.instance(
         new URL(`${testRealmURL}person-spec`),
       );
-      assert.deepEqual(instance?.searchDoc, {
+      expectSearchDoc(assert, instance?.searchDoc, {
         _cardType: 'Spec',
         cardDescription: 'Spec for Person card',
         id: `${testRealmURL}person-spec`,
@@ -1261,7 +1239,8 @@ module(`Integration | realm indexing`, function (hooks) {
         isCard: true,
         isComponent: false,
         isField: false,
-        cardInfo: { theme: null },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
       });
     } else {
       assert.ok(
@@ -1287,6 +1266,7 @@ module(`Integration | realm indexing`, function (hooks) {
               functionName: 'switch-submode_dd88',
               requiresApproval: false,
               cardTitle: 'Switch Submode',
+              definition: null,
             },
           ],
           cardDescription: null,
@@ -1294,9 +1274,6 @@ module(`Integration | realm indexing`, function (hooks) {
           cardThumbnailURL: null,
           cardTitle: null,
           cardInfo,
-        },
-        relationships: {
-          'cardInfo.theme': { links: { self: null } },
         },
         meta: {
           adoptsFrom: skillCardRef,
@@ -1307,10 +1284,8 @@ module(`Integration | realm indexing`, function (hooks) {
           realmURL: testRealmURL,
           realmInfo: {
             backgroundURL: null,
-            hostHome: null,
             iconURL: null,
             includePrerenderedDefaultRealmIndex: null,
-            interactHome: null,
             lastPublishedAt: null,
             name: 'Unnamed Workspace',
             publishable: null,
@@ -1323,7 +1298,7 @@ module(`Integration | realm indexing`, function (hooks) {
       let instance = await indexer.instance(
         new URL(`${testRealmURL}people-skill`),
       );
-      assert.deepEqual(instance?.searchDoc, {
+      expectSearchDoc(assert, instance?.searchDoc, {
         _cardType: 'Skill',
         id: `${testRealmURL}people-skill`,
         instructions: 'How to win friends and influence people',
@@ -1333,9 +1308,11 @@ module(`Integration | realm indexing`, function (hooks) {
             functionName: 'switch-submode_dd88',
             requiresApproval: false,
             cardTitle: 'Switch Submode',
+            definition: null,
           },
         ],
-        cardInfo: { theme: null },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
       });
     } else {
       assert.ok(
@@ -1422,9 +1399,20 @@ module(`Integration | realm indexing`, function (hooks) {
             entry.error.errorDetail.message,
             'Encountered error rendering HTML for card: intentional error',
           );
-          assert.deepEqual(entry.error.errorDetail.deps, [
-            `${testRealmURL}boom`,
-          ]);
+          // An errored card records its full render closure as deps, not just
+          // its own module: any change to a transitive dependency could be the
+          // one that fixes the render, so the errored card must reindex when
+          // any of them changes. Assert the meaningful members rather than the
+          // whole (large, churn-prone) closure.
+          let errorDeps = entry.error.errorDetail.deps ?? [];
+          assert.ok(
+            errorDeps.includes(`${testRealmURL}boom`),
+            "error deps include the card's own module",
+          );
+          assert.ok(
+            errorDeps.includes(`${testRealmURL}@cardstack/base/card-api`),
+            'error deps include transitive render dependencies (the full closure)',
+          );
         } else {
           assert.ok('false', 'expected search entry to be an error document');
         }
@@ -1816,13 +1804,6 @@ module(`Integration | realm indexing`, function (hooks) {
           cardThumbnailURL: null,
           cardTitle: 'Untitled Card',
         },
-        relationships: {
-          'cardInfo.theme': {
-            links: {
-              self: null,
-            },
-          },
-        },
         meta: {
           adoptsFrom: {
             module: rri(`./person`),
@@ -1874,13 +1855,13 @@ module(`Integration | realm indexing`, function (hooks) {
     });
     let { searchDoc } =
       (await getInstance(realm, new URL(`${testRealmURL}vangogh`))) ?? {};
-    assert.deepEqual(
+    expectSearchDoc(
+      assert,
       searchDoc,
       {
         _cardType: 'Person',
-        cardInfo: {
-          theme: null,
-        },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
         firstName: 'Van Gogh',
         id: `${testRealmURL}vangogh`,
         cardTitle: 'Untitled Card',
@@ -2043,7 +2024,6 @@ module(`Integration | realm indexing`, function (hooks) {
           class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card embedded-format display-container-true"
           data-boxel-card-container
           data-test-boxel-card-container
-          style
           data-boxel-card-id="http://test-realm/test/germaine"
           data-boxel-card-format="embedded"
           data-test-card="http://test-realm/test/germaine"
@@ -2053,14 +2033,22 @@ module(`Integration | realm indexing`, function (hooks) {
       'default embedded HTML is correct',
     );
 
-    let cardDefRefURL = internalKeyFor(baseCardRef, undefined);
+    let cardDefRefURL = internalKeyFor(
+      baseCardRef,
+      undefined,
+      getService('network').virtualNetwork,
+    );
+    // Compare as a set: the `embedded_html` key order is lexical after
+    // storage round-trip, not semantically meaningful, and the base
+    // CardDef key sorts differently in RRI prefix form (`@cardstack/...`)
+    // than in URL form. Consumers look up by key, never by position.
     assert.deepEqual(
-      Object.keys(embeddedHtml!),
+      [...Object.keys(embeddedHtml!)].sort(),
       [
         `${testRealmURL}fancy-person/FancyPerson`,
         `${testRealmURL}person/Person`,
         cardDefRefURL,
-      ],
+      ].sort(),
       'embedded class hierarchy is correct',
     );
 
@@ -2072,7 +2060,6 @@ module(`Integration | realm indexing`, function (hooks) {
         class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card embedded-format display-container-true"
         data-boxel-card-container
         data-test-boxel-card-container
-        style
         data-boxel-card-id="http://test-realm/test/germaine"
         data-boxel-card-format="embedded"
         data-test-card="http://test-realm/test/germaine"
@@ -2091,7 +2078,6 @@ module(`Integration | realm indexing`, function (hooks) {
         class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card embedded-format display-container-true"
         data-boxel-card-container
         data-test-boxel-card-container
-        style
         data-boxel-card-id="http://test-realm/test/germaine"
         data-boxel-card-format="embedded"
         data-test-card="http://test-realm/test/germaine"
@@ -2188,7 +2174,6 @@ module(`Integration | realm indexing`, function (hooks) {
           class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card fitted-format display-container-true"
           data-boxel-card-container
           data-test-boxel-card-container
-          style
           data-boxel-card-id="http://test-realm/test/germaine"
           data-boxel-card-format="fitted"
           data-test-card="http://test-realm/test/germaine"
@@ -2198,14 +2183,20 @@ module(`Integration | realm indexing`, function (hooks) {
       'default fitted HTML is correct',
     );
 
-    let cardDefRefURL = internalKeyFor(baseCardRef, undefined);
+    let cardDefRefURL = internalKeyFor(
+      baseCardRef,
+      undefined,
+      getService('network').virtualNetwork,
+    );
+    // Compare as a set: see the embedded-hierarchy assertion above —
+    // `fitted_html` key order is lexical after storage, not semantic.
     assert.deepEqual(
-      Object.keys(fittedHtml!),
+      [...Object.keys(fittedHtml!)].sort(),
       [
         `${testRealmURL}fancy-person/FancyPerson`,
         `${testRealmURL}person/Person`,
         cardDefRefURL,
-      ],
+      ].sort(),
       'fitted class hierarchy is correct',
     );
 
@@ -2217,7 +2208,6 @@ module(`Integration | realm indexing`, function (hooks) {
       class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card fitted-format display-container-true"
       data-boxel-card-container
       data-test-boxel-card-container
-      style
       data-boxel-card-id="http://test-realm/test/germaine"
       data-boxel-card-format="fitted"
       data-test-card="http://test-realm/test/germaine"
@@ -2236,7 +2226,6 @@ module(`Integration | realm indexing`, function (hooks) {
       class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card embedded-format display-container-true"
       data-boxel-card-container
       data-test-boxel-card-container
-      style
       data-boxel-card-id="http://test-realm/test/germaine"
       data-boxel-card-format="embedded"
       data-test-card="http://test-realm/test/germaine"
@@ -2340,6 +2329,8 @@ module(`Integration | realm indexing`, function (hooks) {
           cardTitle: 'Vet visit',
           contact: {
             firstName: 'Burcu',
+            // a computed declared inside the nested `Person` FieldDef
+            cardTitle: 'Burcu',
           },
         },
         cardDescription: 'Dog',
@@ -2350,7 +2341,6 @@ module(`Integration | realm indexing`, function (hooks) {
         'appointment.contact.pet': {
           links: { self: `./mango` },
         },
-        'cardInfo.theme': { links: { self: null } },
       });
     } else {
       assert.ok(
@@ -2398,7 +2388,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `https://localhost:4202/test/vendor`,
+                module: `${testModuleRealm}vendor`,
                 name: 'Vendor',
               },
             },
@@ -2412,7 +2402,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `https://localhost:4202/test/chain`,
+                module: `${testModuleRealm}chain`,
                 name: 'Chain',
               },
             },
@@ -2426,7 +2416,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `https://localhost:4202/test/chain`,
+                module: `${testModuleRealm}chain`,
                 name: 'Chain',
               },
             },
@@ -2489,11 +2479,10 @@ module(`Integration | realm indexing`, function (hooks) {
                 self: `../Chain/2`,
               },
             },
-            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
-              module: rri(`https://localhost:4202/test/vendor`),
+              module: rri(`${testModuleRealm}vendor`),
               name: 'Vendor',
             },
             lastModified: adapter.lastModifiedMap.get(
@@ -2506,10 +2495,8 @@ module(`Integration | realm indexing`, function (hooks) {
             realmURL: ri('http://test-realm/test/'),
             realmInfo: {
               backgroundURL: null,
-              hostHome: null,
               iconURL: null,
               includePrerenderedDefaultRealmIndex: null,
-              interactHome: null,
               lastPublishedAt: null,
               name: 'Unnamed Workspace',
               publishable: null,
@@ -2524,7 +2511,7 @@ module(`Integration | realm indexing`, function (hooks) {
             id: testRRI('Chain/1'),
             type: 'card',
             links: {
-              self: `../Chain/1`,
+              self: `./1`,
             },
             attributes: {
               name: 'Ethereum Mainnet',
@@ -2534,12 +2521,9 @@ module(`Integration | realm indexing`, function (hooks) {
               cardThumbnailURL: `Ethereum Mainnet-icon.png`,
               cardInfo,
             },
-            relationships: {
-              'cardInfo.theme': { links: { self: null } },
-            },
             meta: {
               adoptsFrom: {
-                module: rri(`https://localhost:4202/test/chain`),
+                module: rri(`${testModuleRealm}chain`),
                 name: 'Chain',
               },
               lastModified: adapter.lastModifiedMap.get(
@@ -2549,10 +2533,8 @@ module(`Integration | realm indexing`, function (hooks) {
               realmURL: ri('http://test-realm/test/'),
               realmInfo: {
                 backgroundURL: null,
-                hostHome: null,
                 iconURL: null,
                 includePrerenderedDefaultRealmIndex: null,
-                interactHome: null,
                 lastPublishedAt: null,
                 name: 'Unnamed Workspace',
                 publishable: null,
@@ -2566,7 +2548,7 @@ module(`Integration | realm indexing`, function (hooks) {
             id: testRRI('Chain/2'),
             type: 'card',
             links: {
-              self: `../Chain/2`,
+              self: `./2`,
             },
             attributes: {
               name: 'Polygon',
@@ -2576,12 +2558,9 @@ module(`Integration | realm indexing`, function (hooks) {
               cardThumbnailURL: `Polygon-icon.png`,
               cardInfo,
             },
-            relationships: {
-              'cardInfo.theme': { links: { self: null } },
-            },
             meta: {
               adoptsFrom: {
-                module: rri(`https://localhost:4202/test/chain`),
+                module: rri(`${testModuleRealm}chain`),
                 name: 'Chain',
               },
               lastModified: adapter.lastModifiedMap.get(
@@ -2591,10 +2570,8 @@ module(`Integration | realm indexing`, function (hooks) {
               realmURL: ri('http://test-realm/test/'),
               realmInfo: {
                 backgroundURL: null,
-                hostHome: null,
                 iconURL: null,
                 includePrerenderedDefaultRealmIndex: null,
-                interactHome: null,
                 lastPublishedAt: null,
                 name: 'Unnamed Workspace',
                 publishable: null,
@@ -2623,7 +2600,7 @@ module(`Integration | realm indexing`, function (hooks) {
             id: `${testRealmURL}Boom/boom`,
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/card-with-error',
+                module: `${testModuleRealm}card-with-error`,
                 name: 'Boom',
               },
             },
@@ -2637,7 +2614,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/person',
+                module: `${testModuleRealm}person`,
                 name: 'Person',
               },
             },
@@ -2706,7 +2683,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/person',
+                module: `${testModuleRealm}person`,
                 name: 'Person',
               },
             },
@@ -2718,7 +2695,8 @@ module(`Integration | realm indexing`, function (hooks) {
       realm,
       new URL(`${testRealmURL}Person/hassan`),
     );
-    assert.deepEqual(
+    expectSearchDoc(
+      assert,
       entry?.searchDoc,
       {
         id: `${testRealmURL}Person/hassan`,
@@ -2730,13 +2708,14 @@ module(`Integration | realm indexing`, function (hooks) {
         cardDescription: 'Person',
         fullName: 'Hassan Abdel-Rahman',
         _cardType: 'Person',
-        cardInfo: { theme: null },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
       },
       `search doc includes fullName field`,
     );
   });
 
-  test(`search doc includes unused 'linksTo' field if isUsed option is set to true`, async function (assert) {
+  test(`search doc includes a 'linksTo' field the render never loaded when it is searchable`, async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
@@ -2770,7 +2749,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/post',
+                module: `${testModuleRealm}post`,
                 name: 'Post',
               },
             },
@@ -2790,7 +2769,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/post',
+                module: `${testModuleRealm}post`,
                 name: 'Post',
               },
             },
@@ -2799,7 +2778,8 @@ module(`Integration | realm indexing`, function (hooks) {
       },
     });
     let entry = await getInstance(realm, new URL(`${testRealmURL}Post/1`));
-    assert.deepEqual(
+    expectSearchDoc(
+      assert,
       entry?.searchDoc,
       {
         _cardType: 'Post',
@@ -2814,7 +2794,8 @@ module(`Integration | realm indexing`, function (hooks) {
           id: `${testRealmURL}Publication/pacific`,
         },
         views: 5,
-        cardInfo: { theme: null },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
       },
       `post 1 search doc includes publication relationship`,
     );
@@ -2822,7 +2803,8 @@ module(`Integration | realm indexing`, function (hooks) {
       realm,
       new URL(`${testRealmURL}Publication/pacific`),
     );
-    assert.deepEqual(
+    expectSearchDoc(
+      assert,
       entry2?.searchDoc,
       {
         _cardType: 'Publication',
@@ -2835,6 +2817,7 @@ module(`Integration | realm indexing`, function (hooks) {
               fullName: ' ',
               cardTitle: ' ',
             },
+            cardTheme: null,
             cardInfo: { cardThumbnail: null, theme: null },
             id: `${testRealmURL}Post/1`,
             publication: {
@@ -2849,6 +2832,7 @@ module(`Integration | realm indexing`, function (hooks) {
               fullName: ' ',
               cardTitle: ' ',
             },
+            cardTheme: null,
             cardInfo: { cardThumbnail: null, theme: null },
             id: `${testRealmURL}Post/2`,
             publication: {
@@ -2858,9 +2842,10 @@ module(`Integration | realm indexing`, function (hooks) {
             views: 24,
           },
         ],
-        cardInfo: { theme: null },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
       },
-      `publication search doc includes featuredPosts relationship via isUsed=true`,
+      `publication search doc includes featuredPosts relationship via its searchable annotation`,
     );
   });
 
@@ -2921,13 +2906,13 @@ module(`Integration | realm indexing`, function (hooks) {
               cardDescription: 'Spec for Booking',
               specType: 'card',
               ref: {
-                module: 'https://localhost:4202/test/booking',
+                module: `${testModuleRealm}booking`,
                 name: 'Booking',
               },
             },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/spec',
+                module: '@cardstack/base/spec',
                 name: 'Spec',
               },
             },
@@ -2939,20 +2924,21 @@ module(`Integration | realm indexing`, function (hooks) {
       realm,
       new URL(`${testRealmURL}Spec/booking`),
     );
-    assert.deepEqual(entry?.searchDoc, {
+    expectSearchDoc(assert, entry?.searchDoc, {
       _cardType: 'Spec',
       id: `${testRealmURL}Spec/booking`,
       cardDescription: 'Spec for Booking',
       specType: 'card',
-      moduleHref: 'https://localhost:4202/test/booking',
+      moduleHref: `${testModuleRealm}booking`,
       containedExamples: null,
       linkedExamples: null,
-      ref: 'https://localhost:4202/test/booking/Booking',
+      ref: `${testModuleRealm}booking/Booking`,
       cardTitle: 'Booking',
       isCard: true,
       isComponent: false,
       isField: false,
-      cardInfo: { theme: null },
+      cardTheme: null,
+      cardInfo: { cardThumbnail: null, theme: null },
     });
     // we should be able to perform a structured clone of the search doc (this
     // emulates the limitations of the postMessage used to communicate between
@@ -3027,11 +3013,6 @@ module(`Integration | realm indexing`, function (hooks) {
           cardInfo,
         },
         relationships: {
-          friend: {
-            links: {
-              self: null,
-            },
-          },
           'pets.0': {
             links: { self: `../Pet/mango` },
             data: { id: `${testRealmURL}Pet/mango`, type: 'card' },
@@ -3040,7 +3021,6 @@ module(`Integration | realm indexing`, function (hooks) {
             links: { self: `../Pet/vanGogh` },
             data: { id: `${testRealmURL}Pet/vanGogh`, type: 'card' },
           },
-          'cardInfo.theme': { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -3057,10 +3037,8 @@ module(`Integration | realm indexing`, function (hooks) {
           realmURL: ri('http://test-realm/test/'),
           realmInfo: {
             backgroundURL: null,
-            hostHome: null,
             iconURL: null,
             includePrerenderedDefaultRealmIndex: null,
-            interactHome: null,
             lastPublishedAt: null,
             name: 'Unnamed Workspace',
             publishable: null,
@@ -3074,17 +3052,13 @@ module(`Integration | realm indexing`, function (hooks) {
         {
           id: testRRI('Pet/mango'),
           type: 'card',
-          links: { self: `../Pet/mango` },
+          links: { self: `./mango` },
           attributes: {
             cardDescription: null,
             firstName: 'Mango',
             cardTitle: 'Mango',
             cardThumbnailURL: null,
             cardInfo,
-          },
-          relationships: {
-            owner: { links: { self: null } },
-            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -3098,10 +3072,8 @@ module(`Integration | realm indexing`, function (hooks) {
             realmURL: ri('http://test-realm/test/'),
             realmInfo: {
               backgroundURL: null,
-              hostHome: null,
               iconURL: null,
               includePrerenderedDefaultRealmIndex: null,
-              interactHome: null,
               lastPublishedAt: null,
               name: 'Unnamed Workspace',
               publishable: null,
@@ -3114,17 +3086,13 @@ module(`Integration | realm indexing`, function (hooks) {
         {
           id: testRRI('Pet/vanGogh'),
           type: 'card',
-          links: { self: `../Pet/vanGogh` },
+          links: { self: `./vanGogh` },
           attributes: {
             cardDescription: null,
             firstName: 'Van Gogh',
             cardTitle: 'Van Gogh',
             cardThumbnailURL: null,
             cardInfo,
-          },
-          relationships: {
-            owner: { links: { self: null } },
-            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -3141,10 +3109,8 @@ module(`Integration | realm indexing`, function (hooks) {
             realmURL: ri('http://test-realm/test/'),
             realmInfo: {
               backgroundURL: null,
-              hostHome: null,
               iconURL: null,
               includePrerenderedDefaultRealmIndex: null,
-              interactHome: null,
               lastPublishedAt: null,
               name: 'Unnamed Workspace',
               publishable: null,
@@ -3167,7 +3133,7 @@ module(`Integration | realm indexing`, function (hooks) {
       new URL(`${testRealmURL}PetPerson/hassan`),
     );
     if (hassanEntry) {
-      assert.deepEqual(hassanEntry.searchDoc, {
+      expectSearchDoc(assert, hassanEntry.searchDoc, {
         _cardType: 'Pet Person',
         id: `${testRealmURL}PetPerson/hassan`,
         firstName: 'Hassan',
@@ -3177,6 +3143,7 @@ module(`Integration | realm indexing`, function (hooks) {
             firstName: 'Mango',
             owner: null,
             cardTitle: 'Mango',
+            cardTheme: null,
             cardInfo: { cardThumbnail: null, theme: null },
           },
           {
@@ -3184,6 +3151,7 @@ module(`Integration | realm indexing`, function (hooks) {
             firstName: 'Van Gogh',
             owner: null,
             cardTitle: 'Van Gogh',
+            cardTheme: null,
             cardInfo: { cardThumbnail: null, theme: null },
           },
         ],
@@ -3191,7 +3159,8 @@ module(`Integration | realm indexing`, function (hooks) {
         cardTitle: 'Hassan Pet Person',
         cardDescription: 'A person with pets',
         cardThumbnailURL: null,
-        cardInfo: { theme: null },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
       });
     } else {
       assert.ok(
@@ -3208,10 +3177,6 @@ module(`Integration | realm indexing`, function (hooks) {
         'PetPerson/burcu.json': {
           data: {
             attributes: { firstName: 'Burcu' },
-            relationships: {
-              pets: { links: { self: null } },
-              'cardInfo.theme': { links: { self: null } },
-            },
             meta: {
               adoptsFrom: {
                 module: `${testModuleRealm}pet-person`,
@@ -3244,11 +3209,6 @@ module(`Integration | realm indexing`, function (hooks) {
             cardThumbnailURL: null,
             cardInfo,
           },
-          relationships: {
-            pets: { links: { self: null } },
-            friend: { links: { self: null } },
-            'cardInfo.theme': { links: { self: null } },
-          },
           meta: {
             adoptsFrom: {
               module: testModuleRRI('pet-person'),
@@ -3264,10 +3224,8 @@ module(`Integration | realm indexing`, function (hooks) {
             realmURL: ri('http://test-realm/test/'),
             realmInfo: {
               backgroundURL: null,
-              hostHome: null,
               iconURL: null,
               includePrerenderedDefaultRealmIndex: null,
-              interactHome: null,
               lastPublishedAt: null,
               name: 'Unnamed Workspace',
               publishable: null,
@@ -3290,7 +3248,7 @@ module(`Integration | realm indexing`, function (hooks) {
       new URL(`${testRealmURL}PetPerson/burcu`),
     );
     if (entry) {
-      assert.deepEqual(entry.searchDoc, {
+      expectSearchDoc(assert, entry.searchDoc, {
         _cardType: 'Pet Person',
         id: `${testRealmURL}PetPerson/burcu`,
         firstName: 'Burcu',
@@ -3299,7 +3257,8 @@ module(`Integration | realm indexing`, function (hooks) {
         cardTitle: 'Burcu Pet Person',
         cardDescription: 'A person with pets',
         cardThumbnailURL: null,
-        cardInfo: { theme: null },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
       });
     } else {
       assert.ok(
@@ -3338,7 +3297,7 @@ module(`Integration | realm indexing`, function (hooks) {
             relationships: {},
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/spec',
+                module: '@cardstack/base/spec',
                 name: 'Spec',
               },
             },
@@ -3386,13 +3345,9 @@ module(`Integration | realm indexing`, function (hooks) {
           isField: false,
           cardInfo,
         },
-        relationships: {
-          'cardInfo.theme': { links: { self: null } },
-          linkedExamples: { links: { self: null } },
-        },
         meta: {
           adoptsFrom: {
-            module: rri('https://cardstack.com/base/spec'),
+            module: rri('@cardstack/base/spec'),
             name: 'Spec',
           },
           lastModified: adapter.lastModifiedMap.get(
@@ -3401,10 +3356,8 @@ module(`Integration | realm indexing`, function (hooks) {
           realmURL: ri('http://test-realm/test/'),
           realmInfo: {
             backgroundURL: null,
-            hostHome: null,
             iconURL: null,
             includePrerenderedDefaultRealmIndex: null,
-            interactHome: null,
             lastPublishedAt: null,
             name: 'Unnamed Workspace',
             publishable: null,
@@ -3430,7 +3383,7 @@ module(`Integration | realm indexing`, function (hooks) {
       new URL(`${testRealmURL}pet-person-spec`),
     );
     if (entry) {
-      assert.deepEqual(entry.searchDoc, {
+      expectSearchDoc(assert, entry.searchDoc, {
         _cardType: 'Spec',
         id: `${testRealmURL}pet-person-spec`,
         cardTitle: 'PetPerson',
@@ -3443,13 +3396,196 @@ module(`Integration | realm indexing`, function (hooks) {
         isCard: true,
         isComponent: false,
         isField: false,
-        cardInfo: { theme: null },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
       });
     } else {
       assert.ok(
         false,
         `could not find ${testRealmURL}pet-person-spec in the index`,
       );
+    }
+  });
+
+  test('can index a card whose contained field has a query-backed link driven by a computed in that same field', async function (assert) {
+    // The chain a rich-markdown card reference travels: a computed inside a
+    // composite field derives the reference ids, and a query-backed link in
+    // that same field interpolates them. The interpolation reads the
+    // serialized resource, so the computed has to survive `contains`
+    // serialization or the query aborts and the relationship indexes as an
+    // ordinary unresolved link — no `links.search`, no results, no error.
+    class Pet extends CardDef {
+      static displayName = 'Pet';
+      @field name = contains(StringField);
+    }
+    class Note extends FieldDef {
+      @field body = contains(StringField);
+      @field mentionedIds = containsMany(StringField, {
+        computeVia: function (this: Note) {
+          return (this.body ?? '')
+            .split(/\s+/)
+            .filter((word) => word.startsWith('@'))
+            .map((word) => `${testRealmURL}Pet/${word.slice(1)}`);
+        },
+      });
+      @field mentioned = linksToMany(() => Pet, {
+        query: { filter: { in: { id: '$this.mentionedIds' } } },
+      });
+    }
+    class Post extends CardDef {
+      @field note = contains(Note);
+    }
+    let { realm } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Pet, Note, Post },
+        'Pet/mango.json': {
+          data: {
+            attributes: { name: 'Mango' },
+            meta: {
+              adoptsFrom: { module: '../test-cards', name: 'Pet' },
+            },
+          },
+        },
+        'post-1.json': {
+          data: {
+            attributes: { note: { body: 'hello @mango' } },
+            meta: {
+              adoptsFrom: { module: './test-cards', name: 'Post' },
+            },
+          },
+        },
+      },
+    });
+
+    let post = await realm.realmIndexQueryEngine.cardDocument(
+      new URL(`${testRealmURL}post-1`),
+      { loadLinks: true },
+    );
+    if (post?.type === 'doc') {
+      assert.deepEqual(
+        (post.doc.data.attributes?.note as Record<string, any>)?.mentionedIds,
+        [`${testRealmURL}Pet/mango`],
+        'the computed declared inside the contained field is in the indexed document',
+      );
+      let mentioned = post.doc.data.relationships?.[
+        'note.mentioned'
+      ] as Relationship;
+      assert.ok(
+        mentioned?.links?.search?.startsWith(`${testRealmURL}_search?`),
+        `the query-backed link carries links.search (got ${JSON.stringify(
+          mentioned?.links,
+        )})`,
+      );
+      assert.deepEqual(
+        mentioned?.data,
+        [{ type: 'card', id: `${testRealmURL}Pet/mango` }],
+        'the query resolved the mentioned card',
+      );
+    } else {
+      assert.ok(
+        false,
+        `search entry was an error: ${post?.error.errorDetail.message}`,
+      );
+    }
+  });
+
+  test('a query-backed field resolves references that live in another realm', async function (assert) {
+    // A query field with no realm searches only the realm holding the card, so
+    // a reference into another realm could never match. Interpolating the
+    // reference ids into `realms` targets wherever they actually live.
+    class Pet extends CardDef {
+      static displayName = 'Pet';
+      @field name = contains(StringField);
+    }
+    class Note extends FieldDef {
+      // Declared before `mentioned`: interpolated paths are validated when the
+      // field decorator runs, so the target must already exist.
+      @field rawIds = containsMany(StringField);
+      @field mentionedIds = containsMany(StringField, {
+        computeVia: function (this: Note) {
+          return this.rawIds ?? [];
+        },
+      });
+      // Targets CardDef, not a realm-local class: a cross-realm reference
+      // points at a card whose type module lives in that other realm, so a
+      // realm-local type filter could never match it. This is how
+      // RichMarkdownField declares its own reference links.
+      @field mentioned = linksToMany(() => CardDef, {
+        query: {
+          filter: { in: { id: '$this.mentionedIds' } },
+          realms: '$this.mentionedIds',
+        },
+      });
+    }
+    class Post extends CardDef {
+      @field note = contains(Note);
+    }
+
+    let otherRealmURL = 'http://test-realm/other/';
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      realmURL: otherRealmURL,
+      contents: {
+        'pet.gts': { Pet },
+        'Pet/mango.json': {
+          data: {
+            attributes: { name: 'Mango' },
+            meta: { adoptsFrom: { module: '../pet', name: 'Pet' } },
+          },
+        },
+      },
+    });
+
+    let virtualNetwork = getService('network').virtualNetwork;
+    virtualNetwork.addRealmMapping('@other/cards/', otherRealmURL);
+    try {
+      let { realm } = await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'test-cards.gts': { Post, Note },
+          'post-1.json': {
+            data: {
+              attributes: {
+                note: { rawIds: ['@other/cards/Pet/mango'] },
+              },
+              meta: {
+                adoptsFrom: { module: './test-cards', name: 'Post' },
+              },
+            },
+          },
+        },
+      });
+
+      let post = await realm.realmIndexQueryEngine.cardDocument(
+        new URL(`${testRealmURL}post-1`),
+        { loadLinks: true },
+      );
+      if (post?.type === 'doc') {
+        let mentioned = post.doc.data.relationships?.[
+          'note.mentioned'
+        ] as Relationship;
+        let searchURL = mentioned?.links?.search ?? '';
+        let namesOtherRealm =
+          searchURL.includes(encodeURIComponent(otherRealmURL)) ||
+          searchURL.includes(otherRealmURL);
+        assert.ok(
+          namesOtherRealm,
+          `links.search names the other realm (got ${searchURL})`,
+        );
+        assert.deepEqual(
+          mentioned?.data,
+          [{ type: 'card', id: `${otherRealmURL}Pet/mango` }],
+          'the cross-realm reference resolved',
+        );
+      } else {
+        assert.ok(
+          false,
+          `search entry was an error: ${post?.error.errorDetail.message}`,
+        );
+      }
+    } finally {
+      virtualNetwork.removeRealmMapping('@other/cards/');
     }
   });
 
@@ -3477,7 +3613,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/friend',
+                module: `${testModuleRealm}friend`,
                 name: 'Friend',
               },
             },
@@ -3499,7 +3635,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/friend',
+                module: `${testModuleRealm}friend`,
                 name: 'Friend',
               },
             },
@@ -3513,16 +3649,9 @@ module(`Integration | realm indexing`, function (hooks) {
               cardDescription: 'Dog friend',
               cardThumbnailURL: 'van-gogh.jpg',
             },
-            relationships: {
-              friend: {
-                links: {
-                  self: null,
-                },
-              },
-            },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/friend',
+                module: `${testModuleRealm}friend`,
                 name: 'Friend',
               },
             },
@@ -3554,11 +3683,10 @@ module(`Integration | realm indexing`, function (hooks) {
               self: `./mango`,
             },
           },
-          'cardInfo.theme': { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
-            module: rri('https://localhost:4202/test/friend'),
+            module: rri(`${testModuleRealm}friend`),
             name: 'Friend',
           },
           lastModified: adapter.lastModifiedMap.get(
@@ -3567,10 +3695,8 @@ module(`Integration | realm indexing`, function (hooks) {
           realmURL: ri('http://test-realm/test/'),
           realmInfo: {
             backgroundURL: null,
-            hostHome: null,
             iconURL: null,
             includePrerenderedDefaultRealmIndex: null,
-            interactHome: null,
             lastPublishedAt: null,
             name: 'Unnamed Workspace',
             publishable: null,
@@ -3596,7 +3722,7 @@ module(`Integration | realm indexing`, function (hooks) {
       new URL(`${testRealmURL}Friend/hassan`),
     );
     if (hassanEntry) {
-      assert.deepEqual(hassanEntry.searchDoc, {
+      expectSearchDoc(assert, hassanEntry.searchDoc, {
         _cardType: 'Friend',
         id: `${testRealmURL}Friend/hassan`,
         firstName: 'Hassan',
@@ -3610,9 +3736,11 @@ module(`Integration | realm indexing`, function (hooks) {
           friend: {
             id: `${testRealmURL}Friend/vanGogh`,
           },
-          cardInfo: { theme: null },
+          cardTheme: null,
+          cardInfo: { cardThumbnail: null, theme: null },
         },
-        cardInfo: { theme: null },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
       });
     } else {
       assert.ok(
@@ -3642,7 +3770,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/friend',
+                module: `${testModuleRealm}friend`,
                 name: 'Friend',
               },
             },
@@ -3668,7 +3796,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/friend',
+                module: `${testModuleRealm}friend`,
                 name: 'Friend',
               },
             },
@@ -3706,11 +3834,10 @@ module(`Integration | realm indexing`, function (hooks) {
                 id: `${testRealmURL}Friend/mango`,
               },
             },
-            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
-              module: rri('https://localhost:4202/test/friend'),
+              module: rri(`${testModuleRealm}friend`),
               name: 'Friend',
             },
             lastModified: adapter.lastModifiedMap.get(
@@ -3719,10 +3846,8 @@ module(`Integration | realm indexing`, function (hooks) {
             realmURL: ri('http://test-realm/test/'),
             realmInfo: {
               backgroundURL: null,
-              hostHome: null,
               iconURL: null,
               includePrerenderedDefaultRealmIndex: null,
-              interactHome: null,
               lastPublishedAt: null,
               name: 'Unnamed Workspace',
               publishable: null,
@@ -3758,11 +3883,10 @@ module(`Integration | realm indexing`, function (hooks) {
                   id: `${testRealmURL}Friend/hassan`,
                 },
               },
-              'cardInfo.theme': { links: { self: null } },
             },
             meta: {
               adoptsFrom: {
-                module: rri('https://localhost:4202/test/friend'),
+                module: rri(`${testModuleRealm}friend`),
                 name: 'Friend',
               },
               lastModified: adapter.lastModifiedMap.get(
@@ -3771,10 +3895,8 @@ module(`Integration | realm indexing`, function (hooks) {
               realmURL: ri('http://test-realm/test/'),
               realmInfo: {
                 backgroundURL: null,
-                hostHome: null,
                 iconURL: null,
                 includePrerenderedDefaultRealmIndex: null,
-                interactHome: null,
                 lastPublishedAt: null,
                 name: 'Unnamed Workspace',
                 publishable: null,
@@ -3802,7 +3924,7 @@ module(`Integration | realm indexing`, function (hooks) {
       new URL(`${testRealmURL}Friend/hassan`),
     );
     if (hassanEntry) {
-      assert.deepEqual(hassanEntry.searchDoc, {
+      expectSearchDoc(assert, hassanEntry.searchDoc, {
         _cardType: 'Friend',
         id: `${testRealmURL}Friend/hassan`,
         firstName: 'Hassan',
@@ -3815,10 +3937,12 @@ module(`Integration | realm indexing`, function (hooks) {
             id: `${testRealmURL}Friend/hassan`,
           },
           cardDescription: 'Dog friend',
-          cardInfo: { theme: null },
+          cardTheme: null,
+          cardInfo: { cardThumbnail: null, theme: null },
         },
         cardTitle: 'Hassan',
-        cardInfo: { theme: null },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
       });
     } else {
       assert.ok(
@@ -3856,11 +3980,10 @@ module(`Integration | realm indexing`, function (hooks) {
                 id: `${testRealmURL}Friend/hassan`,
               },
             },
-            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
-              module: rri('https://localhost:4202/test/friend'),
+              module: rri(`${testModuleRealm}friend`),
               name: 'Friend',
             },
             lastModified: adapter.lastModifiedMap.get(
@@ -3869,10 +3992,8 @@ module(`Integration | realm indexing`, function (hooks) {
             realmURL: ri('http://test-realm/test/'),
             realmInfo: {
               backgroundURL: null,
-              hostHome: null,
               iconURL: null,
               includePrerenderedDefaultRealmIndex: null,
-              interactHome: null,
               lastPublishedAt: null,
               name: 'Unnamed Workspace',
               publishable: null,
@@ -3908,11 +4029,10 @@ module(`Integration | realm indexing`, function (hooks) {
                   id: `${testRealmURL}Friend/mango`,
                 },
               },
-              'cardInfo.theme': { links: { self: null } },
             },
             meta: {
               adoptsFrom: {
-                module: rri('https://localhost:4202/test/friend'),
+                module: rri(`${testModuleRealm}friend`),
                 name: 'Friend',
               },
               lastModified: adapter.lastModifiedMap.get(
@@ -3921,10 +4041,8 @@ module(`Integration | realm indexing`, function (hooks) {
               realmURL: ri('http://test-realm/test/'),
               realmInfo: {
                 backgroundURL: null,
-                hostHome: null,
                 iconURL: null,
                 includePrerenderedDefaultRealmIndex: null,
-                interactHome: null,
                 lastPublishedAt: null,
                 name: 'Unnamed Workspace',
                 publishable: null,
@@ -3952,7 +4070,7 @@ module(`Integration | realm indexing`, function (hooks) {
       new URL(`${testRealmURL}Friend/mango`),
     );
     if (mangoEntry) {
-      assert.deepEqual(mangoEntry.searchDoc, {
+      expectSearchDoc(assert, mangoEntry.searchDoc, {
         _cardType: 'Friend',
         id: `${testRealmURL}Friend/mango`,
         firstName: 'Mango',
@@ -3966,9 +4084,11 @@ module(`Integration | realm indexing`, function (hooks) {
             id: `${testRealmURL}Friend/mango`,
           },
           cardDescription: 'Dog owner',
+          cardTheme: null,
           cardInfo: { cardThumbnail: null, theme: null },
         },
-        cardInfo: { theme: null },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
       });
     } else {
       assert.ok(
@@ -3998,7 +4118,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://localhost:4202/test/friend',
+                module: `${testModuleRealm}friend`,
                 name: 'Friend',
               },
             },
@@ -4036,11 +4156,10 @@ module(`Integration | realm indexing`, function (hooks) {
                 id: `${testRealmURL}Friend/hassan`,
               },
             },
-            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
-              module: rri('https://localhost:4202/test/friend'),
+              module: rri(`${testModuleRealm}friend`),
               name: 'Friend',
             },
             lastModified: adapter.lastModifiedMap.get(
@@ -4049,10 +4168,8 @@ module(`Integration | realm indexing`, function (hooks) {
             realmURL: ri('http://test-realm/test/'),
             realmInfo: {
               backgroundURL: null,
-              hostHome: null,
               iconURL: null,
               includePrerenderedDefaultRealmIndex: null,
-              interactHome: null,
               lastPublishedAt: null,
               name: 'Unnamed Workspace',
               publishable: null,
@@ -4079,7 +4196,7 @@ module(`Integration | realm indexing`, function (hooks) {
       new URL(`${testRealmURL}Friend/hassan`),
     );
     if (hassanEntry) {
-      assert.deepEqual(hassanEntry.searchDoc, {
+      expectSearchDoc(assert, hassanEntry.searchDoc, {
         _cardType: 'Friend',
         id: `${testRealmURL}Friend/hassan`,
         firstName: 'Hassan',
@@ -4088,7 +4205,8 @@ module(`Integration | realm indexing`, function (hooks) {
           id: `${testRealmURL}Friend/hassan`,
         },
         cardTitle: 'Hassan',
-        cardInfo: { theme: null },
+        cardTheme: null,
+        cardInfo: { cardThumbnail: null, theme: null },
       });
     } else {
       assert.ok(
@@ -4191,7 +4309,6 @@ module(`Integration | realm indexing`, function (hooks) {
               links: { self: './vanGogh' },
               data: { type: 'card', id: vanGoghID },
             },
-            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: friendsRef,
@@ -4199,10 +4316,8 @@ module(`Integration | realm indexing`, function (hooks) {
             realmURL: ri('http://test-realm/test/'),
             realmInfo: {
               backgroundURL: null,
-              hostHome: null,
               iconURL: null,
               includePrerenderedDefaultRealmIndex: null,
-              interactHome: null,
               lastPublishedAt: null,
               name: 'Unnamed Workspace',
               publishable: null,
@@ -4238,7 +4353,6 @@ module(`Integration | realm indexing`, function (hooks) {
                 links: { self: './hassan' },
                 data: { type: 'card', id: hassanID },
               },
-              'cardInfo.theme': { links: { self: null } },
             },
             meta: {
               adoptsFrom: friendsRef,
@@ -4246,10 +4360,8 @@ module(`Integration | realm indexing`, function (hooks) {
               realmURL: ri('http://test-realm/test/'),
               realmInfo: {
                 backgroundURL: null,
-                hostHome: null,
                 iconURL: null,
                 includePrerenderedDefaultRealmIndex: null,
-                interactHome: null,
                 lastPublishedAt: null,
                 name: 'Unnamed Workspace',
                 publishable: null,
@@ -4279,7 +4391,6 @@ module(`Integration | realm indexing`, function (hooks) {
                 links: { self: './hassan' },
                 data: { type: 'card', id: hassanID },
               },
-              'cardInfo.theme': { links: { self: null } },
             },
             meta: {
               adoptsFrom: friendsRef,
@@ -4287,10 +4398,8 @@ module(`Integration | realm indexing`, function (hooks) {
               realmURL: ri('http://test-realm/test/'),
               realmInfo: {
                 backgroundURL: null,
-                hostHome: null,
                 iconURL: null,
                 includePrerenderedDefaultRealmIndex: null,
-                interactHome: null,
                 lastPublishedAt: null,
                 name: 'Unnamed Workspace',
                 publishable: null,
@@ -4316,7 +4425,8 @@ module(`Integration | realm indexing`, function (hooks) {
 
     let hassanEntry = await getInstance(realm, new URL(hassanID));
     if (hassanEntry) {
-      assert.deepEqual(
+      expectSearchDoc(
+        assert,
         hassanEntry.searchDoc,
         {
           _cardType: 'Friends',
@@ -4329,17 +4439,20 @@ module(`Integration | realm indexing`, function (hooks) {
               firstName: 'Mango',
               cardTitle: 'Mango',
               friends: [{ id: hassanID }],
-              cardInfo: { theme: null },
+              cardTheme: null,
+              cardInfo: { cardThumbnail: null, theme: null },
             },
             {
               id: vanGoghID,
               firstName: 'Van Gogh',
               friends: [{ id: hassanID }],
               cardTitle: 'Van Gogh',
-              cardInfo: { theme: null },
+              cardTheme: null,
+              cardInfo: { cardThumbnail: null, theme: null },
             },
           ],
-          cardInfo: { theme: null },
+          cardTheme: null,
+          cardInfo: { cardThumbnail: null, theme: null },
         },
         'hassan searchData is correct',
       );
@@ -4369,7 +4482,6 @@ module(`Integration | realm indexing`, function (hooks) {
               links: { self: './hassan' },
               data: { type: 'card', id: hassanID },
             },
-            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: friendsRef,
@@ -4377,10 +4489,8 @@ module(`Integration | realm indexing`, function (hooks) {
             realmURL: ri('http://test-realm/test/'),
             realmInfo: {
               backgroundURL: null,
-              hostHome: null,
               iconURL: null,
               includePrerenderedDefaultRealmIndex: null,
-              interactHome: null,
               lastPublishedAt: null,
               name: 'Unnamed Workspace',
               publishable: null,
@@ -4419,7 +4529,6 @@ module(`Integration | realm indexing`, function (hooks) {
                 links: { self: './vanGogh' },
                 data: { type: 'card', id: vanGoghID },
               },
-              'cardInfo.theme': { links: { self: null } },
             },
             meta: {
               adoptsFrom: friendsRef,
@@ -4427,10 +4536,8 @@ module(`Integration | realm indexing`, function (hooks) {
               realmURL: ri('http://test-realm/test/'),
               realmInfo: {
                 backgroundURL: null,
-                hostHome: null,
                 iconURL: null,
                 includePrerenderedDefaultRealmIndex: null,
-                interactHome: null,
                 lastPublishedAt: null,
                 name: 'Unnamed Workspace',
                 publishable: null,
@@ -4460,7 +4567,6 @@ module(`Integration | realm indexing`, function (hooks) {
                 links: { self: './hassan' },
                 data: { type: 'card', id: hassanID },
               },
-              'cardInfo.theme': { links: { self: null } },
             },
             meta: {
               adoptsFrom: friendsRef,
@@ -4468,10 +4574,8 @@ module(`Integration | realm indexing`, function (hooks) {
               realmURL: ri('http://test-realm/test/'),
               realmInfo: {
                 backgroundURL: null,
-                hostHome: null,
                 iconURL: null,
                 includePrerenderedDefaultRealmIndex: null,
-                interactHome: null,
                 lastPublishedAt: null,
                 name: 'Unnamed Workspace',
                 publishable: null,
@@ -4497,7 +4601,8 @@ module(`Integration | realm indexing`, function (hooks) {
 
     let mangoEntry = await getInstance(realm, new URL(mangoID));
     if (mangoEntry) {
-      assert.deepEqual(
+      expectSearchDoc(
+        assert,
         mangoEntry.searchDoc,
         {
           _cardType: 'Friends',
@@ -4520,13 +4625,16 @@ module(`Integration | realm indexing`, function (hooks) {
                       id: hassanID,
                     },
                   ],
-                  cardInfo: { theme: null },
+                  cardTheme: null,
+                  cardInfo: { cardThumbnail: null, theme: null },
                 },
               ],
+              cardTheme: null,
               cardInfo: { cardThumbnail: null, theme: null },
             },
           ],
-          cardInfo: { theme: null },
+          cardTheme: null,
+          cardInfo: { cardThumbnail: null, theme: null },
         },
         'mango searchData is correct',
       );
@@ -4556,7 +4664,6 @@ module(`Integration | realm indexing`, function (hooks) {
               links: { self: './hassan' },
               data: { type: 'card', id: hassanID },
             },
-            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: friendsRef,
@@ -4564,10 +4671,8 @@ module(`Integration | realm indexing`, function (hooks) {
             realmURL: ri('http://test-realm/test/'),
             realmInfo: {
               backgroundURL: null,
-              hostHome: null,
               iconURL: null,
               includePrerenderedDefaultRealmIndex: null,
-              interactHome: null,
               lastPublishedAt: null,
               name: 'Unnamed Workspace',
               publishable: null,
@@ -4606,7 +4711,6 @@ module(`Integration | realm indexing`, function (hooks) {
                 links: { self: './vanGogh' },
                 data: { type: 'card', id: vanGoghID },
               },
-              'cardInfo.theme': { links: { self: null } },
             },
             meta: {
               adoptsFrom: friendsRef,
@@ -4614,10 +4718,8 @@ module(`Integration | realm indexing`, function (hooks) {
               realmURL: ri('http://test-realm/test/'),
               realmInfo: {
                 backgroundURL: null,
-                hostHome: null,
                 iconURL: null,
                 includePrerenderedDefaultRealmIndex: null,
-                interactHome: null,
                 lastPublishedAt: null,
                 name: 'Unnamed Workspace',
                 publishable: null,
@@ -4647,7 +4749,6 @@ module(`Integration | realm indexing`, function (hooks) {
                 links: { self: './hassan' },
                 data: { type: 'card', id: hassanID },
               },
-              'cardInfo.theme': { links: { self: null } },
             },
             meta: {
               adoptsFrom: friendsRef,
@@ -4655,10 +4756,8 @@ module(`Integration | realm indexing`, function (hooks) {
               realmURL: ri('http://test-realm/test/'),
               realmInfo: {
                 backgroundURL: null,
-                hostHome: null,
                 iconURL: null,
                 includePrerenderedDefaultRealmIndex: null,
-                interactHome: null,
                 lastPublishedAt: null,
                 name: 'Unnamed Workspace',
                 publishable: null,
@@ -4684,7 +4783,8 @@ module(`Integration | realm indexing`, function (hooks) {
 
     let vanGoghEntry = await getInstance(realm, new URL(vanGoghID));
     if (vanGoghEntry) {
-      assert.deepEqual(
+      expectSearchDoc(
+        assert,
         vanGoghEntry.searchDoc,
         {
           _cardType: 'Friends',
@@ -4698,10 +4798,8 @@ module(`Integration | realm indexing`, function (hooks) {
               cardTitle: 'Hassan',
               friends: [
                 {
-                  cardInfo: {
-                    cardThumbnail: null,
-                    theme: null,
-                  },
+                  cardTheme: null,
+                  cardInfo: { cardThumbnail: null, theme: null },
                   firstName: 'Mango',
                   friends: [
                     {
@@ -4713,10 +4811,12 @@ module(`Integration | realm indexing`, function (hooks) {
                 },
                 { id: vanGoghID },
               ],
+              cardTheme: null,
               cardInfo: { cardThumbnail: null, theme: null },
             },
           ],
-          cardInfo: { theme: null },
+          cardTheme: null,
+          cardInfo: { cardThumbnail: null, theme: null },
         },
         'vanGogh searchData is correct',
       );
@@ -4751,72 +4851,99 @@ module(`Integration | realm indexing`, function (hooks) {
         .sort()
         // Exclude synthetic imports that encapsulate scoped CSS
         .filter((ref) => !ref.includes('glimmer-scoped.css')),
+      // This list is also the guard on how wide every card's dependency graph
+      // is: `card-api` statically imports FileDef's format templates, so
+      // anything the shared file-format shells import lands here — and
+      // therefore in the deps of every card in every realm, whether or not it
+      // ever renders a file. Growth here is a real cost (module loads per cold
+      // prerender, bytes per index row), so treat an addition as a decision
+      // rather than a snapshot to re-record. A family's own glyph belongs on
+      // its subclass's `static icon`, not in a shared map.
       [
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/align-box-left-middle',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/align-left',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/arrow-left',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/bell',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/captions',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/clipboard-copy',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/code',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/eye',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/file',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/file-pencil',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/folder-pen',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/hash',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/image',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/import',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/letter-case',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/link',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/link-off',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/notepad-text',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/palette',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/rectangle-ellipsis',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/trash-2',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/wand',
-        'https://cardstack.com/base/-private',
-        'https://cardstack.com/base/card-api',
-        'https://cardstack.com/base/card-serialization',
-        'https://cardstack.com/base/contains-many-component',
-        'https://cardstack.com/base/default-templates/atom',
-        'https://cardstack.com/base/default-templates/card-info',
-        'https://cardstack.com/base/default-templates/embedded',
-        'https://cardstack.com/base/default-templates/field-edit',
-        'https://cardstack.com/base/default-templates/file-def-edit',
-        'https://cardstack.com/base/default-templates/fitted',
-        'https://cardstack.com/base/default-templates/head',
-        'https://cardstack.com/base/default-templates/image-def-atom',
-        'https://cardstack.com/base/default-templates/image-def-embedded',
-        'https://cardstack.com/base/default-templates/image-def-fitted',
-        'https://cardstack.com/base/default-templates/image-def-isolated',
-        'https://cardstack.com/base/default-templates/isolated-and-edit',
-        'https://cardstack.com/base/default-templates/markdown',
-        'https://cardstack.com/base/default-templates/markdown-fallback',
-        'https://cardstack.com/base/default-templates/missing-template',
-        'https://cardstack.com/base/field-component',
-        'https://cardstack.com/base/field-support',
-        'https://cardstack.com/base/file-menu-items',
-        'https://cardstack.com/base/helpers/sanitized-html',
-        'https://cardstack.com/base/helpers/set-background-image',
-        'https://cardstack.com/base/links-to-editor',
-        'https://cardstack.com/base/links-to-many-component',
-        'https://cardstack.com/base/markdown-helpers',
-        'https://cardstack.com/base/menu-items',
-        'https://cardstack.com/base/number',
-        'https://cardstack.com/base/number/components/badge-counter',
-        'https://cardstack.com/base/number/components/badge-metric',
-        'https://cardstack.com/base/number/components/badge-notification',
-        'https://cardstack.com/base/number/components/gauge',
-        'https://cardstack.com/base/number/components/progress-bar',
-        'https://cardstack.com/base/number/components/progress-circle',
-        'https://cardstack.com/base/number/components/score',
-        'https://cardstack.com/base/number/components/stat',
-        'https://cardstack.com/base/number/util/index',
-        'https://cardstack.com/base/query-field-support',
-        'https://cardstack.com/base/shared-state',
-        'https://cardstack.com/base/string',
-        'https://cardstack.com/base/text-input-validator',
-        'https://cardstack.com/base/watched-array',
+        '@cardstack/base/-private',
+        '@cardstack/base/card-api',
+        '@cardstack/base/card-serialization',
+        '@cardstack/base/contains-many-component',
+        '@cardstack/base/default-templates/atom',
+        '@cardstack/base/default-templates/card-info',
+        '@cardstack/base/default-templates/embedded',
+        '@cardstack/base/default-templates/field-edit',
+        '@cardstack/base/default-templates/file-def-atom',
+        '@cardstack/base/default-templates/file-def-edit',
+        '@cardstack/base/default-templates/file-def-embedded',
+        '@cardstack/base/default-templates/file-def-fitted',
+        '@cardstack/base/default-templates/file-def-isolated',
+        '@cardstack/base/default-templates/fitted',
+        '@cardstack/base/default-templates/head',
+        '@cardstack/base/default-templates/isolated-and-edit',
+        '@cardstack/base/default-templates/markdown',
+        '@cardstack/base/default-templates/markdown-fallback',
+        '@cardstack/base/default-templates/missing-template',
+        '@cardstack/base/field-component',
+        '@cardstack/base/field-support',
+        '@cardstack/base/file-formats/file-image',
+        '@cardstack/base/file-formats/file-presentation',
+        '@cardstack/base/file-formats/file-preview-stage',
+        '@cardstack/base/file-formats/file-shell-atom',
+        '@cardstack/base/file-formats/file-shell-embedded',
+        '@cardstack/base/file-formats/file-shell-fitted',
+        '@cardstack/base/file-formats/file-shell-isolated',
+        '@cardstack/base/file-formats/file-type-profile',
+        '@cardstack/base/file-formats/file-view-model',
+        '@cardstack/base/file-formats/image-preview',
+        '@cardstack/base/file-menu-items',
+        '@cardstack/base/helpers/sanitized-html',
+        '@cardstack/base/helpers/set-background-image',
+        '@cardstack/base/links-to-editor',
+        '@cardstack/base/links-to-many-component',
+        '@cardstack/base/markdown-helpers',
+        '@cardstack/base/menu-items',
+        '@cardstack/base/number',
+        '@cardstack/base/number/components/badge-counter',
+        '@cardstack/base/number/components/badge-metric',
+        '@cardstack/base/number/components/badge-notification',
+        '@cardstack/base/number/components/gauge',
+        '@cardstack/base/number/components/progress-bar',
+        '@cardstack/base/number/components/progress-circle',
+        '@cardstack/base/number/components/score',
+        '@cardstack/base/number/components/stat',
+        '@cardstack/base/number/util/index',
+        '@cardstack/base/query-field-support',
+        '@cardstack/base/searchable',
+        '@cardstack/base/shared-state',
+        '@cardstack/base/string',
+        '@cardstack/base/text-input-validator',
+        '@cardstack/base/watched-array',
+        '@cardstack/boxel-ui/components',
+        '@cardstack/boxel-ui/helpers',
+        '@cardstack/boxel-ui/icons',
+        '@cardstack/boxel-ui/modifiers',
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/align-box-left-middle`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/align-left`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/arrow-left`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/bell`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/captions`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/clipboard-copy`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/code`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/eye`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/file`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/file-pencil`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/folder-pen`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/hash`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/image`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/import`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/letter-case`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/link`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/link-off`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/notepad-text`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/palette`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/rectangle-ellipsis`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/trash-2`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/wand`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/x`,
+        // Module deps are stored in canonical (deployment-independent) form,
+        // so the live test realm's module resolves to the standard
+        // `localhost:4202` address even when served at the env-mode hostname.
         'https://localhost:4202/test/person',
         'https://packages/@cardstack/boxel-host/commands/copy-and-edit',
         'https://packages/@cardstack/boxel-host/commands/copy-card',
@@ -4832,10 +4959,6 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://packages/@cardstack/boxel-host/commands/show-card',
         'https://packages/@cardstack/boxel-host/commands/show-file',
         'https://packages/@cardstack/boxel-host/commands/switch-submode',
-        'https://packages/@cardstack/boxel-ui/components',
-        'https://packages/@cardstack/boxel-ui/helpers',
-        'https://packages/@cardstack/boxel-ui/icons',
-        'https://packages/@cardstack/boxel-ui/modifiers',
         'https://packages/@cardstack/runtime-common',
         'https://packages/@cardstack/runtime-common/marked-sync',
         'https://packages/@ember/component',
@@ -4843,6 +4966,7 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://packages/@ember/helper',
         'https://packages/@ember/modifier',
         'https://packages/@ember/object',
+        'https://packages/@ember/object/internals',
         'https://packages/@ember/runloop',
         'https://packages/@ember/template',
         'https://packages/@ember/template-factory',
@@ -4853,10 +4977,14 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://packages/ember-css-url',
         'https://packages/ember-modifier',
         'https://packages/ember-provide-consume-context',
-        'https://packages/lodash',
-        'https://packages/super-fast-md5',
+        'https://packages/lodash-es',
         'https://packages/tracked-built-ins',
-      ],
+        // Sort the expected list so the assertion is robust against
+        // the iconsBase URL scheme/host: standard mode puts icons at
+        // `http://localhost:4206/`, env mode at `https://icons.<slug>.localhost/`,
+        // and the lexical position of those entries among the other
+        // URLs differs accordingly.
+      ].sort(),
       'the card references for the instance are correct',
     );
   });
@@ -4878,7 +5006,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${baseRealm.url}spec`,
+                module: `${baseRealmRRI}spec`,
                 name: 'Spec',
               },
               fields: {
@@ -4902,84 +5030,111 @@ module(`Integration | realm indexing`, function (hooks) {
         .sort()
         // Exclude synthetic imports that encapsulate scoped CSS
         .filter((ref) => !ref.includes('glimmer-scoped.css')),
+      // This list is also the guard on how wide every card's dependency graph
+      // is: `card-api` statically imports FileDef's format templates, so
+      // anything the shared file-format shells import lands here — and
+      // therefore in the deps of every card in every realm, whether or not it
+      // ever renders a file. Growth here is a real cost (module loads per cold
+      // prerender, bytes per index row), so treat an addition as a decision
+      // rather than a snapshot to re-record. A family's own glyph belongs on
+      // its subclass's `static icon`, not in a shared map.
       [
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/align-box-left-middle',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/align-left',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/apps',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/arrow-left',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/bell',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/book-open-text',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/box-model',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/captions',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/clipboard-copy',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/code',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/eye',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/file',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/file-pencil',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/folder-pen',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/git-branch',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/hash',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/image',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/import',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/layers-subtract',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/layout-list',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/letter-case',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/link',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/link-off',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/notepad-text',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/palette',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/rectangle-ellipsis',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/stack',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/toggle-left',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/trash-2',
-        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/wand',
-        'https://cardstack.com/base/-private',
-        'https://cardstack.com/base/boolean',
-        'https://cardstack.com/base/card-api',
-        'https://cardstack.com/base/card-serialization',
-        'https://cardstack.com/base/code-ref',
-        'https://cardstack.com/base/contains-many-component',
-        'https://cardstack.com/base/default-templates/atom',
-        'https://cardstack.com/base/default-templates/card-info',
-        'https://cardstack.com/base/default-templates/embedded',
-        'https://cardstack.com/base/default-templates/field-edit',
-        'https://cardstack.com/base/default-templates/file-def-edit',
-        'https://cardstack.com/base/default-templates/fitted',
-        'https://cardstack.com/base/default-templates/head',
-        'https://cardstack.com/base/default-templates/image-def-atom',
-        'https://cardstack.com/base/default-templates/image-def-embedded',
-        'https://cardstack.com/base/default-templates/image-def-fitted',
-        'https://cardstack.com/base/default-templates/image-def-isolated',
-        'https://cardstack.com/base/default-templates/isolated-and-edit',
-        'https://cardstack.com/base/default-templates/markdown',
-        'https://cardstack.com/base/default-templates/markdown-fallback',
-        'https://cardstack.com/base/default-templates/missing-template',
-        'https://cardstack.com/base/field-component',
-        'https://cardstack.com/base/field-support',
-        'https://cardstack.com/base/file-menu-items',
-        'https://cardstack.com/base/helpers/sanitized-html',
-        'https://cardstack.com/base/helpers/set-background-image',
-        'https://cardstack.com/base/links-to-editor',
-        'https://cardstack.com/base/links-to-many-component',
-        'https://cardstack.com/base/markdown',
-        'https://cardstack.com/base/markdown-helpers',
-        'https://cardstack.com/base/menu-items',
-        'https://cardstack.com/base/number',
-        'https://cardstack.com/base/number/components/badge-counter',
-        'https://cardstack.com/base/number/components/badge-metric',
-        'https://cardstack.com/base/number/components/badge-notification',
-        'https://cardstack.com/base/number/components/gauge',
-        'https://cardstack.com/base/number/components/progress-bar',
-        'https://cardstack.com/base/number/components/progress-circle',
-        'https://cardstack.com/base/number/components/score',
-        'https://cardstack.com/base/number/components/stat',
-        'https://cardstack.com/base/number/util/index',
-        'https://cardstack.com/base/query-field-support',
-        'https://cardstack.com/base/shared-state',
-        'https://cardstack.com/base/spec',
-        'https://cardstack.com/base/string',
-        'https://cardstack.com/base/text-input-validator',
-        'https://cardstack.com/base/watched-array',
+        '@cardstack/base/-private',
+        '@cardstack/base/boolean',
+        '@cardstack/base/card-api',
+        '@cardstack/base/card-serialization',
+        '@cardstack/base/code-ref',
+        '@cardstack/base/contains-many-component',
+        '@cardstack/base/default-templates/atom',
+        '@cardstack/base/default-templates/card-info',
+        '@cardstack/base/default-templates/embedded',
+        '@cardstack/base/default-templates/field-edit',
+        '@cardstack/base/default-templates/file-def-atom',
+        '@cardstack/base/default-templates/file-def-edit',
+        '@cardstack/base/default-templates/file-def-embedded',
+        '@cardstack/base/default-templates/file-def-fitted',
+        '@cardstack/base/default-templates/file-def-isolated',
+        '@cardstack/base/default-templates/fitted',
+        '@cardstack/base/default-templates/head',
+        '@cardstack/base/default-templates/isolated-and-edit',
+        '@cardstack/base/default-templates/markdown',
+        '@cardstack/base/default-templates/markdown-fallback',
+        '@cardstack/base/default-templates/missing-template',
+        '@cardstack/base/field-component',
+        '@cardstack/base/field-support',
+        '@cardstack/base/file-formats/file-image',
+        '@cardstack/base/file-formats/file-presentation',
+        '@cardstack/base/file-formats/file-preview-stage',
+        '@cardstack/base/file-formats/file-shell-atom',
+        '@cardstack/base/file-formats/file-shell-embedded',
+        '@cardstack/base/file-formats/file-shell-fitted',
+        '@cardstack/base/file-formats/file-shell-isolated',
+        '@cardstack/base/file-formats/file-type-profile',
+        '@cardstack/base/file-formats/file-view-model',
+        '@cardstack/base/file-formats/image-preview',
+        '@cardstack/base/file-menu-items',
+        '@cardstack/base/helpers/sanitized-html',
+        '@cardstack/base/helpers/set-background-image',
+        '@cardstack/base/links-to-editor',
+        '@cardstack/base/links-to-many-component',
+        '@cardstack/base/markdown',
+        '@cardstack/base/markdown-helpers',
+        '@cardstack/base/menu-items',
+        '@cardstack/base/number',
+        '@cardstack/base/number/components/badge-counter',
+        '@cardstack/base/number/components/badge-metric',
+        '@cardstack/base/number/components/badge-notification',
+        '@cardstack/base/number/components/gauge',
+        '@cardstack/base/number/components/progress-bar',
+        '@cardstack/base/number/components/progress-circle',
+        '@cardstack/base/number/components/score',
+        '@cardstack/base/number/components/stat',
+        '@cardstack/base/number/util/index',
+        '@cardstack/base/query-field-support',
+        '@cardstack/base/searchable',
+        '@cardstack/base/shared-state',
+        '@cardstack/base/spec',
+        '@cardstack/base/string',
+        '@cardstack/base/text-input-validator',
+        '@cardstack/base/watched-array',
+        '@cardstack/boxel-ui/components',
+        '@cardstack/boxel-ui/helpers',
+        '@cardstack/boxel-ui/icons',
+        '@cardstack/boxel-ui/modifiers',
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/align-box-left-middle`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/align-left`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/apps`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/arrow-left`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/bell`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/book-open-text`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/box-model`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/captions`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/clipboard-copy`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/code`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/eye`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/file`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/file-pencil`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/folder-pen`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/git-branch`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/hash`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/image`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/import`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/layers-subtract`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/layout-list`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/letter-case`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/link`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/link-off`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/notepad-text`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/palette`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/rectangle-ellipsis`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/stack`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/toggle-left`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/trash-2`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/wand`,
+        `${iconsBase}@cardstack/boxel-icons/v1/icons/x`,
+        // Module deps are stored in canonical (deployment-independent) form,
+        // so the live test realm's module resolves to the standard
+        // `localhost:4202` address even when served at the env-mode hostname.
         'https://localhost:4202/test/person',
         'https://packages/@cardstack/boxel-host/commands/copy-and-edit',
         'https://packages/@cardstack/boxel-host/commands/copy-card',
@@ -4996,10 +5151,6 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://packages/@cardstack/boxel-host/commands/show-card',
         'https://packages/@cardstack/boxel-host/commands/show-file',
         'https://packages/@cardstack/boxel-host/commands/switch-submode',
-        'https://packages/@cardstack/boxel-ui/components',
-        'https://packages/@cardstack/boxel-ui/helpers',
-        'https://packages/@cardstack/boxel-ui/icons',
-        'https://packages/@cardstack/boxel-ui/modifiers',
         'https://packages/@cardstack/runtime-common',
         'https://packages/@cardstack/runtime-common/marked-sync',
         'https://packages/@ember/component',
@@ -5007,6 +5158,7 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://packages/@ember/helper',
         'https://packages/@ember/modifier',
         'https://packages/@ember/object',
+        'https://packages/@ember/object/internals',
         'https://packages/@ember/runloop',
         'https://packages/@ember/template',
         'https://packages/@ember/template-factory',
@@ -5018,10 +5170,10 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://packages/ember-modifier',
         'https://packages/ember-provide-consume-context',
         'https://packages/ember-resources',
-        'https://packages/lodash',
-        'https://packages/super-fast-md5',
+        'https://packages/lodash-es',
         'https://packages/tracked-built-ins',
-      ],
+        // See note on iconsBase ordering above.
+      ].sort(),
       'the card references for the instance are correct',
     );
   });
@@ -5114,28 +5266,6 @@ posts/please-ignore-me.json
     }
   });
 
-  test('search index ignores .realm.json file', async function (assert) {
-    let { realm } = await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        '.realm.json': `{ name: 'Example Workspace' }`,
-        'post.json': { data: { meta: { adoptsFrom: baseCardRef } } },
-      },
-    });
-
-    let indexer = realm.realmIndexQueryEngine;
-    let card = await indexer.cardDocument(new URL(`${testRealmURL}post`));
-    assert.ok(card, 'instance exists');
-    let instance = await indexer.cardDocument(
-      new URL(`${testRealmURL}.realm.json`),
-    );
-    assert.strictEqual(
-      instance,
-      undefined,
-      'instance does not exist because file is ignored',
-    );
-  });
-
   test("incremental indexing doesn't process ignored files", async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
@@ -5180,7 +5310,7 @@ posts/ignore-me.json
             attributes: {},
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
+                module: '@cardstack/base/cards-grid',
                 name: 'CardsGrid',
               },
             },
@@ -5192,7 +5322,7 @@ posts/ignore-me.json
             attributes: {},
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/realm-config',
+                module: '@cardstack/base/realm-config',
                 name: 'RealmConfig',
               },
             },
@@ -5237,7 +5367,7 @@ posts/ignore-me.json
             attributes: {},
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
+                module: '@cardstack/base/cards-grid',
                 name: 'CardsGrid',
               },
             },
@@ -5251,7 +5381,7 @@ posts/ignore-me.json
             },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/realm-config',
+                module: '@cardstack/base/realm-config',
                 name: 'RealmConfig',
               },
             },
@@ -5270,6 +5400,45 @@ posts/ignore-me.json
     assert.ok(
       (entry?.isolatedHtml ?? '').length > 0,
       'isolated_html has real content',
+    );
+  });
+
+  test('isolated HTML for a default Workspace realm-index card is replaced with the boilerplate when realm has not opted in', async function (assert) {
+    let { realm } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'index.json': {
+          data: {
+            type: 'card',
+            attributes: {},
+            meta: {
+              adoptsFrom: {
+                module: '@cardstack/base/workspace',
+                name: 'Workspace',
+              },
+            },
+          },
+        },
+        'realm.json': {
+          data: {
+            type: 'card',
+            attributes: {},
+            meta: {
+              adoptsFrom: {
+                module: '@cardstack/base/realm-config',
+                name: 'RealmConfig',
+              },
+            },
+          },
+        },
+      },
+    });
+    let entry = await getInstance(realm, new URL(`${testRealmURL}index`));
+    assert.ok(entry, 'realm index card is indexed');
+    assert.strictEqual(
+      entry?.isolatedHtml,
+      REALM_INDEX_BOILERPLATE_HTML,
+      'isolated_html is the boilerplate constant when a Workspace-indexed realm has not opted in',
     );
   });
 

@@ -1,0 +1,474 @@
+import { getOwner } from '@ember/owner';
+import type { RenderingTestContext } from '@ember/test-helpers';
+
+import { getService } from '@universal-ember/test-support';
+import { module, skip, test } from 'qunit';
+
+import { Command } from '@cardstack/runtime-common';
+import type { Loader } from '@cardstack/runtime-common/loader';
+
+import RealmService from '@cardstack/host/services/realm';
+import type { SearchCardsByQueryTool as SearchCardsByQueryCommandType } from '@cardstack/host/tools/search-cards';
+import TransformCardsTool from '@cardstack/host/tools/transform-cards';
+
+import {
+  setupCardLogs,
+  setupIntegrationTestRealm,
+  setupLocalIndexing,
+  setupOnSave,
+  testRealmURL,
+  testRRI,
+  testRealmInfo,
+  realmConfigCardJSON,
+} from '../../helpers';
+import { setupMockMatrix } from '../../helpers/mock-matrix';
+import { setupRenderingTest } from '../../helpers/setup';
+
+import type * as CommandModule from '@cardstack/base/command';
+
+class StubRealmService extends RealmService {
+  get defaultReadableRealm() {
+    return {
+      path: testRealmURL,
+      info: testRealmInfo,
+    };
+  }
+}
+
+module('Integration | tools | transform-cards', function (hooks) {
+  setupRenderingTest(hooks);
+
+  const realmName = 'Transform Cards Test Realm';
+  let loader: Loader;
+
+  hooks.beforeEach(function (this: RenderingTestContext) {
+    getOwner(this)!.register('service:realm', StubRealmService);
+    loader = getService('loader-service').loader;
+  });
+
+  setupLocalIndexing(hooks);
+  setupOnSave(hooks);
+  setupCardLogs(
+    hooks,
+    async () => await loader.import('@cardstack/base/card-api'),
+  );
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
+    activeRealms: [testRealmURL],
+    autostart: true,
+  });
+
+  hooks.beforeEach(async function () {
+    loader = getService('loader-service').loader;
+    let cardApi: typeof import('@cardstack/base/card-api');
+    let string: typeof import('@cardstack/base/string');
+    let CommandModule: typeof import('@cardstack/base/command');
+
+    cardApi = await loader.import('@cardstack/base/card-api');
+    string = await loader.import('@cardstack/base/string');
+    CommandModule = await loader.import('@cardstack/base/command');
+
+    let { field, contains, CardDef } = cardApi;
+    let { default: StringField } = string;
+    let { JsonCard } = CommandModule;
+
+    class Person extends CardDef {
+      static displayName = 'Person';
+      @field name = contains(StringField);
+      @field age = contains(StringField);
+      @field cardTitle = contains(StringField, {
+        computeVia: function (this: Person) {
+          return this.name;
+        },
+      });
+    }
+
+    class Pet extends CardDef {
+      static displayName = 'Pet';
+      @field name = contains(StringField);
+      @field species = contains(StringField);
+      @field cardTitle = contains(StringField, {
+        computeVia: function (this: Pet) {
+          return this.name;
+        },
+      });
+    }
+
+    // Mock command that transforms JSON by adding a prefix to the name field
+    class PrefixNameCommand extends Command<typeof JsonCard, typeof JsonCard> {
+      async getInputType() {
+        return JsonCard;
+      }
+
+      protected async run(
+        input: CommandModule.JsonCard,
+      ): Promise<CommandModule.JsonCard> {
+        let json = { ...input.json };
+        if (json.data?.attributes?.name) {
+          json.data.attributes.name = `Transformed: ${json.data.attributes.name}`;
+        }
+        return new JsonCard({ json });
+      }
+    }
+
+    // Mock command that transforms JSON by uppercasing the name field
+    class UppercaseNameCommand extends Command<
+      typeof JsonCard,
+      typeof JsonCard
+    > {
+      async getInputType() {
+        return JsonCard;
+      }
+
+      protected async run(
+        input: CommandModule.JsonCard,
+      ): Promise<CommandModule.JsonCard> {
+        let json = { ...input.json };
+        if (json.data?.attributes?.name) {
+          json.data.attributes.name = json.data.attributes.name.toUpperCase();
+        }
+        return new JsonCard({ json });
+      }
+    }
+
+    // Mock command that adds metadata to the JSON
+    class AddMetadataCommand extends Command<typeof JsonCard, typeof JsonCard> {
+      async getInputType() {
+        return JsonCard;
+      }
+
+      protected async run(
+        input: CommandModule.JsonCard,
+      ): Promise<CommandModule.JsonCard> {
+        let json = { ...input.json };
+        if (!json.data.attributes.metadata) {
+          json.data.attributes.metadata = 'Added by TransformCardsTool';
+        }
+        return new JsonCard({ json });
+      }
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'person.gts': { Person },
+        'pet.gts': { Pet },
+        'Person/alice.json': `{
+          "data": {
+            "type": "card",
+            "attributes": {
+              "name": "Alice",
+              "age": "30"
+            },
+            "meta": {
+              "adoptsFrom": {
+                "module": "../person",
+                "name": "Person"
+              }
+            }
+          }
+        }`,
+        'Person/bob.json': `{
+          "data": {
+            "type": "card",
+            "attributes": {
+              "name": "Bob",
+              "age": "25"
+            },
+            "meta": {
+              "adoptsFrom": {
+                "module": "../person",
+                "name": "Person"
+              }
+            }
+          }
+        }`,
+        'Person/charlie.json': `{
+          "data": {
+            "type": "card",
+            "attributes": {
+              "name": "Charlie",
+              "age": "35"
+            },
+            "meta": {
+              "adoptsFrom": {
+                "module": "../person",
+                "name": "Person"
+              }
+            }
+          }
+        }`,
+        'Pet/fluffy.json': `{
+          "data": {
+            "type": "card",
+            "attributes": {
+              "name": "Fluffy",
+              "species": "Cat"
+            },
+            "meta": {
+              "adoptsFrom": {
+                "module": "../pet",
+                "name": "Pet"
+              }
+            }
+          }
+        }`,
+        'Pet/rover.json': `{
+          "data": {
+            "type": "card",
+            "attributes": {
+              "name": "Rover",
+              "species": "Dog"
+            },
+            "meta": {
+              "adoptsFrom": {
+                "module": "../pet",
+                "name": "Pet"
+              }
+            }
+          }
+        }`,
+        'prefix-name-command.ts': { default: PrefixNameCommand },
+        'uppercase-name-command.ts': { default: UppercaseNameCommand },
+        'add-metadata-command.ts': { default: AddMetadataCommand },
+        'realm.json': realmConfigCardJSON({
+          name: realmName,
+          iconURL: 'https://boxel-images.boxel.ai/icons/Letter-t.png',
+        }),
+      },
+    });
+  });
+
+  test('transforms all cards matching a query', async function (assert) {
+    let toolService = getService('tool-service');
+    let transformCommand = new TransformCardsTool(toolService.toolContext);
+
+    await transformCommand.execute({
+      query: {
+        filter: {
+          type: {
+            module: testRRI('person'),
+            name: 'Person',
+          },
+        },
+      },
+      commandRef: {
+        module: testRRI('prefix-name-command'),
+        name: 'default',
+      },
+    });
+
+    // Verify that all Person cards were transformed
+    let { SearchCardsByQueryTool } = (await import(
+      // @ts-expect-error tsconfig paths not resolved for dynamic import()
+      '@cardstack/host/tools/search-cards'
+    )) as { SearchCardsByQueryTool: typeof SearchCardsByQueryCommandType };
+    let searchCommand = new SearchCardsByQueryTool(toolService.toolContext);
+    let { cardIds } = await searchCommand.execute({
+      query: {
+        filter: {
+          type: {
+            module: testRRI('person'),
+            name: 'Person',
+          },
+        },
+      },
+    });
+
+    let networkService = getService('network');
+
+    for (let cardId of cardIds) {
+      let url = new URL(cardId + '.json', testRealmURL);
+      let response = await networkService.authedFetch(url);
+      let content = await response.text();
+      let cardData = JSON.parse(content);
+      assert.ok(
+        cardData.data.attributes.name.startsWith('Transformed: '),
+        `Card ${cardId} should have transformed name: ${cardData.data.attributes.name}`,
+      );
+    }
+  });
+
+  test('transforms specific cards using title filter', async function (assert) {
+    let toolService = getService('tool-service');
+    let transformCommand = new TransformCardsTool(toolService.toolContext);
+
+    await transformCommand.execute({
+      query: {
+        filter: {
+          contains: { cardTitle: 'Alice' },
+          on: {
+            module: testRRI('person'),
+            name: 'Person',
+          },
+        },
+      },
+      commandRef: {
+        module: testRRI('uppercase-name-command'),
+        name: 'default',
+      },
+    });
+
+    // Verify only Alice's card was transformed
+    let networkService = getService('network');
+
+    let response = await networkService.authedFetch(
+      new URL(`${testRealmURL}Person/alice.json`),
+    );
+    let aliceContent = await response.text();
+    let aliceData = JSON.parse(aliceContent);
+    assert.strictEqual(aliceData.data.attributes.name, 'ALICE');
+
+    // Verify other cards weren't transformed
+    response = await networkService.authedFetch(
+      new URL(`${testRealmURL}Person/bob.json`),
+    );
+    let bobContent = await response.text();
+    let bobData = JSON.parse(bobContent);
+    assert.strictEqual(bobData.data.attributes.name, 'Bob');
+  });
+
+  test('transforms Pet cards with different command', async function (assert) {
+    let toolService = getService('tool-service');
+    let transformCommand = new TransformCardsTool(toolService.toolContext);
+
+    await transformCommand.execute({
+      query: {
+        filter: {
+          type: {
+            module: testRRI('pet'),
+            name: 'Pet',
+          },
+        },
+      },
+      commandRef: {
+        module: testRRI('add-metadata-command'),
+        name: 'default',
+      },
+    });
+
+    // Verify that Pet cards were transformed
+    let networkService = getService('network');
+
+    let response = await networkService.authedFetch(
+      new URL(`${testRealmURL}Pet/fluffy.json`),
+    );
+    let fluffyContent = await response.text();
+    let fluffyData = JSON.parse(fluffyContent);
+    assert.strictEqual(
+      fluffyData.data.attributes.metadata,
+      'Added by TransformCardsTool',
+    );
+
+    response = await networkService.authedFetch(
+      new URL(`${testRealmURL}Pet/rover.json`),
+    );
+    let roverContent = await response.text();
+    let roverData = JSON.parse(roverContent);
+    assert.strictEqual(
+      roverData.data.attributes.metadata,
+      'Added by TransformCardsTool',
+    );
+  });
+
+  test('handles empty search results gracefully', async function (assert) {
+    let toolService = getService('tool-service');
+    let transformCommand = new TransformCardsTool(toolService.toolContext);
+
+    // Search for non-existent cards
+    await transformCommand.execute({
+      query: {
+        filter: {
+          contains: { cardTitle: 'NonExistentCard' },
+        },
+      },
+      commandRef: {
+        module: testRRI('prefix-name-command'),
+        name: 'default',
+      },
+    });
+
+    // Should complete without error even when no cards match
+    assert.ok(true, 'Command should complete without errors for empty results');
+  });
+
+  test('preserves JSON structure while transforming', async function (assert) {
+    let toolService = getService('tool-service');
+    let transformCommand = new TransformCardsTool(toolService.toolContext);
+
+    // Get original structure first
+    let networkService = getService('network');
+
+    let response = await networkService.authedFetch(
+      new URL(`${testRealmURL}Person/alice.json`),
+    );
+    let originalContent = await response.text();
+    let originalData = JSON.parse(originalContent);
+
+    await transformCommand.execute({
+      query: {
+        filter: {
+          contains: { cardTitle: 'Alice' },
+          on: {
+            module: testRRI('person'),
+            name: 'Person',
+          },
+        },
+      },
+      commandRef: {
+        module: testRRI('prefix-name-command'),
+        name: 'default',
+      },
+    });
+
+    // Verify structure is preserved
+    response = await networkService.authedFetch(
+      new URL(`${testRealmURL}Person/alice.json`),
+    );
+    let transformedContent = await response.text();
+    let transformedData = JSON.parse(transformedContent);
+
+    assert.strictEqual(transformedData.data.type, originalData.data.type);
+    assert.deepEqual(transformedData.data.meta, originalData.data.meta);
+    assert.strictEqual(
+      transformedData.data.attributes.age,
+      originalData.data.attributes.age,
+    );
+    assert.strictEqual(
+      transformedData.data.attributes.name,
+      'Transformed: Alice',
+    );
+  });
+
+  // Skipped because we don't have the ability to capture command errors in the current test setup
+  skip('handles malformed command references gracefully', async function (assert) {
+    let toolService = getService('tool-service');
+    let transformCommand = new TransformCardsTool(toolService.toolContext);
+
+    try {
+      await transformCommand.execute({
+        query: {
+          filter: {
+            contains: { cardTitle: 'Alice' },
+          },
+        },
+        commandRef: {
+          module: testRRI('non-existent-command'),
+          name: 'default',
+        },
+      });
+      assert.notOk(
+        true,
+        'Should have thrown an error for non-existent command',
+      );
+    } catch (error: any) {
+      assert.ok(
+        error.message.includes('Could not load') ||
+          error.message.includes('Module not found') ||
+          error.message.includes('404'),
+        `Error should indicate module loading failure: ${error.message}`,
+      );
+    }
+  });
+});

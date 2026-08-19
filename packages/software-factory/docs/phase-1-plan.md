@@ -160,7 +160,7 @@ Rules:
 
 **IMPORTANT:** "Spec" has two completely different meanings in this system. All code, docs, and prompts must use the qualified form to avoid confusion:
 
-1. **Catalog Spec card** (`Spec/` folder, `.json` files) — A card instance that adopts from `https://cardstack.com/base/spec#Spec`. This is a **catalog entry** describing a card for inclusion in the Boxel catalog. It has fields like `ref` (CodeRef pointing to the card definition), `specType` (`'card'`|`'field'`|`'component'`), `readMe` (markdown description), `cardTitle`, and `cardDescription`. Example: `Spec/sticky-note.json` describes the StickyNote card.
+1. **Catalog Spec card** (`Spec/` folder, `.json` files) — A card instance that adopts from `@cardstack/base/spec#Spec`. This is a **catalog entry** describing a card for inclusion in the Boxel catalog. It has fields like `ref` (CodeRef pointing to the card definition), `specType` (`'card'`|`'field'`|`'component'`), `readMe` (markdown description), `cardTitle`, and `cardDescription`. Example: `Spec/sticky-note.json` describes the StickyNote card.
 
 2. **QUnit test file** (`.test.gts` files, co-located with card definitions) — A GTS file that exports a `runTests()` function containing QUnit test modules. The live-test infrastructure discovers these via `_mtimes` and runs them in the browser. Example: `sticky-note.test.gts` tests that StickyNote renders correctly.
 
@@ -251,7 +251,7 @@ The Catalog Spec card shape (from `packages/base/spec.gts`):
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/spec",
+        "module": "@cardstack/base/spec",
         "name": "Spec"
       }
     }
@@ -293,7 +293,7 @@ Each tool's `execute` function looks up the correct per-realm JWT based on which
 
 Boxel-cli tools (`boxel-sync`, `boxel-push`, `boxel-pull`, etc.) are excluded from the agent's tool registry until CS-10520 lands (boxel-cli auth integration). The `ToolRegistry` is constructed with only `SCRIPT_TOOLS` and `REALM_API_TOOLS`. All file operations use the realm HTTP API directly.
 
-Card write tools (`update_project`, `update_ticket`, `create_knowledge`, `create_catalog_spec`) use **dynamic JSON schemas** fetched at startup from the realm server via `GetCardTypeSchemaCommand` (`_run-command`). DarkFactory schemas come from the source realm (`software-factory/`); the Spec card schema comes from the base realm (`https://cardstack.com/base/spec`). This ensures tool parameter definitions always match the actual card field definitions. Skills reference the tool schemas rather than hardcoding field names.
+Card write tools (`update_project`, `update_ticket`, `create_knowledge`, `create_catalog_spec`) use **dynamic JSON schemas** fetched at startup from the realm server via `GetCardTypeSchemaCommand` (`_run-command`). DarkFactory schemas come from the source realm (`software-factory/`); the Spec card schema comes from the base realm (`@cardstack/base/spec`). This ensures tool parameter definitions always match the actual card field definitions. Skills reference the tool schemas rather than hardcoding field names.
 
 Test generation rule:
 
@@ -443,10 +443,10 @@ The first version should support:
 Add a script:
 
 ```json
-"factory:go": "ts-node --transpileOnly src/cli/factory-entrypoint.ts"
+"factory:go": "node src/cli/factory-entrypoint.ts"
 ```
 
-For software-factory CLI entrypoints, favor `ts-node --transpileOnly` over `tsx`.
+For software-factory CLI entrypoints, run the TypeScript directly with `node` (native type stripping) rather than a separate runner like `tsx`.
 
 - it matches the execution model already used by `realm-server`
 - it avoids the decorator/runtime incompatibilities we hit when `tsx` imports `runtime-common` auth code

@@ -4,10 +4,9 @@ import {
   CardDef,
   FieldDef,
   Component,
-  relativeTo,
-} from 'https://cardstack.com/base/card-api';
-import { cardIdToURL } from '@cardstack/runtime-common';
-import StringField from 'https://cardstack.com/base/string';
+  resolveInstanceURL,
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import CurrencyIcon from '@cardstack/boxel-icons/currency';
 import CircleDotIcon from '@cardstack/boxel-icons/circle-dot';
 
@@ -21,10 +20,16 @@ export class Asset extends CardDef {
       if (!this.logoURL) {
         return null;
       }
-      let rel = this[relativeTo] || this.id;
-      let base =
-        typeof rel === 'string' ? cardIdToURL(rel) : rel;
-      return new URL(this.logoURL, base).href;
+      // `logoURL` may be relative to the instance, which lives at a prefix-form
+      // RRI (e.g. `@cardstack/…/Asset/foo`) that `new URL()` can't parse.
+      // Resolve it against the instance's real URL for the <img src>; if no
+      // VirtualNetwork is available (detached / static-parse), fall back to the
+      // raw value.
+      try {
+        return resolveInstanceURL(this, this.logoURL)?.href ?? this.logoURL;
+      } catch {
+        return this.logoURL;
+      }
     },
   });
   @field cardTitle = contains(StringField, {
@@ -93,10 +98,16 @@ class AssetField extends FieldDef {
       if (!this.logoURL) {
         return null;
       }
-      let rel = this[relativeTo] || this.id;
-      let base =
-        typeof rel === 'string' ? cardIdToURL(rel) : rel;
-      return new URL(this.logoURL, base).href;
+      // `logoURL` may be relative to the instance, which lives at a prefix-form
+      // RRI (e.g. `@cardstack/…/Asset/foo`) that `new URL()` can't parse.
+      // Resolve it against the instance's real URL for the <img src>; if no
+      // VirtualNetwork is available (detached / static-parse), fall back to the
+      // raw value.
+      try {
+        return resolveInstanceURL(this, this.logoURL)?.href ?? this.logoURL;
+      } catch {
+        return this.logoURL;
+      }
     },
   });
   @field cardTitle = contains(StringField, {

@@ -4,11 +4,12 @@ import { getService } from '@universal-ember/test-support';
 
 import { FieldContainer, GridContainer } from '@cardstack/boxel-ui/components';
 
-import { baseRealm } from '@cardstack/runtime-common';
 import type { Realm } from '@cardstack/runtime-common/realm';
 
 import {
   SYSTEM_CARD_FIXTURE_CONTENTS,
+  withCachedRealmSetup,
+  setupRealmCacheTeardown,
   makeMinimalPng,
   setupAcceptanceTestRealm,
   setupAuthEndpoints,
@@ -16,6 +17,7 @@ import {
   setupOnSave,
   setupUserSubscription,
   testRealmURL,
+  realmConfigCardJSON,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
@@ -27,14 +29,26 @@ export const personalRealmURL = `http://test-realm/personal/`;
 type InteractSubmodeSetupOptions = {
   setRealm: (realm: Realm) => void;
   fileSizeLimitBytes?: number;
+  audioSizeLimitBytes?: number;
+  videoSizeLimitBytes?: number;
 };
 
 export function setupInteractSubmodeTests(
   hooks: NestedHooks,
-  { setRealm, fileSizeLimitBytes }: InteractSubmodeSetupOptions,
+  {
+    setRealm,
+    fileSizeLimitBytes,
+    audioSizeLimitBytes,
+    videoSizeLimitBytes,
+  }: InteractSubmodeSetupOptions,
 ) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
+  // Registers for the scope this helper is called from. A consumer whose tests
+  // live in nested modules registers its own too: the delete prefix is fixed at
+  // registration from the module name, and a nested test's snapshot is keyed by
+  // its own composed name.
+  setupRealmCacheTeardown(hooks);
   setupOnSave(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -54,18 +68,18 @@ export function setupInteractSubmodeTests(
     setupAuthEndpoints();
 
     let loader = getService('loader-service').loader;
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
-    let spec: typeof import('https://cardstack.com/base/spec');
-    let cardsGrid: typeof import('https://cardstack.com/base/cards-grid');
-    let fileApi: typeof import('https://cardstack.com/base/file-api');
-    let imageFileApi: typeof import('https://cardstack.com/base/image-file-def');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
-    spec = await loader.import(`${baseRealm.url}spec`);
-    cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
-    fileApi = await loader.import(`${baseRealm.url}file-api`);
-    imageFileApi = await loader.import(`${baseRealm.url}image-file-def`);
+    let cardApi: typeof import('@cardstack/base/card-api');
+    let string: typeof import('@cardstack/base/string');
+    let spec: typeof import('@cardstack/base/spec');
+    let cardsGrid: typeof import('@cardstack/base/cards-grid');
+    let fileApi: typeof import('@cardstack/base/file-api');
+    let imageFileApi: typeof import('@cardstack/base/image-file-def');
+    cardApi = await loader.import('@cardstack/base/card-api');
+    string = await loader.import('@cardstack/base/string');
+    spec = await loader.import('@cardstack/base/spec');
+    cardsGrid = await loader.import('@cardstack/base/cards-grid');
+    fileApi = await loader.import('@cardstack/base/file-api');
+    imageFileApi = await loader.import('@cardstack/base/image-file-def');
 
     let {
       field,
@@ -320,228 +334,237 @@ export function setupInteractSubmodeTests(
 
     let mangoPet = new Pet({ name: 'Mango' });
 
-    let realm: Realm;
-    ({ realm } = await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      fileSizeLimitBytes,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'address.gts': { Address },
-        'focus-test.gts': { FocusTest },
-        'focus-nested.gts': { FocusNested, FocusNestedItem },
-        'file-link-card.gts': { FileLinkCard },
-        'image-link-card.gts': { ImageLinkCard },
-        'person.gts': { Person },
-        'personnel.gts': { Personnel },
-        'pet.gts': { Pet, Puppy },
-        'shipping-info.gts': { ShippingInfo },
-        'README.txt': `Hello World`,
-        'test-image.png': makeMinimalPng(),
-        'FileLinkCard/notes.txt': 'Hello from a file link',
-        'person-entry.json': new Spec({
-          cardTitle: 'Person Card',
-          cardDescription: 'Spec for Person Card',
-          specType: 'card',
-          ref: {
-            module: `${testRealmURL}person`,
-            name: 'Person',
-          },
-        }),
-        'pet-entry.json': new Spec({
-          cardTitle: 'Pet Card',
-          cardDescription: 'Spec for Pet Card',
-          specType: 'card',
-          ref: {
-            module: `${testRealmURL}pet`,
-            name: 'Pet',
-          },
-        }),
-        ...catalogEntries,
-        'puppy-entry.json': new Spec({
-          cardTitle: 'Puppy Card',
-          cardDescription: 'Spec for Puppy Card',
-          specType: 'card',
-          ref: {
-            module: `${testRealmURL}pet`,
-            name: 'Puppy',
-          },
-        }),
-        'Pet/mango.json': mangoPet,
-        'Pet/vangogh.json': new Pet({ name: 'Van Gogh' }),
-        'FocusTest/1.json': new FocusTest({ names: [] }),
-        'FocusNested/1.json': new FocusNested({
-          items: [
-            new FocusNestedItem({ label: 'Plain', pets: [] }),
-            new FocusNestedItem({ label: 'With Pet', pets: [mangoPet] }),
-          ],
-        }),
-        'Person/fadhlan.json': new Person({
-          firstName: 'Fadhlan',
-          address: new Address({
-            city: 'Bandung',
-            country: 'Indonesia',
-            shippingInfo: new ShippingInfo({
-              preferredCarrier: 'DHL',
-              remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
-            }),
+    // The four realms are the same for every test in a module using this
+    // helper, so the indexed result is cached and restored rather than rebuilt.
+    // One block covers all four: the snapshot is taken after the callback
+    // resolves, so it cannot omit a realm the way a hand-placed capture could.
+    let realm = await withCachedRealmSetup(async () => {
+      let { realm } = await setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        fileSizeLimitBytes,
+        audioSizeLimitBytes,
+        videoSizeLimitBytes,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'address.gts': { Address },
+          'focus-test.gts': { FocusTest },
+          'focus-nested.gts': { FocusNested, FocusNestedItem },
+          'file-link-card.gts': { FileLinkCard },
+          'image-link-card.gts': { ImageLinkCard },
+          'person.gts': { Person },
+          'personnel.gts': { Personnel },
+          'pet.gts': { Pet, Puppy },
+          'shipping-info.gts': { ShippingInfo },
+          'README.txt': `Hello World`,
+          'test-image.png': makeMinimalPng(),
+          'FileLinkCard/notes.txt': 'Hello from a file link',
+          'person-entry.json': new Spec({
+            cardTitle: 'Person Card',
+            cardDescription: 'Spec for Person Card',
+            specType: 'card',
+            ref: {
+              module: `${testRealmURL}person`,
+              name: 'Person',
+            },
           }),
-          additionalAddresses: [
-            new Address({
-              city: 'Jakarta',
+          'pet-entry.json': new Spec({
+            cardTitle: 'Pet Card',
+            cardDescription: 'Spec for Pet Card',
+            specType: 'card',
+            ref: {
+              module: `${testRealmURL}pet`,
+              name: 'Pet',
+            },
+          }),
+          ...catalogEntries,
+          'puppy-entry.json': new Spec({
+            cardTitle: 'Puppy Card',
+            cardDescription: 'Spec for Puppy Card',
+            specType: 'card',
+            ref: {
+              module: `${testRealmURL}pet`,
+              name: 'Puppy',
+            },
+          }),
+          'Pet/mango.json': mangoPet,
+          'Pet/vangogh.json': new Pet({ name: 'Van Gogh' }),
+          'FocusTest/1.json': new FocusTest({ names: [] }),
+          'FocusNested/1.json': new FocusNested({
+            items: [
+              new FocusNestedItem({ label: 'Plain', pets: [] }),
+              new FocusNestedItem({ label: 'With Pet', pets: [mangoPet] }),
+            ],
+          }),
+          'Person/fadhlan.json': new Person({
+            firstName: 'Fadhlan',
+            address: new Address({
+              city: 'Bandung',
               country: 'Indonesia',
-              shippingInfo: new ShippingInfo({
-                preferredCarrier: 'FedEx',
-                remarks: `Make sure to deliver to the back door`,
-              }),
-            }),
-            new Address({
-              city: 'Bali',
-              country: 'Indonesia',
-              shippingInfo: new ShippingInfo({
-                preferredCarrier: 'UPS',
-                remarks: `Call ahead to make sure someone is home`,
-              }),
-            }),
-          ],
-          pet: mangoPet,
-          friends: [mangoPet],
-        }),
-        'FileLinkCard/empty.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'Empty linked file',
-            },
-            relationships: {
-              attachment: {
-                links: { self: null },
-                data: null,
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../file-link-card',
-                name: 'FileLinkCard',
-              },
-            },
-          },
-        },
-        'FileLinkCard/with-file.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'Linked file example',
-            },
-            relationships: {
-              attachment: {
-                links: {
-                  self: './notes.txt',
-                },
-                data: {
-                  type: 'file-meta',
-                  id: './notes.txt',
-                },
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../file-link-card',
-                name: 'FileLinkCard',
-              },
-            },
-          },
-        },
-        'ImageLinkCard/empty.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'Empty image link',
-            },
-            relationships: {
-              photo: {
-                links: { self: null },
-                data: null,
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../image-link-card',
-                name: 'ImageLinkCard',
-              },
-            },
-          },
-        },
-        'Puppy/marco.json': new Puppy({ name: 'Marco', age: '5 months' }),
-        'grid.json': new CardsGrid(),
-        'index.json': new CardsGrid(),
-        '.realm.json': {
-          name: 'Test Workspace B',
-          backgroundURL:
-            'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-          iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-        },
-      },
-    }));
-
-    await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      realmURL: testRealm2URL,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'index.json': new CardsGrid(),
-        '.realm.json': {
-          name: 'Test Workspace A',
-          backgroundURL:
-            'https://i.postimg.cc/tgRHRV8C/pawel-czerwinski-h-Nrd99q5pe-I-unsplash.jpg',
-          iconURL: 'https://boxel-images.boxel.ai/icons/cardstack.png',
-        },
-        'Pet/ringo.json': new Pet({ name: 'Ringo' }),
-        'Person/hassan.json': new Person({
-          firstName: 'Hassan',
-          pet: mangoPet,
-          additionalAddresses: [
-            new Address({
-              city: 'New York',
-              country: 'USA',
               shippingInfo: new ShippingInfo({
                 preferredCarrier: 'DHL',
                 remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
               }),
             }),
-          ],
-          friends: [mangoPet],
-        }),
-      },
-    });
-
-    await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      realmURL: testRealm3URL,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'index.json': new CardsGrid(),
-        '.realm.json': {
-          name: 'Test Workspace C',
-          backgroundURL:
-            'https://boxel-images.boxel.ai/background-images/4k-powder-puff.jpg',
-          iconURL: 'https://boxel-images.boxel.ai/icons/cardstack.png',
+            additionalAddresses: [
+              new Address({
+                city: 'Jakarta',
+                country: 'Indonesia',
+                shippingInfo: new ShippingInfo({
+                  preferredCarrier: 'FedEx',
+                  remarks: `Make sure to deliver to the back door`,
+                }),
+              }),
+              new Address({
+                city: 'Bali',
+                country: 'Indonesia',
+                shippingInfo: new ShippingInfo({
+                  preferredCarrier: 'UPS',
+                  remarks: `Call ahead to make sure someone is home`,
+                }),
+              }),
+            ],
+            pet: mangoPet,
+            friends: [mangoPet],
+          }),
+          'FileLinkCard/empty.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                title: 'Empty linked file',
+              },
+              relationships: {
+                attachment: {
+                  links: { self: null },
+                  data: null,
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../file-link-card',
+                  name: 'FileLinkCard',
+                },
+              },
+            },
+          },
+          'FileLinkCard/with-file.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                title: 'Linked file example',
+              },
+              relationships: {
+                attachment: {
+                  links: {
+                    self: './notes.txt',
+                  },
+                  data: {
+                    type: 'file-meta',
+                    id: './notes.txt',
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../file-link-card',
+                  name: 'FileLinkCard',
+                },
+              },
+            },
+          },
+          'ImageLinkCard/empty.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                title: 'Empty image link',
+              },
+              relationships: {
+                photo: {
+                  links: { self: null },
+                  data: null,
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../image-link-card',
+                  name: 'ImageLinkCard',
+                },
+              },
+            },
+          },
+          'Puppy/marco.json': new Puppy({ name: 'Marco', age: '5 months' }),
+          'grid.json': new CardsGrid(),
+          'index.json': new CardsGrid(),
+          'realm.json': realmConfigCardJSON({
+            name: 'Test Workspace B',
+            backgroundURL:
+              'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+            iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+          }),
         },
-      },
-    });
+      });
 
-    await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      realmURL: personalRealmURL,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'index.json': new CardsGrid(),
-        '.realm.json': {
-          name: 'Test Personal Workspace',
-          backgroundURL:
-            'https://boxel-images.boxel.ai/background-images/4k-origami-flock.jpg',
-          iconURL: 'https://boxel-images.boxel.ai/icons/cardstack.png',
+      await setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        realmURL: testRealm2URL,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'index.json': new CardsGrid(),
+          'realm.json': realmConfigCardJSON({
+            name: 'Test Workspace A',
+            backgroundURL:
+              'https://i.postimg.cc/tgRHRV8C/pawel-czerwinski-h-Nrd99q5pe-I-unsplash.jpg',
+            iconURL: 'https://boxel-images.boxel.ai/icons/cardstack.png',
+          }),
+          'Pet/ringo.json': new Pet({ name: 'Ringo' }),
+          'Person/hassan.json': new Person({
+            firstName: 'Hassan',
+            pet: mangoPet,
+            additionalAddresses: [
+              new Address({
+                city: 'New York',
+                country: 'USA',
+                shippingInfo: new ShippingInfo({
+                  preferredCarrier: 'DHL',
+                  remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
+                }),
+              }),
+            ],
+            friends: [mangoPet],
+          }),
         },
-      },
+      });
+
+      await setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        realmURL: testRealm3URL,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'index.json': new CardsGrid(),
+          'realm.json': realmConfigCardJSON({
+            name: 'Test Workspace C',
+            backgroundURL:
+              'https://boxel-images.boxel.ai/background-images/4k-powder-puff.jpg',
+            iconURL: 'https://boxel-images.boxel.ai/icons/cardstack.png',
+          }),
+        },
+      });
+
+      await setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        realmURL: personalRealmURL,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'index.json': new CardsGrid(),
+          'realm.json': realmConfigCardJSON({
+            name: 'Test Personal Workspace',
+            backgroundURL:
+              'https://boxel-images.boxel.ai/background-images/4k-origami-flock.jpg',
+            iconURL: 'https://boxel-images.boxel.ai/icons/cardstack.png',
+          }),
+        },
+      });
+
+      return realm;
     });
 
     setRealm(realm);

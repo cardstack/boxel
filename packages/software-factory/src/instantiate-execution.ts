@@ -5,7 +5,7 @@
  * results without side effects).
  *
  * Discovery is spec-based: the realm is searched for Spec cards (from
- * `https://cardstack.com/base/spec`), and each spec's `linkedExamples` entries
+ * `@cardstack/base/spec`), and each spec's `linkedExamples` entries
  * are instantiated by calling the `instantiate-card` host command via
  * `_run-command`. The host command runs in the prerenderer sandbox (headless
  * Chrome), so every runtime error that surfaces when a real user opens the
@@ -14,18 +14,24 @@
 
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
-import { rri } from '@cardstack/runtime-common/card-reference-resolver';
+import { rri } from '@cardstack/runtime-common/realm-identifiers';
 import {
   isResolvedCodeRef,
   isSingleCardDocument,
 } from '@cardstack/runtime-common/card-document-shape';
 import { specRef } from '@cardstack/runtime-common/constants';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
+import { resolveRRIReference } from '@cardstack/runtime-common/url';
 
-import { logger } from './logger';
-import { validateRealmRelativePath } from './realm-relative-path';
-import { isTransientIndexNotFound, retryWithPoll } from './retry-with-poll';
-import { readCard } from './workspace-fs';
+import { logger } from './logger.ts';
+import { validateRealmRelativePath } from './realm-relative-path.ts';
+import { isTransientIndexNotFound, retryWithPoll } from './retry-with-poll.ts';
+import { readCard } from './workspace-fs.ts';
+
+import {
+  cacheKeyForInputs,
+  type ValidationRunCache,
+} from './validation-run-cache.ts';
 
 let log = logger('instantiate-execution');
 
@@ -73,13 +79,27 @@ export type InstantiateCardFn = (
   instanceData?: string,
 ) => Promise<InstantiateModuleResult>;
 
+export interface SearchSpecsResult {
+  specs: SpecInfo[];
+  error?: string;
+  /**
+   * Raw Spec-card count from the realm search, before the card/app
+   * filter. Lets discovery distinguish "the index hasn't caught up yet"
+   * (zero raw hits — worth polling) from "Spec cards exist but none are
+   * instantiable" (final — return immediately instead of polling to the
+   * deadline). Optional because injected `searchSpecsFn` test doubles
+   * predate it: `undefined` means "no raw-count signal" and is treated
+   * as final, so an injected empty result returns immediately instead
+   * of polling for 30s.
+   */
+  totalSpecCards?: number;
+}
+
 export interface DiscoverRealmSpecsOptions {
   targetRealm: string;
   client: BoxelCLIClient;
   /** Injected for testing — defaults to a client.search over Spec cards. */
-  searchSpecsFn?: (
-    realmUrl: string,
-  ) => Promise<{ specs: SpecInfo[]; error?: string }>;
+  searchSpecsFn?: (realmUrl: string) => Promise<SearchSpecsResult>;
 }
 
 export interface InstantiateRealmSpecsOptions {
@@ -94,6 +114,12 @@ export interface InstantiateRealmSpecsOptions {
   workspaceDir: string;
   /** Injected for testing — defaults to client.runCommand → instantiate-card. */
   instantiateCardFn?: InstantiateCardFn;
+  /**
+   * When set, the engine run is memoized per workspace fingerprint + spec
+   * set, so the agent's mid-turn `run_instantiate` and the pipeline's
+   * instantiate step don't both instantiate the same unchanged examples.
+   */
+  cache?: ValidationRunCache;
 }
 
 export interface InstantiateRealmSpecsOutput {
@@ -123,6 +149,8 @@ export interface RunInstantiateInMemoryOptions {
   path?: string;
   /** Injected for testing — defaults to client.runCommand → instantiate-card. */
   instantiateCardFn?: InstantiateCardFn;
+  /** See {@link InstantiateRealmSpecsOptions.cache}. */
+  cache?: ValidationRunCache;
 }
 
 export interface RunInstantiateFailure {
@@ -159,14 +187,14 @@ export interface RunInstantiateResult {
 
 /**
  * Search the realm for Spec cards and return the ref + linkedExamples for
- * each card/app spec. Field specs are skipped (they don't produce
- * instantiable cards). linkedExample URLs that resolve outside the target
- * realm are dropped to prevent leaking the realm auth token to external
- * origins.
+ * each card/app spec. Specs of any other specType (field, component,
+ * command) are skipped — they don't reference instantiable cards.
+ * linkedExample URLs that resolve outside the target realm are dropped to
+ * prevent leaking the realm auth token to external origins.
  */
 export async function discoverRealmSpecs(
   options: DiscoverRealmSpecsOptions,
-): Promise<{ specs: SpecInfo[]; error?: string }> {
+): Promise<SearchSpecsResult> {
   let searchSpecsFn =
     options.searchSpecsFn ??
     ((realmUrl: string) => defaultSearchSpecs(options.client, realmUrl));
@@ -174,10 +202,15 @@ export async function discoverRealmSpecs(
   // Realm-side source POST indexing is async, so a newly-uploaded Spec
   // card may not be in the search index by the time we get here. Bounded-
   // poll until even one spec shows up so an agent or test that just
-  // pushed Spec files isn't penalized for indexing latency.
+  // pushed Spec files isn't penalized for indexing latency. Poll ONLY on
+  // affirmative evidence of that race — the search itself returned zero
+  // Spec cards (`totalSpecCards === 0`). When Spec cards were found but
+  // the card/app filter dropped them all, or an injected searchSpecsFn
+  // reports no raw count at all, the result is final — polling can't
+  // change the answer.
   return retryWithPoll(
     () => searchSpecsFn(options.targetRealm),
-    (r) => !r.error && r.specs.length === 0,
+    (r) => !r.error && r.specs.length === 0 && r.totalSpecCards === 0,
   );
 }
 
@@ -190,6 +223,25 @@ export async function discoverRealmSpecs(
  * exercised.
  */
 export async function instantiateRealmSpecs(
+  options: InstantiateRealmSpecsOptions,
+  specs: SpecInfo[],
+): Promise<InstantiateRealmSpecsOutput> {
+  if (options.cache) {
+    let inputs = specs.flatMap((s) => [
+      s.specId,
+      s.moduleUrl,
+      s.cardName,
+      ...s.exampleUrls,
+    ]);
+    let key = `instantiate:${cacheKeyForInputs(inputs)}`;
+    return options.cache.getOrRun(key, () =>
+      instantiateRealmSpecsUncached(options, specs),
+    );
+  }
+  return instantiateRealmSpecsUncached(options, specs);
+}
+
+async function instantiateRealmSpecsUncached(
   options: InstantiateRealmSpecsOptions,
   specs: SpecInfo[],
 ): Promise<InstantiateRealmSpecsOutput> {
@@ -364,6 +416,7 @@ export async function runInstantiateInMemory(
         client: options.client,
         workspaceDir: options.workspaceDir,
         instantiateCardFn,
+        cache: options.cache,
       },
       specsResult.specs,
     );
@@ -387,6 +440,31 @@ export async function runInstantiateInMemory(
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+// A module reference inside a card document takes one of three forms: a
+// prefix-form RRI (`@cardstack/base/spec`), an absolute URL, or a path
+// relative to the document holding it. `new URL(ref, base)` reads only the
+// last two correctly — it mistakes a prefix-form RRI for a relative path and
+// joins it onto the base, so `@cardstack/base/spec` under a realm URL yields
+// a same-origin path that names nothing.
+//
+// `resolveRRIReference` dispatches on the form, leaving a prefix-form RRI
+// intact. A prefix-form RRI carries no origin, so `origin` is undefined for
+// it: callers comparing against a URL-form realm treat that as "not this
+// realm", which is the answer the prerender needs — it loads same-origin
+// URL-form modules only, and proving a prefix names the target realm would
+// take realm mappings this tool has no VirtualNetwork to supply.
+function resolveModuleRef(
+  module: string,
+  relativeTo: string,
+): { ref: string; origin: string | undefined } {
+  let ref = resolveRRIReference(module, rri(relativeTo));
+  try {
+    return { ref, origin: new URL(ref).origin };
+  } catch {
+    return { ref, origin: undefined };
+  }
+}
 
 async function runSingleInstance(
   path: string,
@@ -485,11 +563,11 @@ async function prepareExampleInstance(
   // `CodeRef`. Running it first means the nested accesses below cannot
   // throw.
   //
-  // NB: we import from the decorator-free `/card-document-shape` subpath
-  // (not the `/document-types` barrel entry that re-exports it) because
-  // this module is exercised by the software-factory Playwright harness,
-  // which can't compile the `@Memoize()` decorators reachable through
-  // the heavier runtime-common entry points.
+  // NB: we import from the lightweight `/card-document-shape` subpath
+  // (not the `/document-types` barrel entry that re-exports it) so the
+  // software-factory Playwright harness that exercises this module does
+  // not have to pull in the heavier, Node-oriented runtime-common entry
+  // points.
   if (!isSingleCardDocument(parsedDoc)) {
     return {
       error: `Example "${exampleUrl}" is not a valid card document (missing or malformed "data" / "data.meta.adoptsFrom").`,
@@ -517,21 +595,28 @@ async function prepareExampleInstance(
     };
   }
 
-  let moduleUrl = rri(new URL(adoptsFrom.module, exampleCardUrl).href);
+  let { ref: resolvedModule, origin: moduleOrigin } = resolveModuleRef(
+    adoptsFrom.module,
+    exampleCardUrl,
+  );
+  let moduleUrl = rri(resolvedModule);
 
   // The prerender refuses cross-origin module loads. The most common way
   // an agent triggers this is by passing a `Spec/...json` path: Specs
-  // adopt from `https://cardstack.com/base/spec`, which lives in a
+  // adopt from `@cardstack/base/spec`, which lives in a
   // different origin than any user realm. Catch it here with a clearer
   // error than the prerender's "moduleUrl origin … does not match
   // realmUrl origin …" so the agent knows what to do instead.
-  let moduleOrigin = new URL(moduleUrl).origin;
   let targetRealmOrigin = new URL(targetRealm).origin;
   if (moduleOrigin !== targetRealmOrigin) {
     return {
       error:
         `Example "${exampleUrl}" adopts from a module at ${moduleUrl} ` +
-        `(origin ${moduleOrigin}), but instantiation is scoped to the ` +
+        `(${
+          moduleOrigin
+            ? `origin ${moduleOrigin}`
+            : 'a realm addressed by prefix, not by origin'
+        }), but instantiation is scoped to the ` +
         `target realm at ${targetRealmOrigin}. This typically means you ` +
         `passed a Spec card path — Specs adopt from the base realm and ` +
         `cannot be instantiated cross-origin. To validate Specs, call ` +
@@ -622,7 +707,7 @@ function emptyErrorResult(errorMessage: string): RunInstantiateResult {
 async function defaultSearchSpecs(
   client: BoxelCLIClient,
   realmUrl: string,
-): Promise<{ specs: SpecInfo[]; error?: string }> {
+): Promise<SearchSpecsResult> {
   let searchResult = await client.search(realmUrl, {
     filter: { type: specRef },
   });
@@ -631,6 +716,7 @@ async function defaultSearchSpecs(
     return { specs: [], error: searchResult.error };
   }
 
+  let totalSpecCards = (searchResult.data ?? []).length;
   let specs: SpecInfo[] = [];
   for (let card of searchResult.data ?? []) {
     let specId = (card as Record<string, unknown>).id as string | undefined;
@@ -645,10 +731,16 @@ async function defaultSearchSpecs(
       continue;
     }
 
-    // Field specs don't produce instantiable instances — skip.
+    // Only card/app specs reference instantiable CardDefs. Field,
+    // component, and command specs point at exports the prerenderer
+    // cannot instantiate — catalog cards commonly ship them alongside
+    // the card spec — so they are skipped rather than failing the run.
+    // Same allowlist `boxel realm ingest-card` applies at seed time.
     let specType = attributes.specType as string | undefined;
-    if (specType === 'field') {
-      log.info(`Spec ${specId} is a field spec — skipping`);
+    if (specType !== 'card' && specType !== 'app') {
+      log.info(
+        `Spec ${specId} has specType ${specType ?? '(none)'} — not instantiable, skipping`,
+      );
       continue;
     }
 
@@ -658,9 +750,40 @@ async function defaultSearchSpecs(
       continue;
     }
 
-    // Resolve relative module URL against the spec card's own URL.
+    // Resolve the module reference against the spec card's own URL.
     let specCardUrl = new URL(specId, ensureTrailingSlash(realmUrl)).href;
-    let moduleUrl = new URL(ref.module, specCardUrl).href;
+    let { ref: moduleUrl, origin: refModuleOrigin } = resolveModuleRef(
+      ref.module,
+      specCardUrl,
+    );
+
+    // LOCAL PATCH (CS-12195): a Spec whose `ref.module` is itself
+    // cross-origin from the target realm (a bare instance of a base-realm
+    // card, no local subclass — e.g. a plain `Theme` instance, which some
+    // v0 briefs explicitly require: "no new CardDef, no subclass") can
+    // NEVER pass prerender instantiation — the prerender refuses
+    // cross-origin module loads unconditionally (see the same-named guard
+    // in `prepareExampleInstance` below). Every example would fail with
+    // the identical "adopts from a module … does not match target realm"
+    // error regardless of how correct the instance data is. Skip these the
+    // same way non-instantiable specTypes are skipped above: parse, eval,
+    // and lint already validate everything about the instance data that's
+    // actually this realm's responsibility; the base card class itself is
+    // validated by the base realm's own suite, not here. A `ref.module` in
+    // prefix form lands here too: it names a realm this tool cannot match
+    // against a URL-form target without realm mappings, so it is skipped
+    // rather than handed to the prerender as a same-origin path that names
+    // nothing.
+    let targetRealmOrigin = new URL(realmUrl).origin;
+    if (refModuleOrigin !== targetRealmOrigin) {
+      log.info(
+        `Spec ${specId} refs a cross-origin base module (${moduleUrl}) with ` +
+          `no local subclass — prerender instantiation is structurally ` +
+          `impossible (cross-origin), skipping. parse/eval/lint already ` +
+          `cover this instance.`,
+      );
+      continue;
+    }
 
     let relationships = (card as Record<string, unknown>).relationships as
       | Record<string, unknown>
@@ -699,7 +822,7 @@ async function defaultSearchSpecs(
     });
   }
 
-  return { specs };
+  return { specs, totalSpecCards };
 }
 
 /**

@@ -3,9 +3,9 @@ import {
   StringField,
   contains,
   field,
-} from 'https://cardstack.com/base/card-api';
-import EmailField from 'https://cardstack.com/base/email';
-import PhoneNumberField from 'https://cardstack.com/base/phone-number';
+} from '@cardstack/base/card-api';
+import EmailField from '@cardstack/base/email';
+import PhoneNumberField from '@cardstack/base/phone-number';
 export class MeetingMinutesWithContactInfo extends MeetingMinutes {
   static displayName = 'Meeting Minutes';
   @field name = contains(StringField);

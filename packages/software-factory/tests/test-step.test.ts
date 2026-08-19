@@ -1,21 +1,22 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 
-import type { ValidationStepResult } from '../src/factory-agent';
+import type { ValidationStepResult } from '../src/factory-agent/index.ts';
 
 import {
   TestValidationStep,
   type TestValidationStepConfig,
   type TestValidationDetails,
-} from '../src/validators/test-step';
+} from '../src/validators/test-step.ts';
 
 import type {
   TestRunHandle,
   ExecuteTestRunOptions,
-} from '../src/test-run-types';
-import { createMockClient } from './helpers/mock-client';
-import { createTestWorkspace } from './helpers/workspace-fixture';
+} from '../src/test-run-types.ts';
+import { createMockClient } from './helpers/mock-client.ts';
+import { createTestWorkspace } from './helpers/workspace-fixture.ts';
 
 // ---------------------------------------------------------------------------
 // Mock helpers

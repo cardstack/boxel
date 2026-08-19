@@ -2,7 +2,6 @@ import type Koa from 'koa';
 import {
   asExpressions,
   dbAdapterQuerier,
-  ensureTrailingSlash,
   fetchRealmPermissions,
   getMatrixUsername,
   notifyAllFileChanges,
@@ -23,17 +22,19 @@ import {
   sendResponseForSystemError,
   sendResponseForUnprocessableEntity,
   setContextResponse,
-} from '../middleware';
-import type { CreateRoutesArgs } from '../routes';
-import type { RealmServerTokenClaim } from '../utils/jwt';
+} from '../middleware/index.ts';
+import { REALMS_LIST_UPDATED_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
+import type { CreateRoutesArgs } from '../routes.ts';
+import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 import {
   removeRealmDatabaseArtifacts,
   removeRealmFiles,
-} from './realm-destruction-utils';
+} from './realm-destruction-utils.ts';
 import {
   deletePublishedRowsBySourceUrl,
   deleteRegistryRowByUrl,
-} from '../lib/realm-registry-writes';
+} from '../lib/realm-registry-writes.ts';
+import { normalizeRealmURL } from '../utils/realm-url.ts';
 
 interface DeleteRealmJSON {
   data: {
@@ -45,6 +46,7 @@ interface DeleteRealmJSON {
 export default function handleDeleteRealm({
   dbAdapter,
   realmsRootPath,
+  sendEvent,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let token = ctxt.state.token as RealmServerTokenClaim;
@@ -208,6 +210,15 @@ export default function handleDeleteRealm({
           ` AND removed_at IS NULL`,
         ]);
 
+        // Server-issued unlisted-link slug for this realm. Hard-delete it so a
+        // realm later recreated at the same endpoint can't reuse the old
+        // unguessable slug — which would expose the new realm to anyone holding
+        // the previous unlisted URL.
+        await q([
+          `DELETE FROM unlisted_realm_paths WHERE source_realm_url = `,
+          param(realmURL),
+        ]);
+
         await removeRealmPermissions(dbAdapter, parsedRealmURL, txQuerier);
         await removeRealmDatabaseArtifacts({
           dbAdapter,
@@ -260,6 +271,16 @@ export default function handleDeleteRealm({
           },
         }),
       );
+
+      // Tell the owner's other sessions their realm list changed so a session
+      // viewing the workspace chooser drops the deleted realm without a reload.
+      // Best-effort: the realm is already gone, so a failed notify must not
+      // turn a successful delete into an error.
+      try {
+        await sendEvent(ownerUserId, REALMS_LIST_UPDATED_EVENT_TYPE);
+      } catch (error) {
+        Sentry.captureException(error);
+      }
     } catch (error: any) {
       Sentry.captureException(error);
       await sendResponseForSystemError(ctxt, error.message);
@@ -282,18 +303,6 @@ function assertIsDeleteRealmJSON(
   }
   if (!('id' in data) || typeof data.id !== 'string') {
     throw new Error('json.data.id is required and must be a string');
-  }
-}
-
-function normalizeRealmURL(realmURL: string): URL | null {
-  try {
-    let parsedRealmURL = new URL(realmURL);
-    parsedRealmURL.pathname = ensureTrailingSlash(parsedRealmURL.pathname);
-    parsedRealmURL.search = '';
-    parsedRealmURL.hash = '';
-    return parsedRealmURL;
-  } catch {
-    return null;
   }
 }
 

@@ -1,25 +1,25 @@
 import type { IContent, MatrixClient } from 'matrix-js-sdk';
 import { Method } from 'matrix-js-sdk';
-import { REPLACE_MARKER, SEARCH_MARKER, SEPARATOR_MARKER } from '../constants';
-import { logger } from '../log';
+import { findSearchReplaceBlock } from '../search-replace-markers.ts';
+import { logger } from '../log.ts';
 import { OpenAIError } from 'openai/error';
-import type { CommandRequest } from '../commands';
-import { encodeCommandRequests } from '../commands';
+import type { ToolRequest } from '../commands.ts';
+import { encodeToolRequests } from '../commands.ts';
 import {
-  APP_BOXEL_COMMAND_REQUESTS_KEY,
+  APP_BOXEL_TOOL_REQUESTS_KEY,
   APP_BOXEL_RELOAD_BILLING_DATA_KEY,
   APP_BOXEL_REASONING_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
-  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
-} from '../matrix-constants';
-import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
+  isToolResultEventType,
+} from '../matrix-constants.ts';
+import type { MatrixEvent as DiscreteMatrixEvent } from '@cardstack/base/matrix-event';
 import type { MatrixEvent } from 'matrix-js-sdk';
-import type { PromptParts } from './types';
-import { encodeUri } from 'matrix-js-sdk/lib/utils';
-import type { SerializedFileDef } from 'https://cardstack.com/base/file-api';
-import { isTextBasedContentType } from './modality';
+import type { PromptParts } from './types.ts';
+import { encodeUri } from 'matrix-js-sdk/lib/utils.js';
+import type { SerializedFileDef } from '@cardstack/base/file-api';
+import { isTextBasedContentType } from './modality.ts';
 
 function getLog() {
   return logger('ai-bot');
@@ -51,7 +51,7 @@ export async function sendMessageEvent(
   body: string,
   eventIdToReplace: string | undefined,
   data: any = {},
-  commandRequests: Partial<CommandRequest>[] = [],
+  toolRequests: Partial<ToolRequest>[] = [],
   reasoning: string | undefined = undefined,
 ) {
   getLog().debug('sending message', body);
@@ -61,7 +61,7 @@ export async function sendMessageEvent(
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       [APP_BOXEL_REASONING_CONTENT_KEY]: reasoning,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: encodeCommandRequests(commandRequests),
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: encodeToolRequests(toolRequests),
     },
     ...data,
   };
@@ -129,7 +129,7 @@ export async function sendEventListAsDebugMessage(
   await sendDebugMessage(
     client,
     roomId,
-    'Debug: attached the raw event list.\n\n' + customMessage,
+    'Debug: attached the event list.\n\n' + customMessage,
     {
       attachedFiles: [
         {
@@ -421,27 +421,28 @@ export async function downloadFileAsBase64DataUrl(
   return `data:${contentType};base64,${base64}`;
 }
 
-export function isCommandOrCodePatchResult(
+export function isToolOrCodePatchResult(
   event: MatrixEvent | DiscreteMatrixEvent,
 ): boolean {
   let type =
     (event as DiscreteMatrixEvent).type || (event as MatrixEvent).getType?.();
   return (
-    type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE ||
+    isToolResultEventType(type) ||
     type === APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE
   );
 }
 
 export function extractCodePatchBlocks(s: string) {
-  let matches = [
-    ...s.matchAll(
-      new RegExp(
-        `${SEARCH_MARKER}.*?${SEPARATOR_MARKER}.*?${REPLACE_MARKER}`,
-        'gs',
-      ),
-    ),
-  ];
-  return matches.map((match) => match[0]);
+  let blocks: string[] = [];
+  let from = 0;
+  for (;;) {
+    let block = findSearchReplaceBlock(s, from);
+    if (!block) {
+      return blocks;
+    }
+    blocks.push(s.substring(block.start, block.end));
+    from = block.end;
+  }
 }
 
 // Normalize a Matrix media URL (HTTP download URL or mxc://) into a canonical key.

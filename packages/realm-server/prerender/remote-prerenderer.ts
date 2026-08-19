@@ -18,7 +18,7 @@ import {
   PRERENDER_SERVER_STATUS_HEADER,
   resolvePrerenderManagerRequestTimeoutMs,
   sanitizePrerenderJobId,
-} from './prerender-constants';
+} from './prerender-constants.ts';
 import { randomUUID } from 'crypto';
 
 const log = logger('remote-prerenderer');
@@ -231,9 +231,11 @@ export function createRemotePrerenderer(
       realm,
       url,
       auth,
+      visitType,
       renderOptions,
       fileData,
       types,
+      cardTypes,
       batchId,
       priority,
       jobId,
@@ -247,9 +249,11 @@ export function createRemotePrerenderer(
           realm,
           url,
           auth,
+          ...(visitType ? { visitType } : {}),
           renderOptions: renderOptions ?? {},
           ...(fileData ? { fileData } : {}),
           ...(types ? { types } : {}),
+          ...(cardTypes ? { cardTypes } : {}),
           ...(batchId ? { batchId } : {}),
           ...(priority !== undefined ? { priority } : {}),
           ...(jobId ? { jobId } : {}),

@@ -84,12 +84,7 @@ const emptyFsPath = require.resolve('./lib/empty-fs.js');
 const nodeBuiltinStubResolver = {
   name: 'node-builtin-stub-resolver',
   resolveId(id) {
-    if (
-      id === 'fs' ||
-      id === 'node:fs' ||
-      id === 'url' ||
-      id === 'node:url'
-    ) {
+    if (id === 'fs' || id === 'node:fs' || id === 'url' || id === 'node:url') {
       return emptyFsPath;
     }
     return null;
@@ -273,13 +268,13 @@ export default defineConfig(({ mode }) => ({
     },
   },
   resolve: {
-    alias: {
-      path: require.resolve('path-browserify'),
-      crypto: require.resolve('crypto-browserify'),
-      stream: require.resolve('stream-browserify'),
+    alias: [
+      { find: 'path', replacement: require.resolve('path-browserify') },
+      { find: 'stream', replacement: require.resolve('stream-browserify') },
+      { find: /^util$/, replacement: require.resolve('util/') },
       // recast's main.js eagerly requires 'fs'; we stub it for the browser.
-      fs: require.resolve('./lib/empty-fs.js'),
-    },
+      { find: 'fs', replacement: require.resolve('./lib/empty-fs.js') },
+    ],
   },
   plugins: [
     scopedCSS(),
@@ -307,12 +302,18 @@ export default defineConfig(({ mode }) => ({
     cors: true,
     headers: {
       'Cache-Control': 'no-store',
+      'Document-Policy': 'js-profiling',
     },
     ...(envHostname ? { allowedHosts: [envHostname] } : {}),
     ...(_devHttps ? { https: _devHttps } : {}),
   },
   server: {
     ...(_devHttps ? { https: _devHttps } : {}),
+    // Permit the JS Self-Profiling API in dev so client-telemetry's Tier-2
+    // wedge stack sampling works when running the host from Vite locally.
+    headers: {
+      'Document-Policy': 'js-profiling',
+    },
     // Pre-warm the dep optimizer at server boot so the prerender's first
     // `/_standby` navigation doesn't race a cold Vite optimize. The host
     // transitive graph is ~1000 packages, and a cold optimize routinely

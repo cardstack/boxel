@@ -1,7 +1,8 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
-import { AsyncSemaphore } from '../prerender/async-semaphore';
-import { TabQueue } from '../prerender/page-pool';
+import { AsyncSemaphore } from '../prerender/async-semaphore.ts';
+import { TabQueue } from '../prerender/page-pool.ts';
 
 // Priority-aware dequeue for both `AsyncSemaphore` (the per-server
 // render-cap + per-affinity file-admission) and `TabQueue` (the per-
@@ -16,7 +17,7 @@ import { TabQueue } from '../prerender/page-pool';
 // arriving while a system-priority full reindex has saturated the
 // queue should NOT wait behind every queued background entry.
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('AsyncSemaphore priority dequeue', function () {
     test('higher priority jumps the queue ahead of lower-priority pending work', async function (assert) {
       let sem = new AsyncSemaphore(1);

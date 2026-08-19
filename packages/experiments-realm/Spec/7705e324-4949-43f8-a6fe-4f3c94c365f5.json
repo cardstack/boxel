@@ -56,7 +56,7 @@
     "attributes": {
       "ref": {
         "name": "TravelGoalWithProgress",
-        "module": "https://localhost:4201/experiments/trip-info"
+        "module": "../trip-info"
       },
       "readMe": null,
       "cardInfo": {

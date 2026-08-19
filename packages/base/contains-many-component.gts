@@ -29,7 +29,7 @@ import {
   uuidv4,
   isCardInstance,
 } from '@cardstack/runtime-common';
-import { cn } from '@cardstack/boxel-ui/helpers';
+import { cn, coalesce } from '@cardstack/boxel-ui/helpers';
 import { IconTrash, FourLines, IconPlus } from '@cardstack/boxel-ui/icons';
 import { task } from 'ember-concurrency';
 import { action } from '@ember/object';
@@ -138,13 +138,13 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
         {{#if permissions.canWrite}}
           <Button
             class={{cn 'add-new' no-items=this.noItems}}
-            @kind='muted'
+            @kind='secondary'
             @size='tall'
             @rectangular={{true}}
             {{on 'click' this.add}}
             data-test-add-new
           >
-            <IconPlus class='icon' width='12px' height='12px' alt='plus' />
+            <IconPlus class='icon' width='12px' height='12px' role='presentation' />
             Add
             {{getPlural @field.card.displayName}}
           </Button>
@@ -154,9 +154,6 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
     <style scoped>
       .contains-many-editor {
         --remove-icon-size: var(--boxel-icon-med);
-      }
-      .contains-many-editor :deep(.compound-field.edit-format .add-new) {
-        border: 1px solid var(--border, var(--boxel-border-color));
       }
       .list {
         list-style: none;
@@ -210,9 +207,8 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
         box-shadow: var(--boxel-box-shadow-hover);
       }
       .add-new {
-        gap: var(--boxel-sp-xxxs);
+        gap: var(--boxel-sp-3xs);
         width: fit-content;
-        letter-spacing: var(--boxel-lsp-xs);
         margin-left: calc(var(--boxel-icon-med) + var(--boxel-sp-xs));
         /* for alignment due to sort handle */
       }
@@ -269,10 +265,6 @@ function getPluralChildFormat(effectiveFormat: Format, model: Box<FieldDef>) {
     return 'atom';
   }
   return effectiveFormat;
-}
-
-function coalesce<T>(arg1: T | undefined, arg2: T): T {
-  return arg1 ?? arg2;
 }
 
 const componentCache = initSharedState(
@@ -365,23 +357,36 @@ export function getContainsManyComponent({
             (coalesce @format defaultFormats.fieldDef)
             as |effectiveFormat|
           }}
-            <div
-              class='plural-field containsMany-field
-                {{effectiveFormat}}-format
-                {{unless arrayField.children.length "empty"}}'
-              data-test-plural-view={{field.fieldType}}
-              data-test-plural-view-field={{field.name}}
-              data-test-plural-view-format={{effectiveFormat}}
-              ...attributes
-            >
-              {{#each (getComponents) as |Item i|}}
-                <div class='containsMany-item' data-test-plural-view-item={{i}}>
-                  <Item
-                    @format={{getPluralChildFormat effectiveFormat model}}
-                  />
-                </div>
+            {{#if (coalesce @displayContainer true)}}
+              <div
+                class='plural-field containsMany-field
+                  {{effectiveFormat}}-format
+                  {{unless arrayField.children.length "empty"}}'
+                data-test-plural-view={{field.fieldType}}
+                data-test-plural-view-field={{field.name}}
+                data-test-plural-view-format={{effectiveFormat}}
+                ...attributes
+              >
+                {{#each (getComponents) as |Item i|}}
+                  <div
+                    class='containsMany-item'
+                    data-test-plural-view-item={{i}}
+                  >
+                    <Item
+                      @format={{getPluralChildFormat effectiveFormat model}}
+                    />
+                  </div>
+
+                {{/each}}
+              </div>
+            {{else}}
+              {{#each (getComponents) as |Item|}}
+                <Item
+                  @format={{getPluralChildFormat effectiveFormat model}}
+                  @displayContainer={{false}}
+                />
               {{/each}}
-            </div>
+            {{/if}}
           {{/let}}
         {{/if}}
       </DefaultFormatsConsumer>

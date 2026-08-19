@@ -1,10 +1,13 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import type { Test, SuperTest } from 'supertest';
 import supertest from 'supertest';
 import { join, basename } from 'path';
-import type { RealmHttpServer as Server } from '../server';
+import type { RealmHttpServer as Server } from '../server.ts';
 import type { DirResult } from 'tmp';
-import { existsSync, readJSONSync, statSync, writeFileSync } from 'fs-extra';
+import fsExtra from 'fs-extra';
+const { existsSync, readFileSync, readJSONSync, statSync, writeFileSync } =
+  fsExtra;
 import type {
   Realm,
   Relationship,
@@ -15,27 +18,26 @@ import {
   ri,
   baseRRI,
   rri,
+  searchEntryWireQueryFromQuery,
   type LooseSingleCardDocument,
   type SingleCardDocument,
 } from '@cardstack/runtime-common';
 import { parse } from 'qs';
-import type { Query } from '@cardstack/runtime-common/query';
 import {
   setupPermissionedRealmCached,
   setupPermissionedRealmsCached,
   setupMatrixRoom,
   closeServer,
   testRealmInfo,
-  cleanWhiteSpace,
   createJWT,
   testRealmServerMatrixUserId,
   cardInfo,
   type RealmRequest,
   withRealmPath,
-} from './helpers';
-import { expectIncrementalIndexEvent } from './helpers/indexing';
+} from './helpers/index.ts';
+import { expectIncrementalIndexEvent } from './helpers/indexing.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
-import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms';
+import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms.ts';
 import type { PgAdapter } from '@cardstack/postgres';
 
 function parseSearchQuery(searchURL: URL) {
@@ -95,7 +97,7 @@ function buildPngChunk(type: string, data: Uint8Array): Uint8Array {
   return chunk;
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('Realm-specific Endpoints | card URLs', function (hooks) {
     let realmURL = new URL('http://127.0.0.1:4444/test/');
     let testRealmHref = realmURL.href;
@@ -161,8 +163,18 @@ module(basename(__filename), function () {
           );
           let json = response.body;
           assert.ok(json.data.meta.lastModified, 'lastModified exists');
+          assert.strictEqual(
+            typeof json.data.meta.generation,
+            'number',
+            'card+json GET carries the index-data generation in meta',
+          );
+          assert.ok(
+            json.data.meta.generation > 0,
+            'the index-data generation is positive',
+          );
           delete json.data.meta.lastModified;
           delete json.data.meta.resourceCreatedAt;
+          delete json.data.meta.generation;
           assert.strictEqual(
             response.get('X-boxel-realm-url'),
             testRealmHref,
@@ -184,18 +196,6 @@ module(basename(__filename), function () {
                 cardDescription: null,
                 cardThumbnailURL: null,
               },
-              relationships: {
-                'cardInfo.cardThumbnail': {
-                  links: {
-                    self: null,
-                  },
-                },
-                'cardInfo.theme': {
-                  links: {
-                    self: null,
-                  },
-                },
-              },
               meta: {
                 adoptsFrom: {
                   module: rri(`./person`),
@@ -211,13 +211,16 @@ module(basename(__filename), function () {
           });
         });
 
-        test('serves a card error request without last known good state', async function (assert) {
+        test('serves a card with a broken linksTo target as a normal instance — the broken slot is surfaced via the relationship reference, not as a server error', async function (assert) {
           let response = await request
             .get('/missing-link')
             .set('Accept', 'application/vnd.card+json');
 
-          assert.strictEqual(response.status, 500, 'HTTP 500 status');
-          let json = response.body;
+          assert.strictEqual(
+            response.status,
+            200,
+            `HTTP 200 status: ${response.text}`,
+          );
           assert.strictEqual(
             response.get('X-boxel-realm-url'),
             testRealmHref,
@@ -228,49 +231,17 @@ module(basename(__filename), function () {
             'true',
             'realm is public readable',
           );
-
-          let errorBody = json.errors[0];
-          assert.ok(
-            errorBody.meta.stack.includes('at Realm.getSourceOrRedirect'),
-            'stack trace is correct',
-          );
-          delete errorBody.meta.stack;
-          assert.strictEqual(errorBody.id, `${testRealmHref}missing-link`);
-          assert.strictEqual(errorBody.status, 404);
-          assert.strictEqual(errorBody.title, 'Link Not Found');
+          let json = response.body;
           assert.strictEqual(
-            errorBody.message,
-            `missing file ${testRealmHref}does-not-exist.json`,
-          );
-          assert.strictEqual(errorBody.realm, testRealmHref);
-          assert.strictEqual(
-            errorBody.meta.lastKnownGoodHtml,
-            null,
-            'no last known good html is present',
+            json.data.id,
+            `${testRealmHref}missing-link`,
+            'response carries the requested card id',
           );
           assert.strictEqual(
-            errorBody.meta.cardTitle,
-            null,
-            'no card title is present',
+            json.data.relationships?.friend?.links?.self,
+            './does-not-exist',
+            'broken friend relationship is preserved on the wire as a reference — the consumer renders the placeholder, the server does not error',
           );
-          assert.ok(
-            Array.isArray(errorBody.meta.scopedCssUrls),
-            'scoped css urls are present',
-          );
-          if (errorBody.meta.scopedCssUrls.length > 0) {
-            assert.ok(
-              errorBody.meta.scopedCssUrls.every((scopedCssUrl: string) =>
-                scopedCssUrl.endsWith('.glimmer-scoped.css'),
-              ),
-              'scoped css urls have the expected suffix',
-            );
-          } else {
-            assert.deepEqual(
-              errorBody.meta.scopedCssUrls,
-              [],
-              'scoped css urls can be empty when no styles are collected',
-            );
-          }
         });
 
         test('includes FileDef resources for file links in included payload', async function (assert) {
@@ -293,8 +264,8 @@ module(basename(__filename), function () {
               [
                 'gallery.gts',
                 `
-                import { CardDef, field, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
-                import { FileDef } from "https://cardstack.com/base/file-api";
+                import { CardDef, field, linksTo, linksToMany } from "@cardstack/base/card-api";
+                import { FileDef } from "@cardstack/base/file-api";
 
                 export class Gallery extends CardDef {
                   @field hero = linksTo(FileDef);
@@ -409,8 +380,8 @@ module(basename(__filename), function () {
             [
               'tag.gts',
               `
-                import { CardDef, field, contains } from "https://cardstack.com/base/card-api";
-                import StringField from "https://cardstack.com/base/string";
+                import { CardDef, field, contains } from "@cardstack/base/card-api";
+                import StringField from "@cardstack/base/string";
 
                 export class Tag extends CardDef {
                   @field label = contains(StringField);
@@ -425,8 +396,8 @@ module(basename(__filename), function () {
             [
               'article.gts',
               `
-                import { CardDef, field, contains, linksTo } from "https://cardstack.com/base/card-api";
-                import StringField from "https://cardstack.com/base/string";
+                import { CardDef, field, contains, linksTo } from "@cardstack/base/card-api";
+                import StringField from "@cardstack/base/string";
                 import { Tag } from "./tag";
 
                 export class Article extends CardDef {
@@ -551,9 +522,9 @@ module(basename(__filename), function () {
               [
                 'skill-card.gts',
                 `
-                  import { CardDef, field, contains, linksTo } from "https://cardstack.com/base/card-api";
-                  import StringField from "https://cardstack.com/base/string";
-                  import { MarkdownDef } from "https://cardstack.com/base/markdown-file-def";
+                  import { CardDef, field, contains, linksTo } from "@cardstack/base/card-api";
+                  import StringField from "@cardstack/base/string";
+                  import { MarkdownDef } from "@cardstack/base/markdown-file-def";
 
                   export class SkillCard extends CardDef {
                     @field cardTitle = contains(StringField);
@@ -650,8 +621,8 @@ module(basename(__filename), function () {
             [
               'query-person-finder.gts',
               `
-                import { CardDef, field, contains, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
-                import StringField from "https://cardstack.com/base/string";
+                import { CardDef, field, contains, linksTo, linksToMany } from "@cardstack/base/card-api";
+                import StringField from "@cardstack/base/string";
                 import { Person } from "./person";
 
                 export class QueryPersonFinder extends CardDef {
@@ -742,8 +713,8 @@ module(basename(__filename), function () {
             [
               'query-person-finder-nested.gts',
               `
-                import { CardDef, FieldDef, field, contains, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
-                import StringField from "https://cardstack.com/base/string";
+                import { CardDef, FieldDef, field, contains, linksTo, linksToMany } from "@cardstack/base/card-api";
+                import StringField from "@cardstack/base/string";
                 import { Person } from "./person";
 
                 export class QueryLinksField extends FieldDef {
@@ -884,8 +855,8 @@ module(basename(__filename), function () {
           let etag = response.get('etag') ?? '';
           assert.ok(etag, 'response carries an ETag');
           assert.true(
-            /^"\d+(?:-[0-9a-f]+)?:card"$/.test(etag),
-            `ETag matches "<indexed_at>(-<realmInfoHash>)?:card" pattern (got ${etag})`,
+            /^"\d+(?:-[0-9a-f]+)?:card-rri"$/.test(etag),
+            `ETag matches "<indexed_at>(-<realmInfoHash>)?:card-rri" pattern (got ${etag})`,
           );
           assert.strictEqual(
             response.get('cache-control'),
@@ -978,6 +949,7 @@ module(basename(__filename), function () {
 
           delete json.data.meta.lastModified;
           delete json.data.meta.resourceCreatedAt;
+          delete json.data.meta.generation;
 
           assert.strictEqual(
             response.get('X-boxel-realm-url'),
@@ -1016,18 +988,6 @@ module(basename(__filename), function () {
                 realmInfo: testRealmInfo,
                 realmURL: testRealmHref,
               },
-              relationships: {
-                'cardInfo.cardThumbnail': {
-                  links: {
-                    self: null,
-                  },
-                },
-                'cardInfo.theme': {
-                  links: {
-                    self: null,
-                  },
-                },
-              },
               links: {
                 self: `${testRealmHref}person-1`,
               },
@@ -1048,7 +1008,7 @@ module(basename(__filename), function () {
           onRealmSetup,
         });
 
-        test('serves a card error request with last known good state', async function (assert) {
+        test('patching a card to point at a missing linksTo target keeps the card itself indexable — GET returns the card as a normal instance with the broken reference preserved on the wire', async function (assert) {
           await request
             .patch('/hassan')
             .send({
@@ -1075,8 +1035,11 @@ module(basename(__filename), function () {
             .get('/hassan')
             .set('Accept', 'application/vnd.card+json');
 
-          assert.strictEqual(response.status, 500, 'HTTP 500 status');
-          let json = response.body;
+          assert.strictEqual(
+            response.status,
+            200,
+            `HTTP 200 status: ${response.text}`,
+          );
           assert.strictEqual(
             response.get('X-boxel-realm-url'),
             testRealmHref,
@@ -1087,30 +1050,83 @@ module(basename(__filename), function () {
             'true',
             'realm is public readable',
           );
-
-          let errorBody = json.errors[0];
-          let lastKnownGoodHtml = cleanWhiteSpace(
-            errorBody.meta.lastKnownGoodHtml,
-          );
-
-          assert.ok(
-            errorBody.meta.stack.includes('at Realm.getSourceOrRedirect'),
-            'stack trace is correct',
-          );
-          assert.strictEqual(errorBody.status, 404);
-          assert.strictEqual(errorBody.title, 'Link Not Found');
+          let json = response.body;
           assert.strictEqual(
-            errorBody.message,
-            `missing file ${testRealmHref}does-not-exist.json`,
+            json.data.id,
+            `${testRealmHref}hassan`,
+            'response carries the requested card id',
           );
-          assert.ok(lastKnownGoodHtml.includes('Hassan has a friend'));
-          assert.ok(lastKnownGoodHtml.includes('Jade'));
-          let scopedCssUrls = errorBody.meta.scopedCssUrls;
-          assertScopedCssUrlsContain(
-            assert,
-            scopedCssUrls,
-            cardDefModuleDependencies,
+          assert.strictEqual(
+            json.data.relationships?.friend?.links?.self,
+            './does-not-exist',
+            'broken friend relationship is preserved on the wire as a reference — the consumer renders the placeholder, the server does not error',
           );
+        });
+
+        test('GET on an existing-but-errored index entry mirrors the underlying error status onto the HTTP response, but never 404 (reserved for a missing row) and never a non-HTTP status', async function (assert) {
+          let cardURL = `${testRealmHref}person-1`;
+          let cases: { errorStatus: number; expectedHttp: number }[] = [
+            // Real, card-level HTTP error statuses flow through unchanged.
+            { errorStatus: 401, expectedHttp: 401 },
+            { errorStatus: 403, expectedHttp: 403 },
+            { errorStatus: 422, expectedHttp: 422 },
+            { errorStatus: 500, expectedHttp: 500 },
+            // An unregistered-but-in-range upstream status (e.g. a proxied
+            // 520) is still mirrored and must not throw while building the
+            // error response.
+            { errorStatus: 520, expectedHttp: 520 },
+            // An existing-but-errored card is never "not found": a
+            // recorded 404 (e.g. the error's underlying cause was a
+            // missing linked instance) falls back to 500 so that a 404
+            // on a card GET stays an unambiguous "card no longer exists"
+            // signal.
+            { errorStatus: 404, expectedHttp: 500 },
+            // Non-HTTP / out-of-range statuses also fall back to 500: a
+            // fetch failure recorded as 0, and a non-error status that
+            // should never reach the error-row branch.
+            { errorStatus: 0, expectedHttp: 500 },
+            { errorStatus: 200, expectedHttp: 500 },
+          ];
+
+          for (let { errorStatus, expectedHttp } of cases) {
+            let errorDoc = {
+              message: 'boom',
+              status: errorStatus,
+              title: 'Some Error',
+              additionalErrors: null,
+            };
+            // The instance row is keyed by `url` with the `.json` suffix;
+            // the bare card URL is the `file_alias`. Match either so the
+            // error flag lands on the row the GET read resolves.
+            for (let table of ['boxel_index', 'boxel_index_working']) {
+              await dbAdapter.execute(
+                `UPDATE ${table}
+                 SET has_error = TRUE, error_doc = $1::jsonb
+                 WHERE (url = $2 OR file_alias = $2) AND type = 'instance'`,
+                {
+                  bind: [JSON.stringify(errorDoc), cardURL],
+                },
+              );
+            }
+
+            let response = await request
+              .get('/person-1')
+              .set('Accept', 'application/vnd.card+json');
+
+            assert.strictEqual(
+              response.status,
+              expectedHttp,
+              `errorDoc.status ${errorStatus} → HTTP ${expectedHttp}`,
+            );
+            // The JSON:API body always carries the real underlying
+            // status regardless of the HTTP status chosen, so consumers
+            // can still see the precise cause.
+            assert.strictEqual(
+              response.body.errors?.[0]?.status,
+              errorStatus,
+              `JSON:API body preserves the underlying status (${errorStatus})`,
+            );
+          }
         });
       });
 
@@ -1255,7 +1271,7 @@ module(basename(__filename), function () {
                 attributes: {},
                 meta: {
                   adoptsFrom: {
-                    module: rri('https://cardstack.com/base/card-api'),
+                    module: rri('@cardstack/base/card-api'),
                     name: 'CardDef',
                   },
                 },
@@ -1320,13 +1336,209 @@ module(basename(__filename), function () {
                 type: 'card',
                 meta: {
                   adoptsFrom: {
-                    module: rri('https://cardstack.com/base/card-api'),
+                    module: rri('@cardstack/base/card-api'),
                     name: 'CardDef',
                   },
                 },
               },
             },
             'file contents are correct',
+          );
+        });
+
+        test('an explicitly-null relationship is preserved and an absent one omitted, in both the source and the served card+json', async function (assert) {
+          let realmEventTimestampStart = Date.now();
+
+          // `Friend.friend` (linksTo) and `Friend.friends` (linksToMany) are
+          // both non-searchable. Author `friend` explicitly null and leave
+          // `friends` absent. Serialization keys on whether the card actually
+          // has the relationship — an authored empty (`{ self: null }`) vs a
+          // never-set link — independent of searchability, so both the written
+          // source and the served card+json keep `friend` as `{ self: null }`
+          // and omit `friends`. (`friend` is even rendered in the isolated
+          // template, yet a render doesn't author a link — reading it doesn't
+          // mark it "used" — so it stays omitted unless actually set.)
+          let response = await request
+            .post('/')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'Hassan',
+                },
+                relationships: {
+                  friend: {
+                    links: {
+                      self: null,
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('https://localhost:4202/node-test/friend'),
+                    name: 'Friend',
+                  },
+                },
+              },
+            } as LooseSingleCardDocument)
+            .set('Accept', 'application/vnd.card+json');
+
+          let incrementalEventContent = await expectIncrementalIndexEvent(
+            testRealmHref,
+            realmEventTimestampStart,
+            {
+              assert,
+              getMessagesSince,
+              realm: testRealmHref,
+              type: 'Friend',
+              timeout: 5000,
+            },
+          );
+          let id = incrementalEventContent.invalidations[0].split('/').pop()!;
+
+          assert.strictEqual(
+            response.status,
+            201,
+            `HTTP 201 status: ${response.text}`,
+          );
+
+          // The written source persists the card's relationships as authored:
+          // the explicitly-null `friend` survives as `{ self: null }` while the
+          // never-authored `friends` is absent.
+          let cardFile = join(
+            dir.name,
+            'realm_server_1',
+            'test',
+            'Friend',
+            `${id}.json`,
+          );
+          assert.ok(existsSync(cardFile), `card json ${cardFile} exists`);
+          let source = readJSONSync(cardFile) as LooseSingleCardDocument;
+          assert.deepEqual(
+            source.data.relationships,
+            { friend: { links: { self: null } } },
+            'source keeps the explicitly-null friend link and omits the absent friends link',
+          );
+
+          // The served card+json (the indexed pristine doc) keeps the same
+          // distinction: `friend` was authored empty, so it round-trips as
+          // `{ self: null }`; `friends` was never set, so it is omitted. This is
+          // data fidelity, independent of searchability.
+          let getResponse = await request
+            .get(`/Friend/${id}`)
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(
+            getResponse.status,
+            200,
+            `HTTP 200 status: ${getResponse.text}`,
+          );
+          let served = getResponse.body as SingleCardDocument;
+          assert.deepEqual(
+            served.data.relationships?.friend,
+            { links: { self: null } },
+            'served card+json preserves the explicitly-null friend link',
+          );
+          assert.strictEqual(
+            served.data.relationships?.friends,
+            undefined,
+            'served card+json omits the absent friends link',
+          );
+        });
+
+        test('an authored-empty linksToMany is preserved distinctly from a never-set one, in both the source and the served card+json', async function (assert) {
+          let realmEventTimestampStart = Date.now();
+
+          // Mirror of the `linksTo` case above for the plural link. Author
+          // `friends` (linksToMany) explicitly empty and leave `friend`
+          // (linksTo) absent. An empty plural link is authored — a relationship
+          // the card has, spelled `{ self: null }` on the wire — vs. a never-set
+          // one, which is omitted. This holds even though the plural getter
+          // materializes a backing array on read: a mere render doesn't author a
+          // link, so the never-set `friend` stays omitted while the authored
+          // empty `friends` round-trips.
+          let response = await request
+            .post('/')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'Hassan',
+                },
+                relationships: {
+                  friends: {
+                    links: {
+                      self: null,
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('https://localhost:4202/node-test/friend'),
+                    name: 'Friend',
+                  },
+                },
+              },
+            } as LooseSingleCardDocument)
+            .set('Accept', 'application/vnd.card+json');
+
+          let incrementalEventContent = await expectIncrementalIndexEvent(
+            testRealmHref,
+            realmEventTimestampStart,
+            {
+              assert,
+              getMessagesSince,
+              realm: testRealmHref,
+              type: 'Friend',
+              timeout: 5000,
+            },
+          );
+          let id = incrementalEventContent.invalidations[0].split('/').pop()!;
+
+          assert.strictEqual(
+            response.status,
+            201,
+            `HTTP 201 status: ${response.text}`,
+          );
+
+          // The written source persists the card's relationships as authored:
+          // the explicitly-empty `friends` survives as `{ self: null }` while the
+          // never-authored `friend` is absent.
+          let cardFile = join(
+            dir.name,
+            'realm_server_1',
+            'test',
+            'Friend',
+            `${id}.json`,
+          );
+          assert.ok(existsSync(cardFile), `card json ${cardFile} exists`);
+          let source = readJSONSync(cardFile) as LooseSingleCardDocument;
+          assert.deepEqual(
+            source.data.relationships,
+            { friends: { links: { self: null } } },
+            'source keeps the explicitly-empty friends link and omits the absent friend link',
+          );
+
+          // The served card+json (the indexed pristine doc) keeps the same
+          // distinction: `friends` was authored empty, so it round-trips as
+          // `{ self: null }`; `friend` was never set, so it is omitted.
+          let getResponse = await request
+            .get(`/Friend/${id}`)
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(
+            getResponse.status,
+            200,
+            `HTTP 200 status: ${getResponse.text}`,
+          );
+          let served = getResponse.body as SingleCardDocument;
+          assert.deepEqual(
+            served.data.relationships?.friends,
+            { links: { self: null } },
+            'served card+json preserves the explicitly-empty friends link',
+          );
+          assert.strictEqual(
+            served.data.relationships?.friend,
+            undefined,
+            'served card+json omits the absent friend link',
           );
         });
 
@@ -1570,6 +1782,7 @@ module(basename(__filename), function () {
             assert.ok(json.data.meta.lastModified, 'lastModified exists');
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
+            delete json.data.meta.generation;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,
@@ -1593,16 +1806,6 @@ module(basename(__filename), function () {
                   data: {
                     type: 'card',
                     id: `${testRealmHref}Friend/local-id-1`,
-                  },
-                },
-                'cardInfo.cardThumbnail': {
-                  links: {
-                    self: null,
-                  },
-                },
-                'cardInfo.theme': {
-                  links: {
-                    self: null,
                   },
                 },
               },
@@ -1658,21 +1861,6 @@ module(basename(__filename), function () {
                         type: 'card',
                       },
                     },
-                    friend: {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.cardThumbnail': {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.theme': {
-                      links: {
-                        self: null,
-                      },
-                    },
                   },
                   meta: {
                     adoptsFrom: {
@@ -1691,23 +1879,6 @@ module(basename(__filename), function () {
                     cardThumbnailURL: null,
                     cardInfo,
                   },
-                  relationships: {
-                    friend: {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.cardThumbnail': {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.theme': {
-                      links: {
-                        self: null,
-                      },
-                    },
-                  },
                   meta: {
                     adoptsFrom: {
                       module: rri('https://localhost:4202/node-test/friend'),
@@ -1724,23 +1895,6 @@ module(basename(__filename), function () {
                     cardDescription: null,
                     cardThumbnailURL: null,
                     cardInfo,
-                  },
-                  relationships: {
-                    friend: {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.cardThumbnail': {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.theme': {
-                      links: {
-                        self: null,
-                      },
-                    },
                   },
                   meta: {
                     adoptsFrom: {
@@ -1763,6 +1917,7 @@ module(basename(__filename), function () {
             assert.ok(json.data.meta.lastModified, 'lastModified exists');
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
+            delete json.data.meta.generation;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,
@@ -1795,21 +1950,6 @@ module(basename(__filename), function () {
                   data: {
                     id: `${testRealmHref}Friend/local-id-3`,
                     type: 'card',
-                  },
-                },
-                friend: {
-                  links: {
-                    self: null,
-                  },
-                },
-                'cardInfo.cardThumbnail': {
-                  links: {
-                    self: null,
-                  },
-                },
-                'cardInfo.theme': {
-                  links: {
-                    self: null,
                   },
                 },
               },
@@ -1846,23 +1986,6 @@ module(basename(__filename), function () {
                     cardThumbnailURL: null,
                     cardInfo,
                   },
-                  relationships: {
-                    friend: {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.cardThumbnail': {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.theme': {
-                      links: {
-                        self: null,
-                      },
-                    },
-                  },
                   meta: {
                     adoptsFrom: {
                       module: rri('https://localhost:4202/node-test/friend'),
@@ -1879,23 +2002,6 @@ module(basename(__filename), function () {
                     cardDescription: null,
                     cardThumbnailURL: null,
                     cardInfo,
-                  },
-                  relationships: {
-                    friend: {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.cardThumbnail': {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.theme': {
-                      links: {
-                        self: null,
-                      },
-                    },
                   },
                   meta: {
                     adoptsFrom: {
@@ -1918,6 +2024,7 @@ module(basename(__filename), function () {
             assert.ok(json.data.meta.lastModified, 'lastModified exists');
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
+            delete json.data.meta.generation;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,
@@ -1933,23 +2040,6 @@ module(basename(__filename), function () {
                   cardDescription: null,
                   cardThumbnailURL: null,
                   cardInfo,
-                },
-                relationships: {
-                  friend: {
-                    links: {
-                      self: null,
-                    },
-                  },
-                  'cardInfo.cardThumbnail': {
-                    links: {
-                      self: null,
-                    },
-                  },
-                  'cardInfo.theme': {
-                    links: {
-                      self: null,
-                    },
-                  },
                 },
                 meta: {
                   adoptsFrom: {
@@ -1975,6 +2065,7 @@ module(basename(__filename), function () {
             assert.ok(json.data.meta.lastModified, 'lastModified exists');
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
+            delete json.data.meta.generation;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,
@@ -1990,23 +2081,6 @@ module(basename(__filename), function () {
                   cardDescription: null,
                   cardThumbnailURL: null,
                   cardInfo,
-                },
-                relationships: {
-                  friend: {
-                    links: {
-                      self: null,
-                    },
-                  },
-                  'cardInfo.cardThumbnail': {
-                    links: {
-                      self: null,
-                    },
-                  },
-                  'cardInfo.theme': {
-                    links: {
-                      self: null,
-                    },
-                  },
                 },
                 meta: {
                   adoptsFrom: {
@@ -2099,8 +2173,15 @@ module(basename(__filename), function () {
                     firstName: 'Hassan',
                   },
                   relationships: {
+                    // The written source records the explicitly-nulled cross-
+                    // realm `friend` link — the write path persists the card's
+                    // own relationships as authored, and an authored
+                    // `{ self: null }` is preserved (the served card+json keeps
+                    // it too; only never-authored links are omitted).
                     friend: {
-                      links: { self: null },
+                      links: {
+                        self: null,
+                      },
                     },
                   },
                   meta: {
@@ -2195,6 +2276,7 @@ module(basename(__filename), function () {
             assert.ok(json.data.meta.lastModified, 'lastModified exists');
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
+            delete json.data.meta.generation;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,
@@ -2209,23 +2291,6 @@ module(basename(__filename), function () {
                 cardDescription: null,
                 cardThumbnailURL: null,
                 cardInfo,
-              },
-              relationships: {
-                friend: {
-                  links: {
-                    self: null,
-                  },
-                },
-                'cardInfo.cardThumbnail': {
-                  links: {
-                    self: null,
-                  },
-                },
-                'cardInfo.theme': {
-                  links: {
-                    self: null,
-                  },
-                },
               },
               meta: {
                 adoptsFrom: {
@@ -2305,7 +2370,7 @@ module(basename(__filename), function () {
                 attributes: {},
                 meta: {
                   adoptsFrom: {
-                    module: rri('https://cardstack.com/base/card-api'),
+                    module: rri('@cardstack/base/card-api'),
                     name: 'CardDef',
                   },
                 },
@@ -2389,9 +2454,12 @@ module(basename(__filename), function () {
           assert.ok(json.data.meta.lastModified, 'lastModified is populated');
           delete json.data.meta.lastModified;
           delete json.data.meta.resourceCreatedAt;
+          delete json.data.meta.generation;
           let cardFile = join(dir.name, 'realm_server_1', 'test', entry);
           assert.ok(existsSync(cardFile), 'card json exists');
           let card = readJSONSync(cardFile);
+          // The stored file carries only the fields the file and the patch
+          // actually specify — unset fields are not materialized into it.
           assert.deepEqual(
             card,
             {
@@ -2399,19 +2467,6 @@ module(basename(__filename), function () {
                 type: 'card',
                 attributes: {
                   firstName: 'Van Gogh',
-                  cardInfo,
-                },
-                relationships: {
-                  'cardInfo.cardThumbnail': {
-                    links: {
-                      self: null,
-                    },
-                  },
-                  'cardInfo.theme': {
-                    links: {
-                      self: null,
-                    },
-                  },
                 },
                 meta: {
                   adoptsFrom: {
@@ -2424,26 +2479,31 @@ module(basename(__filename), function () {
             'file contents are correct',
           );
 
-          let query: Query = {
-            filter: {
-              on: {
-                module: rri(`${testRealmHref}person`),
-                name: 'Person',
-              },
-              eq: {
-                firstName: 'Van Gogh',
-              },
-            },
-          };
-
           response = await request
             .post('/_search')
             .set('Accept', 'application/vnd.card+json')
             .set('X-HTTP-Method-Override', 'QUERY')
-            .send({ ...query });
+            .send(
+              searchEntryWireQueryFromQuery(
+                {
+                  filter: {
+                    on: {
+                      module: rri(`${testRealmHref}person`),
+                      name: 'Person',
+                    },
+                    eq: { firstName: 'Van Gogh' },
+                  },
+                },
+                { fields: ['item'] },
+              ),
+            );
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
-          assert.strictEqual(response.body.data.length, 1, 'found one card');
+          assert.strictEqual(
+            response.body.data.length,
+            1,
+            'found one search result',
+          );
         });
 
         test('PATCH preserves nested contains attribute values on disk', async function (assert) {
@@ -2498,13 +2558,14 @@ module(basename(__filename), function () {
           let cardFile = join(dir.name, 'realm_server_1', 'test', entry);
           assert.ok(existsSync(cardFile), 'card json exists on disk');
           let card = readJSONSync(cardFile);
+          // Only the values the patch specifies land on disk; unset nested
+          // fields (cardThumbnailURL) are not materialized into the file.
           assert.deepEqual(
             card.data.attributes?.cardInfo,
             {
               name: 'Mango Card',
               notes: 'a friendly dog',
               summary: 'good boy',
-              cardThumbnailURL: null,
             },
             'nested cardInfo values persisted to disk by file-serializer',
           );
@@ -2517,6 +2578,25 @@ module(basename(__filename), function () {
             'test',
             'person-1.json',
           );
+          // A PATCH stores the file in canonical serialized form (e.g. the
+          // adoptsFrom module ref is written without its executable
+          // extension), so a first PATCH of a hand-authored fixture may
+          // rewrite it once. Prime with one PATCH so the no-op assertions
+          // below measure the steady state.
+          await request
+            .patch('/person-1')
+            .send({
+              data: {
+                type: 'card',
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./person'),
+                    name: 'Person',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
           let initialStat = statSync(cardFile);
 
           let initialResponse = await request
@@ -2596,8 +2676,8 @@ module(basename(__filename), function () {
           let patchEtag = patchResponse.get('etag') ?? '';
           assert.ok(patchEtag, 'PATCH response carries an ETag');
           assert.true(
-            /^"\d+(?:-[0-9a-f]+)?:card"$/.test(patchEtag),
-            `PATCH ETag matches "<indexed_at>(-<realmInfoHash>)?:card" pattern (got ${patchEtag})`,
+            /^"\d+(?:-[0-9a-f]+)?:card-rri"$/.test(patchEtag),
+            `PATCH ETag matches "<indexed_at>(-<realmInfoHash>)?:card-rri" pattern (got ${patchEtag})`,
           );
           assert.notStrictEqual(
             patchEtag,
@@ -2635,6 +2715,23 @@ module(basename(__filename), function () {
         });
 
         test('no-op PATCH response carries an ETag matching the existing one', async function (assert) {
+          // Prime once so the stored file is in canonical serialized form;
+          // the no-op assertions below measure the steady state (see the
+          // no-op lastModified test).
+          await request
+            .patch('/person-1')
+            .send({
+              data: {
+                type: 'card',
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./person'),
+                    name: 'Person',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
           let initialResponse = await request
             .get('/person-1')
             .set('Accept', 'application/vnd.card+json');
@@ -2664,7 +2761,7 @@ module(basename(__filename), function () {
           );
         });
 
-        test('patches card when index entry is an error using pristine doc', async function (assert) {
+        test('patches card when index entry is an error', async function (assert) {
           let cardURL = `${testRealmHref}person-1`;
           let errorDoc = {
             message: 'render failed',
@@ -2720,10 +2817,10 @@ module(basename(__filename), function () {
             'Recovered',
             'card file updated from error state',
           );
-          assert.deepEqual(
+          assert.strictEqual(
             card.data.relationships?.['cardInfo.theme'],
-            { links: { self: null } },
-            'relationships from pristine doc are preserved',
+            undefined,
+            'the unset, non-searchable base-card link is not persisted (not in a searchable path and never set)',
           );
         });
 
@@ -2900,6 +2997,7 @@ module(basename(__filename), function () {
           assert.ok(json.data.meta.lastModified, 'lastModified is populated');
           delete json.data.meta.lastModified;
           delete json.data.meta.resourceCreatedAt;
+          delete json.data.meta.generation;
           {
             let cardFile = join(
               dir.name,
@@ -2916,22 +3014,11 @@ module(basename(__filename), function () {
                   type: 'card',
                   attributes: {
                     firstName: 'Paper',
-                    cardInfo,
                   },
                   relationships: {
                     friend: {
                       links: {
                         self: './Friend/local-id-1',
-                      },
-                    },
-                    'cardInfo.cardThumbnail': {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.theme': {
-                      links: {
-                        self: null,
                       },
                     },
                   },
@@ -3055,6 +3142,7 @@ module(basename(__filename), function () {
             assert.ok(json.data.meta.lastModified, 'lastModified exists');
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
+            delete json.data.meta.generation;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,
@@ -3078,16 +3166,6 @@ module(basename(__filename), function () {
                   data: {
                     type: 'card',
                     id: `${testRealmHref}Friend/local-id-1`,
-                  },
-                },
-                'cardInfo.cardThumbnail': {
-                  links: {
-                    self: null,
-                  },
-                },
-                'cardInfo.theme': {
-                  links: {
-                    self: null,
                   },
                 },
               },
@@ -3127,7 +3205,7 @@ module(basename(__filename), function () {
                   relationships: {
                     'friends.0': {
                       links: {
-                        self: './Friend/local-id-2',
+                        self: './local-id-2',
                       },
                       data: {
                         id: `${testRealmHref}Friend/local-id-2`,
@@ -3136,32 +3214,17 @@ module(basename(__filename), function () {
                     },
                     'friends.1': {
                       links: {
-                        self: './Friend/local-id-3',
+                        self: './local-id-3',
                       },
                       data: {
                         id: `${testRealmHref}Friend/local-id-3`,
                         type: 'card',
                       },
                     },
-                    friend: {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.cardThumbnail': {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.theme': {
-                      links: {
-                        self: null,
-                      },
-                    },
                   },
                   meta: {
                     adoptsFrom: {
-                      module: rri('./friend'),
+                      module: rri('../friend'),
                       name: 'Friend',
                     },
                   },
@@ -3176,26 +3239,9 @@ module(basename(__filename), function () {
                     cardDescription: null,
                     cardThumbnailURL: null,
                   },
-                  relationships: {
-                    friend: {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.cardThumbnail': {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.theme': {
-                      links: {
-                        self: null,
-                      },
-                    },
-                  },
                   meta: {
                     adoptsFrom: {
-                      module: rri('./friend'),
+                      module: rri('../friend'),
                       name: 'Friend',
                     },
                   },
@@ -3210,26 +3256,9 @@ module(basename(__filename), function () {
                     cardDescription: null,
                     cardThumbnailURL: null,
                   },
-                  relationships: {
-                    friend: {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.cardThumbnail': {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.theme': {
-                      links: {
-                        self: null,
-                      },
-                    },
-                  },
                   meta: {
                     adoptsFrom: {
-                      module: rri('./friend'),
+                      module: rri('../friend'),
                       name: 'Friend',
                     },
                   },
@@ -3248,6 +3277,7 @@ module(basename(__filename), function () {
             assert.ok(json.data.meta.lastModified, 'lastModified exists');
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
+            delete json.data.meta.generation;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,
@@ -3280,21 +3310,6 @@ module(basename(__filename), function () {
                   data: {
                     id: `${testRealmHref}Friend/local-id-3`,
                     type: 'card',
-                  },
-                },
-                friend: {
-                  links: {
-                    self: null,
-                  },
-                },
-                'cardInfo.cardThumbnail': {
-                  links: {
-                    self: null,
-                  },
-                },
-                'cardInfo.theme': {
-                  links: {
-                    self: null,
                   },
                 },
               },
@@ -3331,23 +3346,6 @@ module(basename(__filename), function () {
                     cardThumbnailURL: null,
                     cardInfo,
                   },
-                  relationships: {
-                    friend: {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.cardThumbnail': {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.theme': {
-                      links: {
-                        self: null,
-                      },
-                    },
-                  },
                   meta: {
                     adoptsFrom: {
                       module: rri('../friend'),
@@ -3364,23 +3362,6 @@ module(basename(__filename), function () {
                     cardDescription: null,
                     cardThumbnailURL: null,
                     cardInfo,
-                  },
-                  relationships: {
-                    friend: {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.cardThumbnail': {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.theme': {
-                      links: {
-                        self: null,
-                      },
-                    },
                   },
                   meta: {
                     adoptsFrom: {
@@ -3403,6 +3384,7 @@ module(basename(__filename), function () {
             assert.ok(json.data.meta.lastModified, 'lastModified exists');
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
+            delete json.data.meta.generation;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,
@@ -3418,23 +3400,6 @@ module(basename(__filename), function () {
                   cardDescription: null,
                   cardThumbnailURL: null,
                   cardInfo,
-                },
-                relationships: {
-                  friend: {
-                    links: {
-                      self: null,
-                    },
-                  },
-                  'cardInfo.cardThumbnail': {
-                    links: {
-                      self: null,
-                    },
-                  },
-                  'cardInfo.theme': {
-                    links: {
-                      self: null,
-                    },
-                  },
                 },
                 meta: {
                   adoptsFrom: {
@@ -3460,6 +3425,7 @@ module(basename(__filename), function () {
             assert.ok(json.data.meta.lastModified, 'lastModified exists');
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
+            delete json.data.meta.generation;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,
@@ -3475,23 +3441,6 @@ module(basename(__filename), function () {
                   cardDescription: null,
                   cardThumbnailURL: null,
                   cardInfo,
-                },
-                relationships: {
-                  friend: {
-                    links: {
-                      self: null,
-                    },
-                  },
-                  'cardInfo.cardThumbnail': {
-                    links: {
-                      self: null,
-                    },
-                  },
-                  'cardInfo.theme': {
-                    links: {
-                      self: null,
-                    },
-                  },
                 },
                 meta: {
                   adoptsFrom: {
@@ -3509,7 +3458,7 @@ module(basename(__filename), function () {
           }
         });
 
-        test('creates card instances when it encounters "lid" in the request for requests that has "isUsed: true" links', async function (assert) {
+        test('creates card instances when it encounters "lid" in the request for requests that have linksTo relationships', async function (assert) {
           let response = await request
             .patch('/hassan-x')
             .send({
@@ -3583,6 +3532,7 @@ module(basename(__filename), function () {
           assert.ok(json.data.meta.lastModified, 'lastModified is populated');
           delete json.data.meta.lastModified;
           delete json.data.meta.resourceCreatedAt;
+          delete json.data.meta.generation;
           {
             let cardFile = join(
               dir.name,
@@ -3599,22 +3549,11 @@ module(basename(__filename), function () {
                   type: 'card',
                   attributes: {
                     firstName: 'Paper',
-                    cardInfo,
                   },
                   relationships: {
                     friend: {
                       links: {
                         self: './FriendWithUsedLink/local-id-1',
-                      },
-                    },
-                    'cardInfo.cardThumbnail': {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.theme': {
-                      links: {
-                        self: null,
                       },
                     },
                   },
@@ -3672,6 +3611,7 @@ module(basename(__filename), function () {
             assert.ok(json.data.meta.lastModified, 'lastModified exists');
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
+            delete json.data.meta.generation;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,
@@ -3695,16 +3635,6 @@ module(basename(__filename), function () {
                   data: {
                     type: 'card',
                     id: `${testRealmHref}FriendWithUsedLink/local-id-1`,
-                  },
-                },
-                'cardInfo.cardThumbnail': {
-                  links: {
-                    self: null,
-                  },
-                },
-                'cardInfo.theme': {
-                  links: {
-                    self: null,
                   },
                 },
               },
@@ -3743,23 +3673,6 @@ module(basename(__filename), function () {
                     cardThumbnailURL: null,
                     cardInfo,
                   },
-                  relationships: {
-                    friend: {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.cardThumbnail': {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.theme': {
-                      links: {
-                        self: null,
-                      },
-                    },
-                  },
                   meta: {
                     adoptsFrom: {
                       module: rri(
@@ -3783,6 +3696,7 @@ module(basename(__filename), function () {
             assert.ok(json.data.meta.lastModified, 'lastModified exists');
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
+            delete json.data.meta.generation;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,
@@ -3797,23 +3711,6 @@ module(basename(__filename), function () {
                 cardDescription: null,
                 cardThumbnailURL: null,
                 cardInfo,
-              },
-              relationships: {
-                friend: {
-                  links: {
-                    self: null,
-                  },
-                },
-                'cardInfo.cardThumbnail': {
-                  links: {
-                    self: null,
-                  },
-                },
-                'cardInfo.theme': {
-                  links: {
-                    self: null,
-                  },
-                },
               },
               meta: {
                 adoptsFrom: {
@@ -3902,21 +3799,10 @@ module(basename(__filename), function () {
                   type: 'card',
                   attributes: {
                     firstName: 'Paper',
-                    cardInfo,
                   },
                   relationships: {
                     friend: {
                       links: { self: './jade' },
-                    },
-                    'cardInfo.cardThumbnail': {
-                      links: {
-                        self: null,
-                      },
-                    },
-                    'cardInfo.theme': {
-                      links: {
-                        self: null,
-                      },
                     },
                   },
                   meta: {
@@ -4098,6 +3984,309 @@ module(basename(__filename), function () {
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
         });
       });
+
+      module(
+        'compound fields backed by an unexported FieldDef',
+        function (hooks) {
+          setupPermissionedRealmCached(hooks, {
+            realmURL,
+            permissions: {
+              '*': ['read', 'write'],
+              '@node-test_realm:localhost': ['read', 'realm-owner'],
+            },
+            fileSystem: {
+              'log.gts': `
+              import {
+                contains,
+                containsMany,
+                field,
+                linksTo,
+                linksToMany,
+                CardDef,
+                FieldDef,
+              } from "@cardstack/base/card-api";
+              import StringField from "@cardstack/base/string";
+              import DatetimeField from "@cardstack/base/datetime";
+
+              class Entry extends FieldDef {
+                @field kind = contains(StringField);
+                @field at = contains(DatetimeField);
+                @field headline = contains(StringField);
+                @field author = linksTo(() => Author);
+                @field coauthors = linksToMany(() => Author);
+              }
+
+              export class Author extends CardDef {
+                @field name = contains(StringField);
+              }
+
+              export class Log extends CardDef {
+                @field logTitle = contains(StringField);
+                @field entries = containsMany(Entry);
+                @field latest = contains(Entry);
+                @field owner = linksTo(() => Author);
+              }
+            `,
+              'author-1.json': {
+                data: {
+                  attributes: {
+                    name: 'Probe Author',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('./log'),
+                      name: 'Author',
+                    },
+                  },
+                },
+              },
+              'log-1.json': {
+                data: {
+                  attributes: {
+                    logTitle: 'Probe',
+                    entries: [
+                      {
+                        kind: 'phase',
+                        at: '2026-07-17T02:45:29.259Z',
+                        headline: 'probe entry',
+                      },
+                    ],
+                    latest: {
+                      kind: 'wrap-up',
+                      at: '2026-07-17T03:00:00.000Z',
+                      headline: 'latest entry',
+                    },
+                  },
+                  relationships: {
+                    // `owner` resolves through the exported Log definition;
+                    // `entries.0.author` paths through the unexported Entry.
+                    // Having both ensures the serializer's relationship pass
+                    // produces a non-empty result, so a dropped nested
+                    // relationship can't hide behind the whole original
+                    // relationships object being carried over unprocessed.
+                    owner: {
+                      links: {
+                        self: './author-1',
+                      },
+                    },
+                    'entries.0.author': {
+                      links: {
+                        self: './author-1',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('./log'),
+                      name: 'Log',
+                    },
+                  },
+                },
+              },
+            },
+            onRealmSetup,
+          });
+
+          test('PATCH preserves compound field values on disk', async function (assert) {
+            let response = await request
+              .patch('/log-1')
+              .send({
+                data: {
+                  type: 'card',
+                  attributes: {
+                    logTitle: 'Probe (edited)',
+                    entries: [
+                      {
+                        kind: 'phase',
+                        at: '2026-07-17T02:45:29.259Z',
+                        headline: 'probe entry',
+                      },
+                    ],
+                    latest: {
+                      kind: 'wrap-up',
+                      at: '2026-07-17T03:00:00.000Z',
+                      headline: 'latest entry',
+                    },
+                  },
+                  relationships: {
+                    // JSON:API to-many `data: [...]` form nested under
+                    // the unexported compound field; must survive as
+                    // indexed `.N` link keys on disk.
+                    'entries.0.coauthors': {
+                      data: [{ id: './author-1', type: 'card' }],
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('./log'),
+                      name: 'Log',
+                    },
+                  },
+                },
+              })
+              .set('Accept', 'application/vnd.card+json');
+
+            assert.strictEqual(response.status, 200, 'HTTP 200 status');
+
+            let cardFile = join(
+              dir.name,
+              'realm_server_1',
+              'test',
+              'log-1.json',
+            );
+            assert.ok(existsSync(cardFile), 'card json exists on disk');
+            let card = readJSONSync(cardFile);
+            assert.deepEqual(
+              card.data.attributes?.entries,
+              [
+                {
+                  kind: 'phase',
+                  at: '2026-07-17T02:45:29.259Z',
+                  headline: 'probe entry',
+                },
+              ],
+              'containsMany compound entries persisted to disk',
+            );
+            assert.deepEqual(
+              card.data.attributes?.latest,
+              {
+                kind: 'wrap-up',
+                at: '2026-07-17T03:00:00.000Z',
+                headline: 'latest entry',
+              },
+              'contains compound value persisted to disk',
+            );
+            assert.deepEqual(
+              card.data.relationships?.['entries.0.author'],
+              {
+                links: {
+                  self: './author-1',
+                },
+              },
+              'relationship nested in compound entry persisted to disk',
+            );
+            assert.deepEqual(
+              card.data.relationships?.['entries.0.coauthors.0'],
+              {
+                links: {
+                  self: './author-1',
+                },
+              },
+              'to-many data form nested in compound entry persisted as indexed link keys',
+            );
+            assert.deepEqual(
+              card.data.relationships?.owner,
+              {
+                links: {
+                  self: './author-1',
+                },
+              },
+              'relationship on the card itself persisted to disk',
+            );
+            assert.strictEqual(
+              card.data.attributes?.logTitle,
+              'Probe (edited)',
+              'patched top-level attribute persisted to disk',
+            );
+          });
+
+          test('PATCH merges against the stored file even when the index lags it', async function (assert) {
+            let cardFile = join(
+              dir.name,
+              'realm_server_1',
+              'test',
+              'log-1.json',
+            );
+            // Edit the stored file directly — no realm write, no file
+            // watcher in this fixture — so the index still reflects the
+            // original content. A PATCH of an unrelated field must keep
+            // this edit: the merge base is the stored file, and using the
+            // (lagging) index instead would silently revert it.
+            let onDisk = readJSONSync(cardFile);
+            onDisk.data.attributes.cardInfo = { notes: 'edited on disk' };
+            writeFileSync(cardFile, JSON.stringify(onDisk, null, 2));
+
+            let response = await request
+              .patch('/log-1')
+              .send({
+                data: {
+                  type: 'card',
+                  attributes: {
+                    logTitle: 'Patched after disk edit',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('./log'),
+                      name: 'Log',
+                    },
+                  },
+                },
+              })
+              .set('Accept', 'application/vnd.card+json');
+
+            assert.strictEqual(response.status, 200, 'HTTP 200 status');
+
+            let card = readJSONSync(cardFile);
+            assert.strictEqual(
+              card.data.attributes?.logTitle,
+              'Patched after disk edit',
+              'patched attribute persisted to disk',
+            );
+            assert.strictEqual(
+              card.data.attributes?.cardInfo?.notes,
+              'edited on disk',
+              'file-only change survives a PATCH of an unrelated field',
+            );
+            assert.deepEqual(
+              card.data.attributes?.entries,
+              [
+                {
+                  kind: 'phase',
+                  at: '2026-07-17T02:45:29.259Z',
+                  headline: 'probe entry',
+                },
+              ],
+              'compound entries survive a PATCH of an unrelated field',
+            );
+          });
+
+          test('PATCH against a corrupt stored file fails without overwriting it', async function (assert) {
+            let cardFile = join(
+              dir.name,
+              'realm_server_1',
+              'test',
+              'log-1.json',
+            );
+            let corruptContent = 'not a card document {';
+            writeFileSync(cardFile, corruptContent);
+
+            let response = await request
+              .patch('/log-1')
+              .send({
+                data: {
+                  type: 'card',
+                  attributes: {
+                    logTitle: 'Should not land',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('./log'),
+                      name: 'Log',
+                    },
+                  },
+                },
+              })
+              .set('Accept', 'application/vnd.card+json');
+
+            assert.strictEqual(response.status, 500, 'HTTP 500 status');
+            assert.strictEqual(
+              readFileSync(cardFile, 'utf8'),
+              corruptContent,
+              'the stored file is left untouched',
+            );
+          });
+        },
+      );
     });
 
     module('card DELETE request', function (_hooks) {
@@ -4310,7 +4499,7 @@ module(basename(__filename), function () {
               attributes: {},
               meta: {
                 adoptsFrom: {
-                  module: rri('https://cardstack.com/base/card-api'),
+                  module: rri('@cardstack/base/card-api'),
                   name: 'CardDef',
                 },
               },
@@ -4337,6 +4526,201 @@ module(basename(__filename), function () {
     });
   });
 
+  module('cross-realm file links', function (hooks) {
+    // A card instantiated from the catalog (e.g. a blackjack game) keeps a
+    // linksTo(FileDef) reference to an image file that lives in the catalog
+    // realm. When the card is served from a different realm, loadLinks resolves
+    // that reference via the cross-realm fetch path. Regression for CS-11344:
+    // that path used to assume every cross-realm link target was a card and
+    // threw "instance ... is not a card document" on a file-meta target,
+    // surfacing as an HTTP 500.
+    const providerRealmURL = 'http://127.0.0.1:5531/test/';
+    const consumerRealmURL = 'http://127.0.0.1:5532/test/';
+    let consumerRequest: RealmRequest;
+
+    setupPermissionedRealmsCached(hooks, {
+      realms: [
+        {
+          realmURL: providerRealmURL,
+          permissions: {
+            '*': ['read', 'write', 'realm-owner'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
+          },
+          fileSystem: {
+            'instructions.md': `---
+boxel:
+  kind: skill
+---
+# Cross-realm instructions`,
+            'model.gts': `
+              import { CardDef, field, contains } from "https://cardstack.com/base/card-api";
+              import StringField from "https://cardstack.com/base/string";
+
+              export class Model extends CardDef {
+                @field cardTitle = contains(StringField);
+              }
+            `,
+            'model-4.6.json': {
+              data: {
+                attributes: {
+                  cardTitle: 'Model 4.6',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./model'),
+                    name: 'Model',
+                  },
+                },
+              },
+            },
+          },
+        },
+        {
+          realmURL: consumerRealmURL,
+          permissions: {
+            '*': ['read', 'write', 'realm-owner'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
+          },
+          fileSystem: {
+            'skill-card.gts': `
+              import { CardDef, field, contains, linksTo } from "@cardstack/base/card-api";
+              import StringField from "@cardstack/base/string";
+              import { MarkdownDef } from "@cardstack/base/markdown-file-def";
+
+              export class SkillCard extends CardDef {
+                @field cardTitle = contains(StringField);
+                @field instructionsSource = linksTo(MarkdownDef);
+                @field model = linksTo(CardDef);
+              }
+            `,
+            'skill-with-model.json': {
+              data: {
+                attributes: {
+                  cardTitle: 'Skill with dotted model link',
+                },
+                relationships: {
+                  model: {
+                    links: {
+                      self: `${providerRealmURL}model-4.6`,
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./skill-card'),
+                    name: 'SkillCard',
+                  },
+                },
+              },
+            },
+            'skill.json': {
+              data: {
+                attributes: {
+                  cardTitle: 'Cross-realm skill',
+                },
+                relationships: {
+                  instructionsSource: {
+                    links: {
+                      self: `${providerRealmURL}instructions.md`,
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./skill-card'),
+                    name: 'SkillCard',
+                  },
+                },
+              },
+            },
+          },
+        },
+      ],
+      onRealmSetup({ realms }) {
+        let latestRealms = realms.slice(-2);
+        consumerRequest = withRealmPath(
+          supertest(latestRealms[1].realmHttpServer),
+          new URL(consumerRealmURL),
+        );
+      },
+    });
+
+    hooks.afterEach(() => {
+      resetCatalogRealms();
+    });
+
+    test('serves a card linking to a file in another realm', async function (assert) {
+      let response = await consumerRequest
+        .get('/skill')
+        .set('Accept', 'application/vnd.card+json');
+
+      assert.strictEqual(
+        response.status,
+        200,
+        `HTTP 200 status: ${response.text}`,
+      );
+
+      let doc = response.body as LooseSingleCardDocument;
+      let relationship = doc.data.relationships
+        ?.instructionsSource as Relationship;
+      assert.deepEqual(
+        relationship?.data,
+        {
+          type: 'file-meta',
+          id: `${providerRealmURL}instructions.md`,
+        },
+        'cross-realm file relationship references the file-meta target',
+      );
+
+      let included = doc.included ?? [];
+      let linkedFile = included.find(
+        (resource) => resource.id === `${providerRealmURL}instructions.md`,
+      );
+      assert.ok(linkedFile, 'includes the cross-realm file-meta resource');
+      assert.strictEqual(
+        linkedFile?.type,
+        'file-meta',
+        'cross-realm linked resource is a file-meta resource',
+      );
+      assert.strictEqual(linkedFile?.attributes?.name, 'instructions.md');
+      // Index-derived attributes must survive the cross-realm hop: a partial
+      // file-meta here gets cached by the host, where a markdown skill
+      // without `kind: 'skill'` silently stops counting as a skill.
+      assert.strictEqual(
+        linkedFile?.attributes?.kind,
+        'skill',
+        'cross-realm file-meta carries index-derived attributes',
+      );
+    });
+
+    test('serves a card linking to a cross-realm card whose id contains a dot', async function (assert) {
+      // Card ids may legitimately contain dots (e.g. a versioned
+      // ModelConfiguration). The file-link detection keys on known FileDef
+      // extensions, so ".6" must not classify this link as a file.
+      let response = await consumerRequest
+        .get('/skill-with-model')
+        .set('Accept', 'application/vnd.card+json');
+
+      assert.strictEqual(
+        response.status,
+        200,
+        `HTTP 200 status: ${response.text}`,
+      );
+
+      let doc = response.body as LooseSingleCardDocument;
+      let included = doc.included ?? [];
+      let linkedCard = included.find(
+        (resource) => resource.id === `${providerRealmURL}model-4.6`,
+      );
+      assert.ok(linkedCard, 'includes the cross-realm dotted-id card');
+      assert.strictEqual(
+        linkedCard?.attributes?.cardTitle,
+        'Model 4.6',
+        'the dotted-id link resolves as a card, not a file',
+      );
+    });
+  });
+
   module('Query-backed relationships runtime resolver', function (hooks) {
     const providerRealmURL = 'http://127.0.0.1:5521/test/';
     const consumerRealmURL = 'http://127.0.0.1:5522/test/';
@@ -4353,8 +4737,8 @@ module(basename(__filename), function () {
           },
           fileSystem: {
             'person.gts': `
-              import { CardDef, field, contains } from "https://cardstack.com/base/card-api";
-              import StringField from "https://cardstack.com/base/string";
+              import { CardDef, field, contains } from "@cardstack/base/card-api";
+              import StringField from "@cardstack/base/string";
 
               export class Person extends CardDef {
                 @field name = contains(StringField);
@@ -4383,7 +4767,7 @@ module(basename(__filename), function () {
           },
           fileSystem: {
             'favorite-finder.gts': `
-              import { CardDef, field, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
+              import { CardDef, field, linksTo, linksToMany } from "@cardstack/base/card-api";
               import { Person } from "${providerRealmURL}person";
 
               export class FavoriteLookup extends CardDef {
@@ -4647,29 +5031,3 @@ module(basename(__filename), function () {
     });
   });
 });
-
-function assertScopedCssUrlsContain(
-  assert: Assert,
-  scopedCssUrls: string[],
-  moduleUrls: string[],
-) {
-  moduleUrls.forEach((url) => {
-    let pattern = new RegExp(`^${url}\\.[^.]+\\.glimmer-scoped\\.css$`);
-
-    assert.true(
-      scopedCssUrls.some((scopedCssUrl) => pattern.test(scopedCssUrl)),
-      `css url for ${url} is in the deps`,
-    );
-  });
-}
-
-// These modules have CSS that CardDef consumes, so we expect to see them in all relationships of a prerendered card
-let cardDefModuleDependencies = [
-  'https://cardstack.com/base/default-templates/embedded.gts',
-  'https://cardstack.com/base/default-templates/isolated-and-edit.gts',
-  'https://cardstack.com/base/default-templates/field-edit.gts',
-  'https://cardstack.com/base/field-component.gts',
-  'https://cardstack.com/base/contains-many-component.gts',
-  'https://cardstack.com/base/links-to-editor.gts',
-  'https://cardstack.com/base/links-to-many-component.gts',
-];

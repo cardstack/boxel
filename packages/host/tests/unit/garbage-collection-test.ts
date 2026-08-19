@@ -5,7 +5,6 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
-  baseRealm,
   localId,
   type Loader,
   type CardErrorJSONAPI as CardError,
@@ -14,9 +13,6 @@ import {
 import CardStore, {
   type ReferenceCount,
 } from '@cardstack/host/lib/gc-card-store';
-
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type { CardDef as CardInstance } from 'https://cardstack.com/base/card-api';
 
 import { saveCard, testRealmURL } from '../helpers';
 import {
@@ -31,6 +27,9 @@ import {
 } from '../helpers/base-realm';
 import { setupRenderingTest } from '../helpers/setup';
 
+import type { CardDef as CardInstance } from '@cardstack/base/card-api';
+import type * as CardAPI from '@cardstack/base/card-api';
+
 let loader: Loader;
 
 module('Unit | identity-context garbage collection', function (hooks) {
@@ -40,7 +39,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;
-    api = await loader.import(`${baseRealm.url}card-api`);
+    api = await loader.import('@cardstack/base/card-api');
     delete (globalThis as any).__boxelRenderContext;
   });
 
@@ -110,8 +109,12 @@ module('Unit | identity-context garbage collection', function (hooks) {
     });
 
     let referenceCount: ReferenceCount = new Map();
-    let fetch = getService('network').fetch;
-    let store = new CardStore(referenceCount, fetch);
+    let network = getService('network');
+    let store = new CardStore(
+      referenceCount,
+      network.fetch,
+      network.virtualNetwork,
+    );
 
     store.setCard(jade[localId], jade);
     store.setCard(germaine[localId], germaine);
@@ -322,8 +325,12 @@ module('Unit | identity-context garbage collection', function (hooks) {
     }
 
     let referenceCount: ReferenceCount = new Map();
-    let fetch = getService('network').fetch;
-    let store = new CardStore(referenceCount, fetch);
+    let network = getService('network');
+    let store = new CardStore(
+      referenceCount,
+      network.fetch,
+      network.virtualNetwork,
+    );
 
     let fileUrl = `${testRealmURL}hero.png`;
     let fileDef = new FileDef({
@@ -352,6 +359,83 @@ module('Unit | identity-context garbage collection', function (hooks) {
       store.gcCandidates,
       [],
       'no GC candidates remain when file meta is reachable',
+    );
+  });
+
+  test('a `.json` FileDef does not collide with the same-named card id (CS-11622)', async function (assert) {
+    let referenceCount: ReferenceCount = new Map();
+    let network = getService('network');
+    let store = new CardStore(
+      referenceCount,
+      network.fetch,
+      network.virtualNetwork,
+    );
+
+    // The realm config has two identities that differ only by extension: the
+    // card `…/realm` and the file `…/realm.json`. File-meta keyed without its
+    // extension would collapse onto the card id, so peeking the card id as
+    // file-meta would wrongly find the FileDef and the card would open as a
+    // `.json` file instead of a card.
+    class RealmConfig extends CardDef {}
+    let cardId = `${testRealmURL}realm`;
+    let fileUrl = `${cardId}.json`;
+    let realmConfig = new RealmConfig();
+    store.setCard(cardId, realmConfig);
+
+    let fileDef = new FileDef({
+      id: fileUrl,
+      sourceUrl: fileUrl,
+      url: fileUrl,
+      name: 'realm.json',
+      contentType: 'application/json',
+    });
+    store.setFileMeta(fileUrl, fileDef);
+
+    assert.strictEqual(
+      store.getFileMeta(fileUrl),
+      fileDef,
+      'the FileDef is found by its full `.json` URL',
+    );
+    assert.strictEqual(
+      store.getFileMeta(cardId),
+      undefined,
+      'the card id does not resolve to the colliding FileDef',
+    );
+    assert.strictEqual(
+      store.getCard(cardId),
+      realmConfig,
+      'the card is still found by its (extension-less) card id',
+    );
+
+    // Deleting the file by its `.json` URL removes only the file-meta row; the
+    // same-named card must survive. The GC sweep deletes resident file-meta
+    // this way (`this.delete(fileDef.id)`), so a `.json` delete must never
+    // evict a live card.
+    store.delete(fileUrl);
+    assert.strictEqual(
+      store.getFileMeta(fileUrl),
+      undefined,
+      'the FileDef is removed when deleted by its `.json` URL',
+    );
+    assert.strictEqual(
+      store.getCard(cardId),
+      realmConfig,
+      'deleting the `.json` file leaves the same-named card in place',
+    );
+
+    // The inverse separation must hold too: deleting the card removes only the
+    // card and leaves the same-named FileDef untouched.
+    store.setFileMeta(fileUrl, fileDef);
+    store.delete(cardId);
+    assert.strictEqual(
+      store.getCard(cardId),
+      undefined,
+      'the card is removed when deleted by its (extension-less) id',
+    );
+    assert.strictEqual(
+      store.getFileMeta(fileUrl),
+      fileDef,
+      'deleting the card leaves the same-named FileDef in place',
     );
   });
 
@@ -730,22 +814,30 @@ module('Unit | identity-context garbage collection', function (hooks) {
     );
   });
 
-  test('can get a card from the identity map by correlating the last part of the remote id with the local id for an instance that has a newly assigned remote id', async function (assert) {
+  test('can get a card from the identity map by correlating the last part of the remote id with the local id, without reconciling the instance id', async function (assert) {
     let {
       store,
       instances: { hassan },
     } = await setupTest();
 
+    let idBefore = hassan.id;
+
     assert.strictEqual(
       store.getCardInstanceOrError(`${testRealmURL}${hassan[localId]}`),
       hassan,
-      'card instance is returned',
+      'card instance is returned by correlating the remote id tail to the local id',
     );
 
+    // The lookup is a pure read: it must NOT write the instance's tracked `id`.
+    // Identity reconciliation (local id -> remote id) happens when the store
+    // learns the remote id out of band (the realm invalidation event /
+    // save-deserialize flow), not as a side effect of a bare lookup — which can
+    // run during render, where mutating the tracked id trips a backtracking
+    // re-render assertion.
     assert.strictEqual(
       hassan.id,
-      `${testRealmURL}${hassan[localId]}`,
-      'instance has remote id set correctly',
+      idBefore,
+      'the bare lookup leaves the instance id unchanged',
     );
   });
 

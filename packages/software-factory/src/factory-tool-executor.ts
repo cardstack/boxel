@@ -1,7 +1,9 @@
-import type { ToolResult } from './factory-agent';
-import type { ToolRegistry } from './factory-tool-registry';
+import type { ToolResult } from './factory-agent/index.ts';
+import type { ToolRegistry } from './factory-tool-registry.ts';
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
+
+import { startSpan } from './run-trace.ts';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -115,11 +117,13 @@ export class ToolExecutor {
     this.enforceRealmSafety(toolName, toolArgs);
 
     let start = Date.now();
+    let endToolSpan = startSpan('tool', toolName);
     let result: ToolResult;
 
     try {
       result = await this.executeRealmApi(toolName, toolArgs);
     } catch (error) {
+      endToolSpan({ ok: false });
       let durationMs = Date.now() - start;
       let errorMessage = error instanceof Error ? error.message : String(error);
 
@@ -148,6 +152,7 @@ export class ToolExecutor {
       };
     }
 
+    endToolSpan({ ok: result.exitCode === 0 });
     this.logExecution({
       tool: toolName,
       category: manifest.category,

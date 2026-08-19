@@ -1,12 +1,12 @@
-import NumberField from 'https://cardstack.com/base/number';
+import NumberField from '@cardstack/base/number';
 import {
   CardDef,
   field,
   contains,
   StringField,
-} from 'https://cardstack.com/base/card-api';
-import AddressField from 'https://cardstack.com/base/address';
-import { Component } from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
+import AddressField from '@cardstack/base/address';
+import { Component } from '@cardstack/base/card-api';
 import MapIcon from '@cardstack/boxel-icons/map';
 
 function or(value: number | undefined, defaultValue: number) {

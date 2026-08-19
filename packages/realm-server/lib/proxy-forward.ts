@@ -3,7 +3,7 @@ import type { DBAdapter } from '@cardstack/runtime-common';
 import { logger } from '@cardstack/runtime-common';
 import * as Sentry from '@sentry/node';
 
-import type { AllowedProxyDestination } from './allowed-proxy-destinations';
+import type { AllowedProxyDestination } from './allowed-proxy-destinations.ts';
 
 const log = logger('proxy-forward');
 

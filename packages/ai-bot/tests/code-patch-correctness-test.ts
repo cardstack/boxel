@@ -1,16 +1,17 @@
-import { module, test, assert } from 'qunit';
+import QUnit from 'qunit';
+const { module, test, assert } = QUnit;
 
-import { publishCodePatchCorrectnessMessage } from '../lib/code-patch-correctness';
-import { FakeMatrixClient } from './helpers/fake-matrix-client';
+import { publishCodePatchCorrectnessMessage } from '../lib/code-patch-correctness.ts';
+import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';
 import type { PendingCodePatchCorrectnessCheck } from '@cardstack/runtime-common/ai/types';
 import {
   APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
   APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE,
-  APP_BOXEL_COMMAND_REQUESTS_KEY,
+  APP_BOXEL_TOOL_REQUESTS_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
 import {
-  decodeCommandRequest,
-  type CommandRequest,
+  decodeToolRequest,
+  type ToolRequest,
 } from '@cardstack/runtime-common/commands';
 
 module('code patch correctness helpers', () => {
@@ -70,7 +71,7 @@ module('code patch correctness helpers', () => {
       'Should forward the context with the message',
     );
 
-    let encodedRequests = content[APP_BOXEL_COMMAND_REQUESTS_KEY];
+    let encodedRequests = content[APP_BOXEL_TOOL_REQUESTS_KEY];
     assert.true(
       Array.isArray(encodedRequests),
       'Command requests should be present',
@@ -81,10 +82,10 @@ module('code patch correctness helpers', () => {
       'Should request correctness checks for each file and card',
     );
     let decodedRequests = encodedRequests.map((request: any) =>
-      decodeCommandRequest(request),
+      decodeToolRequest(request),
     );
     let fileRequest = decodedRequests.find(
-      (request: Partial<CommandRequest>) =>
+      (request: Partial<ToolRequest>) =>
         request.arguments?.attributes?.targetType === 'file',
     );
     assert.ok(fileRequest, 'Should include a file correctness request');
@@ -108,7 +109,7 @@ module('code patch correctness helpers', () => {
       'File correctness check request should describe the file that changed',
     );
     let cardRequest = decodedRequests.find(
-      (request: Partial<CommandRequest>) =>
+      (request: Partial<ToolRequest>) =>
         request.arguments?.attributes?.targetType === 'card',
     );
     assert.ok(cardRequest, 'Should include a card correctness request');
@@ -149,13 +150,13 @@ module('code patch correctness helpers', () => {
     await publishCodePatchCorrectnessMessage(summary, client);
 
     let [event] = client.getSentEvents();
-    let encodedRequests = event.content[APP_BOXEL_COMMAND_REQUESTS_KEY];
+    let encodedRequests = event.content[APP_BOXEL_TOOL_REQUESTS_KEY];
     let decodedRequests = encodedRequests.map((request: any) =>
-      decodeCommandRequest(request),
+      decodeToolRequest(request),
     );
 
     let fileRequest = decodedRequests.find(
-      (request: Partial<CommandRequest>) =>
+      (request: Partial<ToolRequest>) =>
         request.arguments?.attributes?.targetType === 'file',
     );
     assert.strictEqual(
@@ -170,7 +171,7 @@ module('code patch correctness helpers', () => {
     );
 
     let cardRequest = decodedRequests.find(
-      (request: Partial<CommandRequest>) =>
+      (request: Partial<ToolRequest>) =>
         request.arguments?.attributes?.targetType === 'card',
     );
     assert.strictEqual(
@@ -206,7 +207,7 @@ module('code patch correctness helpers', () => {
     await publishCodePatchCorrectnessMessage(summary, client);
 
     let [event] = client.getSentEvents();
-    let encodedRequests = event.content[APP_BOXEL_COMMAND_REQUESTS_KEY];
+    let encodedRequests = event.content[APP_BOXEL_TOOL_REQUESTS_KEY];
     assert.notOk(
       encodedRequests,
       'Targets beyond the attempt limit should not emit correctness requests',

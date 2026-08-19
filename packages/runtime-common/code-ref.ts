@@ -5,9 +5,9 @@ import type {
   CardDef,
   FieldDef,
   FieldConstructor,
-} from 'https://cardstack.com/base/card-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-import { Loader } from './loader';
+} from '@cardstack/base/card-api';
+import type { FileDef } from '@cardstack/base/file-api';
+import { Loader } from './loader.ts';
 import {
   isField,
   isSpec,
@@ -17,14 +17,17 @@ import {
   isBaseInstance,
   meta,
   relativeTo,
-} from './constants';
-import { CardError } from './error';
-import { cardIdToURL } from './card-reference-resolver';
-import type { RealmResourceIdentifier } from './card-reference-resolver';
-import type { LooseCardResource, FileMetaResource } from './index';
-import { trimExecutableExtension } from './index';
-import { resolveCardReference } from './card-reference-resolver';
-import type { RuntimeDependencyTrackingContext } from './dependency-tracker';
+} from './constants.ts';
+import { CardError } from './error.ts';
+import type { VirtualNetwork } from './virtual-network.ts';
+import type { RealmResourceIdentifier } from './realm-identifiers.ts';
+import type { LooseCardResource, FileMetaResource } from './index.ts';
+import {
+  isUrlLike,
+  trimExecutableExtension,
+  resolveRRIReference,
+} from './index.ts';
+import type { RuntimeDependencyTrackingContext } from './dependency-tracker.ts';
 
 export type ResolvedCodeRef = {
   module: RealmResourceIdentifier;
@@ -54,7 +57,7 @@ let localIdentities = new WeakMap<
 // only need to recognize a CodeRef don't pull the transitive runtime
 // chain rooted in this file. Re-exported here for backward compat; the
 // local imports let the remainder of this file call them directly.
-import { isResolvedCodeRef, isCodeRef } from './card-document-shape';
+import { isResolvedCodeRef, isCodeRef } from './card-document-shape.ts';
 export { isResolvedCodeRef, isCodeRef };
 
 export function assertIsResolvedCodeRef(
@@ -133,16 +136,42 @@ export function isSpecCard(def: any) {
   return isBaseDef(def) && isSpec in def;
 }
 
+// Loader-only bare specifiers (e.g. `@cardstack/boxel-host/commands/foo`)
+// have no registered realm-prefix mapping — `VirtualNetwork.resolveURL`
+// would URL-join them to `relativeTo` and produce a nonexistent realm
+// path. Throw on that exact case so callers' surrounding try/catch
+// leaves the original ref alone for the loader's importMap shim to
+// resolve. (URL-like refs and registered prefixes resolve normally.)
+export function resolveModuleHref(
+  module: string,
+  relativeTo: RealmResourceIdentifier | URL | undefined,
+  virtualNetwork: VirtualNetwork,
+): string {
+  if (!isUrlLike(module) && !virtualNetwork.isRegisteredPrefix(module)) {
+    throw new Error(
+      `Cannot resolve bare package specifier "${module}" — no matching prefix mapping registered`,
+    );
+  }
+  return virtualNetwork.resolveURL(module, relativeTo).href;
+}
+
 export function codeRefWithAbsoluteIdentifier(
   ref: CodeRef,
-  relativeTo?: RealmResourceIdentifier | URL | undefined,
-  opts?: { trimExecutableExtension?: true },
+  relativeTo: RealmResourceIdentifier | URL | undefined,
+  opts: { trimExecutableExtension?: true } | undefined,
+  // Optional: when a VirtualNetwork is supplied the module is resolved through
+  // it (legacy callers). When omitted, the module is resolved in RRI space via
+  // `resolveRRIReference` — no VirtualNetwork — since code refs are canonical
+  // RRI; relative modules join against `relativeTo`, absolute/prefix modules
+  // pass through unchanged.
+  virtualNetwork?: VirtualNetwork,
 ): CodeRef {
   if (!('type' in ref)) {
     try {
-      let moduleHref = resolveCardReference(
-        ref.module,
-        relativeTo,
+      let moduleHref = (
+        virtualNetwork
+          ? resolveModuleHref(ref.module, relativeTo, virtualNetwork)
+          : resolveRRIReference(ref.module, relativeTo)
       ) as RealmResourceIdentifier;
       if (opts?.trimExecutableExtension) {
         moduleHref = trimExecutableExtension(moduleHref);
@@ -152,7 +181,15 @@ export function codeRefWithAbsoluteIdentifier(
       return { ...ref };
     }
   }
-  return { ...ref, card: codeRefWithAbsoluteIdentifier(ref.card, relativeTo) };
+  return {
+    ...ref,
+    card: codeRefWithAbsoluteIdentifier(
+      ref.card,
+      relativeTo,
+      undefined,
+      virtualNetwork,
+    ),
+  };
 }
 
 export async function getClass(ref: ResolvedCodeRef, loader: Loader) {
@@ -170,8 +207,18 @@ export async function loadCardDef(
 ): Promise<typeof BaseDef> {
   let maybeCard: unknown;
   let loader = opts.loader;
+  let virtualNetwork = loader.getVirtualNetwork();
+  if (!virtualNetwork) {
+    throw new Error(
+      `loadCardDef requires a Loader configured with a VirtualNetwork`,
+    );
+  }
   if (!('type' in ref)) {
-    let resolvedModuleURL = resolveCardReference(ref.module, opts?.relativeTo);
+    let resolvedModuleURL = resolveModuleHref(
+      ref.module,
+      opts?.relativeTo,
+      virtualNetwork,
+    );
     let module = await loader.import<Record<string, any>>(
       resolvedModuleURL,
       opts.dependencyTrackingContext,
@@ -192,8 +239,13 @@ export async function loadCardDef(
     return maybeCard;
   }
 
+  let resolvedFromRef = resolveModuleHref(
+    moduleFrom(ref),
+    opts?.relativeTo,
+    virtualNetwork,
+  );
   let err = new CardError(
-    `Cannot find card ${humanReadable(ref)}. Make sure ${resolveCardReference(moduleFrom(ref), opts?.relativeTo)} exports ${exportFrom(ref)}`,
+    `Cannot find card ${humanReadable(ref)}. Make sure ${resolvedFromRef} exports ${exportFrom(ref)}`,
     {
       status: 404,
     },
@@ -288,7 +340,7 @@ export function getField<T extends BaseDef>(
       }
       if (fieldOverride) {
         let cardThunk = fieldOverride;
-        let { computeVia, name, isUsed, queryDefinition } = result;
+        let { computeVia, name, queryDefinition } = result;
         let originalField = result;
         let declaredCardThunk =
           (originalField as any).declaredCardResolver ??
@@ -300,7 +352,6 @@ export function getField<T extends BaseDef>(
           declaredCardThunk,
           computeVia,
           name,
-          isUsed,
           isPolymorphic: true,
           queryDefinition,
         }) as Field;
@@ -349,6 +400,46 @@ export function moduleFrom(ref: CodeRef): string {
   }
 }
 
+// Reduce a module reference to a single canonical key, collapsing every
+// equivalent spelling the VirtualNetwork knows about — a prefix-form RRI
+// (`@cardstack/base/foo`), the real URL it maps to, and any virtual-URL alias
+// registered via `addURLMapping` (e.g. `https://cardstack.com/base/foo`) — so
+// two refs that point at the same module compare equal regardless of how they
+// were written. The client-side counterpart to the server's `internalKeyFor`,
+// extended to also fold `addURLMapping` aliases (which `resolveURL` alone
+// leaves untouched). Used wherever a code ref carried in a query is compared
+// against a ref derived from a loaded module.
+export function canonicalModuleKey(
+  module: string,
+  virtualNetwork: VirtualNetwork,
+): string {
+  let href: string;
+  try {
+    // Resolves a prefix-form RRI to its mapped URL; an absolute URL is parsed
+    // and returned unchanged. Memoized, so this stays cheap on hot paths.
+    href = virtualNetwork.toURLHref(module);
+  } catch {
+    // Unresolvable reference (e.g. a scoped prefix with no mapping): fall back
+    // to the raw form. Exact-string equality already covers the only way two
+    // such refs can be equal.
+    return module;
+  }
+  // `toURLHref` leaves an absolute URL untouched, so a virtual spelling and its
+  // real target (registered via `addURLMapping`) stay distinct without this.
+  // Collapse virtual onto real; real and unmapped URLs pass through.
+  try {
+    let real = virtualNetwork.mapURL(href, 'virtual-to-real');
+    if (real) {
+      href = real.href;
+    }
+  } catch {
+    // `href` wasn't a parseable absolute URL — leave it as resolved.
+  }
+  // Collapse the real URL onto its portable prefix form when a registered realm
+  // prefix matches, so `@scope/…` and the real URL also land on one key.
+  return virtualNetwork.unresolveURL(href);
+}
+
 function exportFrom(ref: CodeRef): string {
   if (!('type' in ref)) {
     return ref.name;
@@ -388,14 +479,20 @@ export async function getNarrowestType(
   return narrowestType;
 }
 
-export function resolveAdoptedCodeRef(instance: CardDef) {
+export function resolveAdoptedCodeRef(
+  instance: CardDef,
+  virtualNetwork: VirtualNetwork,
+) {
   let adoptsFrom = instance[meta]?.adoptsFrom as CodeRef;
   if (!adoptsFrom) {
     throw new Error('Instance missing adoptsFrom');
   }
+  let base = instance[relativeTo] || virtualNetwork.toURL(instance.id);
   let resolved = codeRefWithAbsoluteIdentifier(
     adoptsFrom,
-    instance[relativeTo] || cardIdToURL(instance.id),
+    base,
+    undefined,
+    virtualNetwork,
   );
   if (!isResolvedCodeRef(resolved)) {
     throw new Error('code ref is not resolved');
@@ -403,7 +500,12 @@ export function resolveAdoptedCodeRef(instance: CardDef) {
   return resolved;
 }
 
-export function resolveAdoptsFrom(card: CardDef): ResolvedCodeRef | undefined {
+export function resolveAdoptsFrom(
+  card: CardDef,
+  // Optional: omit to resolve in RRI space (no VirtualNetwork). The card's id
+  // is the canonical base; relative `adoptsFrom` modules join against it.
+  virtualNetwork?: VirtualNetwork,
+): ResolvedCodeRef | undefined {
   let metadata = (card as any)[meta];
   let adoptsFrom = metadata?.adoptsFrom as CodeRef | undefined;
   let baseURL = (() => {
@@ -411,8 +513,11 @@ export function resolveAdoptsFrom(card: CardDef): ResolvedCodeRef | undefined {
     if (typeof id !== 'string') {
       return undefined;
     }
+    if (!virtualNetwork) {
+      return id as RealmResourceIdentifier;
+    }
     try {
-      return cardIdToURL(id);
+      return virtualNetwork.toURL(id);
     } catch {
       return undefined;
     }
@@ -421,7 +526,12 @@ export function resolveAdoptsFrom(card: CardDef): ResolvedCodeRef | undefined {
     if (!baseURL) {
       return undefined;
     }
-    let resolved = codeRefWithAbsoluteIdentifier(ref, baseURL);
+    let resolved = codeRefWithAbsoluteIdentifier(
+      ref,
+      baseURL,
+      undefined,
+      virtualNetwork,
+    );
     return isResolvedCodeRef(resolved) ? resolved : undefined;
   };
   if (isResolvedCodeRef(adoptsFrom)) {

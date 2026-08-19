@@ -1,6 +1,6 @@
-import './instrument';
-import './setup-logger'; // This should be first
-import './lib/wtfnode-on-signal';
+import './instrument.ts';
+import './setup-logger.ts'; // This should be first
+import './lib/wtfnode-on-signal.ts';
 import { writeSync } from 'node:fs';
 
 // During `mise dev-all` Ctrl-C, the bash trap walks the process tree
@@ -12,7 +12,7 @@ import { writeSync } from 'node:fs';
 // and throws *again*. Node delivers the throw inside an uncaughtException
 // handler as the next pending exception, so V8 hot-loops re-reporting it
 // (uv__run_check → CheckImmediate → InspectorConsoleCall → Error.stack
-// formatting via ts-node) at ~100% CPU until the process is SIGKILLed —
+// formatting) at ~100% CPU until the process is SIGKILLed —
 // CS-11084. Swallowing EPIPE at the stream level breaks the loop and
 // lets normal SIGTERM-driven shutdown finish.
 const swallowEpipe = (err: NodeJS.ErrnoException) => {
@@ -42,39 +42,53 @@ writeSync(
 import {
   logger,
   userInitiatedPriority,
-  systemInitiatedPriority,
+  userInitiatedPrerenderHtmlPriority,
+  systemInitiatedPrerenderHtmlPriority,
   query as _query,
-  param,
-  separatedByCommas,
   IndexWriter,
   isUrlLike,
+  VirtualNetwork,
   type Expression,
   type StatusArgs,
   type IndexingProgressEvent,
 } from '@cardstack/runtime-common';
 import yargs from 'yargs';
 import * as Sentry from '@sentry/node';
-import flattenDeep from 'lodash/flattenDeep';
+import { flattenDeep } from 'lodash-es';
 import { spawn, type ChildProcess } from 'child_process';
 import pluralize from 'pluralize';
 import Koa from 'koa';
 import Router from '@koa/router';
-import { ecsMetadata, fullRequestURL, livenessCheck } from './middleware';
+import {
+  ecsMetadata,
+  fullRequestURL,
+  livenessCheck,
+} from './middleware/index.ts';
 import type { Server } from 'http';
 import { PgAdapter } from '@cardstack/postgres';
-import { startCronJobs, stopCronJobs } from './lib/cron-scheduler';
+import { startCronJobs, stopCronJobs } from './lib/cron-scheduler.ts';
 import {
   isEnvironmentMode,
   registerService,
   deregisterService,
-} from './lib/dev-service-registry';
-import { IndexingEventSink } from './indexing-event-sink';
+} from './lib/dev-service-registry.ts';
+import { IndexingEventSink } from './indexing-event-sink.ts';
 import {
   renderIndexingDashboard,
   type PendingJob,
-} from './handlers/handle-indexing-dashboard';
-import { writeRuntimeMetadataFile } from './lib/runtime-metadata-file';
-import { finalizeOrphanedReservations } from './lib/finalize-orphan-reservations';
+} from './handlers/handle-indexing-dashboard.ts';
+import { writeRuntimeMetadataFile } from './lib/runtime-metadata-file.ts';
+import { finalizeOrphanedReservations } from './lib/finalize-orphan-reservations.ts';
+import { findStuckReservations } from './lib/stuck-reservations.ts';
+import {
+  markFailedJob,
+  type MarkFailedJobResult,
+} from './lib/mark-failed-job.ts';
+import {
+  decodeWorkerRequestIpc,
+  dispatchWorkerRequest,
+  WORKER_REQUEST_IPC_PREFIX,
+} from './lib/worker-request-forwarder.ts';
 
 /* About the Worker Manager
  *
@@ -118,6 +132,7 @@ let {
   matrixURL,
   allPriorityCount = 1,
   highPriorityCount = 0,
+  userIndexCount = 0,
   fromUrl: fromUrls,
   toUrl: toUrls,
   migrateDB,
@@ -133,7 +148,12 @@ let {
     },
     highPriorityCount: {
       description:
-        'The number of workers that service high priority jobs (user initiated) to start (default 0)',
+        'The number of workers that service user-initiated jobs, including user-initiated prerender-html, and nothing below that tier (default 0)',
+      type: 'number',
+    },
+    userIndexCount: {
+      description:
+        'The number of workers that claim only indexing job types at the user-initiated priority — a dedicated index lane that can never be occupied by prerender-html or other job types (default 0)',
       type: 'number',
     },
     allPriorityCount: {
@@ -227,7 +247,7 @@ if (port != null) {
         `SELECT j.id, j.job_type, j.args, j.priority, EXTRACT(EPOCH FROM j.created_at) * 1000 AS created_at_ms`,
         `FROM jobs j`,
         `WHERE j.status = 'unfulfilled'`,
-        `AND j.job_type IN ('from-scratch-index', 'incremental-index')`,
+        `AND j.job_type IN ('from-scratch-index', 'incremental-index', 'prerender_html')`,
         `AND NOT EXISTS (`,
         `  SELECT 1 FROM job_reservations jr`,
         `  WHERE jr.job_id = j.id AND jr.completed_at IS NULL`,
@@ -631,7 +651,10 @@ let adapter: PgAdapter;
 
 (async () => {
   log.info(
-    `starting ${highPriorityCount} high-priority ${pluralize(
+    `starting ${userIndexCount} user-index ${pluralize(
+      'worker',
+      userIndexCount,
+    )}, ${highPriorityCount} high-priority ${pluralize(
       'worker',
       highPriorityCount,
     )} and ${allPriorityCount} all-priority ${pluralize(
@@ -651,11 +674,35 @@ let adapter: PgAdapter;
   // is set.
   eventSink.setAdapter(adapter);
 
+  // Each pool's minimum priority is a dequeue floor: its workers only claim
+  // jobs at or above it, oldest-first among those. The user-index pool is
+  // opt-in — it exists only when `--userIndexCount` > 0 (0 by default). When
+  // run, it floors at the user-initiated indexing tier and registers only the
+  // indexing job types (`--indexJobsOnly`), giving index jobs a lane no
+  // prerender-html sweep can hold; both guards carry weight there — the floor
+  // keeps out ordinary user prerender-html (one tier below), and the job-type
+  // filter keeps out a publish-awaited render (co-equal at the indexing tier,
+  // which the floor alone would admit). The contended matrix test stack runs
+  // this lane to keep realm provisioning responsive under indexing
+  // back-pressure; deployments that leave `--userIndexCount` at 0 rely on
+  // high-priority-pool capacity, plus the render-tier gap that keeps HTML
+  // rendering behind indexing in the prerender server's own admission queue.
+  //
+  // The high-priority pool floors at the user-initiated prerender-html tier
+  // (one below indexing), so it serves all user-initiated work — user
+  // indexing, publish-awaited renders, and ordinary user renders alike — and
+  // never system-tier jobs. The all-priority pool floors at the lowest tier
+  // and serves everything, including system-initiated prerender-html.
+  for (let i = 0; i < userIndexCount; i++) {
+    await startWorker(userInitiatedPriority, urlMappings, {
+      indexJobsOnly: true,
+    });
+  }
   for (let i = 0; i < highPriorityCount; i++) {
-    await startWorker(userInitiatedPriority, urlMappings);
+    await startWorker(userInitiatedPrerenderHtmlPriority, urlMappings);
   }
   for (let i = 0; i < allPriorityCount; i++) {
-    await startWorker(systemInitiatedPriority, urlMappings);
+    await startWorker(systemInitiatedPrerenderHtmlPriority, urlMappings);
   }
   isReady = true;
   log.info('All workers have been started');
@@ -670,30 +717,31 @@ let adapter: PgAdapter;
 });
 
 async function monitorWorker(workerId: string, worker: ChildProcess) {
-  let stuckJobs = (await query([
-    `SELECT id, job_id FROM job_reservations jr WHERE worker_id=`,
-    param(workerId),
-    `AND completed_at IS NULL AND locked_until < NOW() - INTERVAL '30 seconds'`,
-    `AND NOT EXISTS (`,
-    // Skip stale reservations if this worker has already retried the job with a newer reservation.
-    `  SELECT 1 FROM job_reservations newer WHERE`,
-    `    newer.worker_id = jr.worker_id AND`,
-    `    newer.job_id = jr.job_id AND`,
-    `    newer.id > jr.id`,
-    `)`,
-  ])) as { id: string; job_id: string }[];
+  let stuckJobs = await findStuckReservations(adapter, workerId);
 
   if (stuckJobs.length > 0) {
     Sentry.captureMessage(
-      `Detected stuck jobs for worker ${workerId}. job id(s): ${stuckJobs.map((j) => j.job_id).join()}. recycling worker`,
+      `Detected stuck jobs for worker ${workerId}. job id(s): ${stuckJobs.map((j) => j.jobId).join()}. recycling worker`,
     );
     log.error(`detected stuck jobs for worker ${workerId}`);
-    for (let { id, job_id: jobId } of stuckJobs) {
+    for (let { id, jobId } of stuckJobs) {
       log.info(`marking job ${jobId} as timed-out for worker ${workerId}`);
       let currentState =
         ((worker as any).__boxelIndexState as IndexState | undefined) ?? {};
       let { url, realm, deps } = currentState;
-      if (url && realm && deps) {
+      // `markFailedJob` decides whether this job is still ours to fail, and
+      // does it in the same statement that writes the outcome. A lapsed lease
+      // makes the job claimable, so any check made out here would be a
+      // snapshot that another worker can invalidate before the write lands.
+      let outcome = await markFailedJob(adapter, {
+        reservationId: id,
+        workerId,
+        jobId,
+        message: `Timed-out. Worker manager killed unresponsive worker ${workerId} for job reservation ${id}`,
+      });
+      // Skip the error doc only when another worker holds the job — that
+      // attempt is the authority on what its index rows should say.
+      if (outcome !== 'not-ours' && url && realm && deps) {
         await markFailedIndexEntry({
           url,
           realm,
@@ -701,13 +749,10 @@ async function monitorWorker(workerId: string, worker: ChildProcess) {
           message: `worker time-out encountered while indexing ${url}`,
         });
       }
-      await markFailedJob({
-        reservationId: id,
-        workerId,
-        jobId,
-        message: `Timed-out. Worker manager killed unresponsive worker ${workerId} for job reservation ${id}`,
-      });
     }
+    // Kill regardless of which branch each reservation took: holding a
+    // reservation open past its lease without finalizing means the child
+    // never returned from its handler, whoever owns the job now.
     log.info(`killing worker ${workerId} due to stuck jobs`);
     worker.kill();
   }
@@ -726,7 +771,15 @@ async function markFailedIndexEntry({
 }) {
   log.info(`marking index entry ${url} with an error doc`);
   let indexWriter = new IndexWriter(adapter);
-  let batch = await indexWriter.createBatch(new URL(realm));
+  // The worker-manager doesn't run inside any particular realm context, so
+  // it can't see the per-realm prefix mappings. An empty VirtualNetwork is
+  // sufficient here because `invalidate` consumes already-URL-form inputs
+  // and unresolveURL falls through to the original URL when no realm
+  // mapping matches.
+  let batch = await indexWriter.createBatch(
+    new URL(realm),
+    new VirtualNetwork(),
+  );
   await batch.invalidate([new URL(url)]);
   let invalidations = batch.invalidations;
   for (let file of [url, ...invalidations]) {
@@ -746,76 +799,19 @@ async function markFailedIndexEntry({
   await batch.done();
 }
 
-async function markFailedJob({
-  workerId,
-  jobId,
-  reservationId,
-  message,
-}: {
-  workerId: string | undefined;
-  jobId: string;
-  message: string;
-  reservationId?: string;
-}) {
-  log.info(`marking job ${jobId} as failed for worker ${workerId}`);
-  let id: string;
-  if (!reservationId) {
-    [{ id }] = (await query([
-      `SELECT id FROM job_reservations WHERE job_id=`,
-      param(jobId),
-      `AND completed_at IS NULL`,
-    ])) as { id: string }[];
-    if (!id) {
-      log.error(
-        `Cannot determine job_reservation id for failed job ${jobId} of worker ${workerId}`,
-      );
-      return;
-    }
-  } else {
-    id = reservationId;
-  }
-
-  await query([
-    `UPDATE jobs SET `,
-    ...separatedByCommas([
-      [
-        `result =`,
-        param({
-          status: 500,
-          message: `Worker manager detected fatal error in worker ${workerId} for job ${jobId} with job_reservation id ${id}: ${message}`,
-        }),
-      ],
-      [`status = 'rejected'`],
-      [`finished_at = NOW()`],
-    ]),
-    'WHERE id =',
-    param(jobId),
-  ] as Expression);
-  // The worker had uninterrupted access to the job and produced no
-  // verdict before being killed by the watchdog (stuck) or after a fatal
-  // error log line. That counts as a real attempt for cap purposes,
-  // unlike the SIGTERM/child-crash paths which mark 'interrupted'.
-  await query([
-    `UPDATE job_reservations
-     SET completed_at = NOW(), completion_reason = 'completed'
-     WHERE id =`,
-    param(id),
-  ]);
-  await query([`NOTIFY jobs_finished`]);
-}
-
 async function startWorker(
   priority: number,
   urlMappings: [URL | string, URL][],
+  opts?: { indexJobsOnly?: boolean },
 ) {
   let worker = spawn(
-    'ts-node',
+    'node',
     [
-      '--transpileOnly',
-      'worker',
+      'worker.ts',
       `--matrixURL='${matrixURL}'`,
       `--prerendererUrl=${prerendererUrl}`,
       `--priority=${priority}`,
+      ...(opts?.indexJobsOnly ? [`--indexJobsOnly`] : []),
       ...flattenDeep(
         urlMappings.map(([from, to]) => [
           `--fromUrl='${from instanceof URL ? from.href : from}'`,
@@ -859,7 +855,7 @@ async function startWorker(
       log.info(
         `worker ${name} exited (code=${code}, signal=${signal}). spawning replacement worker`,
       );
-      startWorker(priority, urlMappings);
+      startWorker(priority, urlMappings, opts);
     }
 
     // Free orphan reservations in the background. The new worker won't be
@@ -893,18 +889,31 @@ async function startWorker(
         `[worker ${name} priority ${priority}]${maybeLogUrl}: ${message}`,
       );
       if (message.includes('FATAL ERROR')) {
+        // Snapshot the render state before any await: a `status|…` message
+        // from the child can replace `currentState` mid-flight, and this error
+        // belongs to whatever the child was rendering when it died.
+        let { url, realm, deps, jobId } = currentState ?? {};
         (async () => {
-          if (currentState?.url && currentState?.realm) {
-            let { url, realm, deps } = currentState;
+          if (url) {
             message = `encountered fatal error indexing ${url}: ${message}`;
-            await markFailedIndexEntry({ url, realm, deps, message });
           }
-          if (workerId && currentState?.jobId) {
-            await markFailedJob({
+          // Fail the job first, because whether the job's outcome landed here
+          // decides whether the index error doc is ours to write.
+          let outcome: MarkFailedJobResult = 'no-reservation';
+          if (workerId && jobId) {
+            outcome = await markFailedJob(adapter, {
               workerId,
-              jobId: currentState.jobId,
+              jobId,
               message,
             });
+          }
+          // `not-ours` is the only case that yields those rows to someone
+          // else. With no reservation to attribute the failure to, nothing
+          // else owns them, so the error doc is still worth writing — the
+          // child's own exit handler closing the reservation first is a race
+          // this path can lose.
+          if (outcome !== 'not-ours' && url && realm) {
+            await markFailedIndexEntry({ url, realm, deps, message });
           }
         })().catch((e) => {
           Sentry.captureException(e);
@@ -927,7 +936,16 @@ async function startWorker(
           // (`shutdown()`) can run finalizeOrphanedReservations against
           // every live child without having to capture closure scope.
           (worker as any).__workerId = id;
-          watchdog = setInterval(() => monitorWorker(id, worker), 60_000);
+          // `findStuckReservations` and `markFailedJob` both throw on a DB
+          // error, and an unhandled rejection out of an interval callback
+          // would take the whole manager down over a transient blip. The
+          // next tick retries in a minute.
+          watchdog = setInterval(() => {
+            monitorWorker(id, worker).catch((e) => {
+              Sentry.captureException(e);
+              log.error(`worker: monitorWorker failed for worker ${id}`, e);
+            });
+          }, 60_000);
           log.info(`[worker ${name} priority ${priority}]: worker ready`);
           r();
         } else if (
@@ -961,6 +979,31 @@ async function startWorker(
           } catch (e) {
             log.error(`Failed to parse progress event: ${e}`);
           }
+        } else if (
+          typeof message === 'string' &&
+          message.startsWith(WORKER_REQUEST_IPC_PREFIX)
+        ) {
+          // A worker child handed us a typed request it can't service itself
+          // (e.g. broadcasting a realm event — it holds no matrix client). We
+          // dispatch on the request type and forward to the realm server over
+          // the authenticated /_worker-request endpoint. Routing every request
+          // through this single manager avoids per-replica fan-out.
+          let request = decodeWorkerRequestIpc(message);
+          if (!request) {
+            log.error(`Failed to parse worker request from worker ${name}`);
+            return;
+          }
+          dispatchWorkerRequest(request, {
+            urlMappings,
+            secret: REALM_SECRET_SEED!,
+            workerName: name,
+          }).catch((e) => {
+            Sentry.captureException(e);
+            log.error(
+              `worker: failed dispatching worker request '${request.type}' from ${name}`,
+              e,
+            );
+          });
         }
       });
     }),

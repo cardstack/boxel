@@ -8,7 +8,7 @@
  * Faster than the full matrix repro — two probes instead of sixteen.
  *
  * Usage:
- *   pnpm exec ts-node --transpileOnly scripts/canusetool-fix-verify.ts
+ *   pnpm exec node scripts/canusetool-fix-verify.ts
  */
 
 import { existsSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';

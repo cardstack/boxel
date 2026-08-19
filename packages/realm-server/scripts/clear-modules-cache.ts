@@ -2,7 +2,7 @@
 // This is useful when switching branches in local dev, since the cached
 // modules can become stale when the underlying source files change.
 
-import '../setup-logger';
+import '../setup-logger.ts';
 import { PgAdapter } from '@cardstack/postgres';
 
 async function main() {

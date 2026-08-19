@@ -8,13 +8,13 @@ Wraps `boxel profile`, which manages credentials for different users and environ
 
 ## When the user asks to...
 
-| Ask | Run |
-|---|---|
-| "what profiles do I have?" / "who am I logged in as?" | `boxel profile list` |
-| "log in" / "add a new account" | `boxel profile add` (interactive — preferred) |
-| "switch to my staging account" | `boxel profile switch <username-or-fragment>` |
-| "remove that old profile" | `boxel profile remove <profile-id>` |
-| "import from my old .env" | `boxel profile migrate` |
+| Ask                                                   | Run                                           |
+| ----------------------------------------------------- | --------------------------------------------- |
+| "what profiles do I have?" / "who am I logged in as?" | `boxel profile list`                          |
+| "log in" / "add a new account"                        | `boxel profile add` (interactive — preferred) |
+| "switch to my staging account"                        | `boxel profile switch <username-or-fragment>` |
+| "remove that old profile"                             | `boxel profile remove <profile-id>`           |
+| "import from my old .env"                             | `boxel profile migrate`                       |
 
 ## Profile IDs
 
@@ -25,6 +25,12 @@ Profiles use the Matrix ID format: `@username:domain`.
 - Local dev: `@username:<env-slug>.localhost`
 
 `switch` accepts a partial match — `boxel profile switch sarah` is enough if there's only one profile matching `sarah`.
+
+## Which environment a new profile targets
+
+`boxel profile add` targets production. `--staging` and `--local` pick another environment instead (at most one of `--production` / `--staging` / `--local`); there is no environment prompt.
+
+With `-u`, the Matrix ID's own domain decides — `boxel.ai`, `stack.cards`, and `localhost` are recognized, and any other domain needs `--matrix-url` and `--realm-server-url`.
 
 ## Adding profiles non-interactively
 
@@ -42,11 +48,11 @@ For ephemeral environments (PR previews, branch deploys), `BOXEL_ENVIRONMENT` de
 
 ```bash
 BOXEL_ENVIRONMENT=my-branch boxel profile add -u @sarah:my-branch.localhost
-# → matrix at http://matrix.my-branch.localhost
-# → realm-server at http://realm-server.my-branch.localhost/
+# → matrix at https://matrix.my-branch.localhost
+# → realm-server at https://realm-server.my-branch.localhost/
 ```
 
-Override individually with `--matrix-url` / `--realm-server-url` if needed.
+Override individually with `--matrix-url` / `--realm-server-url` if needed — these win over both `BOXEL_ENVIRONMENT` and the environment flags, field by field.
 
 <!-- generated:commands:start -->
 
@@ -70,6 +76,11 @@ Manage saved profiles for different users/environments
 - `-n, --name <displayName>` — Display name (for add command)
 - `-m, --matrix-url <url>` — Matrix server URL (for add command with non-standard domains)
 - `-r, --realm-server-url <url>` — Realm server URL (for add command with non-standard domains)
+- `--no-browser` — Sign in with a username and password in the terminal instead of opening a browser (for add command)
+- `--host-url <url>` — Origin serving the browser sign-in page, when it is not the realm server (for add command)
+- `--production` — Target production — the default (for add command)
+- `--staging` — Target staging instead of production (for add command)
+- `--local` — Target a local dev server instead of production (for add command)
 
 <!-- generated:commands:end -->
 

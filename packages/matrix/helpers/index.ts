@@ -1,19 +1,20 @@
-import { expect, type Page } from '@playwright/test';
-import type { Credentials } from '../docker/synapse';
+import { expect, test, type Browser, type Page } from '@playwright/test';
+import type { Credentials } from '../support/synapse/index.ts';
 import {
   loginUser,
   getAllRoomEvents,
   getJoinedRooms,
+  getUserExternalIds,
   registerUser,
   type SynapseInstance,
   sync,
   updateUser,
   type UpdateUserOptions,
-} from '../docker/synapse';
-import { realmPassword } from './realm-credentials';
-import type { SQLExecutor } from './isolated-realm-server';
-import { appURL, BasicSQLExecutor } from './isolated-realm-server';
-import { APP_BOXEL_MESSAGE_MSGTYPE } from './matrix-constants';
+} from '../support/synapse/index.ts';
+import { realmPassword } from './realm-credentials.ts';
+import type { SQLExecutor } from '../support/isolated-realm-server.ts';
+import { appURL, BasicSQLExecutor } from '../support/isolated-realm-server.ts';
+import { APP_BOXEL_MESSAGE_MSGTYPE } from '../support/matrix-constants.ts';
 import { randomUUID } from 'crypto';
 
 export const testHost = 'https://localhost:4205/test';
@@ -31,6 +32,7 @@ interface ProfileAssertions {
 interface LoginOptions {
   url?: string;
   showAllCards?: boolean; //default true
+  openAiAssistant?: boolean; //default false; opens the AI assistant panel after login
 }
 
 // Shared SQL executor is created on demand for tests
@@ -94,6 +96,32 @@ export async function updateSynapseUser(
   await updateUser(adminAccessToken, userId, options);
 }
 
+// The SSO identities linked to an account, narrowed to one IdP. Returns the
+// bare external ids, which for an OIDC provider are the values its mapping
+// provider derived from the `sub` claim.
+export async function getExternalIdsForIdp(
+  userId: string,
+  authProvider: string,
+): Promise<string[]> {
+  let { adminAccessToken } = getMatrixTestContext();
+  let externalIds = await getUserExternalIds(adminAccessToken, userId);
+  // Sorted: the admin API reports rows in database order, so an account with
+  // more than one linked identity would make assertions order-dependent.
+  return externalIds
+    .filter((entry) => entry.auth_provider === authProvider)
+    .map((entry) => entry.external_id)
+    .sort();
+}
+
+// The subject claim to present to the mock identity provider. One Synapse
+// instance serves the whole run, so a subject reused across attempts matches the
+// `user_external_ids` row an earlier attempt left behind and signs the retry
+// into that account. Deriving it from the UUID-suffixed username keeps every
+// attempt a fresh identity.
+export function subjectFor(username: string): string {
+  return `google-oauth2|${username}`;
+}
+
 async function registerRealmRedirect(
   page: Page,
   fromPrefix: string,
@@ -118,6 +146,57 @@ export async function setRealmRedirects(page: Page) {
     'http://localhost:4201/base/',
     'https://localhost:4205/base/',
   );
+}
+
+// Runs `body` against a page in a context built by hand, rather than the one the
+// `page` fixture provides. Two situations need that: a second browser identity
+// inside one test, and `beforeAll`, which only sees worker-scoped fixtures.
+//
+// Playwright attaches traces, video and screenshots in its own `context`
+// fixture, so a context from `browser.newContext()` records nothing — a failure
+// in one is reported with no artifact to open. This starts a trace and keeps it
+// when there is something to explain, so the failing run carries the same
+// evidence a fixture-backed page would.
+//
+// The trace is kept in two cases. When `body` throws, obviously. And on any
+// retry, whatever `body` does — because the context has to close when `body`
+// returns, so a failure *after* that point (an assertion about what the session
+// persisted, say) can no longer be traced from here. Keeping the trace for the
+// whole of a retried attempt covers that, and mirrors the suite's
+// `trace: 'retry-with-trace'`: a first attempt stays cheap, and the attempt that
+// runs because something already failed records everything.
+//
+// Closing is best-effort on every path: a context that has wedged can fail or
+// hang on close, and that must not replace the real error, nor turn a completed
+// body into a failure.
+export async function withTracedContext<T>(
+  browser: Browser,
+  name: string,
+  body: (page: Page) => Promise<T>,
+): Promise<T> {
+  let context = await browser.newContext();
+  await context.tracing.start({ screenshots: true, snapshots: true });
+  let keepTrace = test.info().retry > 0;
+  try {
+    let page = await context.newPage();
+    await setRealmRedirects(page);
+    return await body(page);
+  } catch (e) {
+    keepTrace = true;
+    throw e;
+  } finally {
+    if (keepTrace) {
+      let tracePath = test.info().outputPath(`${name}-trace.zip`);
+      await context.tracing.stop({ path: tracePath }).catch(() => {});
+      await test
+        .info()
+        .attach(`${name}-trace`, { path: tracePath })
+        .catch(() => {});
+    } else {
+      await context.tracing.stop().catch(() => {});
+    }
+    await context.close().catch(() => {});
+  }
 }
 
 export async function registerRealmUsers(synapse: SynapseInstance) {
@@ -157,7 +236,21 @@ export async function reloadAndOpenAiAssistant(page: Page) {
 }
 
 export async function openAiAssistant(page: Page) {
-  await page.locator('[data-test-open-ai-assistant]').click();
+  // The AI assistant panel is closed by default; the toggle button both opens
+  // and closes it. Wait for the toggle to render (operator mode's open/closed
+  // state is restored synchronously before first paint, so once the button is
+  // present the panel's presence already reflects that state) and only click
+  // when the panel is actually closed — otherwise a call made when it is
+  // already open (restored from URL/localStorage state) would toggle it back
+  // closed.
+  let openButton = page.locator('[data-test-open-ai-assistant]');
+  await openButton.waitFor();
+  let panel = page.locator('[data-test-ai-assistant-panel]');
+  if (await panel.isVisible()) {
+    return;
+  }
+  await openButton.click();
+  await panel.waitFor();
 }
 
 export async function createRealm(
@@ -165,13 +258,97 @@ export async function createRealm(
   endpoint: string,
   name = endpoint,
 ) {
-  await page.locator('[data-test-add-workspace]').click();
-  await page.locator('[data-test-display-name-field]').fill(name);
-  await page.locator('[data-test-endpoint-field]').fill(endpoint);
-  await page.locator('[data-test-create-workspace-submit]').click();
-  await expect(page.locator(`[data-test-workspace="${name}"]`)).toHaveCount(1, {
-    timeout: 30_000,
-  });
+  // Creating a workspace provisions a matrix room + personal realm and blocks
+  // until that realm is indexed. While the task runs the modal shows a spinner
+  // (the submit button is replaced); on failure it surfaces an error
+  // (`data-test-error-message`) and stays open instead of closing and rendering
+  // the workspace tile. Wait for whichever terminal outcome happens first and,
+  // on a surfaced error, retry the whole form from a clean modal (cancel
+  // re-opens with error cleared). If neither outcome appears in time, report
+  // whether the modal was still spinning (provisioning genuinely in flight) vs.
+  // gone (a different failure) so the next CI failure is diagnosable.
+  let workspaceTile = page.locator(`[data-test-workspace="${name}"]`);
+  let errorMessage = page.locator('[data-test-error-message]');
+  let modal = page.locator('[data-test-create-workspace-modal]');
+  let submitButton = page.locator('[data-test-create-workspace-submit]');
+  let maxAttempts = 3;
+  // How long the modal is given to settle (tile or error) per attempt. The
+  // dominant cost is the newly-created realm's from-scratch-index waiting in
+  // the worker queue behind other realms' index + prerender-html jobs. Also
+  // used as the "near budget" yardstick below.
+  let settleTimeoutMs = 30_000;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    // A previous attempt's provisioning may have landed late — if the tile is
+    // already present, don't try to create a duplicate endpoint.
+    if ((await workspaceTile.count()) > 0) {
+      return;
+    }
+
+    await page.locator('[data-test-add-workspace]').click();
+    await page.locator('[data-test-display-name-field]').fill(name);
+    await page.locator('[data-test-endpoint-field]').fill(endpoint);
+    await page.locator('[data-test-create-workspace-submit]').click();
+
+    let startedAt = Date.now();
+    try {
+      await expect(workspaceTile.or(errorMessage).first()).toBeVisible({
+        timeout: settleTimeoutMs,
+      });
+    } catch (cause) {
+      // Neither the tile nor an error surfaced. Distinguish "still creating"
+      // (modal open, submit button replaced by the spinner) from "modal gone,
+      // no tile" so the failure carries a cause, not just a bare timeout.
+      // Fold the original Playwright expectation error into the message so its
+      // locator/call-log context is preserved alongside the classification.
+      let modalOpen = (await modal.count()) > 0;
+      let stillCreating = modalOpen && (await submitButton.count()) === 0;
+      let state = stillCreating
+        ? 'still creating (spinner shown) — realm provisioning did not finish in time'
+        : modalOpen
+          ? 'modal open but neither the workspace tile nor an error appeared'
+          : 'modal closed without the workspace tile appearing';
+      let detail = cause instanceof Error ? cause.message : String(cause);
+      throw new Error(
+        `createRealm("${endpoint}") did not settle within ${
+          settleTimeoutMs / 1000
+        }s: ${state}\n` + `underlying expectation failure: ${detail}`,
+      );
+    }
+    // Log how long provisioning took. Because the failure mode is the settle
+    // wait creeping up under worker-queue load, surfacing the elapsed time on
+    // every run (and flagging a near-budget "close call" even when the tile
+    // did appear) turns a future regression into a visible warning before it
+    // crosses the timeout and starts failing.
+    let elapsedMs = Date.now() - startedAt;
+    let elapsedS = (elapsedMs / 1000).toFixed(1);
+    let warnFraction = 0.6;
+    if (elapsedMs >= settleTimeoutMs * warnFraction) {
+      console.log(
+        `[createRealm] "${endpoint}" settled in ${elapsedS}s — past ${
+          warnFraction * 100
+        }% of the ${settleTimeoutMs / 1000}s budget (worker-queue pressure)`,
+      );
+    } else {
+      console.log(`[createRealm] "${endpoint}" settled in ${elapsedS}s`);
+    }
+    if ((await workspaceTile.count()) > 0) {
+      return;
+    }
+
+    let message = (await errorMessage.textContent())?.trim() ?? '(no message)';
+    if (attempt === maxAttempts) {
+      throw new Error(
+        `createRealm("${endpoint}") failed after ${maxAttempts} attempts: ${message}`,
+      );
+    }
+    console.log(
+      `[createRealm] "${endpoint}" attempt ${attempt}/${maxAttempts} errored, retrying: ${message}`,
+    );
+    // Dismiss the errored modal so the retry opens a fresh one (which clears
+    // the error and resets the fields).
+    await page.locator('[data-test-cancel-create-workspace]').click();
+    await expect(errorMessage).toBeHidden();
+  }
 }
 
 export async function openRoot(page: Page, url = testHost) {
@@ -205,7 +382,7 @@ export async function validateEmail(
     await opts.onAppTrigger(appPage);
   } else {
     await expect(appPage.locator('[data-test-email-validation]')).toContainText(
-      'Please check your email to complete registration.',
+      'Please check your email to complete registration',
     );
   }
 
@@ -356,6 +533,10 @@ export async function login(
   }, localStorageAuth);
 
   await openRoot(page, opts?.url);
+
+  if (opts?.openAiAssistant) {
+    await openAiAssistant(page);
+  }
 }
 
 export async function enterWorkspace(
@@ -366,12 +547,33 @@ export async function enterWorkspace(
 }
 
 export async function showAllCards(page: Page) {
+  // A realm's index is either the legacy CardsGrid — whose "All Cards" filter
+  // lists every card — or the default Workspace, whose Library tab renders the
+  // same live card grid. `.count()` is point-in-time, so wait for the index to
+  // render one of its browse affordances before deciding; checking right after
+  // a `goto` would otherwise miss both and silently no-op. A bespoke index has
+  // neither — leave it be.
+  let allCardsFilter = page.locator(
+    `[data-test-boxel-filter-list-button="All Cards"]`,
+  );
+  let libraryTab = page.locator(`[data-test-workspace-tab="library"]`);
   try {
-    await page
-      .locator(`[data-test-boxel-filter-list-button="All Cards"]`)
-      .click();
-  } catch (e) {
-    console.warn('all cards filter is not found');
+    await allCardsFilter.or(libraryTab).first().waitFor({ timeout: 30_000 });
+  } catch {
+    return;
+  }
+  if ((await allCardsFilter.count()) > 0) {
+    await allCardsFilter.click();
+    return;
+  }
+  if ((await libraryTab.count()) > 0) {
+    await libraryTab.click();
+    // The Library opens on "Everything", which lists a card instance twice —
+    // once as the instance and once as the file-meta row for its `.json` — and
+    // both rows carry the same extension-stripped `data-test-cards-grid-item`.
+    // Selecting "Cards" narrows to instances only, so a locator keyed on a card
+    // id resolves to exactly one element, matching CardsGrid's "All Cards".
+    await page.locator(`[data-test-workspace-filter="cards"]`).click();
   }
 }
 
@@ -471,13 +673,15 @@ export async function selectCardFromCatalog(page: Page, cardId: string) {
   await page.locator('[data-test-attach-button]').click();
   await page.locator('[data-test-attach-card-btn]').click();
   await page
-    .locator('[data-test-card-catalog-modal] [data-test-search-field]')
+    .locator('[data-test-card-chooser-modal] [data-test-search-field]')
     .fill(cardId);
   await page
-    .locator(`[data-test-card-catalog-item="${cardId}"]`)
+    .locator(
+      `[data-test-card-chooser-modal] [data-test-item-button="${cardId}"]`,
+    )
     .first()
     .click();
-  await page.locator('[data-test-card-catalog-go-button]').click();
+  await page.locator('[data-test-card-chooser-go-button]').click();
 }
 
 export async function setupTwoStackItems(
@@ -534,12 +738,17 @@ export async function sendMessage(
   await expect(
     page.locator(`[data-test-message-field="${roomId}"]`),
   ).toHaveValue('');
-  await expect(
-    page.locator('[data-test-ai-assistant-message-pending="true"]'),
-  ).toHaveCount(0);
+  // The new message bubble is rendered optimistically a moment after the draft
+  // clears. Wait for it to appear before asserting that nothing is pending:
+  // checking for no-pending first can pass in the window before the bubble
+  // exists, returning from this helper while the send is still in flight rather
+  // than after the server has acknowledged it.
   await expect(page.locator('[data-test-message-idx]')).toHaveCount(
     messageCountBeforeSend + 1,
   );
+  await expect(
+    page.locator('[data-test-ai-assistant-message-pending="true"]'),
+  ).toHaveCount(0);
   await page.waitForSelector(`[data-test-room-settled]`);
 }
 
@@ -912,6 +1121,65 @@ export async function waitUntil<T>(
     await new Promise((resolve) => setTimeout(resolve, interval));
   }
   throw new Error('Timeout waiting for condition');
+}
+
+// Poll the server-rendered HTML at `url` until it contains `marker`. The
+// `_publish-realm` POST returns before the published realm has finished
+// re-indexing/prerendering, so navigating "cold" races that work and is the
+// source of the flaky `page.goto` timeouts the host-mode suites hit. Gate any
+// navigation to a freshly published realm on this so the document render is
+// warm before the browser asks for it.
+//
+// Budget generously (not waitUntil's 10s default): this is the readiness gate
+// for a realm that may still be indexing under CI load, so a tight poll would
+// fail a slow-but-eventually-ready realm earlier than a bare navigation (which
+// is bounded by the 60s test timeout). 45s stays under that test timeout while
+// leaving headroom for the navigation/assertions that follow.
+//
+// On timeout, throw with the last observed HTTP status and whether a body
+// arrived without the marker. A bare `page.goto` failure only reports "timeout
+// exceeded"; this distinguishes "still erroring" (publish/index not done) from
+// "served but missing the marker" (indexed, wrong/stale content) from "request
+// kept failing" — so the next CI failure is diagnosable without a re-run.
+export async function waitForPublishedMarker(
+  page: Page,
+  url: string,
+  marker: string,
+  timeout = 45_000,
+) {
+  let lastStatus: number | undefined;
+  let lastBodyMissingMarker = false;
+  let lastError: string | undefined;
+  try {
+    await waitUntil(async () => {
+      try {
+        let response = await page.request.get(url, {
+          headers: { Accept: 'text/html' },
+        });
+        lastStatus = response.status();
+        lastError = undefined;
+        if (!response.ok()) {
+          lastBodyMissingMarker = false;
+          return false;
+        }
+        let text = await response.text();
+        lastBodyMissingMarker = !text.includes(marker);
+        return !lastBodyMissingMarker;
+      } catch (e) {
+        lastError = e instanceof Error ? e.message : String(e);
+        return false;
+      }
+    }, timeout);
+  } catch {
+    let detail = lastError
+      ? `last request error: ${lastError}`
+      : lastBodyMissingMarker
+        ? `last response HTTP ${lastStatus} served without marker "${marker}" (realm reachable but still indexing or rendering other content)`
+        : `last response HTTP ${lastStatus ?? 'none'} not OK (publish/index not ready)`;
+    throw new Error(
+      `waitForPublishedMarker timed out after ${timeout}ms for ${url}; ${detail}`,
+    );
+  }
 }
 
 async function waitForRealmToken(page: Page, realmURL: string): Promise<void> {

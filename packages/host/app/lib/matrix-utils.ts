@@ -1,4 +1,4 @@
-import difference from 'lodash/difference';
+import { difference } from 'lodash-es';
 
 export interface MatrixError {
   data: {

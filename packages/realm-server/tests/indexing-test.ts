@@ -1,16 +1,20 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import {
   internalKeyFor,
   rri,
   SupportedMimeType,
   Deferred,
   IndexWriter,
+  VirtualNetwork,
   userInitiatedPriority,
+  diffDoc,
 } from '@cardstack/runtime-common';
 import type {
   DBAdapter,
   DefinitionLookup,
   LooseSingleCardDocument,
+  Prerenderer,
   Realm,
   RealmPermissions,
   RealmAdapter,
@@ -20,22 +24,27 @@ import type {
   QueuePublisher,
   QueueRunner,
 } from '@cardstack/runtime-common';
-import type { runTestRealmServer } from './helpers';
+import type { runTestRealmServer } from './helpers/index.ts';
 import {
   cleanWhiteSpace,
   waitUntil,
   cardInfo,
+  getTestPrerenderer,
   setupPermissionedRealmCached,
   setupPermissionedRealmsCached,
-} from './helpers';
+  searchCardsForTest,
+} from './helpers/index.ts';
 import {
   depsForIndexEntry,
   errorDocForIndexEntry,
   indexedAtForIndexEntry,
+  maxPrerenderHtmlJobId,
+  settlePrerenderHtmlJobs,
   typeForIndexEntry,
-} from './helpers/indexing';
+} from './helpers/indexing.ts';
 import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
 import { basename } from 'path';
+import { createHash } from 'crypto';
 import type { PgAdapter } from '@cardstack/postgres';
 
 function trimCardContainer(text: string) {
@@ -58,9 +67,9 @@ function makeTestRealmFileSystem(): Record<
 > {
   return {
     'person.gts': `
-      import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-      import StringField from "https://cardstack.com/base/string";
-      import NumberField from "https://cardstack.com/base/number";
+      import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
+      import NumberField from "@cardstack/base/number";
 
       export class Person extends CardDef {
         @field firstName = contains(StringField);
@@ -91,12 +100,12 @@ function makeTestRealmFileSystem(): Record<
       }
     `,
     'pet-person.gts': `
-      import { contains, linksTo, field, CardDef, Component, StringField } from "https://cardstack.com/base/card-api";
+      import { contains, linksTo, field, CardDef, Component, StringField } from "@cardstack/base/card-api";
       import { Pet } from "./pet";
 
       export class PetPerson extends CardDef {
         @field firstName = contains(StringField);
-        @field pet = linksTo(() => Pet);
+        @field pet = linksTo(() => Pet, { searchable: true });
         @field nickName = contains(StringField, {
           computeVia: function (this: Person) {
             if (this.pet?.firstName) {
@@ -108,16 +117,16 @@ function makeTestRealmFileSystem(): Record<
       }
     `,
     'pet.gts': `
-      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-      import StringField from "https://cardstack.com/base/string";
+      import { contains, field, CardDef } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
 
       export class Pet extends CardDef {
         @field firstName = contains(StringField);
       }
     `,
     'fancy-person.gts': `
-      import { contains, field, Component } from "https://cardstack.com/base/card-api";
-      import StringField from "https://cardstack.com/base/string";
+      import { contains, field, Component } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
       import { Person } from "./person";
 
       export class FancyPerson extends Person {
@@ -135,13 +144,13 @@ function makeTestRealmFileSystem(): Record<
       }
     `,
     'post.gts': `
-      import { contains, field, linksTo, CardDef, Component } from "https://cardstack.com/base/card-api";
-      import StringField from "https://cardstack.com/base/string";
+      import { contains, field, linksTo, CardDef, Component } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
       import { Person } from "./person";
 
       export class Post extends CardDef {
         static displayName = 'Post';
-        @field author = linksTo(Person);
+        @field author = linksTo(Person, { searchable: true });
         @field message = contains(StringField);
         static isolated = class Isolated extends Component<typeof this> {
           <template>
@@ -152,8 +161,8 @@ function makeTestRealmFileSystem(): Record<
       }
     `,
     'boom.gts': `
-      import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-      import StringField from "https://cardstack.com/base/string";
+      import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
 
       export class Boom extends CardDef {
         @field firstName = contains(StringField);
@@ -168,8 +177,8 @@ function makeTestRealmFileSystem(): Record<
       }
     `,
     'boom2.gts': `
-      import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-      import StringField from "https://cardstack.com/base/string";
+      import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
 
       export class Boom extends CardDef {
         @field firstName = contains(StringField);
@@ -183,8 +192,8 @@ function makeTestRealmFileSystem(): Record<
       }
     `,
     'atom-boom.gts': `
-      import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-      import StringField from "https://cardstack.com/base/string";
+      import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
 
       export class Boom extends CardDef {
         @field firstName = contains(StringField);
@@ -199,8 +208,8 @@ function makeTestRealmFileSystem(): Record<
       }
     `,
     'embedded-boom.gts': `
-      import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-      import StringField from "https://cardstack.com/base/string";
+      import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
 
       export class Boom extends CardDef {
         @field firstName = contains(StringField);
@@ -215,8 +224,8 @@ function makeTestRealmFileSystem(): Record<
       }
     `,
     'fitted-boom.gts': `
-      import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-      import StringField from "https://cardstack.com/base/string";
+      import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
 
       export class Boom extends CardDef {
         @field firstName = contains(StringField);
@@ -396,15 +405,15 @@ function makeTestRealmFileSystem(): Record<
         attributes: {},
         meta: {
           adoptsFrom: {
-            module: rri('https://cardstack.com/base/card-api'),
+            module: rri('@cardstack/base/card-api'),
             name: 'CardDef',
           },
         },
       },
     },
     'address.gts': `
-      import { contains, field, FieldDef } from "https://cardstack.com/base/card-api";
-      import StringField from "https://cardstack.com/base/string";
+      import { contains, field, FieldDef } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
 
       export class Address extends FieldDef {
         @field street = contains(StringField);
@@ -412,7 +421,7 @@ function makeTestRealmFileSystem(): Record<
       }
     `,
     'order-page.gts': `
-      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+      import { contains, field, CardDef } from "@cardstack/base/card-api";
       import { Address } from "./address";
 
       export class OrderPage extends CardDef {
@@ -441,7 +450,7 @@ function makeTestRealmFileSystem(): Record<
       import {
         FileDef as BaseFileDef,
         FileContentMismatchError,
-      } from "https://cardstack.com/base/file-api";
+      } from "@cardstack/base/file-api";
 
       export class FileDef extends BaseFileDef {
         static async extractAttributes() {
@@ -458,7 +467,7 @@ function makeTestRealmFileSystem(): Record<
   };
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('indexing (read only)', function (hooks) {
     let realm: Realm;
 
@@ -493,29 +502,127 @@ module(basename(__filename), function () {
     // false; the from-scratch job below is produced by the `isNewIndex`
     // branch in Realm.start(), not by the env-var-driven branch.
     test('newly-created realm full-indexes on first boot', async function (assert) {
-      let jobs = await testDbAdapter.execute('select * from jobs');
+      let jobs = await testDbAdapter.execute('select * from jobs order by id');
       assert.strictEqual(
         jobs.length,
-        1,
-        'there is one job that was run in the queue',
+        2,
+        'the boot produced an index job and its spawned prerender_html job',
       );
-      let [job] = jobs;
+      let [indexJob, prerenderJob] = jobs;
       assert.strictEqual(
-        job.job_type,
+        indexJob.job_type,
         'from-scratch-index',
-        'the job is a from scratch index job',
+        'the first job is a from scratch index job',
       );
       assert.strictEqual(
-        job.concurrency_group,
+        indexJob.concurrency_group,
         `indexing:${testRealm}`,
         'the job is an index of the test realm',
       );
       assert.strictEqual(
-        job.status,
+        indexJob.status,
         'resolved',
         'the job completed successfully',
       );
-      assert.ok(job.finished_at, 'the job was marked with a finish time');
+      assert.ok(indexJob.finished_at, 'the job was marked with a finish time');
+
+      // The between-visit phase decomposition rides on the job result so the
+      // ~one-in-four of the wall the job spends outside the per-row server
+      // render is queryable per job (`jobs.result.phaseTimings`).
+      let indexResult = indexJob.result as {
+        phaseTimings?: Record<string, unknown>;
+      } | null;
+      let phaseTimings = indexResult?.phaseTimings;
+      assert.ok(
+        phaseTimings,
+        `the from-scratch index job result carries a phaseTimings breakdown, got: ${JSON.stringify(
+          indexResult,
+        )}`,
+      );
+      // The module pre-warm sweep runs on the from-scratch-spawned
+      // prerender_html job, not the index job, so `preWarmMs` is absent here
+      // and asserted on the prerender job's result below.
+      for (let phase of [
+        'totalMs',
+        'setupMs',
+        'mtimesMs',
+        'discoverMs',
+        'orderMs',
+        'visitLoopMs',
+        'writeMs',
+        'swapMs',
+      ]) {
+        assert.strictEqual(
+          typeof phaseTimings?.[phase],
+          'number',
+          `phaseTimings.${phase} is measured on the from-scratch job result, got: ${JSON.stringify(
+            phaseTimings?.[phase],
+          )}`,
+        );
+      }
+      assert.strictEqual(
+        (phaseTimings as Record<string, unknown>)?.preWarmMs,
+        undefined,
+        'the index job does not record preWarmMs — the sweep runs on the prerender job',
+      );
+
+      assert.strictEqual(
+        prerenderJob.job_type,
+        'prerender_html',
+        'the index pass spawned an HTML prerender job',
+      );
+      assert.strictEqual(
+        prerenderJob.concurrency_group,
+        `prerender-html:${testRealm}`,
+        'HTML work runs in its own per-realm concurrency group',
+      );
+      assert.strictEqual(
+        prerenderJob.status,
+        'resolved',
+        'the prerender_html job completed successfully',
+      );
+      let prerenderArgs = prerenderJob.args as {
+        generation: number;
+        spawningJobId: number | null;
+        changes: { url: string; operation: string }[];
+      };
+      assert.strictEqual(
+        prerenderArgs.generation,
+        1,
+        'the job carries the generation the index pass anticipated',
+      );
+      assert.strictEqual(
+        prerenderArgs.spawningJobId,
+        indexJob.id,
+        'the job is correlated back to the index pass that spawned it',
+      );
+      assert.true(
+        prerenderArgs.changes.every((change) => change.operation === 'update'),
+        'the job carries the invalidation set as update operations',
+      );
+      assert.true(
+        prerenderArgs.changes.some(
+          (change) => change.url === `${testRealm}mango.json`,
+        ),
+        'the invalidation set covers the realm content',
+      );
+      assert.true(
+        (prerenderJob.args as { preWarm?: boolean }).preWarm,
+        'a from-scratch-spawned prerender job carries the pre-warm bit',
+      );
+
+      // The module pre-warm sweep's wall-clock is attributed to the job that
+      // pays it: the prerender job records `preWarmMs`, the index job does not.
+      let prerenderResult = prerenderJob.result as {
+        phaseTimings?: { preWarmMs?: unknown } | null;
+      } | null;
+      assert.strictEqual(
+        typeof prerenderResult?.phaseTimings?.preWarmMs,
+        'number',
+        `the prerender job result records the pre-warm wall-clock, got: ${JSON.stringify(
+          prerenderResult,
+        )}`,
+      );
     });
 
     test('can store card pre-rendered html in the index', async function (assert) {
@@ -692,30 +799,96 @@ module(basename(__filename), function () {
       }
     });
 
-    test('can make an error doc for a card that has a link to a URL that is not a card', async function (assert) {
-      let entry = await realm.realmIndexQueryEngine.cardDocument(
+    test('a card whose linksTo target fails to load indexes successfully with the broken target captured in deps', async function (assert) {
+      let entry = await realm.realmIndexQueryEngine.instance(
         new URL(`${testRealm}bad-link`),
       );
-      if (entry?.type === 'error') {
+      assert.strictEqual(
+        entry?.type,
+        'instance',
+        'card with an unreachable linksTo target indexes as a clean instance — the broken slot renders the placeholder, the entry itself is not in error',
+      );
+      let deps = (entry?.deps ?? []).map((d) =>
+        d.endsWith('.json') ? d.slice(0, -5) : d,
+      );
+      assert.ok(deps.includes(`${testRealm}post`), 'deps include post module');
+      assert.ok(
+        deps.includes(`http://localhost:9000/this-is-a-link-to-nowhere`),
+        'deps include the unreachable link target so invalidation can reach this card if it becomes reachable',
+      );
+
+      // The broken slot is also recorded as searchable metadata on the
+      // (successful) index row: the render.meta scan runs getBrokenLinks
+      // after the store settles and the finding rides the diagnostics
+      // channel into `boxel_index.diagnostics.brokenLinks`. This is
+      // the direct, indexed signal that lets a consumer enumerate
+      // cards-with-broken-links without parsing HTML or re-running the scan.
+      let [diagRow] = (await testDbAdapter.execute(
+        `SELECT diagnostics FROM boxel_index WHERE realm_url = $1 AND url = $2 AND type = 'instance'`,
+        { bind: [realm.url, `${testRealm}bad-link.json`] },
+      )) as { diagnostics: { brokenLinks?: unknown } | null }[];
+      let brokenLinks = diagRow?.diagnostics?.brokenLinks as
+        | { fieldName: string; reference: string; kind: string }[]
+        | undefined;
+      assert.strictEqual(
+        brokenLinks?.length,
+        1,
+        `diagnostics.brokenLinks records the single broken slot, got: ${JSON.stringify(
+          brokenLinks,
+        )}`,
+      );
+      assert.strictEqual(
+        brokenLinks?.[0]?.fieldName,
+        'author',
+        'broken-link finding names the linksTo field',
+      );
+      assert.strictEqual(
+        brokenLinks?.[0]?.reference,
+        'http://localhost:9000/this-is-a-link-to-nowhere',
+        'broken-link finding carries the unreachable reference',
+      );
+      // An unreachable external host fails as a generic fetch error rather
+      // than a 404; either is a valid terminal broken-link kind.
+      assert.ok(
+        ['error', 'not-found'].includes(brokenLinks?.[0]?.kind ?? ''),
+        `broken-link finding carries a terminal kind, got: ${brokenLinks?.[0]?.kind}`,
+      );
+
+      // The search-doc settle aggregates ride the same channel onto the
+      // persisted row: render.meta stamps them on every card visit.
+      let diagnostics = diagRow?.diagnostics as
+        | { searchDocSettleMs?: unknown; searchDocSettlePasses?: unknown }
+        | null
+        | undefined;
+      assert.strictEqual(
+        typeof diagnostics?.searchDocSettleMs,
+        'number',
+        `diagnostics.searchDocSettleMs persists on boxel_index, got: ${JSON.stringify(diagnostics?.searchDocSettleMs)}`,
+      );
+      assert.strictEqual(
+        typeof diagnostics?.searchDocSettlePasses,
+        'number',
+        `diagnostics.searchDocSettlePasses persists on boxel_index, got: ${JSON.stringify(diagnostics?.searchDocSettlePasses)}`,
+      );
+
+      // The per-visit client overhead (file read, render round-trip transport,
+      // post-render bookkeeping) rides the same channel — the part of the index
+      // job's between-render wall attributable to this row.
+      let clientMs = (
+        diagRow?.diagnostics as {
+          indexVisitClientMs?: {
+            read?: unknown;
+            renderRpc?: unknown;
+            bookkeeping?: unknown;
+          };
+        } | null
+      )?.indexVisitClientMs;
+      for (let bucket of ['read', 'renderRpc', 'bookkeeping'] as const) {
         assert.strictEqual(
-          entry.error.errorDetail.message,
-          'unable to fetch http://localhost:9000/this-is-a-link-to-nowhere: fetch failed',
+          typeof clientMs?.[bucket],
+          'number',
+          `diagnostics.indexVisitClientMs.${bucket} persists on boxel_index, got: ${JSON.stringify(clientMs?.[bucket])}`,
         );
-        let actualDeps = (entry.error.errorDetail.deps ?? []).map((d) =>
-          d.endsWith('.json') ? d.slice(0, -5) : d,
-        );
-        assert.ok(
-          actualDeps.includes(`${testRealm}post`),
-          'deps include post module',
-        );
-        assert.ok(
-          actualDeps.includes(
-            `http://localhost:9000/this-is-a-link-to-nowhere`,
-          ),
-          'deps include missing link target',
-        );
-      } else {
-        assert.ok(false, 'expected search entry to be an error document');
       }
     });
 
@@ -742,19 +915,15 @@ module(basename(__filename), function () {
         assert.deepEqual(
           hassan.doc.data.relationships,
           {
+            // Only `pet` appears: it is the relationship this card actually
+            // has (a set target). The base-card `cardInfo.theme` /
+            // `cardInfo.cardThumbnail` links are never authored here, so they
+            // drop from the pristine doc — this filtering is data-driven, not
+            // searchable-driven (they still appear in the search doc, which
+            // enumerates every declared field).
             pet: {
               links: {
                 self: './ringo',
-              },
-            },
-            'cardInfo.cardThumbnail': {
-              links: {
-                self: null,
-              },
-            },
-            'cardInfo.theme': {
-              links: {
-                self: null,
               },
             },
           },
@@ -769,27 +938,39 @@ module(basename(__filename), function () {
 
       let hassanEntry = await getInstance(realm, new URL(`${testRealm}hassan`));
       if (hassanEntry) {
+        // The searchable-driven generator is authoritative: every relationship
+        // is present (an unset link is `null`, a set one expands per its
+        // `searchable` annotation), and every card carries its base-card fields
+        // (`cardTheme`, `cardInfo.cardThumbnail`). The expected doc is the exact
+        // generator output; `diffDoc(..., false)` reports any deviation.
         assert.deepEqual(
-          hassanEntry.searchDoc,
-          {
-            id: hassanId,
-            pet: {
-              id: `${testRealm}ringo`,
+          diffDoc(
+            {
+              id: hassanId,
+              pet: {
+                id: `${testRealm}ringo`,
+                cardTitle: 'Untitled Card',
+                firstName: 'Ringo',
+                cardTheme: null,
+                cardInfo: {
+                  cardThumbnail: null,
+                  theme: null,
+                },
+              },
+              nickName: "Ringo's buddy",
+              _cardType: 'PetPerson',
+              firstName: 'Hassan',
               cardTitle: 'Untitled Card',
-              firstName: 'Ringo',
+              cardTheme: null,
               cardInfo: {
+                cardThumbnail: null,
                 theme: null,
               },
             },
-            nickName: "Ringo's buddy",
-            _cardType: 'PetPerson',
-            firstName: 'Hassan',
-            cardTitle: 'Untitled Card',
-            cardInfo: {
-              cardThumbnail: null,
-              theme: null,
-            },
-          },
+            hassanEntry.searchDoc ?? {},
+            false,
+          ),
+          [],
           'searchData is correct',
         );
       } else {
@@ -868,42 +1049,42 @@ module(basename(__filename), function () {
         },
         {
           pattern:
-            /cardstack.com\/base\/default-templates\/embedded\.gts.*\.glimmer-scoped\.css$/,
+            /@cardstack\/base\/default-templates\/embedded\.gts.*\.glimmer-scoped\.css$/,
           fileName: 'default-templates/embedded.gts',
         },
         {
           pattern:
-            /cardstack.com\/base\/default-templates\/isolated-and-edit\.gts.*\.glimmer-scoped\.css$/,
+            /@cardstack\/base\/default-templates\/isolated-and-edit\.gts.*\.glimmer-scoped\.css$/,
           fileName: 'default-templates/isolated-and-edit.gts',
         },
         {
           pattern:
-            /cardstack.com\/base\/default-templates\/missing-template\.gts.*\.glimmer-scoped\.css$/,
+            /@cardstack\/base\/default-templates\/missing-template\.gts.*\.glimmer-scoped\.css$/,
           fileName: 'default-templates/missing-template.gts',
         },
         {
           pattern:
-            /cardstack.com\/base\/default-templates\/field-edit\.gts.*\.glimmer-scoped\.css$/,
+            /@cardstack\/base\/default-templates\/field-edit\.gts.*\.glimmer-scoped\.css$/,
           fileName: 'default-templates/field-edit.gts',
         },
         {
           pattern:
-            /cardstack.com\/base\/links-to-many-component.gts.*\.glimmer-scoped\.css$/,
+            /@cardstack\/base\/links-to-many-component.gts.*\.glimmer-scoped\.css$/,
           fileName: 'links-to-many-component.gts',
         },
         {
           pattern:
-            /cardstack.com\/base\/links-to-editor.gts.*\.glimmer-scoped\.css$/,
+            /@cardstack\/base\/links-to-editor.gts.*\.glimmer-scoped\.css$/,
           fileName: 'links-to-editor.gts',
         },
         {
           pattern:
-            /cardstack.com\/base\/contains-many-component.gts.*\.glimmer-scoped\.css$/,
+            /@cardstack\/base\/contains-many-component.gts.*\.glimmer-scoped\.css$/,
           fileName: 'contains-many-component.gts',
         },
         {
           pattern:
-            /cardstack.com\/base\/field-component.gts.*\.glimmer-scoped\.css$/,
+            /@cardstack\/base\/field-component.gts.*\.glimmer-scoped\.css$/,
           fileName: 'field-component.gts',
         },
       ];
@@ -976,6 +1157,34 @@ module(basename(__filename), function () {
         'text/typescript+glimmer',
         'file entry includes contentType',
       );
+
+      // CS-11171: executable modules are FileDef subclasses — `person.gts`
+      // resolves to GtsFileDef, which inherits the four shared FileDef shells
+      // (marked `data-test-file-*`) and their code renderer from TsFileDef.
+      // CardsGrid's "All Files" group renders those formats. Before the
+      // fix, the fused visit gated fileRender behind `!isModule`, so every
+      // HTML column on these rows was NULL and the grid showed nothing.
+      // The FileDef FileRender pass now runs for modules too.
+      assert.ok(
+        entry?.isolatedHtml?.includes('data-test-file-isolated'),
+        'executable file entry has FileDef isolated HTML (GtsFileDef, via the shared shell)',
+      );
+      // The shared shell mounts GtsFileDef's code renderer, and that renderer
+      // syntax-highlights the source: a `.gts` module has keywords, so the
+      // rendered HTML carries both the preview hook and highlight spans.
+      assert.ok(
+        entry?.isolatedHtml?.includes('data-test-ts-preview'),
+        'isolated HTML mounts the code preview renderer',
+      );
+      assert.ok(
+        entry?.isolatedHtml?.includes('ts-keyword'),
+        'code preview syntax-highlights the source',
+      );
+      let fittedHtml = Object.values(entry?.fittedHtml ?? {}).join('');
+      assert.ok(
+        fittedHtml.includes('data-test-file-fitted'),
+        'executable file entry has FileDef fitted HTML (GtsFileDef, via the shared shell)',
+      );
     });
 
     test('indexes card json resources as file entries too', async function (assert) {
@@ -996,6 +1205,15 @@ module(basename(__filename), function () {
         typeof entry?.searchDoc?.contentSize,
         'number',
         'file entry includes contentSize',
+      );
+      assert.true(
+        entry?.searchDoc?._isCardInstanceFile,
+        'file entry for a card instance json is marked _isCardInstanceFile',
+      );
+      assert.strictEqual(
+        entry?.searchDoc?._title,
+        'mango.json',
+        'file entry _title is the file name',
       );
     });
 
@@ -1044,6 +1262,15 @@ module(basename(__filename), function () {
         'number',
         'search_doc includes contentSize',
       );
+      assert.strictEqual(
+        searchDoc._title,
+        'random-file.txt',
+        'search_doc _title is the file name',
+      );
+      assert.false(
+        '_isCardInstanceFile' in searchDoc,
+        'non-card file search_doc does not carry _isCardInstanceFile',
+      );
     });
 
     test('file extractor mismatch falls back to base extractor', async function (assert) {
@@ -1082,7 +1309,7 @@ module(basename(__filename), function () {
         'deps include mismatch extractor module',
       );
       assert.ok(
-        deps.includes('https://cardstack.com/base/file-api'),
+        deps.includes('@cardstack/base/file-api'),
         'deps include base file-api for fallback',
       );
     });
@@ -1118,7 +1345,7 @@ module(basename(__filename), function () {
       assert.deepEqual(
         doc.data.meta?.adoptsFrom,
         {
-          module: rri('https://cardstack.com/base/text-file-def'),
+          module: rri('@cardstack/base/text-file-def'),
           name: 'TextFileDef',
         },
         'adoptsFrom sourced from pristine file resource',
@@ -1134,6 +1361,7 @@ module(basename(__filename), function () {
       let fileDefKey = internalKeyFor(
         { module: rri(fileDefModule), name: 'FileDef' },
         undefined,
+        realm.virtualNetwork,
       );
       await testDbAdapter.execute(
         `UPDATE boxel_index SET types = '${JSON.stringify([
@@ -1182,8 +1410,8 @@ module(basename(__filename), function () {
               permissions: permissions.provider,
               fileSystem: {
                 'article.gts': `
-                import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-                import StringField from "https://cardstack.com/base/string";
+                import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+                import StringField from "@cardstack/base/string";
                 export class Article extends CardDef {
                   @field title = contains(StringField);
                 }
@@ -1196,7 +1424,7 @@ module(basename(__filename), function () {
               permissions: permissions.consumer,
               fileSystem: {
                 'website.gts': `
-                import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
+                import { contains, field, CardDef, linksTo } from "@cardstack/base/card-api";
                 import { Article } from "${testRealm1URL}article" // importing from another realm;
                 export class Website extends CardDef {
                   @field linkedArticle = linksTo(Article);
@@ -1317,6 +1545,11 @@ module(basename(__filename), function () {
       let queuePublisher: QueuePublisher;
       let queueRunner: QueueRunner;
       let testRealmServer: TestRealmServerResult | undefined;
+      let virtualNetwork: VirtualNetwork;
+
+      hooks.beforeEach(function () {
+        virtualNetwork = new VirtualNetwork();
+      });
 
       setupPermissionedRealmCached(hooks, {
         mode: 'beforeEach',
@@ -1361,6 +1594,7 @@ module(basename(__filename), function () {
       test('batch invalidation resolves alias-like seeds via file_alias matching', async function (assert) {
         let batch = await new IndexWriter(testDbAdapter).createBatch(
           new URL(realm.url),
+          virtualNetwork,
         );
 
         await batch.invalidate([new URL(`${testRealm}mango`)]);
@@ -1372,6 +1606,7 @@ module(basename(__filename), function () {
 
         let jsonSeedBatch = await new IndexWriter(testDbAdapter).createBatch(
           new URL(realm.url),
+          virtualNetwork,
         );
         await jsonSeedBatch.invalidate([new URL(`${testRealm}mango.json`)]);
         assert.ok(
@@ -1386,6 +1621,7 @@ module(basename(__filename), function () {
 
         let stagingBatch = await new IndexWriter(testDbAdapter).createBatch(
           new URL(realm.url),
+          virtualNetwork,
         );
         await stagingBatch.updateEntry(stagedOnlyURL, {
           type: 'file',
@@ -1396,7 +1632,7 @@ module(basename(__filename), function () {
 
         let invalidationBatch = await new IndexWriter(
           testDbAdapter,
-        ).createBatch(new URL(realm.url));
+        ).createBatch(new URL(realm.url), virtualNetwork);
         await invalidationBatch.invalidate([stagedAliasURL]);
 
         assert.ok(
@@ -1408,6 +1644,7 @@ module(basename(__filename), function () {
       test('batch invalidation tombstones all rows that share a matching file_alias', async function (assert) {
         let batch = await new IndexWriter(testDbAdapter).createBatch(
           new URL(realm.url),
+          virtualNetwork,
         );
 
         await batch.invalidate([new URL(`${testRealm}mango`)]);
@@ -1437,7 +1674,7 @@ module(basename(__filename), function () {
       });
 
       test('batch invalidation clears has_error and error_doc when tombstoning a previously-errored row', async function (assert) {
-        // The primary key is `(url, realm_url, type)` — no `realm_version` —
+        // The primary key is `(url, realm_url, type)` — no `generation` —
         // so a tombstone upsert always collides with the prior row for the
         // same URL. Any column NOT in the tombstone upsert's SET list keeps
         // its previous value. Before this guard, `has_error` and `error_doc`
@@ -1451,6 +1688,7 @@ module(basename(__filename), function () {
         //    instance-error entry and committing the batch.
         let errorBatch = await new IndexWriter(testDbAdapter).createBatch(
           new URL(realm.url),
+          virtualNetwork,
         );
         await errorBatch.updateEntry(mangoURL, {
           type: 'instance-error',
@@ -1480,6 +1718,7 @@ module(basename(__filename), function () {
         // 2. Tombstone the URL.
         let tombstoneBatch = await new IndexWriter(testDbAdapter).createBatch(
           new URL(realm.url),
+          virtualNetwork,
         );
         await tombstoneBatch.invalidate([mangoURL]);
         await tombstoneBatch.done();
@@ -1518,6 +1757,7 @@ module(basename(__filename), function () {
         // instead of silently writing the unusable row.
         let batch = await new IndexWriter(testDbAdapter).createBatch(
           new URL(realm.url),
+          virtualNetwork,
         );
 
         for (let badError of [
@@ -1558,15 +1798,18 @@ module(basename(__filename), function () {
           } as LooseSingleCardDocument),
         );
 
-        let { data: result } = await realm.realmIndexQueryEngine.searchCards({
-          filter: {
-            on: {
-              module: rri(`${testRealm}person`),
-              name: 'Person',
+        let { data: result } = await searchCardsForTest(
+          realm.realmIndexQueryEngine,
+          {
+            filter: {
+              on: {
+                module: rri(`${testRealm}person`),
+                name: 'Person',
+              },
+              eq: { firstName: 'Mang-Mang' },
             },
-            eq: { firstName: 'Mang-Mang' },
           },
-        });
+        );
         assert.strictEqual(result.length, 1, 'found updated document');
         assert.strictEqual(
           realm.realmIndexUpdater.stats.instancesIndexed,
@@ -1953,8 +2196,8 @@ module(basename(__filename), function () {
         await realm.write(
           'pet.gts',
           `
-          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, CardDef } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
           export class Pet extends CardDef {
             @field firstName = contains(StringField);
           }
@@ -1968,14 +2211,18 @@ module(basename(__filename), function () {
           export class Intentionally Thrown Error {}
         `,
         );
-        let { data: result } = await realm.realmIndexQueryEngine.searchCards({
-          filter: {
-            type: {
-              module: rri(`${testRealm}person`),
-              name: 'Person',
+        await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
+        let { data: result } = await searchCardsForTest(
+          realm.realmIndexQueryEngine,
+          {
+            filter: {
+              type: {
+                module: rri(`${testRealm}person`),
+                name: 'Person',
+              },
             },
           },
-        });
+        );
         assert.deepEqual(
           result,
           [],
@@ -1984,16 +2231,17 @@ module(basename(__filename), function () {
         await realm.write(
           'person.gts',
           `
-          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, CardDef } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
 
           export class Person extends CardDef {
             @field firstName = contains(StringField);
           }
         `,
         );
+        await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
         result = (
-          await realm.realmIndexQueryEngine.searchCards({
+          await searchCardsForTest(realm.realmIndexQueryEngine, {
             filter: {
               type: {
                 module: rri(`${testRealm}person`),
@@ -2022,7 +2270,7 @@ module(basename(__filename), function () {
         await realm.write(
           'filedef-mismatch.gts',
           `
-          import { FileDef as BaseFileDef } from "https://cardstack.com/base/file-api";
+          import { FileDef as BaseFileDef } from "@cardstack/base/file-api";
           import { buildName } from "./filedef-helper";
 
           export class FileDef extends BaseFileDef {
@@ -2152,6 +2400,71 @@ module(basename(__filename), function () {
         );
       });
 
+      test('the full-realm module pre-warm sweep runs on the from-scratch-spawned prerender job but not on incrementals', async function (assert) {
+        // `fancy-person.gts` is an orphan card module: it defines a CardDef
+        // (FancyPerson) but no instance adopts it and no other module
+        // imports it. Because nothing ever invalidates it, the only code
+        // path that can land it in the module cache is the realm-wide
+        // pre-warm sweep — which runs on the prerender_html job a from-scratch
+        // index spawns, and is skipped on incremental-spawned prerender jobs.
+        // Its presence in the `modules` table is therefore a deterministic
+        // signal of whether the sweep ran.
+        let orphanAlias = `${testRealm}fancy-person`;
+
+        async function isCached(moduleAlias: string): Promise<boolean> {
+          let rows = (await testDbAdapter.execute(
+            `SELECT url FROM modules WHERE url = $1 OR file_alias = $1`,
+            { bind: [moduleAlias] },
+          )) as { url: string }[];
+          return rows.length > 0;
+        }
+
+        // The realm was from-scratch indexed during setup, and its spawned
+        // prerender job (drained before the template snapshot) ran the
+        // realm-wide sweep, warming every card module — including the orphan
+        // that no instance references.
+        await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
+        assert.true(
+          await isCached(orphanAlias),
+          'the from-scratch-spawned prerender job caches the orphan module via the full-realm sweep',
+        );
+
+        // Clear the cache, then run an incremental on an unrelated instance.
+        // The incremental-spawned prerender job has no realm-wide sweep, and
+        // the orphan is neither rendered nor a dependency of the change, so it
+        // does not come back — only the realm-wide sweep (from-scratch) would
+        // re-cache a module that no instance consumes.
+        await testDbAdapter.execute('DELETE FROM modules');
+        // Baseline the HTML channel before the write so the settle below waits
+        // for the job this incremental spawns (fire-and-forget enqueue),
+        // rather than racing ahead past the already-resolved template jobs.
+        let prerenderBaseline = await maxPrerenderHtmlJobId(
+          testDbAdapter,
+          realm.url,
+        );
+        await realm.write(
+          'vangogh.json',
+          JSON.stringify({
+            data: {
+              attributes: { firstName: 'Van Gogh', hourlyRate: 51 },
+              meta: {
+                adoptsFrom: { module: rri('./person'), name: 'Person' },
+              },
+            },
+          }),
+        );
+        // Drain the incremental-spawned prerender job so its renders have had
+        // every chance to touch the cache: it re-warms only what vangogh
+        // consumes (Person), never the orphan.
+        await settlePrerenderHtmlJobs(testDbAdapter, realm.url, {
+          afterJobId: prerenderBaseline,
+        });
+        assert.false(
+          await isCached(orphanAlias),
+          'incremental skips the full-realm sweep, leaving the orphan module uncached',
+        );
+      });
+
       test('propagates module errors to dependent instances and recovers after missing modules are added', async function (assert) {
         await testDbAdapter.execute('DELETE FROM modules');
 
@@ -2176,6 +2489,7 @@ module(basename(__filename), function () {
           } as LooseSingleCardDocument),
         );
 
+        await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
         let brokenInstance = await realm.realmIndexQueryEngine.instance(
           new URL(`${testRealm}deep-card`),
         );
@@ -2196,7 +2510,7 @@ module(basename(__filename), function () {
         await realm.write(
           'deep-card.gts',
           `
-          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+          import { contains, field, CardDef } from "@cardstack/base/card-api";
           import { MiddleField } from "./middle-field";
 
           export class DeepCard extends CardDef {
@@ -2205,6 +2519,7 @@ module(basename(__filename), function () {
         `,
         );
 
+        await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
         brokenInstance = await realm.realmIndexQueryEngine.instance(
           new URL(`${testRealm}deep-card`),
         );
@@ -2230,7 +2545,7 @@ module(basename(__filename), function () {
         }
 
         try {
-          await realm.realmIndexQueryEngine.searchCards({
+          await searchCardsForTest(realm.realmIndexQueryEngine, {
             filter: {
               on: {
                 module: rri(`${testRealm}deep-card`),
@@ -2275,7 +2590,7 @@ module(basename(__filename), function () {
           await realm.write(
             'middle-field.gts',
             `
-          import { contains, field, FieldDef } from "https://cardstack.com/base/card-api";
+          import { contains, field, FieldDef } from "@cardstack/base/card-api";
           import { LeafField } from "./leaf-field";
 
           export class MiddleField extends FieldDef {
@@ -2293,6 +2608,7 @@ module(basename(__filename), function () {
             // expected while dependencies are missing
           }
 
+          await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
           brokenInstance = await realm.realmIndexQueryEngine.instance(
             new URL(`${testRealm}deep-card`),
           );
@@ -2318,7 +2634,7 @@ module(basename(__filename), function () {
           }
 
           try {
-            await realm.realmIndexQueryEngine.searchCards({
+            await searchCardsForTest(realm.realmIndexQueryEngine, {
               filter: {
                 on: {
                   module: rri(`${testRealm}deep-card`),
@@ -2378,8 +2694,8 @@ module(basename(__filename), function () {
         await realm.write(
           'leaf-field.gts',
           `
-          import { contains, field, FieldDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, FieldDef } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
 
           export class LeafField extends FieldDef {
             @field value = contains(StringField);
@@ -2426,8 +2742,8 @@ module(basename(__filename), function () {
         await realm.write(
           'address.gts',
           `
-          import { contains, field, FieldDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, FieldDef } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
           export class AddressField extends FieldDef {
             @field address = contains(StringField);
           }
@@ -2563,8 +2879,8 @@ module(basename(__filename), function () {
         await realm.write(
           'module-a.gts',
           `
-          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, CardDef } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
           import { value } from "./module-b";
 
           export class ModuleCard extends CardDef {
@@ -2679,8 +2995,8 @@ module(basename(__filename), function () {
         await realm.write(
           'person-rel.gts',
           `
-          import { CardDef, Component, contains, field, linksTo } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { CardDef, Component, contains, field, linksTo } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
 
           export class PersonRel extends CardDef {
             @field name = contains(StringField);
@@ -2714,7 +3030,7 @@ module(basename(__filename), function () {
         await realm.write(
           'connection-field.gts',
           `
-          import { Component, FieldDef, field, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
+          import { Component, FieldDef, field, linksTo, linksToMany } from "@cardstack/base/card-api";
           import { PersonRel } from "./person-rel";
 
           export class ConnectionField extends FieldDef {
@@ -2753,7 +3069,7 @@ module(basename(__filename), function () {
         await realm.write(
           'relationship-consumer.gts',
           `
-          import { CardDef, Component, contains, field } from "https://cardstack.com/base/card-api";
+          import { CardDef, Component, contains, field } from "@cardstack/base/card-api";
           import { ConnectionField } from "./connection-field";
 
           export class RelationshipConsumer extends CardDef {
@@ -2944,13 +3260,131 @@ module(basename(__filename), function () {
         );
       });
 
+      test('invalidates a consumer when the dotted-id instance it links to is written', async function (assert) {
+        await realm.write(
+          'dotted-link.gts',
+          `
+          import { CardDef, Component, contains, field, linksTo } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
+
+          export class DottedTarget extends CardDef {
+            @field name = contains(StringField);
+
+            static atom = class Atom extends Component<typeof this> {
+              <template>
+                <p><@fields.name /></p>
+              </template>
+            }
+            static embedded = class Embedded extends Component<typeof this> {
+              <template>
+                <p><@fields.name /></p>
+              </template>
+            }
+            static fitted = class Fitted extends Component<typeof this> {
+              <template>
+                <p><@fields.name /></p>
+              </template>
+            }
+            static isolated = class Isolated extends Component<typeof this> {
+              <template>
+                <p><@fields.name /></p>
+              </template>
+            }
+          }
+
+          export class DottedConsumer extends CardDef {
+            @field target = linksTo(() => DottedTarget);
+
+            static atom = class Atom extends Component<typeof this> {
+              <template>
+                <@fields.target />
+              </template>
+            }
+            static embedded = class Embedded extends Component<typeof this> {
+              <template>
+                <@fields.target />
+              </template>
+            }
+            static fitted = class Fitted extends Component<typeof this> {
+              <template>
+                <@fields.target />
+              </template>
+            }
+            static isolated = class Isolated extends Component<typeof this> {
+              <template>
+                <@fields.target />
+              </template>
+            }
+          }
+        `,
+        );
+
+        // A dot in a card id is part of the name: this instance's id is
+        // `hello.test`, and its index row is keyed on `hello.test.json`.
+        let dottedTarget = (name: string) =>
+          JSON.stringify({
+            data: {
+              attributes: { name },
+              meta: {
+                adoptsFrom: {
+                  module: rri('./dotted-link'),
+                  name: 'DottedTarget',
+                },
+              },
+            },
+          } as LooseSingleCardDocument);
+
+        await realm.write('hello.test.json', dottedTarget('Dotted Target'));
+        await realm.write(
+          'dotted-consumer.json',
+          JSON.stringify({
+            data: {
+              relationships: {
+                target: { links: { self: './hello.test' } },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: rri('./dotted-link'),
+                  name: 'DottedConsumer',
+                },
+              },
+            },
+          } as LooseSingleCardDocument),
+        );
+
+        let deps = await depsFor(`${testRealm}dotted-consumer.json`);
+        assert.ok(
+          deps.includes(`${testRealm}hello.test.json`),
+          `deps include the dotted target's row URL (deps: ${JSON.stringify(
+            deps,
+          )})`,
+        );
+        assert.notOk(
+          deps.includes(`${testRealm}hello.test`),
+          'the dotted target is recorded at its row URL rather than its bare id',
+        );
+
+        let beforeInvalidation = await indexedAtFor(
+          `${testRealm}dotted-consumer.json`,
+        );
+        await realm.write(
+          'hello.test.json',
+          dottedTarget('Dotted Target Updated'),
+        );
+        assert.notStrictEqual(
+          await indexedAtFor(`${testRealm}dotted-consumer.json`),
+          beforeInvalidation,
+          'writing the dotted-id instance invalidates the consumer linking to it',
+        );
+      });
+
       // remove this once we have a query based relationship invalidation strategy
       test('does not capture deps from query-backed relationships', async function (assert) {
         await realm.write(
           'query-rel-target.gts',
           `
-            import { CardDef, Component, contains, field } from "https://cardstack.com/base/card-api";
-            import StringField from "https://cardstack.com/base/string";
+            import { CardDef, Component, contains, field } from "@cardstack/base/card-api";
+            import StringField from "@cardstack/base/string";
 
             export class QueryRelTarget extends CardDef {
               @field cardTitle = contains(StringField);
@@ -2967,8 +3401,8 @@ module(basename(__filename), function () {
         await realm.write(
           'query-rel-consumer.gts',
           `
-            import { CardDef, Component, contains, field, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
-            import StringField from "https://cardstack.com/base/string";
+            import { CardDef, Component, contains, field, linksTo, linksToMany } from "@cardstack/base/card-api";
+            import StringField from "@cardstack/base/string";
 
             export class QueryRelConsumer extends CardDef {
               @field cardTitle = contains(StringField);
@@ -3101,8 +3535,8 @@ module(basename(__filename), function () {
         await realm.write(
           'query-rel-overlap-target.gts',
           `
-            import { CardDef, Component, contains, field } from "https://cardstack.com/base/card-api";
-            import StringField from "https://cardstack.com/base/string";
+            import { CardDef, Component, contains, field } from "@cardstack/base/card-api";
+            import StringField from "@cardstack/base/string";
 
             export class QueryRelOverlapTarget extends CardDef {
               @field cardTitle = contains(StringField);
@@ -3119,7 +3553,7 @@ module(basename(__filename), function () {
         await realm.write(
           'query-rel-overlap-consumer.gts',
           `
-            import { CardDef, Component, field, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
+            import { CardDef, Component, field, linksTo, linksToMany } from "@cardstack/base/card-api";
 
             export class QueryRelOverlapConsumer extends CardDef {
               @field direct = linksTo(() => CardDef);
@@ -3240,8 +3674,8 @@ module(basename(__filename), function () {
         await realm.write(
           'second-rel.gts',
           `
-          import { CardDef, Component, contains, field } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { CardDef, Component, contains, field } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
 
           export class SecondRel extends CardDef {
             @field name = contains(StringField);
@@ -3293,8 +3727,8 @@ module(basename(__filename), function () {
         await realm.write(
           'first-rel.gts',
           `
-          import { CardDef, Component, contains, field, linksTo } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { CardDef, Component, contains, field, linksTo } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
           import { SecondRel } from "./second-rel";
 
           export class FirstRel extends CardDef {
@@ -3352,7 +3786,7 @@ module(basename(__filename), function () {
         await realm.write(
           'css-relationship-consumer.gts',
           `
-          import { CardDef, Component, field, linksTo } from "https://cardstack.com/base/card-api";
+          import { CardDef, Component, field, linksTo } from "@cardstack/base/card-api";
           import { FirstRel } from "./first-rel";
 
           export class CssRelationshipConsumer extends CardDef {
@@ -3456,8 +3890,8 @@ module(basename(__filename), function () {
         await realm.write(
           'loop-card.gts',
           `
-          import { CardDef, Component, contains, field, linksTo } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { CardDef, Component, contains, field, linksTo } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
 
           export class LoopCard extends CardDef {
             @field name = contains(StringField);
@@ -3493,7 +3927,7 @@ module(basename(__filename), function () {
         await realm.write(
           'loop-consumer.gts',
           `
-          import { CardDef, Component, field, linksTo } from "https://cardstack.com/base/card-api";
+          import { CardDef, Component, field, linksTo } from "@cardstack/base/card-api";
           import { LoopCard } from "./loop-card";
 
           export class LoopConsumer extends CardDef {
@@ -3629,7 +4063,7 @@ module(basename(__filename), function () {
         await realm.write(
           'relationship-parent.gts',
           `
-          import { CardDef, Component, field, linksTo } from "https://cardstack.com/base/card-api";
+          import { CardDef, Component, field, linksTo } from "@cardstack/base/card-api";
 
           export class RelationshipParent extends CardDef {
             @field child = linksTo(() => CardDef);
@@ -3661,7 +4095,7 @@ module(basename(__filename), function () {
         await realm.write(
           'relationship-grandparent.gts',
           `
-          import { CardDef, Component, field, linksTo } from "https://cardstack.com/base/card-api";
+          import { CardDef, Component, field, linksTo } from "@cardstack/base/card-api";
 
           export class RelationshipGrandParent extends CardDef {
             @field parent = linksTo(() => CardDef);
@@ -3739,36 +4173,43 @@ module(basename(__filename), function () {
           } as LooseSingleCardDocument),
         );
 
+        // child-error is the only entry in indexing-error state — its
+        // adoptsFrom module is missing, so module → instance propagation
+        // demotes it. parent-rel and grandparent-rel each linksTo a
+        // downstream card; instance → instance propagation terminates at
+        // the first hop, so the consumers stay indexable. The broken slot
+        // renders the placeholder inline.
+        await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
+        let childError = await realm.realmIndexQueryEngine.instance(
+          new URL(`${testRealm}child-error`),
+        );
+        assert.strictEqual(
+          childError?.type,
+          'instance-error',
+          'child-error inherits its missing adoptsFrom module via module → instance propagation',
+        );
         let parentBefore = await realm.realmIndexQueryEngine.instance(
           new URL(`${testRealm}parent-rel`),
         );
         assert.strictEqual(
           parentBefore?.type,
-          'instance-error',
-          'parent is in error while relationship target is broken',
+          'instance',
+          'parent stays indexable while its linksTo target is broken — broken slot renders the placeholder',
         );
         let grandParentBefore = await realm.realmIndexQueryEngine.instance(
           new URL(`${testRealm}grandparent-rel`),
         );
         assert.strictEqual(
           grandParentBefore?.type,
-          'instance-error',
-          'grandparent is in error while downstream relationship target is broken',
+          'instance',
+          'grandparent stays indexable while its downstream linksTo chain reaches a broken card',
         );
-        if (grandParentBefore?.type === 'instance-error') {
-          assert.ok(
-            hasErrorDetail(grandParentBefore.error, 'missing-child'),
-            'two-hop relationship error details include missing child module context',
-          );
-        } else {
-          assert.ok(false, 'expected grandparent to be an instance error');
-        }
 
         await realm.write(
           'missing-child.gts',
           `
-          import { CardDef, contains, field } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { CardDef, contains, field } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
 
           export class MissingChild extends CardDef {
             @field title = contains(StringField);
@@ -3776,13 +4217,22 @@ module(basename(__filename), function () {
         `,
         );
 
+        await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
+        let childErrorAfter = await realm.realmIndexQueryEngine.instance(
+          new URL(`${testRealm}child-error`),
+        );
+        assert.strictEqual(
+          childErrorAfter?.type,
+          'instance',
+          'child-error recovers once the missing adoptsFrom module is created',
+        );
         let parentAfter = await realm.realmIndexQueryEngine.instance(
           new URL(`${testRealm}parent-rel`),
         );
         assert.strictEqual(
           parentAfter?.type,
           'instance',
-          'parent repairs after relationship target is fixed',
+          'parent stays a clean instance after the relationship target recovers',
         );
         let grandParentAfter = await realm.realmIndexQueryEngine.instance(
           new URL(`${testRealm}grandparent-rel`),
@@ -3790,7 +4240,7 @@ module(basename(__filename), function () {
         assert.strictEqual(
           grandParentAfter?.type,
           'instance',
-          'grandparent repairs after downstream relationship target is fixed',
+          'grandparent stays a clean instance after the downstream target recovers',
         );
 
         let parentDeps = await depsFor(`${testRealm}parent-rel.json`);
@@ -3846,7 +4296,7 @@ module(basename(__filename), function () {
         await realm.write(
           'filedef-mismatch.gts',
           `
-          import { FileDef as BaseFileDef } from "https://cardstack.com/base/file-api";
+          import { FileDef as BaseFileDef } from "@cardstack/base/file-api";
           import { MissingChild } from "./missing-child";
 
           export class FileDef extends BaseFileDef {
@@ -3858,8 +4308,8 @@ module(basename(__filename), function () {
         await realm.write(
           'relationship-file-parent.gts',
           `
-          import { CardDef, Component, field, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
-          import { FileDef } from "https://cardstack.com/base/file-api";
+          import { CardDef, Component, field, linksTo, linksToMany } from "@cardstack/base/card-api";
+          import { FileDef } from "@cardstack/base/file-api";
 
           export class RelationshipFileParent extends CardDef {
             @field attachment = linksTo(() => FileDef);
@@ -3890,7 +4340,7 @@ module(basename(__filename), function () {
         await realm.write(
           'relationship-file-grandparent.gts',
           `
-          import { CardDef, Component, field, linksTo } from "https://cardstack.com/base/card-api";
+          import { CardDef, Component, field, linksTo } from "@cardstack/base/card-api";
 
           export class RelationshipFileGrandParent extends CardDef {
             @field parent = linksTo(() => CardDef);
@@ -3989,38 +4439,26 @@ module(basename(__filename), function () {
           'FileDef target error doc includes file extract failure details',
         );
 
+        // Relationship consumers stay indexable while a target is broken —
+        // the same first-hop termination card targets have: the error lives
+        // on the target's own rows and the consumer's broken slot renders
+        // the placeholder inline.
         let parentBefore = await realm.realmIndexQueryEngine.instance(
           new URL(`${testRealm}parent-file-rel`),
         );
         assert.strictEqual(
           parentBefore?.type,
-          'instance-error',
-          'first-degree relationship consumer is in error while FileDef target is broken',
+          'instance',
+          'first-degree relationship consumer stays indexable while FileDef target is broken',
         );
         let grandParentBefore = await realm.realmIndexQueryEngine.instance(
           new URL(`${testRealm}grandparent-file-rel`),
         );
         assert.strictEqual(
           grandParentBefore?.type,
-          'instance-error',
-          'second-degree relationship consumer is in error while delegated FileDef target is broken',
+          'instance',
+          'second-degree relationship consumer stays indexable while delegated FileDef target is broken',
         );
-        if (grandParentBefore?.type === 'instance-error') {
-          let delegatedHasExpectedErrorDetail =
-            hasErrorDetail(
-              grandParentBefore.error,
-              'Received HTTP 404 from server',
-            ) || hasErrorDetail(grandParentBefore.error, 'missing-child');
-          assert.ok(
-            delegatedHasExpectedErrorDetail,
-            'delegated relationship consumer receives nested FileDef error details',
-          );
-        } else {
-          assert.ok(
-            false,
-            'expected delegated relationship consumer error details',
-          );
-        }
 
         await realm.write(
           'filedef-mismatch.gts',
@@ -4028,7 +4466,7 @@ module(basename(__filename), function () {
           import {
             FileDef as BaseFileDef,
             FileContentMismatchError,
-          } from "https://cardstack.com/base/file-api";
+          } from "@cardstack/base/file-api";
 
           export class FileDef extends BaseFileDef {
             static async extractAttributes() {
@@ -4096,8 +4534,8 @@ module(basename(__filename), function () {
         await realm.write(
           'file-relationship-consumer.gts',
           `
-          import { CardDef, Component, field, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
-          import { FileDef } from "https://cardstack.com/base/file-api";
+          import { CardDef, Component, field, linksTo, linksToMany } from "@cardstack/base/card-api";
+          import { FileDef } from "@cardstack/base/file-api";
 
           export class FileRelationshipConsumer extends CardDef {
             @field primaryFile = linksTo(() => FileDef);
@@ -4181,18 +4619,52 @@ module(basename(__filename), function () {
         );
       });
 
+      test('file meta serves write-time contentHash/contentSize over indexed values', async function (assert) {
+        let content = 'bytes behind the file meta doc';
+        await realm.write('meta-note.txt', content);
+
+        // Emulate the state a mid-batch render observes: the production
+        // index row still carries the previous bytes' content values while
+        // `realm_file_meta` (written in the same critical section as the
+        // bytes) already has the current ones. The pristine resource is
+        // dropped so the served doc must choose between the indexed search
+        // doc and the persisted meta.
+        await testDbAdapter.execute(
+          `UPDATE boxel_index SET search_doc = COALESCE(search_doc, '{}'::jsonb) || '{"contentHash":"stale-hash","contentSize":1}'::jsonb, pristine_doc = NULL WHERE url = '${testRealm}meta-note.txt' AND type = 'file'`,
+        );
+
+        let response = await fetch(`${testRealm}meta-note.txt`, {
+          headers: { Accept: SupportedMimeType.FileMeta },
+        });
+        assert.strictEqual(response.status, 200, 'file meta response is ok');
+        let doc = (await response.json()) as LooseSingleCardDocument;
+        assert.strictEqual(
+          doc.data.attributes?.contentHash,
+          createHash('md5').update(content).digest('hex'),
+          'contentHash reflects the bytes on disk, not the indexed value',
+        );
+        assert.strictEqual(
+          doc.data.attributes?.contentSize,
+          content.length,
+          'contentSize reflects the bytes on disk, not the indexed value',
+        );
+      });
+
       test('can incrementally index deleted instance', async function (assert) {
         await realm.delete('mango.json');
 
-        let { data: result } = await realm.realmIndexQueryEngine.searchCards({
-          filter: {
-            on: {
-              module: rri(`${testRealm}person`),
-              name: 'Person',
+        let { data: result } = await searchCardsForTest(
+          realm.realmIndexQueryEngine,
+          {
+            filter: {
+              on: {
+                module: rri(`${testRealm}person`),
+                name: 'Person',
+              },
+              eq: { firstName: 'Mango' },
             },
-            eq: { firstName: 'Mango' },
           },
-        });
+        );
         assert.strictEqual(result.length, 0, 'found no documents');
         assert.strictEqual(
           realm.realmIndexUpdater.stats.instancesIndexed,
@@ -4210,8 +4682,8 @@ module(basename(__filename), function () {
         await realm.write(
           'post.gts',
           `
-        import { contains, linksTo, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+        import { contains, linksTo, field, CardDef, Component } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
         import { Person } from "./person";
 
         export class Post extends CardDef {
@@ -4232,15 +4704,18 @@ module(basename(__filename), function () {
       `,
         );
 
-        let { data: result } = await realm.realmIndexQueryEngine.searchCards({
-          filter: {
-            on: {
-              module: rri(`${testRealm}post`),
-              name: 'Post',
+        let { data: result } = await searchCardsForTest(
+          realm.realmIndexQueryEngine,
+          {
+            filter: {
+              on: {
+                module: rri(`${testRealm}post`),
+                name: 'Post',
+              },
+              eq: { nickName: 'Van Gogh-poo' },
             },
-            eq: { nickName: 'Van Gogh-poo' },
           },
-        });
+        );
         assert.strictEqual(result.length, 1, 'found updated document');
       });
 
@@ -4248,8 +4723,8 @@ module(basename(__filename), function () {
         await realm.write(
           'pet.gts',
           `
-          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, CardDef } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
           import { Name } from "./name";
 
           export class Pet extends CardDef {
@@ -4278,6 +4753,7 @@ module(basename(__filename), function () {
           }),
         );
 
+        await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
         let response = await fetch(`${testRealm}pet-apple`, {
           headers: { Accept: SupportedMimeType.CardJson },
         });
@@ -4296,8 +4772,8 @@ module(basename(__filename), function () {
         await realm.write(
           'name.gts',
           `
-          import { contains, field, FieldDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, FieldDef } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
 
           export class Name extends FieldDef {
             @field firstName = contains(StringField);
@@ -4306,6 +4782,7 @@ module(basename(__filename), function () {
         `,
         );
 
+        await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
         response = await fetch(`${testRealm}pet-apple`, {
           headers: { Accept: SupportedMimeType.CardJson },
         });
@@ -4326,7 +4803,7 @@ module(basename(__filename), function () {
         await realm.write(
           'pet.gts',
           `
-          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+          import { contains, field, CardDef } from "@cardstack/base/card-api";
           import { Name } from "./name";
 
           export class Pet extends CardDef {
@@ -4367,8 +4844,8 @@ module(basename(__filename), function () {
         await realm.write(
           'name.gts',
           `
-          import { contains, field, FieldDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, FieldDef } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
 
           export class Name extends FieldDef {
             @field firstName = contains(StringField);
@@ -4418,8 +4895,8 @@ module(basename(__filename), function () {
         await realm.write(
           'person.gts',
           `
-          import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, Component, CardDef } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
 
           export class Person extends CardDef {
             @field firstName = contains(StringField);
@@ -4438,29 +4915,37 @@ module(basename(__filename), function () {
         `,
         );
 
-        let { data: result } = await realm.realmIndexQueryEngine.searchCards({
-          filter: {
-            on: {
-              module: rri(`${testRealm}post`),
-              name: 'Post',
+        await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
+        let { data: result } = await searchCardsForTest(
+          realm.realmIndexQueryEngine,
+          {
+            filter: {
+              on: {
+                module: rri(`${testRealm}post`),
+                name: 'Post',
+              },
+              eq: { 'author.nickName': 'Van Gogh-poo' },
             },
-            eq: { 'author.nickName': 'Van Gogh-poo' },
           },
-        });
+        );
         assert.strictEqual(result.length, 1, 'found updated document');
       });
 
       test('can incrementally index instance that depends on deleted card source', async function (assert) {
         await realm.delete('post.gts');
+        await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
         {
-          let { data: result } = await realm.realmIndexQueryEngine.searchCards({
-            filter: {
-              type: {
-                module: rri(`${testRealm}post`),
-                name: 'Post',
+          let { data: result } = await searchCardsForTest(
+            realm.realmIndexQueryEngine,
+            {
+              filter: {
+                type: {
+                  module: rri(`${testRealm}post`),
+                  name: 'Post',
+                },
               },
             },
-          });
+          );
           assert.deepEqual(
             result,
             [],
@@ -4482,10 +4967,23 @@ module(basename(__filename), function () {
             actual.error.errorDetail.isCardError,
             'error is marked as a card error',
           );
-          assert.strictEqual(
+          // The render surfaces the module 404 both as the primary error and
+          // as a captured browser console entry; only the latter may ride in
+          // additionalErrors — never a dependency error document.
+          let additionalErrors = Array.isArray(
             actual.error.errorDetail.additionalErrors,
-            null,
-            'no additional dependency errors are present',
+          )
+            ? (actual.error.errorDetail.additionalErrors as {
+                title?: string;
+              }[])
+            : [];
+          assert.true(
+            additionalErrors.every(
+              (additionalError) => additionalError.title === 'Console error',
+            ),
+            `no additional dependency errors are present: ${JSON.stringify(
+              additionalErrors,
+            )}`,
           );
           assert.strictEqual(
             actual.error.errorDetail.message,
@@ -4514,8 +5012,8 @@ module(basename(__filename), function () {
         await realm.write(
           'post.gts',
           `
-        import { contains, linksTo, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+        import { contains, linksTo, field, CardDef, Component } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
         import { Person } from "./person";
 
         export class Post extends CardDef {
@@ -4530,16 +5028,138 @@ module(basename(__filename), function () {
       `,
         );
         {
-          let { data: result } = await realm.realmIndexQueryEngine.searchCards({
-            filter: {
-              on: {
-                module: rri(`${testRealm}post`),
-                name: 'Post',
+          let { data: result } = await searchCardsForTest(
+            realm.realmIndexQueryEngine,
+            {
+              filter: {
+                on: {
+                  module: rri(`${testRealm}post`),
+                  name: 'Post',
+                },
+                eq: { nickName: 'Van Gogh-poo' },
               },
-              eq: { nickName: 'Van Gogh-poo' },
             },
-          });
+          );
           assert.strictEqual(result.length, 1, 'found the post instance');
+        }
+      });
+
+      test('terminates instance→instance error doc propagation at the first linksTo hop', async function (assert) {
+        // Baseline: hassan (PetPerson, linksTo Pet, links to ringo) indexes
+        // cleanly against the as-built fixture. Used as the post-recovery
+        // reference state below.
+        let hassanBaseline = await realm.realmIndexQueryEngine.instance(
+          new URL(`${testRealm}hassan`),
+        );
+        assert.strictEqual(
+          hassanBaseline?.type,
+          'instance',
+          'hassan is a clean instance before any breakage',
+        );
+
+        // Put ringo into instance-error state by pointing its `adoptsFrom` at
+        // a module that does not exist. Pet.gts itself stays clean, so the
+        // only error in play is at the instance level.
+        await realm.write(
+          'ringo.json',
+          JSON.stringify({
+            data: {
+              attributes: { firstName: 'Ringo' },
+              meta: {
+                adoptsFrom: {
+                  module: rri('./missing-pet-target'),
+                  name: 'MissingPet',
+                },
+              },
+            },
+          } as LooseSingleCardDocument),
+        );
+
+        let ringoErrored = await realm.realmIndexQueryEngine.instance(
+          new URL(`${testRealm}ringo`),
+        );
+        assert.strictEqual(
+          ringoErrored?.type,
+          'instance-error',
+          'ringo is in error state once its adoptsFrom module is missing',
+        );
+        if (ringoErrored?.type === 'instance-error') {
+          assert.ok(
+            hasErrorDetail(ringoErrored.error, 'missing-pet-target'),
+            'ringo error doc names the missing module — used below as the inheritance probe',
+          );
+        }
+
+        // hassan (linksTo ringo) must NOT inherit ringo's error doc — and
+        // critically, must NOT itself be in error. The broken slot renders
+        // the placeholder inline; hassan stays a fully indexable instance.
+        let hassanWithBrokenLink = await realm.realmIndexQueryEngine.instance(
+          new URL(`${testRealm}hassan`),
+        );
+        assert.strictEqual(
+          hassanWithBrokenLink?.type,
+          'instance',
+          'hassan with a broken linksTo target is a clean instance, not instance-error — broken slot renders the placeholder inline',
+        );
+        let hassanDeps = hassanWithBrokenLink?.deps ?? [];
+        assert.ok(
+          hassanDeps.some(
+            (dep) =>
+              dep === `${testRealm}ringo.json` || dep === `${testRealm}ringo`,
+          ),
+          'hassan deps still include ringo so invalidation fan-out continues to reach hassan when ringo changes',
+        );
+
+        // Recovery: restoring ringo re-indexes hassan via the
+        // `itemsThatReference` fan-out, and hassan returns to a clean
+        // instance entry.
+        await realm.write(
+          'ringo.json',
+          JSON.stringify({
+            data: {
+              attributes: { firstName: 'Ringo' },
+              meta: {
+                adoptsFrom: { module: rri('./pet'), name: 'Pet' },
+              },
+            },
+          } as LooseSingleCardDocument),
+        );
+
+        let hassanRecovered = await realm.realmIndexQueryEngine.instance(
+          new URL(`${testRealm}hassan`),
+        );
+        assert.strictEqual(
+          hassanRecovered?.type,
+          'instance',
+          'hassan recovers to a clean instance once ringo is restored',
+        );
+      });
+
+      test('preserves module→instance error propagation alongside the instance→instance terminator', async function (assert) {
+        // Companion to the instance→instance terminator above: when a module
+        // breaks, instances backed by that module must still inherit the
+        // module error in `additionalErrors`. Only the instance→instance hop
+        // terminates.
+        await realm.write(
+          'pet.gts',
+          `import { OnlyExistsInDreams } from "./does-not-exist";
+           export class Pet extends OnlyExistsInDreams {}`,
+        );
+
+        await settlePrerenderHtmlJobs(testDbAdapter, realm.url);
+        let ringoAfterModuleBreak = await realm.realmIndexQueryEngine.instance(
+          new URL(`${testRealm}ringo`),
+        );
+        assert.strictEqual(
+          ringoAfterModuleBreak?.type,
+          'instance-error',
+          'ringo cascades to instance-error via module→instance propagation',
+        );
+        if (ringoAfterModuleBreak?.type === 'instance-error') {
+          assert.ok(
+            hasErrorDetail(ringoAfterModuleBreak.error, 'does-not-exist'),
+            'module→instance: ringo inherits Pet module error in additionalErrors',
+          );
         }
       });
 
@@ -4548,8 +5168,8 @@ module(basename(__filename), function () {
         mapOfWrites.set(
           'place.gts',
           `
-        import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+        import { contains, field, CardDef } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
         export class Place extends CardDef {
           @field name = contains(StringField);
         }
@@ -4558,8 +5178,8 @@ module(basename(__filename), function () {
         mapOfWrites.set(
           'country.gts',
           `
-        import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+        import { contains, field, CardDef } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
         export class Country extends CardDef {
           @field name = contains(StringField);
         }
@@ -4597,8 +5217,8 @@ module(basename(__filename), function () {
         mapOfWrites.set(
           'city.gts',
           `
-        import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+        import { contains, field, CardDef } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
         export class City extends CardDef {
           @field name = contains(StringField);
         }
@@ -4716,6 +5336,214 @@ module(basename(__filename), function () {
           undefined,
           'deleted file is not retrievable',
         );
+      });
+    });
+
+    module('per-file failure isolation', function (hooks) {
+      let realm: Realm;
+      let testDbAdapter: PgAdapter;
+      // URL substring the wrapper fails prerender visits for; unset =
+      // pass everything through to the real test prerenderer.
+      let failVisitsFor: string | undefined;
+
+      let delegatePromise: Promise<Prerenderer> | undefined;
+      let delegate = () => (delegatePromise ??= getTestPrerenderer());
+      // A transport-level failure (the prerender request aborting before a
+      // response exists) can only be simulated at the Prerenderer seam —
+      // the in-band error paths all require a response document.
+      let interceptingPrerenderer: Prerenderer = {
+        async prerenderModule(args) {
+          return (await delegate()).prerenderModule(args);
+        },
+        async prerenderVisit(args) {
+          if (failVisitsFor && args.url.includes(failVisitsFor)) {
+            throw new Error(
+              'Prerender request to /prerender-visit aborted after 120000ms (simulated transport failure)',
+            );
+          }
+          return (await delegate()).prerenderVisit(args);
+        },
+        async runCommand(args) {
+          return (await delegate()).runCommand(args);
+        },
+        async releaseBatch(args) {
+          await (await delegate()).releaseBatch?.(args);
+        },
+      };
+
+      hooks.beforeEach(function () {
+        failVisitsFor = undefined;
+      });
+
+      setupPermissionedRealmCached(hooks, {
+        mode: 'beforeEach',
+        realmURL: testRealm,
+        permissions: {
+          '*': ['read'],
+        },
+        fileSystem: makeTestRealmFileSystem(),
+        prerenderer: interceptingPrerenderer,
+        onRealmSetup({ dbAdapter, testRealm: r }) {
+          testDbAdapter = dbAdapter;
+          realm = r;
+        },
+      });
+
+      function mangoDoc(firstName: string): LooseSingleCardDocument {
+        return {
+          data: {
+            attributes: { firstName },
+            meta: {
+              adoptsFrom: {
+                module: rri('./person'),
+                name: 'Person',
+              },
+            },
+          },
+        };
+      }
+
+      async function mangoIndexRows() {
+        return (await testDbAdapter.execute(
+          `SELECT type, has_error, is_deleted,
+                  (pristine_doc IS NOT NULL) as has_pristine_doc,
+                  error_doc->>'message' as error_message
+           FROM boxel_index
+           WHERE url = '${testRealm}mango.json'
+           ORDER BY type`,
+        )) as {
+          type: string;
+          has_error: boolean;
+          is_deleted: boolean | null;
+          has_pristine_doc: boolean;
+          error_message: string | null;
+        }[];
+      }
+
+      test('a transport-level visit failure isolates to its file: the batch still commits and the card keeps last-known-good state under an error row', async function (assert) {
+        failVisitsFor = 'mango.json';
+        await realm.write('mango.json', JSON.stringify(mangoDoc('Mang-Mang')));
+
+        let rows = await mangoIndexRows();
+        assert.deepEqual(
+          rows.map((row) => row.type).sort(),
+          ['file', 'instance'],
+          'both the file and instance rows exist for the failed card',
+        );
+        for (let row of rows) {
+          assert.true(
+            row.has_error,
+            `the ${row.type} row carries the failure as an error`,
+          );
+          assert.notOk(
+            row.is_deleted,
+            `the ${row.type} row is not tombstoned by the transient failure`,
+          );
+          assert.ok(
+            row.error_message?.includes('simulated transport failure'),
+            `the ${row.type} row's error_doc carries the underlying failure text`,
+          );
+        }
+        let instanceRow = rows.find((row) => row.type === 'instance')!;
+        assert.true(
+          instanceRow.has_pristine_doc,
+          'the instance row preserves the last-known-good serialization',
+        );
+
+        // The failure was isolated: the same job's other work still
+        // committed. A sibling card written in the same realm version
+        // remains searchable, proving batch.done() ran.
+        let { data: others } = await searchCardsForTest(
+          realm.realmIndexQueryEngine,
+          {
+            filter: {
+              on: { module: rri(`${testRealm}person`), name: 'Person' },
+              eq: { firstName: 'Van Gogh' },
+            },
+          },
+        );
+        assert.strictEqual(
+          others.length,
+          1,
+          'sibling cards are still searchable after the failed visit',
+        );
+
+        // Recovery: once the transport failure clears, a rewrite indexes
+        // normally and the error state washes out.
+        failVisitsFor = undefined;
+        await realm.write(
+          'mango.json',
+          JSON.stringify(mangoDoc('Mango Recovered')),
+        );
+        rows = await mangoIndexRows();
+        assert.true(
+          rows.every((row) => !row.has_error),
+          'the error state clears once the visit succeeds',
+        );
+        let { data: recovered } = await searchCardsForTest(
+          realm.realmIndexQueryEngine,
+          {
+            filter: {
+              on: { module: rri(`${testRealm}person`), name: 'Person' },
+              eq: { firstName: 'Mango Recovered' },
+            },
+          },
+        );
+        assert.strictEqual(
+          recovered.length,
+          1,
+          'the recovered card is searchable with its new content',
+        );
+      });
+
+      test('a failed visit for a brand-new card records an instance error via the source-parse fallback', async function (assert) {
+        // A brand-new file has no prior index row, so the batch's
+        // tombstoned-types oracle can't identify it as a card — this is
+        // the path where the source re-parse fallback must decide.
+        failVisitsFor = 'pistachio.json';
+        await realm.write(
+          'pistachio.json',
+          JSON.stringify({
+            data: {
+              attributes: { firstName: 'Pistachio' },
+              meta: {
+                adoptsFrom: {
+                  module: rri('./person'),
+                  name: 'Person',
+                },
+              },
+            },
+          } as LooseSingleCardDocument),
+        );
+
+        let rows = (await testDbAdapter.execute(
+          `SELECT type, has_error, is_deleted,
+                  error_doc->>'message' as error_message
+           FROM boxel_index
+           WHERE url = '${testRealm}pistachio.json'
+           ORDER BY type`,
+        )) as {
+          type: string;
+          has_error: boolean;
+          is_deleted: boolean | null;
+          error_message: string | null;
+        }[];
+        assert.deepEqual(
+          rows.map((row) => row.type).sort(),
+          ['file', 'instance'],
+          'both file and instance error rows are recorded for the new card',
+        );
+        for (let row of rows) {
+          assert.true(
+            row.has_error,
+            `the ${row.type} row carries the failure as an error`,
+          );
+          assert.notOk(row.is_deleted, `the ${row.type} row is not deleted`);
+          assert.ok(
+            row.error_message?.includes('simulated transport failure'),
+            `the ${row.type} row's error_doc carries the underlying failure text`,
+          );
+        }
       });
     });
   });

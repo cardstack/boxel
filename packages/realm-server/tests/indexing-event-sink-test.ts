@@ -1,7 +1,8 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import type { DBAdapter, PgPrimitive } from '@cardstack/runtime-common';
-import { IndexingEventSink } from '../indexing-event-sink';
+import { IndexingEventSink } from '../indexing-event-sink.ts';
 
 interface RecordedExecute {
   sql: string;
@@ -44,7 +45,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   test('tracks active indexing from start through file visits to finish', function (assert) {
     let sink = new IndexingEventSink();
 
@@ -320,6 +321,93 @@ module(basename(__filename), function () {
           [99, 5, 5],
           'final write has filesCompleted=5, total_files=5',
         );
+      } finally {
+        sink.dispose();
+      }
+    });
+
+    test('a prerender_html job feeds the shared sink: side-by-side snapshot state plus its own job_progress row', async function (assert) {
+      let { adapter, executes } = makeRecordingAdapter();
+      let sink = new IndexingEventSink({ flushIntervalMs: 1000 });
+      sink.setAdapter(adapter);
+      try {
+        sink.handleEvent({
+          type: 'indexing-started',
+          realmURL: 'http://example.com/realm/',
+          jobId: 300,
+          jobType: 'incremental',
+          totalFiles: 4,
+          files: [],
+        });
+        sink.handleEvent({
+          type: 'indexing-started',
+          realmURL: 'http://example.com/realm/',
+          jobId: 301,
+          jobType: 'prerender_html',
+          totalFiles: 2,
+          files: [],
+        });
+
+        let { active } = sink.getSnapshot();
+        assert.deepEqual(
+          active.map((a) => [a.jobId, a.jobType]),
+          [
+            [300, 'incremental'],
+            [301, 'prerender_html'],
+          ],
+          'index and prerender jobs are tracked side by side, distinguished by jobType',
+        );
+
+        sink.handleEvent({
+          type: 'file-visited',
+          realmURL: 'http://example.com/realm/',
+          jobId: 301,
+          url: 'http://example.com/realm/1.json',
+          filesCompleted: 1,
+          totalFiles: 2,
+        });
+        sink.handleEvent({
+          type: 'file-visited',
+          realmURL: 'http://example.com/realm/',
+          jobId: 301,
+          url: 'http://example.com/realm/2.json',
+          filesCompleted: 2,
+          totalFiles: 2,
+        });
+        sink.handleEvent({
+          type: 'indexing-finished',
+          realmURL: 'http://example.com/realm/',
+          jobId: 301,
+          stats: {
+            instancesIndexed: 2,
+            filesIndexed: 0,
+            instanceErrors: 0,
+            fileErrors: 0,
+            totalIndexEntries: 2,
+          },
+        });
+        await sleep(10);
+
+        let prerenderWrites = executes.filter((e) => e.bind[0] === 301);
+        assert.deepEqual(
+          prerenderWrites[0].bind,
+          [301, 2, 0],
+          'started upserted the prerender job into its own row with the real total',
+        );
+        assert.deepEqual(
+          prerenderWrites[prerenderWrites.length - 1].bind,
+          [301, 2, 2],
+          'finished wrote the terminal counts',
+        );
+
+        let { active: activeAfter, history } = sink.getSnapshot();
+        assert.deepEqual(
+          activeAfter.map((a) => a.jobId),
+          [300],
+          'the indexing job is untouched by the prerender stream',
+        );
+        assert.strictEqual(history[0].jobType, 'prerender_html');
+        assert.strictEqual(history[0].filesCompleted, 2);
       } finally {
         sink.dispose();
       }

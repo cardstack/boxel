@@ -8,14 +8,20 @@ import {
   Deferred,
   RealmPaths,
   isCardErrorJSONAPI,
+  toSafeFileName,
   type LocalPath,
+  type RealmIdentifier,
 } from '@cardstack/runtime-common';
+import {
+  fileSizeLimitFor,
+  validateByteLength,
+} from '@cardstack/runtime-common/write-size-validation';
 
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-
+import type EnvironmentService from './environment-service';
 import type NetworkService from './network';
-import type ResetService from './reset';
+import type SessionService from './session';
 import type StoreService from './store';
+import type { FileDef } from '@cardstack/base/file-api';
 
 export class FileUploadTask {
   @tracked state: 'picking' | 'uploading' | 'complete' | 'error' = 'picking';
@@ -49,25 +55,30 @@ export class FileUploadTask {
 }
 
 export default class FileUploadService extends Service {
+  @service declare private environmentService: EnvironmentService;
   @service declare private network: NetworkService;
-  @service declare private reset: ResetService;
+  @service declare private session: SessionService;
   @service declare private store: StoreService;
 
   @tracked activeUploads: FileUploadTask[] = [];
   private queuedLocalFilesForTesting: (File | null)[] = [];
+  private queuedLocalFileBatchesForTesting: File[][] = [];
 
   constructor(owner: Owner) {
     super(owner);
-    this.reset.register(this);
+    this.session.register(this);
   }
 
   resetState() {
     this.activeUploads = [];
   }
 
-  uploadFile(opts: { realmURL: URL; acceptTypes?: string }): FileUploadTask {
+  uploadFile(opts: {
+    realm: RealmIdentifier;
+    acceptTypes?: string;
+  }): FileUploadTask {
     let task = new FileUploadTask();
-    this._startTask(task, opts.realmURL);
+    this._startTask(task, opts.realm);
 
     if (!isTesting()) {
       this._openFilePicker(task, opts.acceptTypes);
@@ -76,17 +87,20 @@ export default class FileUploadService extends Service {
     return task;
   }
 
-  uploadProvidedFile(opts: { realmURL: URL; file: File }): FileUploadTask {
+  uploadProvidedFile(opts: {
+    realm: RealmIdentifier;
+    file: File;
+  }): FileUploadTask {
     let task = new FileUploadTask();
-    this._startTask(task, opts.realmURL);
+    this._startTask(task, opts.realm);
     task._resolveFile(opts.file);
 
     return task;
   }
 
-  private _startTask(task: FileUploadTask, realmURL: URL) {
+  private _startTask(task: FileUploadTask, realm: RealmIdentifier) {
     this.activeUploads = [...this.activeUploads, task];
-    this._processUpload(task, realmURL).finally(() => {
+    this._processUpload(task, realm).finally(() => {
       this.activeUploads = this.activeUploads.filter((t) => t !== task);
     });
   }
@@ -102,9 +116,20 @@ export default class FileUploadService extends Service {
     return file ?? undefined;
   }
 
+  async pickLocalFiles(opts?: { acceptTypes?: string }): Promise<File[]> {
+    if (isTesting()) {
+      return this.queuedLocalFileBatchesForTesting.shift() ?? [];
+    }
+    return this._openNativeFilePickerMulti(opts?.acceptTypes);
+  }
+
   // Test seam for local-file attachment flow
   __queueLocalFileForTesting(file: File | null) {
     this.queuedLocalFilesForTesting.push(file);
+  }
+
+  __queueLocalFileBatchForTesting(files: File[]) {
+    this.queuedLocalFileBatchesForTesting.push(files);
   }
 
   private _openFilePicker(task: FileUploadTask, acceptTypes?: string) {
@@ -142,7 +167,37 @@ export default class FileUploadService extends Service {
     return deferred.promise;
   }
 
-  private async _processUpload(task: FileUploadTask, realmURL: URL) {
+  private _openNativeFilePickerMulti(acceptTypes?: string): Promise<File[]> {
+    let deferred = new Deferred<File[]>();
+    let input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = true;
+    input.accept = acceptTypes ?? '';
+    input.style.display = 'none';
+    document.body.appendChild(input);
+
+    input.addEventListener(
+      'change',
+      () => {
+        deferred.fulfill(input.files ? Array.from(input.files) : []);
+        input.remove();
+      },
+      { once: true },
+    );
+    input.addEventListener(
+      'cancel',
+      () => {
+        deferred.fulfill([]);
+        input.remove();
+      },
+      { once: true },
+    );
+
+    input.click();
+    return deferred.promise;
+  }
+
+  private async _processUpload(task: FileUploadTask, realm: RealmIdentifier) {
     try {
       let file = await task.awaitFile();
 
@@ -152,19 +207,40 @@ export default class FileUploadService extends Service {
         return;
       }
 
-      let lastDotIndex = file.name.lastIndexOf('.');
-      if (lastDotIndex <= 0 || lastDotIndex >= file.name.length - 1) {
+      // The realm identifies a file by the local path it is written to, and
+      // derives everything else — content type, size ceiling, which FileDef
+      // subtype it adopts — from that path. A name carrying URL syntax would
+      // be truncated on the way there, so it is made safe first and every
+      // decision below is made about the name that will actually be stored.
+      let uploadName = toSafeFileName(file.name);
+
+      let lastDotIndex = uploadName.lastIndexOf('.');
+      if (lastDotIndex <= 0 || lastDotIndex >= uploadName.length - 1) {
         throw new Error(
           `The file "${file.name}" has no extension. Please select a file with an extension (e.g. .png, .txt, .gts).`,
         );
       }
 
-      task.fileName = file.name;
+      task.fileName = uploadName;
+
+      // The realm rejects an over-limit write with a 413, but only after the
+      // whole body has crossed the wire and been buffered server-side. Checking
+      // the size the browser already knows turns that into an immediate error.
+      validateByteLength(
+        file.size,
+        fileSizeLimitFor(uploadName, {
+          default: this.environmentService.fileSizeLimitBytes,
+          audio: this.environmentService.audioSizeLimitBytes,
+          video: this.environmentService.videoSizeLimitBytes,
+        }),
+        'file',
+      );
+
       task.state = 'uploading';
 
-      let targetUrl = new RealmPaths(realmURL).fileURL(file.name as LocalPath);
+      let targetId = new RealmPaths(realm).fileRRI(uploadName as LocalPath);
 
-      let response = await this.network.authedFetch(targetUrl, {
+      let response = await this.network.authedFetch(targetId, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/octet-stream',
@@ -184,11 +260,11 @@ export default class FileUploadService extends Service {
           // response may not be JSON
         }
         throw new Error(
-          `Upload of ${file.name} to ${realmURL.href} failed: ${response.status}${detail ? ` ${detail}` : ''}`,
+          `Upload of ${file.name} to ${realm} failed: ${response.status}${detail ? ` ${detail}` : ''}`,
         );
       }
 
-      let fileDef = await this.store.getWithoutCache<FileDef>(targetUrl.href, {
+      let fileDef = await this.store.getWithoutCache<FileDef>(targetId, {
         type: 'file-meta',
       });
       if (isCardErrorJSONAPI(fileDef)) {

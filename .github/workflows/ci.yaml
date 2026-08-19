@@ -9,10 +9,16 @@ on:
   pull_request:
   workflow_dispatch:
 
+concurrency:
+  group: ci-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
 permissions:
   checks: write
   contents: read
   id-token: write
+  # Lets the warm-test-images step pull the private GHCR mirror packages.
+  packages: read
   pull-requests: write
 
 jobs:
@@ -32,6 +38,7 @@ jobs:
       realm-server: ${{ steps.filter.outputs.realm-server }}
       vscode-boxel-tools: ${{ steps.filter.outputs.vscode-boxel-tools }}
       boxel-cli: ${{ steps.filter.outputs.boxel-cli }}
+      bxl: ${{ steps.filter.outputs.bxl }}
       bench-amd: ${{ steps.filter.outputs.bench-amd }}
       bench-realm: ${{ steps.filter.outputs.bench-realm }}
       # Force all tests to run when on ci-bisect* branches
@@ -47,6 +54,7 @@ jobs:
               - 'packages/runtime-common/**'
               - 'package.json'
               - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
               # CI boot path. Each gated suite runs `./.github/actions/init`
               # (which calls `jdx/mise-action`, sourcing `.mise.toml` for tool
               # versions) and then `mise run test-services:*` (which sources
@@ -70,6 +78,7 @@ jobs:
               - 'packages/boxel-ui/**'
               - 'packages/host/**'
               - 'packages/realm-server/**'
+              - 'packages/test-realm-cards/**'
             ai-bot:
               - *shared
               - '.github/workflows/pr-ai-bot.yml'
@@ -88,6 +97,7 @@ jobs:
               - 'packages/eslint-plugin-cardstack-host/**'
             postgres-migrations:
               - 'packages/postgres/migrations/**'
+              - 'packages/postgres/scripts/determine-changed-migrations.sh'
             boxel-icons:
               - *shared
               - 'packages/boxel-icons/**'
@@ -95,6 +105,7 @@ jobs:
               - *shared
               - 'packages/boxel-icons/**'
               - 'packages/boxel-ui/**'
+              - 'packages/boxel-ui/docs-app/**'
             matrix:
               - *shared
               - 'packages/base/**'
@@ -103,6 +114,7 @@ jobs:
               - 'packages/host/**'
               - 'packages/matrix/**'
               - 'packages/realm-server/**'
+              - 'packages/test-realm-cards/**'
             realm-server:
               - *shared
               - 'packages/billing/**'
@@ -112,12 +124,19 @@ jobs:
               - 'packages/eslint-plugin-boxel/**'
               - 'packages/postgres/**'
               - 'packages/realm-server/**'
+              - 'packages/test-realm-cards/**'
             vscode-boxel-tools:
               - *shared
               - 'packages/vscode-boxel-tools/**'
             boxel-cli:
               - *shared
               - 'packages/boxel-cli/**'
+            bxl:
+              # The suite is self-contained — plain objects under Node, no
+              # stack and no browser — so it stays cheap even when the
+              # shared CI-boot paths trigger it.
+              - *shared
+              - 'packages/bxl/**'
             bench-amd:
               # The AMD transpiler is a runtime-common module with no
               # cross-workspace deps that affect its wall-time, so the
@@ -208,6 +227,21 @@ jobs:
         run: pnpm test
         working-directory: packages/bot-runner
 
+  bxl-test:
+    name: BXL Tests
+    needs: change-check
+    if: needs.change-check.outputs.bxl == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: bxl-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      - name: BXL test suite
+        run: pnpm test
+        working-directory: packages/bxl
+
   eslint-plugin-boxel-test:
     name: ESLint Plugin Boxel Tests
     needs: change-check
@@ -262,6 +296,13 @@ jobs:
           fetch-depth: 0
       - uses: ./.github/actions/init
 
+      # Warm the test images from the GHCR mirror so the steps
+      # below start from a local image instead of an unauthenticated Docker Hub
+      # pull (the cause of the recurring registry-1.docker.io timeouts).
+      # Best-effort: a miss falls back to a hardened-retry Docker Hub pull.
+      - name: Warm test Docker images from the GHCR mirror
+        continue-on-error: true
+        uses: ./.github/actions/warm-test-images
       - name: Start Postgres
         run: pnpm start:pg
         working-directory: packages/postgres
@@ -273,6 +314,17 @@ jobs:
           GITHUB_EVENT_BEFORE: ${{ github.event.before || '' }}
         shell: bash
         run: packages/postgres/scripts/determine-changed-migrations.sh
+
+      # Fail fast if a newly added additive migration drops/renames a column or
+      # table in its up() — those belong in migrations-removal/ (post-deploy) so
+      # they don't break the previous code revision mid-rollout.
+      - name: Guard removal-phase migrations
+        if: steps.migrations.outputs.count && steps.migrations.outputs.count != '0'
+        env:
+          # Newline-separated file list; the guard reads it from this env var
+          # (no shell word-splitting, no multiline value inlined into the script).
+          CHANGED_MIGRATIONS: ${{ steps.migrations.outputs.files }}
+        run: node packages/postgres/scripts/check-removal-phase.cjs
 
       - name: Apply migrations
         if: steps.migrations.outputs.count && steps.migrations.outputs.count != '0'
@@ -312,7 +364,10 @@ jobs:
           SKIP_ICONS_BUILD: ${{ steps.icons-cache.outputs.cache-hit }}
       - name: Run test suite
         run: pnpm test
-        working-directory: packages/boxel-ui/test-app
+        working-directory: packages/boxel-ui
+      - name: Run docs app test suite
+        run: pnpm test
+        working-directory: packages/boxel-ui/docs-app
 
   boxel-ui-raw-icon-changes-only:
     name: Boxel UI ensure raw icon changes only
@@ -327,7 +382,7 @@ jobs:
       - uses: ./.github/actions/init
       - name: Rebuild boxel-ui icons
         run: pnpm rebuild:icons
-        working-directory: packages/boxel-ui/addon
+        working-directory: packages/boxel-ui
       - name: Fail if generated icons have been changed without underlying raw icon changing
         run: git diff --exit-code
 
@@ -376,6 +431,20 @@ jobs:
           cp -a .test-web-assets-artifact/. ./
       - name: Install Playwright Browsers
         run: pnpm exec playwright install
+        working-directory: packages/matrix
+      # Warm the test images from the GHCR mirror so the services
+      # below (and the Playwright synapse/smtp fixtures) start from a local
+      # image instead of an unauthenticated Docker Hub pull (the cause of the
+      # recurring registry-1.docker.io timeouts). Best-effort: a miss falls
+      # back to a hardened-retry Docker Hub pull.
+      - name: Warm test Docker images from the GHCR mirror
+        continue-on-error: true
+        uses: ./.github/actions/warm-test-images
+      - name: Run OIDC mapping provider unit tests
+        # Fast (~no boot) and stack-independent — it only needs the warmed
+        # Synapse image — so run it once on shard 1 rather than every shard.
+        if: matrix.shardIndex == 1
+        run: pnpm test:oidc-mapping-provider
         working-directory: packages/matrix
       - name: Start test services (icons + host dist + base realm)
         run: |
@@ -570,8 +639,15 @@ jobs:
           cp -a .test-web-assets-artifact/. ./
       - name: Compute shard test modules
         id: shard_modules
-        run: echo "modules=$(node scripts/shard-test-modules.js ${{ matrix.shardIndex }} ${{ matrix.shardTotal }})" >> "$GITHUB_OUTPUT"
+        run: echo "modules=$(node scripts/shard-test-modules.cjs ${{ matrix.shardIndex }} ${{ matrix.shardTotal }})" >> "$GITHUB_OUTPUT"
         working-directory: packages/realm-server
+      # Warm the test images from the GHCR mirror so the services
+      # below start from a local image instead of an unauthenticated Docker Hub
+      # pull (the cause of the recurring registry-1.docker.io timeouts).
+      # Best-effort: a miss falls back to a hardened-retry Docker Hub pull.
+      - name: Warm test Docker images from the GHCR mirror
+        continue-on-error: true
+        uses: ./.github/actions/warm-test-images
       - name: Start test services (icons + host dist + realm servers)
         run: mise run test-services:realm-server | tee -a /tmp/server.log &
       - name: create realm users
@@ -801,7 +877,7 @@ jobs:
         working-directory: packages/boxel-icons
       - name: Build Boxel UI
         run: pnpm run build
-        working-directory: packages/boxel-ui/addon
+        working-directory: packages/boxel-ui
       - name: Build host dist
         run: pnpm build
         working-directory: packages/host
@@ -822,6 +898,7 @@ jobs:
       actions: read
     with:
       head-sha: ${{ github.event.pull_request.head.sha || github.sha }}
+      pr-number: ${{ github.event.pull_request.number }}
       slots: realm-tests
     secrets: inherit
 
@@ -918,6 +995,13 @@ jobs:
       - name: Run unit tests
         run: pnpm test:unit
         working-directory: packages/boxel-cli
+      # Warm the test images from the GHCR mirror so the steps
+      # below start from a local image instead of an unauthenticated Docker Hub
+      # pull (the cause of the recurring registry-1.docker.io timeouts).
+      # Best-effort: a miss falls back to a hardened-retry Docker Hub pull.
+      - name: Warm test Docker images from the GHCR mirror
+        continue-on-error: true
+        uses: ./.github/actions/warm-test-images
       - name: Start Matrix
         run: pnpm start:matrix
         working-directory: packages/realm-server
@@ -934,8 +1018,17 @@ jobs:
           # would race the tests ahead of the base realm finishing its
           # initial index.
           timeout 600 bash -c 'until curl -sk -o /dev/null -w "%{http_code}" https://localhost:4200/ | grep -qx 200 && curl -sk -o /dev/null -w "%{http_code}" -H "Accept: application/vnd.api+json" https://localhost:4201/base/_readiness-check | grep -qx 200; do sleep 2; done'
-      - name: Run integration tests
-        run: pnpm test:integration
+      # Run the integration suite against the CLI as an end user installs
+      # it: `pnpm pack` the build from the step above, `npm install` the
+      # tarball into a throwaway dir outside the monorepo (npm hoisting,
+      # not pnpm's nested layout), and drive that binary via BOXEL_CLI_BIN.
+      # This is the layout where `boxel parse`'s glint type-check silently
+      # resolves nothing — which the in-process, function-call tests could
+      # never exercise because they import command functions from src. The
+      # `test:cli:tarball` script execs `pnpm test:integration` under the
+      # installed binary, so the test-PG provisioning is unchanged.
+      - name: Run integration tests against the packed npm install
+        run: pnpm test:cli:tarball
         working-directory: packages/boxel-cli
       - name: Print server logs
         if: ${{ !cancelled() }}
@@ -981,7 +1074,11 @@ jobs:
           shopt -s dotglob
           cp -a .test-web-assets-artifact/. ./
       - name: Index all realms and dump tables
-        run: mise run ci:cache-index 2>&1 | tee /tmp/cache-index.log
+        # pipefail so a nonzero exit from the index/dump task fails the step
+        # instead of being masked by tee's exit code.
+        run: |
+          set -o pipefail
+          mise run ci:cache-index 2>&1 | tee /tmp/cache-index.log
         timeout-minutes: 45
       - name: Upload service logs
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -990,9 +1087,45 @@ jobs:
           name: cache-index-log
           path: /tmp/cache-index.log
           retention-days: 7
+      # Separate step so an incomplete cache (a table dropped out of the dump)
+      # surfaces as its own short, clearly-labeled failure with an error
+      # annotation, rather than an exit code buried in the dump log above.
+      - name: Verify index cache is complete
+        run: scripts/verify-index-cache.sh /tmp/boxel-index-cache.sql.gz
       - name: Upload index cache
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: boxel-index-cache
           path: /tmp/boxel-index-cache.sql.gz
+          retention-days: 30
+      # The host-scoped snapshot covers only the realms a host test shard
+      # serves, so a shard downloads and replays a fraction of the full one.
+      # Verified with its own expected-tables sidecar (the script's default
+      # would resolve to the full snapshot's, which happens to list the same
+      # tables — passing it explicitly keeps that a fact rather than a
+      # coincidence).
+      - name: Verify host-scoped index cache is complete
+        run: |
+          scripts/verify-index-cache.sh \
+            /tmp/boxel-index-cache-host.sql.gz \
+            /tmp/boxel-index-cache-host.tables
+      - name: Upload host-scoped index cache
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: boxel-index-cache-host
+          path: /tmp/boxel-index-cache-host.sql.gz
+          retention-days: 30
+      # The live test realms (`/test/`, `/node-test/`) index into their own
+      # database, so they get their own snapshot. A test shard waits on their
+      # readiness alongside base and skills.
+      - name: Verify test-realm index cache is complete
+        run: |
+          scripts/verify-index-cache.sh \
+            /tmp/boxel-index-cache-test.sql.gz \
+            /tmp/boxel-index-cache-test.tables
+      - name: Upload test-realm index cache
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: boxel-index-cache-test
+          path: /tmp/boxel-index-cache-test.sql.gz
           retention-days: 30

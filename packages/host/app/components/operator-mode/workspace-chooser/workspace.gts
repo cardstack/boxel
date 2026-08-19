@@ -5,8 +5,12 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 
-import CircleAlert from '@cardstack/boxel-icons/circle-alert';
+import ArchiveIcon from '@cardstack/boxel-icons/archive';
+import CopyIcon from '@cardstack/boxel-icons/copy';
+import FileSettingsIcon from '@cardstack/boxel-icons/file-settings';
 import Home from '@cardstack/boxel-icons/home';
+import RefreshIcon from '@cardstack/boxel-icons/refresh-cw';
+import { format as formatDate } from 'date-fns';
 import { dropTask, task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import pluralize from 'pluralize';
@@ -20,17 +24,20 @@ import {
   RealmIcon,
   Tooltip,
 } from '@cardstack/boxel-ui/components';
-import { MenuItem, cssVar, gt } from '@cardstack/boxel-ui/helpers';
+import { MenuItem, cssVar, gt, or } from '@cardstack/boxel-ui/helpers';
 import {
   Group,
   IconGlobe,
   IconTrash,
+  IconX,
   Lock,
   Star,
   StarFilled,
+  Warning as WarningIcon,
 } from '@cardstack/boxel-ui/icons';
 
 import {
+  ensureTrailingSlash,
   hasExecutableExtension,
   RealmPaths,
   SupportedMimeType,
@@ -38,13 +45,16 @@ import {
 } from '@cardstack/runtime-common';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
+import { skillsRealmURL } from '@cardstack/host/lib/utils';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
+import type WorkspaceDuplicationService from '@cardstack/host/services/workspace-duplication';
 
+import focusWhenSelected from './focus-when-selected';
 import ItemContainer from './item-container';
 import WorkspaceLoadingIndicator from './workspace-loading-indicator';
 
@@ -53,6 +63,16 @@ interface Signature {
   Args: {
     realmIdentifier: RealmIdentifier;
     showMenu?: boolean;
+    isSelected?: boolean;
+    // Whether the user has actively engaged the keyboard selection (moved it
+    // off its default). The tile is still `isSelected` on open — it holds focus
+    // so arrow keys and Enter work — but its selection ring stays hidden until
+    // this is true, so opening the chooser doesn't look like a tile is already
+    // picked (which reads as a second selection alongside a favorited tile).
+    selectionActive?: boolean;
+    isFavoritesSection?: boolean;
+    enlargedWidth?: string;
+    navIndex?: number;
   };
 }
 
@@ -62,14 +82,39 @@ export default class Workspace extends Component<Signature> {
       <WorkspaceLoadingIndicator />
     {{else}}
       <div
-        class='workspace-card {{if this.isHostDropdownOpen "is-open"}}'
-        data-test-workspace={{this.name}}
+        class='workspace-card
+          {{if this.isHostDropdownOpen "is-open"}}
+          {{if this.showSelectionRing "is-selected"}}
+          {{if @isFavoritesSection "is-enlarged"}}'
+        style={{cssVar favorite-tile-width=@enlargedWidth}}
+        data-theme='dark'
         {{on 'mouseleave' this.closeHostDropdown}}
+        data-test-workspace={{this.name}}
+        data-test-workspace-selected={{if @isSelected this.name}}
         ...attributes
       >
+        {{#if this.reindexError}}
+          <div class='reindex-error' role='alert' data-test-reindex-error>
+            <span
+              class='reindex-error__message'
+              title={{this.reindexError}}
+            >{{this.reindexError}}</span>
+            <button
+              type='button'
+              class='reindex-error__dismiss'
+              aria-label='Dismiss error'
+              data-test-reindex-error-dismiss
+              {{on 'click' this.clearReindexError}}
+            >
+              <IconX width='11' height='11' />
+            </button>
+          </div>
+        {{/if}}
         <ItemContainer
           data-test-workspace-button={{this.name}}
+          data-nav-index={{@navIndex}}
           {{on 'click' this.openWorkspace}}
+          {{focusWhenSelected @isSelected}}
         >
           <div
             class='tile-icon'
@@ -77,26 +122,99 @@ export default class Workspace extends Component<Signature> {
               workspace-background-image-url=this.backgroundImageURL
             }}
           >
-            <div class='realm-icon-wrapper'>
-              <RealmIcon
-                class='workspace-realm-icon'
-                @realmInfo={{this.realmInfo}}
-              />
-            </div>
+            {{#if @isFavoritesSection}}
+              <div class='tile-scrim'></div>
+              <div class='tile-content'>
+                <div class='realm-icon-wrapper'>
+                  <RealmIcon
+                    class='workspace-realm-icon'
+                    @realmInfo={{this.realmInfo}}
+                    @canAnimate={{true}}
+                  />
+                </div>
+                <div class='tile-text'>
+                  <span
+                    class='tile-name'
+                    data-test-workspace-name
+                  >{{this.name}}</span>
+                  {{! Always rendered so the counts, which load after the tile,
+                      fill reserved space instead of growing it. }}
+                  <div
+                    class='tile-metadata-row'
+                    data-test-workspace-stats={{@realmIdentifier}}
+                  >
+                    {{#each this.tileStats as |stat|}}
+                      <Tooltip @placement='top'>
+                        <:trigger>
+                          <span
+                            class='tile-stat'
+                            data-test-workspace-stat={{stat.label}}
+                          >
+                            <span class='tile-stat-label'>{{stat.label}}</span>
+                            <span class='tile-stat-number'>{{stat.count}}</span>
+                          </span>
+                        </:trigger>
+                        <:content>{{stat.label}} {{stat.count}}</:content>
+                      </Tooltip>
+                    {{/each}}
+                  </div>
+                </div>
+              </div>
+            {{else}}
+              <div class='realm-icon-wrapper'>
+                <RealmIcon
+                  class='workspace-realm-icon'
+                  @realmInfo={{this.realmInfo}}
+                  @canAnimate={{true}}
+                />
+              </div>
+            {{/if}}
           </div>
         </ItemContainer>
-        <ContextButton
-          class='tile-favorite-btn {{if this.isFavorited "is-favorited"}}'
-          @label={{if this.isFavorited 'Unfavorite' 'Favorite'}}
-          @icon={{if this.isFavorited StarFilled Star}}
-          @variant='ghost'
-          @width='16'
-          @height='16'
-          {{on 'click' this.toggleFavorite}}
-          data-test-workspace-favorite-btn={{@realmIdentifier}}
-        />
+        <div class='tile-favorite-btn {{if this.isFavorited "is-favorited"}}'>
+          <Tooltip @placement='top'>
+            <:trigger>
+              <ContextButton
+                @label={{this.favoriteLabel}}
+                @icon={{if this.isFavorited StarFilled Star}}
+                @variant='ghost'
+                @width='16'
+                @height='16'
+                {{on 'click' this.toggleFavorite}}
+                data-test-workspace-favorite-btn={{@realmIdentifier}}
+              />
+            </:trigger>
+            <:content>{{this.favoriteLabel}}</:content>
+          </Tooltip>
+        </div>
+        {{#if @isFavoritesSection}}
+          <div
+            class='tile-status-bar'
+            data-test-workspace-status-bar={{@realmIdentifier}}
+          >
+            {{#if this.hasPublishedRealms}}
+              <Tooltip @placement='top'>
+                <:trigger>
+                  <span class='tile-status-icon'>
+                    <Home width='12' height='12' />
+                  </span>
+                </:trigger>
+                <:content>Hosted on the web</:content>
+              </Tooltip>
+            {{/if}}
+            <Tooltip @placement='top'>
+              <:trigger>
+                <span class='tile-status-visibility'>
+                  <this.visibilityIcon width='12' height='12' />
+                  <span class='tile-status-label'>{{this.visibility}}</span>
+                </span>
+              </:trigger>
+              <:content>{{this.visibilityLabel}}</:content>
+            </Tooltip>
+          </div>
+        {{/if}}
         <div class='tile-menu-btn'>
-          <BoxelDropdown>
+          <BoxelDropdown @contentClass='workspace-menu-dropdown'>
             <:trigger as |bindings|>
               <ContextButton
                 @label='Options'
@@ -109,6 +227,26 @@ export default class Workspace extends Component<Signature> {
             </:trigger>
             <:content as |dd|>
               <Menu @items={{this.tileMenuItems}} @closeMenu={{dd.close}} />
+              {{#if (or this.updatedAtLabel this.createdAtLabel)}}
+                <div
+                  class='workspace-menu-footer'
+                  data-test-workspace-menu-footer={{@realmIdentifier}}
+                >
+                  {{#if this.updatedAtLabel}}
+                    <span
+                      class='workspace-menu-footer__value'
+                    >{{this.updatedAtLabel}}</span>
+                  {{/if}}
+                  {{#if this.createdAtLabel}}
+                    <span class='workspace-menu-footer__row'>
+                      <span class='workspace-menu-footer__label'>Created</span>
+                      <span
+                        class='workspace-menu-footer__value'
+                      >{{this.createdAtLabel}}</span>
+                    </span>
+                  {{/if}}
+                </div>
+              {{/if}}
             </:content>
           </BoxelDropdown>
         </div>
@@ -150,53 +288,50 @@ export default class Workspace extends Component<Signature> {
           {{/if}}
         {{/if}}
 
-        <div class='info {{if this.isHostDropdownOpen "info--hidden"}}'>
-          <span class='name' data-test-workspace-name>{{this.name}}</span>
-          <span class='visibility' data-test-workspace-visibility>
-            {{#if this.hasPublishedRealms}}
+        {{#unless @isFavoritesSection}}
+          <div class='info {{if this.isHostDropdownOpen "info--hidden"}}'>
+            <span class='name' data-test-workspace-name>{{this.name}}</span>
+            <span class='visibility' data-test-workspace-visibility>
+              {{#if this.hasPublishedRealms}}
+                <Tooltip @placement='top'>
+                  <:trigger>
+                    <span class='hosted-icon'>
+                      <Home width='13' height='13' />
+                    </span>
+                  </:trigger>
+                  <:content>Hosted on the web</:content>
+                </Tooltip>
+              {{/if}}
               <Tooltip @placement='top'>
                 <:trigger>
-                  <span class='hosted-icon'>
-                    <Home width='13' height='13' />
-                  </span>
+                  <this.visibilityIcon width='12' height='12' />
                 </:trigger>
-                <:content>Hosted on the web</:content>
+                <:content>
+                  {{this.visibilityLabel}}
+                </:content>
               </Tooltip>
-            {{/if}}
-            <Tooltip @placement='top'>
-              <:trigger>
-                <this.visibilityIcon width='12' height='12' />
-              </:trigger>
-              <:content>
-                {{this.visibilityLabel}}
-              </:content>
-            </Tooltip>
-            <span class='visibility-label'>{{this.visibility}}</span>
-          </span>
-        </div>
+              <span class='visibility-label'>{{this.visibility}}</span>
+            </span>
+          </div>
+        {{/unless}}
       </div>
       {{#if this.showDeleteModal}}
         <ModalContainer
-          @title=''
+          @title='Delete Workspace'
           @onClose={{this.closeDeleteModal}}
           @size='medium'
+          @isCloseDisabled={{this.deleteWorkspaceTask.isRunning}}
           @cardContainerClass='workspace-chooser-delete-modal'
           class='workspace-chooser-delete-modal-container'
+          aria-label='Delete Workspace'
           data-test-delete-modal={{@realmIdentifier}}
         >
           <:content>
-            <div class='delete-modal__header'>
-              <CircleAlert class='delete-modal__warning-icon' />
-              <h2 class='delete-modal__title'>Delete Workspace</h2>
-            </div>
-
             <div class='delete-modal__workspace-card'>
-              <div class='delete-modal__realm-icon-wrapper'>
-                <RealmIcon
-                  class='delete-modal__realm-icon'
-                  @realmInfo={{this.realmInfo}}
-                />
-              </div>
+              <RealmIcon
+                class='delete-modal__realm-icon'
+                @realmInfo={{this.realmInfo}}
+              />
               <div class='delete-modal__workspace-info'>
                 <span class='delete-modal__workspace-name'>{{this.name}}</span>
                 {{#if this.loadDeleteSummaryTask.isRunning}}
@@ -212,62 +347,227 @@ export default class Workspace extends Component<Signature> {
               </div>
             </div>
 
-            <div class='delete-modal__warning-box'>
-              <p class='delete-modal__warning-text'>
-                <strong>
+            <div class='delete-modal__warning warning'>
+              <WarningIcon
+                class='delete-modal__warning-icon'
+                width='20'
+                height='20'
+                role='presentation'
+              />
+              <div class='delete-modal__warning-body'>
+                <div>
                   This permanently deletes the workspace and any custom domains
-                  tied to it.
-                </strong>
-                <strong>
-                  Links to cards in this workspace may stop working elsewhere.
-                </strong>
-              </p>
-              {{#if this.hasPublishedRealms}}
-                <div class='delete-modal__realms'>
-                  <p class='delete-modal__realms-title'>
-                    Published
-                    {{pluralize 'realm' this.publishedRealmURLs.length}}
-                    that will also be removed
-                  </p>
-                  <ul class='delete-modal__realms-list'>
-                    {{#each this.publishedRealmURLs as |publishedRealmURL|}}
-                      <li>{{publishedRealmURL}}</li>
-                    {{/each}}
-                  </ul>
+                  tied to it. Links to cards in this workspace may stop working
+                  elsewhere.
                 </div>
-              {{/if}}
+                {{#if this.hasPublishedRealms}}
+                  <div class='delete-modal__realms'>
+                    <p class='delete-modal__realms-title'>
+                      Published
+                      {{pluralize 'realm' this.publishedRealmURLs.length}}
+                      that will also be removed
+                    </p>
+                    <ul class='delete-modal__realms-list'>
+                      {{#each this.publishedRealmURLs as |publishedRealmURL|}}
+                        <li>{{publishedRealmURL}}</li>
+                      {{/each}}
+                    </ul>
+                  </div>
+                {{/if}}
+                <p class='delete-modal__irreversible'>
+                  This action is not reversible.
+                </p>
+              </div>
             </div>
 
             {{#if this.deleteError}}
-              <p class='delete-modal__error'>{{this.deleteError}}</p>
+              <div class='delete-modal__warning error' data-test-delete-error>
+                {{this.deleteError}}
+              </div>
             {{/if}}
           </:content>
           <:footer>
             <div class='delete-modal__footer'>
-              <div class='delete-modal__actions'>
-                {{#if this.deleteWorkspaceTask.isRunning}}
-                  <LoadingIndicator class='delete-modal__spinner' />
+              <Button
+                @kind='secondary'
+                @size='tall'
+                @disabled={{this.deleteWorkspaceTask.isRunning}}
+                {{on 'click' this.closeDeleteModal}}
+                data-test-cancel-delete-button
+              >
+                Cancel
+              </Button>
+              <Button
+                @kind='destructive'
+                @size='tall'
+                @loading={{this.deleteWorkspaceTask.isRunning}}
+                @disabled={{this.deleteWorkspaceTask.isRunning}}
+                {{on 'click' (perform this.deleteWorkspaceTask)}}
+                data-test-confirm-delete-button
+              >
+                Delete this workspace
+              </Button>
+            </div>
+          </:footer>
+        </ModalContainer>
+      {{/if}}
+      {{#if this.showArchiveModal}}
+        <ModalContainer
+          @title=''
+          @onClose={{this.closeArchiveModal}}
+          @size='medium'
+          @cardContainerClass='workspace-chooser-archive-modal'
+          class='workspace-chooser-archive-modal-container'
+          aria-label='Archive Workspace'
+          data-test-archive-modal={{@realmIdentifier}}
+        >
+          <:content>
+            <div class='archive-modal__header'>
+              <ArchiveIcon class='archive-modal__icon' />
+              <h2 class='archive-modal__title'>Archive Workspace</h2>
+            </div>
+
+            <div class='archive-modal__workspace-card'>
+              <div class='archive-modal__realm-icon-wrapper'>
+                <RealmIcon
+                  class='archive-modal__realm-icon'
+                  @realmInfo={{this.realmInfo}}
+                />
+              </div>
+              <div class='archive-modal__workspace-info'>
+                <span class='archive-modal__workspace-name'>{{this.name}}</span>
+              </div>
+            </div>
+
+            <div class='archive-modal__info-box'>
+              <p class='archive-modal__info-text'>
+                Archiving hides this workspace from your realm list and stops
+                its indexer. While archived, it
+                <strong>
+                  will not be available for viewing or editing — to you or any
+                  other user
+                </strong>
+                — until you restore it.
+              </p>
+              <p class='archive-modal__info-text'>
+                You can restore it at any time from the Archived section of the
+                workspace chooser.
+              </p>
+            </div>
+
+            {{#if this.archiveError}}
+              <p class='archive-modal__error'>{{this.archiveError}}</p>
+            {{/if}}
+          </:content>
+          <:footer>
+            <div class='archive-modal__footer'>
+              <div class='archive-modal__actions'>
+                {{#if this.archiveWorkspaceTask.isRunning}}
+                  <LoadingIndicator class='archive-modal__spinner' />
                 {{else}}
                   <Button
-                    {{on 'click' this.closeDeleteModal}}
-                    class='delete-modal__cancel'
-                    data-test-cancel-delete-button
+                    {{on 'click' this.closeArchiveModal}}
+                    class='archive-modal__cancel'
+                    data-test-cancel-archive-button
                   >
                     Cancel
                   </Button>
                   <button
                     type='button'
-                    class='delete-modal__confirm'
-                    data-test-confirm-delete-button
-                    {{on 'click' (perform this.deleteWorkspaceTask)}}
+                    class='archive-modal__confirm'
+                    data-test-confirm-archive-button
+                    {{on 'click' (perform this.archiveWorkspaceTask)}}
                   >
-                    Delete this workspace
+                    Archive this workspace
                   </button>
                 {{/if}}
               </div>
-              <span class='delete-modal__disclaimer'>
-                This action is not reversible
+              <span class='archive-modal__disclaimer'>
+                You can restore this workspace later
               </span>
+            </div>
+          </:footer>
+        </ModalContainer>
+      {{/if}}
+      {{#if this.showDuplicateModal}}
+        <ModalContainer
+          @title=''
+          @onClose={{this.closeDuplicateModal}}
+          @size='medium'
+          @cardContainerClass='workspace-chooser-duplicate-modal'
+          class='workspace-chooser-duplicate-modal-container'
+          aria-label='Duplicate Workspace'
+          data-test-duplicate-modal={{@realmIdentifier}}
+        >
+          <:content>
+            <div class='duplicate-modal__header'>
+              <CopyIcon class='duplicate-modal__icon' />
+              <h2 class='duplicate-modal__title'>Duplicate Workspace</h2>
+            </div>
+
+            <div class='duplicate-modal__workspace-card'>
+              <div class='duplicate-modal__realm-icon-wrapper'>
+                <RealmIcon
+                  class='duplicate-modal__realm-icon'
+                  @realmInfo={{this.realmInfo}}
+                />
+              </div>
+              <div class='duplicate-modal__workspace-info'>
+                <span
+                  class='duplicate-modal__workspace-name'
+                >{{this.name}}</span>
+              </div>
+            </div>
+
+            <div class='duplicate-modal__info-box'>
+              <p class='duplicate-modal__info-text'>
+                This copies every card and file in this workspace into a new
+                <strong>private workspace</strong>
+                that only you can see and edit. The original stays untouched.
+              </p>
+            </div>
+
+            {{#if this.duplicateError}}
+              <p
+                class='duplicate-modal__error'
+                data-test-duplicate-error
+              >{{this.duplicateError}}</p>
+            {{/if}}
+          </:content>
+          <:footer>
+            <div class='duplicate-modal__footer'>
+              <div class='duplicate-modal__actions'>
+                {{#if this.duplicateWorkspaceTask.isRunning}}
+                  <span
+                    class='duplicate-modal__progress'
+                    data-test-duplicate-progress
+                  >{{this.duplicateProgressLabel}}</span>
+                  <LoadingIndicator class='duplicate-modal__spinner' />
+                  <Button
+                    {{on 'click' this.cancelDuplication}}
+                    class='duplicate-modal__cancel'
+                    data-test-cancel-duplicate-button
+                  >
+                    Cancel
+                  </Button>
+                {{else}}
+                  <Button
+                    {{on 'click' this.closeDuplicateModal}}
+                    class='duplicate-modal__cancel'
+                    data-test-cancel-duplicate-button
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    @kind='primary'
+                    @size='tall'
+                    data-test-confirm-duplicate-button
+                    {{on 'click' (perform this.duplicateWorkspaceTask)}}
+                  >
+                    Duplicate this workspace
+                  </Button>
+                {{/if}}
+              </div>
             </div>
           </:footer>
         </ModalContainer>
@@ -296,31 +596,89 @@ export default class Workspace extends Component<Signature> {
         pointer-events: none;
         z-index: 20;
       }
+      .workspace-card.is-enlarged :deep(.workspace) {
+        width: var(
+          --favorite-tile-width,
+          calc(var(--boxel-xxs-container) * 1.5)
+        );
+        min-width: var(
+          --favorite-tile-width,
+          calc(var(--boxel-xxs-container) * 1.5)
+        );
+      }
+      .workspace-card.is-enlarged::after {
+        width: var(
+          --favorite-tile-width,
+          calc(var(--boxel-xxs-container) * 1.5)
+        );
+      }
       .workspace-card:hover::after {
         border-color: rgba(255 255 255 / 50%);
+      }
+      /* The keyboard-navigation selection ring. Declared after the :hover
+         rule so a selected tile keeps its ring while the pointer is over
+         it. */
+      .workspace-card.is-selected::after {
+        border-color: var(--boxel-highlight);
+        box-shadow: 0 0 0 1px var(--boxel-highlight);
       }
       .tile-favorite-btn {
         position: absolute;
         top: 0.5rem;
         left: 0.5rem;
         z-index: 3;
+        width: var(--boxel-button-xs);
+        height: var(--boxel-button-xs);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
         color: var(--boxel-light);
         --icon-color: var(--boxel-light);
         opacity: 0;
-        transition: opacity 0.15s ease;
-      }
-      .workspace-card:hover .tile-favorite-btn {
-        opacity: 1;
-      }
-      .tile-favorite-btn:hover {
-        background: rgba(0 0 0 / 40%);
-        backdrop-filter: blur(6px);
         border-radius: var(--boxel-border-radius-sm);
+        transition:
+          opacity 0.15s ease,
+          background 0.15s ease;
+      }
+      /* Reveal the tile's controls when the card is hovered or has keyboard
+         focus anywhere within it, so a keyboard user tabbing onto the card
+         sees the star the same way a pointer user does on hover — not only
+         when the star itself is the focused tab stop. */
+      .workspace-card:hover .tile-favorite-btn,
+      .workspace-card:has(:focus-visible) .tile-favorite-btn {
+        opacity: 1;
+        background: var(--boxel-dark-40);
+        backdrop-filter: blur(6px);
+      }
+      .workspace-card:hover .tile-favorite-btn:hover {
+        background: var(--boxel-highlight);
+        color: var(--boxel-dark);
+        --icon-color: var(--boxel-dark);
       }
       .tile-favorite-btn.is-favorited {
-        color: var(--boxel-teal);
-        --icon-color: var(--boxel-teal);
+        color: var(--boxel-highlight);
+        --icon-color: var(--boxel-highlight);
         opacity: 1;
+        background: var(--boxel-dark-40);
+        backdrop-filter: blur(6px);
+      }
+      /* Draw the focus ring on the wrapper, whose overflow hidden would
+         otherwise clip the inner button's own outline. */
+      .tile-favorite-btn:has(:focus-visible) {
+        outline: var(--boxel-outline);
+        outline-offset: -1px;
+      }
+      /* Tooltip wraps its trigger in a `width: fit-content` div. Stretch that
+         wrapper (and the button inside it) to fill the star's box so the whole
+         box stays the hover target, rather than only the glyph. */
+      .tile-favorite-btn > :deep(.trigger),
+      .tile-favorite-btn :deep(button) {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
       .tile-menu-btn {
         position: absolute;
@@ -328,8 +686,6 @@ export default class Workspace extends Component<Signature> {
         right: 0.5rem;
         z-index: 3;
         color: var(--boxel-light);
-        opacity: 0;
-        transition: opacity 0.15s ease;
         border-radius: var(--boxel-border-radius-sm);
         width: var(--boxel-button-xs);
         height: var(--boxel-button-xs);
@@ -337,31 +693,115 @@ export default class Workspace extends Component<Signature> {
         align-items: center;
         justify-content: center;
         overflow: hidden;
+        opacity: 0;
+        transition:
+          opacity 0.15s ease,
+          background 0.15s ease;
         --boxel-icon-button-width: var(--boxel-button-xs);
         --boxel-icon-button-height: var(--boxel-button-xs);
       }
       .workspace-card:hover .tile-menu-btn,
-      .tile-menu-btn:focus-within {
+      .workspace-card:has(:focus-visible) .tile-menu-btn {
         opacity: 1;
-      }
-      .tile-menu-btn:hover {
-        background: rgba(0 0 0 / 40%);
+        background: var(--boxel-dark-40);
         backdrop-filter: blur(6px);
       }
+      .workspace-card:hover .tile-menu-btn:hover {
+        background: var(--boxel-highlight);
+        color: var(--boxel-dark);
+        --icon-color: var(--boxel-dark);
+      }
+      /* Keyboard focus also needs the standard focus ring every other control
+         gets. The inner trigger button's own outline is clipped by this
+         wrapper's overflow hidden, so draw the ring on the wrapper instead:
+         an element's own outline is not clipped by its own overflow. */
+      .tile-menu-btn:has(:focus-visible) {
+        outline: var(--boxel-outline);
+        outline-offset: -1px;
+      }
+      .tile-menu-btn:has([aria-expanded='true']) {
+        opacity: 1;
+        background: var(--boxel-highlight);
+        color: var(--boxel-highlight-foreground);
+      }
+      .workspace-card:hover .tile-menu-btn:has([aria-expanded='true']) {
+        background: var(--boxel-highlight);
+        color: var(--boxel-highlight-foreground);
+      }
+      /* Hosted + visibility indicators for the enlarged favorite tile,
+         combined into a single pill to the right of the favorite star,
+         matching its height. Persistently visible (not hover-gated) since
+         it's informational, same as the favorited star. */
+      .tile-status-bar {
+        position: absolute;
+        top: 0.5rem;
+        left: calc(0.5rem + var(--boxel-button-xs) + var(--boxel-sp-3xs));
+        z-index: 3;
+        /* The bar overlays the tile's own open-workspace button. Let clicks on
+           its inert areas fall through to that button (rather than dying on
+           this strip); the tooltip triggers below re-enable pointer events for
+           themselves so hovering the icons still surfaces their tooltips. */
+        pointer-events: none;
+        box-sizing: border-box;
+        height: var(--boxel-button-xs);
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-3xs);
+        padding: 0 var(--boxel-sp-2xs);
+        border-radius: var(--boxel-border-radius-sm);
+        background: var(--boxel-dark-40);
+        backdrop-filter: blur(6px);
+        color: var(--boxel-light);
+      }
+      .tile-status-icon {
+        display: flex;
+        align-items: center;
+        color: var(--boxel-highlight);
+        /* Re-enable pointer events so this icon's tooltip still opens on hover
+           (see `.tile-status-bar { pointer-events: none }`). */
+        pointer-events: auto;
+      }
+      .tile-status-visibility {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-6xs);
+        --icon-color: var(--boxel-light);
+        /* Re-enable pointer events for this tooltip trigger (see above). */
+        pointer-events: auto;
+      }
+      .tile-status-label {
+        font-size: var(--boxel-font-size-2xs);
+        text-transform: capitalize;
+        letter-spacing: var(--boxel-lsp);
+        margin-left: 3px;
+      }
       .tile-icon {
+        position: relative;
+        height: 100%;
+        width: 100%;
+        overflow: hidden;
+
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+      /* The background image lives on its own layer (rather than directly
+         on .tile-icon) so it can be scaled on hover without also zooming
+         the icon/name/metadata content stacked on top of it. */
+      .tile-icon::before {
+        content: '';
+        position: absolute;
+        inset: 0;
         background-color: var(--boxel-500);
         background-image: var(--workspace-background-image-url);
         background-position: center;
         background-size: cover;
         background-repeat: no-repeat;
-
-        position: relative;
-        height: 100%;
-        width: 100%;
-
-        display: flex;
-        justify-content: center;
-        align-items: center;
+        transition: transform 0.4s ease-out;
+        z-index: 0;
+      }
+      .workspace-card.is-enlarged:hover .tile-icon::before {
+        transform: scale(1.15);
       }
       .realm-icon-wrapper {
         flex-shrink: 0;
@@ -395,6 +835,52 @@ export default class Workspace extends Component<Signature> {
         align-items: center;
         padding-top: var(--boxel-sp-xs);
         gap: var(--boxel-sp-5xs);
+        max-width: var(--boxel-xxs-container);
+      }
+      .reindex-error {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: var(--boxel-xxs-container);
+        box-sizing: border-box;
+        z-index: 21;
+        display: flex;
+        align-items: flex-start;
+        gap: var(--boxel-sp-5xs);
+        padding: var(--boxel-sp-xxs) var(--boxel-sp-xs);
+        border-radius: var(--boxel-border-radius-xl)
+          var(--boxel-border-radius-xl) 0 0;
+        background-color: var(--boxel-danger);
+        color: var(--boxel-light);
+        font: 600 var(--boxel-font-xs);
+      }
+      .reindex-error__message {
+        flex: 1;
+        overflow-wrap: anywhere;
+        /* Cap a long server error at a few lines so the banner never grows to
+        cover the whole tile; the full text stays available via the title. */
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 3;
+        line-clamp: 3;
+        overflow: hidden;
+      }
+      .reindex-error__dismiss {
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0;
+        padding: 2px;
+        border: none;
+        background: transparent;
+        color: inherit;
+        --icon-color: currentColor;
+        cursor: pointer;
+        border-radius: var(--boxel-border-radius-xs);
+      }
+      .reindex-error__dismiss:hover {
+        background: rgba(255 255 255 / 25%);
       }
       .info > span {
         text-overflow: ellipsis;
@@ -404,9 +890,14 @@ export default class Workspace extends Component<Signature> {
         text-align: center;
         letter-spacing: var(--boxel-lsp);
       }
-      .name {
+      .info > .name {
         color: var(--boxel-light);
         font: 400 var(--boxel-font-sm);
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        text-wrap: wrap;
+        overflow-wrap: anywhere;
       }
       .visibility {
         color: var(--boxel-400);
@@ -426,10 +917,85 @@ export default class Workspace extends Component<Signature> {
         margin-left: var(--boxel-sp-6xs);
       }
       .hosted-icon {
-        color: var(--boxel-teal);
+        color: var(--boxel-highlight);
         display: flex;
         align-items: center;
         margin-right: var(--boxel-sp-6xs);
+      }
+      /* Sits between the tile's background image and its text/icon
+         content, darkening the image so the name and metadata stay
+         readable regardless of the underlying artwork. */
+      .tile-scrim {
+        position: absolute;
+        inset: 0;
+        background: rgba(0 0 0 / 50%);
+        z-index: 1;
+        pointer-events: none;
+      }
+      /* The icon + name + metadata group, vertically centered as a unit
+         within the tile. padding-top reserves the zone occupied by the
+         favorite star and status bar (see .tile-favorite-btn/.tile-status-bar
+         above) so the centered group never sits under them; padding-bottom
+         stays 0 so centering is computed against the space below that zone,
+         not the full tile height. Nudged up 10px from that centered
+         position per design feedback. Stays visible even when the
+         host-trigger bar is hovered/open (see .host-trigger below) — only
+         the .info block used to need to fade for that, and this group
+         replaced it. */
+      .tile-content {
+        position: absolute;
+        inset: 0;
+        box-sizing: border-box;
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        padding: calc(0.5rem + var(--boxel-button-xs) + var(--boxel-sp-3xs))
+          var(--boxel-sp) 0;
+        transform: translateY(-10px);
+        z-index: 2;
+      }
+      .tile-text {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-5xs);
+        min-width: 0;
+        flex: 1;
+      }
+      .tile-name {
+        font: 400 var(--boxel-font-md);
+        color: var(--boxel-light);
+        text-align: left;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        overflow-wrap: anywhere;
+      }
+      /* Height is reserved rather than derived from content: the counts are
+         fetched after the tile renders (favorites only), so a row that grew
+         when they landed would shift the tile's centered name. 1lh at the
+         stats' own font-size matches a populated row exactly. */
+      .tile-metadata-row {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-sm);
+        min-height: 1lh;
+        font-size: 0.75rem;
+      }
+      .tile-stat {
+        display: flex;
+        align-items: baseline;
+        gap: 0.25rem;
+        font-size: 0.75rem;
+        color: var(--boxel-light);
+        letter-spacing: var(--boxel-lsp);
+        --icon-color: var(--boxel-450);
+      }
+      .tile-stat-label {
+        font-weight: 400;
+      }
+      .tile-stat-number {
+        font-weight: 600;
       }
       .realm-url {
         font-size: var(--boxel-font-xs);
@@ -448,7 +1014,7 @@ export default class Workspace extends Component<Signature> {
         left: 0;
         width: var(--boxel-xxs-container);
         height: 2.25rem;
-        background: rgba(0 0 0 / 40%);
+        background: var(--boxel-dark-40);
         backdrop-filter: blur(6px);
         border: none;
         border-radius: 0 0 var(--boxel-border-radius-xl)
@@ -468,8 +1034,14 @@ export default class Workspace extends Component<Signature> {
         opacity: 1;
         transition: none;
       }
+      .workspace-card.is-enlarged .host-trigger {
+        width: var(
+          --favorite-tile-width,
+          calc(var(--boxel-xxs-container) * 1.5)
+        );
+      }
       .trigger-house {
-        color: var(--boxel-teal);
+        color: var(--boxel-highlight);
         display: flex;
         align-items: center;
         flex-shrink: 0;
@@ -477,7 +1049,7 @@ export default class Workspace extends Component<Signature> {
       .trigger-url {
         font-size: var(--boxel-font-size-2xs);
         color: var(--boxel-light);
-        font-weight: 500;
+        font-weight: 400;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -492,7 +1064,7 @@ export default class Workspace extends Component<Signature> {
       .host-dropdown {
         position: absolute;
         top: 10.375rem;
-        left: 0;
+        right: 0;
         width: var(--boxel-xxs-container);
         background: var(--boxel-light);
         border-radius: var(--boxel-border-radius);
@@ -574,54 +1146,70 @@ export default class Workspace extends Component<Signature> {
       .workspace-menu__list {
         --boxel-menu-item-content-padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
       }
+      .workspace-chooser-delete-modal-container {
+        --stack-card-footer-height: auto;
+      }
+      :global(.workspace-menu-dropdown) {
+        --boxel-dropdown-border-color: rgba(0 0 0 / 50%);
+      }
+      .workspace-menu-footer {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-5xs);
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+      }
+      .workspace-menu-footer::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 10px;
+        right: 10px;
+        height: 1px;
+        background: var(--boxel-light-25);
+        opacity: 0.75;
+      }
+      /* The last menu item normally rounds its bottom corners to match the
+         panel when hovered, since it's usually flush with the panel's
+         bottom edge. This dropdown has the Updated/Created footer below
+         it instead, so that rounding now reads as a mismatched cutout —
+         square it off here. */
+      :deep(.boxel-menu__item:last-child:hover) {
+        border-bottom-left-radius: 0;
+        border-bottom-right-radius: 0;
+      }
+      :deep([data-menu-item-id='realm-settings'] svg) {
+        width: 17px;
+        height: 17px;
+      }
+      .workspace-menu-footer__row {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-6xs);
+      }
+      .workspace-menu-footer__label,
+      .workspace-menu-footer__value {
+        font-size: var(--boxel-font-size-2xs);
+        color: var(--boxel-450);
+      }
       .workspace-chooser-delete-modal-container > :deep(.boxel-modal__inner) {
         display: flex;
       }
       :deep(.workspace-chooser-delete-modal) {
-        border-radius: var(--boxel-border-radius-xxl);
-        max-width: var(--boxel-md-container);
         height: auto;
         display: flex;
         flex-direction: column;
-      }
-      :deep(.workspace-chooser-delete-modal > .dialog-box__header) {
-        display: none;
       }
       :deep(.workspace-chooser-delete-modal > .dialog-box__content) {
-        padding: var(--boxel-sp-lg) var(--boxel-sp-xl);
-        overflow: visible;
-        height: auto;
-        flex: none;
         display: flex;
         flex-direction: column;
-        gap: var(--boxel-sp-lg);
+        gap: var(--boxel-sp);
       }
       :deep(.workspace-chooser-delete-modal > .dialog-box__content > * + *) {
         margin-top: 0;
       }
-      :deep(.workspace-chooser-delete-modal > .dialog-box__footer) {
-        height: auto;
-        flex: none;
-        padding: 0 var(--boxel-sp-xl) var(--boxel-sp-xl);
-        border-top: none;
-      }
-      .delete-modal__header {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-sm);
-      }
       .delete-modal__warning-icon {
-        width: var(--boxel-icon-lg);
-        height: var(--boxel-icon-lg);
-        min-width: var(--boxel-icon-lg);
-        color: var(--boxel-danger);
         flex-shrink: 0;
-      }
-      .delete-modal__title {
-        font-size: 1.625rem;
-        font-weight: 700;
-        color: var(--boxel-dark);
-        margin: 0;
       }
       .delete-modal__workspace-card {
         display: flex;
@@ -629,32 +1217,11 @@ export default class Workspace extends Component<Signature> {
         gap: var(--boxel-sp-sm);
         background: var(--boxel-light-100);
         border-radius: var(--boxel-border-radius-lg);
-        padding: var(--boxel-sp);
-        min-height: 5.125rem;
-      }
-      .delete-modal__realm-icon-wrapper {
-        position: relative;
-        flex-shrink: 0;
-        border-radius: calc(
-          var(--boxel-border-radius-xs) + var(--boxel-border-radius-sm)
-        );
-        display: flex;
-      }
-      .delete-modal__realm-icon-wrapper::after {
-        content: '';
-        position: absolute;
-        inset: 0;
-        border-radius: inherit;
-        box-shadow: inset 0 0 0 1px rgba(255 255 255 / 50%);
-        z-index: 1;
-        pointer-events: none;
+        padding: var(--boxel-sp-sm);
       }
       .delete-modal__realm-icon {
-        --boxel-realm-icon-size: 2.625rem;
-        --boxel-realm-icon-border-radius: calc(
-          var(--boxel-border-radius-xs) + 6px
-        );
-        --boxel-realm-icon-background-color: var(--boxel-light);
+        flex-shrink: 0;
+        --boxel-realm-icon-size: 1.875rem;
       }
       .delete-modal__workspace-info {
         display: flex;
@@ -663,41 +1230,56 @@ export default class Workspace extends Component<Signature> {
       }
       .delete-modal__workspace-name {
         font-size: var(--boxel-font-size-sm);
-        font-weight: 700;
+        line-height: var(--boxel-line-height-sm);
+        font-weight: 600;
         color: var(--boxel-dark);
       }
       .delete-modal__workspace-meta {
-        font-size: var(--boxel-font-size-sm);
-        font-weight: 400;
-        color: var(--boxel-dark);
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
+        color: var(--boxel-450);
       }
-      .delete-modal__warning-box {
-        background: var(--boxel-danger-bg);
+      .delete-modal__warning {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-sm);
         border-radius: var(--boxel-border-radius-lg);
-        padding: var(--boxel-sp-lg);
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-sm);
-      }
-      .delete-modal__warning-text {
-        margin: 0;
         font-size: var(--boxel-font-size-sm);
-        font-weight: 700;
+        line-height: var(--boxel-line-height-sm);
+      }
+      .delete-modal__warning.warning {
+        flex-direction: row;
+        align-items: flex-start;
+        gap: var(--boxel-sp-sm);
+        background-color: var(--boxel-warning-200);
         color: var(--boxel-dark);
+      }
+      .delete-modal__warning.error {
+        border: 1px solid var(--boxel-error-200);
+        background-color: rgb(from var(--boxel-error-200) r g b / 8%);
+        color: var(--boxel-error-200);
+      }
+      .delete-modal__warning-body {
         display: flex;
         flex-direction: column;
-        gap: var(--boxel-sp-2xs);
+        gap: var(--boxel-sp-xs);
+      }
+      .delete-modal__irreversible {
+        margin: 0;
+        font-weight: 600;
       }
       .delete-modal__realms {
         display: flex;
         flex-direction: column;
-        gap: 0.5rem;
+        gap: var(--boxel-sp-xs);
         margin-top: var(--boxel-sp-4xs);
       }
       .delete-modal__realms-title {
         margin: 0;
         font-size: var(--boxel-font-size-sm);
-        font-weight: 700;
+        line-height: var(--boxel-line-height-sm);
+        font-weight: 600;
         color: var(--boxel-dark);
       }
       .delete-modal__realms-list {
@@ -705,33 +1287,145 @@ export default class Workspace extends Component<Signature> {
         padding-left: var(--boxel-sp-lg);
         display: flex;
         flex-direction: column;
-        gap: 0.5rem;
+        gap: var(--boxel-sp-xs);
       }
       .delete-modal__realms-list li {
         font-size: var(--boxel-font-size-sm);
-        font-weight: 500;
+        line-height: var(--boxel-line-height-sm);
         color: var(--boxel-dark);
         list-style: disc;
       }
-      .delete-modal__error {
+      .delete-modal__footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: var(--boxel-sp-sm);
+        width: 100%;
+      }
+      .workspace-chooser-archive-modal-container > :deep(.boxel-modal__inner) {
+        display: flex;
+      }
+      :deep(.workspace-chooser-archive-modal) {
+        border-radius: var(--boxel-border-radius-xxl);
+        max-width: var(--boxel-md-container);
+        height: auto;
+        display: flex;
+        flex-direction: column;
+      }
+      :deep(.workspace-chooser-archive-modal > .dialog-box__header) {
+        display: none;
+      }
+      :deep(.workspace-chooser-archive-modal > .dialog-box__content) {
+        padding: var(--boxel-sp-lg) var(--boxel-sp-xl);
+        overflow: visible;
+        height: auto;
+        flex: none;
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-lg);
+      }
+      :deep(.workspace-chooser-archive-modal > .dialog-box__content > * + *) {
+        margin-top: 0;
+      }
+      :deep(.workspace-chooser-archive-modal > .dialog-box__footer) {
+        height: auto;
+        flex: none;
+        padding: 0 var(--boxel-sp-xl) var(--boxel-sp-xl);
+        border-top: none;
+      }
+      .archive-modal__header {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-sm);
+      }
+      .archive-modal__icon {
+        width: var(--boxel-icon-lg);
+        height: var(--boxel-icon-lg);
+        min-width: var(--boxel-icon-lg);
+        color: var(--boxel-dark);
+        flex-shrink: 0;
+      }
+      .archive-modal__title {
+        font-size: 1.625rem;
+        font-weight: 700;
+        color: var(--boxel-dark);
+        margin: 0;
+      }
+      .archive-modal__workspace-card {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-sm);
+        background: var(--boxel-light-100);
+        border-radius: var(--boxel-border-radius-lg);
+        padding: var(--boxel-sp);
+        min-height: 5.125rem;
+      }
+      .archive-modal__realm-icon-wrapper {
+        position: relative;
+        flex-shrink: 0;
+        border-radius: calc(
+          var(--boxel-border-radius-xs) + var(--boxel-border-radius-sm)
+        );
+        display: flex;
+      }
+      .archive-modal__realm-icon-wrapper::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        box-shadow: inset 0 0 0 1px rgba(255 255 255 / 50%);
+        z-index: 1;
+        pointer-events: none;
+      }
+      .archive-modal__realm-icon {
+        --boxel-realm-icon-size: 2.625rem;
+        --boxel-realm-icon-border-radius: calc(
+          var(--boxel-border-radius-xs) + 6px
+        );
+        --boxel-realm-icon-background-color: var(--boxel-light);
+      }
+      .archive-modal__workspace-info {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-4xs);
+      }
+      .archive-modal__workspace-name {
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 700;
+        color: var(--boxel-dark);
+      }
+      .archive-modal__info-box {
+        background: var(--boxel-light-100);
+        border-radius: var(--boxel-border-radius-lg);
+        padding: var(--boxel-sp-lg);
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-sm);
+      }
+      .archive-modal__info-text {
+        margin: 0;
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 400;
+        color: var(--boxel-dark);
+      }
+      .archive-modal__error {
         color: var(--boxel-danger);
         font-size: var(--boxel-font-size-sm);
         font-weight: 600;
         margin: 0;
       }
-      .delete-modal__footer {
+      .archive-modal__footer {
         display: flex;
         flex-direction: column;
         align-items: flex-end;
         gap: var(--boxel-sp-xs);
         width: 100%;
       }
-      .delete-modal__actions {
+      .archive-modal__actions {
         display: flex;
         gap: var(--boxel-sp-sm);
         align-items: center;
       }
-      .delete-modal__cancel {
+      .archive-modal__cancel {
         background: none;
         border: 1px solid var(--boxel-450);
         border-radius: var(--boxel-border-radius-xxl);
@@ -745,12 +1439,12 @@ export default class Workspace extends Component<Signature> {
           border-color 0.15s ease,
           background 0.15s ease;
       }
-      .delete-modal__cancel:hover {
+      .archive-modal__cancel:hover {
         border-color: var(--boxel-550);
         background: var(--boxel-light-100);
       }
-      .delete-modal__confirm {
-        background: var(--boxel-danger);
+      .archive-modal__confirm {
+        background: var(--boxel-dark);
         border: none;
         border-radius: var(--boxel-border-radius-xxl);
         padding: 0 1.5rem;
@@ -761,15 +1455,166 @@ export default class Workspace extends Component<Signature> {
         cursor: pointer;
         transition: background 0.15s ease;
       }
-      .delete-modal__confirm:hover {
-        background: var(--boxel-danger-hover);
+      .archive-modal__confirm:hover {
+        background: var(--boxel-700);
       }
-      .delete-modal__disclaimer {
+      .archive-modal__disclaimer {
         font-size: var(--boxel-font-size-xs);
         font-weight: 700;
-        color: var(--boxel-danger);
+        color: var(--boxel-500);
       }
-      .delete-modal__spinner {
+      .archive-modal__spinner {
+        --boxel-loading-indicator-size: 2rem;
+      }
+      .workspace-chooser-duplicate-modal-container
+        > :deep(.boxel-modal__inner) {
+        display: flex;
+      }
+      :deep(.workspace-chooser-duplicate-modal) {
+        border-radius: var(--boxel-border-radius-xxl);
+        max-width: var(--boxel-md-container);
+        height: auto;
+        display: flex;
+        flex-direction: column;
+      }
+      :deep(.workspace-chooser-duplicate-modal > .dialog-box__header) {
+        display: none;
+      }
+      :deep(.workspace-chooser-duplicate-modal > .dialog-box__content) {
+        padding: var(--boxel-sp-lg) var(--boxel-sp-xl);
+        overflow: visible;
+        height: auto;
+        flex: none;
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-lg);
+      }
+      :deep(.workspace-chooser-duplicate-modal > .dialog-box__content > * + *) {
+        margin-top: 0;
+      }
+      :deep(.workspace-chooser-duplicate-modal > .dialog-box__footer) {
+        height: auto;
+        flex: none;
+        padding: 0 var(--boxel-sp-xl) var(--boxel-sp-xl);
+        border-top: none;
+      }
+      .duplicate-modal__header {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-sm);
+      }
+      .duplicate-modal__icon {
+        width: var(--boxel-icon-lg);
+        height: var(--boxel-icon-lg);
+        min-width: var(--boxel-icon-lg);
+        color: var(--boxel-dark);
+        flex-shrink: 0;
+      }
+      .duplicate-modal__title {
+        font-size: 1.625rem;
+        font-weight: 700;
+        color: var(--boxel-dark);
+        margin: 0;
+      }
+      .duplicate-modal__workspace-card {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-sm);
+        background: var(--boxel-light-100);
+        border-radius: var(--boxel-border-radius-lg);
+        padding: var(--boxel-sp);
+        min-height: 5.125rem;
+      }
+      .duplicate-modal__realm-icon-wrapper {
+        position: relative;
+        flex-shrink: 0;
+        border-radius: calc(
+          var(--boxel-border-radius-xs) + var(--boxel-border-radius-sm)
+        );
+        display: flex;
+      }
+      .duplicate-modal__realm-icon-wrapper::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        box-shadow: inset 0 0 0 1px rgba(255 255 255 / 50%);
+        z-index: 1;
+        pointer-events: none;
+      }
+      .duplicate-modal__realm-icon {
+        --boxel-realm-icon-size: 2.625rem;
+        --boxel-realm-icon-border-radius: calc(
+          var(--boxel-border-radius-xs) + 6px
+        );
+        --boxel-realm-icon-background-color: var(--boxel-light);
+      }
+      .duplicate-modal__workspace-info {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-4xs);
+      }
+      .duplicate-modal__workspace-name {
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 700;
+        color: var(--boxel-dark);
+      }
+      .duplicate-modal__info-box {
+        background: var(--boxel-light-100);
+        border-radius: var(--boxel-border-radius-lg);
+        padding: var(--boxel-sp-lg);
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-sm);
+      }
+      .duplicate-modal__info-text {
+        margin: 0;
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 400;
+        color: var(--boxel-dark);
+      }
+      .duplicate-modal__error {
+        color: var(--boxel-danger);
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 600;
+        margin: 0;
+      }
+      .duplicate-modal__footer {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: var(--boxel-sp-xs);
+        width: 100%;
+      }
+      .duplicate-modal__actions {
+        display: flex;
+        gap: var(--boxel-sp-sm);
+        align-items: center;
+      }
+      .duplicate-modal__progress {
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 600;
+        color: var(--boxel-dark);
+      }
+      .duplicate-modal__cancel {
+        background: none;
+        border: 1px solid var(--boxel-450);
+        border-radius: var(--boxel-border-radius-xxl);
+        padding: 0 var(--boxel-sp-lg);
+        height: var(--boxel-button-tall);
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 700;
+        color: var(--boxel-dark);
+        cursor: pointer;
+        transition:
+          border-color 0.15s ease,
+          background 0.15s ease;
+      }
+      .duplicate-modal__cancel:hover {
+        border-color: var(--boxel-550);
+        background: var(--boxel-light-100);
+      }
+      .duplicate-modal__spinner {
         --boxel-loading-indicator-size: 2rem;
       }
     </style>
@@ -781,6 +1626,13 @@ export default class Workspace extends Component<Signature> {
     );
   }
 
+  // Serves as both the button's accessible label and its tooltip text, so the
+  // two can't drift apart.
+  private get favoriteLabel() {
+    return this.isFavorited ? 'Remove from Favorites' : 'Add to Favorites';
+  }
+
+  @service declare private workspaceDuplication: WorkspaceDuplicationService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private matrixService: MatrixService;
   @service declare private network: NetworkService;
@@ -791,11 +1643,25 @@ export default class Workspace extends Component<Signature> {
   @tracked private showDeleteModal = false;
   @tracked private deleteError: string | undefined;
   @tracked private deleteSummary: WorkspaceDeleteSummary | undefined;
+  @tracked private showArchiveModal = false;
+  @tracked private archiveError: string | undefined;
+  @tracked private showDuplicateModal = false;
+  @tracked private duplicateError: string | undefined;
+  private duplicateAbortController: AbortController | undefined;
+  @tracked private duplicateProgress:
+    | { copied: number; total: number }
+    | undefined;
   @tracked private isHostDropdownOpen = false;
+  @tracked private reindexError: string | undefined;
 
   constructor(...args: [any, any]) {
     super(...args);
     this.loadRealmTask.perform();
+  }
+
+  willDestroy() {
+    super.willDestroy();
+    this.clearReindexError();
   }
 
   private loadRealmTask = task(async () => {
@@ -812,13 +1678,69 @@ export default class Workspace extends Component<Signature> {
     return this.realmInfo.name;
   }
 
+  // The selection ring is shown only once the user has actively engaged the
+  // keyboard selection. On open the tile is selected (holds focus for keyboard
+  // nav) but unringed, so the chooser doesn't present a pre-picked tile.
+  private get showSelectionRing() {
+    return Boolean(this.args.isSelected && this.args.selectionActive);
+  }
+
   get tileMenuItems() {
-    return [
+    let items = [
       new MenuItem({
         label: this.isFavorited ? 'Unfavorite' : 'Favorite',
         icon: this.isFavorited ? StarFilled : Star,
         action: this.toggleFavorite,
       }),
+    ];
+    // Duplicating is scoped to the skills realm: it is the one realm whose
+    // contents are all-relative references, which a file-by-file copy
+    // preserves intact. Generic realm cloning needs link rewriting and is
+    // deliberately not offered here.
+    if (this.canDuplicateWorkspace) {
+      items.push(
+        new MenuItem({
+          label: 'Duplicate Workspace',
+          icon: CopyIcon,
+          action: this.openDuplicateModal,
+        }),
+      );
+    }
+    items.push(
+      new MenuItem({
+        id: 'realm-settings',
+        label: 'Realm Settings',
+        icon: FileSettingsIcon,
+        action: this.openRealmConfig,
+      }),
+    );
+    // Re-index and Archive are owner-only and appear only on tiles the user
+    // owns.
+    if (this.canReindexWorkspace) {
+      items.push(
+        new MenuItem({
+          label: 'Re-index',
+          icon: RefreshIcon,
+          action: this.reindexWorkspaceTask.perform,
+          // Gate on the live indexing flag, not reindexWorkspaceTask.isRunning:
+          // the task resolves the instant the 204 lands (sub-second), while the
+          // reindex itself runs much longer. isIndexing stays true for the whole
+          // pass. Repeat clicks are server-safe regardless (the reindex queue
+          // coalesces them), so this guard is purely a UX nicety.
+          disabled: this.isReindexing,
+        }),
+      );
+    }
+    if (this.canArchiveWorkspace) {
+      items.push(
+        new MenuItem({
+          label: 'Archive Workspace',
+          icon: ArchiveIcon,
+          action: this.openArchiveModal,
+        }),
+      );
+    }
+    items.push(
       new MenuItem({
         label: 'Delete Workspace',
         icon: IconTrash,
@@ -826,7 +1748,19 @@ export default class Workspace extends Component<Signature> {
         dangerous: true,
         disabled: !this.canDeleteWorkspace,
       }),
-    ];
+    );
+    return items;
+  }
+
+  @action openRealmConfig() {
+    let realmURL = this.args.realmIdentifier.endsWith('/')
+      ? this.args.realmIdentifier
+      : `${this.args.realmIdentifier}/`;
+    this.operatorModeStateService.openCardInInteractMode(
+      `${realmURL}realm`,
+      'edit',
+    );
+    this.operatorModeStateService.closeWorkspaceChooser();
   }
 
   @action async toggleFavorite() {
@@ -906,8 +1840,63 @@ export default class Workspace extends Component<Signature> {
     }
   }
 
+  private get createdAtLabel() {
+    let { createdAt } = this.realmInfo;
+    if (!createdAt) {
+      return undefined;
+    }
+    return formatRelativeTime(new Date(createdAt));
+  }
+
+  private get updatedAtLabel() {
+    let { updatedAt } = this.realmInfo;
+    if (!updatedAt) {
+      return undefined;
+    }
+    return formatUpdatedTime(new Date(updatedAt));
+  }
+
+  // Compact metadata for the enlarged favorite tile's in-tile content (see
+  // .tile-metadata-row below). Label and count stay separate fields so the
+  // template can emphasize the count with larger type than its unit label.
+  // A stat with no count is dropped rather than rendered as "0" — that's
+  // what gives each favorite tile its own mix of metadata instead of always
+  // showing all three.
+  //
+  // Counts arrive on their own schedule: the chooser requests them for
+  // favorited realms only, after first render (see `trackFavoriteCounts` in
+  // ../workspace-chooser/index.gts). Empty until then, which is why the row
+  // reserves its height rather than being conditionally rendered.
+  private get tileStats(): { label: string; count: number }[] {
+    let counts = this.realm.indexCounts(this.args.realmIdentifier);
+    if (!counts) {
+      return [];
+    }
+    return [
+      { label: 'Cards', count: counts.cardCount },
+      { label: 'Files', count: counts.fileCount },
+      { label: 'Definitions', count: counts.definitionCount },
+    ].filter((stat): stat is { label: string; count: number } => !!stat.count);
+  }
+
   private get canDeleteWorkspace() {
     return this.realm.isRealmOwner(this.args.realmIdentifier);
+  }
+
+  private get canArchiveWorkspace() {
+    return this.realm.isRealmOwner(this.args.realmIdentifier);
+  }
+
+  private get canReindexWorkspace() {
+    return this.realm.isRealmOwner(this.args.realmIdentifier);
+  }
+
+  private get canDuplicateWorkspace() {
+    return ensureTrailingSlash(this.args.realmIdentifier) === skillsRealmURL;
+  }
+
+  private get isReindexing() {
+    return this.realmInfo.isIndexing;
   }
 
   private get deleteSummaryText() {
@@ -961,6 +1950,133 @@ export default class Workspace extends Component<Signature> {
     }
     this.showDeleteModal = false;
     this.deleteError = undefined;
+  }
+
+  @action openArchiveModal() {
+    if (!this.canArchiveWorkspace) {
+      return;
+    }
+    this.archiveError = undefined;
+    this.showArchiveModal = true;
+  }
+
+  @action openDuplicateModal() {
+    if (!this.canDuplicateWorkspace) {
+      return;
+    }
+    this.duplicateError = undefined;
+    this.showDuplicateModal = true;
+  }
+
+  @action closeDuplicateModal() {
+    if (this.duplicateWorkspaceTask.isRunning) {
+      this.cancelDuplication();
+      return;
+    }
+    this.showDuplicateModal = false;
+    this.duplicateError = undefined;
+  }
+
+  // Frees the user immediately: the modal closes here while the service
+  // notices the abort at its next batch boundary and cleans up the partial
+  // realm in the background.
+  @action private cancelDuplication() {
+    this.duplicateAbortController?.abort();
+    this.showDuplicateModal = false;
+    this.duplicateProgress = undefined;
+  }
+
+  private get duplicateProgressLabel() {
+    if (!this.duplicateProgress) {
+      return 'Preparing to copy…';
+    }
+    let { copied, total } = this.duplicateProgress;
+    return `Copying ${copied} of ${total} ${pluralize('file', total)}…`;
+  }
+
+  @action closeArchiveModal() {
+    if (this.archiveWorkspaceTask.isRunning) {
+      return;
+    }
+    this.showArchiveModal = false;
+    this.archiveError = undefined;
+  }
+
+  private archiveWorkspaceTask = dropTask(async () => {
+    this.archiveError = undefined;
+
+    try {
+      let realmPath = new RealmPaths(this.args.realmIdentifier);
+      let isActiveWorkspace =
+        this.operatorModeStateService.realmURL === this.args.realmIdentifier ||
+        this.operatorModeStateService
+          .getOpenCardIds()
+          .some((cardId) => realmPath.inRealm(cardId)) ||
+        this.operatorModeStateService.codePathString?.startsWith(
+          this.args.realmIdentifier,
+        );
+
+      await this.realmServer.archiveRealm(this.args.realmIdentifier);
+      // Archiving seals the realm; drop its local session so background
+      // requests don't loop on 403. Restoring re-creates the session.
+      this.realm.removeRealm(this.args.realmIdentifier);
+
+      if (isActiveWorkspace) {
+        this.operatorModeStateService.clearStacks();
+        await this.operatorModeStateService.updateCodePath(null);
+        this.operatorModeStateService.openWorkspaceChooser();
+      }
+
+      this.showArchiveModal = false;
+    } catch (error: any) {
+      this.archiveError = error.message;
+    }
+  });
+
+  private duplicateWorkspaceTask = dropTask(async () => {
+    this.duplicateError = undefined;
+    this.duplicateProgress = undefined;
+    this.duplicateAbortController = new AbortController();
+
+    try {
+      await this.workspaceDuplication.duplicateWorkspace(
+        this.args.realmIdentifier,
+        {
+          onProgress: (copied, total) => {
+            this.duplicateProgress = { copied, total };
+          },
+          signal: this.duplicateAbortController.signal,
+        },
+      );
+      this.showDuplicateModal = false;
+    } catch (error: any) {
+      // A cancellation is the user's own doing; only real failures are shown.
+      if (error?.name !== 'AbortError') {
+        this.duplicateError = String(error?.message ?? error);
+      }
+    } finally {
+      // Also runs when the task is cancelled by component teardown; aborting
+      // here makes the service stop copying and clean up rather than carrying
+      // on with no UI attached. A no-op after normal completion.
+      this.duplicateAbortController?.abort();
+      this.duplicateProgress = undefined;
+      this.duplicateAbortController = undefined;
+    }
+  });
+
+  private reindexWorkspaceTask = dropTask(async () => {
+    this.clearReindexError();
+    try {
+      await this.realm.fullReindex(this.args.realmIdentifier);
+    } catch (error: any) {
+      // The error stays put until the user dismisses it or retries the
+      // reindex, so a failed pass never disappears before it's noticed.
+      this.reindexError = String(error?.message ?? error);
+    }
+  });
+
+  @action private clearReindexError() {
+    this.reindexError = undefined;
   }
 
   private loadDeleteSummaryTask = dropTask(async () => {
@@ -1045,7 +2161,7 @@ function summarizeWorkspaceContents(
   return fileURLs.reduce(
     (summary, fileURL) => {
       let path = new URL(fileURL).pathname;
-      if (path.endsWith('/.realm.json') || path.endsWith('/realm.json')) {
+      if (path.endsWith('/realm.json')) {
         return summary;
       }
       if (path.endsWith('.json')) {
@@ -1089,4 +2205,49 @@ export function joinWithAnd(parts: string[]): string {
   }
 
   return `${parts.slice(0, -1).join(', ')}, and ${parts.at(-1)}`;
+}
+
+export function formatRelativeTime(date: Date): string {
+  let diffMinutes = Math.floor((Date.now() - date.getTime()) / (60 * 1000));
+  if (diffMinutes < 1) {
+    return formatDate(date, 'h:mm a');
+  }
+  if (diffMinutes < 60) {
+    return `${diffMinutes} min ago`;
+  }
+  let diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) {
+    return `${diffHours} ${diffHours === 1 ? 'hr' : 'hrs'} ago`;
+  }
+  return formatDate(date, 'EEE, MMM d, yyyy');
+}
+
+export function formatUpdatedTime(date: Date): string {
+  // Clamp to 0: a clock skewed slightly ahead of the server (or a
+  // just-written timestamp racing this render) can otherwise produce a
+  // negative diff.
+  let diffSeconds = Math.max(
+    0,
+    Math.floor((Date.now() - date.getTime()) / 1000),
+  );
+  if (diffSeconds === 0) {
+    return 'Updated just now';
+  }
+  if (diffSeconds < 60) {
+    return `Updated ${diffSeconds} sec ago`;
+  }
+  let diffMinutes = Math.floor(diffSeconds / 60);
+  if (diffMinutes < 60) {
+    return `Updated ${diffMinutes} min ago`;
+  }
+  let diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) {
+    return `Updated ${diffHours} ${diffHours === 1 ? 'hr' : 'hrs'} ago`;
+  }
+  let diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 30) {
+    return `Updated ${diffDays} ${diffDays === 1 ? 'day' : 'days'} ago`;
+  }
+  let diffMonths = Math.floor(diffDays / 30);
+  return `Updated ${diffMonths} ${diffMonths === 1 ? 'month' : 'months'} ago`;
 }

@@ -21,6 +21,7 @@ interface Signature {
     onSend: () => void;
     onPaste?: (event: ClipboardEvent) => void | Promise<void>;
     canSend: boolean;
+    isSending?: boolean;
     attachButton?: WithBoundArgs<
       typeof AttachButton,
       'chooseCard' | 'chooseFile' | 'chooseLocalFile'
@@ -55,8 +56,8 @@ export default class AiAssistantChatInput extends Component<Signature> {
       </div>
       <IconButton
         {{on 'click' this.onSend}}
-        {{! TODO we should visually surface this loading state }}
         disabled={{not @canSend}}
+        @loading={{@isSending}}
         data-test-can-send-msg={{@canSend}}
         class='send-button'
         @variant='primary'

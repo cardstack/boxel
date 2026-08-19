@@ -40,6 +40,7 @@ import {
   type TestContextWithSave,
   assertMessages,
   withCachedRealmSetup,
+  realmConfigCardJSON,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import {
@@ -62,18 +63,19 @@ import {
   removeRecentCards,
   assertRecentFileURLs,
 } from '../../helpers/recent-files-cards';
+import { searchCardsForTest } from '../../helpers/search-cards';
 import { setupApplicationTest } from '../../helpers/setup';
 
-const codeRefDriverCard = `import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
-  import { Component } from 'https://cardstack.com/base/card-api';
-  import CodeRefField from 'https://cardstack.com/base/code-ref';
+const codeRefDriverCard = `import { CardDef, field, contains } from '@cardstack/base/card-api';
+  import { Component } from '@cardstack/base/card-api';
+  import CodeRefField from '@cardstack/base/code-ref';
   export class CodeRefDriver extends CardDef {
     static displayName = "Code Ref Driver";
     @field ref = contains(CodeRefField);
 }`;
 
-const testSpecCard = `import { Component } from 'https://cardstack.com/base/card-api';
-  import { Spec } from 'https://cardstack.com/base/spec';
+const testSpecCard = `import { Component } from '@cardstack/base/card-api';
+  import { Spec } from '@cardstack/base/spec';
   export class TestSpec extends Spec {
     static displayName = 'TestSpec';
     static isolated = class Isolated extends Component<typeof this> {
@@ -83,9 +85,9 @@ const testSpecCard = `import { Component } from 'https://cardstack.com/base/card
     }
   }`;
 
-const authorCard = `import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-  import MarkdownField from 'https://cardstack.com/base/markdown';
-  import StringField from "https://cardstack.com/base/string";
+const authorCard = `import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+  import MarkdownField from '@cardstack/base/markdown';
+  import StringField from "@cardstack/base/string";
   export class Author extends CardDef {
     static displayName = 'Author';
     @field firstName = contains(StringField);
@@ -113,9 +115,9 @@ const authorCard = `import { contains, field, CardDef, Component } from "https:/
     }
 }`;
 
-const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, Component, StringField } from "https://cardstack.com/base/card-api";
-  import DateTimeField from 'https://cardstack.com/base/datetime';
-  import MarkdownField from 'https://cardstack.com/base/markdown';
+const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, Component, StringField } from "@cardstack/base/card-api";
+  import DateTimeField from '@cardstack/base/datetime';
+  import MarkdownField from '@cardstack/base/markdown';
   import { Author } from './author';
 
   export class Category extends CardDef {
@@ -160,7 +162,7 @@ const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, C
     }
 }`;
 
-const personCard = `import { field, linksTo, CardDef } from 'https://cardstack.com/base/card-api';
+const personCard = `import { field, linksTo, CardDef } from '@cardstack/base/card-api';
   export class Pet extends CardDef {
     static displayName = 'Pet';
   }
@@ -170,8 +172,8 @@ const personCard = `import { field, linksTo, CardDef } from 'https://cardstack.c
   }
 `;
 
-const customEditCard = `import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+const customEditCard = `import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
   export class CustomEdit extends CardDef {
     static displayName = 'Custom Edit';
     @field name = contains(StringField);
@@ -182,8 +184,8 @@ const customEditCard = `import { contains, field, CardDef, Component } from "htt
     };
   }`;
 
-const headPreviewCard = `import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+const headPreviewCard = `import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
 
   export class HeadPreview extends CardDef {
     static displayName = 'Head Preview';
@@ -289,7 +291,7 @@ const localStyleReferenceCard = {
     },
     meta: {
       adoptsFrom: {
-        module: 'https://cardstack.com/base/style-reference',
+        module: '@cardstack/base/style-reference',
         name: 'default',
       },
     },
@@ -316,8 +318,8 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
     hooks.beforeEach(async function () {
       let loader = getService('loader-service').loader;
-      let cardsGrid: typeof import('https://cardstack.com/base/cards-grid');
-      cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
+      let cardsGrid: typeof import('@cardstack/base/cards-grid');
+      cardsGrid = await loader.import('@cardstack/base/cards-grid');
       let { CardsGrid } = cardsGrid;
 
       createAndJoinRoom({
@@ -1029,28 +1031,22 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         declaration: 'BlogPost',
       });
       await chooseAnotherInstance();
-      assert.dom('[data-test-card-catalog-modal]').exists();
-      assert.dom('[data-test-card-catalog-item]').exists({ count: 3 });
+      assert.dom('[data-test-card-chooser-modal]').exists();
+      assert.dom('[data-test-item-button]').exists({ count: 3 });
       assert
-        .dom(
-          `[data-test-card-catalog-item="${testRealmURL}BlogPost/mad-hatter"]`,
-        )
+        .dom(`[data-test-item-button="${testRealmURL}BlogPost/mad-hatter"]`)
         .exists();
       assert
-        .dom(
-          `[data-test-card-catalog-item="${testRealmURL}BlogPost/urban-living"]`,
-        )
+        .dom(`[data-test-item-button="${testRealmURL}BlogPost/urban-living"]`)
         .exists();
       assert
-        .dom(
-          `[data-test-card-catalog-item="${testRealmURL}BlogPost/remote-work"]`,
-        )
+        .dom(`[data-test-item-button="${testRealmURL}BlogPost/remote-work"]`)
         .exists();
 
       await click(
-        `[data-test-card-catalog-item="${testRealmURL}BlogPost/mad-hatter"]`,
+        `[data-test-item-button="${testRealmURL}BlogPost/mad-hatter"]`,
       );
-      await click('[data-test-card-catalog-go-button]');
+      await click('[data-test-card-chooser-go-button]');
       assertCardExists(
         assert,
         `${testRealmURL}BlogPost/mad-hatter`,
@@ -1168,9 +1164,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
     test('playground preview for card with contained fields can live update when module changes', async function (assert) {
       // change: added "Hello" before rendering title on the template
-      const authorCard = `import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-        import MarkdownField from 'https://cardstack.com/base/markdown';
-        import StringField from "https://cardstack.com/base/string";
+      const authorCard = `import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+        import MarkdownField from '@cardstack/base/markdown';
+        import StringField from "@cardstack/base/string";
         export class Author extends CardDef {
           static displayName = 'Author';
           @field firstName = contains(StringField);
@@ -1213,10 +1209,10 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
     test('playground preview for card with linked fields can live update when module changes', async function (assert) {
       // change: added "Hello" before rendering title on the template
-      const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
-        import DateTimeField from 'https://cardstack.com/base/datetime';
-        import MarkdownField from 'https://cardstack.com/base/markdown';
-        import StringField from "https://cardstack.com/base/string";
+      const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, Component } from "@cardstack/base/card-api";
+        import DateTimeField from '@cardstack/base/datetime';
+        import MarkdownField from '@cardstack/base/markdown';
+        import StringField from "@cardstack/base/string";
         import { Author } from './author';
 
         export class Category extends CardDef {
@@ -1559,14 +1555,17 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         'recent file count is correct',
       );
 
-      let { data: results } = await realm.realmIndexQueryEngine.searchCards({
-        filter: {
-          type: {
-            module: testRRI('person'),
-            name: 'Person',
+      let { data: results } = await searchCardsForTest(
+        realm.realmIndexQueryEngine,
+        {
+          filter: {
+            type: {
+              module: testRRI('person'),
+              name: 'Person',
+            },
           },
         },
-      });
+      );
       assert.strictEqual(results.length, 0);
 
       await openFileInPlayground('person.gts', testRealmURL, {
@@ -1590,14 +1589,17 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         .dom('[data-option-index]')
         .exists({ count: 1 }, 'new card shows up in instance chooser dropdown');
 
-      ({ data: results } = await realm.realmIndexQueryEngine.searchCards({
-        filter: {
-          type: {
-            module: testRRI('person'),
-            name: 'Person',
+      ({ data: results } = await searchCardsForTest(
+        realm.realmIndexQueryEngine,
+        {
+          filter: {
+            type: {
+              module: testRRI('person'),
+              name: 'Person',
+            },
           },
         },
-      }));
+      ));
       assert.strictEqual(results.length, 1);
       assert.strictEqual(results[0].id, newCardId);
     });
@@ -1605,14 +1607,17 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     test('does not autogenerate card instance if one exists in the realm but is not in recent cards', async function (assert) {
       removeRecentFiles();
       const cardId = `${testRealmURL}Person/pet-mango`;
-      let { data: results } = await realm.realmIndexQueryEngine.searchCards({
-        filter: {
-          type: {
-            module: testRRI('person'),
-            name: 'Pet',
+      let { data: results } = await searchCardsForTest(
+        realm.realmIndexQueryEngine,
+        {
+          filter: {
+            type: {
+              module: testRRI('person'),
+              name: 'Pet',
+            },
           },
         },
-      });
+      );
       assert.strictEqual(results.length, 1);
       assert.strictEqual(results[0].id, cardId);
 
@@ -1629,14 +1634,17 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert.dom('[data-option-index]').exists({ count: 1 });
       assert.dom('[data-option-index="0"]').containsText('Mango');
 
-      ({ data: results } = await realm.realmIndexQueryEngine.searchCards({
-        filter: {
-          type: {
-            module: testRRI('person'),
-            name: 'Pet',
+      ({ data: results } = await searchCardsForTest(
+        realm.realmIndexQueryEngine,
+        {
+          filter: {
+            type: {
+              module: testRRI('person'),
+              name: 'Pet',
+            },
           },
         },
-      }));
+      ));
       assert.strictEqual(results.length, 1);
       assert.strictEqual(results[0].id, cardId);
     });
@@ -1728,12 +1736,12 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
             ...SYSTEM_CARD_FIXTURE_CONTENTS,
             'author-card.gts': authorCard,
             'StyleReference/local-style.json': localStyleReferenceCard,
-            '.realm.json': {
+            'realm.json': realmConfigCardJSON({
               name: `Test User's Workspace`,
               backgroundURL:
                 'https://i.postimg.cc/NjcjbyD3/4k-origami-flock.jpg',
               iconURL: 'https://i.postimg.cc/Rq550Bwv/T.png',
-            },
+            }),
           },
         });
 
@@ -1743,11 +1751,11 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           contents: {
             ...SYSTEM_CARD_FIXTURE_CONTENTS,
             'author-card.gts': authorCard,
-            '.realm.json': {
+            'realm.json': realmConfigCardJSON({
               name: `Additional Workspace`,
               backgroundURL: 'https://i.postimg.cc/4ycXQZ94/4k-powder-puff.jpg',
               iconURL: 'https://i.postimg.cc/BZwv0LyC/A.png',
-            },
+            }),
           },
         });
       });
@@ -1860,7 +1868,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     let { setRealmPermissions, setActiveRealms, createAndJoinRoom } =
       mockMatrixUtils;
 
-    const boomPet = `import { contains, field, CardDef, Component, FieldDef, StringField, serialize } from 'https://cardstack.com/base/card-api';
+    const boomPet = `import { contains, field, CardDef, Component, FieldDef, StringField, serialize } from '@cardstack/base/card-api';
       // this field explodes when serialized (saved)
       export class BoomField extends FieldDef {
         @field cardTitle = contains(StringField);
@@ -1878,7 +1886,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         @field boom = contains(BoomField);
       }
     `;
-    const boomPerson = `import { field, contains, CardDef, FieldDef, Component, StringField } from 'https://cardstack.com/base/card-api';
+    const boomPerson = `import { field, contains, CardDef, FieldDef, Component, StringField } from '@cardstack/base/card-api';
       export class BoomPerson extends CardDef {
         static displayName = 'Boom Person';
         @field firstName = contains(StringField);
@@ -1913,7 +1921,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       }
     `;
     const syntaxError = `
-      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+      import { contains, field, CardDef } from "@cardstack/base/card-api";
       // missing StringField import
       export class Boom extends CardDef {
         @field firstName = contains(StringField);
@@ -2050,7 +2058,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         // fix error
         await realm.write(
           'boom-person.gts',
-          `import { field, contains, CardDef, Component, StringField } from 'https://cardstack.com/base/card-api';
+          `import { field, contains, CardDef, Component, StringField } from '@cardstack/base/card-api';
           export class BoomPerson extends CardDef {
             static displayName = 'Boom Person';
             @field firstName = contains(StringField);
@@ -2094,7 +2102,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       // fix error
       await realm.write(
         'boom-pet.gts',
-        `import { contains, field, CardDef, Component, FieldDef, StringField } from 'https://cardstack.com/base/card-api';
+        `import { contains, field, CardDef, Component, FieldDef, StringField } from '@cardstack/base/card-api';
             export class BoomPet extends CardDef {
               static displayName = 'Boom Pet';
               @field boom = contains(StringField);
@@ -2160,7 +2168,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         // fix error
         await realm.write(
           'boom-person.gts',
-          `import { contains, field, CardDef, Component, FieldDef, StringField } from 'https://cardstack.com/base/card-api';
+          `import { contains, field, CardDef, Component, FieldDef, StringField } from '@cardstack/base/card-api';
            export class FailingField extends FieldDef {
              static displayName = 'Failing Field';
              @field cardTitle = contains(StringField);
@@ -2203,23 +2211,19 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert.dom('[data-test-format-chooser]').exists();
       assert.dom('[data-test-error-container]').doesNotExist();
 
-      // cause error (non-existent link)
+      // cause error: flip the card's adoptsFrom to a missing module.
+      // Module → instance propagation lands the card as instance-error
+      // (broken-linksTo no longer demotes a consumer, so we use a missing
+      // adoptsFrom module to keep the "card is in error" precondition).
       await realm.write(
         'Person/delilah.json',
         JSON.stringify({
           data: {
             attributes: { cardInfo: { name: 'Lila' } },
-            relationships: {
-              pet: {
-                links: {
-                  self: './missing-link',
-                },
-              },
-            },
             meta: {
               adoptsFrom: {
-                module: `${testRealmURL}person`,
-                name: 'Person',
+                module: `${testRealmURL}Person/missing-person`,
+                name: 'MissingPerson',
               },
             },
           },
@@ -2238,23 +2242,19 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     });
 
     test('it can render the last known good state for card with error when the not in the edit format', async function (assert) {
-      // cause error (non-existent link)
+      // cause error: missing adoptsFrom module → instance-error via the
+      // module → instance cascade. Broken-linksTo no longer demotes the
+      // consuming card to instance-error so it is no longer the lever for
+      // "make this card error" UI tests.
       await realm.write(
         'Person/delilah.json',
         JSON.stringify({
           data: {
             attributes: { cardInfo: { name: 'Lila' } },
-            relationships: {
-              pet: {
-                links: {
-                  self: './missing-link',
-                },
-              },
-            },
             meta: {
               adoptsFrom: {
-                module: `${testRealmURL}person`,
-                name: 'Person',
+                module: `${testRealmURL}Person/missing-person`,
+                name: 'MissingPerson',
               },
             },
           },
@@ -2275,20 +2275,20 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       });
       assert
         .dom('[data-test-boxel-card-header-title]')
-        .containsText('Card Error: Link Not Found');
+        .containsText('Card Error');
       assert.dom('[data-test-card-error]').exists();
       assert
         .dom('[data-test-playground-panel] [data-test-field="cardInfo-name"]')
         .containsText('Delilah', 'last known good state is rendered');
       assert
         .dom('[data-test-error-message]')
-        .hasText(`missing file ${testRealmURL}Person/missing-link.json`);
+        .hasText(`${testRealmURL}Person/missing-person not found`);
       assert.dom('[data-test-format-chooser]').doesNotExist();
 
       await click('[data-test-toggle-details]');
       assert
         .dom('[data-test-error-details]')
-        .containsText('Person/missing-link.json not found');
+        .containsText('Person/missing-person not found');
       assert.dom('[data-test-error-stack]').exists();
 
       // fix error
@@ -2336,24 +2336,21 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         );
     });
 
-    test('it renders error message for non-existent link in relationship field', async function (assert) {
-      // non-existent link in links-to field
+    test('it renders error message for a card whose adoptsFrom module is missing', async function (assert) {
+      // Make Person/chef-mike adopt from a module that does not exist —
+      // module → instance propagation lands the card as instance-error
+      // and the playground shows the operator-mode error UI. Broken-linksTo
+      // no longer demotes a consumer, so a missing adoptsFrom is now the
+      // lever for "make this card error" UI tests at this layer.
       await realm.write(
         'Person/chef-mike.json',
         JSON.stringify({
           data: {
             attributes: { title: 'Chef Mike' },
-            relationships: {
-              pet: {
-                links: {
-                  self: '../Pet/missing-pet',
-                },
-              },
-            },
             meta: {
               adoptsFrom: {
-                module: `${testRealmURL}person`,
-                name: 'Person',
+                module: `${testRealmURL}Person/missing-person`,
+                name: 'MissingPerson',
               },
             },
           },
@@ -2370,10 +2367,10 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       });
       assert
         .dom('[data-test-boxel-card-header-title]')
-        .containsText('Card Error: Link Not Found');
+        .containsText('Card Error');
       assert
         .dom('[data-test-error-message]')
-        .containsText(`missing file ${testRealmURL}Pet/missing-pet.json`);
+        .containsText(`${testRealmURL}Person/missing-person not found`);
     });
   });
 });

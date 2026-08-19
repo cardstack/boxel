@@ -1,21 +1,22 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 
 import type {
   ValidationStep,
   ValidationStepResult,
   ValidationResults,
-} from '../src/factory-agent';
+} from '../src/factory-agent/index.ts';
 
 import {
   ValidationPipeline,
   createDefaultPipeline,
   type ValidationStepRunner,
-} from '../src/issue-loop';
+} from '../src/issue-loop.ts';
 
-import { NoOpStepRunner } from '../src/validators/noop-step';
-import { InstantiateValidationStep } from '../src/validators/instantiate-step';
-import { createMockClient } from './helpers/mock-client';
-import { createTestWorkspace } from './helpers/workspace-fixture';
+import { NoOpStepRunner } from '../src/validators/noop-step.ts';
+import { InstantiateValidationStep } from '../src/validators/instantiate-step.ts';
+import { createMockClient } from './helpers/mock-client.ts';
+import { createTestWorkspace } from './helpers/workspace-fixture.ts';
 
 // ---------------------------------------------------------------------------
 // Test helpers

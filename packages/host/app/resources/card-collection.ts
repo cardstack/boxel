@@ -8,7 +8,7 @@ import { restartableTask } from 'ember-concurrency';
 
 import { Resource } from 'ember-modify-based-class-resource';
 
-import isEqual from 'lodash/isEqual';
+import { isEqual } from 'lodash-es';
 
 import { TrackedArray } from 'tracked-built-ins';
 
@@ -17,9 +17,8 @@ import {
   type CardErrorJSONAPI as CardError,
 } from '@cardstack/runtime-common';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-
 import type StoreService from '../services/store';
+import type { CardDef } from '@cardstack/base/card-api';
 
 interface Args {
   named: {

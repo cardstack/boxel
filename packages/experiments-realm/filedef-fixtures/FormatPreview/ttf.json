@@ -1,0 +1,47 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "ttf · Format Preview",
+      "cardInfo": {
+        "name": "ttf · Format Preview",
+        "summary": "Simple, moderate, and complex ttf fixtures across atom, embedded, isolated, and the 16 fitted envelopes."
+      }
+    },
+    "relationships": {
+      "previewFiles.0": {
+        "links": {
+          "self": "../samples/ttf-simple.ttf"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/ttf-simple.ttf"
+        }
+      },
+      "previewFiles.1": {
+        "links": {
+          "self": "../samples/ttf-moderate.ttf"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/ttf-moderate.ttf"
+        }
+      },
+      "previewFiles.2": {
+        "links": {
+          "self": "../samples/ttf-complex.ttf"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/ttf-complex.ttf"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../format-preview",
+        "name": "FileDefFormatPreview"
+      }
+    }
+  }
+}

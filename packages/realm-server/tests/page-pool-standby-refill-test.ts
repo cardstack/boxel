@@ -1,6 +1,7 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
-import { PagePool } from '../prerender/page-pool';
+import { PagePool } from '../prerender/page-pool.ts';
 
 // The standby refill (`#ensureStandbyPool`) is deduplicated via the
 // `#ensuringStandbys` promise so concurrent callers share one in-flight
@@ -90,7 +91,7 @@ function makeManualGate() {
   };
 }
 
-module(basename(__filename), function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   let pools: PagePool[] = [];
 
   hooks.afterEach(async () => {

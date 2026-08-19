@@ -2,15 +2,15 @@ import { resolve } from 'node:path';
 
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 
-import { expect, test } from './fixtures';
+import { expect, test } from './fixtures.ts';
 
-import { runTestsInMemory } from '../src/factory-test-realm';
-import { buildTestClient } from './helpers/test-client';
+import { runTestsInMemory } from '../src/factory-test-realm.ts';
+import { buildTestClient } from './helpers/test-client.ts';
 import {
   FAILING_TEST_GTS,
   PASSING_TEST_GTS,
   writeAndAwaitIndex,
-} from './helpers/qunit-test-fixtures';
+} from './helpers/qunit-test-fixtures.ts';
 
 const fixtureRealmDir = resolve(
   process.cwd(),

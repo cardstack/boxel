@@ -1,12 +1,13 @@
 import { createServer } from 'node:net';
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 
 import {
   TEST_WORKER_PORT_RANGE_END,
   TEST_WORKER_PORT_RANGE_START,
   allocateTestWorkerPortSet,
   tryHoldPort,
-} from './helpers/port-allocator';
+} from './helpers/port-allocator.ts';
 
 async function isListeningOn(port: number): Promise<boolean> {
   // Returns true if attempting to bind a fresh server to the port fails
@@ -168,7 +169,11 @@ module('port-allocator', function () {
   test('release + reacquire round-trip keeps ownership', async function (assert) {
     let reservation = await allocateTestWorkerPortSet(0);
     try {
-      let port = reservation.compatRealmServerPort;
+      // releaseRealmServerPorts only releases the realm-server holder
+      // now — the compat holder is released once by the worker fixture
+      // (the worker-scoped proxy takes over the port for the rest of
+      // the worker's lifetime) and there is no matching reacquire.
+      let port = reservation.realmServerPort;
       assert.true(await isListeningOn(port), 'port is held initially');
 
       await reservation.releaseRealmServerPorts();

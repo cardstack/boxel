@@ -12,13 +12,14 @@ import type { AddressInfo } from 'node:net';
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
-import { expect, test } from './fixtures';
+import { expect, test } from './fixtures.ts';
 import {
   getRealmToken,
   readSupportMetadata,
   registerMatrixUser,
-} from './helpers/matrix-auth';
-import { runCommand } from './helpers/run-command';
+} from './helpers/matrix-auth.ts';
+import { runCommand } from './helpers/run-command.ts';
+import { playwrightBrowsersEnv } from './helpers/preflight-env.ts';
 
 const bootstrapTargetDir = resolve(
   process.cwd(),
@@ -33,7 +34,10 @@ const stickyNoteFixture = readFileSync(
 
 test.use({ realmDir: bootstrapTargetDir });
 test.use({ realmServerMode: 'isolated' });
-test.setTimeout(180_000);
+// Must clear the child factory:go budget below (240s) plus realm-server
+// boot and post-run assertions — an outer timeout under the inner one
+// kills the test while the child is still legitimately running.
+test.setTimeout(360_000);
 
 test('factory:go creates a target realm and bootstraps project artifacts end-to-end', async ({
   realm,
@@ -100,8 +104,6 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
       'node',
       [
         '--no-warnings',
-        '--require',
-        require.resolve('ts-node/register/transpile-only'),
         resolve(packageRoot, 'src/cli/factory-entrypoint.ts'),
         '--brief-url',
         briefUrl,
@@ -120,8 +122,13 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
         env: {
           ...process.env,
           HOME: tempProfileHome,
+          ...playwrightBrowsersEnv,
         },
-        timeoutMs: 120_000,
+        // The failing-agent path runs up to five inner iterations, each
+        // with run-log appends and monitor bookkeeping (always on since
+        // the v1 pipeline's removal) — 120s straddled the real duration
+        // and flaked on CI timing jitter.
+        timeoutMs: 240_000,
       },
     );
 

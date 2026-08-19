@@ -327,7 +327,7 @@ function emitDesyncError(ctx: DesyncDetectorContext): void {
       stack: augmentedStack,
       // Structured diagnostics ride on the `diagnostics` field per
       // SerializedError; the indexer copies these onto
-      // `boxel_index.timing_diagnostics`.
+      // `boxel_index.diagnostics`.
       diagnostics: { renderStage: stage },
       deps: [ctx.cardId],
       additionalErrors: null,

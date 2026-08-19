@@ -1,9 +1,13 @@
-import { click, findAll, triggerEvent, waitFor } from '@ember/test-helpers';
+import {
+  click,
+  findAll,
+  triggerEvent,
+  waitFor,
+  waitUntil,
+} from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
-
-import { baseRealm } from '@cardstack/runtime-common';
 
 import {
   setupLocalIndexing,
@@ -15,6 +19,7 @@ import {
   SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
   withCachedRealmSetup,
+  realmConfigCardJSON,
 } from '../helpers';
 import { setupBaseRealm, CardsGrid } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
@@ -45,11 +50,11 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
     let loaderService = getService('loader-service');
     let loader = loaderService.loader;
     let { field, contains, CardDef, Component } = await loader.import<
-      typeof import('https://cardstack.com/base/card-api')
-    >(`${baseRealm.url}card-api`);
+      typeof import('@cardstack/base/card-api')
+    >('@cardstack/base/card-api');
     let { default: StringField } = await loader.import<
-      typeof import('https://cardstack.com/base/string')
-    >(`${baseRealm.url}string`);
+      typeof import('@cardstack/base/string')
+    >('@cardstack/base/string');
 
     class Pet extends CardDef {
       static displayName = 'Pet';
@@ -90,11 +95,7 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
             name: 'Charlie',
             species: 'Bird',
           }),
-          '.realm.json': {
-            name: 'Test Realm',
-            backgroundURL: null,
-            iconURL: null,
-          },
+          'realm.json': realmConfigCardJSON({ name: 'Test Realm' }),
         },
       });
     });
@@ -104,10 +105,10 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
     let cardSelector = `[data-test-cards-grid-item="${testRealmURL}${cardPath}"] .field-component-card`;
     await triggerEvent(cardSelector, 'mouseenter');
     await waitFor(
-      `[data-test-overlay-card="${testRealmURL}${cardPath}"] button.actions-item__button`,
+      `[data-test-overlay-card="${testRealmURL}${cardPath}"] [data-test-overlay-select="${testRealmURL}${cardPath}"]`,
     );
     await click(
-      `[data-test-overlay-card="${testRealmURL}${cardPath}"] button.actions-item__button`,
+      `[data-test-overlay-card="${testRealmURL}${cardPath}"] [data-test-overlay-select="${testRealmURL}${cardPath}"]`,
     );
     await triggerEvent(cardSelector, 'mouseleave');
   }
@@ -137,17 +138,17 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
 
     // Verify selection state is active
     assert
-      .dom('.utility-menu-trigger')
-      .containsText('1 Selected', 'Selection menu appears');
+      .dom('[data-test-selection-dropdown-trigger]')
+      .containsText('1', 'Selection chip shows count');
 
     // Select additional cards
     await selectCard('Pet/2');
 
     // Verify selection count
-    assert.dom('.utility-menu-trigger').containsText('2 Selected');
+    assert.dom('[data-test-selection-dropdown-trigger]').containsText('2');
 
     // Open utility menu
-    await click('.utility-menu-trigger');
+    await click('[data-test-selection-dropdown-trigger]');
 
     // Click bulk delete option
     await click('[data-test-boxel-menu-item-text="Delete 2 items"]');
@@ -177,7 +178,7 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
 
     // Verify selection mode is cleared
     assert
-      .dom('.utility-menu-trigger')
+      .dom('[data-test-selection-dropdown-trigger]')
       .doesNotExist('Selection summary is cleared');
   });
 
@@ -206,20 +207,23 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
     await selectCard('Pet/3');
 
     // Verify selection count
-    assert.dom('.utility-menu-trigger').containsText('3 Selected');
+    assert.dom('[data-test-selection-dropdown-trigger]').containsText('3');
 
     // Open utility menu
-    await click('.utility-menu-trigger');
+    await click('[data-test-selection-dropdown-trigger]');
 
     // Click "Deselect All" option
     await click('[data-test-boxel-menu-item-text="Deselect All"]');
 
     // Verify selection is cleared
     assert
-      .dom('.utility-menu-trigger')
+      .dom('[data-test-selection-dropdown-trigger]')
       .doesNotExist('Selection summary is cleared after deselect');
 
-    // Verify overlay checkboxes are not checked
+    // Verify overlay chrome is gone. The overlay clears on hover-out via a
+    // 100ms hover-bridge timer (native setTimeout, not tracked by settled),
+    // so poll rather than asserting synchronously.
+    await waitUntil(() => findAll('[data-test-overlay-card]').length === 0);
     assert.dom('[data-test-overlay-card]').doesNotExist();
   });
 
@@ -248,22 +252,22 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
 
     // Verify selection state is active
     assert
-      .dom('.utility-menu-trigger')
-      .containsText('1 Selected', 'Selection menu appears');
+      .dom('[data-test-selection-dropdown-trigger]')
+      .containsText('1', 'Selection chip shows count');
 
     // Open utility menu
-    await click('.utility-menu-trigger');
+    await click('[data-test-selection-dropdown-trigger]');
 
     // Click "Select All" option
     await click('[data-test-boxel-menu-item-text="Select All"]');
 
     // Verify all cards are selected
     assert
-      .dom('.utility-menu-trigger')
-      .containsText(`${totalCardCount} Selected`, 'All cards are now selected');
+      .dom('[data-test-selection-dropdown-trigger]')
+      .containsText(`${totalCardCount}`, 'All cards are now selected');
 
     // Open utility menu again to verify "Select All" is no longer available
-    await click('.utility-menu-trigger');
+    await click('[data-test-selection-dropdown-trigger]');
 
     // "Select All" should not be available when all cards are selected
     assert
@@ -276,6 +280,63 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
     assert
       .dom('[data-test-boxel-menu-item-text="Deselect All"]')
       .exists('Deselect All option is available');
+  });
+
+  test('Select All does not load a card instance for every selected card', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
+    await waitFor('[data-test-cards-grid-item]');
+
+    let cards = findAll('[data-test-cards-grid-item]');
+    let totalCardCount = cards.length;
+    assert.ok(totalCardCount >= 3, 'Multiple cards are available');
+
+    // Enter selection mode with a single card, then count store.get calls
+    // made specifically by the Select All action. Selecting cards must not
+    // materialize an instance per card — that eager loading is what froze the
+    // UI for seconds on large grids.
+    await selectCard('Pet/1');
+
+    let store = getService('store');
+    let originalGet = store.get;
+    let getCallCount = 0;
+    (store as any).get = function (...args: unknown[]) {
+      getCallCount += 1;
+      return (originalGet as any).apply(store, args);
+    };
+
+    try {
+      await click('[data-test-selection-dropdown-trigger]');
+      let countBeforeSelectAll = getCallCount;
+      await click('[data-test-boxel-menu-item-text="Select All"]');
+      await waitUntil(() =>
+        document
+          .querySelector('[data-test-selection-dropdown-trigger]')
+          ?.textContent?.includes(`${totalCardCount}`),
+      );
+      let getsDuringSelectAll = getCallCount - countBeforeSelectAll;
+
+      assert
+        .dom('[data-test-selection-dropdown-trigger]')
+        .containsText(`${totalCardCount}`, 'All cards are now selected');
+      assert.strictEqual(
+        getsDuringSelectAll,
+        0,
+        `Select All should not load any instance (selections are tracked by id); store.get was called ${getsDuringSelectAll}x while selecting ${totalCardCount} cards`,
+      );
+    } finally {
+      (store as any).get = originalGet;
+    }
   });
 
   test('can cancel bulk delete operation', async function (assert) {
@@ -303,10 +364,10 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
     await selectCard('Pet/2');
 
     // Verify selection count
-    assert.dom('.utility-menu-trigger').containsText('2 Selected');
+    assert.dom('[data-test-selection-dropdown-trigger]').containsText('2');
 
     // Open utility menu
-    await click('.utility-menu-trigger');
+    await click('[data-test-selection-dropdown-trigger]');
 
     // Click bulk delete option
     await click('[data-test-boxel-menu-item-text="Delete 2 items"]');
@@ -337,7 +398,7 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
 
     // Verify selection is still active
     assert
-      .dom('.utility-menu-trigger')
-      .containsText('2 Selected', 'Selection remains active after cancel');
+      .dom('[data-test-selection-dropdown-trigger]')
+      .containsText('2', 'Selection remains active after cancel');
   });
 });

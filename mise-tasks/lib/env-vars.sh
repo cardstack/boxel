@@ -42,20 +42,48 @@ export PRERENDER_MULTIPLEX="${PRERENDER_MULTIPLEX:-1}"
 export WORKER_HIGH_PRIORITY_COUNT="${WORKER_HIGH_PRIORITY_COUNT:-0}"
 export WORKER_ALL_PRIORITY_COUNT="${WORKER_ALL_PRIORITY_COUNT:-1}"
 
+# Echo the first installed system Chrome/Chromium, or nothing. Lets tooling
+# reuse an already-present browser instead of downloading its own. Explicit
+# checks (not a for-loop) so the macOS path's embedded space doesn't get
+# word-split — env-vars.sh runs under whatever shell mise invokes, and POSIX
+# sh handles backslash-escapes in for-loop word lists inconsistently.
+_boxel_resolve_chrome() {
+  if [ -x /usr/bin/google-chrome ]; then echo /usr/bin/google-chrome
+  elif [ -x /usr/bin/google-chrome-stable ]; then echo /usr/bin/google-chrome-stable
+  elif [ -x /usr/bin/chromium ]; then echo /usr/bin/chromium
+  elif [ -x /usr/bin/chromium-browser ]; then echo /usr/bin/chromium-browser
+  elif [ -x "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" ]; then echo "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+  elif [ -x "/Applications/Chromium.app/Contents/MacOS/Chromium" ]; then echo "/Applications/Chromium.app/Contents/MacOS/Chromium"
+  fi
+}
+
 if [ -n "${BOXEL_ENVIRONMENT:-}" ]; then
   ENV_SLUG=$(compute_env_slug "$BOXEL_ENVIRONMENT")
   export ENV_SLUG
+  ENV_DB_SLUG=$(pg_db_slug "$ENV_SLUG")
+  export ENV_DB_SLUG
   export ENV_MODE=true
 
-  # Drop standard-mode TLS env vars if they leaked in from a parent
-  # shell or a prior mise activation. In env mode Traefik terminates
-  # TLS in front of plain-HTTP services; leaving these set tells vite
-  # and the realm-server to terminate TLS themselves, so Traefik then
-  # speaks HTTP to a TLS-expecting upstream and every request fails
-  # with "HTTP/0.9 when not allowed". NODE_EXTRA_CA_CERTS is kept —
-  # Node clients still need to trust Traefik's mkcert leaf.
-  unset REALM_SERVER_TLS_CERT_FILE
-  unset REALM_SERVER_TLS_KEY_FILE
+  # Local HTTPS dev access in env mode: the realm-server terminates TLS
+  # and serves HTTP/2 on its dynamic backend port using the same mkcert
+  # leaf Traefik presents to the browser. Traefik re-originates an
+  # HTTP/2-over-TLS connection to that backend (dev-service-registry
+  # registers an https:// upstream and Traefik negotiates h2 via ALPN),
+  # so the realm-server must hold the cert. HTTP/2 is a system invariant —
+  # env mode never serves plain HTTP/1.1. The dev cert is mandatory here
+  # (`mise run infra:ensure-dev-cert`); absent it the realm-server fails
+  # startup loudly rather than silently downgrading. Clear any leaked
+  # paths first, then point at the canonical dev cert if it exists. (vite
+  # stays plain HTTP behind Traefik — it ignores these vars in env mode;
+  # see packages/host/vite.config.mjs. NODE_EXTRA_CA_CERTS is set below so
+  # Node clients trust the mkcert leaf in both modes.)
+  unset REALM_SERVER_TLS_CERT_FILE REALM_SERVER_TLS_KEY_FILE
+  _BOXEL_DEV_CERT_DIR="${BOXEL_DEV_CERT_DIR:-$HOME/.local/share/boxel/dev-certs}"
+  if [ -f "$_BOXEL_DEV_CERT_DIR/localhost.pem" ] && [ -f "$_BOXEL_DEV_CERT_DIR/localhost-key.pem" ]; then
+    export REALM_SERVER_TLS_CERT_FILE="$_BOXEL_DEV_CERT_DIR/localhost.pem"
+    export REALM_SERVER_TLS_KEY_FILE="$_BOXEL_DEV_CERT_DIR/localhost-key.pem"
+  fi
+  unset _BOXEL_DEV_CERT_DIR
 
   # Service URLs (Traefik hostnames). Traefik terminates TLS on :443
   # with the mkcert leaf (`infra:ensure-dev-cert` provisioned;
@@ -73,9 +101,11 @@ if [ -n "${BOXEL_ENVIRONMENT:-}" ]; then
   export ICONS_URL="https://icons.${ENV_SLUG}.localhost"
   export HOST_URL="https://host.${ENV_SLUG}.localhost"
 
-  # Database
-  export PGDATABASE="${PGDATABASE:-boxel_${ENV_SLUG}}"
-  export PGDATABASE_TEST="boxel_test_${ENV_SLUG}"
+  # Database. Hyphens in slugs (e.g. `cs-12345-foo`) aren't valid in
+  # unquoted Postgres identifiers, so use the underscored variant for
+  # the DB name while keeping ENV_SLUG hyphenated for hostnames/paths.
+  export PGDATABASE="${PGDATABASE:-boxel_${ENV_DB_SLUG}}"
+  export PGDATABASE_TEST="boxel_test_${ENV_DB_SLUG}"
 
   # Ports (dynamic in env mode)
   export REALM_PORT=0
@@ -93,6 +123,7 @@ else
   # Capture previous ENV_MODE before resetting it, so we can detect transitions
   _PREV_ENV_MODE="${ENV_MODE:-}"
   export ENV_SLUG=""
+  export ENV_DB_SLUG=""
   export ENV_MODE=""
 
   if [ "$_PREV_ENV_MODE" = true ]; then
@@ -214,31 +245,34 @@ else
   # keep the bundled puppeteer chromium — they'll see the hang stall
   # longer until vite's optimizer cache warms up.
   if [ -z "${PUPPETEER_EXECUTABLE_PATH:-}" ]; then
-    # Explicit checks (not a for-loop) so the macOS path's embedded space
-    # doesn't get word-split by /bin/sh — env-vars.sh runs under whatever
-    # shell mise invokes, and POSIX sh handles backslash-escapes in for-
-    # loop word lists inconsistently across implementations.
-    if [ -x /usr/bin/google-chrome ]; then
-      export PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome
-    elif [ -x /usr/bin/google-chrome-stable ]; then
-      export PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
-    elif [ -x /usr/bin/chromium ]; then
-      export PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
-    elif [ -x /usr/bin/chromium-browser ]; then
-      export PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
-    elif [ -x "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" ]; then
-      export PUPPETEER_EXECUTABLE_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-    elif [ -x "/Applications/Chromium.app/Contents/MacOS/Chromium" ]; then
-      export PUPPETEER_EXECUTABLE_PATH="/Applications/Chromium.app/Contents/MacOS/Chromium"
-    fi
+    _boxel_chrome="$(_boxel_resolve_chrome)"
+    [ -n "$_boxel_chrome" ] && export PUPPETEER_EXECUTABLE_PATH="$_boxel_chrome"
+    unset _boxel_chrome
   fi
 fi
 
+# Percy bundles its own Chromium and downloads + unzips it on first use
+# (@percy/core install.js) via extract-zip, whose extraction step hangs
+# indefinitely on Node 24.x — `percy exec` then never reaches the test
+# command it wraps, so the host suite never runs and no junit report is
+# written. @percy/core honors PERCY_BROWSER_EXECUTABLE and skips the download
+# when it points at an existing binary. This sits outside the env/standard
+# branches above because the host-test job runs in env mode (BOXEL_ENVIRONMENT
+# set), whose branch resolves no Chrome path. Reuse PUPPETEER_EXECUTABLE_PATH
+# when standard mode already set it, otherwise detect the system Chrome.
+if [ -z "${PERCY_BROWSER_EXECUTABLE:-}" ]; then
+  _boxel_percy_chrome="${PUPPETEER_EXECUTABLE_PATH:-$(_boxel_resolve_chrome)}"
+  if [ -n "$_boxel_percy_chrome" ] && [ -x "$_boxel_percy_chrome" ]; then
+    export PERCY_BROWSER_EXECUTABLE="$_boxel_percy_chrome"
+  fi
+  unset _boxel_percy_chrome
+fi
+
 # Trust the mkcert root CA in Node clients regardless of env-mode vs
-# standard mode. Both modes serve the same mkcert leaf — standard
-# mode via the realm-server's own h2 dispatcher, env mode via Traefik
-# in front of plain-HTTP services — so any Node-side fetch to
-# `https://host/matrix/realm-server.<...>.localhost` needs the CA
+# standard mode. Both modes present the same mkcert leaf to clients —
+# standard mode via the realm-server's own h2 dispatcher, env mode via
+# Traefik terminating TLS on the public `*.<slug>.localhost` hostnames —
+# so any Node-side fetch to one of those https URLs needs the CA
 # trusted to pass `tls.checkServerIdentity`. Without this, env-mode
 # realm-server's startup `getIndexHTML()` smoke-test fetch fails with
 # `TypeError: fetch failed` and `process.exit(-2)` — the visible

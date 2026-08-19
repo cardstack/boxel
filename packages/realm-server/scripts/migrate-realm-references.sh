@@ -13,12 +13,25 @@
 # so changes can be rolled back with: patch -R -p0 < <name>.patch
 #
 # Usage:
-#   ./migrate-realm-references.sh [--dry-run] <find> <replace> <directory> [<directory> ...]
-#   ./migrate-realm-references.sh [--dry-run] -e <environment> -r <realm> <directory> [<directory> ...]
+#   ./migrate-realm-references.sh [--dry-run] [--json-only] [--exclude <dir>]... <find> <replace> <directory> [<directory> ...]
+#   ./migrate-realm-references.sh [--dry-run] [--json-only] [--exclude <dir>]... -e <environment> -r <realm> <directory> [<directory> ...]
+#
+# Flags:
+#   --dry-run           Preview changes without modifying files
+#   --json-only         Only scan card JSON (skip .gts/.ts source modules)
+#   --modules-only      Only scan source modules (.gts/.ts), skip card JSON —
+#                       e.g. to rewrite import specifiers as a separate pass.
+#                       Mutually exclusive with --json-only.
+#   --exclude <dir>     Skip directories matching <dir> (by name, any depth).
+#                       Repeatable. e.g. --exclude decommissioned to leave
+#                       moved-aside or backup trees untouched.
+#   -j, --jobs <n>      Number of parallel workers (default 16). Files are
+#                       edited concurrently to hide per-file I/O latency on
+#                       networked filesystems (e.g. EFS).
 #
 # Shortcut flags:
 #   -e, --environment   development | staging | production
-#   -r, --realm         catalog | base | skills
+#   -r, --realm         catalog | base | skills | openrouter
 #
 #   Environment URL mappings:
 #     development  -> http://localhost:4201/
@@ -27,8 +40,20 @@
 #
 #   The replacement is auto-derived as @cardstack/<realm>/
 #
+# After a non-dry-run, every changed .json file is re-parsed to confirm the
+# replacement left valid JSON; a parse failure is reported and exits non-zero.
+# Source modules (.gts/.ts) are not parse-checked — a prefix swap inside an
+# import specifier can't change syntax, and the rollback patch is the backstop.
+#
 # Examples:
-#   # Shortcut form
+#   # Convert base references to RRI prefix form in card JSON,
+#   # skipping moved-aside / backup trees.
+#   ./migrate-realm-references.sh --json-only --exclude decommissioned https://cardstack.com/base/ @cardstack/base/ /persistent
+#
+#   # Rewrite base import specifiers in .gts/.ts modules (separate pass).
+#   ./migrate-realm-references.sh --modules-only --exclude decommissioned https://cardstack.com/base/ @cardstack/base/ /persistent
+#
+#   # Shortcut form (deployment-URL references)
 #   ./migrate-realm-references.sh --dry-run -e staging -r catalog /persistent/catalog /persistent/experiments
 #
 #   # Equivalent explicit form
@@ -49,15 +74,49 @@ set -uo pipefail
 # --- Parse flags ---
 
 DRY_RUN=false
+JSON_ONLY=false
+MODULES_ONLY=false
+JOBS=16
 ENV=""
 REALM=""
 ERRORS=()
+EXCLUDE_DIRS=()
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run)
       DRY_RUN=true
       shift
+      ;;
+    -j|--jobs)
+      if [ $# -lt 2 ]; then
+        echo "Error: $1 requires a value (a positive integer)" >&2
+        exit 1
+      fi
+      case "$2" in
+        ''|*[!0-9]*)
+          echo "Error: $1 must be a positive integer (got '$2')" >&2
+          exit 1
+          ;;
+      esac
+      if [ "$2" -lt 1 ]; then
+        echo "Error: $1 must be at least 1 (got '$2')" >&2
+        exit 1
+      fi
+      JOBS="$2"
+      shift 2
+      ;;
+    --json-only)
+      JSON_ONLY=true
+      shift
+      ;;
+    --modules-only)
+      MODULES_ONLY=true
+      shift
+      ;;
+    --exclude)
+      EXCLUDE_DIRS+=("$2")
+      shift 2
       ;;
     -e|--environment)
       ENV="$2"
@@ -92,9 +151,9 @@ if [ -n "$ENV" ] || [ -n "$REALM" ]; then
   esac
 
   case "$REALM" in
-    catalog|base|skills) ;;
+    catalog|base|skills|openrouter) ;;
     *)
-      echo "Error: unknown realm '$REALM' (expected: catalog, base, skills)"
+      echo "Error: unknown realm '$REALM' (expected: catalog, base, skills, openrouter)"
       exit 1
       ;;
   esac
@@ -110,16 +169,20 @@ elif [ $# -ge 2 ]; then
   REPLACEMENT="$1"
   shift
 else
-  echo "Usage: $0 [--dry-run] <find> <replace> <directory> [<directory> ...]"
-  echo "       $0 [--dry-run] -e <environment> -r <realm> <directory> [<directory> ...]"
+  echo "Usage: $0 [--dry-run] [--json-only] [--exclude <dir>]... <find> <replace> <directory> [<directory> ...]"
+  echo "       $0 [--dry-run] [--json-only] [--exclude <dir>]... -e <environment> -r <realm> <directory> [<directory> ...]"
   echo ""
   echo "  <find>           The string to find (URL or prefix)"
   echo "  <replace>        The replacement string"
   echo "  <directory>      One or more realm directories to process"
   echo ""
   echo "  -e, --environment  development | staging | production"
-  echo "  -r, --realm        catalog | base | skills"
+  echo "  -r, --realm        catalog | base | skills | openrouter"
   echo "  --dry-run          Preview changes without modifying files"
+  echo "  --json-only        Only scan card JSON (skip .gts/.ts modules)"
+  echo "  --modules-only     Only scan .gts/.ts modules (skip card JSON)"
+  echo "  --exclude <dir>    Skip directories matching <dir> (repeatable)"
+  echo "  -j, --jobs <n>     Number of parallel workers (default 16)"
   echo ""
   echo "  Environment URL mappings:"
   echo "    development  -> http://localhost:4201/"
@@ -137,6 +200,39 @@ fi
 FIND_STR="${FIND_STR%/}/"
 REPLACEMENT="${REPLACEMENT%/}/"
 
+# Which file types to scan. Default covers card JSON plus in-realm source
+# modules (.gts/.ts). --json-only restricts to card documents; --modules-only
+# restricts to source modules (e.g. when rewriting import specifiers as a
+# separate pass). The two are mutually exclusive.
+if [ "$JSON_ONLY" = true ] && [ "$MODULES_ONLY" = true ]; then
+  echo "Error: --json-only and --modules-only are mutually exclusive" >&2
+  exit 1
+fi
+if [ "$JSON_ONLY" = true ]; then
+  INCLUDE_ARGS=(--include='*.json')
+elif [ "$MODULES_ONLY" = true ]; then
+  INCLUDE_ARGS=(--include='*.gts' --include='*.ts')
+else
+  INCLUDE_ARGS=(--include='*.json' --include='*.gts' --include='*.ts')
+fi
+
+# Directories to skip (matched by name at any depth), e.g. --exclude
+# decommissioned to leave moved-aside / backup trees untouched.
+EXCLUDE_ARGS=()
+if [ ${#EXCLUDE_DIRS[@]} -gt 0 ]; then
+  for d in "${EXCLUDE_DIRS[@]}"; do
+    EXCLUDE_ARGS+=("--exclude-dir=$d")
+  done
+fi
+
+# File-type + exclude args for grep, assembled once. INCLUDE_ARGS is always
+# non-empty, so this array is always safe to expand even when no excludes
+# were given.
+GREP_ARGS=("${INCLUDE_ARGS[@]}")
+if [ ${#EXCLUDE_ARGS[@]} -gt 0 ]; then
+  GREP_ARGS+=("${EXCLUDE_ARGS[@]}")
+fi
+
 # If <find> is a URL, extract the path portion for matching path-only references.
 # e.g., https://realms-staging.stack.cards/catalog/ -> /catalog/
 # For non-URL find strings (like @cardstack/base/), skip path-only matching.
@@ -150,10 +246,92 @@ fi
 # Derive patch filename from the find/replace strings
 # e.g. @cardstack/catalog/ -> catalog, https://cardstack.com/base/ -> base
 PATCH_NAME=$(echo "$FIND_STR $REPLACEMENT" | sed -E 's|https?://[^/]*/||g; s|@cardstack/||g; s|/||g; s| |-to-|')
+# Distinguish the JSON-only and modules-only passes so running both for the
+# same find/replace (e.g. in the same directory) doesn't overwrite the first
+# pass's rollback patch with the second's.
+if [ "$JSON_ONLY" = true ]; then
+  PATCH_NAME="${PATCH_NAME}-json"
+elif [ "$MODULES_ONLY" = true ]; then
+  PATCH_NAME="${PATCH_NAME}-modules"
+fi
 PATCH_FILE="${PATCH_NAME}.patch"
 
 total_files=0
 > "$PATCH_FILE"
+
+# Paths of .json files that were valid JSON *before* editing. The post-run
+# verification only flags a file if it was valid before and is invalid after
+# (i.e. the replacement broke it) — files that were already non-strict (e.g.
+# trailing commas, unescaped embedded source) are tolerated by the realm
+# server's parser and must not fail the migration.
+VALID_BEFORE_FILE=$(mktemp 2>/dev/null || echo "/tmp/migrate-valid-before.$$")
+> "$VALID_BEFORE_FILE"
+
+# --- Parallel processing scratch ---
+# Files are processed concurrently (xargs -P) because the per-file work is
+# I/O-latency-bound on networked filesystems (EFS). Each worker writes ONLY to
+# its own per-PID fragment files under FRAGMENTS_DIR (one stream each for the
+# patch, processed-file list, errors, and changed-JSON list) and never to a
+# shared file — so there are no cross-process appends to serialize (append
+# atomicity is not guaranteed on NFS/EFS). The fragments are concatenated into
+# the aggregate files below after the directory loop.
+FRAGMENTS_DIR=$(mktemp -d 2>/dev/null || echo "/tmp/migrate-frags.$$")
+mkdir -p "$FRAGMENTS_DIR"
+CHANGED_JSON_FILE=$(mktemp 2>/dev/null || echo "/tmp/migrate-changed-json.$$")
+PROCESSED_FILE=$(mktemp 2>/dev/null || echo "/tmp/migrate-processed.$$")
+WORKER_ERRORS_FILE=$(mktemp 2>/dev/null || echo "/tmp/migrate-werr.$$")
+# Per-directory scratch holding the .json paths fed to the pre-edit validator,
+# one per line. Streamed via a file (not argv) so a directory with enough
+# matching files never exceeds ARG_MAX. Rebuilt each directory iteration.
+JSON_CANDIDATES_FILE=$(mktemp 2>/dev/null || echo "/tmp/migrate-json-candidates.$$")
+> "$CHANGED_JSON_FILE"
+> "$PROCESSED_FILE"
+> "$WORKER_ERRORS_FILE"
+
+# Worker: process a batch of files passed as positional args. Reconstructs the
+# sed program from exported scalars (arrays can't be exported across xargs).
+# Runs in its own `bash -c`; all output goes to this worker's own per-PID
+# fragment files (never to a shared file), aggregated after the loop.
+process_files() {
+  local patch="$FRAGMENTS_DIR/patch.$$"
+  local processed="$FRAGMENTS_DIR/processed.$$"
+  local errors="$FRAGMENTS_DIR/errors.$$"
+  local changed="$FRAGMENTS_DIR/changed.$$"
+  local file tmp
+  for file in "$@"; do
+    tmp="$file.tmp.$$"
+    if [ "$IS_URL" = true ]; then
+      if ! sed -e "s|${FIND_STR}|${REPLACEMENT}|g" \
+               -e "s|\"${REALM_PATH}|\"${REPLACEMENT}|g" \
+               -e "s|'${REALM_PATH}|'${REPLACEMENT}|g" \
+               "$file" > "$tmp" 2>/dev/null; then
+        printf '%s\n' "Error processing $file" >> "$errors"
+        rm -f "$tmp"
+        continue
+      fi
+    else
+      if ! sed -e "s|${FIND_STR}|${REPLACEMENT}|g" "$file" > "$tmp" 2>/dev/null; then
+        printf '%s\n' "Error processing $file" >> "$errors"
+        rm -f "$tmp"
+        continue
+      fi
+    fi
+    diff -u --label "$file" --label "$file" "$file" "$tmp" >> "$patch" 2>/dev/null || true
+    printf '%s\n' "$file" >> "$processed"
+    if [ "$DRY_RUN" = true ]; then
+      rm -f "$tmp"
+    elif mv "$tmp" "$file" 2>/dev/null; then
+      case "$file" in
+        *.json) printf '%s\n' "$file" >> "$changed" ;;
+      esac
+    else
+      printf '%s\n' "Error replacing $file" >> "$errors"
+      rm -f "$tmp"
+    fi
+  done
+}
+export -f process_files
+export FIND_STR REPLACEMENT IS_URL REALM_PATH DRY_RUN FRAGMENTS_DIR
 
 for search_dir in "$@"; do
   if [ ! -d "$search_dir" ]; then
@@ -171,9 +349,9 @@ for search_dir in "$@"; do
     [ -n "$file" ] && matching_files+=("$file")
   done < <(
     if [ "$IS_URL" = true ]; then
-      grep -rlE "${FIND_STR}|[\"']${REALM_PATH}" "$search_dir" --include='*.json' --include='*.gts' 2>/dev/null || true
+      grep -rlE "${FIND_STR}|[\"']${REALM_PATH}" "$search_dir" "${GREP_ARGS[@]}" 2>/dev/null || true
     else
-      grep -rl "${FIND_STR}" "$search_dir" --include='*.json' --include='*.gts' 2>/dev/null || true
+      grep -rl "${FIND_STR}" "$search_dir" "${GREP_ARGS[@]}" 2>/dev/null || true
     fi
   )
 
@@ -182,50 +360,71 @@ for search_dir in "$@"; do
     continue
   fi
 
-  # Build sed args once. For URLs, also handle path-only preceded by " or '
-  DQ='"'
-  if [ "$IS_URL" = true ]; then
-    SED_ARGS=(-e "s|${FIND_STR}|${REPLACEMENT}|g"
-              -e "s|${DQ}${REALM_PATH}|${DQ}${REPLACEMENT}|g"
-              -e "s|'${REALM_PATH}|'${REPLACEMENT}|g")
-  else
-    SED_ARGS=(-e "s|${FIND_STR}|${REPLACEMENT}|g")
-  fi
-
-  for file in "${matching_files[@]}"; do
-    if ! sed "${SED_ARGS[@]}" "$file" > "$file.tmp" 2>/tmp/migrate-err.$$; then
-      err="Error processing $file: $(cat /tmp/migrate-err.$$)"
-      echo "  $err"
-      ERRORS+=("$err")
-      rm -f "$file.tmp" /tmp/migrate-err.$$
-      continue
-    fi
-    rm -f /tmp/migrate-err.$$
-
-    # Append unified diff to the patch file (use --label so both sides show the real path)
-    { diff -u --label "$file" --label "$file" "$file" "$file.tmp" || true; } >> "$PATCH_FILE"
-
-    if [ "$DRY_RUN" = true ]; then
-      echo ""
-      echo "  Would update: $file"
-      { diff --unified=0 "$file" "$file.tmp" || true; } | tail -n +3 | grep '^[+-]' | while IFS= read -r line; do
-        echo "    $line"
-      done
-      rm -f "$file.tmp"
-    else
-      if ! mv "$file.tmp" "$file" 2>/tmp/migrate-err.$$; then
-        err="Error replacing $file: $(cat /tmp/migrate-err.$$)"
-        echo "  $err"
+  # Record which matching .json files parse cleanly BEFORE editing, so the
+  # post-run verification can distinguish "the replacement broke this" from
+  # "this was already non-strict". The candidate list is streamed through a
+  # file (not node argv) so a directory with thousands of matches can't exceed
+  # ARG_MAX, and the validator's exit status is checked: if pre-validation
+  # fails we skip editing this directory rather than proceed with an
+  # incomplete valid-before set (which would let a real corruption pass the
+  # after-check unflagged).
+  if [ "$DRY_RUN" = false ]; then
+    > "$JSON_CANDIDATES_FILE"
+    for f in "${matching_files[@]}"; do
+      case "$f" in
+        *.json) printf '%s\n' "$f" >> "$JSON_CANDIDATES_FILE" ;;
+      esac
+    done
+    if [ -s "$JSON_CANDIDATES_FILE" ]; then
+      if ! node -e '
+        const fs = require("fs");
+        const files = fs.readFileSync(process.argv[1], "utf8").split("\n").filter(Boolean);
+        for (const f of files) {
+          try {
+            JSON.parse(fs.readFileSync(f, "utf8"));
+            console.log(f);
+          } catch (e) {
+            /* already non-strict; omit so it is not held to the after-check */
+          }
+        }
+      ' "$JSON_CANDIDATES_FILE" >> "$VALID_BEFORE_FILE"; then
+        err="Pre-migration JSON validation failed for $search_dir; skipping its edits to avoid masking corruption"
+        echo "  $err" >&2
         ERRORS+=("$err")
-        rm -f "$file.tmp" /tmp/migrate-err.$$
         continue
       fi
-      rm -f /tmp/migrate-err.$$
-      echo "  Updated: $file"
     fi
-    total_files=$((total_files + 1))
-  done
+  fi
+
+  echo "  ${#matching_files[@]} file(s) to process (jobs=$JOBS) ..."
+
+  # Process this directory's matching files concurrently. NUL-delimited so any
+  # path (spaces/newlines) is safe; -n batches files per worker to amortize the
+  # bash fork; -P runs JOBS workers at once to hide per-file EFS latency.
+  printf '%s\0' "${matching_files[@]}" \
+    | xargs -0 -P "$JOBS" -n 50 bash -c 'process_files "$@"' _
 done
+
+# --- Aggregate per-worker fragments ---
+# Each worker wrote its own per-PID files, so concatenation order is the only
+# thing left to decide here; every stream is line-oriented and order-insensitive.
+if ls "$FRAGMENTS_DIR"/patch.* >/dev/null 2>&1; then
+  cat "$FRAGMENTS_DIR"/patch.* >> "$PATCH_FILE"
+fi
+if ls "$FRAGMENTS_DIR"/processed.* >/dev/null 2>&1; then
+  cat "$FRAGMENTS_DIR"/processed.* > "$PROCESSED_FILE"
+fi
+if ls "$FRAGMENTS_DIR"/errors.* >/dev/null 2>&1; then
+  cat "$FRAGMENTS_DIR"/errors.* > "$WORKER_ERRORS_FILE"
+fi
+if ls "$FRAGMENTS_DIR"/changed.* >/dev/null 2>&1; then
+  cat "$FRAGMENTS_DIR"/changed.* > "$CHANGED_JSON_FILE"
+fi
+total_files=$(wc -l < "$PROCESSED_FILE" 2>/dev/null | tr -d '[:space:]')
+[ -z "$total_files" ] && total_files=0
+while IFS= read -r werr; do
+  [ -n "$werr" ] && ERRORS+=("$werr")
+done < "$WORKER_ERRORS_FILE"
 
 echo ""
 if [ "$DRY_RUN" = true ]; then
@@ -237,6 +436,54 @@ else
   echo "Rollback patch saved to: $PATCH_FILE"
   echo "  To undo: patch -R -p0 < $PATCH_FILE"
 fi
+
+# Verify the replacement didn't turn any *previously valid* JSON invalid.
+# Files that were already non-strict before editing (captured in
+# VALID_BEFORE_FILE) are tolerated by the realm server's lenient parser, so
+# they're reported as a note but don't fail the run — only a genuine
+# valid -> invalid regression forces a non-zero exit.
+changed_json_count=$(wc -l < "$CHANGED_JSON_FILE" 2>/dev/null | tr -d '[:space:]')
+[ -z "$changed_json_count" ] && changed_json_count=0
+if [ "$DRY_RUN" = false ] && [ "$changed_json_count" -gt 0 ]; then
+  echo ""
+  echo "Verifying $changed_json_count changed JSON file(s) ..."
+  # Both path lists are read from files (not argv) so this scales past ARG_MAX.
+  if ! node -e '
+    const fs = require("fs");
+    const validBefore = new Set(
+      fs.readFileSync(process.argv[1], "utf8").split("\n").filter(Boolean)
+    );
+    const changed = fs.readFileSync(process.argv[2], "utf8").split("\n").filter(Boolean);
+    let broke = 0;
+    let preexisting = 0;
+    for (const f of changed) {
+      try {
+        JSON.parse(fs.readFileSync(f, "utf8"));
+      } catch (e) {
+        if (validBefore.has(f)) {
+          console.error("  Migration broke valid JSON: " + f + ": " + e.message);
+          broke++;
+        } else {
+          preexisting++;
+        }
+      }
+    }
+    if (preexisting > 0) {
+      console.error(
+        "  Note: " + preexisting +
+        " changed file(s) were already non-strict JSON before the migration (not flagged)."
+      );
+    }
+    process.exit(broke > 0 ? 1 : 0);
+  ' "$VALID_BEFORE_FILE" "$CHANGED_JSON_FILE"; then
+    ERRORS+=("Migration turned previously-valid JSON invalid in one or more files (see above). Roll back with: patch -R -p0 < $PATCH_FILE")
+  else
+    echo "  No previously-valid JSON was broken."
+  fi
+fi
+
+rm -f "$VALID_BEFORE_FILE" "$CHANGED_JSON_FILE" "$PROCESSED_FILE" "$WORKER_ERRORS_FILE" "$JSON_CANDIDATES_FILE"
+rm -rf "$FRAGMENTS_DIR"
 
 if [ ${#ERRORS[@]} -gt 0 ]; then
   echo ""

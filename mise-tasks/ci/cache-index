@@ -5,6 +5,7 @@
 set -euo pipefail
 
 export PATH="./node_modules/.bin:$PATH"
+REPO_ROOT="$(cd "../.." && pwd)"
 
 READY_PATH="_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
 # Strip whichever scheme is in front; realm-server speaks HTTPS+HTTP/2 in
@@ -24,6 +25,30 @@ for realm in base catalog skills submissions experiments openrouter software-fac
 done
 READINESS_URLS="${READINESS_URLS}|${MATRIX_URL_VAL}|http://localhost:5001|${ICONS_URL}|${HOST_URL}"
 
+# Give the realms whose rows this snapshot is imported from a content-derived
+# mtime before anything indexes them, so the mtimes baked into the dump
+# describe the content rather than when this runner happened to clone it. A
+# consumer that normalizes the same way sees matching mtimes for every file
+# it hasn't changed, and its boot index skips them. Without this the dump
+# records checkout times that exist nowhere else and every consumer
+# re-indexes the whole realm. See scripts/normalize-realm-mtimes.mjs.
+#
+# Scoped to base, skills and openrouter — the realms a test stack boots
+# without one of the SKIP_* flags switching it off, so the ones a consumer
+# reconciles against its own checkout. A consumer has to normalize exactly
+# this set: a realm normalized on only one side matches nothing and
+# re-indexes wholesale. The other realms indexed below still land in the
+# dump; they just carry this runner's checkout mtimes.
+#
+# skills:setup first because the skills realm is a separate clone that isn't
+# on disk yet in this job; it no-ops if the content is already present, and
+# start:development below would otherwise be the one to fetch it — after
+# this point.
+echo "Normalizing realm file mtimes..."
+pnpm --dir=../skills-realm skills:setup
+node "$REPO_ROOT/scripts/normalize-realm-mtimes.mjs" \
+  ../base ../skills-realm/contents ../openrouter-realm
+
 echo "Starting services..."
 SKIP_BOXEL_HOMEPAGE=true \
   NODE_NO_WARNINGS=1 \
@@ -40,6 +65,11 @@ ensure_services_running() {
 
 cleanup() {
   echo "Stopping services..."
+  # Test realms are started later in the run, so this may be unset.
+  if [ -n "${TEST_SERVICES_PID:-}" ]; then
+    kill "$TEST_SERVICES_PID" 2>/dev/null || true
+    wait "$TEST_SERVICES_PID" 2>/dev/null || true
+  fi
   kill "$SERVICES_PID" 2>/dev/null || true
   wait "$SERVICES_PID" 2>/dev/null || true
 }
@@ -68,12 +98,206 @@ while kill -0 "$WAIT_ON_PID" 2>/dev/null; do
 done
 wait "$WAIT_ON_PID"
 
-echo "All realms ready. Dumping index tables..."
+echo "All realms ready."
+
+# Bring up the live test realms (`/test/`, `/node-test/`) once the dev stack is
+# serving. They run in their own realm-server process against their own
+# database ($PGDATABASE_TEST), and a test shard waits on their readiness too —
+# so without them in the cache they are the whole remaining cost of a shard's
+# boot.
+#
+# Started after the dev readiness wait rather than alongside it: the test realms
+# resolve `https://cardstack.com/base/` to the dev server's base realm, so their
+# index needs base already being served. This mirrors the two phases
+# `start-server-and-test` gives them in test-services/host.
+echo "Starting test realms..."
+NODE_NO_WARNINGS=1 run-p -ln start:worker-test start:test-realms &
+TEST_SERVICES_PID=$!
+
+ensure_test_services_running() {
+  if ! kill -0 "$TEST_SERVICES_PID" 2>/dev/null; then
+    wait "$TEST_SERVICES_PID"
+    echo "Test realm services exited unexpectedly."
+    exit 1
+  fi
+}
+
+cleanup_test_services() {
+  kill "$TEST_SERVICES_PID" 2>/dev/null || true
+  wait "$TEST_SERVICES_PID" 2>/dev/null || true
+}
+
+TEST_HOST="${REALM_TEST_URL#*://}"
+case "$REALM_TEST_URL" in
+  https://*) TEST_READY_SCHEME="https-get" ;;
+  *)         TEST_READY_SCHEME="http-get"  ;;
+esac
+TEST_READINESS_URLS=""
+for realm in test node-test; do
+  TEST_READINESS_URLS="${TEST_READINESS_URLS:+${TEST_READINESS_URLS}|}${TEST_READY_SCHEME}://${TEST_HOST}/${realm}/${READY_PATH}"
+done
+
+echo "Waiting for test realm readiness..."
+NODE_TLS_REJECT_UNAUTHORIZED=0 \
+  wait-on -t 1800000 $(echo "$TEST_READINESS_URLS" | tr '|' ' ') &
+TEST_WAIT_ON_PID=$!
+
+while kill -0 "$TEST_WAIT_ON_PID" 2>/dev/null; do
+  ensure_services_running
+  ensure_test_services_running
+  sleep 1
+done
+wait "$TEST_WAIT_ON_PID"
+
+echo "Test realms ready. Dumping index tables..."
+# Tables that make up the cache. This is the single source of truth: the same
+# list drives pg_dump's -t args and the completeness check in the separate
+# "Verify index cache" CI step (via the sidecar written below). Keep the
+# TRUNCATE list in scripts/import-cached-index.sh in sync. The *_working
+# tables are deliberately excluded — they are transient UNLOGGED scratch space.
+CACHE_TABLES=(boxel_index prerendered_html realm_generations realm_meta)
+
+DUMP_ARGS=()
+for t in "${CACHE_TABLES[@]}"; do
+  DUMP_ARGS+=(-t "$t")
+done
+
 docker exec boxel-pg pg_dump -U postgres --data-only \
-  -t boxel_index -t realm_versions -t realm_meta \
+  "${DUMP_ARGS[@]}" \
   boxel > /tmp/boxel-index-cache.sql
+
+# Record exactly which tables we dumped so the verify step checks the same set.
+printf '%s\n' "${CACHE_TABLES[@]}" > /tmp/boxel-index-cache.tables
 
 gzip /tmp/boxel-index-cache.sql
 
 echo "Index cache created at /tmp/boxel-index-cache.sql.gz"
 ls -lh /tmp/boxel-index-cache.sql.gz
+
+# A second, smaller snapshot carrying only the realms a host test shard
+# actually serves. Every shard pays the download and the replay of whatever it
+# imports, and the realms left out here are the instance-heavy ones (catalog,
+# experiments, software-factory, submissions) — the shard neither mounts nor
+# queries them, so their rows are pure cost. Same table set and same COPY
+# format as the full snapshot above, so a consumer replays either one
+# unchanged.
+#
+# pg_dump takes no row filter, so the blocks are assembled here: a
+# `COPY public.<table> (<cols>) FROM stdin;` header, the matching
+# `COPY (SELECT <cols> …) TO STDOUT` body, and a `\.` terminator. Header and
+# SELECT share one generated column list so their order cannot drift, and
+# `-q` keeps psql from printing a command tag into the middle of the data.
+HOST_CACHE_REALMS=(base skills openrouter)
+HOST_DUMP=/tmp/boxel-index-cache-host.sql
+
+echo "Dumping host-scoped index cache for realms: ${HOST_CACHE_REALMS[*]}"
+
+# A realm's indexed `realm_url` is not reliably its serving URL: the base
+# realm registers under its canonical `https://cardstack.com/base/`, while
+# skills and openrouter carry the serving origin. Reconstructing either form
+# from REALM_BASE_URL gets base wrong. Read the realm_urls the index actually
+# holds and keep the ones whose path is a realm we want, so the filter follows
+# whatever the indexer wrote.
+REALM_URLS_RAW=$(docker exec boxel-pg psql -U postgres -d boxel -tAc \
+  "SELECT DISTINCT realm_url FROM boxel_index")
+
+# Each scoped realm must contribute at least one realm_url. Matching nothing
+# would still produce a structurally valid dump — empty COPY blocks, which the
+# verify step accepts because it checks for the block rather than its contents
+# — and would send every consumer back to indexing from scratch with nothing
+# to show it had happened. Fail here instead, while the cause is still legible.
+HOST_REALM_URLS=""
+for realm in "${HOST_CACHE_REALMS[@]}"; do
+  matched=0
+  while IFS= read -r realm_url; do
+    [ -z "$realm_url" ] && continue
+    case "$realm_url" in
+      */"${realm}"/) ;;
+      *) continue ;;
+    esac
+    # These go into SQL as literals. A quote in a realm URL is not a thing
+    # that happens, and if it ever did, stopping beats emitting broken SQL.
+    case "$realm_url" in
+      *"'"*)
+        echo "::error title=Host index cache::realm_url ${realm_url} contains a quote and cannot be used as a SQL literal."
+        exit 1
+        ;;
+    esac
+    HOST_REALM_URLS+="${HOST_REALM_URLS:+, }'${realm_url}'"
+    matched=$((matched + 1))
+    echo "  ${realm}: ${realm_url}"
+  done <<EOF
+${REALM_URLS_RAW}
+EOF
+  if [ "$matched" -eq 0 ]; then
+    echo "::error title=Host index cache empty::No indexed realm_url ends in '/${realm}/'. Either the realm did not index in this job, or the realm_url form changed — compare against the mount paths in mise-tasks/services/realm-server."
+    exit 1
+  fi
+done
+
+{
+  # The client settings pg_dump puts at the head of a data-only dump, so this
+  # file replays under the same ones as the full snapshot.
+  echo "SET statement_timeout = 0;"
+  echo "SET client_encoding = 'UTF8';"
+  echo "SET standard_conforming_strings = on;"
+  echo "SET check_function_bodies = false;"
+  echo "SET client_min_messages = warning;"
+  echo
+  for t in "${CACHE_TABLES[@]}"; do
+    cols=$(docker exec boxel-pg psql -U postgres -d boxel -tAc \
+      "SELECT string_agg(quote_ident(column_name), ', ' ORDER BY ordinal_position)
+         FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = '${t}'")
+    if [ -z "$cols" ]; then
+      echo "::error title=Host index cache incomplete::Table '${t}' has no columns in information_schema — it was likely renamed or removed by a migration. Update CACHE_TABLES here and the TRUNCATE list in scripts/import-cached-index.sh." >&2
+      exit 1
+    fi
+    echo "COPY public.${t} (${cols}) FROM stdin;"
+    docker exec boxel-pg psql -U postgres -d boxel -q --no-psqlrc \
+      -c "COPY (SELECT ${cols} FROM ${t} WHERE realm_url IN (${HOST_REALM_URLS})) TO STDOUT"
+    echo '\.'
+    echo
+  done
+} > "$HOST_DUMP"
+
+# Same table list as the full snapshot, written alongside the host dump so the
+# verify step can be pointed at this one explicitly.
+printf '%s\n' "${CACHE_TABLES[@]}" > /tmp/boxel-index-cache-host.tables
+
+gzip "$HOST_DUMP"
+
+echo "Host-scoped index cache created at ${HOST_DUMP}.gz"
+ls -lh "${HOST_DUMP}.gz"
+
+# The live test realms live in their own database, so they need their own
+# snapshot. No realm filter: that database holds `/test/` and `/node-test/` and
+# nothing else, so a plain data-only pg_dump is the whole of it.
+TEST_DUMP=/tmp/boxel-index-cache-test.sql
+TEST_DB="${PGDATABASE_TEST:-boxel_test}"
+
+echo "Dumping test-realm index cache from database ${TEST_DB}..."
+
+# Both realms must have indexed something. An empty snapshot would still import
+# and verify cleanly while quietly returning every consumer to indexing from
+# scratch — the same silent-no-op this guard prevents on the host-scoped dump.
+for realm in test node-test; do
+  row_count=$(docker exec boxel-pg psql -U postgres -d "$TEST_DB" -tAc \
+    "SELECT count(*) FROM boxel_index WHERE realm_url LIKE '%/${realm}/'")
+  if [ "$row_count" -eq 0 ]; then
+    echo "::error title=Test index cache empty::No boxel_index rows for realm '/${realm}/' in ${TEST_DB}. Either the realm did not index in this job, or its realm_url no longer ends in '/${realm}/' — compare against the mount paths in mise-tasks/services/test-realms."
+    exit 1
+  fi
+  echo "  /${realm}/: ${row_count} boxel_index rows"
+done
+
+docker exec boxel-pg pg_dump -U postgres --data-only \
+  "${DUMP_ARGS[@]}" \
+  "$TEST_DB" > "$TEST_DUMP"
+
+printf '%s\n' "${CACHE_TABLES[@]}" > /tmp/boxel-index-cache-test.tables
+
+gzip "$TEST_DUMP"
+
+echo "Test-realm index cache created at ${TEST_DUMP}.gz"
+ls -lh "${TEST_DUMP}.gz"

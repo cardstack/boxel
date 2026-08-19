@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import type { Test, SuperTest } from 'supertest';
 import type { Realm, User } from '@cardstack/runtime-common';
@@ -16,16 +17,16 @@ import {
   realmSecretSeed,
   realmServerTestMatrix,
   setupPermissionedRealmCached,
-} from '../helpers';
-import { createRealmServerSession } from './helpers';
+} from '../helpers/index.ts';
+import { createRealmServerSession } from './helpers.ts';
 import { APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 import type {
   MatrixEvent,
   RealmServerEventContent,
-} from 'https://cardstack.com/base/matrix-event';
+} from '@cardstack/base/matrix-event';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
-module(`server-endpoints/${basename(__filename)}`, function () {
+module(`server-endpoints/${basename(import.meta.filename)}`, function () {
   module('Realm Server Endpoints (not specific to one realm)', function () {
     module('stripe webhook handler', function (hooks) {
       let testRealm: Realm;

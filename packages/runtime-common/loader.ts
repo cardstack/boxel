@@ -1,18 +1,20 @@
-import { transpileAmd } from './amd-transpile';
-import { Deferred } from './deferred';
-import { cachedFetch, type MaybeCachedResponse } from './cached-fetch';
-import { executableExtensions, logger } from './index';
+import { transpileAmd } from './amd-transpile/index.ts';
+import { Deferred } from './deferred.ts';
+import { cachedFetch, type MaybeCachedResponse } from './cached-fetch.ts';
+import { executableExtensions, logger } from './index.ts';
 
-import { CardError } from './error';
-import flatMap from 'lodash/flatMap';
 import {
+  CardError,
+  iconNotFoundMessage,
+  stringifyErrorForLog,
+} from './error.ts';
+import { flatMap } from 'lodash-es';
+import {
+  shouldTrackRuntimeModuleGraph,
   trackRuntimeModuleDependency,
   type RuntimeDependencyTrackingContext,
-} from './dependency-tracker';
-import {
-  unresolveCardReference,
-  resolveCardReference,
-} from './card-reference-resolver';
+} from './dependency-tracker.ts';
+import type { VirtualNetwork } from './virtual-network.ts';
 
 type FetchingModule = {
   state: 'fetching';
@@ -207,6 +209,14 @@ export class Loader {
 
   private fetchImplementation: Fetch;
   private resolveImport: (moduleIdentifier: string) => string;
+  private virtualNetwork: VirtualNetwork | undefined;
+  // Unsubscribe for the realm-mapping-change listener registered below. The
+  // VirtualNetwork outlives any single loader (LoaderService replaces the
+  // loader on every module edit / session boundary), so a loader that isn't
+  // unsubscribed when it's discarded stays pinned — along with its whole
+  // module cache — by the listener the network still holds. `dispose()`
+  // releases it; the owner calls that before dropping the loader.
+  private unsubscribeMappingChange: (() => void) | undefined;
   // When the host runs inside a prerender, `setTimeout` is suppressed by
   // the render-timer-stub so the default sleep used by
   // `fetchWithTransientRetry` would never resolve and a transient 5xx on
@@ -218,17 +228,44 @@ export class Loader {
   constructor(
     fetch: Fetch,
     resolveImport?: (moduleIdentifier: string) => string,
-    options?: { retrySleep?: (ms: number) => Promise<void> },
+    options?: {
+      retrySleep?: (ms: number) => Promise<void>;
+      virtualNetwork?: VirtualNetwork;
+    },
   ) {
     this.fetchImplementation = fetch;
     this.resolveImport =
       resolveImport ?? ((moduleIdentifier) => moduleIdentifier);
     this.retrySleep = options?.retrySleep;
+    this.virtualNetwork = options?.virtualNetwork;
+    // Module caches are keyed by canonical RRI form (see moduleCacheKey), whose
+    // relationship to a real URL is only stable between realm-mapping changes.
+    // Discard the RRI-keyed caches whenever a mapping is added or removed so an
+    // entry can't outlive the spelling it was keyed under.
+    this.unsubscribeMappingChange = this.virtualNetwork?.onMappingChange(() => {
+      this.modules.clear();
+      this.moduleCanonicalURLs.clear();
+      this.knownDepsCache.clear();
+    });
+  }
+
+  // Release the realm-mapping-change subscription so this loader can be
+  // garbage-collected once discarded. Only detaches the listener — the caches
+  // are left intact because a discarded loader may still be draining in-flight
+  // imports, and once nothing references it the maps are collected wholesale.
+  dispose() {
+    this.unsubscribeMappingChange?.();
+    this.unsubscribeMappingChange = undefined;
+  }
+
+  getVirtualNetwork(): VirtualNetwork | undefined {
+    return this.virtualNetwork;
   }
 
   static cloneLoader(loader: Loader): Loader {
     let clone = new Loader(loader.fetchImplementation, loader.resolveImport, {
       retrySleep: loader.retrySleep,
+      virtualNetwork: loader.virtualNetwork,
     });
     for (let [moduleIdentifier, module] of loader.moduleShims) {
       clone.shimModule(moduleIdentifier, module);
@@ -302,52 +339,57 @@ export class Loader {
     });
   }
 
-  async getConsumedModules(
-    moduleIdentifier: string,
-    consumed: string[] = [],
-    initialIdentifier = moduleIdentifier,
-  ): Promise<string[]> {
+  // Returns the transitive consumed modules of `moduleIdentifier` in
+  // canonical identifier form: the registered realm-prefix (RRI) spelling
+  // (e.g. `@cardstack/base/card-api`) when the virtual network has a matching
+  // prefix mapping, otherwise the module URL. Accepts either spelling as
+  // input. Callers that need a fetchable URL resolve via the virtual network
+  // at the network boundary.
+  async getConsumedModules(moduleIdentifier: string): Promise<string[]> {
     // Normalize to resolved URL href so that prefix-form identifiers
     // (e.g. @cardstack/catalog/...) and their resolved URL equivalents
     // are treated as the same module for cycle detection and self-exclusion.
-    let resolvedHref = new URL(
-      resolveCardReference(moduleIdentifier, undefined),
-    ).href;
-    let resolvedInitial = new URL(
-      resolveCardReference(initialIdentifier, undefined),
-    ).href;
+    // The walk is Set-based and resolves each identifier once: this runs per
+    // module across large dependency graphs, so an array-scan accumulator or
+    // a per-identifier URL construction multiplies into real render time.
+    let resolveHref = (id: string) =>
+      this.virtualNetwork
+        ? this.virtualNetwork.toURLHref(id)
+        : new URL(id).href;
+    let visited = new Set<string>();
+    let walk = async (id: string, href: string): Promise<void> => {
+      if (visited.has(href)) {
+        return;
+      }
+      visited.add(href);
 
-    if (consumed.includes(resolvedHref)) {
-      return [];
-    }
+      let module = this.getModule(href);
+      if (!module || module.state === 'fetching') {
+        // we haven't yet tried importing the module or we are still in the
+        // process of importing the module
+        try {
+          await this.import<Record<string, any>>(id);
+        } catch (err: any) {
+          this.log.warn(
+            `encountered an error trying to load the module ${id}. The consumedModule result includes all the known consumed modules including the module that caused the error: ${err.message}`,
+          );
+        }
+        module = this.getModule(href);
+      }
+      if (module?.state === 'evaluated' || module?.state === 'broken') {
+        for (let consumedModule of module.consumedModules) {
+          await walk(consumedModule, resolveHref(consumedModule));
+        }
+      }
+    };
+    let initialHref = resolveHref(moduleIdentifier);
+    await walk(moduleIdentifier, initialHref);
     // you can't consume yourself
-    if (resolvedHref !== resolvedInitial) {
-      consumed.push(resolvedHref);
-    }
-
-    let module = this.getModule(resolvedHref);
-
-    if (!module || module.state === 'fetching') {
-      // we haven't yet tried importing the module or we are still in the process of importing the module
-      try {
-        await this.import<Record<string, any>>(moduleIdentifier);
-      } catch (err: any) {
-        this.log.warn(
-          `encountered an error trying to load the module ${moduleIdentifier}. The consumedModule result includes all the known consumed modules including the module that caused the error: ${err.message}`,
-        );
-      }
-    }
-    if (module?.state === 'evaluated' || module?.state === 'broken') {
-      for (let consumedModule of module?.consumedModules ?? []) {
-        await this.getConsumedModules(
-          consumedModule,
-          consumed,
-          initialIdentifier,
-        );
-      }
-      return [...new Set(consumed)]; // Get rid of duplicates
-    }
-    return [];
+    visited.delete(initialHref);
+    return this.canonicalizeIdentifiers(
+      visited,
+      this.canonicalIdentifier(initialHref),
+    );
   }
 
   static identify(
@@ -387,10 +429,17 @@ export class Loader {
     let resolvedModule = new URL(moduleIdentifier);
     let resolvedModuleIdentifier = resolvedModule.href;
     if (!this.moduleShims.has(resolvedModuleIdentifier)) {
-      trackRuntimeModuleDependency(
-        resolvedModuleIdentifier,
-        dependencyTrackingContext,
-      );
+      // Normalize tracker keys to the virtual-alias URL form when one
+      // exists (the dependency tracker requires `http://`/`https://`
+      // URLs — see `canonicalURL` in dependency-tracker.ts — so RRI
+      // prefix forms can't be used as keys). Without this, a base
+      // module imported via the virtual alias
+      // (`https://cardstack.com/base/X`) and the same module imported
+      // via the RRI prefix (`@cardstack/base/X` → resolveImport →
+      // resolved real URL `https://localhost:4201/base/X`) get tracked
+      // as two separate entries.
+      let trackingKey = this.canonicalizeTrackingKey(resolvedModuleIdentifier);
+      trackRuntimeModuleDependency(trackingKey, dependencyTrackingContext);
     }
 
     await this.advanceToState(resolvedModule, 'evaluated');
@@ -425,29 +474,117 @@ export class Loader {
     }
   }
 
+  // The key this loader files a module identifier under, resolved the way
+  // `isModuleLoaded` resolves it. A caller that has to answer "was this module
+  // loaded?" about a loader that no longer exists can compare a snapshot of
+  // `loadedModuleKeys` against this. Returns undefined for an identifier that
+  // does not resolve to a URL, which is never a key any loader holds.
+  moduleKey(moduleIdentifier: string): string | undefined {
+    try {
+      return this.moduleCacheKey(
+        new URL(this.resolveImport(moduleIdentifier)).href,
+      );
+    } catch (e) {
+      if (e instanceof TypeError) {
+        return undefined;
+      }
+      throw e;
+    }
+  }
+
+  // Every module this loader has loaded, in the key form `moduleKey` returns.
+  get loadedModuleKeys(): string[] {
+    return [...this.modules.keys()];
+  }
+
+  // Synchronous sibling of `getConsumedModules` limited to modules already
+  // known to this loader. Output is in the same canonical identifier form:
+  // realm-prefix (RRI) spelling where a prefix mapping is registered,
+  // module URL otherwise.
   getKnownConsumedModules(moduleIdentifier: string): string[] {
     let resolvedModuleIdentifier = this.resolveImport(moduleIdentifier);
     let knownDependencies = this.collectKnownModuleDependencies(
       resolvedModuleIdentifier,
     );
-    // Filter rather than delete to avoid mutating the cached Set
-    return [...knownDependencies].filter(
-      (dep) => dep !== resolvedModuleIdentifier,
+    // Copy rather than delete from the cached Set to avoid mutating it
+    return this.canonicalizeIdentifiers(
+      knownDependencies,
+      this.canonicalIdentifier(resolvedModuleIdentifier),
     );
+  }
+
+  // Canonical form for module identifiers that flow out of the loader
+  // (dependency lists, identities): the registered realm-prefix (RRI)
+  // spelling when the virtual network has a matching mapping, otherwise the
+  // identifier unchanged. Resolving back to a fetchable URL is the virtual
+  // network's job at the network boundary.
+  private canonicalIdentifier(moduleIdentifier: string): string {
+    return this.virtualNetwork
+      ? this.virtualNetwork.unresolveURL(moduleIdentifier)
+      : moduleIdentifier;
+  }
+
+  // Map a set of module identifiers to canonical form, deduped (distinct
+  // spellings of one module — a real URL and its virtual alias — collapse to
+  // one canonical identifier) and with the module itself excluded: a module
+  // doesn't consume itself, and the canonical comparison catches self
+  // references under any spelling.
+  private canonicalizeIdentifiers(
+    identifiers: Iterable<string>,
+    selfCanonical: string,
+  ): string[] {
+    let seen = new Set<string>();
+    let result: string[] = [];
+    for (let identifier of identifiers) {
+      let canonical = this.canonicalIdentifier(identifier);
+      if (canonical === selfCanonical || seen.has(canonical)) {
+        continue;
+      }
+      seen.add(canonical);
+      result.push(canonical);
+    }
+    return result;
+  }
+
+  // The runtime dependency tracker keys module nodes by http(s) URL — its
+  // canonicalURL guard drops realm-prefix identifiers (see
+  // dependency-tracker.ts) — and this loader collapses each tracked module
+  // onto its virtual-alias URL when one is registered (see
+  // canonicalizeTrackingKey). Converts any module identifier, canonical RRI
+  // form included, into that tracking-key form. Callers recording
+  // loader-derived module identifiers with the tracker must cross this
+  // boundary; identifiers stay in canonical RRI form everywhere else.
+  dependencyTrackingKey(moduleIdentifier: string): string {
+    return this.canonicalizeTrackingKey(this.resolveImport(moduleIdentifier));
   }
 
   private trackKnownModuleDependencies(
     rootModuleIdentifier: string,
     dependencyTrackingContext?: RuntimeDependencyTrackingContext,
   ): void {
+    // This walk repeats on every import() of the same module (e.g. when
+    // deserializing many cards of one type) yet records the identical node set
+    // each time; the probe collapses repeats to one Set lookup. Scoped apart
+    // from the relationship walk because this one excludes shimmed modules, so
+    // the two record slightly different node sets.
+    if (
+      !shouldTrackRuntimeModuleGraph(
+        'import',
+        rootModuleIdentifier,
+        dependencyTrackingContext,
+      )
+    ) {
+      return;
+    }
     for (let moduleIdentifier of this.collectKnownModuleDependencies(
       rootModuleIdentifier,
     )) {
       if (!this.moduleShims.has(moduleIdentifier)) {
-        trackRuntimeModuleDependency(
-          moduleIdentifier,
-          dependencyTrackingContext,
-        );
+        // Same canonicalization as the top-level import-time tracking
+        // call — collapse virtual-alias / resolved real URL forms onto
+        // the virtual-alias URL.
+        let trackingKey = this.canonicalizeTrackingKey(moduleIdentifier);
+        trackRuntimeModuleDependency(trackingKey, dependencyTrackingContext);
       }
     }
   }
@@ -626,10 +763,30 @@ export class Loader {
             switch (depModule?.state) {
               case undefined:
               case 'fetching':
-              case 'registered':
-                throw new Error(
-                  `expected ${entry.moduleURL.href} to be 'registered-completing-deps' but was '${depModule?.state}'`,
+              case 'registered': {
+                // A `completing-dep` is recorded while the task completing it
+                // is still on its own recursion stack. A concurrent import
+                // root can reach this transition while that task is suspended
+                // at an await, so finding the dep not-yet-completed is a real
+                // interleaving, not a broken invariant. State transitions are
+                // monotonic and re-entrant, so do the pending work here and
+                // re-enter the state machine rather than asserting some other
+                // task already did it.
+                await this.advanceToState(
+                  entry.moduleURL,
+                  'registered-completing-deps',
+                  {
+                    ...stack,
+                    ...{
+                      'registered-completing-deps': [
+                        ...stack['registered-completing-deps'],
+                        resolvedURL.href,
+                      ],
+                    },
+                  },
                 );
+                break outer_switch;
+              }
               case 'registered-completing-deps': {
                 if (
                   !stack['registered-with-deps'].includes(entry.moduleURL.href)
@@ -722,21 +879,53 @@ export class Loader {
         urlOrRequest instanceof Request
           ? urlOrRequest.url
           : String(urlOrRequest);
-      this.log.error(`fetch failed for ${url}`, err);
+      // `err.code` is present in Node (undici surfaces ECONNREFUSED /
+      // ENOTFOUND / etc.) but absent in browsers — Chromium logs the
+      // underlying `net::ERR_*` through its own network-layer channel
+      // rather than the JS Error. Include whatever's available so the
+      // synthetic Response carries the most specific detail we can get
+      // wherever the loader runs.
+      let detail = err?.code
+        ? `${err.message} (${err.code})`
+        : (err?.message ?? String(err));
+      this.log.error(
+        `fetch failed for ${url}: ${detail}`,
+        stringifyErrorForLog(err),
+      );
 
-      return new Response(`fetch failed for ${url}`, {
+      let synthetic = new Response(`fetch failed for ${url}: ${detail}`, {
         status: 500,
-        statusText: err.message,
+        statusText: detail.slice(0, 200) || 'fetch failed',
       });
+      return synthetic;
     }
   };
 
+  // Cache key for the per-module maps: the canonical RRI form. Every spelling
+  // of a module — its resolved real URL, the virtual-alias URL, and the RRI
+  // prefix — folds to one RRI via `unresolveURL`, so a base module reached by
+  // any of them shares one cached module and therefore one class object.
+  // Without this collapse the spellings evaluate as distinct modules and
+  // `instanceof` / polymorphic-field identity checks across them diverge.
+  // Modules with no realm-prefix mapping (user realms, bare package specifiers)
+  // are returned unchanged by `unresolveURL`.
+  //
+  // The RRI→URL relationship is only stable between realm-mapping changes, so
+  // the caches keyed here are discarded whenever a mapping is added or removed
+  // (see the `onMappingChange` subscription in the constructor).
+  private moduleCacheKey(moduleIdentifier: string): string {
+    let trimmed = trimModuleIdentifier(moduleIdentifier);
+    return this.virtualNetwork
+      ? this.virtualNetwork.unresolveURL(trimmed)
+      : trimmed;
+  }
+
   private getModule(moduleIdentifier: string): Module | undefined {
-    return this.modules.get(trimModuleIdentifier(moduleIdentifier));
+    return this.modules.get(this.moduleCacheKey(moduleIdentifier));
   }
 
   private setModule(moduleIdentifier: string, module: Module) {
-    this.modules.set(trimModuleIdentifier(moduleIdentifier), module);
+    this.modules.set(this.moduleCacheKey(moduleIdentifier), module);
   }
 
   private setCanonicalModuleURL(
@@ -744,20 +933,40 @@ export class Loader {
     canonicalURL: string,
   ) {
     this.moduleCanonicalURLs.set(
-      trimModuleIdentifier(moduleIdentifier),
+      this.moduleCacheKey(moduleIdentifier),
       canonicalURL,
     );
   }
 
   private getCanonicalModuleURL(moduleIdentifier: string): string | undefined {
-    return this.moduleCanonicalURLs.get(trimModuleIdentifier(moduleIdentifier));
+    return this.moduleCanonicalURLs.get(this.moduleCacheKey(moduleIdentifier));
+  }
+
+  // Collapse a module identifier to its virtual-alias URL form when one
+  // exists, so the dependency tracker keys aren't fragmented across the
+  // virtual-alias (`https://cardstack.com/base/X`) and resolved real URL
+  // (`https://localhost:4201/base/X`) for the same module. Returns the
+  // input unchanged when no virtual alias is registered.
+  private canonicalizeTrackingKey(moduleIdentifier: string): string {
+    if (!this.virtualNetwork) {
+      return moduleIdentifier;
+    }
+    try {
+      let parsed = new URL(moduleIdentifier);
+      let virtual = this.virtualNetwork.mapURL(parsed, 'real-to-virtual');
+      return virtual ? virtual.href : moduleIdentifier;
+    } catch {
+      return moduleIdentifier;
+    }
   }
 
   private captureIdentitiesOfModuleExports(
     module: any,
     moduleIdentifier: string,
   ) {
-    let moduleId = unresolveCardReference(
+    // Identities are recorded in canonical identifier form so that
+    // `identify()` output matches the form persisted in code refs.
+    let moduleId = this.canonicalIdentifier(
       trimModuleIdentifier(moduleIdentifier),
     );
     for (let propName of Object.keys(module)) {
@@ -811,11 +1020,22 @@ export class Loader {
     try {
       loaded = await this.load(moduleURL);
     } catch (exception) {
-      this.setModule(moduleIdentifier, {
-        state: 'broken',
-        exception,
-        consumedModules: new Set(), // we blew up before we could understand what was inside ourselves
-      });
+      // A failure to OBTAIN the module — a network failure or an error
+      // HTTP response — is never cached as `broken`. The modules map keys
+      // entries by the extension-trimmed identifier (see
+      // `trimModuleIdentifier`): one slot shared by the `.gts` / `.ts` /
+      // extensionless spellings of a module. A fetch failure is a property
+      // of the requested SPELLING, not of that shared identity — a 404 for
+      // `foo.gts` says nothing about `foo`, which may resolve via
+      // `foo.ts` — so caching it would poison every sibling import for the
+      // lifetime of this loader (definition-cache population probes
+      // extension candidates with real fetches, making this a routine
+      // occurrence, not an edge case). Likewise a transport-level failure
+      // isn't a property of the module at all. Drop the entry so the next
+      // `import` re-enters `fetchModule` and refetches; failures of
+      // *obtained* source (transpile / evaluate below) are deterministic
+      // properties of the module and are the ones cached as `broken`.
+      this.modules.delete(this.moduleCacheKey(moduleIdentifier));
       module.deferred.fulfill();
       throw exception;
     }
@@ -1037,7 +1257,9 @@ export class Loader {
         },
       });
     } catch (err) {
-      this.log.error(`fetch failed for ${moduleURL}`, err); // to aid in debugging, since this exception doesn't include the URL that failed
+      this.log.error(
+        `fetch failed for ${moduleURL}: ${stringifyErrorForLog(err)}`,
+      ); // to aid in debugging, since this exception doesn't include the URL that failed
       // this particular exception might not be worth caching the module in a
       // "broken" state, since the server hosting the module is likely down. it
       // might be a good idea to be able to try again in this case...
@@ -1045,6 +1267,19 @@ export class Loader {
     }
     if (!response.ok) {
       let error = await CardError.fromFetchResponse(moduleURL.href, response);
+      // Replace the raw S3 AccessDenied XML for a missing boxel icon with a
+      // user-actionable message, while preserving everything else the base
+      // error carries (status, deps, responseText). The host's browser loader
+      // rewrites these failures to a fallback icon module, but the indexing
+      // worker's loader has no such middleware, so without this the XML lands
+      // in error_doc.message.
+      let iconMessage = iconNotFoundMessage(moduleURL.href, response.status);
+      if (iconMessage) {
+        error.message = iconMessage;
+        if (!error.deps?.length) {
+          error.deps = [response.url || moduleURL.href];
+        }
+      }
       throw error;
     }
 

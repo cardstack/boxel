@@ -16,7 +16,6 @@ import type {
   Permissions,
 } from '@cardstack/runtime-common';
 import {
-  baseRealm,
   fields,
   isSingleCardDocument,
   localId,
@@ -29,8 +28,6 @@ import type { Loader } from '@cardstack/runtime-common/loader';
 
 import type CardService from '@cardstack/host/services/card-service';
 
-import type { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
-
 import {
   p,
   cleanWhiteSpace,
@@ -39,9 +36,11 @@ import {
   provideConsumeContext,
   setupIntegrationTestRealm,
   setupLocalIndexing,
+  testModuleRealm,
   testRealmURL,
   testRRI,
   cardInfo,
+  cardInfoLinks,
 } from '../../helpers';
 
 import {
@@ -57,11 +56,14 @@ import {
   field,
   NumberField,
   isSaved,
+  subscribeToChanges,
+  unsubscribeFromChanges,
+  flushLogs,
   Base64ImageField,
   updateFromSerialized,
   CodeRefField,
   linksTo,
-  relationshipMeta,
+  getRelationshipMembershipState,
   FieldDef,
   containsMany,
   linksToMany,
@@ -78,7 +80,8 @@ import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
-import type { Captain } from '../../cards/captain';
+import type { Captain } from '../../../../test-realm-cards/contents/captain';
+import type { CardDef as CardDefType } from '@cardstack/base/card-api';
 
 let loader: Loader;
 
@@ -113,7 +116,7 @@ module('Integration | serialization', function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   test('can deserialize field', async function (assert) {
@@ -659,6 +662,64 @@ module('Integration | serialization', function (hooks) {
     );
   });
 
+  test('an included resource relativizes its references against its own id', async function (assert) {
+    // A resource carries its references relative to its OWN id, independent of
+    // the document that delivered it — the base a link target is serialized
+    // against is the target's id, not the primary's. `cardClassFromResource`
+    // resolves an included resource's `adoptsFrom` that way, so a
+    // primary-relative module ref on an included resource would resolve to the
+    // wrong module.
+    class Toy extends CardDef {
+      @field name = contains(StringField);
+    }
+    class Pet extends CardDef {
+      @field name = contains(StringField);
+      @field favoriteToy = linksTo(Toy);
+    }
+    class Person extends CardDef {
+      @field pet = linksTo(Pet);
+    }
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Person, Pet, Toy },
+      },
+    });
+
+    let ball = new Toy({ name: 'Ball' });
+    let mango = new Pet({ name: 'Mango', favoriteToy: ball });
+    let hassan = new Person({ pet: mango });
+    await saveCard(ball, `${testRealmURL}Toy/ball`, loader);
+    await saveCard(mango, `${testRealmURL}Pet/mango`, loader);
+    await saveCard(hassan, `${testRealmURL}Person/hassan`, loader);
+
+    let doc = serializeCard(hassan, {});
+    let petResource = doc.included?.find(
+      (r) => r.id === `${testRealmURL}Pet/mango`,
+    );
+    assert.ok(petResource, 'the linked pet rides along in included[]');
+    assert.deepEqual(
+      petResource?.meta.adoptsFrom,
+      { module: rri('../test-cards'), name: 'Pet' },
+      "the included resource's module is relative to its own id, not the primary's",
+    );
+    assert.strictEqual(
+      (petResource?.relationships?.favoriteToy as Relationship)?.links?.self,
+      '../Toy/ball',
+      "a link on the included resource is relative to that resource's id",
+    );
+    assert.deepEqual(
+      doc.data.meta.adoptsFrom,
+      { module: rri('../test-cards'), name: 'Person' },
+      'the primary resource still relativizes against its own id',
+    );
+    assert.strictEqual(
+      (doc.data.relationships?.pet as Relationship)?.links?.self,
+      '../Pet/mango',
+      "the primary's own relationship stays relative to the primary",
+    );
+  });
+
   test('can serialize a card that has an ID', async function (assert) {
     class Person extends CardDef {
       @field firstName = contains(StringField);
@@ -695,6 +756,7 @@ module('Integration | serialization', function (hooks) {
           firstName: 'Mango',
           cardInfo,
         },
+        relationships: { ...cardInfoLinks },
         meta: {
           adoptsFrom: {
             module: rri(`../test-cards`),
@@ -874,7 +936,7 @@ module('Integration | serialization', function (hooks) {
       },
     });
 
-    let ref = { module: `https://localhost:4202/test/person`, name: 'Person' };
+    let ref = { module: `${testModuleRealm}person`, name: 'Person' };
     let resource = {
       attributes: {
         ref,
@@ -920,10 +982,11 @@ module('Integration | serialization', function (hooks) {
       },
     });
 
-    let ref = { module: `https://localhost:4202/test/person`, name: 'Person' };
+    let ref = { module: `${testModuleRealm}person`, name: 'Person' };
     let driver = new DriverCard({ ref });
-    let serializedRef = serializeCard(driver, { includeUnrenderedFields: true })
-      .data.attributes?.ref;
+    let serializedRef = serializeCard(driver, {
+      includeUnrenderedFields: true,
+    }).data.attributes?.ref;
     assert.notStrictEqual(
       serializedRef,
       ref,
@@ -1080,7 +1143,9 @@ module('Integration | serialization', function (hooks) {
     );
     await saveCard(mango, `${testRealmURL}Pet/mango`, loader);
 
-    let serialized = serializeCard(hassan, { includeUnrenderedFields: true });
+    let serialized = serializeCard(hassan, {
+      includeUnrenderedFields: true,
+    });
     assert.deepEqual(serialized, {
       data: {
         lid: hassan[localId],
@@ -1090,6 +1155,7 @@ module('Integration | serialization', function (hooks) {
           cardInfo,
         },
         relationships: {
+          ...cardInfoLinks,
           pet: {
             links: {
               self: `${testRealmURL}Pet/mango`,
@@ -1115,9 +1181,10 @@ module('Integration | serialization', function (hooks) {
             cardDescription: 'Toilet paper ghost: Poooo!',
             cardInfo,
           },
+          relationships: { ...cardInfoLinks },
           meta: {
             adoptsFrom: {
-              module: testRRI('test-cards'),
+              module: rri('../test-cards'),
               name: 'Toy',
             },
           },
@@ -1130,9 +1197,10 @@ module('Integration | serialization', function (hooks) {
             cardInfo,
           },
           relationships: {
+            ...cardInfoLinks,
             favoriteToy: {
               links: {
-                self: `${testRealmURL}Toy/spookyToiletPaper`,
+                self: `../Toy/spookyToiletPaper`,
               },
               data: {
                 id: `${testRealmURL}Toy/spookyToiletPaper`,
@@ -1142,7 +1210,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: testRRI('test-cards'),
+              module: rri('../test-cards'),
               name: 'Pet',
             },
           },
@@ -1213,7 +1281,9 @@ module('Integration | serialization', function (hooks) {
       pet: mango,
     });
 
-    let serialized = serializeCard(hassan, { includeUnrenderedFields: true });
+    let serialized = serializeCard(hassan, {
+      includeUnrenderedFields: true,
+    });
     assert.deepEqual(serialized, {
       data: {
         lid: hassan[localId],
@@ -1223,6 +1293,7 @@ module('Integration | serialization', function (hooks) {
           cardInfo,
         },
         relationships: {
+          ...cardInfoLinks,
           pet: {
             data: {
               lid: mango[localId],
@@ -1245,6 +1316,7 @@ module('Integration | serialization', function (hooks) {
             cardDescription: 'Toilet paper ghost: Poooo!',
             cardInfo,
           },
+          relationships: { ...cardInfoLinks },
           meta: {
             adoptsFrom: {
               module: testRRI('test-cards'),
@@ -1260,6 +1332,7 @@ module('Integration | serialization', function (hooks) {
             cardInfo,
           },
           relationships: {
+            ...cardInfoLinks,
             favoriteToy: {
               data: {
                 lid: spookyToiletPaper[localId],
@@ -1389,26 +1462,30 @@ module('Integration | serialization', function (hooks) {
       assert.ok(false, '"pet" field value is not an instance of Pet');
     }
 
-    let relationship = relationshipMeta(card, 'pet');
+    let relationship = getRelationshipMembershipState(card, 'pet')
+      .membership![0];
     if (Array.isArray(relationship)) {
       assert.ok(
         false,
-        'relationshipMeta should not be an array for linksTo relationship',
+        'getRelationshipMembershipState should not be an array for linksTo relationship',
       );
     } else {
-      if (relationship?.type === 'loaded') {
-        let relatedCard = relationship.card;
+      if (relationship.kind === 'present') {
+        let relatedCard = relationship.value;
         assert.true(relatedCard instanceof Pet, 'related card is a Pet');
         assert.strictEqual(relatedCard?.id, `${testRealmURL}Pet/mango`);
       } else {
-        assert.ok(false, 'relationship type was not "loaded"');
+        assert.ok(
+          false,
+          `relationship kind was not "present": ${relationship.kind}`,
+        );
       }
     }
 
-    assert.strictEqual(
-      relationshipMeta(card, 'firstName'),
-      undefined,
-      'relationshipMeta returns undefined for non-relationship field',
+    assert.throws(
+      () => getRelationshipMembershipState(card, 'firstName'),
+      /requires a 'linksTo' or 'linksToMany' field/,
+      'getRelationshipMembershipState throws for a non-relationship field',
     );
   });
 
@@ -1483,17 +1560,21 @@ module('Integration | serialization', function (hooks) {
 
     hassan.pet; // should no longer throw NotLoaded errors
 
-    let relationship = relationshipMeta(hassan, 'pet');
+    let relationship = getRelationshipMembershipState(hassan, 'pet')
+      .membership![0];
     if (Array.isArray(relationship)) {
       assert.ok(
         false,
-        'relationshipMeta should not be an array for linksTo relationship',
+        'getRelationshipMembershipState should not be an array for linksTo relationship',
       );
     } else {
-      if (relationship?.type === 'not-loaded') {
+      if (relationship.kind === 'not-loaded') {
         assert.strictEqual(relationship.reference, `${testRealmURL}Pet/mango`);
       } else {
-        assert.ok(false, 'relationship type was not "not-loaded"');
+        assert.ok(
+          false,
+          `relationship kind was not "not-loaded": ${relationship.kind}`,
+        );
       }
     }
 
@@ -1507,6 +1588,7 @@ module('Integration | serialization', function (hooks) {
           cardInfo,
         },
         relationships: {
+          ...cardInfoLinks,
           pet: {
             links: {
               self: `${testRealmURL}Pet/mango`,
@@ -1561,7 +1643,9 @@ module('Integration | serialization', function (hooks) {
 
     let hassan = new Person({ firstName: 'Hassan' });
 
-    let serialized = serializeCard(hassan, { includeUnrenderedFields: true });
+    let serialized = serializeCard(hassan, {
+      includeUnrenderedFields: true,
+    });
     assert.deepEqual(serialized, {
       data: {
         lid: hassan[localId],
@@ -1571,6 +1655,7 @@ module('Integration | serialization', function (hooks) {
           cardInfo,
         },
         relationships: {
+          ...cardInfoLinks,
           pet: {
             links: {
               self: null,
@@ -1597,6 +1682,7 @@ module('Integration | serialization', function (hooks) {
           cardInfo,
         },
         relationships: {
+          ...cardInfoLinks,
           pet: {
             links: {
               self: null,
@@ -1657,7 +1743,11 @@ module('Integration | serialization', function (hooks) {
     );
     assert.ok(card instanceof Person, 'card is a Person');
     assert.strictEqual(card.firstName, 'Hassan');
-    assert.strictEqual(card.pet, null, 'relationship is null');
+    assert.strictEqual(
+      card.pet,
+      undefined,
+      'an explicitly-null linksTo surfaces as undefined to userland',
+    );
   });
 
   test('can deserialize coexisting linksTo, contains, and containsMany fields in a card', async function (assert) {
@@ -1749,27 +1839,31 @@ module('Integration | serialization', function (hooks) {
       assert.ok(false, '"favoriteToy" field value is not an instance of Toy');
     }
 
-    let relationship = relationshipMeta(card, 'owner');
+    let relationship = getRelationshipMembershipState(card, 'owner')
+      .membership![0];
     if (Array.isArray(relationship)) {
       assert.ok(
         false,
-        'relationshipMeta should not be an array for linksTo relationship',
+        'getRelationshipMembershipState should not be an array for linksTo relationship',
       );
     } else {
-      if (relationship?.type === 'loaded') {
-        let relatedCard = relationship.card;
+      if (relationship.kind === 'present') {
+        let relatedCard = relationship.value;
         assert.true(relatedCard instanceof Person, 'related card is a Person');
         assert.strictEqual(relatedCard?.id, `${testRealmURL}Person/burcu`);
       } else {
-        assert.ok(false, 'relationship type was not "loaded"');
+        assert.ok(
+          false,
+          `relationship kind was not "present": ${relationship.kind}`,
+        );
       }
     }
 
     ['firstName', 'toys', 'favoriteToy'].map((fieldName) =>
-      assert.strictEqual(
-        relationshipMeta(card, fieldName),
-        undefined,
-        `relationshipMeta returns undefined for non-relationship field ${fieldName}`,
+      assert.throws(
+        () => getRelationshipMembershipState(card, fieldName),
+        /requires a 'linksTo' or 'linksToMany' field/,
+        `getRelationshipMembershipState throws for non-relationship field ${fieldName}`,
       ),
     );
   });
@@ -1801,7 +1895,9 @@ module('Integration | serialization', function (hooks) {
     let mango = new Person({ firstName: 'Mango' });
     let hassan = new Person({ firstName: 'Hassan', friend: mango });
     await saveCard(mango, `${testRealmURL}Person/mango`, loader);
-    let serialized = serializeCard(hassan, { includeUnrenderedFields: true });
+    let serialized = serializeCard(hassan, {
+      includeUnrenderedFields: true,
+    });
     assert.deepEqual(serialized, {
       data: {
         lid: hassan[localId],
@@ -1811,6 +1907,7 @@ module('Integration | serialization', function (hooks) {
           cardInfo,
         },
         relationships: {
+          ...cardInfoLinks,
           friend: {
             links: {
               self: `${testRealmURL}Person/mango`,
@@ -1837,6 +1934,7 @@ module('Integration | serialization', function (hooks) {
             cardInfo,
           },
           relationships: {
+            ...cardInfoLinks,
             friend: {
               links: {
                 self: null,
@@ -1845,7 +1943,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: testRRI('test-cards'),
+              module: rri('../test-cards'),
               name: 'Person',
             },
           },
@@ -1879,6 +1977,7 @@ module('Integration | serialization', function (hooks) {
           cardInfo,
         },
         relationships: {
+          ...cardInfoLinks,
           friend: {
             data: {
               lid: mango[localId],
@@ -2035,7 +2134,9 @@ module('Integration | serialization', function (hooks) {
       `${testRealmURL}Toy/spookyToiletPaper`,
       loader,
     );
-    let serialized = serializeCard(hassan, { includeUnrenderedFields: true });
+    let serialized = serializeCard(hassan, {
+      includeUnrenderedFields: true,
+    });
     assert.deepEqual(serialized, {
       data: {
         lid: hassan[localId],
@@ -2048,6 +2149,7 @@ module('Integration | serialization', function (hooks) {
           },
         },
         relationships: {
+          ...cardInfoLinks,
           'pet.favoriteToy': {
             links: {
               self: `${testRealmURL}Toy/spookyToiletPaper`,
@@ -2073,9 +2175,10 @@ module('Integration | serialization', function (hooks) {
             cardDescription: 'Toilet paper ghost: Poooo!',
             cardInfo,
           },
+          relationships: { ...cardInfoLinks },
           meta: {
             adoptsFrom: {
-              module: testRRI('test-cards'),
+              module: rri('../test-cards'),
               name: 'Toy',
             },
           },
@@ -2169,7 +2272,9 @@ module('Integration | serialization', function (hooks) {
       `${testRealmURL}Toy/spookyToiletPaper`,
       loader,
     );
-    let serialized = serializeCard(hassan, { includeUnrenderedFields: true });
+    let serialized = serializeCard(hassan, {
+      includeUnrenderedFields: true,
+    });
     assert.deepEqual(serialized, {
       data: {
         lid: hassan[localId],
@@ -2180,6 +2285,7 @@ module('Integration | serialization', function (hooks) {
           cardInfo,
         },
         relationships: {
+          ...cardInfoLinks,
           'pet.favoriteToy': {
             links: {
               self: `${testRealmURL}Toy/spookyToiletPaper`,
@@ -2205,9 +2311,10 @@ module('Integration | serialization', function (hooks) {
             cardDescription: 'Toilet paper ghost: Poooo!',
             cardInfo,
           },
+          relationships: { ...cardInfoLinks },
           meta: {
             adoptsFrom: {
-              module: testRRI('test-cards'),
+              module: rri('../test-cards'),
               name: 'Toy',
             },
           },
@@ -2307,7 +2414,9 @@ module('Integration | serialization', function (hooks) {
       `${testRealmURL}Toy/spookyToiletPaper`,
       loader,
     );
-    let serialized = serializeCard(hassan, { includeUnrenderedFields: true });
+    let serialized = serializeCard(hassan, {
+      includeUnrenderedFields: true,
+    });
     assert.deepEqual(serialized, {
       data: {
         lid: hassan[localId],
@@ -2322,6 +2431,7 @@ module('Integration | serialization', function (hooks) {
           cardInfo,
         },
         relationships: {
+          ...cardInfoLinks,
           'pets.0.favoriteToy': {
             links: {
               self: `${testRealmURL}Toy/spookyToiletPaper`,
@@ -2347,9 +2457,10 @@ module('Integration | serialization', function (hooks) {
             cardDescription: 'Toilet paper ghost: Poooo!',
             cardInfo,
           },
+          relationships: { ...cardInfoLinks },
           meta: {
             adoptsFrom: {
-              module: testRRI('test-cards'),
+              module: rri('../test-cards'),
               name: 'Toy',
             },
           },
@@ -3069,13 +3180,7 @@ module('Integration | serialization', function (hooks) {
             },
             cardInfo,
           },
-          relationships: {
-            'cardInfo.theme': {
-              links: {
-                self: null,
-              },
-            },
-          },
+          relationships: { ...cardInfoLinks },
           meta: {
             adoptsFrom: {
               module: testRRI('test-cards'),
@@ -3112,6 +3217,76 @@ module('Integration | serialization', function (hooks) {
       includeUnrenderedFields: true,
     });
     assert.strictEqual(serialized.data.attributes?.firstBirthday, '2020-10-30');
+  });
+
+  test('can serialize a computed field declared inside a composite field', async function (assert) {
+    // The same FieldDef reached two ways: `contains` and `containsMany` must
+    // agree on whether the computeds declared inside it are serialized.
+    class Probe extends FieldDef {
+      @field raw = contains(StringField);
+      @field innerComputed = contains(StringField, {
+        computeVia: function (this: Probe) {
+          return `inner:${this.raw ?? ''}`;
+        },
+      });
+      @field innerComputedMany = containsMany(StringField, {
+        computeVia: function (this: Probe) {
+          return [`many:${this.raw ?? ''}`, 'constant'];
+        },
+      });
+    }
+    class ComputedProbe extends CardDef {
+      @field inner = contains(Probe);
+      @field innerList = containsMany(Probe);
+    }
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { ComputedProbe, Probe },
+      },
+    });
+    let probe = new ComputedProbe({
+      inner: new Probe({ raw: 'hello' }),
+      innerList: [new Probe({ raw: 'listed' })],
+    });
+    let serialized = serializeCard(probe, {
+      includeComputeds: true,
+      includeUnrenderedFields: true,
+    });
+    assert.deepEqual(
+      serialized.data.attributes?.inner,
+      {
+        raw: 'hello',
+        innerComputed: 'inner:hello',
+        innerComputedMany: ['many:hello', 'constant'],
+      },
+      'computeds declared inside a contains composite field are serialized',
+    );
+    assert.deepEqual(
+      serialized.data.attributes?.innerList,
+      [
+        {
+          raw: 'listed',
+          innerComputed: 'inner:listed',
+          innerComputedMany: ['many:listed', 'constant'],
+        },
+      ],
+      'containsMany serializes the same nested computeds',
+    );
+
+    let withoutComputeds = serializeCard(probe, {
+      includeUnrenderedFields: true,
+    });
+    assert.deepEqual(
+      withoutComputeds.data.attributes?.inner,
+      { raw: 'hello' },
+      'without includeComputeds the nested computeds are still filtered out',
+    );
+    assert.deepEqual(
+      withoutComputeds.data.attributes?.innerList,
+      [{ raw: 'listed' }],
+      'containsMany also filters nested computeds without includeComputeds',
+    );
   });
 
   test('can deserialize a computed field', async function (assert) {
@@ -3257,6 +3432,7 @@ module('Integration | serialization', function (hooks) {
           cardInfo,
         },
         relationships: {
+          ...cardInfoLinks,
           pet: { links: { self: null } },
           friend: {
             links: { self: `${testRealmURL}Person/hassan` },
@@ -3288,11 +3464,12 @@ module('Integration | serialization', function (hooks) {
             cardInfo,
           },
           relationships: {
+            ...cardInfoLinks,
             cardTheme: { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
-              module: testRRI('test-cards'),
+              module: rri('../test-cards'),
               name: 'Pet',
             },
           },
@@ -3308,8 +3485,9 @@ module('Integration | serialization', function (hooks) {
             cardInfo,
           },
           relationships: {
+            ...cardInfoLinks,
             pet: {
-              links: { self: `${testRealmURL}Pet/mango` },
+              links: { self: `../Pet/mango` },
               data: { id: `${testRealmURL}Pet/mango`, type: 'card' },
             },
             friend: { links: { self: null } },
@@ -3318,7 +3496,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: testRRI('test-cards'),
+              module: rri('../test-cards'),
               name: 'Person',
             },
           },
@@ -3421,19 +3599,23 @@ module('Integration | serialization', function (hooks) {
         assert.ok(false, '"friendPet" field value is not an instance of Pet');
       }
 
-      let relationship = relationshipMeta(card, 'friendPet');
+      let relationship = getRelationshipMembershipState(card, 'friendPet')
+        .membership![0];
       if (Array.isArray(relationship)) {
         assert.ok(
           false,
-          'relationshipMeta should not be an array for linksTo relationship',
+          'getRelationshipMembershipState should not be an array for linksTo relationship',
         );
       } else {
-        if (relationship?.type === 'loaded') {
-          let relatedCard = relationship.card;
+        if (relationship.kind === 'present') {
+          let relatedCard = relationship.value;
           assert.true(relatedCard instanceof Pet, 'related card is a Pet');
           assert.strictEqual(relatedCard?.id, `${testRealmURL}Pet/mango`);
         } else {
-          assert.ok(false, 'relationship type was not "loaded"');
+          assert.ok(
+            false,
+            `relationship kind was not "present": ${relationship.kind}`,
+          );
         }
       }
     });
@@ -3475,6 +3657,7 @@ module('Integration | serialization', function (hooks) {
             cardInfo,
           },
           relationships: {
+            ...cardInfoLinks,
             pet: { links: { self: null } },
             friend: { links: { self: null } },
             friendPet: { links: { self: null } },
@@ -3534,10 +3717,19 @@ module('Integration | serialization', function (hooks) {
       );
       assert.ok(card instanceof Person, 'card is a Person');
       assert.strictEqual(card.firstName, 'Burcu');
-      assert.strictEqual(card.friendPet, null, 'relationship is null');
+      assert.strictEqual(
+        card.friendPet,
+        undefined,
+        'an explicitly-null computed linksTo surfaces as undefined to userland',
+      );
 
-      let relationship = relationshipMeta(card, 'friendPet');
-      assert.deepEqual(relationship, { type: 'loaded', card: null });
+      let relationship = getRelationshipMembershipState(card, 'friendPet')
+        .membership![0];
+      assert.deepEqual(relationship, {
+        kind: 'not-set',
+        value: undefined,
+        reference: undefined,
+      });
     });
 
     test('can deserialize a computed linksTo relationship that does not include all the related resources', async function (assert) {
@@ -3583,16 +3775,20 @@ module('Integration | serialization', function (hooks) {
       );
 
       card.friendPet; // Should no longer throw NotLoaded error
-      let friendRel = relationshipMeta(card, 'friend');
+      let friendRel = getRelationshipMembershipState(card, 'friend')
+        .membership![0];
       assert.deepEqual(friendRel, {
-        type: 'not-loaded',
+        kind: 'not-loaded',
+        value: undefined,
         reference: `${testRealmURL}Person/hassan`,
       });
 
-      let friendPetRel = relationshipMeta(card, 'friendPet');
+      let friendPetRel = getRelationshipMembershipState(card, 'friendPet')
+        .membership![0];
       assert.deepEqual(friendPetRel, {
-        type: 'loaded',
-        card: null,
+        kind: 'not-set',
+        value: undefined,
+        reference: undefined,
       });
     });
 
@@ -3817,7 +4013,9 @@ module('Integration | serialization', function (hooks) {
       cardDescription: 'Introductory post',
       cardThumbnailURL: './intro.png',
     });
-    let payload = serializeCard(firstPost, { includeUnrenderedFields: true });
+    let payload = serializeCard(firstPost, {
+      includeUnrenderedFields: true,
+    });
     assert.deepEqual(
       payload,
       {
@@ -3832,6 +4030,7 @@ module('Integration | serialization', function (hooks) {
             cardThumbnailURL: './intro.png',
             cardInfo,
           },
+          relationships: { ...cardInfoLinks },
           meta: {
             adoptsFrom: {
               module: testRRI('test-cards'),
@@ -3890,7 +4089,9 @@ module('Integration | serialization', function (hooks) {
         cardDescription: 'A dog',
       }),
     });
-    let payload = serializeCard(firstPost, { includeUnrenderedFields: true });
+    let payload = serializeCard(firstPost, {
+      includeUnrenderedFields: true,
+    });
     assert.deepEqual(payload, {
       data: {
         lid: firstPost[localId],
@@ -3905,6 +4106,7 @@ module('Integration | serialization', function (hooks) {
           },
           cardInfo,
         },
+        relationships: { ...cardInfoLinks },
         meta: {
           adoptsFrom: {
             module: testRRI('test-cards'),
@@ -3962,7 +4164,9 @@ module('Integration | serialization', function (hooks) {
         department: 'wagging',
       }),
     });
-    let payload = serializeCard(firstPost, { includeUnrenderedFields: true });
+    let payload = serializeCard(firstPost, {
+      includeUnrenderedFields: true,
+    });
     assert.deepEqual(payload, {
       data: {
         lid: firstPost[localId],
@@ -3976,6 +4180,7 @@ module('Integration | serialization', function (hooks) {
           },
           cardInfo,
         },
+        relationships: { ...cardInfoLinks },
         meta: {
           adoptsFrom: {
             module: testRRI('test-cards'),
@@ -4067,7 +4272,9 @@ module('Integration | serialization', function (hooks) {
         }),
       }),
     });
-    let payload = serializeCard(firstPost, { includeUnrenderedFields: true });
+    let payload = serializeCard(firstPost, {
+      includeUnrenderedFields: true,
+    });
     assert.deepEqual(payload, {
       data: {
         lid: firstPost[localId],
@@ -4084,6 +4291,7 @@ module('Integration | serialization', function (hooks) {
           },
           cardInfo,
         },
+        relationships: { ...cardInfoLinks },
         meta: {
           adoptsFrom: {
             module: testRRI('test-cards'),
@@ -4207,6 +4415,7 @@ module('Integration | serialization', function (hooks) {
           ],
           cardInfo,
         },
+        relationships: { ...cardInfoLinks },
         meta: {
           adoptsFrom: {
             module: testRRI('test-cards'),
@@ -4473,7 +4682,9 @@ module('Integration | serialization', function (hooks) {
       }),
     });
 
-    let serialized = serializeCard(article, { includeUnrenderedFields: true });
+    let serialized = serializeCard(article, {
+      includeUnrenderedFields: true,
+    });
 
     assert.deepEqual(serialized, {
       data: {
@@ -4492,6 +4703,7 @@ module('Integration | serialization', function (hooks) {
           },
           cardInfo,
         },
+        relationships: { ...cardInfoLinks },
         meta: {
           adoptsFrom: {
             module: testRRI('test-cards'),
@@ -4659,6 +4871,7 @@ module('Integration | serialization', function (hooks) {
           ],
           cardInfo,
         },
+        relationships: { ...cardInfoLinks },
         meta: {
           adoptsFrom: {
             module: testRRI('test-cards'),
@@ -5093,6 +5306,7 @@ module('Integration | serialization', function (hooks) {
             firstName: 'Mango',
             cardInfo,
           },
+          relationships: { ...cardInfoLinks },
           meta: {
             adoptsFrom: {
               module: rri(`./person`),
@@ -5176,6 +5390,7 @@ module('Integration | serialization', function (hooks) {
             },
             cardInfo,
           },
+          relationships: { ...cardInfoLinks },
           meta: {
             adoptsFrom: {
               module: rri(`./post`),
@@ -5294,6 +5509,7 @@ module('Integration | serialization', function (hooks) {
             ],
             cardInfo,
           },
+          relationships: { ...cardInfoLinks },
           meta: {
             adoptsFrom: {
               module: rri(`./blog`),
@@ -5426,7 +5642,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: testRRI('test-cards'),
+              module: rri('../test-cards'),
               name: 'Certificate',
             },
           },
@@ -5442,7 +5658,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: testRRI('test-cards'),
+              module: rri('../test-cards'),
               name: 'Certificate',
             },
           },
@@ -5458,7 +5674,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: testRRI('test-cards'),
+              module: rri('../test-cards'),
               name: 'Certificate',
             },
           },
@@ -5511,13 +5727,14 @@ module('Integration | serialization', function (hooks) {
             cardInfo,
           },
           relationships: {
+            ...cardInfoLinks,
             'editor.certificate': {
               data: {
                 id: `${testRealmURL}Certificate/0`,
                 type: 'card',
               },
               links: {
-                self: `${testRealmURL}Certificate/0`,
+                self: `./Certificate/0`,
               },
             },
             'posts.0.author.certificate': {
@@ -5526,7 +5743,7 @@ module('Integration | serialization', function (hooks) {
                 type: 'card',
               },
               links: {
-                self: `${testRealmURL}Certificate/1`,
+                self: `./Certificate/1`,
               },
             },
             'posts.1.author.certificate': {
@@ -5535,7 +5752,7 @@ module('Integration | serialization', function (hooks) {
                 type: 'card',
               },
               links: {
-                self: `${testRealmURL}Certificate/2`,
+                self: `./Certificate/2`,
               },
             },
           },
@@ -5554,9 +5771,10 @@ module('Integration | serialization', function (hooks) {
               cardInfo,
             },
             id: testRRI('Certificate/1'),
+            relationships: { ...cardInfoLinks },
             meta: {
               adoptsFrom: {
-                module: testRRI('test-cards'),
+                module: rri('../test-cards'),
                 name: 'Certificate',
               },
             },
@@ -5569,9 +5787,10 @@ module('Integration | serialization', function (hooks) {
               cardInfo,
             },
             id: testRRI('Certificate/2'),
+            relationships: { ...cardInfoLinks },
             meta: {
               adoptsFrom: {
-                module: testRRI('test-cards'),
+                module: rri('../test-cards'),
                 name: 'Certificate',
               },
             },
@@ -5584,9 +5803,10 @@ module('Integration | serialization', function (hooks) {
               cardInfo,
             },
             id: testRRI('Certificate/0'),
+            relationships: { ...cardInfoLinks },
             meta: {
               adoptsFrom: {
-                module: testRRI('test-cards'),
+                module: rri('../test-cards'),
                 name: 'Certificate',
               },
             },
@@ -5638,13 +5858,7 @@ module('Integration | serialization', function (hooks) {
           birthdate: '2019-10-30',
           cardInfo,
         },
-        relationships: {
-          'cardInfo.theme': {
-            links: {
-              self: null,
-            },
-          },
-        },
+        relationships: { ...cardInfoLinks },
         meta: {
           adoptsFrom: {
             module: testRRI('test-cards'),
@@ -5671,11 +5885,7 @@ module('Integration | serialization', function (hooks) {
           cardInfo,
         },
         relationships: {
-          'cardInfo.theme': {
-            links: {
-              self: null,
-            },
-          },
+          ...cardInfoLinks,
           cardTheme: {
             links: {
               self: null,
@@ -5723,6 +5933,7 @@ module('Integration | serialization', function (hooks) {
           unRenderedField: null,
           cardInfo,
         },
+        relationships: { ...cardInfoLinks },
         meta: {
           adoptsFrom: {
             module: rri(`../test-cards`),
@@ -5745,7 +5956,7 @@ module('Integration | serialization', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: rri('https://localhost:4202/test/captain'),
+                module: rri(`${testModuleRealm}captain`),
                 name: 'Captain',
               },
             },
@@ -5768,9 +5979,10 @@ module('Integration | serialization', function (hooks) {
             name: 'Mango',
             cardInfo,
           },
+          relationships: { ...cardInfoLinks },
           meta: {
             adoptsFrom: {
-              module: rri(`https://localhost:4202/test/captain`),
+              module: rri(`${testModuleRealm}captain`),
               name: 'Boat',
             },
           },
@@ -5821,6 +6033,7 @@ module('Integration | serialization', function (hooks) {
             name: 'Mango',
             cardInfo,
           },
+          relationships: { ...cardInfoLinks },
           meta: {
             adoptsFrom: {
               module: testRRI('test-cards'),
@@ -5962,7 +6175,7 @@ module('Integration | serialization', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: testRRI('test-cards'),
+                module: rri('../test-cards'),
                 name: 'Pet',
               },
             },
@@ -5976,7 +6189,7 @@ module('Integration | serialization', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: testRRI('test-cards'),
+                module: rri('../test-cards'),
                 name: 'Pet',
               },
             },
@@ -6188,31 +6401,167 @@ module('Integration | serialization', function (hooks) {
         assert.ok(false, '"pets[1]" is not an instance of Pet');
       }
 
-      let relationships = relationshipMeta(card, 'pets');
-      if (relationships !== undefined && Array.isArray(relationships)) {
+      let relationships = getRelationshipMembershipState(
+        card,
+        'pets',
+      ).membership;
+      if (Array.isArray(relationships)) {
         let [mangoRelationship, vanGoghRelationship] = relationships;
 
-        if (mangoRelationship?.type === 'loaded') {
-          let relatedCard = mangoRelationship.card;
+        if (mangoRelationship?.kind === 'present') {
+          let relatedCard = mangoRelationship.value;
           assert.true(relatedCard instanceof Pet, 'related card is a Pet');
           assert.strictEqual(relatedCard?.id, `${testRealmURL}Pet/mango`);
         } else {
-          assert.ok(false, 'relationship type was not "loaded" for mango');
+          assert.ok(
+            false,
+            `relationship kind was not "present" for mango: ${mangoRelationship?.kind}`,
+          );
         }
-        if (vanGoghRelationship?.type === 'loaded') {
-          let relatedCard = vanGoghRelationship.card;
+        if (vanGoghRelationship?.kind === 'present') {
+          let relatedCard = vanGoghRelationship.value;
           assert.true(relatedCard instanceof Pet, 'related card is a Pet');
           assert.strictEqual(relatedCard?.id, `${testRealmURL}Pet/vanGogh`);
         } else {
-          assert.ok(false, 'relationship type was not "loaded" for vanGogh');
+          assert.ok(
+            false,
+            `relationship kind was not "present" for vanGogh: ${vanGoghRelationship?.kind}`,
+          );
         }
-        assert.strictEqual(
-          relationshipMeta(card, 'firstName'),
-          undefined,
-          'relationshipMeta returns undefined for non-relationship field',
+        assert.throws(
+          () => getRelationshipMembershipState(card, 'firstName'),
+          /requires a 'linksTo' or 'linksToMany' field/,
+          'getRelationshipMembershipState throws for a non-relationship field',
         );
       } else {
-        assert.ok(false, 'relationshipMeta returned an unexpected value');
+        assert.ok(
+          false,
+          'getRelationshipMembershipState returned an unexpected value',
+        );
+      }
+    });
+
+    test("resolves a nested linked card's relative adoptsFrom module against its own id, not the parent card's", async function (assert) {
+      // A linked card in a subdirectory carries an `adoptsFrom.module` relative
+      // to its own id (a card's type is intrinsic to the card, independent of
+      // the document that delivered it). When it is hydrated out of a parent
+      // card's document, its module must still resolve against the linked card's
+      // own id — resolving against the parent's base would fetch a module one
+      // directory off and present the existing card as Card Not Found.
+      class SubSection extends CardDef {
+        @field label = contains(StringField);
+      }
+      class Section extends CardDef {
+        @field label = contains(StringField);
+        @field detail = linksTo(SubSection);
+      }
+      class Workspace extends CardDef {
+        @field label = contains(StringField);
+        @field entryPoints = linksToMany(Section);
+      }
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'test-cards.gts': { Workspace },
+          'sections/section.gts': { Section },
+          'sections/subs/sub-section.gts': { SubSection },
+        },
+      });
+      let doc: LooseSingleCardDocument = {
+        data: {
+          id: `${testRealmURL}index`,
+          type: 'card',
+          attributes: {
+            label: 'Sample workspace',
+            cardInfo: {},
+          },
+          relationships: {
+            'entryPoints.0': {
+              links: {
+                self: `${testRealmURL}sections/section-1`,
+              },
+              data: {
+                id: `${testRealmURL}sections/section-1`,
+                type: 'card',
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: testRRI('test-cards'),
+              name: 'Workspace',
+            },
+          },
+        },
+        included: [
+          {
+            id: testRRI('sections/section-1'),
+            type: 'card',
+            attributes: {
+              label: 'Section one',
+              cardInfo: {},
+            },
+            relationships: {
+              detail: {
+                links: {
+                  self: `${testRealmURL}sections/subs/sub-section-1`,
+                },
+                data: {
+                  id: `${testRealmURL}sections/subs/sub-section-1`,
+                  type: 'card',
+                },
+              },
+            },
+            meta: {
+              // Relative to the section's own id (sections/section-1); resolving
+              // against the workspace root (index) would look one directory up.
+              adoptsFrom: {
+                module: rri('./section'),
+                name: 'Section',
+              },
+            },
+          },
+          {
+            id: testRRI('sections/subs/sub-section-1'),
+            type: 'card',
+            attributes: {
+              label: 'Detail one',
+              cardInfo: {},
+            },
+            meta: {
+              // Relative to the sub-section's own id
+              // (sections/subs/sub-section-1); resolving against the parent
+              // section (sections/) would look one directory up.
+              adoptsFrom: {
+                module: rri('./sub-section'),
+                name: 'SubSection',
+              },
+            },
+          },
+        ],
+      };
+      let card = await createFromSerialized<typeof Workspace>(
+        doc.data,
+        doc,
+        rri(`${testRealmURL}index`),
+      );
+
+      assert.ok(card instanceof Workspace, 'card is an instance of Workspace');
+      let { entryPoints } = card;
+      assert.strictEqual(entryPoints.length, 1, 'entryPoints has 1 item');
+      let [section] = entryPoints;
+      if (section instanceof Section) {
+        assert.true(isSaved(section), 'Section card is saved');
+        assert.strictEqual(section.label, 'Section one');
+        let { detail } = section;
+        if (detail instanceof SubSection) {
+          assert.true(isSaved(detail), 'SubSection card is saved');
+          assert.strictEqual(detail.label, 'Detail one');
+        } else {
+          assert.ok(false, 'section "detail" is not an instance of SubSection');
+        }
+      } else {
+        assert.ok(false, 'entryPoints[0] is not an instance of Section');
       }
     });
 
@@ -6321,26 +6670,38 @@ module('Integration | serialization', function (hooks) {
         assert.ok(false, '"pets[1]" is not an instance of Pet');
       }
 
-      let relationships = relationshipMeta(card, 'pets');
-      if (relationships !== undefined && Array.isArray(relationships)) {
+      let relationships = getRelationshipMembershipState(
+        card,
+        'pets',
+      ).membership;
+      if (Array.isArray(relationships)) {
         let [mangoRelationship, vanGoghRelationship] = relationships;
 
-        if (mangoRelationship?.type === 'loaded') {
-          let relatedCard = mangoRelationship.card;
+        if (mangoRelationship?.kind === 'present') {
+          let relatedCard = mangoRelationship.value;
           assert.true(relatedCard instanceof Pet, 'related card is a Pet');
           assert.strictEqual(relatedCard?.id, `${testRealmURL}Pet/mango`);
         } else {
-          assert.ok(false, 'relationship type was not "loaded" for mango');
+          assert.ok(
+            false,
+            `relationship kind was not "present" for mango: ${mangoRelationship?.kind}`,
+          );
         }
-        if (vanGoghRelationship?.type === 'loaded') {
-          let relatedCard = vanGoghRelationship.card;
+        if (vanGoghRelationship?.kind === 'present') {
+          let relatedCard = vanGoghRelationship.value;
           assert.true(relatedCard instanceof Pet, 'related card is a Pet');
           assert.strictEqual(relatedCard?.id, `${testRealmURL}Pet/vanGogh`);
         } else {
-          assert.ok(false, 'relationship type was not "loaded" for vanGogh');
+          assert.ok(
+            false,
+            `relationship kind was not "present" for vanGogh: ${vanGoghRelationship?.kind}`,
+          );
         }
       } else {
-        assert.ok(false, 'relationshipMeta returned an unexpected value');
+        assert.ok(
+          false,
+          'getRelationshipMembershipState returned an unexpected value',
+        );
       }
     });
 
@@ -6431,7 +6792,7 @@ module('Integration | serialization', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: testRRI('test-cards'),
+                module: rri('../test-cards'),
                 name: 'Toy',
               },
             },
@@ -6446,7 +6807,7 @@ module('Integration | serialization', function (hooks) {
             relationships: {
               favoriteToy: {
                 links: {
-                  self: `${testRealmURL}Toy/spookyToiletPaper`,
+                  self: `../Toy/spookyToiletPaper`,
                 },
                 data: {
                   id: `${testRealmURL}Toy/spookyToiletPaper`,
@@ -6456,7 +6817,7 @@ module('Integration | serialization', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: testRRI('test-cards'),
+                module: rri('../test-cards'),
                 name: 'Pet',
               },
             },
@@ -6530,7 +6891,9 @@ module('Integration | serialization', function (hooks) {
 
       let hassan = new Person({ firstName: 'Hassan' });
 
-      let serialized = serializeCard(hassan, { includeUnrenderedFields: true });
+      let serialized = serializeCard(hassan, {
+        includeUnrenderedFields: true,
+      });
       assert.deepEqual(serialized, {
         data: {
           lid: hassan[localId],
@@ -6540,6 +6903,7 @@ module('Integration | serialization', function (hooks) {
             cardInfo,
           },
           relationships: {
+            ...cardInfoLinks,
             pets: {
               links: {
                 self: null,
@@ -6711,7 +7075,7 @@ module('Integration | serialization', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: testRRI('test-cards'),
+                module: rri('../test-cards'),
                 name: 'Pet',
               },
             },
@@ -6726,33 +7090,38 @@ module('Integration | serialization', function (hooks) {
 
       hassan.pets; // no longer throws NotLoaded
 
-      let relationships = relationshipMeta(hassan, 'pets');
+      let relationships = getRelationshipMembershipState(
+        hassan,
+        'pets',
+      ).membership;
       if (!Array.isArray(relationships)) {
         assert.ok(
           false,
-          'relationshipMeta should be an array for linksToMany relationship',
+          'getRelationshipMembershipState should be an array for linksToMany relationship',
         );
       } else {
         let [mango, vanGogh] = relationships;
-        if (mango?.type === 'loaded') {
-          assert.strictEqual(mango.card?.id, `${testRealmURL}Pet/mango`);
+        if (mango?.kind === 'present') {
+          assert.strictEqual(mango.value?.id, `${testRealmURL}Pet/mango`);
         } else {
           assert.ok(
             false,
-            `relationship type for ${testRealmURL}Pet/mango was not "loaded"`,
+            `relationship kind for ${testRealmURL}Pet/mango was not "present": ${mango?.kind}`,
           );
         }
-        if (vanGogh?.type === 'not-loaded') {
+        if (vanGogh?.kind === 'not-loaded') {
           assert.strictEqual(vanGogh.reference, `${testRealmURL}Pet/vanGogh`);
         } else {
           assert.ok(
             false,
-            `relationship type for ${testRealmURL}Pet/vanGogh was not "not-loaded"`,
+            `relationship kind for ${testRealmURL}Pet/vanGogh was not "not-loaded": ${vanGogh?.kind}`,
           );
         }
       }
 
-      let serialized = serializeCard(hassan, { includeUnrenderedFields: true });
+      let serialized = serializeCard(hassan, {
+        includeUnrenderedFields: true,
+      });
       assert.deepEqual(serialized, {
         data: {
           lid: hassan[localId],
@@ -6762,6 +7131,7 @@ module('Integration | serialization', function (hooks) {
             cardInfo,
           },
           relationships: {
+            ...cardInfoLinks,
             'pets.0': {
               links: {
                 self: `${testRealmURL}Pet/mango`,
@@ -6790,9 +7160,10 @@ module('Integration | serialization', function (hooks) {
               firstName: 'Mango',
               cardInfo,
             },
+            relationships: { ...cardInfoLinks },
             meta: {
               adoptsFrom: {
-                module: testRRI('test-cards'),
+                module: rri('../test-cards'),
                 name: 'Pet',
               },
             },
@@ -6833,7 +7204,9 @@ module('Integration | serialization', function (hooks) {
       await saveCard(mango, `${testRealmURL}Person/mango`, loader);
       await saveCard(vanGogh, `${testRealmURL}Person/vanGogh`, loader);
       await saveCard(hassan, `${testRealmURL}Person/hassan`, loader);
-      let serialized = serializeCard(hassan, { includeUnrenderedFields: true });
+      let serialized = serializeCard(hassan, {
+        includeUnrenderedFields: true,
+      });
       assert.deepEqual(serialized, {
         data: {
           type: 'card',
@@ -6843,6 +7216,7 @@ module('Integration | serialization', function (hooks) {
             cardInfo,
           },
           relationships: {
+            ...cardInfoLinks,
             'friends.0': {
               links: { self: `./mango` },
               data: { id: `${testRealmURL}Person/mango`, type: 'card' },
@@ -6868,6 +7242,7 @@ module('Integration | serialization', function (hooks) {
               cardInfo,
             },
             relationships: {
+              ...cardInfoLinks,
               friends: { links: { self: null } },
             },
             meta: {
@@ -6885,6 +7260,7 @@ module('Integration | serialization', function (hooks) {
               cardInfo,
             },
             relationships: {
+              ...cardInfoLinks,
               friends: { links: { self: null } },
             },
             meta: {
@@ -7005,6 +7381,72 @@ module('Integration | serialization', function (hooks) {
       assert.ok(isSaved(hassan), `${hassan.id} is saved`);
       assert.strictEqual(hassan.firstName, 'Hassan');
     });
+
+    test('an authored-empty linksToMany deserializes to a reactive backing array (in-place mutation notifies subscribers)', async function (assert) {
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field friends = linksToMany(() => Person);
+      }
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'test-cards.gts': { Person },
+        },
+      });
+
+      // Author `friends` explicitly empty (`{ self: null }`) rather than
+      // leaving it absent, then deserialize.
+      let doc: LooseSingleCardDocument = {
+        data: {
+          type: 'card',
+          id: `${testRealmURL}Person/hassan`,
+          attributes: { firstName: 'Hassan' },
+          relationships: { friends: { links: { self: null } } },
+          meta: {
+            adoptsFrom: { module: testRRI('test-cards'), name: 'Person' },
+          },
+        },
+      };
+      let hassan = await createFromSerialized<typeof Person>(
+        doc.data,
+        doc,
+        new URL(`${testRealmURL}Person/hassan`),
+      );
+      assert.strictEqual(hassan.friends.length, 0, 'friends starts empty');
+
+      // The getter must hand back the reactive backing array, not a bare `[]`:
+      // an in-place push runs the WatchedArray subscriber, which notifies
+      // change listeners. A plain array would mutate silently.
+      let events: { fieldName: string; value: unknown }[] = [];
+      let subscriber = (
+        _instance: unknown,
+        fieldName: string,
+        value: unknown,
+      ) => events.push({ fieldName, value });
+      subscribeToChanges(hassan, subscriber);
+      try {
+        let mango = new Person({ firstName: 'Mango' });
+        hassan.friends.push(mango);
+        await flushLogs();
+        assert.strictEqual(
+          events.length,
+          1,
+          'pushing onto the authored-empty relationship notifies subscribers',
+        );
+        assert.strictEqual(
+          events[0]?.fieldName,
+          'friends',
+          'the change event names the mutated field',
+        );
+        assert.strictEqual(
+          hassan.friends[0],
+          mango,
+          'the pushed card is read back from the same backing array',
+        );
+      } finally {
+        unsubscribeFromChanges(hassan, subscriber);
+      }
+    });
   });
 
   module('computed linksToMany', function () {
@@ -7053,6 +7495,7 @@ module('Integration | serialization', function (hooks) {
           cardInfo,
         },
         relationships: {
+          ...cardInfoLinks,
           friend: {
             links: { self: `${testRealmURL}Friend/hassan` },
             data: { id: `${testRealmURL}Friend/hassan`, type: 'card' },
@@ -7087,11 +7530,12 @@ module('Integration | serialization', function (hooks) {
             cardInfo,
           },
           relationships: {
+            ...cardInfoLinks,
             cardTheme: { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
-              module: testRRI('test-cards'),
+              module: rri('../test-cards'),
               name: 'Pet',
             },
           },
@@ -7107,11 +7551,12 @@ module('Integration | serialization', function (hooks) {
             cardInfo,
           },
           relationships: {
+            ...cardInfoLinks,
             cardTheme: { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
-              module: testRRI('test-cards'),
+              module: rri('../test-cards'),
               name: 'Pet',
             },
           },
@@ -7127,19 +7572,20 @@ module('Integration | serialization', function (hooks) {
             cardInfo,
           },
           relationships: {
+            ...cardInfoLinks,
             'pets.0': {
-              links: { self: `${testRealmURL}Pet/mango` },
+              links: { self: `../Pet/mango` },
               data: { id: `${testRealmURL}Pet/mango`, type: 'card' },
             },
             'pets.1': {
-              links: { self: `${testRealmURL}Pet/van-gogh` },
+              links: { self: `../Pet/van-gogh` },
               data: { id: `${testRealmURL}Pet/van-gogh`, type: 'card' },
             },
             cardTheme: { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
-              module: testRRI('test-cards'),
+              module: rri('../test-cards'),
               name: 'Friend',
             },
           },
@@ -7265,11 +7711,21 @@ module('Integration | serialization', function (hooks) {
         assert.ok(false, '"pets[1]" is not an instance of Pet');
       }
 
-      let relationship = relationshipMeta(card, 'friendPets');
-      assert.deepEqual(relationship, [
-        { type: 'loaded', card: mango },
-        { type: 'loaded', card: vanGogh },
-      ]);
+      let relationship = getRelationshipMembershipState(
+        card,
+        'friendPets',
+      ).membership;
+      assert.ok(
+        Array.isArray(relationship),
+        'getRelationshipMembershipState returns an array for linksToMany relationship',
+      );
+      if (Array.isArray(relationship)) {
+        let [mangoRel, vanGoghRel] = relationship;
+        assert.strictEqual(mangoRel.kind, 'present');
+        assert.strictEqual(mangoRel.value, mango);
+        assert.strictEqual(vanGoghRel.kind, 'present');
+        assert.strictEqual(vanGoghRel.value, vanGogh);
+      }
     });
 
     test('can serialize an empty computed linksToMany relationship', async function (assert) {
@@ -7312,6 +7768,7 @@ module('Integration | serialization', function (hooks) {
             cardInfo,
           },
           relationships: {
+            ...cardInfoLinks,
             friend: { links: { self: null } },
             friendPets: { links: { self: null } },
             cardTheme: { links: { self: null } },
@@ -7457,25 +7914,28 @@ module('Integration | serialization', function (hooks) {
       card.friendPets; // No longer throws NotLoaded
       card.ownPets; // No longer throws NotLoaded
 
-      let relationships = relationshipMeta(card, 'ownPets');
+      let relationships = getRelationshipMembershipState(
+        card,
+        'ownPets',
+      ).membership;
       if (!Array.isArray(relationships)) {
-        assert.ok(false, 'relationshipMeta should be an array');
+        assert.ok(false, 'getRelationshipMembershipState should be an array');
       } else {
         let [mango, vanGogh] = relationships;
-        if (mango?.type === 'loaded') {
-          assert.strictEqual(mango.card?.id, `${testRealmURL}Pet/mango`);
+        if (mango?.kind === 'present') {
+          assert.strictEqual(mango.value?.id, `${testRealmURL}Pet/mango`);
         } else {
           assert.ok(
             false,
-            `relationship type for ${testRealmURL}Pet/mango was not "loaded"`,
+            `relationship kind for ${testRealmURL}Pet/mango was not "present": ${mango?.kind}`,
           );
         }
-        if (vanGogh?.type === 'not-loaded') {
+        if (vanGogh?.kind === 'not-loaded') {
           assert.strictEqual(vanGogh.reference, `${testRealmURL}Pet/vanGogh`);
         } else {
           assert.ok(
             false,
-            `relationship type for ${testRealmURL}Pet/vanGogh was not "not-loaded"`,
+            `relationship kind for ${testRealmURL}Pet/vanGogh was not "not-loaded": ${vanGogh?.kind}`,
           );
         }
       }
@@ -7485,6 +7945,7 @@ module('Integration | serialization', function (hooks) {
         includeComputeds: true,
       });
       assert.deepEqual(serialized.data.relationships, {
+        ...cardInfoLinks,
         friend: {
           links: { self: `${testRealmURL}Friend/hassan` },
           data: { type: 'card', id: `${testRealmURL}Friend/hassan` },

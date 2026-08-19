@@ -1,4 +1,4 @@
-import { BOT_TRIGGER_EVENT_TYPE } from './matrix-constants';
+import { BOT_TRIGGER_EVENT_TYPE } from './matrix-constants.ts';
 
 export interface BotCommandMatrixFilter {
   type: 'matrix-event';

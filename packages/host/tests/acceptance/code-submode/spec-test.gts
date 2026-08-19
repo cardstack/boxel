@@ -10,7 +10,7 @@ import {
 import { getService } from '@universal-ember/test-support';
 import { module, skip, test } from 'qunit';
 
-import { baseRealm, Deferred, rri } from '@cardstack/runtime-common';
+import { baseRealmRRI, Deferred, rri } from '@cardstack/runtime-common';
 
 import {
   setupLocalIndexing,
@@ -26,6 +26,7 @@ import {
   setupOnSave,
   setupRealmServerEndpoints,
   withCachedRealmSetup,
+  realmConfigCardJSON,
 } from '../../helpers';
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -44,8 +45,8 @@ import '@cardstack/runtime-common/helpers/code-equality-assertion';
 const testRealm2URL = `http://test-realm/test2/`;
 
 const personCardSource = `
-  import { contains, containsMany, field, linksTo, linksToMany, CardDef, Component, FieldDef } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { contains, containsMany, field, linksTo, linksToMany, CardDef, Component, FieldDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
 
   export class PersonField extends FieldDef {
     static displayName = 'PersonField';
@@ -82,8 +83,8 @@ const personCardSource = `
 `;
 
 const person1CardSource = `
-  import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { contains, field, Component, CardDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
 
   export class Person1 extends CardDef {
     static displayName = 'Person1';
@@ -91,8 +92,8 @@ const person1CardSource = `
 `;
 
 const petCardSource = `
-  import { contains, field, Component, CardDef, FieldDef } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { contains, field, Component, CardDef, FieldDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
 
   export class PetField extends FieldDef {
     static displayName = 'PetField';
@@ -125,8 +126,8 @@ const petCardSource = `
 `;
 
 const employeeCardSource = `
-  import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { contains, field, Component, CardDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
 
   export default class Employee extends CardDef {
     static displayName = 'Employee';
@@ -140,8 +141,8 @@ const employeeCardSource = `
 `;
 
 const newSkillCardSource = `
-  import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-  import { Skill } from 'https://cardstack.com/base/skill';
+  import { contains, field, Component, CardDef } from "@cardstack/base/card-api";
+  import { Skill } from '@cardstack/base/skill';
 
   export class NewSkill extends Skill {
     static displayName = 'NewSkill';
@@ -153,7 +154,7 @@ const newSkillCardSource = `
 `;
 
 const specCardSource = `
-  import { Spec } from 'https://cardstack.com/base/spec';
+  import { Spec } from '@cardstack/base/spec';
 
   export class TestSpec extends Spec {
     static displayName = 'TestSpec';
@@ -166,7 +167,7 @@ const primitiveFieldCardSource = `
     Component,
     FieldDef,
     primitive,
-  } from 'https://cardstack.com/base/card-api';
+  } from '@cardstack/base/card-api';
 
    export class PrimitiveField extends FieldDef {
     static displayName = 'PrimitiveField';
@@ -179,8 +180,8 @@ const primitiveFieldCardSource = `
 `;
 
 const quoteFieldCardSource = `
-  import { contains, field, Component, FieldDef } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { contains, field, Component, FieldDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
 
   export class QuoteField extends FieldDef {
     static displayName = 'QuoteField';
@@ -204,7 +205,7 @@ const polymorphicFieldCardSource = `
     contains,
     StringField,
     FieldDef,
-  } from 'https://cardstack.com/base/card-api';
+  } from '@cardstack/base/card-api';
   import { on } from '@ember/modifier';
 
   export class TestField extends FieldDef {
@@ -333,7 +334,7 @@ module('Acceptance | Spec preview', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
@@ -367,7 +368,7 @@ module('Acceptance | Spec preview', function (hooks) {
                   ],
                 },
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
@@ -385,7 +386,7 @@ module('Acceptance | Spec preview', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
@@ -404,7 +405,7 @@ module('Acceptance | Spec preview', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
@@ -435,7 +436,7 @@ module('Acceptance | Spec preview', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
@@ -535,7 +536,7 @@ module('Acceptance | Spec preview', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
@@ -555,7 +556,7 @@ module('Acceptance | Spec preview', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
@@ -575,7 +576,7 @@ module('Acceptance | Spec preview', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
@@ -595,7 +596,7 @@ module('Acceptance | Spec preview', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
@@ -615,18 +616,18 @@ module('Acceptance | Spec preview', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
             },
           },
-          '.realm.json': {
+          'realm.json': realmConfigCardJSON({
             name: 'Test Workspace B',
             backgroundURL:
               'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
             iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-          },
+          }),
         },
       });
       await setupAcceptanceTestRealm({
@@ -651,7 +652,7 @@ module('Acceptance | Spec preview', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
@@ -685,7 +686,7 @@ module('Acceptance | Spec preview', function (hooks) {
                   ],
                 },
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
@@ -976,14 +977,12 @@ module('Acceptance | Spec preview', function (hooks) {
     assert.dom('[data-test-links-to-many="linkedExamples"]').exists();
     await click('[data-test-add-new]');
     assert
-      .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
+      .dom('[data-test-card-chooser-modal] [data-test-boxel-header-title]')
       .containsText('Person');
-    assert.dom('[data-test-card-catalog-item]').exists({ count: 2 });
+    assert.dom('[data-test-item-button]').exists({ count: 2 });
+    assert.dom(`[data-test-item-button="${testRealmURL}Person/1"]`).exists();
     assert
-      .dom(`[data-test-card-catalog-item="${testRealmURL}Person/1"]`)
-      .exists();
-    assert
-      .dom(`[data-test-card-catalog-item="${testRealmURL}Person/fadhlan"]`)
+      .dom(`[data-test-item-button="${testRealmURL}Person/fadhlan"]`)
       .exists();
   });
 

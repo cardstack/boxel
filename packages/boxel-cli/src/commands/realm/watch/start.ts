@@ -1,31 +1,35 @@
 import { InvalidArgumentError, type Command } from 'commander';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { RealmSyncBase, isProtectedFile } from '../../../lib/realm-sync-base';
+import {
+  RealmSyncBase,
+  isProtectedFile,
+} from '../../../lib/realm-sync-base.ts';
 import {
   CheckpointManager,
   type Checkpoint,
   type CheckpointChange,
-} from '../../../lib/checkpoint-manager';
+} from '../../../lib/checkpoint-manager.ts';
 import {
   type SyncManifest,
   computeFileHash,
   loadManifest,
   saveManifest,
-} from '../../../lib/sync-manifest';
-import type { ProfileManager } from '../../../lib/profile-manager';
-import type { RealmAuthenticator } from '../../../lib/realm-authenticator';
-import { resolveRealmAuthenticator } from '../../../lib/auth-resolver';
-import { resolveRealmSecretSeed } from '../../../lib/prompt';
+} from '../../../lib/sync-manifest.ts';
+import type { ProfileManager } from '../../../lib/profile-manager.ts';
+import type { RealmAuthenticator } from '../../../lib/realm-authenticator.ts';
+import { resolveRealmAuthenticator } from '../../../lib/auth-resolver.ts';
+import { resolveRealmSecretSeed } from '../../../lib/prompt.ts';
+import { reconcileSkillsMirror } from '../../../lib/claude-skills-mirror.ts';
 import {
   acquireWatchLock,
   releaseWatchLock,
   type WatchLockInfo,
-} from '../../../lib/watch-lock';
+} from '../../../lib/watch-lock.ts';
 import {
   registerProcess,
   unregisterCurrentProcess,
-} from '../../../lib/watch-process-registry';
+} from '../../../lib/watch-process-registry.ts';
 import {
   FG_CYAN,
   FG_GREEN,
@@ -33,7 +37,7 @@ import {
   FG_YELLOW,
   DIM,
   RESET,
-} from '../../../lib/colors';
+} from '../../../lib/colors.ts';
 
 export interface WatchRealmSpec {
   realmUrl: string;
@@ -66,6 +70,7 @@ export class RealmWatcher extends RealmSyncBase {
   readonly name: string;
   private readonly debounceMs: number;
   private readonly overwriteLocal: boolean;
+  private readonly claudeSkills: boolean;
   private readonly checkpointManager: CheckpointManager;
   private lastKnownMtimes = new Map<string, number>();
   private pendingChanges = new Map<string, PendingChange>();
@@ -75,11 +80,16 @@ export class RealmWatcher extends RealmSyncBase {
   constructor(
     spec: WatchRealmSpec,
     authenticator: RealmAuthenticator,
-    options: { debounceMs: number; overwriteLocal?: boolean },
+    options: {
+      debounceMs: number;
+      overwriteLocal?: boolean;
+      claudeSkills?: boolean;
+    },
   ) {
     super({ realmUrl: spec.realmUrl, localDir: spec.localDir }, authenticator);
     this.debounceMs = options.debounceMs;
     this.overwriteLocal = options.overwriteLocal ?? false;
+    this.claudeSkills = options.claudeSkills ?? true;
     this.checkpointManager = new CheckpointManager(spec.localDir);
     this.name = deriveRealmName(this.normalizedRealmUrl);
   }
@@ -148,6 +158,22 @@ export class RealmWatcher extends RealmSyncBase {
         this.lastKnownMtimes.set(file, mtime);
       }
     }
+
+    await this.reconcileSkills();
+  }
+
+  /**
+   * Refresh `.claude/skills/` from the local `skills/` directory. Run at
+   * startup so a realm that already has skills on disk exposes them
+   * immediately, and after any flush that touched `skills/` so a skill added,
+   * changed, or removed on the realm takes effect while the watcher runs.
+   */
+  private async reconcileSkills(): Promise<void> {
+    await reconcileSkillsMirror({
+      realmUrl: this.normalizedRealmUrl,
+      localDir: this.options.localDir,
+      enabled: this.claudeSkills,
+    });
   }
 
   /**
@@ -263,6 +289,10 @@ export class RealmWatcher extends RealmSyncBase {
       } else {
         this.lastKnownMtimes.set(file, info.mtime);
       }
+    }
+
+    if (changes.some((change) => change.file.startsWith('skills/'))) {
+      await this.reconcileSkills();
     }
 
     let checkpoint: Checkpoint | null = null;
@@ -412,6 +442,13 @@ export interface WatchRealmsOptions {
    * skipped with a warning instead of overwritten.
    */
   overwriteLocal?: boolean;
+  /**
+   * Mirror the realm's `skills/` directory into the surrounding checkout's
+   * `.claude/skills/` so realm-authored skills are available to Claude Code.
+   * On by default; `--no-claude-skills` (or `BOXEL_DISABLE_CLAUDE_SKILLS_SYNC=1`) opts
+   * out.
+   */
+  claudeSkills?: boolean;
 }
 
 export interface WatchRealmsResult {
@@ -490,6 +527,7 @@ export async function watchRealms(
     const watcher = new RealmWatcher(spec, authenticator, {
       debounceMs,
       overwriteLocal,
+      claudeSkills: options.claudeSkills,
     });
     try {
       await watcher.initialize();
@@ -564,56 +602,79 @@ export async function watchRealms(
     // Best effort — registry failures must never block the watch.
   }
 
-  await tickAll();
-  scheduleNextTick();
+  // Wire up the stop triggers (an abort signal, or SIGINT/SIGTERM when none is
+  // supplied) before the first poll so an interrupt during a slow initial tick
+  // still tears down cleanly - clearing the timer, shutting down watchers,
+  // releasing locks, and unregistering the process.
+  let resolveDone: () => void = () => {};
+  const done = new Promise<void>((resolve) => {
+    resolveDone = resolve;
+  });
 
-  await new Promise<void>((resolve) => {
-    let sigintHandler: (() => void) | null = null;
-    let sigtermHandler: (() => void) | null = null;
+  let sigintHandler: (() => void) | null = null;
+  let sigtermHandler: (() => void) | null = null;
 
-    const cleanup = async () => {
-      if (stopped) return;
-      stopped = true;
-      if (timeoutId !== null) {
-        clearTimeout(timeoutId);
-        timeoutId = null;
-      }
-      for (const w of watchers) w.shutdown();
-      if (sigintHandler) process.off('SIGINT', sigintHandler);
-      if (sigtermHandler) process.off('SIGTERM', sigtermHandler);
-      for (const dir of lockedDirs) {
-        try {
-          await releaseWatchLock(dir);
-        } catch {
-          // Best effort \u2014 a leftover lock will be detected as stale next run.
-        }
-      }
+  const cleanup = async () => {
+    if (stopped) return;
+    stopped = true;
+    if (timeoutId !== null) {
+      clearTimeout(timeoutId);
+      timeoutId = null;
+    }
+    for (const w of watchers) w.shutdown();
+    if (sigintHandler) process.off('SIGINT', sigintHandler);
+    if (sigtermHandler) process.off('SIGTERM', sigtermHandler);
+    for (const dir of lockedDirs) {
       try {
-        await unregisterCurrentProcess();
+        await releaseWatchLock(dir);
       } catch {
-        // Best effort \u2014 leftover entries are pruned on next read.
+        // Best effort - a leftover lock will be detected as stale next run.
       }
-      resolve();
-    };
+    }
+    try {
+      await unregisterCurrentProcess();
+    } catch {
+      // Best effort - leftover entries are pruned on next read.
+    }
+    resolveDone();
+  };
 
-    if (options.signal) {
-      if (options.signal.aborted) {
-        void cleanup();
-        return;
-      }
+  if (options.signal) {
+    if (options.signal.aborted) {
+      void cleanup();
+    } else {
       options.signal.addEventListener('abort', () => void cleanup(), {
         once: true,
       });
-    } else {
-      sigintHandler = () => {
-        if (!quiet) console.log(`\n${FG_CYAN}\u21c5 Watch stopped${RESET}`);
-        void cleanup();
-      };
-      sigtermHandler = sigintHandler;
-      process.on('SIGINT', sigintHandler);
-      process.on('SIGTERM', sigtermHandler);
     }
-  });
+  } else {
+    sigintHandler = () => {
+      if (!quiet) console.log(`\n${FG_CYAN}\u21c5 Watch stopped${RESET}`);
+      void cleanup();
+    };
+    sigtermHandler = sigintHandler;
+    process.on('SIGINT', sigintHandler);
+    process.on('SIGTERM', sigtermHandler);
+  }
+
+  // Run the initial poll, but let a stop that arrives mid-poll win the race so
+  // an interrupt during a slow first poll returns promptly instead of blocking
+  // on the poll (a registered signal handler suppresses Node's default Ctrl+C
+  // termination, so a wedged poll would otherwise look like a hung process).
+  // When the stop wins, the still-pending poll is inert: the watcher is already
+  // shut down and scheduleNextTick is guarded by `stopped`. A stop that already
+  // arrived before we got here skips the poll entirely.
+  if (!stopped) {
+    await Promise.race([
+      (async () => {
+        await tickAll();
+        scheduleNextTick();
+      })().catch(() => {}),
+      done,
+    ]);
+  }
+
+  await done;
 
   return { watchers };
 }
@@ -706,6 +767,10 @@ export function registerStartCommand(watch: Command): void {
       '--overwrite-local',
       'Overwrite local files when the remote changes. Default: skip + warn when the local copy diverges from the sync manifest.',
     )
+    .option(
+      '--no-claude-skills',
+      "Skip mirroring the realm's skills/ directory into the checkout's .claude/skills/ (env: BOXEL_DISABLE_CLAUDE_SKILLS_SYNC=1)",
+    )
     .action(
       async (
         realmUrl: string,
@@ -715,6 +780,7 @@ export function registerStartCommand(watch: Command): void {
           debounce: number;
           realmSecretSeed?: boolean;
           overwriteLocal?: boolean;
+          claudeSkills?: boolean;
         },
       ) => {
         const realmSecretSeed = await resolveRealmSecretSeed(
@@ -725,6 +791,7 @@ export function registerStartCommand(watch: Command): void {
           debounceMs: options.debounce * 1000,
           realmSecretSeed,
           overwriteLocal: options.overwriteLocal === true,
+          claudeSkills: options.claudeSkills,
         });
         if (result.error) {
           console.error(`${FG_RED}Error:${RESET} ${result.error}`);

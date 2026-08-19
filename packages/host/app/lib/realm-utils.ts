@@ -1,4 +1,9 @@
-import { cardIdToURL, RealmPaths, rri } from '@cardstack/runtime-common';
+import {
+  RealmPaths,
+  ri,
+  rri,
+  type VirtualNetwork,
+} from '@cardstack/runtime-common';
 
 /**
  * Normalizes realm URLs by ensuring they have trailing slashes and
@@ -13,7 +18,7 @@ import { cardIdToURL, RealmPaths, rri } from '@cardstack/runtime-common';
  */
 export function normalizeRealms(realms: string[]): string[] {
   return realms.map((r) => {
-    return new RealmPaths(new URL(r)).url;
+    return new RealmPaths(ri(r)).url;
   });
 }
 
@@ -32,7 +37,11 @@ export function normalizeRealms(realms: string[]): string[] {
  * )
  * // Returns: 'http://localhost:4201/test/'
  */
-export function resolveCardRealmUrl(cardId: string, realms: string[]): string {
+export function resolveCardRealmUrl(
+  cardId: string,
+  realms: string[],
+  virtualNetwork: VirtualNetwork,
+): string {
   let cardRRI = rri(cardId);
   for (let realm of realms) {
     let realmUrl = new URL(realm);
@@ -41,5 +50,5 @@ export function resolveCardRealmUrl(cardId: string, realms: string[]): string {
       return realmPaths.url;
     }
   }
-  return new RealmPaths(cardIdToURL(cardId)).url;
+  return new RealmPaths(virtualNetwork.toURL(cardId)).url;
 }

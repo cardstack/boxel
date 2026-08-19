@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import type { SuperTest, Test } from 'supertest';
 import supertest from 'supertest';
 import { basename } from 'path';
@@ -8,22 +9,22 @@ import {
   closeServer,
   setupPermissionedRealmCached,
   testCreatePrerenderAuth,
-} from './helpers';
+} from './helpers/index.ts';
 import {
   buildPrerenderApp,
   createPrerenderHttpServer,
-} from '../prerender/prerender-app';
-import type { Prerenderer } from '../prerender';
+} from '../prerender/prerender-app.ts';
+import type { Prerenderer } from '../prerender/index.ts';
 import { baseCardRef, rri } from '@cardstack/runtime-common';
 import {
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
   PRERENDER_SERVER_STATUS_DRAINING,
   PRERENDER_SERVER_STATUS_HEADER,
-} from '../prerender/prerender-constants';
-import { toAffinityKey } from '../prerender/affinity';
+} from '../prerender/prerender-constants.ts';
+import { toAffinityKey } from '../prerender/affinity.ts';
 import { Deferred } from '@cardstack/runtime-common';
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('Prerender server', function (hooks) {
     let request: SuperTest<Test>;
     let prerenderer: Prerenderer;
@@ -37,8 +38,8 @@ module(basename(__filename), function () {
       realmURL,
       fileSystem: {
         'pet.gts': `
-          import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
-          import { Component } from 'https://cardstack.com/base/card-api';
+          import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
+          import { Component } from '@cardstack/base/card-api';
           export class Pet extends CardDef {
             static displayName = 'Pet';
             @field name = contains(StringField);
@@ -63,7 +64,7 @@ module(basename(__filename), function () {
             field,
             contains,
             StringField,
-          } from 'https://cardstack.com/base/card-api';
+          } from '@cardstack/base/card-api';
 
           export class CommandResult extends CardDef {
             static displayName = 'CommandResult';
@@ -190,9 +191,7 @@ module(basename(__filename), function () {
       );
       assert.ok(
         (card.deps as string[]).find((d) =>
-          d.match(
-            /^https:\/\/cardstack.com\/base\/card-api\.gts\..*glimmer-scoped\.css$/,
-          ),
+          d.match(/^@cardstack\/base\/card-api\.gts\..*glimmer-scoped\.css$/),
         ),
         `glimmer scoped css from ${baseCardRef.module} is a dep`,
       );

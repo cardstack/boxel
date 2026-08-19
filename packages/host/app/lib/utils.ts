@@ -1,10 +1,10 @@
-import deburr from 'lodash/deburr';
+import { deburr } from 'lodash-es';
 
 import {
   realmURL,
-  RealmPaths,
+  ensureTrailingSlash,
   devSkillLocalPath,
-  envSkillLocalPath,
+  skillsIndexLocalPath,
 } from '@cardstack/runtime-common';
 export {
   iconURLFor,
@@ -13,7 +13,7 @@ export {
 
 import ENV from '@cardstack/host/config/environment';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from '@cardstack/base/card-api';
 
 export function stripFileExtension(path: string): string {
   return path.replace(/\.[^/.]+$/, '');
@@ -61,11 +61,15 @@ export function urlForRealmLookup(card: CardDef) {
   return urlForRealmLookup;
 }
 
-// usage example for realm url: `catalogRealm.url`, `skillsRealm.url`
-export const catalogRealm = ENV.resolvedCatalogRealmURL
-  ? new RealmPaths(new URL(ENV.resolvedCatalogRealmURL))
+// Catalog and Skills realm URLs as plain strings (always trailing-slashed).
+// Use `.url`-style URL operations directly; for realm-membership checks
+// against either of these, construct a `RealmPaths` with a VN at the call site.
+export const catalogRealmURL: string | null = ENV.resolvedCatalogRealmURL
+  ? ensureTrailingSlash(decodeURI(new URL(ENV.resolvedCatalogRealmURL).href))
   : null;
-export const skillsRealm = new RealmPaths(new URL(ENV.resolvedSkillsRealmURL));
+export const skillsRealmURL: string = ensureTrailingSlash(
+  decodeURI(new URL(ENV.resolvedSkillsRealmURL).href),
+);
 
 /**
  * Constructs a universal @cardstack/skills/ reference to a skill card.
@@ -80,5 +84,23 @@ export function skillCardURL(skillId: string): string {
   return `@cardstack/skills/Skill/${skillId}`;
 }
 
+/**
+ * Constructs a universal @cardstack/skills/ reference to a `.md` skill file
+ * (`skills/<name>/SKILL.md`) — the markdown skill form, resolved as a
+ * `MarkdownDef` whose `boxel.kind: skill` frontmatter makes it a skill source.
+ *
+ * @example
+ * skillFileURL('source-code-editing')  // '@cardstack/skills/skills/source-code-editing/SKILL.md'
+ */
+export function skillFileURL(skillName: string): string {
+  return `@cardstack/skills/skills/${skillName}/SKILL.md`;
+}
+
 export const devSkillId = `@cardstack/skills/${devSkillLocalPath}`;
-export const envSkillId = `@cardstack/skills/${envSkillLocalPath}`;
+
+// The skills index, the default skill for every new AI room. Spelled as a
+// resolved absolute URL rather than an `@cardstack/skills/` reference because
+// the index routes to its siblings entirely through document-relative markdown
+// links: the prompt resolves those against the skill's own id, and only an
+// absolute id can anchor that resolution.
+export const skillsIndexId = `${skillsRealmURL}${skillsIndexLocalPath}`;

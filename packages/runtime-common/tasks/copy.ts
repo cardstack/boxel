@@ -1,12 +1,12 @@
-import type { Task, WorkerArgs } from './index';
+import type { Task, WorkerArgs } from './index.ts';
 
-import { jobIdentity } from '../index';
+import { jobIdentity } from '../index.ts';
 import {
   type QueueCoalesceCandidate,
   type QueueCoalesceContext,
   type QueueCoalesceDecision,
   registerQueueJobDefinition,
-} from '../queue';
+} from '../queue.ts';
 
 export { copy };
 
@@ -17,6 +17,9 @@ export interface CopyArgs extends WorkerArgs {
 export interface CopyResult {
   totalNonErrorIndexEntries: number;
   invalidations: string[];
+  // The realm generation this copy committed. Optional so a result produced
+  // by an older worker mid-deploy still parses.
+  generation?: number;
 }
 
 function isObjectLike(value: unknown): value is Record<string, unknown> {
@@ -66,14 +69,22 @@ registerQueueJobDefinition({
   coalesce: chooseCopyCoalesceDecision,
 });
 
-const copy: Task<CopyArgs, CopyResult> = ({ reportStatus, log, indexWriter }) =>
+const copy: Task<CopyArgs, CopyResult> = ({
+  reportStatus,
+  log,
+  indexWriter,
+  virtualNetwork,
+}) =>
   async function (args) {
     let { jobInfo, realmURL, sourceRealmURL } = args;
     log.debug(
       `${jobIdentity(jobInfo)} starting copy indexing for job: ${JSON.stringify(args)}`,
     );
     reportStatus(jobInfo, 'start');
-    let batch = await indexWriter.createBatch(new URL(realmURL));
+    let batch = await indexWriter.createBatch(
+      new URL(realmURL),
+      virtualNetwork,
+    );
     await batch.copyFrom(new URL(sourceRealmURL));
     let result = await batch.done();
     let invalidations = batch.invalidations;
@@ -89,5 +100,6 @@ const copy: Task<CopyArgs, CopyResult> = ({ reportStatus, log, indexWriter }) =>
     return {
       invalidations,
       totalNonErrorIndexEntries,
+      generation: batch.currentGeneration,
     };
   };

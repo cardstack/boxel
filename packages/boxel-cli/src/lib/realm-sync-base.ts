@@ -1,15 +1,22 @@
-import type { RealmAuthenticator } from './realm-authenticator';
+import type { RealmAuthenticator } from './realm-authenticator.ts';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import ignoreModule from 'ignore';
 import pLimit from 'p-limit';
-import { isBinaryFilename } from '@cardstack/runtime-common/infer-content-type';
+import {
+  isBinaryContentType,
+  isBinaryFilename,
+} from '@cardstack/runtime-common/infer-content-type';
 
 const ignore = (ignoreModule as any).default || ignoreModule;
 type Ignore = ReturnType<typeof ignoreModule>;
 
 // Files that must never be pushed, deleted, or overwritten on the server via CLI.
-export const PROTECTED_FILES = new Set(['.realm.json']);
+// The `realm.json` RealmConfig card is intentionally NOT protected — `boxel
+// realm push/sync` is the supported way to manage it. The set is empty; it
+// stays an exported helper so a protected file can be added without a
+// fan-out edit through every command.
+export const PROTECTED_FILES = new Set<string>([]);
 const DELETE_TIMEOUT_MS = 10_000;
 const DELETE_TIMEOUT_PROBE_MS = 3_000;
 
@@ -99,14 +106,15 @@ const REMOTE_CONCURRENCY = 10;
 const ALWAYS_IGNORED_DIRS = new Set(['node_modules']);
 
 export abstract class RealmSyncBase {
+  protected options: SyncOptions;
+  protected authenticator: RealmAuthenticator;
   protected normalizedRealmUrl: string;
   private ignoreCache = new Map<string, Promise<Ignore>>();
   protected remoteLimit = pLimit(REMOTE_CONCURRENCY);
 
-  constructor(
-    protected options: SyncOptions,
-    protected authenticator: RealmAuthenticator,
-  ) {
+  constructor(options: SyncOptions, authenticator: RealmAuthenticator) {
+    this.options = options;
+    this.authenticator = authenticator;
     this.normalizedRealmUrl = this.normalizeRealmUrl(options.realmUrl);
   }
 
@@ -450,7 +458,7 @@ export abstract class RealmSyncBase {
     console.log(`  Uploaded: ${relativePath}`);
   }
 
-  // Uploads a single binary file (PNG, PDF, font, etc.) per the host
+  // Uploads a single binary file per the host
   // pattern: a per-file POST with Content-Type: application/octet-stream
   // and the raw bytes as the body. The realm-server routes octet-stream
   // POSTs to upsertBinaryFile, which writes the bytes verbatim without
@@ -675,16 +683,25 @@ export abstract class RealmSyncBase {
       const body = (await response.json()) as {
         'atomic:results'?: Array<{ data?: { id?: string } }>;
       };
-      // The realm normalizes hrefs: a path with a space goes out as
-      // `Knowledge Articles/...` but comes back URL-encoded as
-      // `Knowledge%20Articles/...`. Decode the response id before the
-      // map lookup so we resolve back to the original relative path
-      // instead of falling through to the raw encoded URL.
-      const atomicSucceeded = (body['atomic:results'] ?? [])
-        .map((r) => r.data?.id)
-        .filter((id): id is string => typeof id === 'string')
-        .map((id) => decodeAtomicResultId(id))
-        .map((id) => hrefToRelative.get(id) ?? id);
+      const results = body['atomic:results'] ?? [];
+      // atomic:results are positional: result[i] answers operations[i]. Map
+      // back to relative paths by index rather than by matching the returned
+      // id string — the server may express ids in forms this side cannot
+      // reconstruct (URL-encoded hrefs, or resource identifiers like
+      // `@cardstack/skills/...`), and a missed match used to leak raw ids
+      // into `succeeded`, crashing the manifest hashing downstream.
+      let atomicSucceeded: string[];
+      if (results.length === textEntries.length) {
+        atomicSucceeded = textEntries.map(([rel]) => rel);
+      } else {
+        // Unexpected shape; fall back to id matching (decoding the
+        // URL-encoded href form) and drop anything unmatched.
+        atomicSucceeded = results
+          .map((r) => r.data?.id)
+          .filter((id): id is string => typeof id === 'string')
+          .map((id) => hrefToRelative.get(decodeAtomicResultId(id)))
+          .filter((rel): rel is string => rel !== undefined);
+      }
       for (const rel of atomicSucceeded) {
         console.log(`  Uploaded: ${rel}`);
       }
@@ -749,7 +766,15 @@ export abstract class RealmSyncBase {
     const localDir = path.dirname(localPath);
     await fs.mkdir(localDir, { recursive: true });
 
-    if (isBinaryFilename(relativePath)) {
+    // Classify by what the realm served rather than by the requested name, so
+    // this agrees with `file read` on paths whose extension is absent or does
+    // not describe the bytes. Falls back to the name when the header is absent.
+    const servedContentType = response.headers.get('content-type');
+    const isBinary = servedContentType
+      ? isBinaryContentType(servedContentType)
+      : isBinaryFilename(relativePath);
+
+    if (isBinary) {
       const buffer = Buffer.from(await response.arrayBuffer());
       await fs.writeFile(localPath, buffer);
     } else {

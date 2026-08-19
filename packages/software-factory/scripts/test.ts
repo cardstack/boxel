@@ -1,12 +1,12 @@
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
-import { configureLogger, logger } from '../src/logger';
+import { configureLogger, logger } from '../src/logger.ts';
 
 configureLogger(process.env.LOG_LEVELS || '*=error');
 
 let log = logger('test');
 
-const packageRoot = resolve(__dirname, '..');
+const packageRoot = resolve(import.meta.dirname, '..');
 
 type TestRunnerOptions = {
   nodeOnly: boolean;
@@ -81,7 +81,7 @@ async function main(): Promise<void> {
     await runCommand(
       `LOG_LEVELS=${JSON.stringify(
         logLevels,
-      )} NODE_NO_WARNINGS=1 qunit --require ts-node/register/transpile-only tests/index.ts`,
+      )} NODE_NO_WARNINGS=1 node tests/index.ts`,
     );
   }
 

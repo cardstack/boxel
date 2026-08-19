@@ -1,6 +1,7 @@
 import type Koa from 'koa';
 import { resolve, join } from 'path';
-import { ensureDirSync, writeJSONSync } from 'fs-extra';
+import fsExtra from 'fs-extra';
+const { ensureDirSync, writeJSONSync } = fsExtra;
 import * as Sentry from '@sentry/node';
 import type {
   DBAdapter,
@@ -19,15 +20,17 @@ import {
   userInitiatedPriority,
 } from '@cardstack/runtime-common';
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
-import { insertSourceRealmInRegistry } from '../lib/realm-registry-writes';
-import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler';
+import { REALMS_LIST_UPDATED_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
+import { insertSourceRealmInRegistry } from '../lib/realm-registry-writes.ts';
+import type { SendEvent } from './send-event.ts';
+import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.ts';
 import {
   fetchRequestFromContext,
   sendResponseForBadRequest,
   sendResponseForSystemError,
   setContextResponse,
-} from '../middleware';
-import type { RealmServerTokenClaim } from '../utils/jwt';
+} from '../middleware/index.ts';
+import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 
 const log = logger('realm-server');
 
@@ -150,13 +153,12 @@ export async function createRealm(
       [ownerUserId]: DEFAULT_PERMISSIONS,
     });
 
-    // CS-10053: publishable lives in realm_metadata now, not the
-    // sidecar. The legacy .realm.json is no longer written here;
-    // hostHome/interactHome (still sidecar-owned until CS-10055)
-    // are absent on a fresh realm and don't need a placeholder file.
-    // Reset all mutable metadata columns on conflict so a stale row
-    // (e.g. left over from a previous realm at the same URL whose
-    // delete didn't clean up) doesn't bleed into the new realm.
+    // publishable lives in realm_metadata. A fresh realm has no
+    // hostRoutingRules to seed (host mode picks them up from the
+    // realm.json card once an operator edits one). Reset
+    // all mutable metadata columns on conflict so a stale row (e.g.
+    // left over from a previous realm at the same URL whose delete
+    // didn't clean up) doesn't bleed into the new realm.
     await query(dbAdapter, [
       `INSERT INTO realm_metadata (url, publishable, show_as_catalog) VALUES (`,
       param(url),
@@ -176,7 +178,7 @@ export async function createRealm(
         },
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/realm-config',
+            module: '@cardstack/base/realm-config',
             name: 'RealmConfig',
           },
         },
@@ -187,8 +189,8 @@ export async function createRealm(
         type: 'card',
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/cards-grid',
-            name: 'CardsGrid',
+            module: '@cardstack/base/workspace',
+            name: 'Workspace',
           },
         },
       },
@@ -245,6 +247,7 @@ export async function createRealm(
 
 export default function handleCreateRealmRequest(
   deps: CreateRealmDeps,
+  sendEvent: SendEvent,
 ): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let token = ctxt.state.token as RealmServerTokenClaim;
@@ -351,6 +354,19 @@ export default function handleCreateRealmRequest(
       },
     });
     await setContextResponse(ctxt, response);
+
+    // Tell the owner's other sessions their realm list changed so a session
+    // viewing the workspace chooser refreshes without a reload. Best-effort:
+    // the realm is already created and the response sent, so a failed notify
+    // must not turn a successful creation into an error.
+    try {
+      await sendEvent(ownerUserId, REALMS_LIST_UPDATED_EVENT_TYPE);
+    } catch (e: any) {
+      log.error(
+        `Failed to send ${REALMS_LIST_UPDATED_EVENT_TYPE} event after creating realm ${url} for ${ownerUserId}`,
+        e,
+      );
+    }
     return;
   };
 }

@@ -5,6 +5,7 @@ export interface User {
   stripeCustomerEmail: string | null;
   matrixRegistrationToken: string | null;
   sessionRoomId: string | null;
+  sessionsRevokedAt: number | null;
 }
 
 export interface Plan {

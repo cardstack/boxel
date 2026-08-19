@@ -9,6 +9,7 @@ import { tracked } from '@glimmer/tracking';
 import { restartableTask, timeout, all } from 'ember-concurrency';
 
 import perform from 'ember-concurrency/helpers/perform';
+import { modifier } from 'ember-modifier';
 
 import {
   BoxelButton,
@@ -24,11 +25,21 @@ import { ProfileInfo } from '@cardstack/host/components/operator-mode/profile-in
 import config from '@cardstack/host/config/environment';
 import { isValidPassword } from '@cardstack/host/lib/matrix-utils';
 import type MatrixService from '@cardstack/host/services/matrix-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import ProfileEmail from './profile-email';
 import ProfileSubscription from './profile-subscription';
 
 import type { IAuthData } from 'matrix-js-sdk';
+
+// Subscription sits below the fold in this fixed-height modal
+const scrollIntoViewIfRequested = modifier(
+  (element: HTMLElement, [requested]: [boolean]) => {
+    if (requested) {
+      element.scrollIntoView({ block: 'start' });
+    }
+  },
+);
 
 interface Signature {
   Args: {
@@ -53,14 +64,13 @@ export default class ProfileSettingsModal extends Component<Signature> {
         <ProfileInfo />
       </:sidebar>
       <:content>
-        <form {{on 'submit' this.onSubmit}}>
+        <form class='settings-form' {{on 'submit' this.onSubmit}}>
           {{#unless (bool this.submode)}}
             <FieldContainer @label='Name' @tag='label' class='profile-field'>
               <BoxelInput
                 data-test-display-name-field
                 @value={{this.matrixService.profile.displayName}}
                 @onInput={{this.setDisplayName}}
-                @valid={{this.isDisplayNameValid}}
                 @errorMessage={{if
                   (not this.isDisplayNameValid)
                   'Name is required'
@@ -78,7 +88,7 @@ export default class ProfileSettingsModal extends Component<Signature> {
             <FieldContainer
               @label='Current Password'
               @tag='label'
-              class='profile-field'
+              class='profile-field password-settings-field'
             >
               <BoxelInput
                 data-test-current-password-field
@@ -92,7 +102,7 @@ export default class ProfileSettingsModal extends Component<Signature> {
             <FieldContainer
               @label='New Password'
               @tag='label'
-              class='profile-field'
+              class='profile-field password-settings-field'
             >
               <BoxelInput
                 data-test-new-password-field
@@ -107,7 +117,7 @@ export default class ProfileSettingsModal extends Component<Signature> {
             <FieldContainer
               @label='Confirm New Password'
               @tag='label'
-              class='profile-field'
+              class='profile-field password-settings-field'
             >
               <BoxelInput
                 data-test-confirm-password-field
@@ -127,7 +137,13 @@ export default class ProfileSettingsModal extends Component<Signature> {
               @changeEmailComplete={{this.completeEmail}}
             />
           {{/if}}
-          <ProfileSubscription />
+          <div
+            class='profile-settings-subscription'
+            {{scrollIntoViewIfRequested this.subscriptionRequested}}
+            data-test-profile-subscription-section
+          >
+            <ProfileSubscription />
+          </div>
         </form>
         {{#if (or (bool this.displayNameError) (bool this.error))}}
           <div class='error-message' data-test-profile-save-error>
@@ -143,10 +159,11 @@ export default class ProfileSettingsModal extends Component<Signature> {
         <div class='buttons'>
           {{#unless (eq this.submode 'password')}}
             <BoxelButton
-              data-test-change-password-button
+              class='profile-settings-change-pw-button'
               @size='tall'
               @kind='secondary-light'
               {{on 'click' this.changePassword}}
+              data-test-change-password-button
             >
               Change Password
             </BoxelButton>
@@ -193,7 +210,7 @@ export default class ProfileSettingsModal extends Component<Signature> {
         display: flex;
       }
       :deep(.profile-settings) {
-        height: 70vh;
+        height: 80vh;
       }
       .error-message {
         color: var(--boxel-error-100);
@@ -202,13 +219,52 @@ export default class ProfileSettingsModal extends Component<Signature> {
       .profile-field :deep(.invalid) {
         box-shadow: none;
       }
-      .profile-field + .profile-field {
-        margin-top: var(--boxel-sp-xl);
+
+      .settings-form,
+      .profile-settings-subscription {
+        --settings-modal-gap: var(--boxel-sp-xl);
+        display: grid;
+        gap: var(--settings-modal-gap);
+      }
+
+      @container dialog-box (width <= 48rem) {
+        .settings-form,
+        .profile-settings-subscription {
+          --settings-modal-gap: var(--boxel-sp);
+        }
+        .password-settings-field {
+          grid-template-columns: 1fr;
+          gap: var(--boxel-sp-xs);
+        }
+        .profile-settings-change-pw-button {
+          margin-right: auto;
+          padding-inline: var(--boxel-sp-xs);
+          font-size: 0.8125rem;
+        }
+        .buttons {
+          gap: var(--boxel-sp-xs);
+        }
+        .right-buttons > :not(:first-child) {
+          margin-left: 0;
+        }
+        .right-buttons {
+          display: flex;
+          gap: var(--boxel-sp-xs);
+        }
+      }
+
+      /* FieldContainer's 8rem label column is 40% of a phone-width modal,
+         shredding the values beside it. Inherited from the form. */
+      @container dialog-box (width <= 28rem) {
+        .settings-form {
+          --boxel-field-label-size: 5.5rem;
+        }
       }
     </style>
   </template>
 
   @service declare private matrixService: MatrixService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
   @tracked private displayName: string | undefined;
   @tracked private submode: 'email' | 'password' | undefined;
   @tracked private saveSuccessIndicatorShown = false;
@@ -228,6 +284,12 @@ export default class ProfileSettingsModal extends Component<Signature> {
   constructor(owner: Owner, args: any) {
     super(owner, args);
     this.setInitialValues.perform();
+  }
+
+  private get subscriptionRequested() {
+    return (
+      this.operatorModeStateService.profileSettingsSection === 'subscription'
+    );
   }
 
   private get title() {
@@ -272,10 +334,10 @@ export default class ProfileSettingsModal extends Component<Signature> {
   }
 
   private get hasPasswordError() {
-    return (
+    return Boolean(
       this.currentPasswordError ||
       this.newPasswordError ||
-      this.confirmPasswordError
+      this.confirmPasswordError,
     );
   }
 

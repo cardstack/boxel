@@ -1,6 +1,6 @@
 import { FeaturedImageField } from './fields/featured-image';
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import TextAreaField from 'https://cardstack.com/base/text-area';
+import MarkdownField from '@cardstack/base/markdown';
+import TextAreaField from '@cardstack/base/text-area';
 import {
   Component,
   CardDef,
@@ -9,11 +9,11 @@ import {
   containsMany,
   linksTo,
   StringField,
-} from 'https://cardstack.com/base/card-api';
-import EmailField from 'https://cardstack.com/base/email';
+} from '@cardstack/base/card-api';
+import EmailField from '@cardstack/base/email';
 
 import Email from '@cardstack/boxel-icons/mail';
-import Linkedin from '@cardstack/boxel-icons/linkedin';
+import Linkedin from '@cardstack/boxel-icons/brand-linkedin';
 import XIcon from '@cardstack/boxel-icons/brand-x';
 import UserIcon from '@cardstack/boxel-icons/user';
 import UserRoundPen from '@cardstack/boxel-icons/user-round-pen';
@@ -69,7 +69,9 @@ export class Author extends CardDef {
   @field contactLinks = containsMany(AuthorContactLink);
   @field email = contains(EmailField);
   @field featuredImage = contains(FeaturedImageField);
-  @field blog = linksTo(BlogApp, { isUsed: true });
+  @field blog = linksTo(BlogApp, {
+    searchable: true,
+  });
 
   static isolated = class Isolated extends Component<typeof this> {
     <template>

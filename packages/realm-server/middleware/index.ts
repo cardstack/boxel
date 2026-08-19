@@ -1,14 +1,20 @@
 import http from 'http';
 import https from 'https';
-import type { ResponseWithNodeStream } from '@cardstack/runtime-common';
+import type {
+  DBAdapter,
+  ResponseWithNodeStream,
+} from '@cardstack/runtime-common';
 import {
+  isSessionRevoked,
   logger as getLogger,
   webStreamToText,
+  sanitizeLoggingCorrelationId,
+  X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
 } from '@cardstack/runtime-common';
 import type Koa from 'koa';
 import mime from 'mime-types';
-import { nodeStreamToText, nodeStreamToBuffer } from '../stream';
-import { retrieveTokenClaim } from '../utils/jwt';
+import { nodeStreamToText, nodeStreamToBuffer } from '../stream.ts';
+import { retrieveTokenClaim } from '../utils/jwt.ts';
 import {
   AuthenticationError,
   AuthenticationErrorMessages,
@@ -17,7 +23,16 @@ import {
 import {
   PRERENDER_JOB_ID_HEADER,
   sanitizePrerenderJobId,
-} from '../prerender/prerender-constants';
+} from '../prerender/prerender-constants.ts';
+import {
+  incrementSearchInFlight,
+  decrementSearchInFlight,
+} from '../search-inflight.ts';
+
+// Matches the realm-server's search endpoints (`/_search`,
+// `/_federated-search`) so the request middleware can track how
+// many searches are in flight for the health sampler.
+const SEARCH_PATH_PATTERN = /(^|\/)_(federated-)?search$/;
 
 const REQUEST_BODY_STATE = 'requestBody';
 
@@ -156,20 +171,60 @@ export function httpLogging(ctxt: Koa.Context, next: Koa.Next) {
   // realm-server lines for an indexing job alongside worker lines.
   let jobId = sanitizePrerenderJobId(ctxt.get(PRERENDER_JOB_ID_HEADER));
   let jobTag = jobId ? ` [job: ${jobId}]` : '';
+  // Correlation id minted by the client; echoed onto both request log
+  // lines (and into the response header) so a client-observed slow search
+  // joins to the realm-server's view of the same request. The matching
+  // `realm:search-timing` line (emitted by `searchRealms`) is keyed by the
+  // same value.
+  let loggingCorrelationId = sanitizeLoggingCorrelationId(
+    ctxt.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER),
+  );
+  let corrTag = loggingCorrelationId ? ` corr=${loggingCorrelationId}` : '';
+  if (loggingCorrelationId) {
+    ctxt.set(X_BOXEL_LOGGING_CORRELATION_ID_HEADER, loggingCorrelationId);
+  }
+  let startedAt = Date.now();
+
+  // Track in-flight search load for the health sampler across the request's
+  // full lifecycle (queue → parse → SQL → serialize → send), which is the
+  // window during which a saturated event loop would leave it unserviced.
+  let isSearch = SEARCH_PATH_PATTERN.test(ctxt.path);
+  let releasedInFlight = false;
+  let releaseInFlight = () => {
+    if (releasedInFlight) {
+      return;
+    }
+    releasedInFlight = true;
+    decrementSearchInFlight();
+  };
+  if (isSearch) {
+    incrementSearchInFlight();
+  }
 
   logger.info(
     `<-- ${ctxt.method} ${ctxt.req.headers.accept} ${
       fullRequestURL(ctxt).href
-    }${jobTag}`,
+    }${jobTag}${corrTag}`,
   );
 
-  ctxt.res.on('finish', () => {
+  let onSettled = () => {
+    if (isSearch) {
+      releaseInFlight();
+    }
     logger.info(
       `--> ${ctxt.method} ${ctxt.req.headers.accept} ${
         fullRequestURL(ctxt).href
-      }: ${ctxt.status}${jobTag}`,
+      }: ${ctxt.status}${jobTag}${corrTag} dur=${Date.now() - startedAt}ms`,
     );
     logger.debug(JSON.stringify(ctxt.req.headers));
+  };
+  // `finish` fires on a fully-sent response; `close` covers a connection
+  // torn down before that (so the in-flight count can't leak on aborts).
+  ctxt.res.on('finish', onSettled);
+  ctxt.res.on('close', () => {
+    if (isSearch) {
+      releaseInFlight();
+    }
   });
   return next();
 }
@@ -282,6 +337,7 @@ export async function fetchRequestFromContext(
 
 export function jwtMiddleware(
   secretSeed: string,
+  dbAdapter: DBAdapter,
 ): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, next: Koa.Next) {
     let authorization = ctxt.req.headers['authorization'];
@@ -301,7 +357,13 @@ export function jwtMiddleware(
       // the server. If we introduce another type of realm-server permission,
       // then we will need to compare the token with what is configured on the
       // server.
-      ctxt.state.token = retrieveTokenClaim(authorization, secretSeed);
+      let token = retrieveTokenClaim(authorization, secretSeed);
+      if (await isSessionRevoked(dbAdapter, token.user, token.iat)) {
+        throw new AuthenticationError(
+          AuthenticationErrorMessages.SessionRevoked,
+        );
+      }
+      ctxt.state.token = token;
     } catch (e) {
       if (e instanceof AuthenticationError) {
         await sendResponseForUnauthorizedRequest(ctxt, e.message);

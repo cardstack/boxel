@@ -10,6 +10,11 @@ on:
       - ".github/workflows/preview-host.yml"
       - "package.json"
       - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+
+concurrency:
+  group: preview-host-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -129,5 +134,6 @@ jobs:
       actions: read
     with:
       head-sha: ${{ github.event.pull_request.head.sha }}
+      pr-number: ${{ github.event.pull_request.number }}
       slots: ${{ needs.post-preview-comment.outputs.slots }}
     secrets: inherit

@@ -1,7 +1,8 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
-import { PagePool } from '../prerender/page-pool';
-import { AsyncSemaphore } from '../prerender/async-semaphore';
+import { PagePool } from '../prerender/page-pool.ts';
+import { AsyncSemaphore } from '../prerender/async-semaphore.ts';
 
 // CS-10976 PR 2: regression test for the self-referential prerender
 // deadlock that the `affinityTabMax − 1` file-admission ceiling (CS-10946)
@@ -140,7 +141,7 @@ function makeStubPagePool(opts: {
   return { pool, stub };
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('CS-10976: deadlock-safety reservation', function (hooks) {
     let prevTabMax: string | undefined;
 

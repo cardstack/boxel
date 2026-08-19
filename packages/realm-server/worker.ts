@@ -1,6 +1,6 @@
-import './instrument';
-import './setup-logger'; // This should be first
-import './lib/wtfnode-on-signal';
+import './instrument.ts';
+import './setup-logger.ts'; // This should be first
+import './lib/wtfnode-on-signal.ts';
 import { writeSync } from 'node:fs';
 
 // Swallow EPIPE from stdout/stderr so a torn-down parent (worker manager
@@ -36,6 +36,9 @@ import {
   type StatusArgs,
   type IndexingProgressEvent,
 } from '@cardstack/runtime-common';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
+import { BROADCAST_REALM_EVENT } from '@cardstack/runtime-common/worker-request';
+import { encodeWorkerRequestIpc } from './lib/worker-request-forwarder.ts';
 import yargs from 'yargs';
 import * as Sentry from '@sentry/node';
 import {
@@ -43,9 +46,9 @@ import {
   PgQueuePublisher,
   PgQueueRunner,
 } from '@cardstack/postgres';
-import { createRemotePrerenderer } from './prerender/remote-prerenderer';
-import { buildCreatePrerenderAuth } from './prerender/auth';
-import { finalizeChildReservationAsFailure } from './lib/finalize-child-fatal-failure';
+import { createRemotePrerenderer } from './prerender/remote-prerenderer.ts';
+import { buildCreatePrerenderAuth } from './prerender/auth.ts';
+import { finalizeChildReservationAsFailure } from './lib/finalize-child-fatal-failure.ts';
 
 let log = logger('worker');
 
@@ -80,6 +83,7 @@ let {
   priority = 0,
   migrateDB,
   prerendererUrl,
+  indexJobsOnly = false,
 } = yargs(process.argv.slice(2))
   .usage('Start worker')
   .options({
@@ -113,10 +117,19 @@ let {
       demandOption: true,
       type: 'string',
     },
+    indexJobsOnly: {
+      description:
+        'When set, the worker only registers (and therefore only claims) indexing job types, making it a dedicated index lane that other job types cannot occupy',
+      type: 'boolean',
+    },
   })
   .parseSync();
 
-log.info(`starting worker with pid ${process.pid} and priority ${priority}`);
+log.info(
+  `starting worker with pid ${process.pid} and priority ${priority}${
+    indexJobsOnly ? ' (index jobs only)' : ''
+  }`,
+);
 
 let prerenderer = createRemotePrerenderer(prerendererUrl);
 let createPrerenderAuth = buildCreatePrerenderAuth(REALM_SECRET_SEED);
@@ -133,6 +146,13 @@ for (let i = 0; i < fromUrls.length; i++) {
   let to = new URL(String(toUrls[i]));
   if (isUrlLike(from)) {
     virtualNetwork.addURLMapping(new URL(from), to);
+    // Convention: https://cardstack.com/X/ aliases @cardstack/X/. Also
+    // register the realm-prefix mapping so unresolveURL on either form
+    // produces the same canonical RRI — same reasoning as main.ts.
+    let m = from.match(/^https:\/\/cardstack\.com\/([^/]+)\/$/);
+    if (m) {
+      virtualNetwork.addRealmMapping(`@cardstack/${m[1]}/`, to.href);
+    }
   } else {
     virtualNetwork.addRealmMapping(from, to.href);
   }
@@ -159,6 +179,25 @@ let autoMigrate = migrateDB || undefined;
     }
   }
 
+  // Generic worker → manager request bridge. A worker child hands the manager
+  // an arbitrary typed payload over the IPC channel; the manager dispatches on
+  // `type` and forwards it to the realm server. A worker-originated request is a
+  // `type` here plus a matching handler on the manager and the realm server —
+  // the transport doesn't change.
+  function sendWorkerRequest(type: string, payload: unknown) {
+    if (process.send) {
+      process.send(encodeWorkerRequestIpc(type, payload));
+    }
+  }
+
+  // A worker child holds no matrix client, so it can't broadcast a realm event
+  // itself. It requests one through the manager, which broadcasts it through the
+  // realm's matrix session rooms. The task calls the `reportRealmEvent` callback
+  // in TaskArgs without knowing this transport.
+  function reportRealmEvent(event: RealmEventContent) {
+    sendWorkerRequest(BROADCAST_REALM_EVENT, event);
+  }
+
   let dbAdapter = new PgAdapter({ autoMigrate });
   let queue = new PgQueueRunner({ adapter: dbAdapter, workerId, priority });
   let worker = new Worker({
@@ -169,11 +208,13 @@ let autoMigrate = migrateDB || undefined;
     secretSeed: REALM_SECRET_SEED,
     reportStatus,
     reportProgress,
+    reportRealmEvent,
     realmServerMatrixUsername: REALM_SERVER_MATRIX_USERNAME,
     dbAdapter,
     queuePublisher: new PgQueuePublisher(dbAdapter),
     prerenderer,
     createPrerenderAuth,
+    indexJobsOnly,
   });
 
   await worker.run();

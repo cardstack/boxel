@@ -6,14 +6,14 @@ import type {
   Realm,
   VirtualNetwork,
 } from '@cardstack/runtime-common';
-import type { RealmHttpServer as Server } from '../../server';
+import type { RealmHttpServer as Server } from '../../server.ts';
 import type { PgAdapter } from '@cardstack/postgres';
-import type { RealmServer } from '../../server';
+import type { RealmServer } from '../../server.ts';
 import {
   setupPermissionedRealmCached,
   testPort,
   type RealmFixtureName,
-} from '../helpers';
+} from '../helpers/index.ts';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 
 export const testRealmURL = new URL(`http://127.0.0.1:${testPort(4445)}/test/`);

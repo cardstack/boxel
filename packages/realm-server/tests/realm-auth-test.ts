@@ -1,9 +1,15 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import type { SuperTest, Test as SupertestTest } from 'supertest';
 import sinon from 'sinon';
 import { basename } from 'path';
 
 import type { PgAdapter } from '@cardstack/postgres';
+import {
+  archiveRealm,
+  insertPermissions,
+  unarchiveRealm,
+} from '@cardstack/runtime-common';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { fetchSessionRoom } from '@cardstack/runtime-common/db-queries/session-room-queries';
 
@@ -11,13 +17,16 @@ import {
   setupPermissionedRealmCached,
   realmSecretSeed,
   testRealmHref,
-} from './helpers';
-import { createJWT as createRealmServerJWT } from '../utils/jwt';
+} from './helpers/index.ts';
+import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
+import { insertSourceRealmInRegistry } from '../lib/realm-registry-writes.ts';
+import type { RealmServer } from '../server.ts';
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('realm auth handler', function (hooks) {
     let dbAdapter: PgAdapter;
     let request: SuperTest<SupertestTest>;
+    let testRealmServer: RealmServer;
     const matrixUserId = '@firsttimer:localhost';
 
     setupPermissionedRealmCached(hooks, {
@@ -27,9 +36,14 @@ module(basename(__filename), function () {
         [matrixUserId]: ['read', 'write'],
         '@node-test_realm:localhost': ['read', 'realm-owner'],
       },
-      onRealmSetup: ({ dbAdapter: adapter, request: req }) => {
+      onRealmSetup: ({
+        dbAdapter: adapter,
+        request: req,
+        testRealmServer: server,
+      }) => {
         dbAdapter = adapter;
         request = req;
+        testRealmServer = server.testRealmServer;
       },
     });
 
@@ -84,6 +98,198 @@ module(basename(__filename), function () {
         sessionRoom,
         expectedRoomId,
         'session room is persisted after the realm auth request',
+      );
+    });
+
+    // CS-11264 regression: after a realm-server restart, a non-pinned
+    // realm has a row in realm_registry but no active Realm instance
+    // on this process until something triggers a lazy mount via the
+    // request path. Pre-fix, _realm-auth iterated realms[] directly
+    // and silently skipped any realm not yet mounted on this instance
+    // — so an owner's first post-restart boxel-cli call
+    // (push/publish/sync) failed with "No realm token available".
+    // Post-fix, the handler validates against reconciler.knownByUrl
+    // (with a registry probe fallback) and issues a JWT without
+    // mounting; the mount happens later via the normal request path
+    // when the holder of the JWT actually hits a realm endpoint.
+    //
+    // Mounting per row inside _realm-auth was rejected because
+    // fetchUserPermissions(onlyOwnRealms:false) returns every
+    // '*'-readable realm, so a single boxel realm list / host login
+    // would cold-mount the entire accessible set after a restart.
+    test('POST /_realm-auth issues a token for a realm absent from realms[] and reconciler.mounted (post-restart)', async function (assert) {
+      sinon
+        .stub(MatrixClient.prototype, 'createDM')
+        .resolves('!post-restart-session-room:localhost');
+      sinon.stub(MatrixClient.prototype, 'sendEvent').resolves();
+      sinon.stub(MatrixClient.prototype, 'getJoinedRooms').resolves({
+        joined_rooms: [],
+      });
+      sinon.stub(MatrixClient.prototype, 'joinRoom').resolves();
+
+      // Bring the test fixture's realm into the realm_registry so the
+      // post-restart state we're simulating is faithful: in production
+      // every realm has a registry row, but runTestRealmServer
+      // legacy-registers its testRealm into reconciler.mounted without
+      // inserting (registerExistingMounts deliberately bypasses
+      // knownByUrl to preserve legacy mounts across reconcile passes).
+      // Insert + reconcile so reconciler.knownByUrl reflects the row,
+      // matching what a real boot would have done.
+      await insertSourceRealmInRegistry(dbAdapter, {
+        url: testRealmHref,
+        diskId: 'node-test_realm/test',
+        ownerUsername: 'node-test_realm',
+      });
+      await testRealmServer.testingOnlyReconcile();
+
+      // Simulate the post-restart state: registry row + knownByUrl
+      // entry are present (reconciler boot has reflected the registry),
+      // but neither realms[] nor reconciler.mounted holds an active
+      // Realm. The handler must NOT attempt to cold-mount; it must
+      // issue a JWT from the registry presence alone.
+      testRealmServer.testingOnlyEvictRealmFromRealmsList(testRealmHref);
+      assert.false(
+        testRealmServer.testingOnlyRealms.some((r) => r.url === testRealmHref),
+        'precondition: realm is absent from realms[]',
+      );
+      assert.false(
+        testRealmServer.testingOnlyReconciler.mounted.has(testRealmHref),
+        'precondition: realm is absent from reconciler.mounted',
+      );
+      assert.true(
+        testRealmServer.testingOnlyReconciler.knownByUrl.has(testRealmHref),
+        'precondition: registry row is still reflected in reconciler.knownByUrl',
+      );
+
+      let response = await request
+        .post('/_realm-auth')
+        .set('Accept', 'application/json')
+        .set('Content-Type', 'application/json')
+        .set(
+          'Authorization',
+          `Bearer ${createRealmServerJWT(
+            { user: matrixUserId, sessionRoom: 'server-session-room' },
+            realmSecretSeed,
+          )}`,
+        )
+        .send('{}');
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.ok(
+        response.body[testRealmHref],
+        'response includes a JWT for the realm even though it was absent from realms[] and reconciler.mounted',
+      );
+      assert.false(
+        testRealmServer.testingOnlyReconciler.mounted.has(testRealmHref),
+        'the handler did NOT cold-mount the realm — mount remains deferred to the next per-realm request',
+      );
+    });
+
+    test('POST /_realm-auth omits archived realms; unarchive restores them', async function (assert) {
+      sinon
+        .stub(MatrixClient.prototype, 'createDM')
+        .resolves('!archived-test-session-room:localhost');
+      sinon.stub(MatrixClient.prototype, 'sendEvent').resolves();
+      sinon.stub(MatrixClient.prototype, 'getJoinedRooms').resolves({
+        joined_rooms: [],
+      });
+      sinon.stub(MatrixClient.prototype, 'joinRoom').resolves();
+
+      let realmAuthRequest = () =>
+        request
+          .post('/_realm-auth')
+          .set('Accept', 'application/json')
+          .set('Content-Type', 'application/json')
+          .set(
+            'Authorization',
+            `Bearer ${createRealmServerJWT(
+              { user: matrixUserId, sessionRoom: 'server-session-room' },
+              realmSecretSeed,
+            )}`,
+          )
+          .send('{}');
+
+      let before = await realmAuthRequest();
+      assert.strictEqual(before.status, 200);
+      assert.ok(
+        before.body[testRealmHref],
+        'active realm appears in the response',
+      );
+
+      await archiveRealm(dbAdapter, new URL(testRealmHref));
+      let archived = await realmAuthRequest();
+      assert.strictEqual(archived.status, 200);
+      assert.notOk(
+        archived.body[testRealmHref],
+        'archived realm is omitted from the response',
+      );
+
+      await unarchiveRealm(dbAdapter, new URL(testRealmHref));
+      let restored = await realmAuthRequest();
+      assert.strictEqual(restored.status, 200);
+      assert.ok(
+        restored.body[testRealmHref],
+        'unarchived realm reappears in the response',
+      );
+    });
+
+    test('POST /_realm-auth enumerates realms newest-created-first', async function (assert) {
+      sinon
+        .stub(MatrixClient.prototype, 'createDM')
+        .resolves('!ordering-test-session-room:localhost');
+      sinon.stub(MatrixClient.prototype, 'sendEvent').resolves();
+      sinon.stub(MatrixClient.prototype, 'getJoinedRooms').resolves({
+        joined_rooms: [],
+      });
+      sinon.stub(MatrixClient.prototype, 'joinRoom').resolves();
+
+      // Two registry-backed realms whose creation order is the reverse of
+      // both their permission-row insertion order and their alphabetical
+      // order, so the assertion can only pass via created_at ordering.
+      const olderRealmURL = 'http://127.0.0.1:4444/ordering/zz-older/';
+      const newerRealmURL = 'http://127.0.0.1:4444/ordering/aa-newer/';
+      await insertSourceRealmInRegistry(dbAdapter, {
+        url: newerRealmURL,
+        diskId: 'ordering/aa-newer',
+        ownerUsername: 'ordering',
+      });
+      await insertSourceRealmInRegistry(dbAdapter, {
+        url: olderRealmURL,
+        diskId: 'ordering/zz-older',
+        ownerUsername: 'ordering',
+      });
+      await dbAdapter.execute(
+        `UPDATE realm_registry SET created_at = '2020-01-01T00:00:00Z' WHERE url = '${olderRealmURL}'`,
+      );
+      await dbAdapter.execute(
+        `UPDATE realm_registry SET created_at = '2021-01-01T00:00:00Z' WHERE url = '${newerRealmURL}'`,
+      );
+      await insertPermissions(dbAdapter, new URL(newerRealmURL), {
+        [matrixUserId]: ['read', 'write'],
+      });
+      await insertPermissions(dbAdapter, new URL(olderRealmURL), {
+        [matrixUserId]: ['read', 'write'],
+      });
+
+      let response = await request
+        .post('/_realm-auth')
+        .set('Accept', 'application/json')
+        .set('Content-Type', 'application/json')
+        .set(
+          'Authorization',
+          `Bearer ${createRealmServerJWT(
+            { user: matrixUserId, sessionRoom: 'server-session-room' },
+            realmSecretSeed,
+          )}`,
+        )
+        .send('{}');
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let urls = Object.keys(response.body);
+      assert.deepEqual(
+        urls.filter((url) => [olderRealmURL, newerRealmURL].includes(url)),
+        [newerRealmURL, olderRealmURL],
+        'registry-backed realms are enumerated newest-created-first',
       );
     });
   });

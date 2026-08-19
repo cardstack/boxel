@@ -1,15 +1,29 @@
-import { notFound, CardError, responseWithError } from './error';
-import type { RequestContext } from './index';
-import { RealmPaths, logger } from './index';
+import { notFound, CardError, responseWithError } from './error.ts';
+import type { RequestContext } from './index.ts';
+import { RealmPaths, logger } from './index.ts';
 
 export class AuthenticationError extends Error {}
 export class AuthorizationError extends Error {}
-export enum AuthenticationErrorMessages {
-  MissingAuthHeader = 'Missing Authorization header',
-  PermissionMismatch = "User permissions in the JWT payload do not match the server's permissions", // Could happen if the user's permissions were changed during the life of the JWT
-  TokenExpired = 'Token expired',
-  TokenInvalid = 'Token invalid',
-}
+// Thrown at the realm request boundary when a request targets an archived
+// (sealed) realm. Surfaced as a 403 carrying an "archived" marker so the
+// client can render the sealed state rather than a generic forbidden error.
+export class ArchivedRealmError extends Error {}
+// A `const` object (rather than a TS `enum`) so the declaration is
+// erasable and runs under Node's native `--experimental-strip-types`.
+export const AuthenticationErrorMessages = {
+  MissingAuthHeader: 'Missing Authorization header',
+  // Could happen if the user's permissions were changed during the life of the JWT
+  PermissionMismatch:
+    "User permissions in the JWT payload do not match the server's permissions",
+  TokenExpired: 'Token expired',
+  TokenInvalid: 'Token invalid',
+  // The token was issued before this user's sessions were revoked. Clients with
+  // a live matrix session recover by re-authenticating, same as for an expired
+  // token, so this is deliberately a 401 rather than a 403.
+  SessionRevoked: 'Session revoked',
+} as const;
+export type AuthenticationErrorMessages =
+  (typeof AuthenticationErrorMessages)[keyof typeof AuthenticationErrorMessages];
 
 type Handler = (
   request: Request,
@@ -47,7 +61,7 @@ function formatUnknownError(error: unknown): string {
 
 export type Method = 'GET' | 'QUERY' | 'POST' | 'PATCH' | 'DELETE' | 'HEAD';
 
-import { SupportedMimeType } from './supported-mime-type';
+import { SupportedMimeType } from './supported-mime-type.ts';
 export { SupportedMimeType };
 
 function isHTTPMethod(method: unknown): method is Method {
@@ -200,6 +214,15 @@ export class Router {
       return await handler(request, requestContext);
     } catch (err) {
       if (err instanceof CardError) {
+        // Without this line a thrown CardError is indistinguishable in the
+        // request log from a handler that returned the same status
+        // deliberately (e.g. a 404 from a routed endpoint that can't
+        // otherwise produce one), which makes such failures undiagnosable
+        // from CI logs alone.
+        this.log.warn(
+          `handler for ${request.method} ${request.url} threw CardError ` +
+            `(status ${err.status}): ${err.message}`,
+        );
         return responseWithError(err, requestContext);
       }
 

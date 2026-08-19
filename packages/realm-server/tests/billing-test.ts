@@ -6,14 +6,15 @@ import type {
   User,
 } from '@cardstack/runtime-common';
 import { logger, param, query } from '@cardstack/runtime-common';
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import {
   createTestPgAdapter,
   fetchSubscriptionsByUserId,
   insertPlan,
   insertUser,
   prepareTestDB,
-} from './helpers';
+} from './helpers/index.ts';
 import type { PgAdapter } from '@cardstack/postgres';
 import { handlePaymentSucceeded } from '@cardstack/billing/stripe-webhook-handlers/payment-succeeded';
 import { handleSubscriptionDeleted } from '@cardstack/billing/stripe-webhook-handlers/subscription-deleted';
@@ -85,6 +86,7 @@ function buildDailyCreditGrantTaskArgs(dbAdapter: PgAdapter): TaskArgs {
     indexWriter: {} as TaskArgs['indexWriter'],
     prerenderer: {} as TaskArgs['prerenderer'],
     definitionLookup: {} as TaskArgs['definitionLookup'],
+    virtualNetwork: {} as TaskArgs['virtualNetwork'],
     log: logger('test-daily-credit-grant'),
     matrixURL: 'http://matrix.invalid',
     getReader: () => {
@@ -100,7 +102,7 @@ function buildDailyCreditGrantTaskArgs(dbAdapter: PgAdapter): TaskArgs {
   };
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('billing', function (hooks) {
     let dbAdapter: PgAdapter;
 

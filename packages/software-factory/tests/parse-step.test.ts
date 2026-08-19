@@ -1,6 +1,7 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 
-import type { ValidationStepResult } from '../src/factory-agent';
+import type { ValidationStepResult } from '../src/factory-agent/index.ts';
 
 import {
   ParseValidationStep,
@@ -9,10 +10,10 @@ import {
   type SpecExampleInfo,
   parseJsonFile,
   validateCardDocumentStructure,
-} from '../src/validators/parse-step';
-import type { ParseErrorData } from '../src/parse-result-cards';
-import { createMockClient } from './helpers/mock-client';
-import { createTestWorkspace } from './helpers/workspace-fixture';
+} from '../src/validators/parse-step.ts';
+import type { ParseErrorData } from '../src/parse-result-cards.ts';
+import { createMockClient } from './helpers/mock-client.ts';
+import { createTestWorkspace } from './helpers/workspace-fixture.ts';
 
 // ---------------------------------------------------------------------------
 // Mock helpers
@@ -101,7 +102,7 @@ module('ParseValidationStep', function () {
         fetchFilenames: makeFetchFilenames([
           'Cards/my-card.json',
           'index.json',
-          '.realm.json',
+          'realm.json',
         ]),
         readFileFn: makeReadFile({}),
         searchSpecsFn: makeSearchSpecs([]),

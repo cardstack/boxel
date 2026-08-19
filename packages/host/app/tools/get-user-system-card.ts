@@ -1,0 +1,41 @@
+import { service } from '@ember/service';
+
+import ENV from '@cardstack/host/config/environment';
+
+import HostBaseTool from '../lib/host-base-tool';
+
+import type MatrixService from '../services/matrix-service';
+import type * as BaseToolModule from '@cardstack/base/command';
+
+const { defaultSystemCardId } = ENV;
+
+export default class GetUserSystemCardTool extends HostBaseTool<
+  undefined,
+  typeof BaseToolModule.GetUserSystemCardResult
+> {
+  @service declare private matrixService: MatrixService;
+
+  static actionVerb = 'Get';
+  description = "Gets the current user's active system card ID";
+
+  async getInputType() {
+    return undefined;
+  }
+
+  protected async run(): Promise<BaseToolModule.GetUserSystemCardResult> {
+    await this.matrixService.ready;
+    let commandModule = await this.loadToolModule();
+    const { GetUserSystemCardResult } = commandModule;
+
+    const systemCard = this.matrixService.systemCard;
+    const cardId = systemCard?.id ?? undefined;
+    return new GetUserSystemCardResult({
+      cardId,
+      isDefault: !cardId || cardId === defaultSystemCardId,
+    });
+  }
+}
+
+// Pre-rename spellings: realm content references these classes by named
+// export in imports and codeRefs, so the old names stay importable.
+export { GetUserSystemCardTool as GetUserSystemCardCommand };

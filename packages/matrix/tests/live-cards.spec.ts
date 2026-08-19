@@ -1,5 +1,5 @@
-import { test, expect } from './fixtures';
-import { appURL } from '../helpers/isolated-realm-server';
+import { test, expect } from './fixtures.ts';
+import { appURL } from '../support/isolated-realm-server.ts';
 import {
   createRealm,
   showAllCards,
@@ -9,7 +9,7 @@ import {
   getMonacoContent,
   waitUntil,
   createSubscribedUserAndLogin,
-} from '../helpers';
+} from '../helpers/index.ts';
 
 test.describe('Live Cards', () => {
   const serverIndexUrl = new URL(appURL).origin;
@@ -36,7 +36,7 @@ test.describe('Live Cards', () => {
         },
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/card-api',
+            module: '@cardstack/base/card-api',
             name: 'CardDef',
           },
         },
@@ -63,7 +63,7 @@ test.describe('Live Cards', () => {
         },
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/card-api',
+            module: '@cardstack/base/card-api',
             name: 'CardDef',
           },
         },
@@ -74,17 +74,15 @@ test.describe('Live Cards', () => {
     await page.goto(realmURL);
     await showAllCards(page);
 
-    await expect(
-      page.locator(`[data-test-boxel-filter-list-button="All Cards"]`),
-    ).toHaveCount(1);
+    await expect(page.locator(`[data-test-cards-grid-cards]`)).toBeVisible();
 
     await postCardSource(
       page,
       realmURL,
       'sample-card.gts',
       `
-      import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
-      import { Component } from 'https://cardstack.com/base/card-api';
+      import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
+      import { Component } from '@cardstack/base/card-api';
       export class SampleCard extends CardDef {
         @field name = contains(StringField);
         static isolated = class Isolated extends Component<typeof this> {
@@ -125,8 +123,8 @@ test.describe('Live Cards', () => {
       realmURL,
       `sample-card.gts`,
       `
-          import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
-          import { Component } from 'https://cardstack.com/base/card-api';
+          import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
+          import { Component } from '@cardstack/base/card-api';
           export class SampleCard extends CardDef {
             @field name = contains(StringField);
             static isolated = class Isolated extends Component<typeof this> {
@@ -179,7 +177,7 @@ test.describe('Live Cards', () => {
         },
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/card-api',
+            module: '@cardstack/base/card-api',
             name: 'CardDef',
           },
         },
@@ -213,5 +211,62 @@ test.describe('Live Cards', () => {
       await getMonacoContent(page),
       'monaco editor has been updated',
     ).toContain('Replacement');
+  });
+
+  // End-to-end coverage of specifying a card type by URL in the card chooser,
+  // against a real realm server (real HTTP + real Matrix login). The host
+  // integration version of this flow is skipped; this is its real-server home.
+  test('can specify a card by URL in the card chooser', async ({ page }) => {
+    let { username } = await createSubscribedUserAndLogin(
+      page,
+      'chooser',
+      serverIndexUrl,
+    );
+
+    const realmURL = new URL(`${username}/${realmName}/`, serverIndexUrl).href;
+    await createRealm(page, realmName);
+
+    // Open the card chooser via the operator-mode "New" button — an
+    // index-agnostic affordance, so this doesn't depend on whether the realm
+    // index is a CardsGrid or a Workspace. Its "Choose a card type..." item
+    // opens the same chooser CardsGrid's create button did.
+    await page.goto(realmURL);
+    await page.locator('[data-test-new-file-button]').click();
+    await page
+      .locator('[data-test-boxel-menu-item-text="Choose a card type..."]')
+      .click();
+    await expect(page.locator('[data-test-card-chooser-modal]')).toBeVisible();
+    await expect(page.locator('[data-test-item-button]').first()).toBeVisible();
+
+    // Specify a base-realm card type by its URL.
+    await page
+      .locator('[data-test-search-field]')
+      .fill('https://cardstack.com/base/types/card');
+
+    // The result resolves under the "Base Workspace" realm section.
+    await expect(
+      page.locator(
+        '[data-test-realm-url="https://cardstack.com/base/"][data-test-realm="Base Workspace"]',
+      ),
+    ).toBeVisible({ timeout: 30_000 });
+    await expect(
+      page.locator(
+        '[data-test-realm="Base Workspace"] [data-test-results-count]',
+      ),
+    ).toContainText('1 result');
+    await expect(page.locator('[data-test-item-button]')).toHaveCount(1);
+
+    await page.locator('[data-test-item-button]').click();
+    await expect(
+      page.locator('[data-test-card-chooser-go-button]'),
+    ).toBeEnabled();
+    await page.locator('[data-test-card-chooser-go-button]').click();
+
+    // The chosen type produces a new card on the stack.
+    await expect(
+      page.locator(
+        '[data-test-stack-card-index="1"] [data-test-field="cardInfo-name"]',
+      ),
+    ).toBeVisible();
   });
 });

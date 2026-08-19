@@ -6,7 +6,6 @@ import { module, test } from 'qunit';
 import {
   PermissionsContextName,
   type Permissions,
-  baseRealm,
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
@@ -20,6 +19,7 @@ import {
   setupIntegrationTestRealm,
   provideConsumeContext,
   setupOperatorModeStateCleanup,
+  realmConfigCardJSON,
 } from '../../helpers';
 import {
   CardDef,
@@ -64,7 +64,7 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
   setupBaseRealm(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   hooks.beforeEach(async function () {
@@ -473,7 +473,7 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
       contents: {
         'currency.gts': { CurrencyCard },
         'tx.gts': { TxCard },
-        '.realm.json': `{ "name": "Local Workspace" }`,
+        'realm.json': realmConfigCardJSON({ name: 'Local Workspace' }),
         'usd.json': usdCard,
         'Tx/1.json': txCard,
       },
@@ -514,16 +514,16 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
     await triggerEvent(`[data-test-card="${testRealmURL}usd"]`, 'mouseenter');
     assert
       .dom(
-        `[data-test-overlay-card="${testRealmURL}usd"] [data-test-overlay-edit]`,
-      )
-      .exists()
-      .isNotDisabled();
-    assert
-      .dom(
         `[data-test-overlay-card="${testRealmURL}usd"] [data-test-overlay-more-options]`,
       )
       .exists()
       .isNotDisabled();
+    await click(
+      `[data-test-overlay-card="${testRealmURL}usd"] [data-test-overlay-more-options]`,
+    );
+    assert
+      .dom('[data-test-boxel-menu-item-text="Edit"]')
+      .exists('Edit menu item exposed for editable linked card');
 
     await click(
       '[data-test-field="denomination"] [data-test-links-to-editor] [data-test-remove-card]',
@@ -579,21 +579,21 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
     await waitFor(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`);
     assert.dom('[data-test-field="trips"] [data-test-add-new]').exists();
     await click('[data-test-links-to-many="countries"] [data-test-add-new]');
-    await waitFor(`[data-test-card-catalog-item="${testRealmURL}japan"]`);
-    await click(`[data-test-card-catalog-item="${testRealmURL}japan"]`);
-    await click('[data-test-card-catalog-go-button]');
+    await waitFor(`[data-test-item-button="${testRealmURL}japan"]`);
+    await click(`[data-test-item-button="${testRealmURL}japan"]`);
+    await click('[data-test-card-chooser-go-button]');
 
-    await waitFor('[card-catalog-modal]', { count: 0 });
+    await waitFor('[card-chooser-modal]', { count: 0 });
 
     assert.dom('[data-test-pill-item]').exists({ count: 1 });
     assert.dom('[data-test-field="trips"]').containsText('Japan');
 
     await click('[data-test-links-to-many="countries"] [data-test-add-new]');
-    await waitFor(`[data-test-card-catalog-item="${testRealmURL}usa"]`);
-    await click(`[data-test-card-catalog-item="${testRealmURL}usa"]`);
-    await click('[data-test-card-catalog-go-button]');
+    await waitFor(`[data-test-item-button="${testRealmURL}usa"]`);
+    await click(`[data-test-item-button="${testRealmURL}usa"]`);
+    await click('[data-test-card-chooser-go-button]');
 
-    await waitFor('[card-catalog-modal]', { count: 0 });
+    await waitFor('[card-chooser-modal]', { count: 0 });
     assert.dom('[data-test-pill-item]').exists({ count: 2 });
     assert.dom('[data-test-field="trips"]').containsText('Japan United States');
 

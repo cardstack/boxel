@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "title": "Try with new API",
-      "body": "Wire up the search bar against the v2 endpoint and benchmark p95 latency.",
+      "body": "Wire up the search bar against the search endpoint and benchmark p95 latency.",
       "color": "green",
       "x": 120,
       "y": 320,

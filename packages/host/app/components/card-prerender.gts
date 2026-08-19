@@ -14,7 +14,9 @@ import Component from '@glimmer/component';
 import { didCancel, enqueueTask } from 'ember-concurrency';
 
 import {
+  baseRef,
   CardError,
+  internalKeysFor,
   SupportedMimeType,
   type CardErrorsJSONAPI,
   type LooseSingleCardDocument,
@@ -27,11 +29,13 @@ import {
   type RunCommandArgs,
   type RunCommandResponse,
   type Format,
+  type FusedIndexMeta,
   type PrerenderMeta,
   type RenderRouteOptions,
   VISIT_PASS_ORDER,
   serializeRenderRouteOptions,
   cleanCapturedHTML,
+  snapshotRuntimeDependencies,
 } from '@cardstack/runtime-common';
 
 import { readFileAsText as _readFileAsText } from '@cardstack/runtime-common/stream';
@@ -49,9 +53,6 @@ import {
   RenderCardTypeTracker,
   type CardRenderContext,
   deriveCardTypeFromDoc,
-  withCardType,
-  coerceRenderError,
-  normalizeRenderError,
 } from '../utils/render-error';
 import {
   enableRenderTimerStub,
@@ -77,7 +78,6 @@ export default class CardPrerender extends Component {
   #nonce = 0;
   #shouldClearCacheForNextRender = true;
   #prerendererDelegate!: Prerenderer;
-  #renderErrorPayload: string | undefined;
   #cardTypeTracker = new RenderCardTypeTracker();
   #currentContext: CardRenderContext | undefined;
   #moduleTypesCache: ModuleTypesCache = new WeakMap() as ModuleTypesCache;
@@ -102,12 +102,7 @@ export default class CardPrerender extends Component {
       runCommand: this.runCommand.bind(this),
     };
     this.localIndexer.setup(this.#prerendererDelegate);
-    window.addEventListener('boxel-render-error', this.#handleRenderErrorEvent);
     registerDestructor(this, () => {
-      window.removeEventListener(
-        'boxel-render-error',
-        this.#handleRenderErrorEvent,
-      );
       this.localIndexer.teardown(this.#prerendererDelegate);
       this.#cardTypeTracker.clear();
       this.#moduleTypesCache = new WeakMap() as ModuleTypesCache;
@@ -210,14 +205,23 @@ export default class CardPrerender extends Component {
   );
 
   // Composite visit task — runs the caller-selected subset of
-  // {fileExtract, cardRender, fileRender} on a shared nonce and with a single
-  // clearCache consumption. Mirrors the server-side prerenderVisitAttempt.
+  // {fileExtract, cardRender, fileRender} in one visit with a single
+  // clearCache consumption; each pass takes its own nonce so the render
+  // route's model cache keys them distinctly. Mirrors the server-side
+  // prerenderVisitAttempt, including its visitType bifurcation: an 'index'
+  // visit of a card instance runs the fused meta entry (which carries the
+  // file extract) plus the card's and the file's icons — never an
+  // html-format render; a non-card index visit runs the standalone extract;
+  // a 'prerender-html' visit runs only the html formats + markdown. No
+  // visitType runs the fused union.
   private prerenderVisitTask = enqueueTask(
     async ({
       url,
+      visitType,
       renderOptions,
       fileData,
       types,
+      cardTypes,
     }: PrerenderVisitArgs): Promise<RenderVisitResponse> => {
       this.#nonce++;
       // Clear any residual render error from a previous visit so the earliest
@@ -228,11 +232,24 @@ export default class CardPrerender extends Component {
         Boolean(renderOptions?.clearCache),
       );
       let baseOptions: RenderRouteOptions = { ...(renderOptions ?? {}) };
+      let runIndexSteps = visitType !== 'prerender-html';
+      let runHtmlSteps = visitType !== 'index';
       let requested = {
-        fileExtract: Boolean(baseOptions.fileExtract),
+        // The extract belongs to the index half; a prerender-html visit
+        // never runs it even when the flag rides along on shared options.
+        fileExtract: Boolean(baseOptions.fileExtract) && runIndexSteps,
         cardRender: Boolean(baseOptions.cardRender),
         fileRender: Boolean(baseOptions.fileRender),
       };
+      // A card-instance index visit fuses the extract into the render.meta
+      // entry — one route entry produces both the instance row and the file
+      // row — mirroring the server-side runner. No capability probe is
+      // needed: this driver and the render routes ship in the same build.
+      let fusedIndexPass =
+        visitType === 'index' && requested.cardRender && requested.fileExtract;
+      if (fusedIndexPass) {
+        requested.fileExtract = false;
+      }
       if (shouldClearCache) {
         this.loaderService.resetLoader({
           clearFetchCache: true,
@@ -242,12 +259,17 @@ export default class CardPrerender extends Component {
       }
       let clearCacheConsumed = !shouldClearCache;
       let optionsForPass = (
-        pass: 'fileExtract' | 'cardRender' | 'fileRender',
+        pass: 'fileExtract' | 'cardRender' | 'fileRender' | 'fusedIndex',
       ): RenderRouteOptions => {
         let out: RenderRouteOptions = {
           ...baseOptions,
-          fileExtract: pass === 'fileExtract' ? true : undefined,
-          cardRender: pass === 'cardRender' ? true : undefined,
+          // The fused index pass carries both flags — the render route
+          // serves it from the card branch and folds the file extract into
+          // the render.meta payload.
+          fileExtract:
+            pass === 'fileExtract' || pass === 'fusedIndex' ? true : undefined,
+          cardRender:
+            pass === 'cardRender' || pass === 'fusedIndex' ? true : undefined,
           fileRender: pass === 'fileRender' ? true : undefined,
         };
         if (!clearCacheConsumed) {
@@ -271,8 +293,15 @@ export default class CardPrerender extends Component {
       // is explicit below.
       void VISIT_PASS_ORDER;
 
-      // ── fileExtract pass ───────────────────────────────────────────────
-      if (requested.fileExtract) {
+      // Runs a standalone render.file-extract route entry and stores its
+      // result on `response.fileExtract`. Serves the fileExtract pass and
+      // the fused-index fallback (a card render error must still yield a
+      // file row). Self-contained: bumps the nonce and clears any earlier
+      // pass's render error so it keys and captures independently of
+      // whatever ran before it.
+      let runFileExtractPass = async () => {
+        this.#nonce++;
+        this.localIndexer.renderError = undefined;
         let passOptions = optionsForPass('fileExtract');
         try {
           let routeInfo = await this.router.recognizeAndLoad(
@@ -317,6 +346,11 @@ export default class CardPrerender extends Component {
           // behaves the same way — only genuine page-unusable conditions
           // (eviction, auth failure) short-circuit the visit.
         }
+      };
+
+      // ── fileExtract pass ───────────────────────────────────────────────
+      if (requested.fileExtract) {
+        await runFileExtractPass();
       }
 
       // ── cardRender pass ────────────────────────────────────────────────
@@ -333,7 +367,9 @@ export default class CardPrerender extends Component {
         this.#currentContext = context;
         this.localIndexer.renderError = undefined;
         this.localIndexer.prerenderStatus = 'loading';
-        let initialRenderOptions = optionsForPass('cardRender');
+        let initialRenderOptions = optionsForPass(
+          fusedIndexPass ? 'fusedIndex' : 'cardRender',
+        );
         let cardError: RenderError | undefined;
         let isolatedHTML: string | null = null;
         let headHTML: string | null = null;
@@ -342,6 +378,7 @@ export default class CardPrerender extends Component {
         let embeddedHTML: Record<string, string> | null = null;
         let fittedHTML: Record<string, string> | null = null;
         let markdown: string | null = null;
+        let capturedDeps: string[] | null = null;
         let meta: PrerenderMeta = {
           serialized: null,
           searchDoc: null,
@@ -353,48 +390,93 @@ export default class CardPrerender extends Component {
           await this.#primeCardType(url, context);
           let subsequentRenderOptions =
             omitOneTimeOptions(initialRenderOptions);
-          isolatedHTML = await this.renderHTML.perform(
-            url,
-            'isolated',
-            0,
-            initialRenderOptions,
-          );
-          meta = await this.renderMeta.perform(url, subsequentRenderOptions);
-          headHTML = await this.renderHTML.perform(
-            url,
-            'head',
-            0,
-            subsequentRenderOptions,
-          );
-          atomHTML = await this.renderHTML.perform(
-            url,
-            'atom',
-            0,
-            subsequentRenderOptions,
-          );
-          iconHTML = await this.renderIcon.perform(
-            url,
-            subsequentRenderOptions,
-          );
-          markdown = await this.renderHTML.perform(
-            url,
-            'markdown',
-            0,
-            subsequentRenderOptions,
-          );
-          if (meta?.types) {
-            embeddedHTML = await this.renderAncestors.perform(
+          if (runHtmlSteps) {
+            isolatedHTML = await this.renderHTML.perform(
               url,
-              'embedded',
-              meta.types,
+              'isolated',
+              0,
+              initialRenderOptions,
+            );
+            if (visitType === 'prerender-html') {
+              // The card's runtime deps normally ride on render.meta, which
+              // a prerender-html visit never runs. Snapshot the tracking
+              // session directly after the isolated render settles so the
+              // HTML rendering still reports what it pulled in — the
+              // indexing job unions this with the index visit's meta deps.
+              capturedDeps = this.network.virtualNetwork.unresolveURLs(
+                snapshotRuntimeDependencies({ excludeQueryOnly: true }).deps,
+              );
+            }
+          }
+          if (runIndexSteps) {
+            let metaResult = (await this.renderMeta.perform(
+              url,
+              runHtmlSteps ? subsequentRenderOptions : initialRenderOptions,
+            )) as FusedIndexMeta | undefined;
+            // Split the extract off before `meta` is spread into
+            // `response.card` below — the card row's payload must never
+            // carry the file half. The meta route's abort path resolves
+            // with no payload; falling back to the empty meta keeps that
+            // producing an empty card payload rather than a throw.
+            let { fileExtract: fusedExtract, ...cardMeta } = (metaResult ??
+              meta) as FusedIndexMeta;
+            meta = cardMeta;
+            if (fusedExtract) {
+              response.fileExtract = fusedExtract;
+            }
+          }
+          if (runHtmlSteps) {
+            headHTML = await this.renderHTML.perform(
+              url,
+              'head',
+              0,
               subsequentRenderOptions,
             );
-            fittedHTML = await this.renderAncestors.perform(
+            atomHTML = await this.renderHTML.perform(
               url,
-              'fitted',
-              meta.types,
+              'atom',
+              0,
               subsequentRenderOptions,
             );
+          }
+          if (runIndexSteps) {
+            iconHTML = await this.renderIcon.perform(
+              url,
+              subsequentRenderOptions,
+            );
+          }
+          if (runHtmlSteps) {
+            markdown = await this.renderHTML.perform(
+              url,
+              'markdown',
+              0,
+              subsequentRenderOptions,
+            );
+            // The ancestor type chain drives the fitted/embedded renders. A
+            // prerender-html visit takes the chain the caller passed (the
+            // indexing job forwards the index visit's types) and resolves it
+            // itself via render.meta only as a fallback; the fused visit
+            // already holds it from the meta step above.
+            let typesForAncestors = runIndexSteps
+              ? meta?.types
+              : cardTypes?.length
+                ? cardTypes
+                : (await this.renderMeta.perform(url, subsequentRenderOptions))
+                    ?.types;
+            if (typesForAncestors) {
+              embeddedHTML = await this.renderAncestors.perform(
+                url,
+                'embedded',
+                typesForAncestors,
+                subsequentRenderOptions,
+              );
+              fittedHTML = await this.renderAncestors.perform(
+                url,
+                'fitted',
+                typesForAncestors,
+                subsequentRenderOptions,
+              );
+            }
           }
         } catch (e: any) {
           try {
@@ -411,6 +493,17 @@ export default class CardPrerender extends Component {
               type: 'instance-error',
             };
           }
+          // Plant cardType from the source-derived tracker if the upstream
+          // error payload didn't carry it. Without this, errored rows have
+          // search_doc._cardType=null and the cards-grid "All Cards" filter
+          // (not eq _cardType=Cards Grid) excludes them — invisible errors
+          // that the user can never click into.
+          if (cardError && !cardError.cardType) {
+            let primed = this.#cardTypeTracker.get(context);
+            if (primed) {
+              cardError.cardType = primed;
+            }
+          }
           this.store.resetCache();
         } finally {
           this.#cardTypeTracker.set(context, undefined);
@@ -423,6 +516,7 @@ export default class CardPrerender extends Component {
         }
         response.card = {
           ...meta,
+          ...(capturedDeps ? { deps: capturedDeps } : {}),
           isolatedHTML,
           headHTML,
           atomHTML,
@@ -432,12 +526,24 @@ export default class CardPrerender extends Component {
           markdown,
           ...(cardError ? { error: cardError } : {}),
         };
+
+        // ── fused-extract fallback ─────────────────────────────────────
+        // A fused index pass carries the file extract inside render.meta,
+        // so a card render error leaves the file half missing. Run the
+        // standalone extract entry — a broken card must still yield a good
+        // file row.
+        if (fusedIndexPass && !response.fileExtract) {
+          await runFileExtractPass();
+        }
       }
 
       // ── fileRender pass ────────────────────────────────────────────────
       if (requested.fileRender) {
         // Bump nonce between passes (see cardRender pass for rationale).
         this.#nonce++;
+        // Start the pass clean, like fileExtract/cardRender — a render error
+        // from an earlier pass must not be re-thrown by this one.
+        this.localIndexer.renderError = undefined;
         let effectiveFileData =
           fileData ??
           (response.fileExtract?.resource && baseOptions.fileDefCodeRef
@@ -485,47 +591,55 @@ export default class CardPrerender extends Component {
           try {
             let subsequentRenderOptions =
               omitOneTimeOptions(initialRenderOptions);
-            isolatedHTML = await this.renderHTML.perform(
-              url,
-              'isolated',
-              0,
-              initialRenderOptions,
-            );
-            headHTML = await this.renderHTML.perform(
-              url,
-              'head',
-              0,
-              subsequentRenderOptions,
-            );
-            atomHTML = await this.renderHTML.perform(
-              url,
-              'atom',
-              0,
-              subsequentRenderOptions,
-            );
-            iconHTML = await this.renderIcon.perform(
-              url,
-              subsequentRenderOptions,
-            );
-            markdown = await this.renderHTML.perform(
-              url,
-              'markdown',
-              0,
-              subsequentRenderOptions,
-            );
-            if (effectiveTypes?.length) {
-              embeddedHTML = await this.renderAncestors.perform(
+            if (runHtmlSteps) {
+              isolatedHTML = await this.renderHTML.perform(
                 url,
-                'embedded',
-                effectiveTypes,
+                'isolated',
+                0,
+                initialRenderOptions,
+              );
+              headHTML = await this.renderHTML.perform(
+                url,
+                'head',
+                0,
                 subsequentRenderOptions,
               );
-              fittedHTML = await this.renderAncestors.perform(
+              atomHTML = await this.renderHTML.perform(
                 url,
-                'fitted',
-                effectiveTypes,
+                'atom',
+                0,
                 subsequentRenderOptions,
               );
+            }
+            if (runIndexSteps) {
+              // The file's icon belongs to the index half; in an index visit
+              // it is the pass's only render.
+              iconHTML = await this.renderIcon.perform(
+                url,
+                runHtmlSteps ? subsequentRenderOptions : initialRenderOptions,
+              );
+            }
+            if (runHtmlSteps) {
+              markdown = await this.renderHTML.perform(
+                url,
+                'markdown',
+                0,
+                subsequentRenderOptions,
+              );
+              if (effectiveTypes?.length) {
+                embeddedHTML = await this.renderAncestors.perform(
+                  url,
+                  'embedded',
+                  effectiveTypes,
+                  subsequentRenderOptions,
+                );
+                fittedHTML = await this.renderAncestors.perform(
+                  url,
+                  'fitted',
+                  effectiveTypes,
+                  subsequentRenderOptions,
+                );
+              }
             }
           } catch (e: any) {
             try {
@@ -604,8 +718,8 @@ export default class CardPrerender extends Component {
         throw new Error(this.localIndexer.renderError);
       }
       // The html sub-route flags this when the card is the realm's
-      // default CardsGrid index and the realm has not opted in to
-      // keeping its prerendered isolated HTML. Short-circuit the
+      // default index card (CardsGrid or Workspace) and the realm has
+      // not opted in to keeping its prerendered isolated HTML. Short-circuit the
       // Glimmer render entirely and return the boilerplate so the
       // indexer pays a constant write cost regardless of realm size.
       if (
@@ -617,7 +731,6 @@ export default class CardPrerender extends Component {
         return REALM_INDEX_BOILERPLATE_HTML;
       }
       let component = routeInfo.attributes.Component;
-      this.#renderErrorPayload = undefined;
       let captureMode: 'innerHTML' | 'outerHTML' | 'textContent';
       if (format === 'markdown') {
         // Mirror realm-server puppeteer capture: markdown renders into a
@@ -636,9 +749,6 @@ export default class CardPrerender extends Component {
         format,
         this.waitForLinkedData,
       );
-      if (this.#renderErrorPayload) {
-        throw new Error(this.#renderErrorPayload);
-      }
 
       if (typeof captured !== 'string') {
         return null;
@@ -657,8 +767,19 @@ export default class CardPrerender extends Component {
       types: string[],
       renderOptions?: RenderRouteOptions,
     ) => {
+      // BaseDef is part of the searchable `types` chain (so `{ type: baseRef }`
+      // spans cards and files) but it is abstract — a card coerced to BaseDef
+      // has no meaningful fitted/embedded template, so rendering that level is
+      // pure index bloat. Skip it; the ancestor renderings cover the concrete
+      // card types through CardDef.
+      let baseDefKeys = new Set(
+        internalKeysFor(baseRef, undefined, this.network.virtualNetwork),
+      );
       let ancestors: Record<string, string> = {};
       for (let i = 0; i < types.length; i++) {
+        if (baseDefKeys.has(types[i])) {
+          continue;
+        }
         let res = await this.renderHTML.perform(url, format, i, renderOptions);
         ancestors[types[i]] = res as string;
       }
@@ -694,55 +815,6 @@ export default class CardPrerender extends Component {
     }
   }
 
-  #handleRenderErrorEvent = (
-    event: Event & { detail?: { reason?: unknown }; reason?: unknown },
-  ) => {
-    let reason =
-      'reason' in event ? (event as any).reason : event.detail?.reason;
-    if (!reason) {
-      return;
-    }
-    let context = this.#currentContext ?? this.#contextFromDom();
-    let cardType = context ? this.#cardTypeTracker.get(context) : undefined;
-    let renderErrorPayload = coerceRenderError(reason);
-    if (renderErrorPayload) {
-      let normalized = normalizeRenderError(renderErrorPayload, {
-        cardId: context?.cardId,
-      });
-      this.#renderErrorPayload = JSON.stringify(
-        withCardType(normalized, cardType),
-      );
-      return;
-    }
-    if (reason instanceof Error) {
-      this.#renderErrorPayload = reason.message;
-    } else if (typeof reason === 'string') {
-      this.#renderErrorPayload = reason;
-    } else {
-      try {
-        this.#renderErrorPayload = JSON.stringify(reason);
-      } catch (_err) {
-        this.#renderErrorPayload = String(reason);
-      }
-    }
-  };
-
-  #contextFromDom(): CardRenderContext | undefined {
-    if (typeof document === 'undefined') {
-      return undefined;
-    }
-    let container = document.querySelector(
-      '[data-prerender]',
-    ) as HTMLElement | null;
-    if (!container) {
-      return undefined;
-    }
-    return {
-      cardId: container.dataset.prerenderId ?? undefined,
-      nonce: container.dataset.prerenderNonce ?? undefined,
-    };
-  }
-
   private waitForLinkedData = async () => {
     await Promise.resolve(); // ensure lazy link fetches enqueue
     await this.store.loaded();
@@ -770,16 +842,12 @@ export default class CardPrerender extends Component {
         throw new Error(this.localIndexer.renderError);
       }
       let component = routeInfo.attributes.Component;
-      this.#renderErrorPayload = undefined;
       let captured = await this.renderService.renderCardComponent(
         component,
         'outerHTML',
         'isolated',
         this.waitForLinkedData,
       );
-      if (this.#renderErrorPayload) {
-        throw new Error(this.#renderErrorPayload);
-      }
       if (typeof captured !== 'string') {
         return null;
       }

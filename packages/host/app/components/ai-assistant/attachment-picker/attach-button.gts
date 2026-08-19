@@ -12,7 +12,7 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 
 import { chooseCard, baseCardRef, chooseFile } from '@cardstack/runtime-common';
 
-import type { FileDef } from 'https://cardstack.com/base/file-api';
+import type { FileDef } from '@cardstack/base/file-api';
 
 interface AttachButtonTriggerSignature {
   Element: HTMLButtonElement;
@@ -128,7 +128,7 @@ export default class AttachButton extends Component<Signature> {
   }
 
   @action
-  handleSelection(option: string) {
+  handleSelection(option: string | null) {
     if (option === 'Attach a Card') {
       this.onAttachCard();
     } else if (option === 'Attach a File (Workspace)') {

@@ -1,0 +1,11 @@
+{
+  "name": "@cardstack/test-realm-cards",
+  "version": "1.0.0",
+  "private": true,
+  "license": "MIT",
+  "devDependencies": {
+    "@cardstack/boxel-ui": "workspace:*",
+    "@cardstack/local-types": "workspace:*",
+    "@cardstack/runtime-common": "workspace:*"
+  }
+}

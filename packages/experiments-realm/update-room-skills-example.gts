@@ -3,14 +3,14 @@ import {
   Component,
   contains,
   field,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { action } from '@ember/object';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { tracked } from '@glimmer/tracking';
 
-import UpdateRoomSkillsCommand from '@cardstack/boxel-host/commands/update-room-skills';
+import UpdateRoomSkillsTool from '@cardstack/boxel-host/commands/update-room-skills';
 
 import { Button, FieldContainer } from '@cardstack/boxel-ui/components';
 
@@ -99,7 +99,7 @@ class Isolated extends Component<typeof UpdateRoomSkillsExample> {
   @tracked isExecuting = false;
 
   get hasCommandContext() {
-    return Boolean(this.args.context?.commandContext);
+    return Boolean(this.args.context?.toolContext);
   }
 
   get finalSkillsRealmURL() {
@@ -239,8 +239,8 @@ class Isolated extends Component<typeof UpdateRoomSkillsExample> {
       return;
     }
 
-    let commandContext = this.args.context?.commandContext;
-    if (!commandContext) {
+    let toolContext = this.args.context?.toolContext;
+    if (!toolContext) {
       this.errorMessage =
         'Command context is not available. Open this card inside the host app.';
       return;
@@ -270,7 +270,7 @@ class Isolated extends Component<typeof UpdateRoomSkillsExample> {
     this.errorMessage = null;
 
     try {
-      let command = new UpdateRoomSkillsCommand(commandContext);
+      let command = new UpdateRoomSkillsTool(toolContext);
       await command.execute({
         roomId,
         skillCardIdsToActivate,
@@ -299,7 +299,7 @@ class Isolated extends Component<typeof UpdateRoomSkillsExample> {
       <h1>Update Room Skills Command</h1>
       <p class='intro'>
         Use this card to experiment with
-        <code>UpdateRoomSkillsCommand</code>. Provide a Matrix room ID, pick the
+        <code>UpdateRoomSkillsTool</code>. Provide a Matrix room ID, pick the
         skills you want to toggle, then run the command to publish the new
         configuration.
       </p>
@@ -312,16 +312,15 @@ class Isolated extends Component<typeof UpdateRoomSkillsExample> {
       {{/unless}}
 
       <div class='form-grid'>
-        <FieldContainer
-          @label='Skills realm base URL (optional)'
-          @hint='Used to expand relative skill identifiers such as "boxel-environment".'
-        >
+        <FieldContainer @label='Skills realm base URL (optional)'>
           <input
             type='text'
             value={{this.skillsRealmURL}}
             placeholder='https://example.com/skills/'
             {{on 'input' this.updateSkillsRealmURL}}
           />
+          <p class='hint'>Used to expand relative skill identifiers such as
+            "boxel-environment".</p>
         </FieldContainer>
 
         <FieldContainer @label='Room ID'>
@@ -333,28 +332,24 @@ class Isolated extends Component<typeof UpdateRoomSkillsExample> {
           />
         </FieldContainer>
 
-        <FieldContainer
-          @label='Activate these skills'
-          @hint='Comma or newline separated list.'
-        >
+        <FieldContainer @label='Activate these skills'>
           <textarea
             rows='3'
             value={{@model.manualActivationTargets}}
             placeholder='boxel-environment, catalog-listing'
             {{on 'input' (fn this.updateManualList 'activate')}}
           ></textarea>
+          <p class='hint'>Comma or newline separated list.</p>
         </FieldContainer>
 
-        <FieldContainer
-          @label='Disable these skills'
-          @hint='Comma or newline separated list.'
-        >
+        <FieldContainer @label='Disable these skills'>
           <textarea
             rows='3'
             value={{@model.manualDeactivationTargets}}
             placeholder='source-code-editing'
             {{on 'input' (fn this.updateManualList 'deactivate')}}
           ></textarea>
+          <p class='hint'>Comma or newline separated list.</p>
         </FieldContainer>
       </div>
 
@@ -448,11 +443,11 @@ class Isolated extends Component<typeof UpdateRoomSkillsExample> {
 
       <Button
         class='apply-button'
-        @appearance='primary'
+        @kind='primary'
         disabled={{this.isApplyDisabled}}
         {{on 'click' this.applySkills}}
       >
-        {{if this.isExecuting 'Updating skills…' 'Run UpdateRoomSkillsCommand'}}
+        {{if this.isExecuting 'Updating skills…' 'Run UpdateRoomSkillsTool'}}
       </Button>
     </div>
 
@@ -480,6 +475,12 @@ class Isolated extends Component<typeof UpdateRoomSkillsExample> {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
         gap: var(--boxel-sp-lg);
+      }
+
+      .hint {
+        margin: var(--boxel-sp-xxs) 0 0;
+        color: var(--boxel-600);
+        font: var(--boxel-font-xs);
       }
 
       input,

@@ -1,5 +1,5 @@
-import type { MatrixClient } from './matrix-client';
-import { RealmAuthClient } from './realm-auth-client';
+import type { MatrixClient } from './matrix-client.ts';
+import { RealmAuthClient } from './realm-auth-client.ts';
 
 export class RealmAuthDataSource {
   // Cached realm info and session to avoid fetching it multiple times for the same realm

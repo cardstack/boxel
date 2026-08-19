@@ -23,8 +23,8 @@ NODE_ENV=development \
   NODE_NO_WARNINGS=1 \
   PRERENDER_MANAGER_VERBOSE_LOGS=false \
   PRERENDER_MULTIPLEX="${PRERENDER_MULTIPLEX:-1}" \
-  ts-node \
-  --transpileOnly prerender/manager-server \
+  node \
+  prerender/manager-server.ts \
   --port=${PRERENDER_MANAGER_PORT:-$PRERENDER_MGR_PORT} \
   --exit-on-signal \
   2>&1 | "$LOG_TEE" prerender-manager

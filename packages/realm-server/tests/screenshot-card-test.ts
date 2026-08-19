@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import Koa from 'koa';
 import Router from '@koa/router';
 import supertest from 'supertest';
@@ -13,13 +14,13 @@ import type {
   ScreenshotPrerenderResponse,
 } from '@cardstack/runtime-common';
 
-import handleScreenshotCard from '../handlers/handle-screenshot-card';
-import type { CreateRoutesArgs } from '../routes';
-import { jwtMiddleware } from '../middleware';
-import { createJWT } from '../utils/jwt';
-import { realmSecretSeed } from './helpers';
+import handleScreenshotCard from '../handlers/handle-screenshot-card.ts';
+import type { CreateRoutesArgs } from '../routes.ts';
+import { jwtMiddleware } from '../middleware/index.ts';
+import { createJWT } from '../utils/jwt.ts';
+import { realmSecretSeed } from './helpers/index.ts';
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('/_screenshot-card endpoint', function () {
     function makeDbAdapter(): DBAdapter {
       return {
@@ -88,7 +89,7 @@ module(basename(__filename), function () {
       let router = new Router();
       router.post(
         '/_screenshot-card',
-        jwtMiddleware(realmSecretSeed),
+        jwtMiddleware(realmSecretSeed, args.dbAdapter),
         handleScreenshotCard(args),
       );
       app.use(router.routes());

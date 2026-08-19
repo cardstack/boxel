@@ -1,6 +1,6 @@
 ---
 name: aws-access
-description: Provision an AWS STS session for Claude to use against staging or prod, and reach the deployed environment's data plane from there. Covers (1) the first-time setup walkthrough for a teammate who has never let Claude reach AWS, (2) refreshing an expired session, (3) running read-only queries against the private staging/prod boxel Postgres via SSM port-forwarding through the realm-server ECS task, authenticated as `claude_readonly_user` (a dedicated DB user, member of `readonly_role`), (4) browsing the realm-server's EFS filesystem read-only via a dedicated `boxel-claude-fs-readonly` Fargate task (Caddy file-server, port-forwarded over SSM), and (5) tailing CloudWatch logs for the four boxel ECS services. Claude operates as the dedicated `boxel-claude-readonly` IAM role — its effective AWS permissions are exactly that role's policy, regardless of which IAM groups the user is in. Use whenever Claude needs to call AWS APIs against the cardstack accounts, read/inspect the boxel_index database, browse `/persistent/` files, or read service logs in a deployed environment, or whenever the user asks "how do I connect Claude to AWS / staging / prod" or any of the deployed-env triage questions ("why is this realm indexing slowly", "show me the realm-server logs from last night", "is this file actually on disk in staging").
+description: Provision an AWS STS session for Claude to use against staging or prod, and reach the deployed environment's data plane from there. Covers (1) the first-time setup walkthrough for a teammate who has never let Claude reach AWS, (2) refreshing an expired session, (3) running read-only queries against the private staging/prod boxel Postgres via SSM port-forwarding through the realm-server ECS task, authenticated as `claude_readonly_user` (a dedicated DB user, member of `readonly_role`), (4) browsing the realm-server's EFS filesystem read-only via a dedicated `boxel-claude-fs-readonly` Fargate task (Caddy file-server, port-forwarded over SSM), (5) tailing CloudWatch logs for the four boxel ECS services, (6) tailing Loki logs via `tail-logs.sh` (the role can read the Loki auth params), and (7) reading the realm-server ALB access logs from S3 to attribute 5xx / latency spikes to specific URL paths. Claude operates as the dedicated `boxel-claude-readonly` IAM role — its effective AWS permissions are exactly that role's policy, regardless of which IAM groups the user is in. Use whenever Claude needs to call AWS APIs against the cardstack accounts, read/inspect the boxel_index database, browse `/persistent/` files, or read service logs in a deployed environment, or whenever the user asks "how do I connect Claude to AWS / staging / prod" or any of the deployed-env triage questions ("why is this realm indexing slowly", "show me the realm-server logs from last night", "is this file actually on disk in staging").
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
@@ -11,7 +11,7 @@ This skill exists because:
 1. The team's existing `staging` / `prod` shell aliases export AWS credentials into the user's interactive shell, but Claude's Bash tool spawns its own shell that does not inherit them.
 2. The boxel staging/prod RDS instances are not publicly reachable — they live inside the AWS VPC.
 
-The flow below solves both: a wrapper script that mints a scoped STS session and writes its credentials to a *named profile* in `~/.aws/credentials` so Claude can read them from any shell, plus the SSM port-forward pattern for talking to the in-VPC database.
+The flow below solves both: a wrapper script that mints a scoped STS session and writes its credentials to a _named profile_ in `~/.aws/credentials` so Claude can read them from any shell, plus the SSM port-forward pattern for talking to the in-VPC database.
 
 The script and mise task are in this repo:
 
@@ -25,7 +25,7 @@ Profile convention is fixed (don't change without a heads-up):
 
 ## Identity model (CS-10962)
 
-The credentials in `[claude-staging]` / `[claude-prod]` are *not* the user's IAM identity. The script does:
+The credentials in `[claude-staging]` / `[claude-prod]` are _not_ the user's IAM identity. The script does:
 
 1. Reads the user's long-lived IAM access keys (held in their source profile, e.g. `cardstack`).
 2. Calls `sts:AssumeRole arn:aws:iam::<account>:role/boxel-claude-readonly` directly, passing the user's MFA token via `--serial-number` and `--token-code`. The role's trust policy requires `aws:MultiFactorAuthPresent: true`, which is satisfied by these flags. This is the MFA gate.
@@ -46,7 +46,7 @@ The user needs:
 - `aws` CLI installed.
 - `jq` installed (`brew install jq` / `apt install jq`).
 - `session-manager-plugin` installed — required for the SSM port-forward tunnel to RDS. Install instructions: <https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html>. macOS: `brew install --cask session-manager-plugin`. Ubuntu: download the deb from the page and `sudo dpkg -i`.
-- A working AWS named profile in `~/.aws/credentials` for staging (typically `cardstack`) and for prod (typically `cardstack-prod`). These hold the user's long-lived access keys; they're what the team sets up via `aws configure --profile <name>` on day one. The script uses these as the *source* profile to mint an STS session — the user can name them whatever they want and the script will prompt the first time it runs.
+- A working AWS named profile in `~/.aws/credentials` for staging (typically `cardstack`) and for prod (typically `cardstack-prod`). These hold the user's long-lived access keys; they're what the team sets up via `aws configure --profile <name>` on day one. The script uses these as the _source_ profile to mint an STS session — the user can name them whatever they want and the script will prompt the first time it runs.
 - An MFA device registered on the IAM user. The script auto-detects the MFA ARN via `aws iam list-mfa-devices`, so the user does not edit anything.
 - IAM permission to `sts:AssumeRole` on `boxel-claude-readonly` in the target account. The infra side of CS-10962 grants this to the `read-only` and `full-access` groups in both staging and prod, so any teammate already set up to use staging/prod has it automatically.
 
@@ -81,14 +81,14 @@ After that, Claude can run any `aws --profile claude-staging ...` or `aws --prof
 
 ### Troubleshooting walkthrough
 
-| Symptom | What to tell the user |
-|---|---|
-| `mise ERROR no task claude-aws found` | They typed it wrong (common: `cluade-aws`) or the mise task file is missing — re-clone or pull main. |
-| `An error occurred (AccessDenied) … MultiFactorAuthentication failed with invalid MFA one time pass code` | The token expired before they hit enter. Wait for a fresh code and try again. |
-| `No source AWS profile is configured for 'staging'.` followed by a list | Expected on first run. Type the source profile name (most teammates use `cardstack` / `cardstack-prod` but it varies). |
-| `No MFA device registered for profile <name>` | They picked the wrong source profile (cached on first run). List MFA devices: `aws iam list-mfa-devices --profile <profile>`. To clear the bad choice and re-prompt, run `mise run claude-aws --reset`, then re-run with the right profile. |
+| Symptom                                                                                                                                                                                   | What to tell the user                                                                                                                                                                                                                                                                                 |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mise ERROR no task claude-aws found`                                                                                                                                                     | They typed it wrong (common: `cluade-aws`) or the mise task file is missing — re-clone or pull main.                                                                                                                                                                                                  |
+| `An error occurred (AccessDenied) … MultiFactorAuthentication failed with invalid MFA one time pass code`                                                                                 | The token expired before they hit enter. Wait for a fresh code and try again.                                                                                                                                                                                                                         |
+| `No source AWS profile is configured for 'staging'.` followed by a list                                                                                                                   | Expected on first run. Type the source profile name (most teammates use `cardstack` / `cardstack-prod` but it varies).                                                                                                                                                                                |
+| `No MFA device registered for profile <name>`                                                                                                                                             | They picked the wrong source profile (cached on first run). List MFA devices: `aws iam list-mfa-devices --profile <profile>`. To clear the bad choice and re-prompt, run `mise run claude-aws --reset`, then re-run with the right profile.                                                           |
 | `An error occurred (AccessDenied) when calling the AssumeRole operation: User: ... is not authorized to perform: sts:AssumeRole on resource: arn:aws:iam::...:role/boxel-claude-readonly` | Either the infra side of CS-10962 hasn't been applied to that account yet (so the role doesn't exist or doesn't trust the user's group), or the user's IAM user isn't in `read-only` or `full-access`. Check role existence: `aws --profile <source> iam get-role --role-name boxel-claude-readonly`. |
-| `An error occurred (NoRegion)` when Claude later runs `aws --profile claude-staging …` | They ran the script on an old version that didn't carry region forward. Either re-run `mise run claude-aws <env> <token>` (the current script copies the region from the source profile), or set it manually: `aws configure set region us-east-1 --profile claude-staging`. |
+| `An error occurred (NoRegion)` when Claude later runs `aws --profile claude-staging …`                                                                                                    | They ran the script on an old version that didn't carry region forward. Either re-run `mise run claude-aws <env> <token>` (the current script copies the region from the source profile), or set it manually: `aws configure set region us-east-1 --profile claude-staging`.                          |
 
 ## How Claude uses the session
 
@@ -124,6 +124,22 @@ Claude operates against staging and prod **only as the `boxel-claude-readonly` I
 
 The role is provisioned by infra-side configuration tracked under CS-10962. Anything that would require a permission outside the role's policy is out of scope for Claude — the user should run that operation themselves through whatever channel the team uses for it. This is by design: the role is the AWS-side complement to the claude-readonly-only DB rule below, and together they make accidental writes structurally hard to issue.
 
+### Global read-only control-plane APIs (CloudFront, etc.)
+
+Some services Claude reads are **global control-plane APIs that need none of the SSM-tunnel / ECS machinery** below — just call them directly with the session profile, no region tunnel, no DB/EFS hop:
+
+```sh
+aws --profile claude-staging cloudfront list-distributions
+aws --profile claude-prod    cloudfront get-distribution-config --id <id>
+```
+
+For **CloudFront** specifically, the role grants read across the relevant surface in both accounts: `list-distributions`, `get-distribution-config`, `list-invalidations`, `get-invalidation`, `list-tags-for-resource`, and the policy lookups (`get-cache-policy` / `get-origin-request-policy` / `get-response-headers-policy`). **Writes are denied** — `create-invalidation`, `update-distribution`, `tag-resource`, etc. all `AccessDenied`, consistent with the read-only boundary. So a full CloudFront audit (distributions, origins/behaviors, TLS, custom errors, invalidation history, tags) is doable end-to-end as the role; cache-busting and config changes are not.
+
+Two operational notes when fanning these out:
+
+- CloudFront throttles aggressively — firing ~60 calls at once gets `Throttling: Rate exceeded` on some. Cap concurrency or fall back to sequential with a small `sleep`.
+- AWS CLI v2 auto-pagination quirk: for _paginated_ list operations (e.g. `list-invalidations`, `list-distributions`), the CLI prints **nothing** (empty stdout, exit 0) when there are zero items — including under the default/JSON output. This is the pagination layer, not the output format: `--no-paginate` returns the normal `{"InvalidationList": { … "Quantity": 0 }}` payload, and non-paginated calls like `list-tags-for-resource` print `{"Items": []}` for an empty result. So empty stdout _from a paginated list_ means "zero items," not an error — but don't generalize that to other commands, which return a normal JSON payload for empty results.
+
 ## Connecting to the boxel RDS database
 
 The staging/prod boxel Postgres instances are **private** (`PubliclyAccessible: false`) and live inside the cardstack VPC. They are not directly reachable from a developer laptop. The only path Claude uses is SSM port-forwarding through the realm-server ECS task, authenticated as the read-only `claude_readonly_user` DB user.
@@ -136,15 +152,16 @@ This opens an SSM tunnel through the realm-server container to the RDS endpoint,
 
 Verified on staging via `has_table_privilege(current_user, 'boxel_index', '...')`:
 
-| Privilege | Result |
-|---|---|
-| SELECT | ✓ (granted via `readonly_role` membership) |
-| INSERT / UPDATE / DELETE / TRUNCATE | ✗ |
-| superuser / createrole / createdb / bypassrls | all `f` |
+| Privilege                                     | Result                                     |
+| --------------------------------------------- | ------------------------------------------ |
+| SELECT                                        | ✓ (granted via `readonly_role` membership) |
+| INSERT / UPDATE / DELETE / TRUNCATE           | ✗                                          |
+| superuser / createrole / createdb / bypassrls | all `f`                                    |
 
 The user is dedicated to Claude so `pg_stat_activity` and slow-query logs cleanly identify triage traffic. It inherits from `readonly_role`, which is where the SELECT-on-public grants live — defined once, applied to whichever users are members.
 
 Source of truth:
+
 - `readonly_role` — defined in `packages/postgres/migrations/1751981407344_setup-grafana-db-user.js` (`CONNECT` on `boxel` / `USAGE` on `public` / `SELECT` on all current tables, plus default privileges so future tables inherit). The filename is historical; the role itself is general.
 - `claude_readonly_user` — defined in `packages/postgres/migrations/1777413435523_setup-claude-readonly-db-user.js`, granted `readonly_role`. Both migrations gate on `REALM_SENTRY_ENVIRONMENT in (staging, production)`, so they only run in deployed environments.
 
@@ -258,7 +275,7 @@ When constructing a query, the cheapest sanity check is: does the SQL begin with
 
 ### What's actually in the database
 
-The `indexing-diagnostics` skill is the right entry point for `boxel_index` / `boxel_index_working` / `error_doc` exploration — it documents the schema, the `timing_diagnostics` JSONB shape, and the canonical query patterns. This skill only covers *getting connected*; the queries themselves live there.
+The `indexing-diagnostics` skill is the right entry point for `boxel_index` / `boxel_index_working` / `error_doc` exploration — it documents the schema, the `diagnostics` JSONB shape, and the canonical query patterns. This skill only covers _getting connected_; the queries themselves live there.
 
 ## Browsing the EFS filesystem (read-only)
 
@@ -335,7 +352,7 @@ kill $TUNNEL_PID
 ### When this is useful
 
 - Confirming a `.gts` or `.json` file actually exists at a particular path before chasing why indexing skipped it.
-- Looking at `index.json` / `cards-grid.json` for a realm.
+- Reading a realm's `index.json` to see which card its root adopts — `Workspace` when it adopts the default index card, `CardsGrid` (or its `IndexCard` alias) when it adopts that card, or something bespoke.
 - Verifying file mtimes / sizes for a realm where the user reports "X is missing".
 - Cross-referencing what the indexer saw against what actually landed on disk.
 
@@ -351,12 +368,12 @@ CloudWatch read access is part of the `boxel-claude-readonly` role's policy, so 
 
 The boxel deployed services all log to CloudWatch under predictable group names:
 
-| Group (staging) | Group (prod, verify with `describe-log-groups`) | What lives there |
-|---|---|---|
-| `ecs-boxel-realm-server-staging` | `ecs-boxel-realm-server-production` | Realm-server requests, indexer drive lines, prerender-client (manager) calls. The main place to grep `requestId=…`. |
-| `ecs-boxel-prerender-server-staging` | `ecs-boxel-prerender-server-production` | Prerender-server endpoint logs (per-render breakdown), the periodic `prerender-queue-snapshot` line, page-pool warnings. |
-| `ecs-boxel-prerender-manager-staging` | `ecs-boxel-prerender-manager-production` | Manager proxy decisions (queueMs, target assignment). |
-| `ecs-boxel-worker-staging` | `ecs-boxel-worker-production` | Background worker / job queue (the realm-server itself runs the worker manager — there is no separate worker-manager log group). |
+| Group (staging)                       | Group (prod, verify with `describe-log-groups`) | What lives there                                                                                                                 |
+| ------------------------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `ecs-boxel-realm-server-staging`      | `ecs-boxel-realm-server-production`             | Realm-server requests, indexer drive lines, prerender-client (manager) calls. The main place to grep `requestId=…`.              |
+| `ecs-boxel-prerender-server-staging`  | `ecs-boxel-prerender-server-production`         | Prerender-server endpoint logs (per-render breakdown), the periodic `prerender-queue-snapshot` line, page-pool warnings.         |
+| `ecs-boxel-prerender-manager-staging` | `ecs-boxel-prerender-manager-production`        | Manager proxy decisions (queueMs, target assignment).                                                                            |
+| `ecs-boxel-worker-staging`            | `ecs-boxel-worker-production`                   | Background worker / job queue (the realm-server itself runs the worker manager — there is no separate worker-manager log group). |
 
 Cross-component grep is the bread-and-butter pattern: every request carries `requestId=<uuid>` through realm-server → manager → prerender-server, so a single `requestId` filter will collate the whole call.
 
@@ -412,7 +429,7 @@ For long-running tails or when you want to know which log stream / task each eve
 
 ### Timezones — confirm, convert to UTC yourself, then run
 
-CloudWatch stores all event timestamps in UTC, and `cw` defaults to UTC for `--start` / `--end` unless you pass `-l` / `--local`. The host running `cw` is **not** necessarily in the user's timezone (Claude often runs on Linux boxes set to UTC), so `-l` is unsafe — it interprets times in the *cw host's* local zone, not the user's.
+CloudWatch stores all event timestamps in UTC, and `cw` defaults to UTC for `--start` / `--end` unless you pass `-l` / `--local`. The host running `cw` is **not** necessarily in the user's timezone (Claude often runs on Linux boxes set to UTC), so `-l` is unsafe — it interprets times in the _cw host's_ local zone, not the user's.
 
 Workflow when a user asks for a time-bounded slice:
 
@@ -447,6 +464,70 @@ aws --profile claude-staging logs filter-log-events \
 ```
 
 This is fine for one-off investigations. For anything iterative — tailing during a repro, comparing log groups, narrowing a filter — `cw` pays for itself within minutes.
+
+## Tailing Loki logs (`tail-logs.sh`) — usually sharper than CloudWatch
+
+The boxel services dual-ship logs to Loki behind the Grafana ALB. `packages/observability/scripts/tail-logs.sh` (documented by the `tail-logs` skill) is generally the better staging/prod tool than CloudWatch: it speaks LogQL, so real line-regex is available (`|~ '--> .*/base/.*: 5[0-9]{2}'`), and it collates by `service` / `realm` / `worker_id` labels.
+
+The role can read the two SSM parameters the script authenticates with — `/<env>/loki/auth_token` (SecureString, decrypted via the `aws/ssm` key) and `/<env>/loki/public_url` — so it runs directly as `boxel-claude-readonly`. The script reads credentials from the ambient AWS environment (it has no `--profile` flag), so pass the profile via `AWS_PROFILE`:
+
+```sh
+AWS_PROFILE=claude-staging \
+  packages/observability/scripts/tail-logs.sh \
+  --env staging --service realm-server --since 15m --no-follow
+```
+
+For production the profile is `claude-prod` but the script's env value is the full word `production` (and it needs `--confirm`) — the two names don't match, which is an easy invocation slip:
+
+```sh
+AWS_PROFILE=claude-prod \
+  packages/observability/scripts/tail-logs.sh \
+  --env production --service realm-server --since 15m --no-follow --confirm
+```
+
+Everything else — flags, label filters, retention caveats — is in the `tail-logs` skill.
+
+## Reading ALB access logs (per-request path attribution)
+
+CloudWatch ELB metrics aggregate by target group, so they can't tell you _which URL path_ a 5xx or latency spike is landing on. The realm-server ALB's **access logs** are the only per-request record of path + status. They're delivered to `boxel-alb-access-logs-<env>` and the role has read access.
+
+The account ID in the S3 key is the role's own account, so derive it rather than hardcoding it; region is `us-east-1`.
+
+```sh
+acct=$(aws --profile claude-staging sts get-caller-identity --query Account --output text)
+
+# What days/hours have logs?
+aws --profile claude-staging s3 ls \
+  "s3://boxel-alb-access-logs-staging/AWSLogs/$acct/elasticloadbalancing/us-east-1/"
+
+# Pull one day and count 5xx by URL path — "are the 502s only on /base/*?"
+day=$(date -u +%Y/%m/%d)   # or an explicit YYYY/MM/DD (UTC)
+aws --profile claude-staging s3 cp \
+  "s3://boxel-alb-access-logs-staging/AWSLogs/$acct/elasticloadbalancing/us-east-1/$day/" \
+  ./alb-logs/ --recursive
+
+# ALB logs are gzip'd and space-delimited. Field 9 is the ELB status code (what
+# the ALB returned to the client — 502 = it got no valid response from the
+# target); the quoted "request" field is "METHOD https://host:port/path?q HTTP/x".
+# Decompress before parsing.
+zcat ./alb-logs/*.log.gz \
+  | awk -F'"' '{ split($1, m, " "); if (m[9] ~ /^5/) { split($2, r, " "); print r[2] } }' \
+  | sed -E 's#https?://[^/]+##; s#\?.*##' \
+  | sort | uniq -c | sort -rn | head -20
+```
+
+Field 10 is the _target_ status code (what the app returned), useful for separating "ALB never reached the target" (502 at the ALB, empty/`-` target code) from "the app itself 5xx'd".
+
+**Athena:** no Athena table is provisioned over this bucket, so the S3 + `zcat`/`awk` path above is it. If per-path queries become routine, standing up an Athena table over the bucket (and extending the role with `athena:StartQueryExecution` + `athena:GetQueryResults` + read on the results bucket) is the natural next step.
+
+**ALB config introspection.** The role also has read-only `elasticloadbalancing:Describe*`, so ALB behavior can be audited directly — e.g. confirm access logging is on, or read timeouts / deregistration delay:
+
+```sh
+LB_ARN=$(aws --profile claude-staging elbv2 describe-load-balancers \
+  --names boxel-realm-server-staging --query 'LoadBalancers[0].LoadBalancerArn' --output text)
+aws --profile claude-staging elbv2 describe-load-balancer-attributes \
+  --load-balancer-arn "$LB_ARN" --output table
+```
 
 ## Future skill / scripting room
 

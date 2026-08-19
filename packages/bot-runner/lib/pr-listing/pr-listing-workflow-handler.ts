@@ -4,17 +4,16 @@ import {
   type RunCommandResponse,
 } from '@cardstack/runtime-common';
 import { isBinaryFilename } from '@cardstack/runtime-common/infer-content-type';
-import {
-  runLintOnSubmissionFiles,
-  type LintOutcome,
-  type SubmissionFile,
-} from '@cardstack/runtime-common/lint/submission-lint';
+import type { LintOutcome, SubmissionFile } from './lint-submission-files.ts';
 import {
   CreateListingPRHandler,
   type BotTriggerEventContent,
-} from './create-listing-pr-handler';
-import type { BotCommandHandler, EnqueueRunCommandFn } from '../command-runner';
-import type { GitHubClient } from '../github';
+} from './create-listing-pr-handler.ts';
+import type {
+  BotCommandHandler,
+  EnqueueRunCommandFn,
+} from '../command-runner.ts';
+import type { GitHubClient } from '../github.ts';
 
 export type LintSubmissionFilesFn = (
   files: SubmissionFile[],
@@ -36,11 +35,12 @@ const PR_LISTING_CREATE = 'pr-listing-create';
 const PR_LISTING_RETRY = 'pr-listing-retry';
 
 type FailedStep = 'collect-files' | 'lint' | 'create-pr-card' | 'github-pr';
-type FileContent = { filename: string; contents: string };
+type FileContent = { filename: string; contents: string; isBinary?: boolean };
 
 interface PrCardData {
   prCardResult: RunCommandResponse;
   prCardUrl: string | null;
+  textFiles: FileContent[];
   binaryFiles: FileContent[];
 }
 
@@ -59,14 +59,15 @@ interface WorkflowContext {
   // hands it a synthesized event with that shape.
   syntheticCreateEvent: BotTriggerEventContent;
   existingPrCardUrl: string | null;
+  isRetry: boolean;
 }
 
 class StepError extends Error {
-  constructor(
-    readonly step: FailedStep,
-    cause: unknown,
-  ) {
+  readonly step: FailedStep;
+
+  constructor(step: FailedStep, cause: unknown) {
     super(cause instanceof Error ? cause.message : String(cause), { cause });
+    this.step = step;
     this.name = 'StepError';
   }
 }
@@ -75,7 +76,7 @@ export interface PrListingWorkflowHandlerDeps {
   submissionBotUserId: string;
   enqueueRunCommand: EnqueueRunCommandFn;
   githubClient: GitHubClient;
-  lintSubmissionFiles?: LintSubmissionFilesFn;
+  lintSubmissionFiles: LintSubmissionFilesFn;
 }
 
 // Inline orchestrator for the listing-PR workflow. Workaround until
@@ -91,8 +92,7 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
     this.submissionBotUserId = deps.submissionBotUserId;
     this.enqueueRunCommand = deps.enqueueRunCommand;
     this.createListingPRHandler = new CreateListingPRHandler(deps.githubClient);
-    this.lintSubmissionFiles =
-      deps.lintSubmissionFiles ?? runLintOnSubmissionFiles;
+    this.lintSubmissionFiles = deps.lintSubmissionFiles;
   }
 
   matches(eventContent: BotTriggerEventContent): boolean {
@@ -162,6 +162,7 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
         input: { ...(input as Record<string, unknown>), branchName },
       },
       existingPrCardUrl: null,
+      isRetry: false,
     };
   }
 
@@ -238,6 +239,7 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
         },
       },
       existingPrCardUrl,
+      isRetry: true,
     };
   }
 
@@ -245,9 +247,10 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
 
   private async runWorkflow(ctx: WorkflowContext): Promise<RunCommandResponse> {
     try {
-      let prCardData = ctx.existingPrCardUrl
-        ? await runStep('create-pr-card', () => this.loadExistingPrCard(ctx))
-        : await this.runFreshPrCardFlow(ctx);
+      if (ctx.isRetry) {
+        await this.clearStaleWorkflowError(ctx);
+      }
+      let prCardData = await this.runFreshPrCardFlow(ctx);
 
       await runStep('github-pr', () => this.pushToGitHub(ctx, prCardData));
       await runStep('github-pr', () =>
@@ -266,14 +269,16 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
       'collect-files',
       () => this.collectFiles(ctx),
     );
-    await runStep('lint', () => this.applyLintSkip(ctx, totalCount));
+    let lintedFiles = await runStep('lint', () =>
+      this.applyLint(ctx, textFiles),
+    );
     let { prCardResult, prCardUrl } = await runStep('create-pr-card', () =>
-      this.createPrCard(ctx, textFiles, totalCount),
+      this.createPrCard(ctx, lintedFiles, binaryFiles, totalCount),
     );
     await runStep('create-pr-card', () =>
       this.linkPrCardOnWorkflow(ctx, prCardUrl),
     );
-    return { prCardResult, prCardUrl, binaryFiles };
+    return { prCardResult, prCardUrl, textFiles: lintedFiles, binaryFiles };
   }
 
   // ── Steps ──
@@ -298,11 +303,15 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
     });
     requireReady(result, 'collect-submission-files');
 
-    // Binary files bypass the PrCard 512KB size limit; they're committed to
-    // GitHub directly via addContentsToCommit's binaryFiles arg.
+    // Binaries skip lint and are committed to GitHub as base64 blobs. The
+    // collector's isBinary flag says how each file was actually read — a
+    // text-extension FileDef (e.g. a generated .js) still carries base64;
+    // the extension check is only a fallback for pre-flag collect results.
     let allFiles = extractFileContents(result.cardResultString);
-    let binaryFiles = allFiles.filter((f) => isBinaryFilename(f.filename));
-    let textFiles = allFiles.filter((f) => !isBinaryFilename(f.filename));
+    let isBinaryFile = (f: FileContent) =>
+      f.isBinary ?? isBinaryFilename(f.filename);
+    let binaryFiles = allFiles.filter((f) => isBinaryFile(f));
+    let textFiles = allFiles.filter((f) => !isBinaryFile(f));
     log.info('pr-listing-create: files collected', {
       fileCount: allFiles.length,
       binaryCount: binaryFiles.length,
@@ -310,28 +319,82 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
     return { textFiles, binaryFiles, totalCount: allFiles.length };
   }
 
-  private async applyLintSkip(
+  // Lint runs as `lint-source` worker jobs; unfixable errors block the PR.
+  // Returns the (possibly autofixed) files that should land on the PrCard.
+  private async applyLint(
     ctx: WorkflowContext,
-    fileCount: number,
-  ): Promise<void> {
-    // TEMP: lint step skipped while we investigate OOM in staging/prod.
-    // To restore, replace this method body with the original lint logic
-    // (preserved in git history at commit 2a94b3538d).
-    log.info('pr-listing-create: lint skipped (temporary)', { fileCount });
-    void this.lintSubmissionFiles;
-    if (ctx.workflowCardUrl) {
-      await this.patchWorkflowCard(ctx, {
-        attributes: { lintStatus: 'passed', lintFixedCount: 0 },
+    textFiles: FileContent[],
+  ): Promise<FileContent[]> {
+    // Drop any prior run's findings as this one starts: every terminal state
+    // below writes the findings it produced, so leftovers would contradict it.
+    await this.patchWorkflowCard(ctx, {
+      attributes: { lintStatus: 'in-progress', lintErrors: [] },
+    });
+    log.info('pr-listing-create: linting files', {
+      fileCount: textFiles.length,
+    });
+
+    let outcome: LintOutcome;
+    try {
+      outcome = await this.lintSubmissionFiles(textFiles, {
+        roomId: ctx.roomId,
+        listingId: ctx.listingId,
       });
+    } catch (lintError: any) {
+      let message = lintError?.message ?? 'lint runner crashed';
+      log.error('pr-listing-create: lint runner crashed', { error: message });
+      await this.patchWorkflowCard(ctx, {
+        attributes: { lintStatus: 'failed', lintErrors: [message] },
+      });
+      throw new Error(message, { cause: lintError });
     }
+
+    if (!outcome.passed) {
+      log.error('pr-listing-create: lint found unfixable errors', {
+        errorCount: outcome.lintErrors.length,
+      });
+      await this.patchWorkflowCard(ctx, {
+        attributes: { lintStatus: 'failed', lintErrors: outcome.lintErrors },
+      });
+      // The individual errors are already persisted in lintErrors above;
+      // keep the thrown message short so prCreationError doesn't repeat them.
+      throw new Error(
+        `Lint failed with ${outcome.lintErrors.length} unfixable error(s)`,
+      );
+    }
+
+    log.info('pr-listing-create: lint passed', {
+      fixedFileCount: outcome.fixedFileCount,
+    });
+    await this.patchWorkflowCard(ctx, {
+      attributes: {
+        lintStatus: 'passed',
+        lintErrors: [],
+        lintFixedCount: outcome.fixedFileCount,
+      },
+    });
+    return outcome.fixedFileCount > 0 ? outcome.fixedFiles : textFiles;
   }
 
   private async createPrCard(
     ctx: WorkflowContext,
     textFiles: FileContent[],
+    binaryFiles: FileContent[],
     totalFileCount: number,
   ): Promise<{ prCardResult: RunCommandResponse; prCardUrl: string | null }> {
+    // Retry reuses the PrCard linked by the prior attempt; the files pushed
+    // to GitHub always come from this run's fresh collection.
+    if (ctx.existingPrCardUrl) {
+      log.info('pr-listing-retry: reusing existing PrCard', {
+        existingPrCardUrl: ctx.existingPrCardUrl,
+      });
+      return {
+        prCardResult: { status: 'ready', cardResultString: null },
+        prCardUrl: ctx.existingPrCardUrl,
+      };
+    }
     let prSummary = buildPrSummary(ctx, totalFileCount);
+    let fileManifest = buildFileManifest(textFiles, binaryFiles);
     let prCardResult = await this.enqueueRunCommand({
       runAs: this.submissionBotUserId,
       realmURL: ctx.submissionRealm,
@@ -341,7 +404,7 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
         branchName: ctx.branchName,
         submittedBy: ctx.runAs,
         prSummary,
-        allFileContents: textFiles,
+        fileManifest,
       },
     });
     if (prCardResult.status !== 'ready') {
@@ -354,7 +417,7 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
         error: prCardResult.error,
         cardResultString: prCardResult.cardResultString ?? null,
         fileCount: textFiles.length,
-        inputPayloadSize: JSON.stringify(textFiles).length,
+        inputPayloadSize: JSON.stringify(fileManifest).length,
       });
       throw new Error(
         prCardResult.error?.trim() ||
@@ -366,41 +429,6 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
     return { prCardResult, prCardUrl };
   }
 
-  private async loadExistingPrCard(ctx: WorkflowContext): Promise<PrCardData> {
-    log.info('pr-listing-retry: reusing existing PrCard', {
-      existingPrCardUrl: ctx.existingPrCardUrl,
-    });
-    let result = await this.enqueueRunCommand({
-      runAs: this.submissionBotUserId,
-      realmURL: ctx.submissionRealm,
-      command: FETCH_CARD_JSON_COMMAND,
-      commandInput: { url: ctx.existingPrCardUrl },
-    });
-    requireReady(result, 'fetch-card-json (existing PrCard)');
-
-    let prCardDoc = extractFetchedDocument(result.cardResultString);
-    let allFileContents = extractFileContents(
-      prCardDoc ? JSON.stringify(prCardDoc) : null,
-    );
-    if (!prCardDoc || allFileContents.length === 0) {
-      throw new Error(
-        `existing PrCard at ${ctx.existingPrCardUrl} has no allFileContents — refusing to open an empty PR`,
-      );
-    }
-    let prCardResult: RunCommandResponse = {
-      ...result,
-      cardResultString: JSON.stringify(prCardDoc),
-    };
-    // Binary files aren't stored on the PrCard; addContentsToCommit dedupes
-    // by content-hash so re-running with empty binaries is safe when the
-    // prior attempt already committed them.
-    return {
-      prCardResult,
-      prCardUrl: ctx.existingPrCardUrl,
-      binaryFiles: [],
-    };
-  }
-
   private async pushToGitHub(
     ctx: WorkflowContext,
     prCardData: PrCardData,
@@ -410,7 +438,10 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
     );
     await this.createListingPRHandler.addContentsToCommit(
       ctx.syntheticCreateEvent,
-      prCardData.prCardResult,
+      prCardData.textFiles.map((f) => ({
+        path: f.filename,
+        content: f.contents,
+      })),
       prCardData.binaryFiles.map((f) => ({
         path: f.filename,
         content: f.contents,
@@ -419,7 +450,7 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
     let prResult = await this.createListingPRHandler.openCreateListingPR(
       ctx.syntheticCreateEvent,
       ctx.runAs,
-      prCardData.prCardResult,
+      prCardData.textFiles.length + prCardData.binaryFiles.length,
       ctx.workflowCardUrl,
     );
     log.info('pr-listing-create: PR created', {
@@ -438,6 +469,21 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
         prCard: { links: { self: prCardUrl } },
       },
     });
+  }
+
+  // Retry reuses a card still carrying the previous attempt's failure; clear
+  // it up front so an active attempt doesn't display a stale error. Cosmetic
+  // only — a patch failure must not abort the retry.
+  private async clearStaleWorkflowError(ctx: WorkflowContext): Promise<void> {
+    try {
+      await this.patchWorkflowCard(ctx, {
+        attributes: { prCreationError: null, failedStep: null },
+      });
+    } catch (patchError: any) {
+      log.warn('pr-listing-retry: failed to clear stale workflow error', {
+        patchError: patchError?.message ?? patchError,
+      });
+    }
   }
 
   private async clearWorkflowError(
@@ -545,7 +591,7 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
       runAs: opts.runAs,
       realmURL: opts.realmURL,
       command: FETCH_CARD_JSON_COMMAND,
-      commandInput: { url: opts.cardId },
+      commandInput: { cardIdentifier: opts.cardId },
     });
     requireReady(result, 'fetch-card-json');
     return extractFetchedDocument(result.cardResultString);
@@ -637,6 +683,31 @@ function extractFetchedDocument(cardResultString?: string | null): any | null {
   }
 }
 
+function buildFileManifest(
+  textFiles: FileContent[],
+  binaryFiles: FileContent[],
+): { filename: string; size: number; kind: 'text' | 'binary' }[] {
+  return [
+    ...textFiles.map((f) => ({
+      filename: f.filename,
+      size: Buffer.byteLength(f.contents, 'utf8'),
+      kind: 'text' as const,
+    })),
+    ...binaryFiles.map((f) => ({
+      filename: f.filename,
+      size: base64DecodedLength(f.contents),
+      kind: 'binary' as const,
+    })),
+  ];
+}
+
+function base64DecodedLength(base64: string): number {
+  let length = base64.length;
+  if (length === 0) return 0;
+  let padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0;
+  return Math.floor((length * 3) / 4) - padding;
+}
+
 function extractFileContents(cardResultString?: string | null): FileContent[] {
   if (!cardResultString || !cardResultString.trim()) {
     return [];
@@ -647,12 +718,20 @@ function extractFileContents(cardResultString?: string | null): FileContent[] {
     if (!Array.isArray(items)) {
       return [];
     }
-    return items.filter(
-      (item: any) =>
-        item &&
-        typeof item.filename === 'string' &&
-        typeof item.contents === 'string',
-    );
+    return items
+      .filter(
+        (item: any) =>
+          item &&
+          typeof item.filename === 'string' &&
+          typeof item.contents === 'string',
+      )
+      .map((item: any) => ({
+        filename: item.filename,
+        contents: item.contents,
+        ...(typeof item.isBinary === 'boolean'
+          ? { isBinary: item.isBinary }
+          : {}),
+      }));
   } catch {
     return [];
   }

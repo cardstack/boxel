@@ -1,14 +1,14 @@
-import EmailField from 'https://cardstack.com/base/email';
-import PercentageField from 'https://cardstack.com/base/percentage';
-import WebsiteField from 'https://cardstack.com/base/website';
-import RealmField from 'https://cardstack.com/base/realm';
-import ColorField from 'https://cardstack.com/base/color';
-import UrlField from 'https://cardstack.com/base/url';
-import PhoneNumberField from 'https://cardstack.com/base/phone-number';
-import AddressField from 'https://cardstack.com/base/address';
-import CountryField from 'https://cardstack.com/base/country';
-import DateRangeField from 'https://cardstack.com/base/date-range-field';
-import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
+import EmailField from '@cardstack/base/email';
+import PercentageField from '@cardstack/base/percentage';
+import WebsiteField from '@cardstack/base/website';
+import RealmField from '@cardstack/base/realm';
+import ColorField from '@cardstack/base/color';
+import UrlField from '@cardstack/base/url';
+import PhoneNumberField from '@cardstack/base/phone-number';
+import AddressField from '@cardstack/base/address';
+import CountryField from '@cardstack/base/country';
+import DateRangeField from '@cardstack/base/date-range-field';
+import { CardDef, field, contains } from '@cardstack/base/card-api';
 
 export class DemoFields extends CardDef {
   static displayName = 'Demo Fields';

@@ -1,6 +1,10 @@
 {
   "cSpell.words": ["boxel"],
   "editor.formatOnSave": true,
+  "files.associations": {
+    "*.gts": "glimmer-ts",
+    "*.gjs": "glimmer-js"
+  },
   "[glimmer-js]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode",
     "editor.formatOnSave": true

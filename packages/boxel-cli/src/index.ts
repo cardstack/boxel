@@ -1,11 +1,11 @@
 import 'dotenv/config';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { buildBoxelProgram } from './build-program';
-import { setQuiet } from './lib/cli-log';
+import { buildBoxelProgram } from './build-program.ts';
+import { setQuiet } from './lib/cli-log.ts';
 
 const pkg = JSON.parse(
-  readFileSync(resolve(__dirname, '../package.json'), 'utf-8'),
+  readFileSync(resolve(import.meta.dirname, '../package.json'), 'utf-8'),
 );
 
 // `--quiet` is implemented by intercepting `console.log/info/debug`.

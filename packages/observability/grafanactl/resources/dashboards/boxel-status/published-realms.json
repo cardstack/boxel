@@ -1,0 +1,1279 @@
+{
+  "apiVersion": "dashboard.grafana.app/v1beta1",
+  "kind": "Dashboard",
+  "metadata": {
+    "annotations": {
+      "grafana.app/folder": "defd2d156sav4d"
+    },
+    "name": "boxelpubrealms01"
+  },
+  "spec": {
+    "annotations": {
+      "list": [
+        {
+          "builtIn": 1,
+          "datasource": {
+            "type": "grafana",
+            "uid": "-- Grafana --"
+          },
+          "enable": true,
+          "hide": true,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "name": "Annotations & Alerts",
+          "type": "dashboard"
+        }
+      ]
+    },
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 0,
+    "links": [
+      {
+        "asDropdown": false,
+        "icon": "external link",
+        "includeVars": false,
+        "keepTime": true,
+        "tags": [
+          "entity:realm"
+        ],
+        "title": "Realms",
+        "type": "dashboards"
+      },
+      {
+        "asDropdown": false,
+        "icon": "external link",
+        "includeVars": true,
+        "keepTime": true,
+        "tags": [
+          "forensics"
+        ],
+        "title": "Logs",
+        "type": "dashboards"
+      }
+    ],
+    "panels": [
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Resolve a published realm to its origin. Pick a published realm from the **Published realm** dropdown, or paste any published realm URL into the **Manual URL** box (the manual value wins when non-empty). `origin_realm` is `realm_registry.source_url` for this published row — click it to open the Realms dashboard scoped to the source realm.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "align": "left",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "filterable": true,
+              "inspect": false,
+              "minWidth": 150
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "published_realm"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Published Realm"
+                },
+                {
+                  "id": "custom.minWidth",
+                  "value": 320
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "origin_realm"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Origin Realm"
+                },
+                {
+                  "id": "custom.minWidth",
+                  "value": 320
+                },
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "title": "Open source realm in Realms dashboard",
+                      "targetBlank": true,
+                      "url": "/d/boxelrealms001?var-realm_url=${__data.fields.origin_realm:queryparam}&orgId=1"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "owner"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Owner"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "last_published"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Last Published"
+                },
+                {
+                  "id": "unit",
+                  "value": "dateTimeAsIso"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "pinned"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Pinned"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "disk_id"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Disk ID"
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 5,
+          "w": 24,
+          "x": 0,
+          "y": 0
+        },
+        "id": 1,
+        "options": {
+          "cellHeight": "sm",
+          "footer": {
+            "countRows": false,
+            "fields": "",
+            "reducer": [
+              "sum"
+            ],
+            "show": false
+          },
+          "showHeader": true
+        },
+        "pluginVersion": "10.4.1",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT\n  url AS published_realm,\n  source_url AS origin_realm,\n  owner_username AS owner,\n  to_timestamp(last_published_at / 1000.0) AS last_published,\n  pinned,\n  disk_id\nFROM realm_registry\nWHERE kind = 'published'\n  AND url = (RTRIM(TRIM(COALESCE(NULLIF(${realm_manual:sqlstring}, ''), ${realm_picker:sqlstring})), '/') || '/');",
+            "refId": "A"
+          }
+        ],
+        "title": "Origin lookup (published → source)",
+        "type": "table"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Card instance entries in boxel_index for this published realm (type='instance').",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "blue"
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 0,
+          "y": 5
+        },
+        "id": 2,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "horizontal",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT COUNT(*) AS cards FROM boxel_index WHERE realm_url = (RTRIM(TRIM(COALESCE(NULLIF(${realm_manual:sqlstring}, ''), ${realm_picker:sqlstring})), '/') || '/') AND type = 'instance' AND is_deleted IS NOT TRUE;",
+            "refId": "A"
+          }
+        ],
+        "title": "Cards",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Module entries in boxel_index for this published realm (type='module').",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "blue"
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 6,
+          "y": 5
+        },
+        "id": 3,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "horizontal",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT COUNT(*) AS modules FROM boxel_index WHERE realm_url = (RTRIM(TRIM(COALESCE(NULLIF(${realm_manual:sqlstring}, ''), ${realm_picker:sqlstring})), '/') || '/') AND type = 'module' AND is_deleted IS NOT TRUE;",
+            "refId": "A"
+          }
+        ],
+        "title": "Modules",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Non-card non-module entries in boxel_index for this published realm (type='file').",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "blue"
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 12,
+          "y": 5
+        },
+        "id": 4,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "horizontal",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT COUNT(*) AS files FROM boxel_index WHERE realm_url = (RTRIM(TRIM(COALESCE(NULLIF(${realm_manual:sqlstring}, ''), ${realm_picker:sqlstring})), '/') || '/') AND type = 'file' AND is_deleted IS NOT TRUE;",
+            "refId": "A"
+          }
+        ],
+        "title": "Files",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Error entries in boxel_index for this published realm (type='error'). Each row is a file/module that failed to index in the published snapshot.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "red",
+                  "value": 1
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 18,
+          "y": 5
+        },
+        "id": 5,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "horizontal",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT COUNT(*) AS errors FROM boxel_index WHERE realm_url = (RTRIM(TRIM(COALESCE(NULLIF(${realm_manual:sqlstring}, ''), ${realm_picker:sqlstring})), '/') || '/') AND type = 'error' AND is_deleted IS NOT TRUE;",
+            "refId": "A"
+          }
+        ],
+        "title": "Errors",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Metadata for this published realm from realm_metadata plus the unlisted-link slug (if any) allocated to its source realm. `publishable=false` is the expected state for a published snapshot. `unlisted_slug` is the server-issued path segment from unlisted_realm_paths keyed by the source realm URL.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "align": "left",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "filterable": true,
+              "inspect": false,
+              "minWidth": 150
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "publishable"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Publishable"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "show_as_catalog"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Show As Catalog"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "unlisted_slug"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Unlisted Slug"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "unlisted_source"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Unlisted Source Realm"
+                },
+                {
+                  "id": "custom.minWidth",
+                  "value": 320
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 6,
+          "w": 12,
+          "x": 0,
+          "y": 9
+        },
+        "id": 6,
+        "options": {
+          "cellHeight": "sm",
+          "footer": {
+            "countRows": false,
+            "fields": "",
+            "reducer": [
+              "sum"
+            ],
+            "show": false
+          },
+          "showHeader": true
+        },
+        "pluginVersion": "10.4.1",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT\n  rm.publishable,\n  rm.show_as_catalog,\n  up.slug AS unlisted_slug,\n  up.source_realm_url AS unlisted_source\nFROM realm_registry rr\nLEFT JOIN realm_metadata rm ON rm.url = rr.url\nLEFT JOIN unlisted_realm_paths up ON up.source_realm_url = rr.source_url\nWHERE rr.kind = 'published'\n  AND rr.url = (RTRIM(TRIM(COALESCE(NULLIF(${realm_manual:sqlstring}, ''), ${realm_picker:sqlstring})), '/') || '/');",
+            "refId": "A"
+          }
+        ],
+        "title": "Metadata & unlisted slug",
+        "type": "table"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Every published snapshot that shares the same source realm as the one selected above (`realm_registry.source_url` match). Useful for spotting duplicate or stale publish targets for one source realm.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "align": "left",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "filterable": true,
+              "inspect": false,
+              "minWidth": 150
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "published_realm"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Published Realm"
+                },
+                {
+                  "id": "custom.minWidth",
+                  "value": 320
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "last_published"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Last Published"
+                },
+                {
+                  "id": "unit",
+                  "value": "dateTimeAsIso"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "pinned"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Pinned"
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 6,
+          "w": 12,
+          "x": 12,
+          "y": 9
+        },
+        "id": 7,
+        "options": {
+          "cellHeight": "sm",
+          "footer": {
+            "countRows": false,
+            "fields": "",
+            "reducer": [
+              "sum"
+            ],
+            "show": false
+          },
+          "showHeader": true,
+          "sortBy": [
+            {
+              "desc": true,
+              "displayName": "Last Published"
+            }
+          ]
+        },
+        "pluginVersion": "10.4.1",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT\n  p2.url AS published_realm,\n  to_timestamp(p2.last_published_at / 1000.0) AS last_published,\n  p2.pinned\nFROM realm_registry p1\nJOIN realm_registry p2\n  ON p2.source_url = p1.source_url\n AND p2.kind = 'published'\nWHERE p1.kind = 'published'\n  AND p1.url = (RTRIM(TRIM(COALESCE(NULLIF(${realm_manual:sqlstring}, ''), ${realm_picker:sqlstring})), '/') || '/')\nORDER BY p2.last_published_at DESC NULLS LAST\nLIMIT 200;",
+            "refId": "A"
+          }
+        ],
+        "title": "Other snapshots of this source realm",
+        "type": "table"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Operator action: grant a permission level on the **selected published realm** (dropdown or Manual URL box) to a Matrix user. To add access for yourself, type your own Matrix ID (e.g. `@you:matrix.host`) or pick it from the list. Note: publishing already grants public read (`*` → read), so you typically only need this to give yourself read/write. POSTs to the realm-server with `Authorization: Bearer ${grafana_secret}` (token substituted from SSM at apply time), same mechanism as the Realms dashboard Grant Permission panel.",
+        "fieldConfig": {
+          "defaults": {},
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 15
+        },
+        "id": 8,
+        "options": {
+          "buttonGroup": {
+            "orientation": "center",
+            "size": "md"
+          },
+          "confirmModal": {
+            "body": "Please confirm the action.",
+            "cancel": "Cancel",
+            "columns": {
+              "include": [
+                "name",
+                "newValue"
+              ],
+              "name": "Field",
+              "newValue": "Value",
+              "oldValue": "Previous"
+            },
+            "confirm": "Confirm",
+            "elementDisplayMode": "modified",
+            "title": "Confirm operator action"
+          },
+          "elements": [
+            {
+              "id": "matrix_username",
+              "type": "select",
+              "title": "Matrix username",
+              "tooltip": "Pick from existing users or type a new Matrix user ID like @user:matrix.host. Type your own to grant yourself access.",
+              "labelWidth": 28,
+              "section": "input",
+              "value": "",
+              "options": [],
+              "optionsSource": "Query",
+              "queryOptions": {
+                "source": "B",
+                "value": "matrix_user_id",
+                "label": "matrix_user_id"
+              },
+              "allowCustomValue": true
+            },
+            {
+              "id": "permission",
+              "type": "radio",
+              "title": "Permission level",
+              "tooltip": "Read = read-only; Read/Write = read and write.",
+              "labelWidth": 28,
+              "section": "input",
+              "value": "read",
+              "optionsSource": "Custom",
+              "options": [
+                {
+                  "id": "read",
+                  "label": "Read",
+                  "type": "string",
+                  "value": "read"
+                },
+                {
+                  "id": "read_write",
+                  "label": "Read/Write",
+                  "type": "string",
+                  "value": "read_write"
+                }
+              ]
+            },
+            {
+              "id": "btn_grant",
+              "type": "button",
+              "title": "",
+              "buttonLabel": "Grant on selected published realm",
+              "tooltip": "POST /_grafana-upsert-realm-user-permission?realm=...&user=...&read=...&write=...",
+              "labelWidth": 28,
+              "section": "actions",
+              "show": "form",
+              "size": "md",
+              "variant": "primary",
+              "value": "",
+              "customCode": "const manual = ${realm_manual:doublequote};\nconst picker = ${realm_picker:doublequote};\nconst rawRealm = (manual && String(manual).trim()) ? String(manual).trim() : picker;\nconst realm = rawRealm ? rawRealm.replace(/[/]+$/, '') + '/' : rawRealm;\nconst username = (context.panel.elements.find(function(e){return e.id==='matrix_username';})||{}).value || '';\nconst permission = (context.panel.elements.find(function(e){return e.id==='permission';})||{}).value || 'read';\nconst trimmed = String(username).trim();\nif (!realm) {\n  context.grafana.notifyWarning(['Realm required', 'Pick a published realm from the dropdown or paste a URL into the Manual URL box.']);\n  return;\n}\nif (!trimmed) {\n  context.grafana.notifyWarning(['Username required', 'Pick a Matrix user from the list or type one (e.g. @user:matrix.host).']);\n  return;\n}\nconst read = 'true';\nconst write = permission === 'read_write' ? 'true' : 'false';\nconst label = permission === 'read_write' ? 'read/write' : 'read';\nif (!window.confirm('Grant ' + label + ' to ' + trimmed + ' on ' + realm + '?')) { return; }\n(async () => {\ntry {\n  const url = ${realm_server:doublequote} + '_grafana-upsert-realm-user-permission?realm=' + encodeURIComponent(realm)\n            + '&user=' + encodeURIComponent(trimmed)\n            + '&read=' + read\n            + '&write=' + write;\n  const r = await fetch(url, { method: 'POST', headers: { 'Authorization': 'Bearer ' + ${grafana_secret:doublequote} } });\n  if (r.ok) {\n    context.grafana.notifySuccess(['Permission granted', label + ' granted to ' + trimmed + ' on ' + realm]);\n    if (typeof context.grafana.refresh === 'function') { context.grafana.refresh(); }\n  } else {\n    const txt = await r.text();\n    context.grafana.notifyError(['Grant failed', 'HTTP ' + r.status + ': ' + txt]);\n  }\n} catch (err) {\n  context.grafana.notifyError(['Grant failed', String(err)]);\n}\n\n})();"
+            }
+          ],
+          "initial": {
+            "code": "",
+            "contentType": "application/json",
+            "getPayload": "return {};",
+            "highlight": false,
+            "method": "query",
+            "payload": {}
+          },
+          "layout": {
+            "orientation": "horizontal",
+            "padding": 10,
+            "sectionVariant": "default",
+            "sections": [
+              {
+                "id": "input",
+                "name": "Grant"
+              },
+              {
+                "id": "actions",
+                "name": "Action"
+              }
+            ],
+            "variant": "split"
+          },
+          "reset": {
+            "backgroundColor": "purple",
+            "foregroundColor": "yellow",
+            "icon": "process",
+            "text": "Refresh",
+            "variant": "hidden"
+          },
+          "resetAction": {
+            "code": "",
+            "confirm": false,
+            "contentType": "application/json",
+            "getPayload": "return {};",
+            "method": "-",
+            "mode": "initial",
+            "payload": {}
+          },
+          "saveDefault": {
+            "icon": "save",
+            "text": "Save Default",
+            "variant": "hidden"
+          },
+          "submit": {
+            "backgroundColor": "purple",
+            "foregroundColor": "yellow",
+            "icon": "cloud-upload",
+            "text": "Submit",
+            "variant": "hidden"
+          },
+          "sync": false,
+          "update": {
+            "code": "",
+            "confirm": false,
+            "contentType": "application/json",
+            "getPayload": "return {};",
+            "method": "-",
+            "payload": {},
+            "payloadMode": "all"
+          },
+          "updateEnabled": "disabled"
+        },
+        "pluginVersion": "6.2.0",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT 1 AS noop;",
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT matrix_user_id FROM users ORDER BY matrix_user_id;",
+            "refId": "B"
+          }
+        ],
+        "title": "Grant Permission",
+        "type": "volkovlabs-form-panel"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Permissions currently recorded for this published realm. The `*` row is the public-read sentinel granted at publish time. Set the Matrix Username and Permission Level above, then click Grant Permission to add or change a row.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "align": "left",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "filterable": true,
+              "inspect": false,
+              "minWidth": 150
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "username"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Matrix User"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "permission"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Permission"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "realm_owner"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Realm Owner"
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 23
+        },
+        "id": 9,
+        "options": {
+          "cellHeight": "sm",
+          "footer": {
+            "countRows": false,
+            "fields": "",
+            "reducer": [
+              "sum"
+            ],
+            "show": false
+          },
+          "showHeader": true,
+          "sortBy": [
+            {
+              "desc": true,
+              "displayName": "Realm Owner"
+            }
+          ]
+        },
+        "pluginVersion": "10.4.1",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT \n  username,\n  read,\n  write,\n  realm_owner,\n  CASE\n    WHEN realm_owner THEN 'owner'\n    WHEN write THEN 'read/write'\n    WHEN read THEN 'read'\n    ELSE 'none'\n  END AS permission\nFROM realm_user_permissions\nWHERE realm_url = (RTRIM(TRIM(COALESCE(NULLIF(${realm_manual:sqlstring}, ''), ${realm_picker:sqlstring})), '/') || '/')\nORDER BY realm_owner DESC, write DESC, read DESC, username ASC\nLIMIT 500;",
+            "refId": "A"
+          }
+        ],
+        "title": "Permissions (this published realm)",
+        "type": "table"
+      },
+      {
+        "collapsed": false,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 31
+        },
+        "id": 10,
+        "panels": [],
+        "title": "Per-user published-realm browser",
+        "type": "row"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Published realms the selected Matrix user (**Browse user** variable) can access — via an explicit realm_user_permissions row OR the public-read wildcard (`*`) that publishing grants (handle-publish-realm.ts). The `access` column shows which applies; read/write/owner reflect the explicit row when present, otherwise the wildcard. `origin_realm` links to the source realm in the Realms dashboard.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "align": "left",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "filterable": true,
+              "inspect": false,
+              "minWidth": 150
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "published_realm"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Published Realm"
+                },
+                {
+                  "id": "custom.minWidth",
+                  "value": 320
+                },
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "title": "Inspect this published realm",
+                      "targetBlank": false,
+                      "url": "/d/boxelpubrealms01?var-realm_manual=${__data.fields.published_realm:queryparam}&orgId=1"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "origin_realm"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Origin Realm"
+                },
+                {
+                  "id": "custom.minWidth",
+                  "value": 320
+                },
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "title": "Open source realm in Realms dashboard",
+                      "targetBlank": true,
+                      "url": "/d/boxelrealms001?var-realm_url=${__data.fields.origin_realm:queryparam}&orgId=1"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "realm_owner"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Realm Owner"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "access"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Access"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "last_published"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Last Published"
+                },
+                {
+                  "id": "unit",
+                  "value": "dateTimeAsIso"
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 10,
+          "w": 24,
+          "x": 0,
+          "y": 32
+        },
+        "id": 11,
+        "options": {
+          "cellHeight": "sm",
+          "footer": {
+            "countRows": true,
+            "fields": "",
+            "reducer": [
+              "sum"
+            ],
+            "show": true
+          },
+          "showHeader": true,
+          "sortBy": [
+            {
+              "desc": true,
+              "displayName": "Last Published"
+            }
+          ]
+        },
+        "pluginVersion": "10.4.1",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT\n  rr.url AS published_realm,\n  rr.source_url AS origin_realm,\n  COALESCE(own.read, pub.read) AS read,\n  COALESCE(own.write, pub.write, false) AS write,\n  COALESCE(own.realm_owner, false) AS realm_owner,\n  CASE WHEN own.username IS NOT NULL THEN 'explicit' ELSE 'public (*)' END AS access,\n  to_timestamp(rr.last_published_at / 1000.0) AS last_published\nFROM realm_registry rr\nLEFT JOIN realm_user_permissions own\n  ON own.realm_url = rr.url\n AND own.username = ${browse_user:sqlstring}\nLEFT JOIN realm_user_permissions pub\n  ON pub.realm_url = rr.url\n AND pub.username = '*'\n AND pub.read IS TRUE\nWHERE rr.kind = 'published'\n  AND (own.username IS NOT NULL OR pub.username IS NOT NULL)\nORDER BY rr.last_published_at DESC NULLS LAST\nLIMIT 500;",
+            "refId": "A"
+          }
+        ],
+        "title": "Published realms accessible to ${browse_user}",
+        "type": "table"
+      }
+    ],
+    "refresh": "30s",
+    "schemaVersion": 42,
+    "tags": [
+      "entity:realm",
+      "entity:published-realm"
+    ],
+    "templating": {
+      "list": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "cef5v5sl9k7i8f"
+          },
+          "definition": "SELECT REGEXP_REPLACE(url, '^https?://', '') AS __text, url AS __value FROM realm_registry WHERE kind = 'published' ORDER BY 1;",
+          "description": "Published realm to inspect. Leave the Manual URL box empty to use this dropdown.",
+          "hide": 0,
+          "includeAll": false,
+          "label": "Published realm",
+          "multi": false,
+          "name": "realm_picker",
+          "options": [],
+          "query": "SELECT REGEXP_REPLACE(url, '^https?://', '') AS __text, url AS __value FROM realm_registry WHERE kind = 'published' ORDER BY 1;",
+          "refresh": 1,
+          "regex": "",
+          "skipUrlSync": false,
+          "sort": 1,
+          "type": "query"
+        },
+        {
+          "description": "Paste any published realm URL to override the dropdown. Wins over the dropdown when non-empty. A trailing slash is optional — it's normalized to the canonical form before lookup.",
+          "hide": 0,
+          "label": "Manual URL",
+          "name": "realm_manual",
+          "query": "",
+          "current": {
+            "text": "",
+            "value": ""
+          },
+          "options": [
+            {
+              "text": "",
+              "value": "",
+              "selected": true
+            }
+          ],
+          "skipUrlSync": false,
+          "type": "textbox"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "cef5v5sl9k7i8f"
+          },
+          "definition": "SELECT matrix_user_id FROM users ORDER BY matrix_user_id;",
+          "description": "User whose accessible published realms are listed in the Per-user browser section.",
+          "hide": 0,
+          "includeAll": false,
+          "label": "Browse user",
+          "multi": false,
+          "name": "browse_user",
+          "options": [],
+          "query": "SELECT matrix_user_id FROM users ORDER BY matrix_user_id;",
+          "refresh": 1,
+          "regex": "",
+          "skipUrlSync": false,
+          "sort": 1,
+          "type": "query"
+        },
+        {
+          "hide": 2,
+          "name": "realm_server",
+          "query": "__REALM_SERVER_URL__",
+          "skipUrlSync": true,
+          "type": "constant"
+        },
+        {
+          "hide": 2,
+          "name": "grafana_secret",
+          "query": "REPLACE_AT_APPLY_TIME",
+          "skipUrlSync": true,
+          "type": "constant"
+        }
+      ]
+    },
+    "time": {
+      "from": "now-6h",
+      "to": "now"
+    },
+    "timepicker": {},
+    "timezone": "browser",
+    "title": "Published Realms",
+    "weekStart": ""
+  }
+}

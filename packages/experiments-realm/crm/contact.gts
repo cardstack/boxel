@@ -1,4 +1,4 @@
-import StringField from 'https://cardstack.com/base/string';
+import StringField from '@cardstack/base/string';
 import {
   Component,
   CardDef,
@@ -6,9 +6,9 @@ import {
   contains,
   linksTo,
   containsMany,
-} from 'https://cardstack.com/base/card-api';
-import { ContactPhoneNumber } from 'https://cardstack.com/base/phone-number';
-import EmailField from 'https://cardstack.com/base/email';
+} from '@cardstack/base/card-api';
+import { ContactPhoneNumber } from '@cardstack/base/phone-number';
+import EmailField from '@cardstack/base/email';
 
 import {
   Avatar,
@@ -19,7 +19,7 @@ import AvatarGroup from '../components/avatar-group';
 
 import ContactIcon from '@cardstack/boxel-icons/contact';
 import Email from '@cardstack/boxel-icons/mail';
-import Linkedin from '@cardstack/boxel-icons/linkedin';
+import Linkedin from '@cardstack/boxel-icons/brand-linkedin';
 import XIcon from '@cardstack/boxel-icons/brand-x';
 
 import { CrmApp } from '../crm-app';
@@ -463,7 +463,7 @@ class AtomTemplate extends Component<typeof Contact> {
       <EntityDisplayWithThumbnail @title={{this.label}} @underline={{true}}>
         <:thumbnail>
           <Avatar
-            @userID={{@model.id}}
+            @userId={{@model.id}}
             @displayName={{@model.name}}
             @thumbnailURL={{@model.cardThumbnailURL}}
             @isReady={{true}}
@@ -495,8 +495,8 @@ export class Contact extends CardDef {
   @field firstName = contains(StringField);
   @field lastName = contains(StringField);
   @field position = contains(StringField);
-  @field crmApp = linksTo(() => CrmApp);
-  @field company = linksTo(() => Company);
+  @field crmApp = linksTo(() => CrmApp, { searchable: true });
+  @field company = linksTo(() => Company, { searchable: 'crmApp' });
   @field department = contains(StringField);
   @field primaryEmail = contains(EmailField);
   @field secondaryEmail = contains(EmailField);

@@ -9,26 +9,7 @@
 
 import { execSync } from 'child_process';
 
-export interface ParsedSemver {
-  major: number;
-  minor: number;
-  patch: number;
-}
-
-export function parseSemver(version: string): ParsedSemver {
-  const base = version.split('-')[0];
-  const [major, minor, patch] = base.split('.').map((n) => parseInt(n, 10));
-  return { major, minor, patch };
-}
-
-export function compareSemver(a: string, b: string): number {
-  const A = parseSemver(a);
-  const B = parseSemver(b);
-  if (A.major !== B.major) return A.major - B.major;
-  if (A.minor !== B.minor) return A.minor - B.minor;
-  if (A.patch !== B.patch) return A.patch - B.patch;
-  return 0;
-}
+import semver from 'semver';
 
 function listBoxelCliTags(): string[] {
   return execSync("git tag --list 'boxel-cli-v*'")
@@ -46,7 +27,7 @@ export function lastStableTag(): string {
   const versions = listBoxelCliTags()
     .filter((t) => !t.includes('-unstable.'))
     .map((t) => t.replace(/^boxel-cli-v/, ''))
-    .sort(compareSemver);
+    .sort(semver.compare);
   if (versions.length === 0) {
     throw new Error(
       'No stable boxel-cli-v* tag found. Cannot compute prerelease counter.',
@@ -82,7 +63,7 @@ export function previousStableTag(): string | null {
   const versions = listBoxelCliTags()
     .filter((t) => !t.includes('-unstable.'))
     .map((t) => t.replace(/^boxel-cli-v/, ''))
-    .sort(compareSemver);
+    .sort(semver.compare);
   if (versions.length === 0) return null;
   return `boxel-cli-v${versions[versions.length - 1]}`;
 }

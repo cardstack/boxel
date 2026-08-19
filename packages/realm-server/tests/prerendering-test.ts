@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import type {
   RealmPermissions,
@@ -9,24 +10,25 @@ import type {
   RenderRouteOptions,
 } from '@cardstack/runtime-common';
 import type { Realm as RuntimeRealm } from '@cardstack/runtime-common';
-import type { Prerenderer } from '../prerender/index';
-import { PagePool } from '../prerender/page-pool';
-import { RenderRunner } from '../prerender/render-runner';
-import { BrowserManager } from '../prerender/browser-manager';
+import type { Prerenderer } from '../prerender/index.ts';
+import { toAffinityKey } from '../prerender/affinity.ts';
+import { PagePool } from '../prerender/page-pool.ts';
+import { RenderRunner } from '../prerender/render-runner.ts';
+import { BrowserManager } from '../prerender/browser-manager.ts';
 
 import {
   setupPermissionedRealmsCached,
   cleanWhiteSpace,
   testCreatePrerenderAuth,
   getPrerendererForTesting,
-} from './helpers';
-import { prerenderCard, prerenderFileExtract } from './helpers/prerender';
+} from './helpers/index.ts';
+import { prerenderCard, prerenderFileExtract } from './helpers/prerender.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import {
   baseCardRef,
   trimExecutableExtension,
   rri,
-  baseRealm,
+  baseRealmRRI,
   baseRRI,
   executableExtensions,
 } from '@cardstack/runtime-common';
@@ -36,7 +38,7 @@ import {
   installRealmServerAssertOwnRealmServerBypassPatch,
   installSearchRequestObserverPatch,
   installThrottledRAFPatch,
-} from './helpers/prerender-page-patches';
+} from './helpers/prerender-page-patches.ts';
 
 class TestSemaphore {
   #available: number;
@@ -226,7 +228,7 @@ function makeStubPagePool(opts: StubPagePoolOptions) {
   return { pool, contextsCreated, contextsClosed };
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('prerender - mutating tests', function (hooks) {
     let realmURL = 'http://127.0.0.1:4450/test/';
     let prerenderServerURL = new URL(realmURL).origin;
@@ -276,7 +278,7 @@ module(basename(__filename), function () {
           },
           fileSystem: {
             'person.gts': `
-              import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
               export class Person extends CardDef {
                 static displayName = "Person";
                 @field name = contains(StringField);
@@ -390,7 +392,7 @@ module(basename(__filename), function () {
       await realmAdapter.write(
         'person.gts',
         `
-          import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
+          import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
           export class Person extends CardDef {
             static displayName = "Updated Person";
             @field name = contains(StringField);
@@ -471,7 +473,7 @@ module(basename(__filename), function () {
       await realmAdapter.write(
         'filedef-mismatch.gts',
         `
-          import { FileDef as BaseFileDef } from "https://cardstack.com/base/file-api";
+          import { FileDef as BaseFileDef } from "@cardstack/base/file-api";
           import { MissingChild } from "./missing-child";
 
           export class FileDef extends BaseFileDef {
@@ -540,7 +542,7 @@ module(basename(__filename), function () {
       await realmAdapter.write(
         modulePath,
         `
-          import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
+          import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
           export class FlakyTarget extends CardDef {
             static displayName = 'FlakyTarget';
             @field name = contains(StringField);
@@ -686,7 +688,7 @@ module(basename(__filename), function () {
             },
             fileSystem: {
               'person.gts': `
-              import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
               export class Person extends CardDef {
                 static displayName = "Person";
                 @field name = contains(StringField);
@@ -709,7 +711,7 @@ module(basename(__filename), function () {
                 },
               },
               'no-icon.gts': `
-                import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
+                import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
                 export class NoIcon extends CardDef {
                   static displayName = "No Icon";
                   static icon = class extends Component<typeof this> {
@@ -735,7 +737,7 @@ module(basename(__filename), function () {
                 },
               },
               'bad-icon-import.gts': `
-                import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
+                import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
                 export class BadIconImport extends CardDef {
                   static displayName = "Bad Icon Import";
                   static icon = undefined as any;
@@ -769,8 +771,105 @@ module(basename(__filename), function () {
                   },
                 },
               },
+              'owner-with-broken-pet.gts': `
+                import { CardDef, field, contains, linksTo, StringField, Component } from '@cardstack/base/card-api';
+                export class Pet extends CardDef {
+                  static displayName = "Pet";
+                  @field name = contains(StringField);
+                }
+                export class OwnerWithBrokenPet extends CardDef {
+                  static displayName = "Owner With Broken Pet";
+                  @field name = contains(StringField);
+                  @field pet = linksTo(Pet);
+                  static isolated = class extends Component<typeof this> {
+                    <template>{{@model.name}}{{#if @model.pet}}{{@model.pet.name}}{{/if}}</template>
+                  }
+                }
+              `,
+              // Links to ./missing-pet, which does not exist — the lazy load
+              // 404s and the broken slot renders the placeholder. The card
+              // itself indexes cleanly; the missing target is carried in
+              // `deps` so invalidation can reach the card if the target is
+              // created later.
+              'owner-with-broken-pet.json': {
+                data: {
+                  attributes: {
+                    name: 'Owner',
+                  },
+                  relationships: {
+                    pet: {
+                      links: {
+                        self: './missing-pet',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('./owner-with-broken-pet'),
+                      name: 'OwnerWithBrokenPet',
+                    },
+                  },
+                },
+              },
+              'owner-with-broken-pets.gts': `
+                import { CardDef, field, contains, linksToMany, StringField, Component } from '@cardstack/base/card-api';
+                export class Pet extends CardDef {
+                  static displayName = "Pet";
+                  @field name = contains(StringField);
+                }
+                export class OwnerWithBrokenPets extends CardDef {
+                  static displayName = "Owner With Broken Pets";
+                  @field name = contains(StringField);
+                  @field pets = linksToMany(Pet);
+                  static isolated = class extends Component<typeof this> {
+                    <template>{{@model.name}}{{#each @model.pets as |pet|}}{{#if pet}}{{pet.name}}{{/if}}{{/each}}</template>
+                  }
+                }
+              `,
+              'real-pet.json': {
+                data: {
+                  attributes: {
+                    name: 'Real Pet',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('./owner-with-broken-pets'),
+                      name: 'Pet',
+                    },
+                  },
+                },
+              },
+              // One present element (./real-pet) and one broken element
+              // (./missing-pet-2, which does not exist): the present slot
+              // loads while the broken slot 404s and renders the
+              // per-element placeholder. The card itself indexes cleanly.
+              'owner-with-broken-pets.json': {
+                data: {
+                  attributes: {
+                    name: 'Owner',
+                  },
+                  relationships: {
+                    'pets.0': {
+                      links: {
+                        self: './real-pet',
+                      },
+                    },
+                    'pets.1': {
+                      links: {
+                        self: './missing-pet-2',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('./owner-with-broken-pets'),
+                      name: 'OwnerWithBrokenPets',
+                    },
+                  },
+                },
+              },
               'rejects.gts': `
-              import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, Component } from '@cardstack/base/card-api';
               export class Rejects extends CardDef {
                 static isolated = class extends Component<typeof this> {
                   constructor(...args) {
@@ -792,7 +891,7 @@ module(basename(__filename), function () {
                 },
               },
               'rsvp-rejects.gts': `
-              import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, Component } from '@cardstack/base/card-api';
               import * as RSVP from 'rsvp';
               export class RsvpRejects extends CardDef {
                 static isolated = class extends Component<typeof this> {
@@ -830,7 +929,7 @@ module(basename(__filename), function () {
               // a stack-bearing entry the test can assert on.
               'desync-repro.gts': `
               import { registerDestructor } from '@ember/destroyable';
-              import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, Component } from '@cardstack/base/card-api';
               export class DesyncRepro extends CardDef {
                 static isolated = class extends Component<typeof this> {
                   constructor(...args) {
@@ -877,7 +976,7 @@ module(basename(__filename), function () {
                 },
               },
               'throws.gts': `
-              import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, Component } from '@cardstack/base/card-api';
               export class Throws extends CardDef {
                 static isolated = class extends Component<typeof this> {
                   get explode() {
@@ -907,7 +1006,7 @@ module(basename(__filename), function () {
               // payload and synthesized "invalid error payload" instead of
               // surfacing the real underlying throw.
               'eval-throw.gts': `
-              import { CardDef } from 'https://cardstack.com/base/card-api';
+              import { CardDef } from '@cardstack/base/card-api';
               throw new Error('module-eval-throw');
               export class EvalThrow extends CardDef {
                 static displayName = 'Eval Throw';
@@ -924,7 +1023,7 @@ module(basename(__filename), function () {
                 },
               },
               'console-error.gts': `
-              import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, Component } from '@cardstack/base/card-api';
               export class ConsoleError extends CardDef {
                 static isolated = class extends Component<typeof this> {
                   get explode() {
@@ -946,7 +1045,7 @@ module(basename(__filename), function () {
                 },
               },
               'console-no-error.gts': `
-              import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, Component } from '@cardstack/base/card-api';
               export class ConsoleNoError extends CardDef {
                 static isolated = class extends Component<typeof this> {
                   constructor(...args) {
@@ -968,7 +1067,7 @@ module(basename(__filename), function () {
                 },
               },
               'directory-query.gts': `
-              import { CardDef, field, contains, linksTo, linksToMany, StringField, Component, queryableValue } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, contains, linksTo, linksToMany, StringField, Component, queryableValue } from '@cardstack/base/card-api';
 
               export class Person extends CardDef {
                 static displayName = 'Person';
@@ -1295,6 +1394,204 @@ module(basename(__filename), function () {
           deps.some((dep) => dep.includes(`${realmURL}broken`)),
           'deps include failing module',
         );
+      });
+
+      test('card prerender succeeds for a card with a broken linksTo target — the broken slot is captured in deps for invalidation, the entry indexes cleanly', async function (assert) {
+        let cardURL = `${realmURL}owner-with-broken-pet.json`;
+
+        let result = await prerenderCard(prerenderer, {
+          affinityType: 'realm',
+          affinityValue: realmURL,
+          realm: realmURL,
+          url: cardURL,
+          auth: auth(),
+        });
+
+        assert.notOk(
+          result.response.error,
+          `prerender succeeds despite the broken linksTo — broken slot renders inline, error: ${JSON.stringify(result.response.error?.error ?? null)}`,
+        );
+        assert.ok(
+          result.response.serialized,
+          'prerender returns the serialized JSON:API document',
+        );
+        let deps = result.response.deps ?? [];
+        assert.ok(
+          deps.some((dep) => dep.includes('missing-pet')),
+          `deps include the broken link reference so invalidation can reach the card if the target is created later, got: ${JSON.stringify(deps)}`,
+        );
+      });
+
+      test('card prerender succeeds for a card with a broken linksToMany element — the broken element is captured in deps for invalidation, the entry indexes cleanly', async function (assert) {
+        let cardURL = `${realmURL}owner-with-broken-pets.json`;
+
+        let result = await prerenderCard(prerenderer, {
+          affinityType: 'realm',
+          affinityValue: realmURL,
+          realm: realmURL,
+          url: cardURL,
+          auth: auth(),
+        });
+
+        assert.notOk(
+          result.response.error,
+          `prerender succeeds despite the broken linksToMany element — broken slot renders inline, error: ${JSON.stringify(result.response.error?.error ?? null)}`,
+        );
+        assert.ok(
+          result.response.serialized,
+          'prerender returns the serialized JSON:API document',
+        );
+        let deps = result.response.deps ?? [];
+        assert.ok(
+          deps.some((dep) => dep.includes('missing-pet-2')),
+          `deps include the broken element reference, got: ${JSON.stringify(deps)}`,
+        );
+      });
+
+      test('card prerender records a broken linksTo target on meta.diagnostics.brokenLinks for persistence', async function (assert) {
+        // The broken-link findings ride the same consolidated diagnostics
+        // channel as the server timings: render.meta runs getBrokenLinks on
+        // the settled instance, attaches the findings to its diagnostics
+        // block, and the Prerenderer lifts that onto
+        // `response.meta.diagnostics` — exactly the blob the indexer flattens
+        // into `boxel_index.diagnostics`.
+        let result = await prerenderer.prerenderVisit({
+          affinityType: 'realm',
+          affinityValue: realmURL,
+          realm: realmURL,
+          url: `${realmURL}owner-with-broken-pet.json`,
+          auth: auth(),
+          renderOptions: { cardRender: true },
+        });
+
+        assert.notOk(
+          result.response.card?.error,
+          'prerender succeeds — the card indexes cleanly',
+        );
+        let brokenLinks = result.response.meta?.diagnostics?.brokenLinks;
+        assert.strictEqual(
+          brokenLinks?.length,
+          1,
+          `meta.diagnostics.brokenLinks has the single broken slot, got: ${JSON.stringify(
+            brokenLinks,
+          )}`,
+        );
+        assert.strictEqual(
+          brokenLinks?.[0]?.fieldName,
+          'pet',
+          'broken-link finding names the linksTo field',
+        );
+        assert.ok(
+          brokenLinks?.[0]?.reference.includes('missing-pet'),
+          `broken-link finding carries the broken reference, got: ${brokenLinks?.[0]?.reference}`,
+        );
+        assert.strictEqual(
+          brokenLinks?.[0]?.kind,
+          'not-found',
+          'a missing realm target is classified not-found',
+        );
+      });
+
+      test('card prerender records a broken linksToMany element on meta.diagnostics.brokenLinks for persistence', async function (assert) {
+        let result = await prerenderer.prerenderVisit({
+          affinityType: 'realm',
+          affinityValue: realmURL,
+          realm: realmURL,
+          url: `${realmURL}owner-with-broken-pets.json`,
+          auth: auth(),
+          renderOptions: { cardRender: true },
+        });
+
+        assert.notOk(
+          result.response.card?.error,
+          'prerender succeeds — the card indexes cleanly',
+        );
+        let brokenLinks = result.response.meta?.diagnostics?.brokenLinks;
+        // Only the broken element is recorded; the present sibling slot
+        // (./real-pet) produces no finding.
+        assert.strictEqual(
+          brokenLinks?.length,
+          1,
+          `meta.diagnostics.brokenLinks has only the broken element, got: ${JSON.stringify(
+            brokenLinks,
+          )}`,
+        );
+        assert.strictEqual(
+          brokenLinks?.[0]?.fieldName,
+          'pets',
+          'broken-link finding names the linksToMany field',
+        );
+        assert.ok(
+          brokenLinks?.[0]?.reference.includes('missing-pet-2'),
+          `broken-link finding carries the broken element reference, got: ${brokenLinks?.[0]?.reference}`,
+        );
+        assert.strictEqual(
+          brokenLinks?.[0]?.kind,
+          'not-found',
+          'a missing realm element is classified not-found',
+        );
+      });
+
+      test('card prerender records the search-doc settle aggregates on meta.diagnostics for persistence', async function (assert) {
+        // The settle aggregates ride the same consolidated diagnostics
+        // channel as the timings and broken-link findings: render.meta
+        // stamps searchDocSettleMs / searchDocSettlePasses on every card
+        // visit, and the Prerenderer lifts them onto
+        // `response.meta.diagnostics` — the blob the indexer flattens into
+        // `boxel_index.diagnostics`. The per-field / per-link-load detail
+        // (searchDocFieldsMs / searchDocLinkLoads) is floor-bounded so its
+        // presence depends on real timings; only its shape is asserted when
+        // it appears.
+        let result = await prerenderer.prerenderVisit({
+          affinityType: 'realm',
+          affinityValue: realmURL,
+          realm: realmURL,
+          url: `${realmURL}1.json`,
+          auth: auth(),
+          renderOptions: { cardRender: true },
+        });
+
+        assert.notOk(result.response.card?.error, 'prerender succeeds');
+        let diagnostics = result.response.meta?.diagnostics;
+        assert.strictEqual(
+          typeof diagnostics?.searchDocSettleMs,
+          'number',
+          `searchDocSettleMs is stamped, got: ${diagnostics?.searchDocSettleMs}`,
+        );
+        assert.ok(
+          (diagnostics?.searchDocSettleMs ?? -1) >= 0,
+          `searchDocSettleMs is non-negative, got: ${diagnostics?.searchDocSettleMs}`,
+        );
+        // A card whose first walk fires no lazy getter loads settles with
+        // zero discarded passes, so 0 is the healthy floor.
+        assert.strictEqual(
+          typeof diagnostics?.searchDocSettlePasses,
+          'number',
+          `searchDocSettlePasses is stamped, got: ${diagnostics?.searchDocSettlePasses}`,
+        );
+        assert.ok(
+          (diagnostics?.searchDocSettlePasses ?? -1) >= 0,
+          `searchDocSettlePasses counts the discarded walks, got: ${diagnostics?.searchDocSettlePasses}`,
+        );
+        if (diagnostics?.searchDocFieldsMs !== undefined) {
+          assert.ok(
+            Object.values(diagnostics.searchDocFieldsMs).every(
+              (ms) => typeof ms === 'number' && ms >= 1,
+            ),
+            'retained per-field timings are all at/over the persistence floor',
+          );
+        }
+        if (diagnostics?.searchDocLinkLoads !== undefined) {
+          assert.ok(
+            diagnostics.searchDocLinkLoads.every(
+              (l) =>
+                typeof l.path === 'string' &&
+                typeof l.target === 'string' &&
+                l.ms >= 1,
+            ),
+            'retained link loads carry path + target and are at/over the floor',
+          );
+        }
       });
 
       test('card prerender surfaces actionable error for bad icon import', async function (assert) {
@@ -1867,36 +2164,16 @@ module(basename(__filename), function () {
             `isolated html includes hero mini cards from query and nested query loads: ${isolatedHTML}`,
           );
 
-          let staff = result.response.searchDoc?.staff as
-            | Array<Record<string, any>>
-            | undefined;
-          assert.ok(
-            Array.isArray(staff),
-            'searchDoc includes query field results',
-          );
-
-          let bob = staff?.find((entry) => entry?.name === 'Bob');
-          assert.ok(bob, 'searchDoc includes Bob from query results');
+          // Query-backed relationships are never captured in the search doc:
+          // they can't be invalidated when their matching cards change, so an
+          // indexed copy would go stale. The search doc is generated from the
+          // field definitions, so a card's custom queryableValue does not inject
+          // them either. The query field's results still render (asserted above)
+          // and the host re-resolves them at view time.
           assert.strictEqual(
-            bob?.manager?.name,
-            'Alice',
-            'searchDoc includes loaded manager relationship',
-          );
-
-          let bobReports = bob?.reports as
-            | Array<Record<string, any>>
-            | undefined;
-          assert.ok(
-            Array.isArray(bobReports),
-            'searchDoc includes nested query results',
-          );
-          let hasEveWithManager = bobReports?.some(
-            (report) =>
-              report?.name === 'Eve' && report?.manager?.name === 'Bob',
-          );
-          assert.true(
-            Boolean(hasEveWithManager),
-            'searchDoc includes nested loaded relationships',
+            result.response.searchDoc?.staff,
+            undefined,
+            'query-backed field is not captured in the search doc',
           );
         } finally {
           await realmServerPatch.restore();
@@ -1953,7 +2230,7 @@ module(basename(__filename), function () {
         // block so operators can classify the stall. Diagnostics
         // live on `response.meta.diagnostics` (the consolidated
         // channel — the indexer reads from there and persists into
-        // `boxel_index.timing_diagnostics`, mirroring to
+        // `boxel_index.diagnostics`, mirroring to
         // `error_doc.diagnostics` at write time for UI compat).
         let diagnostics = (timedOut.response as any)?.meta?.diagnostics;
         assert.strictEqual(
@@ -2070,7 +2347,7 @@ module(basename(__filename), function () {
 
           // Diagnostics live on `response.meta.diagnostics` — the
           // consolidated channel the indexer reads from and persists
-          // onto `boxel_index.timing_diagnostics` (mirrored to
+          // onto `boxel_index.diagnostics` (mirrored to
           // `error_doc.diagnostics` for UI compat).
           let diagnostics = (result.response as any)?.meta?.diagnostics;
           assert.strictEqual(
@@ -2181,8 +2458,8 @@ module(basename(__filename), function () {
           'search doc includes name',
         );
         assert.ok(
-          result.response.deps.includes(`${baseRealm.url}file-api`),
-          'deps include base file-api module',
+          result.response.deps.includes(`${baseRealmRRI}card-api`),
+          'deps include base card-api module (where FileDef is defined)',
         );
         assert.notOk(
           result.response.deps.includes(fileURL),
@@ -2241,7 +2518,7 @@ module(basename(__filename), function () {
             },
             fileSystem: {
               'person.gts': `
-                import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
+                import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
                 export class Person extends CardDef {
                   static displayName = "Person";
                   @field name = contains(StringField);
@@ -2251,7 +2528,7 @@ module(basename(__filename), function () {
                 }
               `,
               'dep-reset-consumer.gts': `
-                import { CardDef, field, linksTo, Component } from 'https://cardstack.com/base/card-api';
+                import { CardDef, field, linksTo, Component } from '@cardstack/base/card-api';
                 import { Person } from './person';
                 export class DepResetConsumer extends CardDef {
                   static displayName = 'Dep Reset Consumer';
@@ -2408,8 +2685,9 @@ module(basename(__filename), function () {
         let alternate = url.endsWith('.json')
           ? url.replace(/\.json$/, '')
           : `${url}.json`;
+        // The isolated-HTML injection reads from prerendered_html.
         await dbAdapter.execute(
-          `UPDATE boxel_index SET isolated_html = $1 WHERE url = $2 OR url = $3`,
+          `UPDATE prerendered_html SET isolated_html = $1 WHERE url = $2 OR url = $3`,
           { bind: [html, url, alternate] },
         );
       }
@@ -2424,148 +2702,79 @@ module(basename(__filename), function () {
               [testUserId]: ['read', 'write', 'realm-owner'],
             },
             fileSystem: {
-              'prerendered-search-live.gts': `
-              import { CardDef, Component, field, contains, StringField, linksTo } from 'https://cardstack.com/base/card-api';
+              'card-search.gts': `
+              import { CardDef, Component, field, contains, StringField } from '@cardstack/base/card-api';
 
-              export class LiveSearchResult extends CardDef {
-                static displayName = 'Live Search Result';
-                @field cardTitle = contains(StringField);
-
+              export class CardSearchResult extends CardDef {
+                static displayName = 'Card Search Result';
+                @field label = contains(StringField);
                 static fitted = class extends Component<typeof this> {
                   <template>
-                    <div class="live-search-css-sentinel" data-test-live-card-value>{{@model.cardTitle}}</div>
+                    <div class="card-search-result-sentinel" data-test-card-result-value>{{@model.label}}</div>
                     <style scoped>
-                      .live-search-css-sentinel {
-                        border-top: 4px solid rgb(1, 2, 3);
-                      }
+                      .card-search-result-sentinel { border-top: 4px solid rgb(7, 8, 9); }
                     </style>
                   </template>
                 };
-
                 static embedded = this.fitted;
                 static isolated = this.fitted;
               }
 
-              export class LiveSearchInner extends CardDef {
-                static displayName = 'Live Search Inner';
+              export class CardSearchInner extends CardDef {
+                static displayName = 'Card Search Inner';
                 static isolated = class extends Component<typeof this> {
-                  get realmHref() {
-                    let id = this.args.model?.id;
-                    if (!id) {
-                      return '';
-                    }
-                    return new URL('.', id).href;
-                  }
-
                   get query() {
                     return {
                       filter: {
-                        type: {
-                          module: new URL('./prerendered-search-live', import.meta.url).href,
-                          name: 'LiveSearchResult',
+                        'item.on': {
+                          module: new URL('./card-search', import.meta.url).href,
+                          name: 'CardSearchResult',
                         },
                       },
-                      page: {
-                        size: 10,
-                        number: 0,
-                      },
+                      realms: [new URL('./', import.meta.url).href],
                     };
                   }
 
-                  get realms() {
-                    return [new URL('./', import.meta.url).href];
-                  }
-
                   <template>
-                    <div data-test-live-search-host-ran>Host ran</div>
-                    <div data-test-live-search-realm>{{this.realmHref}}</div>
-                    {{#if @context.prerenderedCardSearchComponent}}
-                      <@context.prerenderedCardSearchComponent
-                        @query={{this.query}}
-                        @format='fitted'
-                        @realms={{this.realms}}
-                        @isLive={{true}}
-                      >
-                        <:loading>
-                          <div data-test-live-search-loading>Loading...</div>
-                        </:loading>
-                        <:response as |cards|>
-                          {{#each cards as |card|}}
-                            <div data-test-live-search-card={{card.url}}>
-                              <card.component />
-                            </div>
-                          {{/each}}
-                        </:response>
-                        <:meta as |meta|>
-                          <div data-test-live-search-total>{{meta.page.total}}</div>
-                        </:meta>
-                      </@context.prerenderedCardSearchComponent>
+                    <div data-test-card-search-host-ran>host ran</div>
+                    {{#if @context.searchResultsComponent}}
+                      <@context.searchResultsComponent @query={{this.query}} @mode='none' />
                     {{else}}
-                      <div data-test-live-search-component-missing>missing</div>
+                      <div data-test-card-search-component-missing>missing</div>
                     {{/if}}
                   </template>
                 };
               }
-
-              export class LiveSearchHost extends CardDef {
-                static displayName = 'Live Search Host';
-                @field child = linksTo(() => LiveSearchInner);
-
-                static isolated = class extends Component<typeof this> {
-                  <template>
-                    <@fields.child @format='isolated' />
-                  </template>
-                };
-
-                static embedded = this.isolated;
-              }
             `,
-              'live-search-host.json': {
+              'card-search-inner.json': {
                 data: {
-                  relationships: {
-                    child: {
-                      links: {
-                        self: './live-search-inner',
-                      },
-                    },
-                  },
                   meta: {
                     adoptsFrom: {
-                      module: rri('./prerendered-search-live'),
-                      name: 'LiveSearchHost',
+                      module: rri('./card-search'),
+                      name: 'CardSearchInner',
                     },
                   },
                 },
               },
-              'live-search-inner.json': {
-                data: {
-                  meta: {
-                    adoptsFrom: {
-                      module: rri('./prerendered-search-live'),
-                      name: 'LiveSearchInner',
-                    },
-                  },
-                },
-              },
-              'live-search-result-1.json': {
+              'card-search-result-1.json': {
                 data: {
                   attributes: {
-                    cardTitle: 'LIVE_RESULT_VALUE',
+                    label: 'CARD_RESULT_VALUE',
                   },
                   meta: {
                     adoptsFrom: {
-                      module: rri('./prerendered-search-live'),
-                      name: 'LiveSearchResult',
+                      module: rri('./card-search'),
+                      name: 'CardSearchResult',
                     },
                   },
                 },
               },
-              'live-file-search-card.gts': `
-              import { CardDef, Component, field, contains, StringField, linksTo } from 'https://cardstack.com/base/card-api';
+              'file-search.gts': `
+              import { CardDef, Component } from '@cardstack/base/card-api';
               import { rri } from '@cardstack/runtime-common';
 
-              export class LiveFileSearchInner extends CardDef {
-                static displayName = 'Live File Search Inner';
+              export class FileSearchInner extends CardDef {
+                static displayName = 'File Search Inner';
                 static isolated = class extends Component<typeof this> {
                   get realmHref() {
                     let id = this.args.model?.id;
@@ -2578,94 +2787,37 @@ module(basename(__filename), function () {
                   get query() {
                     return {
                       filter: {
-                        on: {
-                          module: rri('https://cardstack.com/base/card-api'),
+                        'item.on': {
+                          module: rri('@cardstack/base/card-api'),
                           name: 'FileDef',
                         },
-                        eq: {
-                          url: \`\${this.realmHref}live-file.live\`,
-                        },
                       },
-                      page: {
-                        size: 10,
-                        number: 0,
-                      },
+                      realms: [new URL('./', import.meta.url).href],
                     };
                   }
 
-                  get realms() {
-                    return [new URL('./', import.meta.url).href];
-                  }
-
                   <template>
-                    <div data-test-live-file-search-host-ran>File Host ran</div>
-                    {{#if @context.prerenderedCardSearchComponent}}
-                      <@context.prerenderedCardSearchComponent
-                        @query={{this.query}}
-                        @format='embedded'
-                        @realms={{this.realms}}
-                        @isLive={{true}}
-                      >
-                        <:response as |cards|>
-                          {{#each cards as |card|}}
-                            <div data-test-live-file-search-card={{card.url}}>
-                              <card.component />
-                            </div>
-                          {{/each}}
-                        </:response>
-                      </@context.prerenderedCardSearchComponent>
+                    <div data-test-file-search-host-ran>File Host ran</div>
+                    {{#if @context.searchResultsComponent}}
+                      <@context.searchResultsComponent @query={{this.query}} @mode='none' />
                     {{else}}
-                      <div data-test-live-file-search-component-missing>missing</div>
+                      <div data-test-file-search-component-missing>missing</div>
                     {{/if}}
                   </template>
                 };
               }
-
-              export class LiveFileSearchHost extends CardDef {
-                static displayName = 'Live File Search Host';
-                @field cardTitle = contains(StringField);
-                @field child = linksTo(() => LiveFileSearchInner);
-
-                static isolated = class extends Component<typeof this> {
-                  <template>
-                    <@fields.child @format='isolated' />
-                  </template>
-                };
-
-                static embedded = this.isolated;
-              }
             `,
-              'live-file-search-host.json': {
+              'file-search-inner.json': {
                 data: {
-                  attributes: {
-                    cardTitle: 'Live File Search Host',
-                  },
-                  relationships: {
-                    child: {
-                      links: {
-                        self: './live-file-search-inner',
-                      },
-                    },
-                  },
                   meta: {
                     adoptsFrom: {
-                      module: rri('./live-file-search-card'),
-                      name: 'LiveFileSearchHost',
+                      module: rri('./file-search'),
+                      name: 'FileSearchInner',
                     },
                   },
                 },
               },
-              'live-file-search-inner.json': {
-                data: {
-                  meta: {
-                    adoptsFrom: {
-                      module: rri('./live-file-search-card'),
-                      name: 'LiveFileSearchInner',
-                    },
-                  },
-                },
-              },
-              'live-file.live': 'LIVE_FILE_VALUE',
+              'hello.md': '# Hello from FileDef content',
             },
           },
         ],
@@ -2677,25 +2829,27 @@ module(basename(__filename), function () {
         },
       });
 
-      test('card prerendered search uses live rendered CardDef HTML and keeps unique CSS', async function (assert) {
-        const cardURL = `${realmURL}live-search-host`;
+      test('search prerenders the live rendered result, beating stale indexed HTML and keeping its unique scoped CSS', async function (assert) {
+        const cardURL = `${realmURL}card-search-inner`;
         const sentinel = 'SENTINEL_STALE_CARD_HTML';
         let realmServerPatch =
           installRealmServerAssertOwnRealmServerBypassPatch();
-        let searchRequestObserverPatch = installSearchRequestObserverPatch();
 
         try {
           let indexedRows = await dbAdapter.execute(
             `SELECT url FROM boxel_index WHERE url LIKE $1 ORDER BY url`,
-            { bind: [`${realmURL}%live-search%`] },
+            { bind: [`${realmURL}%card-search%`] },
           );
           assert.ok(
             indexedRows.length > 0,
-            `expected indexed rows for live-search fixtures, got: ${JSON.stringify(indexedRows)}`,
+            `expected indexed rows for card-search fixtures, got: ${JSON.stringify(indexedRows)}`,
           );
 
+          // Plant a stale indexed rendering for the result so a live win is
+          // observable: the prerendered search must re-render the result from
+          // its card+source, not echo this indexed HTML.
           await overrideIndexedIsolatedHTML(
-            `${realmURL}live-search-result-1`,
+            `${realmURL}card-search-result-1`,
             `<div data-test-stale-card-html>${sentinel}</div>`,
           );
 
@@ -2711,45 +2865,50 @@ module(basename(__filename), function () {
           let isolatedHTML = cleanWhiteSpace(
             result.response.isolatedHTML ?? '',
           );
-          let searchRequests = searchRequestObserverPatch.getRequests();
-          assert.ok(
-            searchRequests.length > 0,
-            `observed federated search requests: ${JSON.stringify(searchRequests)}`,
-          );
 
           assert.ok(
-            isolatedHTML.includes('LIVE_RESULT_VALUE'),
-            `isolated html includes live card value: ${isolatedHTML}`,
+            isolatedHTML.includes('CARD_RESULT_VALUE'),
+            `isolated html includes the live result value: ${isolatedHTML}`,
           );
           assert.notOk(
             isolatedHTML.includes(sentinel),
-            `isolated html does not include stale indexed sentinel: ${isolatedHTML}`,
+            `isolated html does not include the stale indexed sentinel: ${isolatedHTML}`,
           );
           assert.ok(
-            isolatedHTML.includes('live-search-css-sentinel'),
-            `isolated html includes unique live card css class: ${isolatedHTML}`,
+            isolatedHTML.includes('card-search-result-sentinel'),
+            `isolated html includes the result's unique css class: ${isolatedHTML}`,
           );
           assert.ok(
-            /live-search-css-sentinel[^>]*data-scopedcss-[a-f0-9]{10}-[a-f0-9]{10}/.test(
+            /card-search-result-sentinel[^>]*data-scopedcss-[a-f0-9]{10}-[a-f0-9]{10}/.test(
               isolatedHTML,
             ),
-            `isolated html keeps scoped css marker on live result: ${isolatedHTML}`,
+            `isolated html keeps the scoped css marker on the live result: ${isolatedHTML}`,
           );
         } finally {
-          searchRequestObserverPatch.restore();
           await realmServerPatch.restore();
         }
       });
 
-      test('card prerendered search uses live rendered FileDef HTML', async function (assert) {
-        const cardURL = `${realmURL}live-file-search-host`;
+      test('search prerenders a FileDef result and renders live over stale indexed HTML', async function (assert) {
+        const cardURL = `${realmURL}file-search-inner`;
         const sentinel = 'SENTINEL_STALE_FILE_HTML';
         let realmServerPatch =
           installRealmServerAssertOwnRealmServerBypassPatch();
 
         try {
+          // Diagnostic: confirm the file is indexed so an empty result set
+          // localizes to the prerender search path, not a missing index row.
+          let fileRows = await dbAdapter.execute(
+            `SELECT url FROM boxel_index WHERE url LIKE $1 ORDER BY url`,
+            { bind: [`${realmURL}%hello.md%`] },
+          );
+          assert.ok(
+            fileRows.length > 0,
+            `expected an indexed row for hello.md, got: ${JSON.stringify(fileRows)}`,
+          );
+
           await overrideIndexedIsolatedHTML(
-            `${realmURL}live-file.live`,
+            `${realmURL}hello.md`,
             `<article data-test-stale-file-html>${sentinel}</article>`,
           );
 
@@ -2766,17 +2925,61 @@ module(basename(__filename), function () {
             result.response.isolatedHTML ?? '',
           );
 
+          // The per-result wrapper is `data-test-search-result={{entry.id}}`, so
+          // the file's URL appearing proves a file entry was surfaced (and not
+          // the empty result list a dropped file would leave).
           assert.ok(
-            isolatedHTML.includes('live-file.live'),
-            `isolated html includes live FileDef fallback value: ${isolatedHTML}`,
+            isolatedHTML.includes('hello.md'),
+            `isolated html surfaces the FileDef result identity: ${isolatedHTML}`,
           );
           assert.notOk(
             isolatedHTML.includes(sentinel),
-            `isolated html does not include stale file sentinel: ${isolatedHTML}`,
+            `isolated html does not include the stale file sentinel: ${isolatedHTML}`,
+          );
+        } finally {
+          await realmServerPatch.restore();
+        }
+      });
+
+      test('a card rendering the @context.searchResultsComponent prerenders with its results present, not an empty list', async function (assert) {
+        // The search resource registers its in-flight fetch with the render
+        // store's readiness signal, so the /render settle loop waits for results
+        // before HTML capture. Without that wiring the search resolves only
+        // after capture and the prerendered html shows an empty result list —
+        // the bug this test guards. Driven through the real prerenderer (the
+        // host test harness can't cover the /render route).
+        const cardURL = `${realmURL}card-search-inner`;
+        let realmServerPatch =
+          installRealmServerAssertOwnRealmServerBypassPatch();
+
+        try {
+          let result = await prerenderCard(prerenderer, {
+            affinityType: 'realm',
+            affinityValue: realmURL,
+            realm: realmURL,
+            url: cardURL,
+            auth: auth(),
+          });
+
+          assert.notOk(
+            result.response.error,
+            `prerender succeeds: ${JSON.stringify(result.response.error)}`,
+          );
+          let isolatedHTML = cleanWhiteSpace(
+            result.response.isolatedHTML ?? '',
+          );
+
+          assert.ok(
+            isolatedHTML.includes('data-test-card-search-host-ran'),
+            `the host template ran: ${isolatedHTML}`,
+          );
+          assert.notOk(
+            isolatedHTML.includes('data-test-card-search-component-missing'),
+            'the searchResultsComponent is provided in the render context',
           );
           assert.ok(
-            isolatedHTML.includes('data-test-live-file-search-card'),
-            `isolated html includes live FileDef search result wrapper: ${isolatedHTML}`,
+            isolatedHTML.includes('CARD_RESULT_VALUE'),
+            `prerendered html includes the search result — the /render settle loop waited for the search before HTML capture: ${isolatedHTML}`,
           );
         } finally {
           await realmServerPatch.restore();
@@ -2844,8 +3047,8 @@ module(basename(__filename), function () {
           },
           fileSystem: {
             'article.gts': `
-              import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-              import StringField from "https://cardstack.com/base/string";
+              import { contains, field, CardDef } from "@cardstack/base/card-api";
+              import StringField from "@cardstack/base/string";
               export class Article extends CardDef {
                 @field title = contains(StringField);
               }
@@ -2873,7 +3076,7 @@ module(basename(__filename), function () {
           },
           fileSystem: {
             'website.gts': `
-              import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
+              import { contains, field, CardDef, linksTo } from "@cardstack/base/card-api";
               import { Article } from "${providerRealmURL}article" // importing from another realm;
               export class Website extends CardDef {
                 @field linkedArticle = linksTo(Article);
@@ -2891,8 +3094,8 @@ module(basename(__filename), function () {
               },
             },
             'auth-proxy.gts': `
-              import { contains, field, CardDef, linksTo, Component } from "https://cardstack.com/base/card-api";
-              import StringField from "https://cardstack.com/base/string";
+              import { contains, field, CardDef, linksTo, Component } from "@cardstack/base/card-api";
+              import StringField from "@cardstack/base/string";
               // define a local stand-in type so the consumer realm doesn't need to import provider modules
               export class RemoteArticle extends CardDef {
                 @field title = contains(StringField);
@@ -3063,6 +3266,45 @@ module(basename(__filename), function () {
       );
       assert.false(result.pool.timedOut, 'prerender did not time out');
     });
+
+    test('a fused index visit mirrors an auth error onto the file half without a fallback transition', async function (assert) {
+      const cardFileURL = `${providerRealmURL}secret.json`;
+
+      let { response, pool } = await prerenderer.prerenderVisit({
+        affinityType: 'realm',
+        affinityValue: providerRealmURL,
+        realm: providerRealmURL,
+        url: cardFileURL,
+        auth: auth(),
+        visitType: 'index',
+        renderOptions: { cardRender: true, fileExtract: true },
+      });
+
+      assert.strictEqual(
+        response.card?.error?.error.status,
+        401,
+        'card half carries the auth error',
+      );
+      assert.strictEqual(
+        response.fileExtract?.status,
+        'error',
+        'file half is an error row',
+      );
+      assert.strictEqual(
+        response.fileExtract?.error?.error.status,
+        401,
+        'file half mirrors the auth error',
+      );
+      // A fallback extract would hit the same auth wall, so none runs — the
+      // file half is synthesized from the card error instead.
+      assert.strictEqual(
+        response.meta?.diagnostics?.indexRoutesMs?.file?.fileExtract,
+        undefined,
+        'no standalone extract transition runs on the auth path',
+      );
+      assert.false(pool.timedOut, 'auth failure is not reported as a timeout');
+      assert.false(pool.evicted, 'auth failure does not evict the page');
+    });
   });
 
   module('prerender - public query fallback', function (hooks) {
@@ -3099,8 +3341,8 @@ module(basename(__filename), function () {
 
     let makeQueryDirectoryFileSystem = () => ({
       'person.gts': `
-        import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+        import { contains, field, CardDef } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
 
         export class Person extends CardDef {
           @field name = contains(StringField);
@@ -3133,7 +3375,7 @@ module(basename(__filename), function () {
         },
       },
       'query-directory.gts': `
-        import { field, CardDef, Component, linksToMany } from "https://cardstack.com/base/card-api";
+        import { field, CardDef, Component, linksToMany } from "@cardstack/base/card-api";
         import { Person } from "./person";
 
         export class QueryDirectory extends CardDef {
@@ -3170,7 +3412,7 @@ module(basename(__filename), function () {
         },
       },
       'query-directory-proxy.gts': `
-        import { field, CardDef, Component, linksTo } from "https://cardstack.com/base/card-api";
+        import { field, CardDef, Component, linksTo } from "@cardstack/base/card-api";
         import { QueryDirectory } from "./query-directory";
 
         export class QueryDirectoryProxy extends CardDef {
@@ -3294,8 +3536,8 @@ module(basename(__filename), function () {
 
       let makeQueryDirectoryFileSystem = () => ({
         'person.gts': `
-          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, CardDef } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
 
           export class Person extends CardDef {
             @field name = contains(StringField);
@@ -3328,7 +3570,7 @@ module(basename(__filename), function () {
           },
         },
         'query-directory.gts': `
-          import { field, CardDef, Component, linksToMany } from "https://cardstack.com/base/card-api";
+          import { field, CardDef, Component, linksToMany } from "@cardstack/base/card-api";
           import { Person } from "./person";
 
           export class QueryDirectory extends CardDef {
@@ -3365,7 +3607,7 @@ module(basename(__filename), function () {
           },
         },
         'query-directory-proxy.gts': `
-          import { field, CardDef, Component, linksTo } from "https://cardstack.com/base/card-api";
+          import { field, CardDef, Component, linksTo } from "@cardstack/base/card-api";
           import { QueryDirectory } from "./query-directory";
 
           export class QueryDirectoryProxy extends CardDef {
@@ -3535,8 +3777,8 @@ module(basename(__filename), function () {
             },
             fileSystem: {
               'person.gts': `
-              import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
-              import { Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
+              import { Component } from '@cardstack/base/card-api';
               export class Person extends CardDef {
                 static displayName = "Person";
                 @field name = contains(StringField);
@@ -3594,63 +3836,64 @@ module(basename(__filename), function () {
                 },
               },
               'cat.gts': `
-              import { CardDef, field, contains, linksTo, StringField } from 'https://cardstack.com/base/card-api';
-              import { Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, contains, linksTo, StringField } from '@cardstack/base/card-api';
+              import { Component } from '@cardstack/base/card-api';
               import { Person } from '${realmURL1}person';
               export class Cat extends CardDef {
                 @field name = contains(StringField);
-                @field owner = linksTo(Person);
+                @field owner = linksTo(Person, { searchable: true });
                 static displayName = "Cat";
                 static embedded = <template>{{@fields.name}} says Meow. owned by <@fields.owner /></template>
               }
             `,
               'dog.gts': `
-              import { CardDef, field, contains, linksTo, StringField, Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, contains, linksTo, StringField, Component } from '@cardstack/base/card-api';
               import { Person } from '${realmURL1}person';
               export class Dog extends CardDef {
                 static displayName = "Dog";
                 @field name = contains(StringField);
-                @field owner = linksTo(Person, { isUsed: true });
+                @field owner = linksTo(Person, { searchable: true });
                 static isolated = class extends Component<typeof this> {
-                  // owner is intentionally not in isolated template, this is included in search doc via isUsed=true
+                  // owner is intentionally not in isolated template; searchable: true pulls it into the search doc anyway
                   <template>{{@model.name}}</template>
                 }
               }
             `,
               'dog-many.gts': `
-              import { CardDef, field, contains, linksToMany, StringField, Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, contains, linksToMany, StringField, Component } from '@cardstack/base/card-api';
               import { Person } from '${realmURL1}person';
               export class DogMany extends CardDef {
                 static displayName = "Dog Many";
                 @field name = contains(StringField);
-                @field owners = linksToMany(Person, { isUsed: true });
+                @field owners = linksToMany(Person, { searchable: true });
                 static isolated = class extends Component<typeof this> {
-                  // owners is intentionally not in isolated template, this is included in search doc via isUsed=true
+                  // owners is intentionally not in isolated template; searchable: true pulls them into the search doc anyway
                   <template>{{@model.name}}</template>
                 }
               }
             `,
               'dog-profile.gts': `
-              import { CardDef, FieldDef, field, contains, linksTo, linksToMany, StringField, Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, FieldDef, field, contains, linksTo, linksToMany, StringField, Component } from '@cardstack/base/card-api';
               import { Person } from '${realmURL1}person';
 
               class DogProfileField extends FieldDef {
-                @field primaryOwner = linksTo(Person, { isUsed: true });
-                @field caretakers = linksToMany(Person, { isUsed: true });
+                @field primaryOwner = linksTo(Person);
+                @field caretakers = linksToMany(Person);
               }
 
               export class DogProfile extends CardDef {
                 static displayName = "Dog Profile";
                 @field name = contains(StringField);
-                @field profile = contains(DogProfileField);
+                @field profile = contains(DogProfileField, { searchable: ['primaryOwner', 'caretakers'] });
                 static isolated = class extends Component<typeof this> {
-                  // profile is intentionally not in isolated template, this is included in search doc via isUsed=true
+                  // profile is intentionally not in isolated template; the contained field's
+                  // searchable routes pull its primaryOwner / caretakers links into the search doc
                   <template>{{@model.name}}</template>
                 }
               }
             `,
               'non-isolated-links-card.gts': `
-              import { CardDef, FieldDef, field, contains, linksTo, linksToMany, StringField, Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, FieldDef, field, contains, linksTo, linksToMany, StringField, Component } from '@cardstack/base/card-api';
               import { Person } from '${realmURL1}person';
 
               class RelationshipField extends FieldDef {
@@ -3661,9 +3904,9 @@ module(basename(__filename), function () {
               export class NonIsolatedLinks extends CardDef {
                 static displayName = 'Non Isolated Links';
                 @field name = contains(StringField);
-                @field owner = linksTo(Person);
-                @field owners = linksToMany(Person);
-                @field profile = contains(RelationshipField);
+                @field owner = linksTo(Person, { searchable: true });
+                @field owners = linksToMany(Person, { searchable: true });
+                @field profile = contains(RelationshipField, { searchable: ['lead', 'members'] });
 
                 static isolated = class extends Component<typeof this> {
                   <template><div data-test-isolated-name>{{@model.name}}</div></template>
@@ -3827,7 +4070,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: rri('https://cardstack.com/base/brand-guide'),
+                      module: rri('@cardstack/base/brand-guide'),
                       name: 'default',
                     },
                   },
@@ -3872,8 +4115,8 @@ module(basename(__filename), function () {
                 },
               },
               'intentional-error.gts': `
-              import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
-              import { Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
+              import { Component } from '@cardstack/base/card-api';
               export class IntentionalError extends CardDef {
                 @field name = contains(StringField);
                 static displayName = "Intentional Error";
@@ -3902,8 +4145,8 @@ module(basename(__filename), function () {
                 },
               },
               'timer-error-card.gts': `
-              import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
-              import { Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
+              import { Component } from '@cardstack/base/card-api';
               export class TimerError extends CardDef {
                 @field name = contains(StringField);
                 static displayName = "Timer Error";
@@ -3931,8 +4174,8 @@ module(basename(__filename), function () {
                 },
               },
               'timer-timeout-card.gts': `
-              import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
-              import { Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
+              import { Component } from '@cardstack/base/card-api';
               setTimeout(() => {}, 0);
               setInterval(() => {}, 5);
               export class TimerTimeout extends CardDef {
@@ -3961,13 +4204,13 @@ module(basename(__filename), function () {
                   },
                 },
               },
-              // A card that fires the boxel-render-error event (handled by the prerender route)
+              // A card that throws during render (handled by the prerender route)
               // and then blocks the event loop long enough that Ember health probe times out,
               // causing data-prerender-status to be set to 'unusable' by the error handler without
               // transitioning to the render-error route (so nothing overwrites our dataset).
               'unusable-error.gts': `
-              import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
-              import { Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
+              import { Component } from '@cardstack/base/card-api';
               export class UnusableError extends CardDef {
                 @field name = contains(StringField);
                 static displayName = "Unusable Error";
@@ -3993,7 +4236,7 @@ module(basename(__filename), function () {
                 },
               },
               'embedded-error.gts': `
-              import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
               export class EmbeddedError extends CardDef {
                 @field name = contains(StringField);
                 static displayName = "Embedded Error";
@@ -4035,8 +4278,8 @@ module(basename(__filename), function () {
             },
             fileSystem: {
               'dog.gts': `
-              import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
-              import { Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
+              import { Component } from '@cardstack/base/card-api';
               export class Dog extends CardDef {
                 @field name = contains(StringField);
                 static displayName = "Dog";
@@ -4096,9 +4339,7 @@ module(basename(__filename), function () {
         test('parent embedded HTML', function (assert) {
           assert.ok(
             /data-test-card-thumbnail-placeholder/.test(
-              result.embeddedHTML![
-                'https://cardstack.com/base/card-api/CardDef'
-              ],
+              result.embeddedHTML!['@cardstack/base/card-api/CardDef'],
             ),
             `failed to match embedded html:${JSON.stringify(result.embeddedHTML)}`,
           );
@@ -4174,7 +4415,7 @@ module(basename(__filename), function () {
           assert.ok(
             result.deps?.find((d) =>
               d.match(
-                /^https:\/\/cardstack.com\/base\/card-api\.gts\..*glimmer-scoped\.css$/,
+                /^@cardstack\/base\/card-api\.gts\..*glimmer-scoped\.css$/,
               ),
             ),
             `glimmer scoped css from ${baseCardRef.module} is a dep`,
@@ -4184,7 +4425,8 @@ module(basename(__filename), function () {
         test('types', function (assert) {
           assert.deepEqual(result.types, [
             `${realmURL2}cat/Cat`,
-            'https://cardstack.com/base/card-api/CardDef',
+            '@cardstack/base/card-api/CardDef',
+            '@cardstack/base/card-api/BaseDef',
           ]);
         });
 
@@ -4194,7 +4436,7 @@ module(basename(__filename), function () {
           assert.strictEqual(result.searchDoc?.owner.name, 'Hassan');
         });
 
-        test('isUsed field includes a field in search doc that is not rendered in template', async function (assert) {
+        test('searchable field includes a field in search doc that is not rendered in template', async function (assert) {
           const testCardURL = `${realmURL2}is-used`;
           let { response } = await prerenderCard(prerenderer, {
             affinityType: 'realm',
@@ -4215,11 +4457,11 @@ module(basename(__filename), function () {
           assert.strictEqual(
             response.searchDoc?.owner.name,
             'Hassan',
-            'linked field is included in search doc via isUsed=true',
+            'linked field is included in search doc via searchable: true',
           );
         });
 
-        test('isUsed linksToMany field includes links in search doc that are not rendered in template', async function (assert) {
+        test('searchable linksToMany field includes links in search doc that are not rendered in template', async function (assert) {
           const testCardURL = `${realmURL2}is-used-many`;
           let { response } = await prerenderCard(prerenderer, {
             affinityType: 'realm',
@@ -4240,16 +4482,16 @@ module(basename(__filename), function () {
           assert.strictEqual(
             response.searchDoc?.owners?.[0]?.name,
             'Hassan',
-            'first linked record is included in search doc via isUsed=true',
+            'first linked record is included in search doc via searchable: true',
           );
           assert.strictEqual(
             response.searchDoc?.owners?.[1]?.name,
             'Mango',
-            'second linked record is included in search doc via isUsed=true',
+            'second linked record is included in search doc via searchable: true',
           );
         });
 
-        test('isUsed compound field includes nested linksTo relationship in search doc', async function (assert) {
+        test('searchable compound field includes nested linksTo relationship in search doc', async function (assert) {
           const testCardURL = `${realmURL2}is-used-field-def`;
           let { response } = await prerenderCard(prerenderer, {
             affinityType: 'realm',
@@ -4270,11 +4512,11 @@ module(basename(__filename), function () {
           assert.strictEqual(
             response.searchDoc?.profile?.primaryOwner?.name,
             'Hassan',
-            'nested linksTo relationship is included in search doc via isUsed=true on the relationship field',
+            'nested linksTo relationship is included in search doc via searchable route on the contained field',
           );
         });
 
-        test('isUsed compound field includes nested linksToMany relationships in search doc', async function (assert) {
+        test('searchable compound field includes nested linksToMany relationships in search doc', async function (assert) {
           const testCardURL = `${realmURL2}is-used-field-def`;
           let { response } = await prerenderCard(prerenderer, {
             affinityType: 'realm',
@@ -4295,12 +4537,12 @@ module(basename(__filename), function () {
           assert.strictEqual(
             response.searchDoc?.profile?.caretakers?.[0]?.name,
             'Hassan',
-            'first nested linksToMany relationship is included in search doc via isUsed=true on the relationship field',
+            'first nested linksToMany relationship is included in search doc via searchable route on the contained field',
           );
           assert.strictEqual(
             response.searchDoc?.profile?.caretakers?.[1]?.name,
             'Mango',
-            'second nested linksToMany relationship is included in search doc via isUsed=true on the relationship field',
+            'second nested linksToMany relationship is included in search doc via searchable route on the contained field',
           );
         });
 
@@ -4518,7 +4760,7 @@ module(basename(__filename), function () {
           );
         });
 
-        test('missing link surfaces 404 without eviction', async function (assert) {
+        test('a card whose linksTo target is missing prerenders cleanly and does not evict the page', async function (assert) {
           const testCardURL = `${realmURL2}missing-link`;
           let result = await prerenderCard(prerenderer, {
             affinityType: 'realm',
@@ -4529,12 +4771,10 @@ module(basename(__filename), function () {
           });
           let { response } = result;
 
-          assert.ok(response.error, 'error present for missing link');
-          assert.strictEqual(
-            response.error?.error.message,
-            `missing file ${realmURL1}missing-owner.json`,
+          assert.notOk(
+            response.error,
+            `prerender succeeds — broken slot renders inline, error: ${JSON.stringify(response.error?.error ?? null)}`,
           );
-          assert.strictEqual(response.error?.error.status, 404);
           assert.false(
             result.pool.evicted,
             'missing link does not evict prerender page',
@@ -4545,7 +4785,7 @@ module(basename(__filename), function () {
           );
         });
 
-        test('fetch failed surfaces error without eviction', async function (assert) {
+        test('a card whose linksTo target fails to fetch prerenders cleanly and does not evict the page', async function (assert) {
           const testCardURL = `${realmURL2}fetch-failed`;
           let result = await prerenderCard(prerenderer, {
             affinityType: 'realm',
@@ -4556,19 +4796,17 @@ module(basename(__filename), function () {
           });
           let { response } = result;
 
-          assert.ok(response.error, 'error present for fetch failed');
-          assert.strictEqual(
-            response.error?.error.message,
-            `unable to fetch http://localhost:9000/this-is-a-link-to-nowhere: fetch failed`,
+          assert.notOk(
+            response.error,
+            `prerender succeeds — broken slot renders inline, error: ${JSON.stringify(response.error?.error ?? null)}`,
           );
-          assert.strictEqual(response.error?.error.status, 500);
           assert.false(
             result.pool.evicted,
-            'fetch failed does not evict prerender page',
+            'fetch-failed link does not evict prerender page',
           );
           assert.false(
             result.pool.timedOut,
-            'fetch failed does not mark prerender timeout',
+            'fetch-failed link does not mark prerender timeout',
           );
         });
 
@@ -6527,6 +6765,7 @@ module(basename(__filename), function () {
                 admissionMs: 0,
                 tabQueueMs: 0,
                 tabStartupMs: 0,
+                tabProbeMs: 0,
               },
             },
             pool: {
@@ -6633,6 +6872,7 @@ module(basename(__filename), function () {
                 admissionMs: 0,
                 tabQueueMs: 0,
                 tabStartupMs: 0,
+                tabProbeMs: 0,
               },
             },
             pool: {
@@ -6748,6 +6988,7 @@ module(basename(__filename), function () {
                 admissionMs: 0,
                 tabQueueMs: 0,
                 tabStartupMs: 0,
+                tabProbeMs: 0,
               },
             },
             pool: {
@@ -6928,8 +7169,8 @@ module(basename(__filename), function () {
 
       let childRealmFileSystem: Record<string, any> = {
         'detail.gts': `
-          import { CardDef, field, contains, Component } from 'https://cardstack.com/base/card-api';
-          import StringField from 'https://cardstack.com/base/string';
+          import { CardDef, field, contains, Component } from '@cardstack/base/card-api';
+          import StringField from '@cardstack/base/string';
           export class Detail extends CardDef {
             static displayName = 'Detail';
             @field info = contains(StringField);
@@ -6959,8 +7200,8 @@ module(basename(__filename), function () {
 
       let parentRealmFileSystem: Record<string, any> = {
         'child-config.gts': `
-          import { CardDef, field, contains, linksTo, Component } from 'https://cardstack.com/base/card-api';
-          import StringField from 'https://cardstack.com/base/string';
+          import { CardDef, field, contains, linksTo, Component } from '@cardstack/base/card-api';
+          import StringField from '@cardstack/base/string';
           import { Detail } from '${childRealmURL}detail';
           export class ChildConfig extends CardDef {
             static displayName = 'Child Config';
@@ -6979,7 +7220,7 @@ module(basename(__filename), function () {
           }
         `,
         'parent-card.gts': `
-          import { CardDef, field, linksToMany, Component } from 'https://cardstack.com/base/card-api';
+          import { CardDef, field, linksToMany, Component } from '@cardstack/base/card-api';
           import { ChildConfig } from './child-config';
           export class ParentCard extends CardDef {
             static displayName = 'Parent Card';
@@ -7156,13 +7397,23 @@ module(basename(__filename), function () {
           },
           fileSystem: {
             'person.gts': `
-              import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
               export class Person extends CardDef {
                 static displayName = "Person";
                 @field name = contains(StringField);
                 static isolated = class extends Component<typeof this> {
                   <template>{{@model.name}}</template>
                 }
+              }
+            `,
+            'pet.gts': `
+              import { CardDef } from '@cardstack/base/card-api';
+              const PetIcon = <template>
+                <svg data-test-icon='pet' xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='10' /></svg>
+              </template>;
+              export class Pet extends CardDef {
+                static displayName = "Pet";
+                static icon = PetIcon;
               }
             `,
             'maple.json': {
@@ -7172,6 +7423,59 @@ module(basename(__filename), function () {
                   adoptsFrom: {
                     module: rri('./person'),
                     name: 'Person',
+                  },
+                },
+              },
+            },
+            'willow.json': {
+              data: {
+                attributes: { name: 'Willow' },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./person'),
+                    name: 'Person',
+                  },
+                },
+              },
+            },
+            'rex.json': {
+              data: {
+                attributes: {},
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./pet'),
+                    name: 'Pet',
+                  },
+                },
+              },
+            },
+            'owner.gts': `
+              import { CardDef, StringField, field, contains, linksTo } from '@cardstack/base/card-api';
+              import { Person } from './person';
+              export class Owner extends CardDef {
+                static displayName = "Owner";
+                @field friend = linksTo(Person);
+                @field friendName = contains(StringField, {
+                  computeVia: function() {
+                    return this.friend.name;
+                  }
+                });
+              }
+            `,
+            'stray.json': {
+              data: {
+                attributes: {},
+                relationships: {
+                  friend: {
+                    links: {
+                      self: 'http://localhost:9000/link-to-nowhere',
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./owner'),
+                    name: 'Owner',
                   },
                 },
               },
@@ -7233,6 +7537,80 @@ module(basename(__filename), function () {
       assert.notOk(result.response.fileRender, 'fileRender skipped');
     });
 
+    test('client abort mid-render interrupts the in-flight visit and frees the affinity', async function (assert) {
+      const cardFileURL = `${realmURL}maple.json`;
+      let ac = new AbortController();
+      let restartsBefore = prerenderer.getBrowserRestartCount();
+      let start = Date.now();
+      try {
+        await prerenderer.prerenderVisit({
+          affinityType: 'realm',
+          affinityValue: realmURL,
+          realm: realmURL,
+          url: cardFileURL,
+          auth: auth(),
+          renderOptions: { cardRender: true },
+          // The simulated delay holds the render step in-flight so the
+          // abort lands mid-step; the matching timeout means the only
+          // way this visit ends early is the abort being observed
+          // inside the step, not at a pass boundary after the step has
+          // burned its full budget.
+          opts: { timeoutMs: 15_000, simulateTimeoutMs: 15_000 },
+          signal: ac.signal,
+          onTabAcquired: () => {
+            setTimeout(() => ac.abort('client disconnected'), 250);
+          },
+        });
+        assert.ok(false, 'visit should have been cancelled');
+      } catch (e: any) {
+        assert.strictEqual(
+          e?.name,
+          'PrerenderCancelledError',
+          'visit rejects with the cancellation error',
+        );
+        assert.strictEqual(
+          e?.state,
+          'rendering',
+          'tagged as a mid-render cancel',
+        );
+      }
+      let elapsedMs = Date.now() - start;
+      assert.ok(
+        elapsedMs < 10_000,
+        `cancelled promptly (${elapsedMs}ms) instead of waiting out the render step`,
+      );
+
+      // The cancel handler disposes the abandoned tab; the affinity
+      // itself must stay usable — the next visit gets a fresh page and
+      // renders normally.
+      let followUp = await prerenderer.prerenderVisit({
+        affinityType: 'realm',
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: cardFileURL,
+        auth: auth(),
+        renderOptions: { cardRender: true },
+      });
+      assert.ok(
+        followUp.response.card?.isolatedHTML?.includes('Maple'),
+        'follow-up visit on the same affinity renders normally',
+      );
+      assert.notOk(
+        followUp.response.pageUnusableError,
+        'follow-up visit is not poisoned by the cancelled render',
+      );
+      // A restart-lane detour would also render normally (restart →
+      // retry succeeds), so the success assertions alone can't tell a
+      // clean fresh-page acquisition from recovery. The counter can:
+      // the awaited cancel disposal means the follow-up acquires a
+      // page without a browser restart.
+      assert.strictEqual(
+        prerenderer.getBrowserRestartCount(),
+        restartsBefore,
+        'follow-up visit did not pay a browser restart',
+      );
+    });
+
     test('fileExtract-only visit returns only the extract', async function (assert) {
       const moduleURL = `${realmURL}person.gts`;
       let result = await prerenderer.prerenderVisit({
@@ -7288,6 +7666,437 @@ module(basename(__filename), function () {
       );
     });
 
+    // The bifurcated visits split the fused visit's output along the
+    // search-doc/HTML seam. The indexing job runs the index visit then the
+    // prerender-html visit and merges the halves into the same writes a
+    // fused visit produces — so the two halves must partition the fused
+    // output exactly: no field produced by both, none produced by neither,
+    // and every field byte-identical to its fused counterpart.
+    test('index and prerender-html visits partition the fused output losslessly', async function (assert) {
+      const cardFileURL = `${realmURL}maple.json`;
+      const fileDefCodeRef = {
+        module: baseRRI('json-file-def'),
+        name: 'JsonFileDef',
+      };
+      let visitArgs = {
+        affinityType: 'realm' as const,
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: cardFileURL,
+        auth: auth(),
+      };
+      const htmlFields = [
+        'isolatedHTML',
+        'headHTML',
+        'atomHTML',
+        'embeddedHTML',
+        'fittedHTML',
+        'markdown',
+      ] as const;
+
+      let fused = (
+        await prerenderer.prerenderVisit({
+          ...visitArgs,
+          renderOptions: {
+            cardRender: true,
+            fileExtract: true,
+            fileRender: true,
+            fileDefCodeRef,
+          },
+        })
+      ).response;
+      let index = (
+        await prerenderer.prerenderVisit({
+          ...visitArgs,
+          visitType: 'index',
+          renderOptions: {
+            cardRender: true,
+            fileExtract: true,
+            fileRender: true,
+            fileDefCodeRef,
+          },
+        })
+      ).response;
+      assert.ok(
+        index.fileExtract?.resource,
+        'index visit extract produced a resource to chain into the prerender-html visit',
+      );
+      let html = (
+        await prerenderer.prerenderVisit({
+          ...visitArgs,
+          visitType: 'prerender-html',
+          renderOptions: {
+            cardRender: true,
+            fileRender: true,
+            fileDefCodeRef,
+          },
+          fileData: {
+            resource: index.fileExtract!.resource!,
+            fileDefCodeRef,
+          },
+          types: index.fileExtract!.types ?? undefined,
+          cardTypes: index.card!.types ?? undefined,
+        })
+      ).response;
+
+      // The index visit produces only the search-doc side.
+      assert.notOk(
+        index.card?.error,
+        `index visit card completed without error: ${JSON.stringify(index.card?.error?.error ?? null)}`,
+      );
+      assert.ok(index.card?.serialized, 'index visit serializes the card');
+      assert.ok(index.card?.searchDoc, 'index visit builds the search doc');
+      assert.ok(index.card?.types?.length, 'index visit reports types');
+      assert.ok(index.card?.deps?.length, 'index visit reports deps');
+      assert.ok(index.card?.iconHTML, 'index visit renders the card icon');
+      assert.ok(
+        index.fileRender?.iconHTML,
+        'index visit renders the file icon',
+      );
+      for (let field of htmlFields) {
+        assert.strictEqual(
+          index.card?.[field],
+          null,
+          `index visit leaves card ${field} null`,
+        );
+        assert.strictEqual(
+          index.fileRender?.[field],
+          null,
+          `index visit leaves file ${field} null`,
+        );
+      }
+
+      // The prerender-html visit produces only the HTML side.
+      assert.notOk(
+        html.card?.error,
+        `prerender-html visit card completed without error: ${JSON.stringify(html.card?.error?.error ?? null)}`,
+      );
+      assert.notOk(html.fileExtract, 'prerender-html visit skips the extract');
+      assert.strictEqual(
+        html.card?.serialized,
+        null,
+        'prerender-html visit does not serialize the card',
+      );
+      assert.strictEqual(
+        html.card?.searchDoc,
+        null,
+        'prerender-html visit does not build a search doc',
+      );
+      assert.strictEqual(
+        html.card?.types,
+        null,
+        'prerender-html visit does not report types',
+      );
+      assert.strictEqual(
+        html.card?.iconHTML,
+        null,
+        'prerender-html visit does not render the card icon',
+      );
+      assert.strictEqual(
+        html.fileRender?.iconHTML,
+        null,
+        'prerender-html visit does not render the file icon',
+      );
+      assert.ok(
+        html.card?.deps?.length,
+        'prerender-html visit reports the deps its renders pulled in',
+      );
+
+      // Merging the two halves reproduces the fused output. The file's
+      // isolated HTML is captured as raw innerHTML (card HTML goes through
+      // the ember-id scrub, file isolated does not), so auto-generated
+      // `id="emberNN"` values vary per render and are normalized away
+      // before comparing.
+      let scrubEmberIds = (value: unknown) =>
+        typeof value === 'string'
+          ? value.replace(/id="ember\d+"/g, 'id="ember"')
+          : value;
+      for (let field of htmlFields) {
+        assert.deepEqual(
+          html.card?.[field],
+          fused.card?.[field],
+          `card ${field} matches the fused visit`,
+        );
+        assert.deepEqual(
+          scrubEmberIds(html.fileRender?.[field]),
+          scrubEmberIds(fused.fileRender?.[field]),
+          `file ${field} matches the fused visit`,
+        );
+      }
+      assert.deepEqual(
+        index.card?.iconHTML,
+        fused.card?.iconHTML,
+        'card icon matches the fused visit',
+      );
+      assert.deepEqual(
+        index.fileRender?.iconHTML,
+        fused.fileRender?.iconHTML,
+        'file icon matches the fused visit',
+      );
+      assert.deepEqual(
+        index.card?.serialized,
+        fused.card?.serialized,
+        'serialized doc matches the fused visit',
+      );
+      assert.deepEqual(
+        index.card?.searchDoc,
+        fused.card?.searchDoc,
+        'search doc matches the fused visit',
+      );
+      assert.deepEqual(
+        index.card?.displayNames,
+        fused.card?.displayNames,
+        'display names match the fused visit',
+      );
+      assert.deepEqual(
+        index.card?.types,
+        fused.card?.types,
+        'types match the fused visit',
+      );
+      {
+        let { deps: fusedDeps, nonce: _n1, ...fusedRest } = fused.fileExtract!;
+        let { deps: indexDeps, nonce: _n2, ...indexRest } = index.fileExtract!;
+        assert.deepEqual(
+          indexRest,
+          fusedRest,
+          'file extract matches the fused visit',
+        );
+        assert.deepEqual(
+          [...new Set(indexDeps)].sort(),
+          [...new Set(fusedDeps)].sort(),
+          'file extract deps match the fused visit as a set',
+        );
+      }
+      assert.deepEqual(
+        [
+          ...new Set([...(index.card?.deps ?? []), ...(html.card?.deps ?? [])]),
+        ].sort(),
+        [...new Set(fused.card?.deps ?? [])].sort(),
+        'union of the two visits card deps matches the fused deps as a set',
+      );
+
+      // Per-format render timings ride the prerender-html visit's meta —
+      // one number per html-route step for the card and the file rendering
+      // — while the index visit, which never runs the html route, reports
+      // none.
+      let renderFormatsMs = html.meta?.diagnostics?.renderFormatsMs;
+      const formats = [
+        'isolated',
+        'head',
+        'atom',
+        'markdown',
+        'fitted',
+        'embedded',
+      ] as const;
+      for (let format of formats) {
+        assert.strictEqual(
+          typeof renderFormatsMs?.card?.[format],
+          'number',
+          `prerender-html visit records the card ${format} render timing`,
+        );
+        assert.strictEqual(
+          typeof renderFormatsMs?.file?.[format],
+          'number',
+          `prerender-html visit records the file ${format} render timing`,
+        );
+      }
+      assert.notOk(
+        index.meta?.diagnostics?.renderFormatsMs,
+        'index visit records no per-format render timings',
+      );
+
+      // Per-route index timings are the index-half sibling of
+      // renderFormatsMs: they ride the index visit's meta — one number per
+      // index-half route step — while the prerender-html visit, which runs
+      // no index-half route here, reports none. The index visit of a card
+      // instance fuses the extract into its render.meta transition, so
+      // `card.meta` covers both halves (the extract's share itemized as
+      // `fileExtractMs`) and no standalone `file.fileExtract` leg exists.
+      // (No jobId is threaded, so the per-type icon memo is inactive and
+      // each icon route actually runs.)
+      let indexRoutesMs = index.meta?.diagnostics?.indexRoutesMs;
+      assert.strictEqual(
+        typeof indexRoutesMs?.card?.meta,
+        'number',
+        'index visit records the card render.meta route timing',
+      );
+      assert.strictEqual(
+        typeof indexRoutesMs?.card?.icon,
+        'number',
+        'index visit records the card icon route timing',
+      );
+      assert.strictEqual(
+        indexRoutesMs?.file?.fileExtract,
+        undefined,
+        'index visit runs no standalone file extract transition',
+      );
+      assert.strictEqual(
+        typeof index.meta?.diagnostics?.fileExtractMs,
+        'number',
+        'index visit itemizes the extract share of the fused meta transition',
+      );
+      assert.strictEqual(
+        typeof indexRoutesMs?.file?.icon,
+        'number',
+        'index visit records the file icon route timing',
+      );
+      assert.notOk(
+        html.meta?.diagnostics?.indexRoutesMs,
+        'prerender-html visit records no per-route index timings',
+      );
+      // The fused (union) visit runs meta last, after the html renders, so
+      // its extract stays a standalone transition and records its own leg.
+      let fusedIndexRoutesMs = fused.meta?.diagnostics?.indexRoutesMs;
+      assert.strictEqual(
+        typeof fusedIndexRoutesMs?.card?.meta,
+        'number',
+        'fused visit records the card render.meta route timing',
+      );
+      assert.strictEqual(
+        typeof fusedIndexRoutesMs?.card?.icon,
+        'number',
+        'fused visit records the card icon route timing',
+      );
+      assert.strictEqual(
+        typeof fusedIndexRoutesMs?.file?.fileExtract,
+        'number',
+        'fused visit records the standalone file extract route timing',
+      );
+    });
+
+    test('a legacy host without the fused capability gets per-pass transitions with identical output', async function (assert) {
+      const cardFileURL = `${realmURL}maple.json`;
+      const fileDefCodeRef = {
+        module: baseRRI('json-file-def'),
+        name: 'JsonFileDef',
+      };
+      let visitArgs = {
+        affinityType: 'realm' as const,
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: cardFileURL,
+        auth: auth(),
+        visitType: 'index' as const,
+        renderOptions: {
+          cardRender: true,
+          fileExtract: true,
+          fileRender: true,
+          fileDefCodeRef,
+        } as const,
+      };
+      let legacy = (
+        await prerenderer.prerenderVisit({
+          ...visitArgs,
+          opts: { simulateLegacyHost: true },
+        })
+      ).response;
+      let fused = (await prerenderer.prerenderVisit(visitArgs)).response;
+
+      // The legacy path pays a standalone extract transition; the fused
+      // path folds the extract into render.meta and itemizes its share.
+      assert.strictEqual(
+        typeof legacy.meta?.diagnostics?.indexRoutesMs?.file?.fileExtract,
+        'number',
+        'legacy host records a standalone file extract transition',
+      );
+      assert.strictEqual(
+        legacy.meta?.diagnostics?.fileExtractMs,
+        undefined,
+        'legacy host has no fused extract share to itemize',
+      );
+      assert.strictEqual(
+        fused.meta?.diagnostics?.indexRoutesMs?.file?.fileExtract,
+        undefined,
+        'fused host runs no standalone file extract transition',
+      );
+      assert.strictEqual(
+        typeof fused.meta?.diagnostics?.fileExtractMs,
+        'number',
+        'fused host itemizes the extract share of the meta transition',
+      );
+
+      // Both strategies produce the same output.
+      assert.deepEqual(
+        fused.card?.serialized,
+        legacy.card?.serialized,
+        'serialized doc matches the legacy path',
+      );
+      assert.deepEqual(
+        fused.card?.searchDoc,
+        legacy.card?.searchDoc,
+        'search doc matches the legacy path',
+      );
+      assert.deepEqual(
+        fused.card?.types,
+        legacy.card?.types,
+        'types match the legacy path',
+      );
+      assert.deepEqual(
+        fused.card?.displayNames,
+        legacy.card?.displayNames,
+        'display names match the legacy path',
+      );
+      assert.deepEqual(
+        [...new Set(fused.card?.deps ?? [])].sort(),
+        [...new Set(legacy.card?.deps ?? [])].sort(),
+        'card deps match the legacy path as a set',
+      );
+      {
+        let { deps: fusedDeps, nonce: _n1, ...fusedRest } = fused.fileExtract!;
+        let {
+          deps: legacyDeps,
+          nonce: _n2,
+          ...legacyRest
+        } = legacy.fileExtract!;
+        assert.deepEqual(
+          fusedRest,
+          legacyRest,
+          'file extract matches the legacy path',
+        );
+        assert.deepEqual(
+          [...new Set(fusedDeps)].sort(),
+          [...new Set(legacyDeps)].sort(),
+          'file extract deps match the legacy path as a set',
+        );
+      }
+    });
+
+    test('an eviction during the fused pass ends the visit without a fallback extract', async function (assert) {
+      const cardFileURL = `${realmURL}maple.json`;
+      // A render timeout is a wedged-page signal: the page gets evicted and
+      // no further transition can run on it, so the fused visit ends with
+      // the file half absent. The file row degrades to an error row for
+      // this attempt and heals on the next index of the file — the pinned
+      // trade-off for carrying the extract inside the meta transition.
+      let { response, pool } = await prerenderer.prerenderVisit({
+        affinityType: 'realm',
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: cardFileURL,
+        auth: auth(),
+        visitType: 'index',
+        renderOptions: { cardRender: true, fileExtract: true },
+        opts: { timeoutMs: 1, simulateTimeoutMs: 200 },
+      });
+
+      assert.true(pool.timedOut, 'the fused transition timed out');
+      assert.true(pool.evicted, 'the timeout evicted the page');
+      assert.ok(
+        response.pageUnusableError,
+        'the visit reports the page unusable',
+      );
+      assert.strictEqual(
+        response.fileExtract,
+        undefined,
+        'no fallback extract runs on an evicted page',
+      );
+      assert.strictEqual(
+        response.meta?.diagnostics?.indexRoutesMs?.file?.fileExtract,
+        undefined,
+        'no standalone extract transition was recorded',
+      );
+    });
+
     test('reuses a single pooled page for all three passes', async function (assert) {
       const cardFileURL = `${realmURL}maple.json`;
       // Warm the pool
@@ -7317,6 +8126,233 @@ module(basename(__filename), function () {
         },
       });
       assert.true(result.pool.reused, 'second visit reused the pooled page');
+    });
+
+    // Icon HTML is a pure function of the card's type (the type's static
+    // `icon` component), so an indexing job renders each type's icon once:
+    // the first index visit for a type renders it and every later visit of
+    // that type reuses the captured markup, skipping the icon route. The
+    // memo is scoped to the visit's jobId; visits without one (on-demand
+    // renders) always render the icon and never touch the memo.
+    module('index-visit icon memo', function () {
+      let affinityKey = toAffinityKey({
+        affinityType: 'realm',
+        affinityValue: realmURL,
+      });
+      let indexVisit = (fileName: string, extra?: Record<string, unknown>) =>
+        prerenderer.prerenderVisit({
+          affinityType: 'realm',
+          affinityValue: realmURL,
+          realm: realmURL,
+          url: `${realmURL}${fileName}`,
+          auth: auth(),
+          visitType: 'index',
+          renderOptions: {
+            cardRender: true,
+            fileExtract: true,
+            fileRender: true,
+            fileDefCodeRef: {
+              module: baseRRI('json-file-def'),
+              name: 'JsonFileDef',
+            },
+            ...((extra?.renderOptions as object) ?? {}),
+          },
+          ...(extra?.jobId ? { jobId: extra.jobId as string } : {}),
+          ...(extra?.batchId ? { batchId: extra.batchId as string } : {}),
+        });
+
+      test('one job renders each type icon once and reuses it', async function (assert) {
+        let jobId = 'icon-memo-reuse.1';
+        let first = (await indexVisit('maple.json', { jobId })).response;
+        assert.notOk(first.card?.error, 'first visit completes cleanly');
+        assert.ok(
+          first.card?.iconHTML?.startsWith('<svg'),
+          `first visit renders the card icon: ${first.card?.iconHTML}`,
+        );
+        assert.ok(
+          first.fileRender?.iconHTML,
+          'first visit renders the file icon',
+        );
+        let memo = prerenderer.getIconMemo(affinityKey);
+        assert.strictEqual(
+          memo?.misses,
+          2,
+          'card + file icons each rendered once',
+        );
+        assert.strictEqual(memo?.hits, 0, 'nothing reused yet');
+        assert.strictEqual(memo?.types.length, 2, 'two type keys memoized');
+
+        let second = (await indexVisit('willow.json', { jobId })).response;
+        assert.notOk(second.card?.error, 'second visit completes cleanly');
+        assert.strictEqual(
+          second.card?.iconHTML,
+          first.card?.iconHTML,
+          'same-type card icon is reused byte-identically',
+        );
+        assert.strictEqual(
+          second.fileRender?.iconHTML,
+          first.fileRender?.iconHTML,
+          'same-type file icon is reused byte-identically',
+        );
+        memo = prerenderer.getIconMemo(affinityKey);
+        assert.strictEqual(memo?.hits, 2, 'card + file icons each reused');
+        assert.strictEqual(memo?.misses, 2, 'no additional renders');
+
+        let third = (await indexVisit('rex.json', { jobId })).response;
+        assert.notOk(third.card?.error, 'third visit completes cleanly');
+        assert.ok(
+          third.card?.iconHTML?.includes('data-test-icon'),
+          `a different type renders its own icon: ${third.card?.iconHTML}`,
+        );
+        assert.notStrictEqual(
+          third.card?.iconHTML,
+          first.card?.iconHTML,
+          'the two card types have distinct icons',
+        );
+        memo = prerenderer.getIconMemo(affinityKey);
+        assert.strictEqual(memo?.misses, 3, 'the new card type rendered once');
+        assert.strictEqual(memo?.hits, 3, 'its file icon was reused');
+        assert.strictEqual(memo?.types.length, 3, 'three type keys memoized');
+      });
+
+      test('a different job renders icons afresh', async function (assert) {
+        await indexVisit('maple.json', { jobId: 'icon-memo-job-a.1' });
+        let memoA = prerenderer.getIconMemo(affinityKey);
+        assert.strictEqual(memoA?.misses, 2, 'first job rendered its icons');
+
+        let result = (
+          await indexVisit('willow.json', { jobId: 'icon-memo-job-b.1' })
+        ).response;
+        assert.ok(result.card?.iconHTML, 'card icon rendered');
+        let memoB = prerenderer.getIconMemo(affinityKey);
+        assert.notStrictEqual(
+          memoB?.jobKey,
+          memoA?.jobKey,
+          'the memo belongs to the new job',
+        );
+        assert.strictEqual(
+          memoB?.misses,
+          2,
+          'the new job rendered the icons itself',
+        );
+        assert.strictEqual(memoB?.hits, 0, 'nothing carried over');
+      });
+
+      test('a visit without a jobId never touches the memo', async function (assert) {
+        await indexVisit('maple.json', { jobId: 'icon-memo-anon.1' });
+        let before = prerenderer.getIconMemo(affinityKey);
+        assert.strictEqual(before?.misses, 2, 'job memo established');
+
+        let result = (await indexVisit('willow.json')).response;
+        assert.ok(
+          result.card?.iconHTML?.startsWith('<svg'),
+          'icon still renders without a jobId',
+        );
+        let after = prerenderer.getIconMemo(affinityKey);
+        assert.deepEqual(
+          after,
+          before,
+          'the jobless visit neither read nor wrote the memo',
+        );
+      });
+
+      test('a meta error short-circuits the pass and skips the icon render', async function (assert) {
+        // `stray.json`'s `friendName` computed reads a link whose target
+        // never loads, so the meta entry errors on every visit. The pass
+        // must stop there: driving the icon render against the error
+        // route would wait out the full render timeout and evict the tab.
+        let { response, pool } = await indexVisit('stray.json', {
+          jobId: 'icon-memo-meta-error.1',
+        });
+        assert.ok(
+          response.card?.error,
+          `card error captured: ${JSON.stringify(
+            response.card?.error?.error?.message ?? null,
+          )}`,
+        );
+        assert.strictEqual(
+          response.card?.iconHTML,
+          null,
+          'icon render is skipped once the meta entry has errored',
+        );
+        // The extract normally rides the fused meta transition, which the
+        // card error lost — the fallback standalone extract transition must
+        // still produce the file row (the card error is a route-level error;
+        // the page stays fully operational).
+        assert.strictEqual(
+          response.fileExtract?.status,
+          'ready',
+          'the fallback extract still produces the file row',
+        );
+        assert.strictEqual(
+          typeof response.meta?.diagnostics?.indexRoutesMs?.file?.fileExtract,
+          'number',
+          'the fallback extract records its standalone route timing',
+        );
+        assert.false(
+          pool.timedOut,
+          'the visit completes without a render timeout',
+        );
+        assert.false(pool.evicted, 'the page stays usable');
+      });
+
+      test('disposing the affinity drops the memo', async function (assert) {
+        await indexVisit('maple.json', { jobId: 'icon-memo-dispose.1' });
+        assert.ok(
+          prerenderer.getIconMemo(affinityKey),
+          'memo established by the visit',
+        );
+        await prerenderer.disposeAffinity({
+          affinityType: 'realm',
+          affinityValue: realmURL,
+        });
+        assert.strictEqual(
+          prerenderer.getIconMemo(affinityKey),
+          undefined,
+          'affinity disposal drops the memo with the rest of the warm state',
+        );
+      });
+
+      test('a clearCache visit bypasses the memo read and releaseBatch drops the memo', async function (assert) {
+        let jobId = 'icon-memo-clear.1';
+        let batchId = 'icon-memo-clear-batch';
+        let first = (await indexVisit('maple.json', { jobId })).response;
+        assert.ok(first.card?.iconHTML, 'card icon rendered');
+
+        let second = (
+          await indexVisit('willow.json', {
+            jobId,
+            batchId,
+            renderOptions: { clearCache: true },
+          })
+        ).response;
+        assert.ok(
+          second.card?.iconHTML?.startsWith('<svg'),
+          'clearCache visit renders the icon',
+        );
+        let memo = prerenderer.getIconMemo(affinityKey);
+        assert.strictEqual(
+          memo?.hits,
+          0,
+          'the clearCache visit did not read the memo',
+        );
+        assert.strictEqual(
+          memo?.misses,
+          4,
+          'the clearCache visit re-rendered and re-stored both icons',
+        );
+
+        await prerenderer.releaseBatch({
+          batchId,
+          affinityType: 'realm',
+          affinityValue: realmURL,
+        });
+        assert.strictEqual(
+          prerenderer.getIconMemo(affinityKey),
+          undefined,
+          'releasing the owning batch drops the memo',
+        );
+      });
     });
   });
 });

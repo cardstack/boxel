@@ -5,7 +5,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
-  baseRealm,
+  baseRealmRRI,
   type FileExtractResponse,
   type RenderRouteOptions,
   type ResolvedCodeRef,
@@ -79,7 +79,7 @@ module('Acceptance | svg image def', function (hooks) {
   const makeFileURL = (path: string) => new URL(path, testRealmURL).href;
 
   const svgDefCodeRef = (): ResolvedCodeRef => ({
-    module: `${baseRealm.url}svg-image-def` as RealmResourceIdentifier,
+    module: `${baseRealmRRI}svg-image-def` as RealmResourceIdentifier,
     name: 'SvgDef',
   });
 
@@ -250,6 +250,15 @@ module('Acceptance | svg image def', function (hooks) {
       img?.getAttribute('src')?.includes('sample.svg'),
       'img src references the SVG file',
     );
+    assert.strictEqual(
+      img?.getAttribute('data-image-fit'),
+      'contain',
+      'a vector letterboxes at its own proportions instead of cropping',
+    );
+    assert.ok(
+      document.querySelector('[data-prerender] [data-test-file-isolated]'),
+      'the shared isolated shell hosts the preview',
+    );
   });
 
   test('indexing stores SVG metadata and file meta uses it', async function (assert) {
@@ -329,7 +338,7 @@ module('Acceptance | svg image def', function (hooks) {
     let { status } = await capturePrerenderResult('innerHTML');
     assert.strictEqual(status, 'ready', 'render completed');
 
-    let imgSelector = '[data-prerender] .image-isolated__img';
+    let imgSelector = '[data-prerender] [data-test-image-preview]';
     let img = document.querySelector(imgSelector) as HTMLImageElement | null;
     assert.ok(img, 'img element is rendered');
     assert.ok(

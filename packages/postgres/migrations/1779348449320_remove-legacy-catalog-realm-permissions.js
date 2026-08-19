@@ -38,33 +38,83 @@ exports.up = (pgm) => {
 // by realm-server's startup registry-backfill, so a rewind here would be
 // incomplete. If the realm is brought back, the next boot of realm-server
 // with the realm on disk re-registers it automatically.
+//
+// Each INSERT is guarded by NOT EXISTS against both http- and https-forms
+// of the (realm_url, username) pair. Background: 1779100257124_canonical-
+// url-http-to-https rewrites localhost URLs in place from http→https on
+// UP. On dev that runs before this migration, so by the time this UP
+// fires the legacy-catalog rows are already in https form and its
+// http-targeted DELETE matches nothing — the rows persist into the
+// rollback. Then this DOWN inserts the http row, and 1779100257124's
+// DOWN rewrites the leftover https row back to http, which collides with
+// the just-inserted http row on realm_user_permissions_pkey. Guarding
+// the INSERT keeps the chain idempotent regardless of which form is
+// sitting in the table. Staging/production never hit the underlying
+// trigger (their canonicals are always https) but use the same guard
+// for uniformity.
+function guardedRestore(realmUrl, username, write, realmOwner) {
+  let httpsUrl = realmUrl.replace(/^http:/, 'https:');
+  let httpUrl = realmUrl.replace(/^https:/, 'http:');
+  return `
+    INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
+    SELECT '${realmUrl}', '${username}', true, ${write}, ${realmOwner}
+    WHERE NOT EXISTS (
+      SELECT 1 FROM realm_user_permissions
+      WHERE realm_url IN ('${httpUrl}', '${httpsUrl}')
+        AND username = '${username}'
+    )
+  `;
+}
+
 exports.down = (pgm) => {
   switch (process.env.REALM_SENTRY_ENVIRONMENT) {
     case 'staging':
       pgm.sql(
-        `INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
-         VALUES
-           ('https://realms-staging.stack.cards/legacy-catalog/', '@legacy_catalog_realm:stack.cards', true, true, true),
-           ('https://realms-staging.stack.cards/legacy-catalog/', '*', true, false, false)
-         ON CONFLICT ON CONSTRAINT realm_user_permissions_pkey DO NOTHING`,
+        guardedRestore(
+          'https://realms-staging.stack.cards/legacy-catalog/',
+          '@legacy_catalog_realm:stack.cards',
+          true,
+          true,
+        ),
+      );
+      pgm.sql(
+        guardedRestore(
+          'https://realms-staging.stack.cards/legacy-catalog/',
+          '*',
+          false,
+          false,
+        ),
       );
       break;
     case 'production':
       pgm.sql(
-        `INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
-         VALUES
-           ('https://app.boxel.ai/legacy-catalog/', '@legacy_catalog_realm:boxel.ai', true, true, true),
-           ('https://app.boxel.ai/legacy-catalog/', '*', true, false, false)
-         ON CONFLICT ON CONSTRAINT realm_user_permissions_pkey DO NOTHING`,
+        guardedRestore(
+          'https://app.boxel.ai/legacy-catalog/',
+          '@legacy_catalog_realm:boxel.ai',
+          true,
+          true,
+        ),
+      );
+      pgm.sql(
+        guardedRestore('https://app.boxel.ai/legacy-catalog/', '*', false, false),
       );
       break;
     default:
       pgm.sql(
-        `INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
-         VALUES
-           ('http://localhost:4201/legacy-catalog/', '@legacy_catalog_realm:localhost', true, true, true),
-           ('http://localhost:4201/legacy-catalog/', '*', true, false, false)
-         ON CONFLICT ON CONSTRAINT realm_user_permissions_pkey DO NOTHING`,
+        guardedRestore(
+          'http://localhost:4201/legacy-catalog/',
+          '@legacy_catalog_realm:localhost',
+          true,
+          true,
+        ),
+      );
+      pgm.sql(
+        guardedRestore(
+          'http://localhost:4201/legacy-catalog/',
+          '*',
+          false,
+          false,
+        ),
       );
   }
 };

@@ -32,6 +32,11 @@
 // against a genuinely broken vite — in normal dev that ceiling is never
 // reached.
 
+// First, so this probe's own progress logs flush in real time instead of
+// at process exit (Node block-buffers writes to a pipe; in CI this script
+// runs piped through run-p + tee, so retry-attempt output otherwise hides
+// behind buffering until teardown).
+import '../lib/unbuffer-stdio.ts';
 import puppeteer, { type Browser } from 'puppeteer';
 
 const PER_ATTEMPT_TIMEOUT_MS = 30_000;
@@ -48,7 +53,7 @@ const LAUNCH_TIMEOUT_MS = 90_000;
 const LAUNCH_MAX_ATTEMPTS = 3;
 const LAUNCH_RETRY_BACKOFF_MS = 2_000;
 
-import { isHttpsLoopback } from '../lib/is-https-loopback';
+import { isHttpsLoopback } from '../lib/is-https-loopback.ts';
 
 const log = (msg: string) => console.log(`[wait-for-host-standby] ${msg}`);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

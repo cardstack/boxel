@@ -1,14 +1,15 @@
-import { test, expect } from './fixtures';
+import { test, expect } from './fixtures.ts';
 import type { Page } from '@playwright/test';
 import { randomUUID } from 'crypto';
-import { appURL } from '../helpers/isolated-realm-server';
+import { appURL } from '../support/isolated-realm-server.ts';
 import {
   clearLocalStorage,
   createRealm,
   createSubscribedUserAndLogin,
   openRoot,
   postCardSource,
-} from '../helpers';
+  waitForPublishedMarker,
+} from '../helpers/index.ts';
 
 test.describe('Head tags', () => {
   // These tests mutate shared published-realm/head-tag state in the same
@@ -84,6 +85,13 @@ test.describe('Head tags', () => {
 
     let publishedRealmURLString = `https://${user.username}.localhost:4205/new-workspace/index`;
 
+    // Publishing returns before the published realm finishes re-indexing and
+    // prerendering, so a cold navigation races that work — the served HTML can
+    // still be missing its head tags, which surfaces here as the og:title
+    // element not being found. Gate on the SSR marker so the document render is
+    // warm before the browser asks for it.
+    await waitForPublishedMarker(page, publishedRealmURLString, 'og:title');
+
     await page.goto(publishedRealmURLString);
 
     await expect(page.locator('meta[property="og:title"]')).toHaveAttribute(
@@ -102,15 +110,15 @@ test.describe('Head tags', () => {
       displayName: realmName,
     });
 
-    await page.goto(realmURL);
+    await page.goto(realmURL, { waitUntil: 'domcontentloaded' });
     await page.locator('[data-test-stack-item-content]').first().waitFor();
 
     let defaultHeadCardSource = `
       import { action } from '@ember/object';
       import { consume } from 'ember-provide-consume-context';
       import { on } from '@ember/modifier';
-      import { contains, field, CardDef, Component, type CardCrudFunctions } from "https://cardstack.com/base/card-api";
-      import StringField from "https://cardstack.com/base/string";
+      import { contains, field, CardDef, Component, type CardCrudFunctions } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
       import { CardCrudFunctionsContextName } from '@cardstack/runtime-common';
 
       export class DefaultHeadCard extends CardDef {
@@ -154,8 +162,8 @@ test.describe('Head tags', () => {
       import { action } from '@ember/object';
       import { consume } from 'ember-provide-consume-context';
       import { on } from '@ember/modifier';
-      import { contains, field, CardDef, Component, type CardCrudFunctions } from "https://cardstack.com/base/card-api";
-      import StringField from "https://cardstack.com/base/string";
+      import { contains, field, CardDef, Component, type CardCrudFunctions } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
       import { CardCrudFunctionsContextName } from '@cardstack/runtime-common';
 
       export class CustomHeadCard extends CardDef {
@@ -273,7 +281,19 @@ test.describe('Head tags', () => {
     let publishedRealmURL = `https://${user.username}.localhost:4205/${realmName}/`;
     let defaultCardURL = `${publishedRealmURL}default-head-card.json`;
 
-    await page.goto(defaultCardURL);
+    // Publishing returns before the published realm finishes re-indexing
+    // and prerendering, so navigating "cold" races that work — the source
+    // of the flaky 60s `page.goto`/`waitFor` timeouts here. Gate on the
+    // card's SSR marker (`data-test-default-head-card`, from the isolated
+    // template) so the document render is warm before the browser asks
+    // for it.
+    await waitForPublishedMarker(
+      page,
+      defaultCardURL,
+      'data-test-default-head-card',
+    );
+
+    await page.goto(defaultCardURL, { waitUntil: 'domcontentloaded' });
 
     // Wait for Ember to take over
     await page.locator('[data-test-host-mode-content]').waitFor();

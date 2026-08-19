@@ -2,20 +2,22 @@ import type {
   DependencyIndexRow,
   SearchIndexErrorEntry,
   SingleCardDocument,
-} from '../index';
-import type { DefinitionCacheEntries } from '../definition-lookup';
-import type { SerializedError } from '../error';
-import { canonicalURL } from './dependency-url';
-import { IndexBackedDependencyErrors } from './index-backed-dependency-errors';
+} from '../index.ts';
+import type { DefinitionCacheEntries } from '../definition-lookup.ts';
+import type { SerializedError } from '../error.ts';
+import type { VirtualNetwork } from '../virtual-network.ts';
+import { canonicalURL, type CanonicalURLMemo } from './dependency-url.ts';
+import { IndexBackedDependencyErrors } from './index-backed-dependency-errors.ts';
 import {
   RelationshipDependencyExtractor,
   type RelationshipSource,
-} from './relationship-dependency-extractor';
+} from './relationship-dependency-extractor.ts';
 
 type OrderingDependencyRow = Pick<DependencyIndexRow, 'url' | 'type' | 'deps'>;
 
 interface DependencyResolverOptions {
   realmURL: URL;
+  virtualNetwork: VirtualNetwork;
   readDefinitionCacheEntries(
     moduleIds: string[],
   ): Promise<DefinitionCacheEntries>;
@@ -41,30 +43,54 @@ export class IndexRunnerDependencyManager {
   ) => Promise<OrderingDependencyRow[]>;
   #indexBackedDependencyErrors: IndexBackedDependencyErrors;
   #relationshipDependencyExtractor: RelationshipDependencyExtractor;
+  #virtualNetwork: VirtualNetwork;
+  // Shared across invalidation ordering, relationship extraction, and
+  // index-backed error lookup so the module/relationship deps that recur on
+  // nearly every card in a realm are canonicalized once per index pass rather
+  // than on every `(row, dep)` pair. Cleared at each pass boundary by `reset()`.
+  #canonicalURLMemo: CanonicalURLMemo = new Map();
 
   constructor({
     realmURL,
+    virtualNetwork,
     readDefinitionCacheEntries,
     getDependencyRows,
     getOrderingDependencyRows,
     getInvalidations,
   }: DependencyResolverOptions) {
     this.#getOrderingDependencyRows = getOrderingDependencyRows;
+    this.#virtualNetwork = virtualNetwork;
     this.#indexBackedDependencyErrors = new IndexBackedDependencyErrors({
       realmURL,
+      virtualNetwork,
       readDefinitionCacheEntries,
       getDependencyRows,
       getInvalidations,
+      canonicalURLMemo: this.#canonicalURLMemo,
     });
     this.#relationshipDependencyExtractor = new RelationshipDependencyExtractor(
       {
         realmURL,
+        virtualNetwork,
+        canonicalURLMemo: this.#canonicalURLMemo,
       },
     );
   }
 
   reset(): void {
+    this.#canonicalURLMemo.clear();
     this.#indexBackedDependencyErrors.reset();
+  }
+
+  // Canonical form of `url` relative to `relativeTo`, sharing the pass-scoped
+  // cache with invalidation ordering and index-backed error lookup.
+  canonicalURL(url: string, relativeTo: string | undefined): string {
+    return canonicalURL(
+      url,
+      relativeTo,
+      this.#virtualNetwork,
+      this.#canonicalURLMemo,
+    );
   }
 
   invalidateRelationshipDependencyRowCache(url: URL): void {
@@ -95,7 +121,7 @@ export class IndexRunnerDependencyManager {
       }
       let base = new URL(row.url);
       for (let dep of row.deps ?? []) {
-        let normalized = canonicalURL(dep, base.href);
+        let normalized = this.canonicalURL(dep, base.href);
         if (!byHref.has(normalized) || normalized === row.url) {
           continue;
         }

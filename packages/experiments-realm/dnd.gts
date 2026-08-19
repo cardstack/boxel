@@ -6,11 +6,11 @@ import {
   field,
   CardDef,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
-import BooleanField from 'https://cardstack.com/base/boolean';
-import MarkdownField from 'https://cardstack.com/base/markdown';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
+import BooleanField from '@cardstack/base/boolean';
+import MarkdownField from '@cardstack/base/markdown';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Package from '@cardstack/boxel-icons/package';
@@ -209,7 +209,7 @@ export class DnDItem extends CardDef {
 // Define the InventoryItem card
 export class InventoryItem extends CardDef {
   static icon = Package;
-  @field item = linksTo(DnDItem);
+  @field item = linksTo(DnDItem, { searchable: true });
   @field quantity = contains(NumberField);
 }
 
@@ -228,8 +228,8 @@ export class CharacterSheet extends CardDef {
   @field intelligence = contains(NumberField);
   @field wisdom = contains(NumberField);
   @field charisma = contains(NumberField);
-  @field spells = linksToMany(Spell);
-  @field inventory = linksToMany(InventoryItem);
+  @field spells = linksToMany(Spell, { searchable: true });
+  @field inventory = linksToMany(InventoryItem, { searchable: 'item' });
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       {{! Character Header Section }}

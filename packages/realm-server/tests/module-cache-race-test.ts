@@ -1,21 +1,26 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename, join } from 'path';
-import { ensureDirSync, writeFileSync, writeJSONSync } from 'fs-extra';
+import fsExtra from 'fs-extra';
+const { ensureDirSync, writeFileSync, writeJSONSync } = fsExtra;
 import sinon from 'sinon';
 import { dirSync } from 'tmp';
 import type { SuperTest, Test } from 'supertest';
-import type { RealmHttpServer as Server } from '../server';
+import type { RealmHttpServer as Server } from '../server.ts';
 import type { Realm } from '@cardstack/runtime-common';
 import {
   CachingDefinitionLookup,
+  REALM_FILE_CHANGES_CHANNEL,
+  REALM_INDEX_UPDATED_CHANNEL,
+  RealmIndexUpdater,
   SupportedMimeType,
   param,
   query,
   userInitiatedPriority,
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
-import { ModuleCacheCoordinator } from '../lib/module-cache-coordination';
-import { RealmFileChangesListener } from '../lib/realm-file-changes-listener';
+import { ModuleCacheCoordinator } from '../lib/module-cache-coordination.ts';
+import { RealmFileChangesListener } from '../lib/realm-file-changes-listener.ts';
 import {
   setupPermissionedRealmCached,
   setupDB,
@@ -26,7 +31,7 @@ import {
   testCreatePrerenderAuth,
   withRealmPath,
   type RealmRequest,
-} from './helpers';
+} from './helpers/index.ts';
 
 // CS-11028: regression coverage for the persist-after-invalidate race in
 // Realm.#transpiledModuleCache. The scenario: reader A enters fallbackHandle for
@@ -47,7 +52,7 @@ import {
 // transforms + scoped-css), so the invalidate lands inside the race
 // window. The observable assertion is on the subsequent request's
 // `x-boxel-cache` header — a miss proves A's cache write was discarded.
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module(
     'Realm.#transpiledModuleCache invalidate-during-transpile race',
     function (hooks) {
@@ -76,8 +81,8 @@ module(basename(__filename), function () {
       });
 
       const transpilerHeavySource = `
-      import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-      import StringField from "https://cardstack.com/base/string";
+      import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
 
       export class RaceCard extends CardDef {
         @field name = contains(StringField);
@@ -329,8 +334,8 @@ module(basename(__filename), function () {
       });
 
       const transpilerHeavySource = `
-      import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-      import StringField from "https://cardstack.com/base/string";
+      import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
 
       export class DedupCard extends CardDef {
         @field name = contains(StringField);
@@ -934,8 +939,8 @@ module(basename(__filename), function () {
       });
 
       const transpilerHeavySource = `
-        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+        import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
 
         export class L2Card extends CardDef {
           @field name = contains(StringField);
@@ -1217,8 +1222,8 @@ module(basename(__filename), function () {
 
       const peerRealmURL = 'http://127.0.0.1:5555/peer/';
       const peerCardSource = `
-        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+        import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
 
         export class PeerCard extends CardDef {
           @field name = contains(StringField);
@@ -1267,10 +1272,19 @@ module(basename(__filename), function () {
         let tmp = dirSync();
         let testRealmDir = join(tmp.name, 'peer-realm');
         ensureDirSync(testRealmDir);
-        // Minimal .realm.json so the Realm bootstraps a name + readable
-        // visibility; the test only ever asks for module GETs.
-        writeJSONSync(join(testRealmDir, '.realm.json'), {
-          name: 'Peer Realm',
+        // Minimal RealmConfig card so the Realm bootstraps a name; the
+        // test only ever asks for module GETs.
+        writeJSONSync(join(testRealmDir, 'realm.json'), {
+          data: {
+            type: 'card',
+            attributes: { cardInfo: { name: 'Peer Realm' } },
+            meta: {
+              adoptsFrom: {
+                module: '@cardstack/base/realm-config',
+                name: 'RealmConfig',
+              },
+            },
+          },
         });
         let cardPath = 'peer-card.gts';
         writeFileSync(join(testRealmDir, cardPath), peerCardSource);
@@ -1438,8 +1452,8 @@ module(basename(__filename), function () {
       });
 
       const reindexSource = `
-        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+        import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
 
         export class ReindexCard extends CardDef {
           @field name = contains(StringField);
@@ -1604,8 +1618,8 @@ module(basename(__filename), function () {
       });
 
       const reindexSource = `
-        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+        import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
 
         export class WorkerNotifyCard extends CardDef {
           @field name = contains(StringField);
@@ -1681,6 +1695,427 @@ module(basename(__filename), function () {
           'L2 rows tombstoned by the worker-side NOTIFY even though startReindex never ran',
         );
       });
+
+      test('realmIndexUpdater.fullIndex emits realm_index_updated so index-derived caches drop on every replica', async function (assert) {
+        let originalNotify = dbAdapter.notify.bind(dbAdapter);
+        let notifyStub = sinon
+          .stub(dbAdapter, 'notify')
+          .callsFake((channel, payload) => originalNotify(channel, payload));
+
+        try {
+          // Bypass `Realm.startReindex` (whose .then never clears the
+          // index-derived caches anyway) and go straight through
+          // `RealmIndexUpdater.fullIndex`, mirroring the production bypass
+          // paths. The worker-side emit is the only thing that drops
+          // `#cachedRealmInfo` / `#cachedHostRoutingMap` / `#inFlightSearch`
+          // on every mounted replica after a from-scratch swap.
+          await testRealm.realmIndexUpdater.fullIndex(userInitiatedPriority);
+
+          let indexUpdatedCall = notifyStub
+            .getCalls()
+            .find(
+              (c) =>
+                c.args[0] === REALM_INDEX_UPDATED_CHANNEL &&
+                c.args[1] === realmURL.href,
+            );
+
+          assert.ok(
+            indexUpdatedCall,
+            'worker emitted realm_index_updated for the realm URL after the from-scratch swap',
+          );
+        } finally {
+          notifyStub.restore();
+        }
+      });
     },
   );
+
+  // CS-11245: bootstrap realms (kind='bootstrap': base, catalog, skills,
+  // …) full-index on every realm-server boot. The from-scratch-index
+  // worker that picks up the resulting job fans HTTP source reads
+  // through the load balancer, which during a rolling deploy can land
+  // on a still-warm pre-deploy peer whose `#sourceCache` is populated
+  // from pre-rsync bytes. `Realm.#startup` now broadcasts a
+  // `realm_file_changes:<url>:*` NOTIFY before enqueueing the
+  // from-scratch-index, so every peer drops its cache for this URL
+  // and the next HTTP read falls through to `/persistent/` (EFS,
+  // already brought up to date by the new container's
+  // `setup:<realm>-in-deployment` rsync). The broadcast is the
+  // prevent layer; without it the reindex persists stale bytes into
+  // `boxel_index.pristine_doc` plus sticky `error_doc` rows that
+  // survive past fleet stabilization (see CS-11245 for the
+  // originating incident).
+  module(
+    '#startup broadcasts source-cache wipe for bootstrap realms (CS-11245)',
+    function (hooks) {
+      let dbAdapter: PgAdapter;
+      let publisher: import('@cardstack/runtime-common').QueuePublisher;
+      let runner: import('@cardstack/runtime-common').QueueRunner;
+      setupDB(hooks, {
+        beforeEach: async (adapter, pub, run) => {
+          dbAdapter = adapter;
+          publisher = pub;
+          runner = run;
+        },
+      });
+
+      hooks.afterEach(function () {
+        sinon.restore();
+      });
+
+      const startupRealmURL = 'http://127.0.0.1:6666/startup/';
+
+      async function buildStartupRealm({
+        fullIndexOnStartup,
+      }: {
+        fullIndexOnStartup: boolean;
+      }): Promise<Realm> {
+        let tmp = dirSync();
+        let dir = join(tmp.name, 'startup-realm');
+        ensureDirSync(dir);
+        writeJSONSync(join(dir, 'realm.json'), {
+          data: {
+            type: 'card',
+            attributes: { cardInfo: { name: 'Startup Realm' } },
+            meta: {
+              adoptsFrom: {
+                module: '@cardstack/base/realm-config',
+                name: 'RealmConfig',
+              },
+            },
+          },
+        });
+        let virtualNetwork = createVirtualNetwork();
+        let prerenderer = await getTestPrerenderer();
+        let definitionLookup = new CachingDefinitionLookup(
+          dbAdapter,
+          prerenderer,
+          virtualNetwork,
+          testCreatePrerenderAuth,
+        );
+        let { realm } = await createRealm({
+          dir,
+          definitionLookup,
+          realmURL: startupRealmURL,
+          permissions: { '*': ['read'] },
+          virtualNetwork,
+          publisher,
+          runner,
+          dbAdapter,
+          ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),
+        });
+        return realm;
+      }
+
+      test('bootstrap realm emits realm_file_changes wildcard NOTIFY before enqueuing the from-scratch-index', async function (assert) {
+        let originalNotify = dbAdapter.notify.bind(dbAdapter);
+        let notifyStub = sinon
+          .stub(dbAdapter, 'notify')
+          .callsFake((channel, payload) => originalNotify(channel, payload));
+        // Stub fullIndex so the test doesn't actually run a from-scratch
+        // pass — we only care that the broadcast precedes the call.
+        let fullIndexStub = sinon
+          .stub(RealmIndexUpdater.prototype, 'fullIndex')
+          .resolves();
+
+        let realm = await buildStartupRealm({ fullIndexOnStartup: true });
+        await realm.start();
+
+        let wildcardNotifyCall = notifyStub
+          .getCalls()
+          .find(
+            (c) =>
+              c.args[0] === REALM_FILE_CHANGES_CHANNEL &&
+              c.args[1] === `${startupRealmURL}:*`,
+          );
+
+        assert.ok(
+          wildcardNotifyCall,
+          'realm_file_changes wildcard NOTIFY was emitted for the realm URL during startup',
+        );
+        assert.strictEqual(
+          fullIndexStub.callCount,
+          1,
+          'RealmIndexUpdater.fullIndex was invoked exactly once on startup',
+        );
+        assert.ok(
+          wildcardNotifyCall?.calledBefore(fullIndexStub.getCall(0)),
+          'the NOTIFY happened before from-scratch-index was enqueued',
+        );
+      });
+
+      test('non-bootstrap realm (isNewIndex-only branch) does NOT broadcast on startup', async function (assert) {
+        let originalNotify = dbAdapter.notify.bind(dbAdapter);
+        let notifyStub = sinon
+          .stub(dbAdapter, 'notify')
+          .callsFake((channel, payload) => originalNotify(channel, payload));
+        let fullIndexStub = sinon
+          .stub(RealmIndexUpdater.prototype, 'fullIndex')
+          .resolves();
+
+        let realm = await buildStartupRealm({ fullIndexOnStartup: false });
+        await realm.start();
+
+        let wildcardNotifyCall = notifyStub
+          .getCalls()
+          .find(
+            (c) =>
+              c.args[0] === REALM_FILE_CHANGES_CHANNEL &&
+              c.args[1] === `${startupRealmURL}:*`,
+          );
+
+        assert.strictEqual(
+          wildcardNotifyCall,
+          undefined,
+          'no realm_file_changes wildcard NOTIFY on a first-mount fresh-index realm whose kind is not bootstrap',
+        );
+        assert.strictEqual(
+          fullIndexStub.callCount,
+          1,
+          'fullIndex still ran via the isNewIndex branch, even without a broadcast',
+        );
+      });
+    },
+  );
+
+  // Regression coverage for the persist-after-invalidate race in
+  // Realm.#sourceCache — the source-read analogue of the
+  // #transpiledModuleCache race above. getSourceOrRedirect reads bytes from
+  // disk under an await, then writes #sourceCache. If invalidateCache fires
+  // inside that window — e.g. a DELETE removing the file while a worker's
+  // indexing fetch of the same source is still in flight — the in-flight
+  // read's set would otherwise re-fill the slot invalidate just cleared,
+  // leaving a subsequent GET serving a file that is already gone from disk.
+  // The reader snapshots the source-cache generation before its first await
+  // and discards its set when the generation moved.
+  //
+  // __testOnlyDelaySourceCacheSet parks a source read at the exact post-read,
+  // pre-set point so the tests can fire invalidate / delete concurrently and
+  // assert on the next request's x-boxel-cache header (and HTTP status, for
+  // the delete case) deterministically — no reliance on real worker timing.
+  module('Realm.#sourceCache set-after-invalidate race', function (hooks) {
+    let realmURL = new URL('http://127.0.0.1:4444/test/');
+    let testRealm: Realm;
+    let request: RealmRequest;
+
+    function onRealmSetup(args: {
+      testRealm: Realm;
+      testRealmHttpServer: Server;
+      request: SuperTest<Test>;
+    }) {
+      testRealm = args.testRealm;
+      request = withRealmPath(args.request, realmURL);
+    }
+
+    setupPermissionedRealmCached(hooks, {
+      fixture: 'blank',
+      realmURL,
+      permissions: {
+        '*': ['read', 'write'],
+        user: ['read', 'write', 'realm-owner'],
+        '@node-test_realm:localhost': ['read', 'realm-owner'],
+      },
+      onRealmSetup,
+    });
+
+    function authHeader() {
+      return `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`;
+    }
+
+    // supertest's Test is a thenable — an identity .then() forces the HTTP
+    // request to dispatch now so the caller can race other work against the
+    // in-flight read instead of waiting on an await to start it.
+    function fireSourceRequest(path: string): Promise<{ status: number }> {
+      return request
+        .get(`/${path}`)
+        .set('Accept', 'application/vnd.card+source')
+        .set('Authorization', authHeader())
+        .then((r) => r as { status: number });
+    }
+
+    // Install a gate that parks the next source read AFTER it has read bytes
+    // from disk but BEFORE it writes #sourceCache. `entered` resolves once a
+    // read is actually parked, so tests never depend on a fixed timeout.
+    function parkNextSourceRead(): {
+      release: () => void;
+      entered: Promise<void>;
+    } {
+      let release: () => void = () => {};
+      let gate = new Promise<void>((r) => {
+        release = r;
+      });
+      let signalEntered: () => void = () => {};
+      let entered = new Promise<void>((r) => {
+        signalEntered = r;
+      });
+      testRealm.__testOnlyDelaySourceCacheSet(() => {
+        signalEntered();
+        return gate;
+      });
+      return { release, entered };
+    }
+
+    test('in-flight source read is dropped when invalidateCache fires concurrently', async function (assert) {
+      let modulePath = 'source-race-invalidate.gts';
+      await testRealm.write(modulePath, 'export const v = 1;\n');
+      testRealm.__testOnlyClearCaches();
+
+      let { release, entered } = parkNextSourceRead();
+      let inflight: Promise<{ status: number }> | undefined;
+      try {
+        inflight = fireSourceRequest(modulePath);
+        await entered;
+
+        // Invalidate mid-read: bumps the source-cache generation and clears
+        // the slot. The parked read's post-gate set must be discarded.
+        testRealm.invalidateCache(modulePath);
+
+        // Stop parking so the assertion request below runs unblocked, then
+        // release the in-flight read.
+        testRealm.__testOnlyDelaySourceCacheSet(undefined);
+        release();
+
+        let response = await inflight;
+        assert.strictEqual(
+          response.status,
+          200,
+          'in-flight read still serves the bytes it read at request time',
+        );
+      } finally {
+        release();
+        testRealm.__testOnlyDelaySourceCacheSet(undefined);
+        if (inflight) {
+          await inflight.catch(() => {});
+        }
+      }
+
+      let nextResponse = await request
+        .get(`/${modulePath}`)
+        .set('Accept', 'application/vnd.card+source')
+        .set('Authorization', authHeader());
+      assert.strictEqual(
+        nextResponse.headers['x-boxel-cache'],
+        'miss',
+        'next source request is a cache miss — the in-flight read did not re-fill the slot invalidate cleared',
+      );
+    });
+
+    test('a source read in flight during a delete does not leave the deleted file served from cache', async function (assert) {
+      let modulePath = 'source-race-delete.gts';
+      await testRealm.write(modulePath, 'export const v = 1;\n');
+      testRealm.__testOnlyClearCaches();
+
+      let { release, entered } = parkNextSourceRead();
+      let inflight: Promise<{ status: number }> | undefined;
+      try {
+        inflight = fireSourceRequest(modulePath);
+        await entered;
+
+        // Delete the file while the read is parked. _deleteUnlocked removes
+        // the file from disk AND calls invalidateCache(path) synchronously —
+        // exactly the concurrency the boxel-cli `push --delete` flake hit,
+        // where a worker's indexing fetch of the source was in flight when
+        // the DELETE landed and re-cached the just-removed bytes.
+        await testRealm.delete(modulePath, { waitForIndex: false });
+
+        testRealm.__testOnlyDelaySourceCacheSet(undefined);
+        release();
+        await inflight;
+      } finally {
+        release();
+        testRealm.__testOnlyDelaySourceCacheSet(undefined);
+        if (inflight) {
+          await inflight.catch(() => {});
+        }
+      }
+
+      let afterDelete = await request
+        .get(`/${modulePath}`)
+        .set('Accept', 'application/vnd.card+source')
+        .set('Authorization', authHeader());
+      assert.strictEqual(
+        afterDelete.status,
+        404,
+        'the deleted source is gone — without the generation guard the parked read would re-cache it and this would be a stale 200',
+      );
+    });
+
+    test('invalidateCache of an unrelated path does not drop the in-flight source set', async function (assert) {
+      let primaryPath = 'source-race-primary.gts';
+      let unrelatedPath = 'source-race-unrelated.gts';
+      await testRealm.write(primaryPath, 'export const v = 1;\n');
+      await testRealm.write(unrelatedPath, 'export const v = 2;\n');
+      testRealm.__testOnlyClearCaches();
+
+      let { release, entered } = parkNextSourceRead();
+      let inflight: Promise<{ status: number }> | undefined;
+      try {
+        inflight = fireSourceRequest(primaryPath);
+        await entered;
+
+        // Invalidate a DIFFERENT path mid-read. primaryPath's generation is
+        // unchanged, so its set must proceed.
+        testRealm.invalidateCache(unrelatedPath);
+
+        testRealm.__testOnlyDelaySourceCacheSet(undefined);
+        release();
+        await inflight;
+      } finally {
+        release();
+        testRealm.__testOnlyDelaySourceCacheSet(undefined);
+        if (inflight) {
+          await inflight.catch(() => {});
+        }
+      }
+
+      let nextResponse = await request
+        .get(`/${primaryPath}`)
+        .set('Accept', 'application/vnd.card+source')
+        .set('Authorization', authHeader());
+      assert.strictEqual(
+        nextResponse.headers['x-boxel-cache'],
+        'hit',
+        'cross-path invalidate did not poison the in-flight source set — per-path scoping is correct',
+      );
+    });
+
+    test('in-flight source read is dropped when __testOnlyClearCaches fires concurrently', async function (assert) {
+      let modulePath = 'source-race-clear.gts';
+      await testRealm.write(modulePath, 'export const v = 1;\n');
+      testRealm.__testOnlyClearCaches();
+
+      let { release, entered } = parkNextSourceRead();
+      let inflight: Promise<{ status: number }> | undefined;
+      try {
+        inflight = fireSourceRequest(modulePath);
+        await entered;
+
+        // Global wipe mid-read. The path-level counter is reset to 0
+        // alongside the parked read's snapshot value, so only the global
+        // generation distinguishes pre/post-wipe — that's what catches the
+        // race here. (__testOnlyClearCaches does not touch the delay hook.)
+        testRealm.__testOnlyClearCaches();
+
+        testRealm.__testOnlyDelaySourceCacheSet(undefined);
+        release();
+        await inflight;
+      } finally {
+        release();
+        testRealm.__testOnlyDelaySourceCacheSet(undefined);
+        if (inflight) {
+          await inflight.catch(() => {});
+        }
+      }
+
+      let nextResponse = await request
+        .get(`/${modulePath}`)
+        .set('Accept', 'application/vnd.card+source')
+        .set('Authorization', authHeader());
+      assert.strictEqual(
+        nextResponse.headers['x-boxel-cache'],
+        'miss',
+        'next source request is a cache miss — the global generation bump catches the race the path counter alone would miss',
+      );
+    });
+  });
 });

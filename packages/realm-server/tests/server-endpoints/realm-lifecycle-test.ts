@@ -1,16 +1,17 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename, join } from 'path';
-import { existsSync, readJSONSync } from 'fs-extra';
+import fsExtra from 'fs-extra';
+const { existsSync, readJSONSync } = fsExtra;
 import type { Test, SuperTest } from 'supertest';
 import { v4 as uuidv4 } from 'uuid';
-import type { Query } from '@cardstack/runtime-common/query';
 import {
   baseCardRef,
   fetchRealmPermissions,
+  searchEntryWireQueryFromQuery,
   userInitiatedPriority,
 } from '@cardstack/runtime-common';
 import type { SingleCardDocument } from '@cardstack/runtime-common';
-import type { CardCollectionDocument } from '@cardstack/runtime-common/document-types';
 import { cardSrc } from '@cardstack/runtime-common/etc/test-fixtures';
 import {
   closeServer,
@@ -21,12 +22,12 @@ import {
   setupPermissionedRealmCached,
   testRealmInfo,
   testRealmURL as rootTestRealmURL,
-} from '../helpers';
-import { createJWT as createRealmServerJWT } from '../../utils/jwt';
-import { setupServerEndpointsTest, testRealmURL } from './helpers';
+} from '../helpers/index.ts';
+import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
+import { setupServerEndpointsTest, testRealmURL } from './helpers.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
-module(`server-endpoints/${basename(__filename)}`, function () {
+module(`server-endpoints/${basename(import.meta.filename)}`, function () {
   module(
     'Realm Server Endpoints (not specific to one realm)',
     function (hooks) {
@@ -90,8 +91,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           owner,
           endpoint,
         );
-        // CS-10053: publishable lives in realm_metadata now; createRealm
-        // no longer writes a .realm.json sidecar at all.
+        // No write path produces a .realm.json sidecar; createRealm
+        // writes only the realm.json RealmConfig card.
         assert.notOk(
           existsSync(join(realmPath, '.realm.json')),
           'no .realm.json sidecar is written by createRealm',
@@ -117,7 +118,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: 'https://cardstack.com/base/realm-config',
+                  module: '@cardstack/base/realm-config',
                   name: 'RealmConfig',
                 },
               },
@@ -166,7 +167,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 attributes: { cardInfo: { name: 'Test Card' } },
                 meta: {
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/card-api',
+                    module: '@cardstack/base/card-api',
                     name: 'CardDef',
                   },
                 },
@@ -227,20 +228,126 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 permissions: ['read', 'write', 'realm-owner'],
               })}`,
             )
-            .send({
-              filter: {
-                on: baseCardRef,
-                eq: {
-                  cardTitle: 'Test Card',
+            .send(
+              searchEntryWireQueryFromQuery(
+                {
+                  filter: {
+                    on: baseCardRef,
+                    eq: {
+                      cardTitle: 'Test Card',
+                    },
+                  },
                 },
-              },
-            } as Query);
+                { fields: ['item'] },
+              ),
+            );
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
-          let results = response.body as CardCollectionDocument;
-          (assert.strictEqual(results.data.length, 1),
-            'correct number of search results');
+          assert.strictEqual(
+            response.body.data.length,
+            1,
+            'correct number of search results',
+          );
         }
+      });
+
+      test('a write to a source realm advances realm_registry.updated_at', async function (assert) {
+        let endpoint = `test-realm-${uuidv4()}`;
+        let owner = 'mango';
+        let ownerUserId = '@mango:localhost';
+        let createResponse = await context.request
+          .post('/_create-realm')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .set(
+            'Authorization',
+            `Bearer ${createRealmServerJWT(
+              { user: ownerUserId, sessionRoom: 'session-room-test' },
+              realmSecretSeed,
+            )}`,
+          )
+          .send(
+            JSON.stringify({
+              data: {
+                type: 'realm',
+                attributes: {
+                  ...testRealmInfo,
+                  endpoint,
+                  // `testRealmInfo` carries `backgroundURL: null` / `iconURL:
+                  // null`, which create-realm rejects (present but not a
+                  // string). Send strings like the sibling create-realm test.
+                  backgroundURL: 'http://example.com/background.jpg',
+                  iconURL: 'http://example.com/icon.jpg',
+                },
+              },
+            }),
+          );
+        assert.strictEqual(createResponse.status, 202, 'realm created');
+        let realmURL = createResponse.body.data.id as string;
+        let realmServerURL = testRealmURL.origin + '/';
+
+        let readTimestamps = async () => {
+          let rows = (await context.dbAdapter.execute(
+            `SELECT kind, created_at, updated_at FROM realm_registry WHERE url = $1`,
+            { bind: [realmURL] },
+          )) as { kind: string; created_at: string; updated_at: string }[];
+          return rows[0];
+        };
+
+        // A freshly created source realm starts with updated_at == created_at:
+        // both are seeded by now() on insert, and the from-scratch index runs on
+        // a path that doesn't touch updated_at.
+        let before = await readTimestamps();
+        assert.strictEqual(
+          before.kind,
+          'source',
+          'the realm registered as a source realm',
+        );
+        assert.strictEqual(
+          new Date(before.updated_at).getTime(),
+          new Date(before.created_at).getTime(),
+          'updated_at starts equal to created_at',
+        );
+
+        // Writing a card runs an incremental index, whose invalidation hook
+        // advances updated_at for the source realm.
+        let writeResponse = await context.request
+          .post(`/${owner}/${endpoint}/`)
+          .send({
+            data: {
+              type: 'card',
+              attributes: { cardInfo: { name: 'Test Card' } },
+              meta: {
+                adoptsFrom: {
+                  module: '@cardstack/base/card-api',
+                  name: 'CardDef',
+                },
+              },
+            },
+          })
+          .set('Accept', 'application/vnd.card+json')
+          .set(
+            'Authorization',
+            `Bearer ${createJWTForRealmURL({
+              realmURL,
+              realmServerURL,
+              user: ownerUserId,
+              permissions: ['read', 'write', 'realm-owner'],
+            })}`,
+          );
+        assert.strictEqual(writeResponse.status, 201, 'card written');
+
+        let after = await readTimestamps();
+        assert.ok(
+          new Date(after.updated_at).getTime() >
+            new Date(before.updated_at).getTime(),
+          'updated_at advanced after the write',
+        );
+        assert.strictEqual(
+          new Date(after.created_at).getTime(),
+          new Date(before.created_at).getTime(),
+          'created_at is unchanged by the write',
+        );
       });
 
       test('dynamically created realms are not publicly readable or writable', async function (assert) {
@@ -287,14 +394,19 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 user: 'rando',
               })}`,
             )
-            .send({
-              filter: {
-                on: baseCardRef,
-                eq: {
-                  cardTitle: 'Test Card',
+            .send(
+              searchEntryWireQueryFromQuery(
+                {
+                  filter: {
+                    on: baseCardRef,
+                    eq: {
+                      cardTitle: 'Test Card',
+                    },
+                  },
                 },
-              },
-            } as Query);
+                { fields: ['item'] },
+              ),
+            );
 
           assert.strictEqual(response.status, 403, 'HTTP 403 status');
 
@@ -308,7 +420,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/card-api',
+                    module: '@cardstack/base/card-api',
                     name: 'CardDef',
                   },
                 },
@@ -373,7 +485,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 attributes: { cardInfo: { name: 'Test Card' } },
                 meta: {
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/card-api',
+                    module: '@cardstack/base/card-api',
                     name: 'CardDef',
                   },
                 },

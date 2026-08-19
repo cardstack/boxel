@@ -8,8 +8,15 @@ import { isTesting } from '@embroider/macros';
 import window from 'ember-window-mock';
 import stringify from 'safe-stable-stringify';
 
+import {
+  HOST_APP_QUERY_PARAMS,
+  isRedirectRoutingRule,
+} from '@cardstack/runtime-common';
+import { isFileDefInstance } from '@cardstack/runtime-common/code-ref';
+
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
+import type { StackItemType } from '@cardstack/host/lib/stack-item';
 
 import type BillingService from '@cardstack/host/services/billing-service';
 import type CardService from '@cardstack/host/services/card-service';
@@ -73,23 +80,37 @@ export default class Card extends Route {
   // OperatorModeStateService.schedulePersist() is called (due to the fact we
   // care about the back button, see note at bottom). Because of that make sure
   // that there is as little async as possible in this model hook.
-  async model(params: {
-    authRedirect?: string;
-    cardPath?: string;
-    path: string;
-    operatorModeState: string;
-  }) {
+  async model(
+    params: {
+      authRedirect?: string;
+      cardPath?: string;
+      path: string;
+      operatorModeState: string;
+    },
+    transition: Transition,
+  ) {
     if (this.hostModeService.isActive) {
       let normalizedPath = params.path ?? '';
       // CS-10055: a routing rule in the realm config can map a bare path
-      // to a target card. When the path matches a rule, use the rule's
-      // target id directly; otherwise resolve the path as a card URL
-      // under the host-mode origin.
-      let routedId = this.hostModeService.resolveRoutedPath(
+      // to a target card. When the path matches a serve rule, use the
+      // rule's target id directly; otherwise resolve the path as a card
+      // URL under the host-mode origin. A redirect rule is never
+      // rendered — navigate to its target instead, mirroring the 3xx
+      // the server answers for a full-page request to this path, query
+      // string included (`params` holds only the pathname).
+      let routed = this.hostModeService.resolveRoutedPath(
         normalizedPath || '/',
       );
+      if (routed && isRedirectRoutingRule(routed)) {
+        this.hostModeService.redirectTo(
+          routed.redirectTo,
+          this.forwardableQueryParams(transition),
+        );
+        return;
+      }
       let cardUrl =
-        routedId ?? `${this.hostModeService.hostModeOrigin}/${normalizedPath}`;
+        routed?.id ??
+        `${this.hostModeService.hostModeOrigin}/${normalizedPath}`;
 
       return this.store.get(cardUrl);
     }
@@ -100,9 +121,35 @@ export default class Card extends Route {
       await this.matrixService.ready;
       await this.matrixService.start();
       this.didMatrixServiceStart = true;
+    } else if (this.matrixService.needsPostLoginRecovery) {
+      // `start()` above is a one-shot (guarded by `didMatrixServiceStart`). If
+      // `postLoginCompleted` was cleared after that first start while there's
+      // still persisted auth to boot from — a `resetState()` racing a
+      // re-navigation — the guard alone would strand the app on the login form.
+      // Re-run `start()` to re-establish the post-login session before falling
+      // through.
+      if (isTesting()) {
+        console.warn(
+          `[login-diag] index route recovering post-login session: ` +
+            JSON.stringify(this.matrixService.loginReadinessDebug),
+        );
+      }
+      await this.matrixService.start();
+      if (isTesting() && !this.matrixService.isLoggedIn) {
+        console.warn(
+          `[login-diag] index route post-login recovery did not restore session: ` +
+            JSON.stringify(this.matrixService.loginReadinessDebug),
+        );
+      }
     }
 
     if (!this.matrixService.isLoggedIn) {
+      if (isTesting()) {
+        console.warn(
+          `[login-diag] index route rendering login form: didMatrixServiceStart=${this.didMatrixServiceStart} ` +
+            JSON.stringify(this.matrixService.loginReadinessDebug),
+        );
+      }
       return; // Show login component
     }
 
@@ -123,19 +170,24 @@ export default class Card extends Route {
 
     let pathOrCardPath = cardPath ?? params.path;
 
-    let cardUrl: string | undefined = pathOrCardPath
-      ? await this.getCardUrl(pathOrCardPath)
+    let resolvedItem = pathOrCardPath
+      ? await this.resolvePathToStackItem(pathOrCardPath)
       : undefined;
-    let stacks: { id: string; format: string }[][] = [];
-    if (cardUrl) {
-      stacks = [
-        [
-          {
-            id: cardUrl,
-            format: 'isolated',
-          },
-        ],
-      ];
+    let stacks: { id: string; format: string; type?: StackItemType }[][] = [];
+    if (resolvedItem) {
+      // Only carry `type` when the resolved instance is a file. The canonical
+      // serializer (OperatorModeStateService.rawStateWithSavedCardsOnly)
+      // omits `type` for cards, so emitting `type: 'card'` here would diverge
+      // from the canonical string and trip the equality guard on every
+      // subsequent model refresh.
+      let stackItem: { id: string; format: string; type?: StackItemType } = {
+        id: resolvedItem.id,
+        format: 'isolated',
+      };
+      if (resolvedItem.type === 'file') {
+        stackItem.type = 'file';
+      }
+      stacks = [[stackItem]];
     }
     let operatorModeStateObject = operatorModeState
       ? JSON.parse(operatorModeState)
@@ -180,6 +232,29 @@ export default class Card extends Route {
     }
   }
 
+  // Query params to carry onto a redirect rule's target, read from the
+  // transition rather than `window.location.search` — with
+  // HistoryLocation the location still points at the URL being navigated
+  // away from while the transition is in flight.
+  //
+  // The app's own params are dropped, matching what serve-index forwards
+  // on the equivalent HTTP redirect. On this side there is an extra
+  // reason to: the router hydrates every declared param onto
+  // `transition.to.queryParams` using its controller default whether or
+  // not it was in the URL, so forwarding them blind would append values
+  // that were never there (`debug=false` on every redirect). Foreign
+  // params (`utm_source` and friends) pass through untouched.
+  private forwardableQueryParams(
+    transition: Transition,
+  ): Record<string, unknown> {
+    let queryParams = transition.to?.queryParams ?? {};
+    return Object.fromEntries(
+      Object.entries(queryParams).filter(
+        ([key]) => !HOST_APP_QUERY_PARAMS.includes(key),
+      ),
+    );
+  }
+
   async afterModel(
     model: ReturnType<StoreService['get']>,
     transition: Transition,
@@ -211,7 +286,9 @@ export default class Card extends Route {
     await this.hostModeService.updateHeadTemplate(headCardId);
   }
 
-  private async getCardUrl(cardPath: string): Promise<string | undefined> {
+  private async resolvePathToStackItem(
+    cardPath: string,
+  ): Promise<{ id: string; type: StackItemType } | undefined> {
     let cardUrl;
     if (hostsOwnAssets) {
       // availableRealmIdentifiers is set in matrixService.start(), so we can use it here
@@ -243,18 +320,23 @@ export default class Card extends Route {
       cardUrl = new URL(cardPath, window.location.origin).href;
     }
 
-    // we only get a card to understand its canonical URL so it's ok to fetch
-    // a card that is detached from the store as we only care about it's ID.
-    let canonicalCardUrl: string | undefined;
-    // the peek takes advantage of the store cache so this should be quick
-    canonicalCardUrl = (await this.store.get(cardUrl))?.id;
-    if (!canonicalCardUrl) {
+    // we only get an instance to understand its canonical URL so it's ok to
+    // fetch one that is detached from the store as we only care about its id.
+    // For a URL pointing at a binary file (e.g. an image), the store's card
+    // path auto-reroutes to a file-meta load and returns a FileDef — so the
+    // resulting stack item lands on FileDef isolated rendering instead of
+    // failing to hydrate the URL as a CardDef.
+    let resolved = await this.store.get(cardUrl);
+    let canonicalUrl = resolved?.id;
+    if (!canonicalUrl) {
       // TODO: show a 404 page
       // https://linear.app/cardstack/issue/CS-7364/show-user-a-clear-message-when-they-try-to-access-a-realm-they-cannot
       alert(`Card not found: ${cardUrl}`);
+      return undefined;
     }
-    cardUrl = canonicalCardUrl;
-
-    return cardUrl;
+    return {
+      id: canonicalUrl,
+      type: isFileDefInstance(resolved) ? 'file' : 'card',
+    };
   }
 }

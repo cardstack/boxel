@@ -3,13 +3,13 @@ import {
   field,
   CardDef,
   linksTo,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import { Representative } from '../crm/representative';
-import { Component } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
-import DateTimeField from 'https://cardstack.com/base/datetime';
-import TextAreaField from 'https://cardstack.com/base/text-area';
+import { Component } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
+import DateTimeField from '@cardstack/base/datetime';
+import TextAreaField from '@cardstack/base/text-area';
 import {
   FieldContainer,
   BoxelSelect,
@@ -146,7 +146,10 @@ class AtomTemplate extends Component<typeof DealEvent> {
 }
 
 class EditTemplate extends Component<typeof DealEvent> {
-  @tracked selectedEventType = { name: this.args.model.eventType };
+  @tracked selectedEventType: { name: string } | null = this.args.model
+    .eventType
+    ? { name: this.args.model.eventType }
+    : null;
   @tracked eventTypeItems = [
     { name: 'Email' },
     { name: 'Meeting' },
@@ -155,7 +158,10 @@ class EditTemplate extends Component<typeof DealEvent> {
     { name: 'None' },
   ];
 
-  @action updateEventType(type: { name: string }) {
+  @action updateEventType(type: { name: string } | null) {
+    if (!type) {
+      return;
+    }
     this.selectedEventType = type;
     this.args.model.eventType = type.name;
   }
@@ -235,7 +241,7 @@ export class DealEvent extends CardDef {
   @field attendees = contains(NumberField);
   @field subject = contains(StringField);
   @field location = contains(StringField);
-  @field assignee = linksTo(() => Representative);
+  @field assignee = linksTo(() => Representative, { searchable: 'crmApp' });
   @field startDateTime = contains(DateTimeField);
   @field endDateTime = contains(DateTimeField);
   @field eventType = contains(StringField);

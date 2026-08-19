@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { reportError } from '../';
+import { reportError } from '..//index.ts';
 
 const fileChecksumPath = path.join(
   process.cwd(),

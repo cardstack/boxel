@@ -4,8 +4,8 @@ import {
   Component,
   CardDef,
   FieldDef,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import CurrencyDollarIcon from '@cardstack/boxel-icons/currency-dollar';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
 import { tracked } from '@glimmer/tracking';
@@ -56,7 +56,10 @@ class CurrencyFieldEdit extends Component<typeof CurrencyField> {
     );
   });
 
-  @action onSelectCurrency(currency: CurrencyData) {
+  @action onSelectCurrency(currency: CurrencyData | null) {
+    if (!currency) {
+      return;
+    }
     this.currency = { code: currency.code };
     this.args.model.code = currency.code;
   }

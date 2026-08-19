@@ -1,4 +1,4 @@
-import '../helpers/setup-realm-server';
+import '../helpers/setup-realm-server.ts';
 import {
   describe,
   it,
@@ -14,18 +14,18 @@ import * as path from 'path';
 import {
   RealmWatcher,
   watchRealms,
-} from '../../src/commands/realm/watch/start';
-import { CheckpointManager } from '../../src/lib/checkpoint-manager';
-import { ProfileManager } from '../../src/lib/profile-manager';
-import type { RealmAuthenticator } from '../../src/lib/realm-authenticator';
+} from '../../src/commands/realm/watch/start.ts';
+import { CheckpointManager } from '../../src/lib/checkpoint-manager.ts';
+import { ProfileManager } from '../../src/lib/profile-manager.ts';
+import type { RealmAuthenticator } from '../../src/lib/realm-authenticator.ts';
 import {
   startTestRealmServer,
   stopTestRealmServer,
   createTestProfileDir,
   setupJwtTestProfile,
   TEST_REALM_SERVER_URL,
-} from '../helpers/integration';
-import { TINY_PNG_BYTES } from '../helpers/binary-fixtures';
+} from '../helpers/integration.ts';
+import { TINY_PNG_BYTES } from '../helpers/binary-fixtures.ts';
 
 let profileManager: ProfileManager;
 let cleanupProfile: (() => void) | undefined;
@@ -245,6 +245,28 @@ async function deleteRemoteFile(realm: string, relPath: string): Promise<void> {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Polls `predicate` until it returns true, then resolves; throws with
+ * `describeFailure()` once `timeoutMs` elapses. Used to wait on state that
+ * watchRealms populates asynchronously (the lock file, the SIGINT/SIGTERM
+ * handlers) instead of racing it with a fixed sleep that can lose under CI
+ * load.
+ */
+async function waitFor(
+  predicate: () => boolean | Promise<boolean>,
+  describeFailure: () => string,
+  timeoutMs = REMOTE_VISIBILITY_TIMEOUT_MS,
+): Promise<void> {
+  let deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await predicate()) return;
+    await sleep(25);
+  }
+  throw new Error(
+    `waitFor timed out after ${timeoutMs}ms: ${describeFailure()}`,
+  );
 }
 
 beforeAll(async () => {
@@ -607,10 +629,12 @@ describe('realm watch (integration)', () => {
       signal: firstController.signal,
     });
 
-    // Wait for the first run to acquire the lock.
-    await sleep(150);
-
     let lockPath = path.join(localDir, '.boxel-watch.lock');
+    // Wait for the first run to acquire the lock instead of racing a fixed delay.
+    await waitFor(
+      () => fs.existsSync(lockPath),
+      () => `first watch did not create a lock at ${lockPath}`,
+    );
     expect(fs.existsSync(lockPath)).toBe(true);
 
     let secondResult = await watchRealms([{ realmUrl, localDir }], {
@@ -649,7 +673,25 @@ describe('realm watch (integration)', () => {
       signal: controller.signal,
     });
 
-    await sleep(150);
+    // Wait for the stale lock to be overwritten with our pid, tolerating a
+    // transient malformed read while acquireWatchLock rewrites the file.
+    await waitFor(
+      () => {
+        try {
+          return (
+            JSON.parse(fs.readFileSync(lockPath, 'utf8')).pid === process.pid
+          );
+        } catch {
+          return false;
+        }
+      },
+      () => {
+        let raw = fs.existsSync(lockPath)
+          ? fs.readFileSync(lockPath, 'utf8')
+          : '<missing>';
+        return `stale lock not overwritten with pid ${process.pid}; lock contents: ${raw}`;
+      },
+    );
     let parsed = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
     expect(parsed.pid).toBe(process.pid);
 
@@ -777,26 +819,89 @@ describe('realm watch (integration)', () => {
       quiet: true,
     });
 
-    await sleep(150);
-
-    let addedSigint = process
-      .listeners('SIGINT')
-      .filter((l) => !originalSigint.includes(l));
-    let addedSigterm = process
-      .listeners('SIGTERM')
-      .filter((l) => !originalSigterm.includes(l));
-    expect(addedSigint).toHaveLength(1);
-    expect(addedSigterm).toHaveLength(1);
+    // watchRealms registers its SIGINT/SIGTERM handlers asynchronously (after
+    // acquiring the lock and initializing the watcher). Wait for them to
+    // appear rather than racing a fixed delay that can lose under CI load.
+    let addedSigint = () =>
+      process.listeners('SIGINT').filter((l) => !originalSigint.includes(l));
+    let addedSigterm = () =>
+      process.listeners('SIGTERM').filter((l) => !originalSigterm.includes(l));
+    await waitFor(
+      () => addedSigint().length === 1 && addedSigterm().length === 1,
+      () =>
+        `expected watchRealms to add exactly one SIGINT and one SIGTERM handler; ` +
+        `saw ${addedSigint().length} SIGINT / ${addedSigterm().length} SIGTERM ` +
+        `(total SIGINT listeners: ${process.listeners('SIGINT').length}, ` +
+        `SIGTERM: ${process.listeners('SIGTERM').length})`,
+    );
+    expect(addedSigint()).toHaveLength(1);
+    expect(addedSigterm()).toHaveLength(1);
 
     // Invoke the registered handler directly instead of process.emit('SIGINT'),
     // which would also trigger any unrelated SIGINT listeners on the runner.
-    (addedSigint[0] as () => void)();
+    (addedSigint()[0] as () => void)();
 
     let result = await runPromise;
     expect(result.error).toBeUndefined();
     expect(process.listeners('SIGINT')).toEqual(originalSigint);
     expect(process.listeners('SIGTERM')).toEqual(originalSigterm);
     expect(fs.existsSync(path.join(localDir, '.boxel-watch.lock'))).toBe(false);
+  });
+
+  it('returns promptly when stopped while the initial poll is still blocked', async () => {
+    let localDir = makeLocalDir();
+    await writeRemoteFile(
+      realmUrl,
+      watchFixture('hungpoll'),
+      'export const x = 1;\n',
+    );
+    let originalSigint = [...process.listeners('SIGINT')];
+
+    // Gate the initial poll (2nd _mtimes: 1 = initialize, 2 = initial tickAll
+    // poll) so it never resolves on its own, simulating a wedged first poll.
+    let mtimesCallCount = 0;
+    let releaseGate: () => void = () => {};
+    let gate = new Promise<void>((resolve) => {
+      releaseGate = resolve;
+    });
+    let gatedAuth: RealmAuthenticator = {
+      authedRealmFetch: async (input, init) => {
+        let url = typeof input === 'string' ? input : input.toString();
+        if (url.endsWith('_mtimes')) {
+          mtimesCallCount++;
+          if (mtimesCallCount === 2) await gate;
+        }
+        return profileManager.authedRealmFetch(input, init);
+      },
+    };
+
+    // No `signal` → the SIGINT handler is registered before the initial poll.
+    let runPromise = watchRealms([{ realmUrl, localDir }], {
+      authenticator: gatedAuth,
+      intervalMs: 1000,
+      debounceMs: 25,
+      quiet: true,
+    });
+
+    await waitFor(
+      () =>
+        process.listeners('SIGINT').filter((l) => !originalSigint.includes(l))
+          .length === 1,
+      () => 'watchRealms did not register a SIGINT handler before the poll',
+    );
+    let handler = process
+      .listeners('SIGINT')
+      .filter((l) => !originalSigint.includes(l))[0];
+
+    // Stop while the initial poll is still blocked. watchRealms must return
+    // rather than staying parked on the wedged poll (the registered handler
+    // suppresses Node's default Ctrl+C exit, so a park would look like a hang).
+    (handler as () => void)();
+    let result = await runPromise;
+    releaseGate();
+    expect(result.error).toBeUndefined();
+    expect(fs.existsSync(path.join(localDir, '.boxel-watch.lock'))).toBe(false);
+    expect(process.listeners('SIGINT')).toEqual(originalSigint);
   });
 
   it('downgrades a pending modify to a delete when the remote file disappears', async () => {

@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import jwt from 'jsonwebtoken';
+import { SESSION_TOKEN_TTL } from '@cardstack/runtime-common/session-token';
 import {
   ProfileManager,
   getEnvironmentFromMatrixId,
@@ -137,6 +139,113 @@ describe('ProfileManager', () => {
     expect(profile.matrixAccessToken).toBe('new-token');
   });
 
+  // The refresh margin has to stay well under the realm server's session TTL.
+  // A margin at or above it makes every token the server just minted look
+  // already-expired, so the CLI re-mints on every single call — and in any
+  // context where the Matrix re-auth path can't run (no TTY), the command fails
+  // outright instead of using the perfectly good token it already holds.
+  it('treats a freshly minted server token as usable rather than near-expiry', async () => {
+    await manager.addProfileWithAuth(
+      '@bob:stack.cards',
+      fakeAuth('@bob:stack.cards', 'https://matrix-staging.stack.cards'),
+    );
+    // Backdate the mint by a minute. A token checked in the same second it was
+    // signed has exactly the full TTL left, which slips past a strict `<`
+    // comparison even against a bad margin — the bug only shows once any time
+    // at all has passed.
+    let freshToken = jwt.sign(
+      {
+        user: '@bob:stack.cards',
+        sessionRoom: 'session',
+        iat: Math.floor(Date.now() / 1000) - 60,
+      },
+      'test-secret',
+      { expiresIn: SESSION_TOKEN_TTL },
+    );
+    manager.setRealmServerToken(freshToken);
+
+    // Resolving to the cached token proves no refresh was attempted. Were the
+    // margin too wide, this would reach for the network and reject instead.
+    await expect(manager.getOrRefreshServerToken()).resolves.toBe(freshToken);
+  });
+
+  // Consumers that receive the bare token can't notice a 401 and re-mint, so
+  // they ask for a longer lifetime. The cached token stays on the short default,
+  // because the CLI's own fetch wrappers do recover and shouldn't inherit a
+  // lifetime chosen for something that can't.
+  it('mintExtendedServerToken asks for an extended lifetime and leaves the cache alone', async () => {
+    await manager.addProfileWithAuth(
+      '@bob:stack.cards',
+      fakeAuth('@bob:stack.cards', 'https://matrix-staging.stack.cards'),
+    );
+    manager.setRealmServerToken('cached-short-token');
+
+    let sessionBodies: any[] = [];
+    const fetchStub = vi.fn(async (input: any, init: any) => {
+      const url = typeof input === 'string' ? input : input.url;
+      if (url.includes('/openid/request_token')) {
+        return new Response(JSON.stringify({ token: 'oid' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.includes('/_server-session')) {
+        sessionBodies.push(JSON.parse(init.body));
+        return new Response(null, {
+          status: 201,
+          headers: { authorization: 'extended-jwt' },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchStub);
+    try {
+      const token = await manager.mintExtendedServerToken();
+
+      expect(token).toBe('extended-jwt');
+      expect(sessionBodies).toHaveLength(1);
+      expect(sessionBodies[0].lifetime).toBe('extended');
+      expect(manager.getRealmServerToken()).toBe('cached-short-token');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('getOrRefreshServerToken does not ask for an extended lifetime', async () => {
+    await manager.addProfileWithAuth(
+      '@bob:stack.cards',
+      fakeAuth('@bob:stack.cards', 'https://matrix-staging.stack.cards'),
+    );
+
+    let sessionBodies: any[] = [];
+    const fetchStub = vi.fn(async (input: any, init: any) => {
+      const url = typeof input === 'string' ? input : input.url;
+      if (url.includes('/openid/request_token')) {
+        return new Response(JSON.stringify({ token: 'oid' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.includes('/_server-session')) {
+        sessionBodies.push(JSON.parse(init.body));
+        return new Response(null, {
+          status: 201,
+          headers: { authorization: 'short-jwt' },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchStub);
+    try {
+      await manager.getOrRefreshServerToken();
+
+      expect(sessionBodies).toHaveLength(1);
+      expect(sessionBodies[0].lifetime).toBeUndefined();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('addProfileWithAuth clears cached realm tokens when matrixUrl changes', async () => {
     await manager.addProfileWithAuth(
       '@bob:stack.cards',
@@ -218,7 +327,7 @@ describe('ProfileManager', () => {
     );
     const profile = manager.getProfile('@dev:localhost')!;
     expect(profile.matrixUrl).toBe('http://localhost:8008');
-    expect(profile.realmServerUrl).toBe('http://localhost:4201/');
+    expect(profile.realmServerUrl).toBe('https://localhost:4201/');
   });
 
   it('adds a production profile with correct defaults', async () => {

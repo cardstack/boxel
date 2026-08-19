@@ -5,6 +5,8 @@ import GlimmerComponent from '@glimmer/component';
 
 import { module, test } from 'qunit';
 
+import { MAX_MARKDOWN_RENDER_LENGTH } from '@cardstack/runtime-common';
+
 import RenderedMarkdown from '@cardstack/host/components/operator-mode/preview-panel/rendered-markdown';
 
 import { testRealmURL } from '../../helpers';
@@ -134,6 +136,79 @@ module('Integration | rendered-markdown', function (hooks) {
         '.markdown-content [data-boxel-bfm-block-ref][data-boxel-bfm-type="card"]',
       )
       .exists('placeholder has card type attribute');
+  });
+
+  test('inline :file[URL] creates BFM placeholder element', async function (assert) {
+    let fileUrl = 'http://example.com/docs/report.pdf';
+    let content = `See :file[${fileUrl}] here.`;
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><RenderedMarkdown @content={{content}} /></template>
+      },
+    );
+    await settled();
+
+    assert
+      .dom(`.markdown-content [data-boxel-bfm-inline-ref="${fileUrl}"]`)
+      .exists('placeholder has correct file URL in data attribute');
+    assert
+      .dom(
+        '.markdown-content [data-boxel-bfm-inline-ref][data-boxel-bfm-type="file"]',
+      )
+      .exists('placeholder has file type attribute');
+  });
+
+  test('block ::file[URL] creates BFM placeholder element', async function (assert) {
+    let fileUrl = 'http://example.com/data/sample.csv';
+    let content = `# Summary\n\n::file[${fileUrl}]\n\nMore text.`;
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><RenderedMarkdown @content={{content}} /></template>
+      },
+    );
+    await settled();
+
+    assert
+      .dom(`.markdown-content [data-boxel-bfm-block-ref="${fileUrl}"]`)
+      .exists('placeholder has correct file URL in data attribute');
+    assert
+      .dom(
+        '.markdown-content [data-boxel-bfm-block-ref][data-boxel-bfm-type="file"]',
+      )
+      .exists('placeholder has file type attribute');
+  });
+
+  test('unresolved file reference shows fallback with the file name', async function (assert) {
+    // When a file URL can't be loaded, the modifier creates an unresolved slot
+    // labeled with the file name (last path segment), not a card type name.
+    let fileUrl = 'http://nonexistent.example.com/docs/missing.pdf';
+    let content = `See :file[${fileUrl}] here.`;
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><RenderedMarkdown @content={{content}} /></template>
+      },
+    );
+    await settled();
+
+    await waitUntil(
+      () =>
+        document.querySelector('[data-test-markdown-bfm-unresolved-inline]') !==
+        null,
+      {
+        timeout: 5000,
+        timeoutMessage: 'unresolved file fallback did not appear',
+      },
+    );
+
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-inline]')
+      .hasAttribute('title', fileUrl, 'fallback has URL as title');
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-inline]')
+      .containsText('missing.pdf', 'fallback shows the file name');
   });
 
   test('BFM card placeholders have URL text stripped', async function (assert) {
@@ -302,5 +377,394 @@ module('Integration | rendered-markdown', function (hooks) {
       '200',
       'height is set',
     );
+  });
+
+  test('unresolved embedded block ref renders with embedded format class', async function (assert) {
+    let cardUrl = 'http://nonexistent.example.com/Article/missing';
+    let content = `::card[${cardUrl}]`;
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><RenderedMarkdown @content={{content}} /></template>
+      },
+    );
+
+    await waitUntil(
+      () =>
+        document.querySelector('[data-test-markdown-bfm-unresolved-block]') !==
+        null,
+      { timeout: 5000, timeoutMessage: 'unresolved block did not appear' },
+    );
+
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-block]')
+      .hasClass(
+        'markdown-bfm-broken--embedded',
+        'block ref defaults to the embedded footprint',
+      );
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-block]')
+      .doesNotHaveAttribute(
+        'style',
+        'embedded broken-link box does not carry an inline width/height style',
+      );
+  });
+
+  test('unresolved isolated block ref renders with isolated format class', async function (assert) {
+    let cardUrl = 'http://nonexistent.example.com/Article/missing-isolated';
+    let content = `::card[${cardUrl} | isolated]`;
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><RenderedMarkdown @content={{content}} /></template>
+      },
+    );
+
+    await waitUntil(
+      () =>
+        document.querySelector('[data-test-markdown-bfm-unresolved-block]') !==
+        null,
+      { timeout: 5000, timeoutMessage: 'unresolved block did not appear' },
+    );
+
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-block]')
+      .hasClass(
+        'markdown-bfm-broken--isolated',
+        'isolated ref carries the isolated footprint class',
+      );
+  });
+
+  test('unresolved fitted block ref carries inline width/height matching the card footprint', async function (assert) {
+    let cardUrl = 'http://nonexistent.example.com/Article/missing-fitted';
+    let content = `::card[${cardUrl} | 400x200]`;
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><RenderedMarkdown @content={{content}} /></template>
+      },
+    );
+
+    await waitUntil(
+      () =>
+        document.querySelector('[data-test-markdown-bfm-unresolved-block]') !==
+        null,
+      { timeout: 5000, timeoutMessage: 'unresolved block did not appear' },
+    );
+
+    let brokenBlock = document.querySelector(
+      '[data-test-markdown-bfm-unresolved-block]',
+    ) as HTMLElement | null;
+    assert.ok(brokenBlock, 'broken-link block exists');
+    assert
+      .dom(brokenBlock)
+      .hasClass(
+        'markdown-bfm-broken--fitted',
+        'fitted ref carries the fitted footprint class',
+      );
+    let style = brokenBlock?.getAttribute('style') ?? '';
+    assert.true(
+      /width:\s*400px/.test(style),
+      `broken-link inline style includes width: 400px (got "${style}")`,
+    );
+    assert.true(
+      /height:\s*200px/.test(style),
+      `broken-link inline style includes height: 200px (got "${style}")`,
+    );
+  });
+
+  test('block ::file with a size spec is honored the same way ::card is', async function (assert) {
+    let fileUrl = 'http://example.com/images/photo.png';
+    let content = `::file[${fileUrl} | 400x200]`;
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><RenderedMarkdown @content={{content}} /></template>
+      },
+    );
+    await settled();
+
+    let el = document.querySelector(
+      `.markdown-content [data-boxel-bfm-block-ref="${fileUrl}"]`,
+    );
+    assert.ok(el, 'block file placeholder exists');
+    assert.strictEqual(
+      el?.getAttribute('data-boxel-bfm-format'),
+      'fitted',
+      'file size spec sets fitted format',
+    );
+    assert.strictEqual(el?.getAttribute('data-boxel-bfm-width'), '400');
+    assert.strictEqual(el?.getAttribute('data-boxel-bfm-height'), '200');
+  });
+
+  test('unresolved fitted block ::file carries inline width/height matching the footprint', async function (assert) {
+    let fileUrl = 'http://nonexistent.example.com/images/missing.png';
+    let content = `::file[${fileUrl} | 400x200]`;
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><RenderedMarkdown @content={{content}} /></template>
+      },
+    );
+
+    await waitUntil(
+      () =>
+        document.querySelector('[data-test-markdown-bfm-unresolved-block]') !==
+        null,
+      { timeout: 5000, timeoutMessage: 'unresolved file block did not appear' },
+    );
+
+    let brokenBlock = document.querySelector(
+      '[data-test-markdown-bfm-unresolved-block]',
+    ) as HTMLElement | null;
+    assert.ok(brokenBlock, 'broken-link block exists');
+    assert
+      .dom(brokenBlock)
+      .hasClass(
+        'markdown-bfm-broken--fitted',
+        'fitted file ref carries the fitted footprint class',
+      );
+    let style = brokenBlock?.getAttribute('style') ?? '';
+    assert.true(
+      /width:\s*400px/.test(style),
+      `broken-link inline style includes width: 400px (got "${style}")`,
+    );
+    assert.true(
+      /height:\s*200px/.test(style),
+      `broken-link inline style includes height: 200px (got "${style}")`,
+    );
+  });
+
+  test('loading placeholder appears before unresolved card ref settles', async function (assert) {
+    // The modifier emits a loading shimmer on its first run (before
+    // loadReferencedCards has settled) and only transitions to the broken-link
+    // box afterwards. Observe the DOM to confirm the loading element actually
+    // appears — the existing "no broken Pill flashed" tests only check absence
+    // of the unresolved selector and would still pass if the loading element
+    // never rendered.
+    let cardUrl = 'http://nonexistent.example.com/Article/missing-loading';
+    let content = `::card[${cardUrl} | 400x200]`;
+
+    let loadingEverAppeared = false;
+    let capturedLoadingStyle = '';
+    let capturedLoadingClasses = '';
+    let testRoot = document.querySelector('#ember-testing')!;
+    let observer = new MutationObserver(() => {
+      let loadingEl = testRoot.querySelector(
+        '[data-test-markdown-bfm-loading-block]',
+      ) as HTMLElement | null;
+      if (loadingEl) {
+        loadingEverAppeared = true;
+        capturedLoadingStyle =
+          loadingEl.getAttribute('style') ?? capturedLoadingStyle;
+        capturedLoadingClasses = loadingEl.className || capturedLoadingClasses;
+      }
+    });
+    observer.observe(testRoot, { childList: true, subtree: true });
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><RenderedMarkdown @content={{content}} /></template>
+      },
+    );
+
+    await waitUntil(
+      () =>
+        document.querySelector('[data-test-markdown-bfm-unresolved-block]') !==
+        null,
+      { timeout: 5000, timeoutMessage: 'unresolved block did not appear' },
+    );
+
+    observer.disconnect();
+
+    assert.true(
+      loadingEverAppeared,
+      'loading shimmer block appeared before the broken-link box',
+    );
+    assert.true(
+      capturedLoadingClasses.includes('markdown-bfm-loading--fitted'),
+      `loading block carries the fitted footprint class (got "${capturedLoadingClasses}")`,
+    );
+    assert.true(
+      /width:\s*400px/.test(capturedLoadingStyle),
+      `loading block inline style includes width: 400px (got "${capturedLoadingStyle}")`,
+    );
+    assert.true(
+      /height:\s*200px/.test(capturedLoadingStyle),
+      `loading block inline style includes height: 200px (got "${capturedLoadingStyle}")`,
+    );
+  });
+
+  test('inline card reference with size spec sets data attributes', async function (assert) {
+    let cardUrl = 'http://example.com/Card/inline-sized';
+    let content = `See :card[${cardUrl} | 400x200] here.`;
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><RenderedMarkdown @content={{content}} /></template>
+      },
+    );
+    await settled();
+
+    let el = document.querySelector(
+      `.markdown-content [data-boxel-bfm-inline-ref="${cardUrl}"]`,
+    );
+    assert.ok(el, 'inline placeholder exists');
+    assert.strictEqual(
+      el?.getAttribute('data-boxel-bfm-format'),
+      'fitted',
+      'format is set to fitted',
+    );
+    assert.strictEqual(el?.getAttribute('data-boxel-bfm-width'), '400');
+    assert.strictEqual(el?.getAttribute('data-boxel-bfm-height'), '200');
+  });
+
+  test('inline card reference with embedded format sets the format attribute', async function (assert) {
+    let cardUrl = 'http://example.com/Card/inline-embedded';
+    let content = `See :card[${cardUrl} | embedded] here.`;
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><RenderedMarkdown @content={{content}} /></template>
+      },
+    );
+    await settled();
+
+    let el = document.querySelector(
+      `.markdown-content [data-boxel-bfm-inline-ref="${cardUrl}"]`,
+    );
+    assert.ok(el, 'inline placeholder exists');
+    assert.strictEqual(
+      el?.getAttribute('data-boxel-bfm-format'),
+      'embedded',
+      'inline ref carries the embedded format',
+    );
+  });
+
+  test('unresolved embedded inline ref renders with the embedded footprint class', async function (assert) {
+    let cardUrl = 'http://nonexistent.example.com/Article/missing-inline-embed';
+    let content = `See :card[${cardUrl} | embedded] here.`;
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><RenderedMarkdown @content={{content}} /></template>
+      },
+    );
+
+    await waitUntil(
+      () =>
+        document.querySelector('[data-test-markdown-bfm-unresolved-inline]') !==
+        null,
+      { timeout: 5000, timeoutMessage: 'unresolved inline did not appear' },
+    );
+
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-inline]')
+      .hasClass(
+        'markdown-bfm-broken--embedded',
+        'embedded inline ref carries the embedded footprint class',
+      );
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-inline]')
+      .hasClass(
+        'markdown-bfm-broken--inline-embed',
+        'embedded inline ref flows inline',
+      );
+  });
+
+  test('unresolved fitted inline ref carries inline width/height matching the footprint', async function (assert) {
+    let cardUrl =
+      'http://nonexistent.example.com/Article/missing-inline-fitted';
+    let content = `See :card[${cardUrl} | 400x200] here.`;
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><RenderedMarkdown @content={{content}} /></template>
+      },
+    );
+
+    await waitUntil(
+      () =>
+        document.querySelector('[data-test-markdown-bfm-unresolved-inline]') !==
+        null,
+      { timeout: 5000, timeoutMessage: 'unresolved inline did not appear' },
+    );
+
+    let brokenInline = document.querySelector(
+      '[data-test-markdown-bfm-unresolved-inline]',
+    ) as HTMLElement | null;
+    assert.ok(brokenInline, 'broken-link inline exists');
+    assert
+      .dom(brokenInline)
+      .hasClass(
+        'markdown-bfm-broken--fitted',
+        'fitted inline ref carries the fitted footprint class',
+      );
+    let style = brokenInline?.getAttribute('style') ?? '';
+    assert.true(
+      /width:\s*400px/.test(style),
+      `broken-link inline style includes width: 400px (got "${style}")`,
+    );
+    assert.true(
+      /height:\s*200px/.test(style),
+      `broken-link inline style includes height: 200px (got "${style}")`,
+    );
+  });
+
+  test('plain inline ref (no spec) keeps the atom pill fallback', async function (assert) {
+    let cardUrl = 'http://nonexistent.example.com/Pet/plain-inline';
+    let content = `See :card[${cardUrl}] here.`;
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><RenderedMarkdown @content={{content}} /></template>
+      },
+    );
+
+    await waitUntil(
+      () =>
+        document.querySelector('[data-test-markdown-bfm-unresolved-inline]') !==
+        null,
+      { timeout: 5000, timeoutMessage: 'unresolved inline did not appear' },
+    );
+
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-inline]')
+      .hasClass(
+        'markdown-bfm-broken--inline',
+        'a plain inline ref defaults to the atom pill',
+      );
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-inline]')
+      .doesNotHaveClass(
+        'markdown-bfm-broken--embedded',
+        'a plain inline ref is not given a non-atom footprint',
+      );
+  });
+
+  test('over-limit content renders a notice instead of parsing markdown', async function (assert) {
+    // `.md` files reach this component at up to the 5 MB file limit, so the
+    // same render-thread guard the base template applies is needed here.
+    let content = '# Heading\n\n' + 'a'.repeat(MAX_MARKDOWN_RENDER_LENGTH);
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><RenderedMarkdown @content={{content}} /></template>
+      },
+    );
+    await settled();
+
+    assert
+      .dom('[data-test-markdown-oversized]')
+      .exists('over-limit content renders the notice');
+    assert
+      .dom('.markdown-content h1')
+      .doesNotExist('markdown was not parsed into HTML');
+    assert
+      .dom('.markdown-oversized-preview')
+      .hasTextContaining(
+        '# Heading',
+        'the preview shows the raw content start',
+      );
   });
 });

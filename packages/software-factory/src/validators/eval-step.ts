@@ -13,23 +13,24 @@
 
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 
-import type { ValidationStepResult } from '../factory-agent';
-import { deriveIssueSlug } from '../factory-agent';
+import type { ValidationStepResult } from '../factory-agent/index.ts';
+import { deriveIssueSlug } from '../factory-agent/index.ts';
 import {
   discoverEvaluableFiles,
   evaluateRealmModules,
   type EvalModuleResult,
   type EvalModuleRecord,
-} from '../eval-execution';
-import { getNextValidationSequenceNumber } from '../realm-operations';
+} from '../eval-execution.ts';
+import { getNextValidationSequenceNumber } from '../realm-operations.ts';
 import {
   createEvalResult,
   completeEvalResult,
   type EvalModuleErrorData,
-} from '../eval-result-cards';
-import { logger } from '../logger';
+} from '../eval-result-cards.ts';
+import { logger } from '../logger.ts';
 
-import type { ValidationStepRunner } from './validation-pipeline';
+import type { ValidationStepRunner } from './validation-pipeline.ts';
+import type { ValidationRunCache } from '../validation-run-cache.ts';
 
 let log = logger('eval-validation-step');
 
@@ -43,6 +44,8 @@ export type { EvalModuleResult };
 export interface EvalValidationStepConfig {
   client: BoxelCLIClient;
   realmServerUrl: string;
+  /** Memoizes the engine run per workspace fingerprint — see ValidationRunCache. */
+  cache?: ValidationRunCache;
   evalResultsModuleUrl: string;
   /**
    * Local workspace directory mirroring the target realm. EvalResult
@@ -200,6 +203,7 @@ export class EvalValidationStep implements ValidationStepRunner {
         client: this.config.client,
         realmServerUrl: this.config.realmServerUrl,
         evaluateModuleFn: this.config.evaluateModuleFn,
+        cache: this.config.cache,
       },
       evaluableFiles,
     );

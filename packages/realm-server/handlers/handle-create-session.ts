@@ -1,7 +1,9 @@
 import {
+  EXTENDED_SESSION_TOKEN_TTL,
   fetchSessionRoom,
   getOrCreateUser,
   logger,
+  SESSION_TOKEN_TTL,
   SupportedMimeType,
   upsertSessionRoom,
 } from '@cardstack/runtime-common';
@@ -9,14 +11,14 @@ import type { Utils } from '@cardstack/runtime-common/matrix-backend-authenticat
 import { MatrixBackendAuthentication } from '@cardstack/runtime-common/matrix-backend-authentication';
 import { addToCreditsLedger } from '@cardstack/billing/billing-queries';
 import type Koa from 'koa';
-import { createJWT } from '../utils/jwt';
+import { createJWT } from '../utils/jwt.ts';
 import {
   fetchRequestFromContext,
   sendResponseForSystemError,
   setContextResponse,
-} from '../middleware';
-import type { CreateRoutesArgs } from '../routes';
-import { getLowCreditThreshold } from '../lib/daily-credit-grant-config';
+} from '../middleware/index.ts';
+import type { CreateRoutesArgs } from '../routes.ts';
+import { getLowCreditThreshold } from '../lib/daily-credit-grant-config.ts';
 
 const log = logger('realm-server');
 
@@ -41,8 +43,18 @@ export default function handleCreateSessionRequest({
       ) {
         return new Response(body, init);
       },
-      createJWT: async (user: string, sessionRoom: string) =>
-        createJWT({ user, sessionRoom }, realmSecretSeed),
+      createJWT: async (
+        user: string,
+        sessionRoom: string,
+        opts?: { extendedLifetime?: boolean },
+      ) =>
+        createJWT(
+          { user, sessionRoom },
+          realmSecretSeed,
+          opts?.extendedLifetime
+            ? EXTENDED_SESSION_TOKEN_TTL
+            : SESSION_TOKEN_TTL,
+        ),
       ensureSessionRoom: async (userId: string, registrationToken?: string) => {
         let sessionRoom = await fetchSessionRoom(dbAdapter, userId);
 

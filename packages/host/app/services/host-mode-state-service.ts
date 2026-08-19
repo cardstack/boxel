@@ -9,8 +9,10 @@ import stringify from 'safe-stable-stringify';
 
 import { TrackedArray } from 'tracked-built-ins';
 
+import { removeTopmost, unwindOrPush } from '../utils/host-mode-stack';
+
 import type RealmService from './realm';
-import type ResetService from './reset';
+import type SessionService from './session';
 
 interface InitializeOptions {
   primaryCardId: string | null;
@@ -23,7 +25,7 @@ type SerializedStack = string[];
 export default class HostModeStateService extends Service {
   @service declare router: RouterService;
   @service declare realm: RealmService;
-  @service declare reset: ResetService;
+  @service declare session: SessionService;
 
   // The primary card comes from the main path segment of the URL.
   // The stack cards come from the `hostModeStack` query param.
@@ -38,7 +40,7 @@ export default class HostModeStateService extends Service {
 
   constructor(owner: Owner) {
     super(owner);
-    this.reset.register(this);
+    this.session.register(this);
   }
 
   resetState() {
@@ -95,15 +97,12 @@ export default class HostModeStateService extends Service {
   }
 
   pushCard(cardId: string) {
-    this.stackCardItems.push(cardId);
+    unwindOrPush(this.stackCardItems, cardId, this.primaryCardItem);
     this.schedulePersist();
   }
 
   removeCardFromStack(cardId: string) {
-    let index = this.stackCardItems.findIndex((item) => item === cardId);
-
-    if (index !== -1) {
-      this.stackCardItems.splice(index, 1);
+    if (removeTopmost(this.stackCardItems, cardId)) {
       this.schedulePersist();
     }
   }

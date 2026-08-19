@@ -19,10 +19,12 @@ import { MenuItem } from '@cardstack/boxel-ui/helpers';
 
 import { type getCard, GetCardContextName } from '@cardstack/runtime-common';
 
-import ShowCardCommand from '@cardstack/host/commands/show-card';
 import consumeContext from '@cardstack/host/helpers/consume-context';
-import type CommandService from '@cardstack/host/services/command-service';
+import { isMarkdownSkillId } from '@cardstack/host/lib/skill-tools';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
+import type ToolService from '@cardstack/host/services/tool-service';
+import ShowCardTool from '@cardstack/host/tools/show-card';
 
 interface SkillToggleSignature {
   Element: HTMLDivElement | HTMLButtonElement;
@@ -38,15 +40,46 @@ interface SkillToggleSignature {
 export default class SkillToggle extends Component<SkillToggleSignature> {
   @consume(GetCardContextName) declare private getCard: getCard;
   @service declare private realm: RealmService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
   @tracked private cardResource: ReturnType<getCard> | undefined;
 
+  private get isMarkdownSkill(): boolean {
+    return isMarkdownSkillId(this.args.cardId);
+  }
+
   private makeCardResource = () => {
-    this.cardResource = this.getCard(this, () => this.args.cardId);
+    // A skill markdown file is a `MarkdownDef` file-meta resource, not a card;
+    // load it through the file-meta read type. Skill cards load as cards.
+    this.cardResource = this.getCard(this, () => this.args.cardId, {
+      type: this.isMarkdownSkill ? 'file-meta' : 'card',
+    });
   };
 
   private get card() {
     return this.cardResource?.card;
+  }
+
+  // Title for either skill source: `cardTitle` for a Skill card; for a skill
+  // markdown file, the title indexed from its first heading, falling back to
+  // the frontmatter name slug only when the file has no heading.
+  private get displayTitle(): string {
+    let card = this.card as {
+      cardTitle?: string;
+      title?: string;
+      name?: string;
+      frontmatter?: { name?: string };
+    };
+    if (!card) {
+      return 'Untitled Skill';
+    }
+    return (
+      card.cardTitle ??
+      card.title ??
+      card.frontmatter?.name ??
+      card.name ??
+      'Untitled Skill'
+    );
   }
 
   private get isCreating() {
@@ -56,20 +89,46 @@ export default class SkillToggle extends Component<SkillToggleSignature> {
   private get menuItems(): MenuItem[] {
     return [
       new MenuItem({
-        label: 'Open Skill Card',
-        action: this.openSkillCard,
+        label: this.isMarkdownSkill ? 'Open Skill File' : 'Open Skill Card',
+        action: this.openSkill,
       }),
     ];
   }
 
   @action
+  private async openSkill() {
+    if (this.isMarkdownSkill) {
+      await this.openSkillFile();
+    } else {
+      await this.openSkillCard();
+    }
+  }
+
   private async openSkillCard() {
-    let showCardCommand = new ShowCardCommand(
-      this.commandService.commandContext,
-    );
+    let showCardCommand = new ShowCardTool(this.toolService.toolContext);
     await showCardCommand.execute({
       cardId: this.args.cardId,
     });
+  }
+
+  // A skill markdown file is not a card, so `ShowCardTool` can't open it.
+  // Open it the way any file opens: a file stack item in interact mode, or by
+  // pointing the code editor at it in code mode.
+  private async openSkillFile() {
+    let { operatorModeStateService: om } = this;
+    if (om.state?.submode === 'code') {
+      await om.updateCodePath(new URL(this.args.cardId));
+      return;
+    }
+    let newStackIndex = Math.min(om.numberOfStacks(), 1);
+    let newStackItem = om.createStackItem(
+      this.args.cardId,
+      newStackIndex,
+      'isolated',
+      undefined,
+      'file',
+    );
+    om.addItemToStack(newStackItem);
   }
 
   <template>
@@ -88,8 +147,8 @@ export default class SkillToggle extends Component<SkillToggleSignature> {
           >
             <:default>
               <div class='pill-content'>
-                <div class='card-content' title={{this.card.cardTitle}}>
-                  {{this.card.cardTitle}}
+                <div class='card-content' title={{this.displayTitle}}>
+                  {{this.displayTitle}}
                 </div>
               </div>
             </:default>
@@ -117,9 +176,9 @@ export default class SkillToggle extends Component<SkillToggleSignature> {
           </Pill>
           <Switch
             class='toggle'
-            @isEnabled={{@isEnabled}}
+            @isEnabled={{Boolean @isEnabled}}
             @onChange={{@onToggle}}
-            @label={{this.card.cardTitle}}
+            @label={{this.displayTitle}}
             data-test-skill-toggle='{{@cardId}}-{{if @isEnabled "on" "off"}}'
           />
         </div>

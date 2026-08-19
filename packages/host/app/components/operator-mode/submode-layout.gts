@@ -1,6 +1,8 @@
 import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
+import { scheduleOnce } from '@ember/runloop';
 
 import { service } from '@ember/service';
 
@@ -37,6 +39,7 @@ import type IndexController from '@cardstack/host/controllers';
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
 import { AiAssistantPanelWidth } from '@cardstack/host/utils/local-storage-keys';
+import type { SearchResultKind } from '@cardstack/host/utils/search/types';
 
 import SearchSheet, { SearchSheetModes } from '../search-sheet';
 
@@ -51,6 +54,7 @@ import type AiAssistantPanelService from '../../services/ai-assistant-panel-serv
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RecentCardsService from '../../services/recent-cards-service';
+import type SearchSheetStateService from '../../services/search-sheet-state';
 import type StoreService from '../../services/store';
 import type { SearchSheetMode } from '../search-sheet';
 import type { Submode } from '../submode-switcher';
@@ -60,7 +64,7 @@ interface Signature {
   Args: {
     onSearchSheetOpened?: () => void;
     onSearchSheetClosed?: () => void;
-    onCardSelectFromSearch?: (cardId: string) => void;
+    onCardSelectFromSearch?: (cardId: string, kind?: SearchResultKind) => void;
     selectedCardRef?: ResolvedCodeRef | undefined;
     newFileOptions?: NewFileOptions;
   };
@@ -137,6 +141,38 @@ export default class SubmodeLayout extends Component<Signature> {
   @service declare private store: StoreService;
   @service declare private aiAssistantPanelService: AiAssistantPanelService;
   @service declare private recentCardsService: RecentCardsService;
+  @service('search-sheet-state')
+  declare private searchSheetState: SearchSheetStateService;
+
+  // `?openProfileSettings` deep link. Consumed here, not in the
+  // index route, because this component exists only once logged in — a
+  // logged-out arrival renders <Auth /> after the model hook has returned.
+  // afterRender: both writes touch state this render pass already read.
+  constructor(owner: Owner, args: Signature['Args']) {
+    super(owner, args);
+
+    if (
+      this.operatorModeStateService.operatorModeController.openProfileSettings
+    )
+      scheduleOnce('afterRender', this, this.consumeProfileSettingsDeepLink);
+  }
+
+  // Nulled like `sid` in matrix/auth.gts, so the modal does not reopen on
+  // the model refresh every schedulePersist() triggers.
+  private consumeProfileSettingsDeepLink = () => {
+    let controller = this.operatorModeStateService.operatorModeController;
+    let requested = controller.openProfileSettings;
+    if (!requested) {
+      return;
+    }
+    controller.openProfileSettings = null;
+    // An unrecognized value still opens settings: this param is linked from
+    // external pages, so a stale or mistyped link degrades to the modal's
+    // default view rather than doing nothing.
+    this.operatorModeStateService.openProfileSettings(
+      requested === 'subscription' ? 'subscription' : undefined,
+    );
+  };
 
   private searchElement: HTMLElement | null = null;
   private suppressSearchClose = false;
@@ -346,15 +382,26 @@ export default class SubmodeLayout extends Component<Signature> {
 
   @action private openSearchSheetToPrompt() {
     if (this.searchSheetMode === SearchSheetModes.Closed) {
-      this.searchSheetMode = SearchSheetModes.SearchPrompt;
+      // Reopen straight to the results view when a search is persisted, so the
+      // restored results are shown immediately rather than the compact prompt.
+      // Gate on the service's own `hasActiveSearch` (term OR type OR realm) —
+      // the same predicate that produces `mainQuery` — so a filter-only search
+      // (e.g. code mode's "Find instances", which sets a type with no term)
+      // reopens to its live results rather than the recents-only compact prompt.
+      this.searchSheetMode = this.searchSheetState.hasActiveSearch
+        ? SearchSheetModes.SearchResults
+        : SearchSheetModes.SearchPrompt;
     }
 
     this.searchElement?.focus();
     this.args.onSearchSheetOpened?.();
   }
 
-  @action private async handleCardSelectFromSearch(cardId: string) {
-    this.args.onCardSelectFromSearch?.(cardId);
+  @action private async handleCardSelectFromSearch(
+    cardId: string,
+    kind?: SearchResultKind,
+  ) {
+    this.args.onCardSelectFromSearch?.(cardId, kind);
     this.closeSearchSheet();
   }
 
@@ -454,6 +501,7 @@ export default class SubmodeLayout extends Component<Signature> {
                 workspace-button--chooser-open=this.workspaceChooserOpened
               }}
               {{on 'click' this.toggleWorkspaceChooser}}
+              data-workspace-chooser-toggle
               data-test-workspace-chooser-toggle
             />
             {{#if this.workspaceChooserOpened}}
@@ -500,7 +548,7 @@ export default class SubmodeLayout extends Component<Signature> {
               data-test-profile-icon-button
             >
               <Avatar
-                @isReady={{this.matrixService.profile.loaded}}
+                @isReady={{this.matrixService.profile.isLoaded}}
                 @userId={{this.matrixService.userId}}
                 @displayName={{this.matrixService.profile.displayName}}
               />
@@ -567,6 +615,7 @@ export default class SubmodeLayout extends Component<Signature> {
             @defaultSize={{this.aiPanelWidths.defaultWidth}}
             @minSize={{this.aiPanelWidths.minWidth}}
             @collapsible={{false}}
+            data-theme='dark'
           >
             <AiAssistantPanel
               @onClose={{this.aiAssistantPanelService.closePanel}}
@@ -661,10 +710,27 @@ export default class SubmodeLayout extends Component<Signature> {
       }
 
       .submode-layout-top-bar-center {
+        /* Narrow default: stay in flow as a flex child. `flex: 1` reserves the
+           middle track between the workspace button and the profile controls,
+           so the content can neither slide under those controls nor intercept
+           clicks meant for them — it just sits on the one line between them. */
         flex: 1;
         display: flex;
         justify-content: center;
         min-width: 0;
+      }
+      /* Wider top bars have room to center the content within the whole bar
+         rather than only within the asymmetric middle track (the 160px
+         workspace button makes the flex track off-centre). Take it out of flow
+         and pin it to the bar's centre; the breakpoint is high enough that the
+         centred content clears the workspace button on the left. */
+      @container (min-width: 60rem) {
+        .submode-layout-top-bar-center {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+        }
       }
 
       /* Slot for the expanded stack-item's CardHeader pill. When a
@@ -707,6 +773,10 @@ export default class SubmodeLayout extends Component<Signature> {
       .profile-icon-button {
         --boxel-icon-button-width: var(--container-button-size);
         --boxel-icon-button-height: var(--container-button-size);
+        /* Match the outline treatment used by the search and AI-assistant
+           icon buttons (see .ai-assistant-button/search-sheet), instead of
+           the Avatar component's default 2px solid white border. */
+        --profile-avatar-icon-border: var(--boxel-border-flexible);
 
         background: none;
 

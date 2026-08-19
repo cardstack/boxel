@@ -27,11 +27,19 @@ import { join, resolve, dirname } from 'node:path';
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import { specRef } from '@cardstack/runtime-common/constants';
 
-import { logger } from './logger';
-import type { ParseErrorData, ParseFileResultData } from './parse-result-cards';
-import { validateRealmRelativePath } from './realm-relative-path';
-import { retryWithPoll } from './retry-with-poll';
-import { readCard } from './workspace-fs';
+import { logger } from './logger.ts';
+import type {
+  ParseErrorData,
+  ParseFileResultData,
+} from './parse-result-cards.ts';
+import { validateRealmRelativePath } from './realm-relative-path.ts';
+import { retryWithPoll } from './retry-with-poll.ts';
+import { readCard } from './workspace-fs.ts';
+
+import {
+  cacheKeyForInputs,
+  type ValidationRunCache,
+} from './validation-run-cache.ts';
 
 let log = logger('parse-execution');
 
@@ -53,7 +61,7 @@ export const PARSEABLE_JSON_EXTENSION = '.json';
  * `packages/software-factory`, alongside `packages/base`,
  * `packages/host`, and `packages/boxel-ui`.
  */
-const PACKAGES_PATH = resolve(__dirname, '..', '..');
+const PACKAGES_PATH = resolve(import.meta.dirname, '..', '..');
 const BASE_PKG_PATH = join(PACKAGES_PATH, 'base');
 const HOST_PKG_PATH = join(PACKAGES_PATH, 'host');
 
@@ -91,9 +99,19 @@ export interface DiscoverFilesOptions {
     realmUrl: string,
   ) => Promise<{ filenames: string[]; error?: string }>;
   /** Injected for testing — defaults to client.search-based spec discovery. */
-  searchSpecsFn?: (
-    realmUrl: string,
-  ) => Promise<{ specs: SpecExampleInfo[]; error?: string }>;
+  searchSpecsFn?: (realmUrl: string) => Promise<SearchSpecExamplesResult>;
+}
+
+export interface SearchSpecExamplesResult {
+  specs: SpecExampleInfo[];
+  error?: string;
+  /**
+   * Raw Spec-card count from the realm search. `undefined` (injected
+   * test doubles) and non-zero counts are final results; only an
+   * affirmative zero indicates the index may not have caught up yet
+   * and is worth polling.
+   */
+  totalSpecCards?: number;
 }
 
 export interface ParseRealmFilesOptions {
@@ -122,6 +140,12 @@ export interface ParseRealmFilesOptions {
   runGlintCheckFn?: (
     gtsFiles: { path: string; content: string }[],
   ) => Promise<ParseErrorData[]>;
+  /**
+   * When set, the engine run is memoized per workspace fingerprint + file
+   * set, so the agent's mid-turn `run_parse` and the pipeline's parse step
+   * don't both type-check the same unchanged files.
+   */
+  cache?: ValidationRunCache;
 }
 
 export interface ParseRealmFilesOutput {
@@ -153,6 +177,8 @@ export interface RunParseInMemoryOptions {
    * the card document structure is validated.
    */
   path?: string;
+  /** See {@link ParseRealmFilesOptions.cache}. */
+  cache?: ValidationRunCache;
 }
 
 export interface RunParseError {
@@ -226,10 +252,12 @@ export async function discoverJsonExampleFiles(
   // Realm-side source POST indexing is async, so a newly-uploaded Spec
   // card may not be in the search index by the time we get here. Bounded-
   // poll until even one spec shows up so an agent or test that just
-  // pushed Spec files isn't penalized for indexing latency.
+  // pushed Spec files isn't penalized for indexing latency. Poll ONLY on
+  // affirmative evidence of that race — the search itself returned zero
+  // Spec cards. An injected searchSpecsFn without a raw count is final.
   let result = await retryWithPoll(
     () => searchSpecsFn(options.targetRealm),
-    (r) => !r.error && r.specs.length === 0,
+    (r) => !r.error && r.specs.length === 0 && r.totalSpecCards === 0,
   );
   if (result.error) {
     log.warn(`Failed to discover specs for JSON validation: ${result.error}`);
@@ -252,6 +280,17 @@ export async function discoverJsonExampleFiles(
       }
     }
   }
+  // Diagnostic: whole-realm JSON discovery hinges on the Spec index being
+  // caught up. Source POST indexing is async, so a caller that just wrote a
+  // Spec can observe it in search before its `linkedExamples` link resolves,
+  // surfacing here as Spec cards found but zero example URLs — which silently
+  // drops those examples from the parse set. Logging the shape of each
+  // discovery makes that gap visible when tracing why an example went
+  // unchecked (a Spec legitimately having no examples looks identical, so
+  // this stays at debug rather than warning).
+  log.debug(
+    `spec discovery: totalSpecCards=${result.totalSpecCards ?? 'n/a'} specs=${result.specs.length} exampleUrls=${urls.length}`,
+  );
   return urls.sort((a, b) => a.localeCompare(b));
 }
 
@@ -267,6 +306,20 @@ export async function discoverJsonExampleFiles(
  * `parse-error` entries.
  */
 export async function parseRealmFiles(
+  options: ParseRealmFilesOptions,
+  gtsFiles: string[],
+  jsonFiles: string[],
+): Promise<ParseRealmFilesOutput> {
+  if (options.cache) {
+    let key = `parse:${cacheKeyForInputs([...gtsFiles, ...jsonFiles])}`;
+    return options.cache.getOrRun(key, () =>
+      parseRealmFilesUncached(options, gtsFiles, jsonFiles),
+    );
+  }
+  return parseRealmFilesUncached(options, gtsFiles, jsonFiles);
+}
+
+async function parseRealmFilesUncached(
   options: ParseRealmFilesOptions,
   gtsFiles: string[],
   jsonFiles: string[],
@@ -487,6 +540,7 @@ export async function runParseInMemory(
         targetRealm: options.targetRealm,
         client: options.client,
         workspaceDir: options.workspaceDir,
+        cache: options.cache,
       },
       gtsFiles,
       jsonFiles,
@@ -581,14 +635,16 @@ export async function runGlintCheck(
           noUnusedParameters: false,
           types: ['qunit-dom', '@cardstack/local-types'],
           paths: {
+            '@cardstack/base/*': [`${BASE_PKG_PATH}/*`],
             'https://cardstack.com/base/*': [`${BASE_PKG_PATH}/*`],
             '@cardstack/host/tests/*': [`${HOST_PKG_PATH}/tests/*`],
             '@cardstack/host/*': [`${HOST_PKG_PATH}/app/*`],
+            '@cardstack/boxel-host/tools/*': [`${HOST_PKG_PATH}/app/tools/*`],
             '@cardstack/boxel-host/commands/*': [
-              `${HOST_PKG_PATH}/app/commands/*`,
+              `${HOST_PKG_PATH}/app/tools/*`,
             ],
             '@cardstack/boxel-ui/*': [
-              `${join(PACKAGES_PATH, 'boxel-ui', 'addon', 'src')}/*`,
+              `${join(PACKAGES_PATH, 'boxel-ui', 'src')}/*`,
             ],
             '*': [`${HOST_PKG_PATH}/types/*`],
           },
@@ -607,7 +663,7 @@ export async function runGlintCheck(
     symlinkSync(NODE_MODULES_PATH, join(tempDir, 'node_modules'));
 
     let emberTscBin = resolve(
-      __dirname,
+      import.meta.dirname,
       '..',
       'node_modules',
       '.bin',
@@ -827,7 +883,7 @@ export function validateCardDocumentStructure(
 async function defaultSearchSpecs(
   client: BoxelCLIClient,
   realmUrl: string,
-): Promise<{ specs: SpecExampleInfo[]; error?: string }> {
+): Promise<SearchSpecExamplesResult> {
   let searchResult = await client.search(realmUrl, {
     filter: {
       type: specRef,
@@ -838,6 +894,7 @@ async function defaultSearchSpecs(
     return { specs: [], error: searchResult.error };
   }
 
+  let totalSpecCards = (searchResult.data ?? []).length;
   let specs: SpecExampleInfo[] = [];
   for (let card of searchResult.data ?? []) {
     let specId = (card as Record<string, unknown>).id as string | undefined;
@@ -874,7 +931,7 @@ async function defaultSearchSpecs(
     specs.push({ specId, exampleUrls });
   }
 
-  return { specs };
+  return { specs, totalSpecCards };
 }
 
 // ---------------------------------------------------------------------------

@@ -717,7 +717,7 @@ export class SkillPlusMarkdown extends SkillPlus {
   static prefersWideFormat = true;
 
   // Override instructions field to be computed of instructionsSource.content
-  @field instructionsSource = linksTo(MarkdownDef);
+  @field instructionsSource = linksTo(MarkdownDef, { searchable: true });
   @field instructions = contains(MarkdownField, {
     computeVia: function (this: SkillPlusMarkdown) {
       return this.instructionsSource?.content;

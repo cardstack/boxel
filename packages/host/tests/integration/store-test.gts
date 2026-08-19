@@ -5,6 +5,7 @@ import {
   waitFor,
   click,
   typeIn,
+  settled,
 } from '@ember/test-helpers';
 
 import GlimmerComponent from '@glimmer/component';
@@ -15,17 +16,15 @@ import { module, test } from 'qunit';
 
 import {
   isCardInstance,
-  baseRealm,
   localId,
   baseCardRef,
   realmURL,
   Deferred,
+  SupportedMimeType,
   type Loader,
   type Realm,
   type SingleCardDocument,
   type LooseSingleCardDocument,
-  registerCardReferencePrefix,
-  unregisterCardReferencePrefix,
 } from '@cardstack/runtime-common';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
@@ -38,11 +37,9 @@ import type RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
 import type { CardErrorJSONAPI } from '@cardstack/host/services/store';
 
-import type { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
-
 import {
+  withCachedRealmSetup,
+  setupRealmCacheTeardown,
   testRealmURL,
   testRRI,
   setupLocalIndexing,
@@ -67,10 +64,17 @@ import {
   setupBaseRealm,
 } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
+import {
+  registerDefaultRoutes,
+  registerRealmServerRoute,
+} from '../helpers/realm-server-mock/routes';
 import { renderComponent } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
 
 import type { TestRealmAdapter } from '../helpers/adapter';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type { CardDef as CardDefType } from '@cardstack/base/card-api';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 module('Integration | Store', function (hooks) {
   setupRenderingTest(hooks);
@@ -86,13 +90,16 @@ module('Integration | Store', function (hooks) {
   let cardStore: CardStore;
   let PersonDef: typeof CardDefType;
   let BoomPersonDef: typeof CardDefType;
+  let EmployeeDef: typeof CardDefType;
+  let ManagerDef: typeof CardDefType;
   let realmService: RealmService;
 
   setupLocalIndexing(hooks);
+  setupRealmCacheTeardown(hooks);
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -149,32 +156,61 @@ module('Integration | Store', function (hooks) {
       };
     }
     BoomPersonDef = BoomPerson;
+
+    class Employee extends CardDef {
+      static displayName = 'Employee';
+      @field name = contains(StringField);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <div data-test-employee-badge>Employee: <@fields.name /></div>
+        </template>
+      };
+    }
+    EmployeeDef = Employee;
+
+    class Manager extends Employee {
+      static displayName = 'Manager';
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <div data-test-manager-badge>Manager: <@fields.name /></div>
+        </template>
+      };
+    }
+    ManagerDef = Manager;
     loaderService = getService('loader-service');
     loader = loaderService.loader;
-    api = await loader.import(`${baseRealm.url}card-api`);
+    api = await loader.import('@cardstack/base/card-api');
     storeService = getService('store');
     operatorModeStateService = getService('operator-mode-state-service');
     cardStore = (storeService as any).store as CardStore;
     realmService = getService('realm');
 
-    ({ adapter: testRealmAdapter, realm: testRealm } =
-      await setupIntegrationTestRealm({
-        mockMatrixUtils,
-        contents: {
-          'person.gts': { Person },
-          'boom-person.gts': { BoomPerson },
-          'Person/hassan.json': new Person({ name: 'Hassan' }),
-          'Person/jade.json': new Person({ name: 'Jade' }),
-          'Person/queenzy.json': new Person({ name: 'Queenzy' }),
-          'Person/germaine.json': new Person({ name: 'Germaine' }),
-          'Person/boris.json': new Person({ name: 'Boris' }),
-        },
-      }));
+    // Every test builds these fixtures identically, so the indexed result is
+    // cached for the module and restored rather than rebuilt. Tests here do
+    // write; that stays with the test that wrote it, since each test restores
+    // the snapshot rather than continuing from the previous one.
+    await withCachedRealmSetup(async () => {
+      ({ adapter: testRealmAdapter, realm: testRealm } =
+        await setupIntegrationTestRealm({
+          mockMatrixUtils,
+          contents: {
+            'person.gts': { Person },
+            'boom-person.gts': { BoomPerson },
+            'employee.gts': { Employee },
+            'manager.gts': { Manager },
+            'Person/hassan.json': new Person({ name: 'Hassan' }),
+            'Person/jade.json': new Person({ name: 'Jade' }),
+            'Person/queenzy.json': new Person({ name: 'Queenzy' }),
+            'Person/germaine.json': new Person({ name: 'Germaine' }),
+            'Person/boris.json': new Person({ name: 'Boris' }),
+          },
+        }));
+    });
     await realmService.login(testRealmURL);
   });
 
   hooks.afterEach(function () {
-    unregisterCardReferencePrefix('@test-prefix/');
+    getService('network').virtualNetwork.removeRealmMapping('@test-prefix/');
   });
 
   test('can peek a card instance', async function (assert) {
@@ -264,7 +300,10 @@ module('Integration | Store', function (hooks) {
   });
 
   test<TestContextWithSave>('can use registered prefix ids across store APIs', async function (assert) {
-    registerCardReferencePrefix('@test-prefix/', testRealmURL);
+    getService('network').virtualNetwork.addRealmMapping(
+      '@test-prefix/',
+      testRealmURL,
+    );
 
     storeService.addReference('@test-prefix/Person/hassan');
     await storeService.flush();
@@ -336,6 +375,94 @@ module('Integration | Store', function (hooks) {
 
     let file = await testRealmAdapter.openFile(`Person/boris.json`);
     assert.strictEqual(file, undefined, 'delete() removes the remote card');
+  });
+
+  test('deleting a linked target rewrites a loaded consumer linksTo slot to a broken-link sentinel', async function (assert) {
+    // Load the consumer and the target, then link them so the consumer holds
+    // the target as a resolved (present) link — the state a user is looking at
+    // when they delete the linked card. The delete must flip that slot to a
+    // broken-link sentinel in place, so the placeholder render takes over
+    // without a reload. (delete() evicts the target from the store before its
+    // own invalidation event arrives, so the realm-event reload path never
+    // sees it; the rewrite has to happen here.)
+    storeService.addReference(`${testRealmURL}Person/hassan`);
+    storeService.addReference(`${testRealmURL}Person/boris`);
+    await storeService.flush();
+    let hassan = storeService.peek(
+      `${testRealmURL}Person/hassan`,
+    ) as CardDefType;
+    let boris = storeService.peek(`${testRealmURL}Person/boris`) as CardDefType;
+    (hassan as any).bestFriend = boris;
+    await settled();
+
+    assert.strictEqual(
+      api.getRelationshipMembershipState(hassan, 'bestFriend').membership![0]
+        .kind,
+      'present',
+      'the consumer link resolves to the target before the delete',
+    );
+
+    await storeService.delete(`${testRealmURL}Person/boris`);
+
+    let after = api.getRelationshipMembershipState(hassan, 'bestFriend')
+      .membership![0];
+    assert.strictEqual(
+      after.kind,
+      'not-found',
+      'deleting the target rewrites the consumer slot to a broken-link sentinel without a reload',
+    );
+    assert.strictEqual(
+      after.reference,
+      `${testRealmURL}Person/boris`,
+      'the sentinel preserves the deleted target reference for the placeholder',
+    );
+  });
+
+  test('deleting a linked target rewrites only the matching element of a loaded consumer linksToMany slot', async function (assert) {
+    storeService.addReference(`${testRealmURL}Person/hassan`);
+    storeService.addReference(`${testRealmURL}Person/boris`);
+    storeService.addReference(`${testRealmURL}Person/jade`);
+    await storeService.flush();
+    let hassan = storeService.peek(
+      `${testRealmURL}Person/hassan`,
+    ) as CardDefType;
+    let boris = storeService.peek(`${testRealmURL}Person/boris`) as CardDefType;
+    let jade = storeService.peek(`${testRealmURL}Person/jade`) as CardDefType;
+    (hassan as any).friends = [jade, boris];
+    await settled();
+
+    let before = api.getRelationshipMembershipState(
+      hassan,
+      'friends',
+    ).membership!;
+    assert.deepEqual(
+      before.map((s) => s.kind),
+      ['present', 'present'],
+      'both linksToMany elements resolve before the delete',
+    );
+
+    await storeService.delete(`${testRealmURL}Person/boris`);
+
+    let after = api.getRelationshipMembershipState(
+      hassan,
+      'friends',
+    ).membership!;
+    let borisEntry = after.find(
+      (s) => s.reference === `${testRealmURL}Person/boris`,
+    );
+    let jadeEntry = after.find(
+      (s) => s.reference === `${testRealmURL}Person/jade`,
+    );
+    assert.strictEqual(
+      borisEntry?.kind,
+      'not-found',
+      'the deleted element becomes a broken-link sentinel',
+    );
+    assert.strictEqual(
+      jadeEntry?.kind,
+      'present',
+      'the surviving element is left untouched',
+    );
   });
 
   test('peekError returns the server state error when a stale instance exists', async function (assert) {
@@ -427,6 +554,149 @@ module('Integration | Store', function (hooks) {
       instance,
       'instance is not garbage collected',
     );
+  });
+
+  test('a render-context load does not set up the autosave change subscription', async function (assert) {
+    // The card-api module's exports are read-only, so we count `subscribeToChanges`
+    // by interposing on `cardService.getAPI()` — which the store re-reads each time
+    // it sets up autosave — and handing back a proxy that tallies the call.
+    let cardService = getService('card-service');
+    let originalGetAPI = cardService.getAPI.bind(cardService);
+    let realApi = await originalGetAPI();
+    let trueSubscribe = realApi.subscribeToChanges;
+    let subscribeCount = 0;
+    (cardService as any).getAPI = async () =>
+      new Proxy(realApi, {
+        get(target, prop, receiver) {
+          if (prop === 'subscribeToChanges') {
+            return (...args: unknown[]) => {
+              subscribeCount++;
+              return (trueSubscribe as any)(...args);
+            };
+          }
+          return Reflect.get(target, prop, receiver);
+        },
+      });
+
+    try {
+      // The live store wires up the change subscription that drives autosave.
+      await storeService.add(new PersonDef({ name: 'Mango' }), {
+        doNotPersist: true,
+      });
+      assert.true(
+        subscribeCount > 0,
+        'the live store subscribes a loaded instance for autosave',
+      );
+
+      // A render store blocks persistence, so autosave can never fire — it must
+      // not pay for the per-instance subscribe/unsubscribe churn that drives it.
+      subscribeCount = 0;
+      (globalThis as any).__boxelRenderContext = true;
+      let renderStore = getService('render-store');
+      await renderStore.add(new PersonDef({ name: 'Van Gogh' }), {
+        doNotPersist: true,
+      });
+      assert.strictEqual(
+        subscribeCount,
+        0,
+        'the render store does not subscribe a loaded instance for autosave',
+      );
+    } finally {
+      (cardService as any).getAPI = originalGetAPI;
+      delete (globalThis as any).__boxelRenderContext;
+    }
+  });
+
+  test('restoring sessions from storage skips the re-walk when the session blob is unchanged', function (assert) {
+    // `restoreSessionsFromStorage` is synchronous, so the walk-count delta
+    // measured immediately around each call is exactly that call's work — other
+    // realm activity can only run at async boundaries, never mid-call. The realms
+    // already in storage (from login) are resolved with their own tokens, so the
+    // walk has no token-setter side effects.
+    let walks = 0;
+    let originalGetOrCreate = (
+      realmService as any
+    ).getOrCreateRealmResource.bind(realmService);
+    (realmService as any).getOrCreateRealmResource = (...args: unknown[]) => {
+      walks++;
+      return originalGetOrCreate(...args);
+    };
+
+    try {
+      (realmService as any).lastRestoredSessionsString = undefined;
+
+      let before = walks;
+      realmService.restoreSessionsFromStorage();
+      assert.true(
+        walks - before > 0,
+        'the first restore walks the stored sessions',
+      );
+
+      before = walks;
+      realmService.restoreSessionsFromStorage();
+      assert.strictEqual(
+        walks - before,
+        0,
+        'a restore with an unchanged blob does not re-walk',
+      );
+
+      // When a newly seeded realm session changes the stored blob, the memo no
+      // longer matches it, so the next restore re-reads and re-walks.
+      (realmService as any).lastRestoredSessionsString = 'stale-sentinel';
+      before = walks;
+      realmService.restoreSessionsFromStorage();
+      assert.true(
+        walks - before > 0,
+        'a restore re-walks once the stored blob no longer matches the memo',
+      );
+    } finally {
+      (realmService as any).getOrCreateRealmResource = originalGetOrCreate;
+    }
+  });
+
+  test('getFields is memoized per instance in the render context and invalidates as the instance grows', function (assert) {
+    let person = new PersonDef({ name: 'Mango' });
+    try {
+      (globalThis as any).__boxelRenderContext = true;
+
+      let first = api.getFields(person, { usedLinksToFieldsOnly: true });
+      let second = api.getFields(person, { usedLinksToFieldsOnly: true });
+      assert.strictEqual(
+        first,
+        second,
+        'a repeat call in the render context returns the memoized field map',
+      );
+      assert.notOk(
+        'bestFriend' in first,
+        'an unused linksTo field is absent before it is populated',
+      );
+
+      // Populating a linksTo field grows the data bucket, so the memo token no
+      // longer matches and the next call recomputes.
+      (person as any).bestFriend = new PersonDef({ name: 'Van Gogh' });
+      let third = api.getFields(person, { usedLinksToFieldsOnly: true });
+      assert.notStrictEqual(
+        third,
+        first,
+        'growing the instance invalidates the memo',
+      );
+      assert.ok(
+        'bestFriend' in third,
+        'the now-used linksTo field appears after the bucket grows',
+      );
+
+      // Outside the render context the result is never memoized.
+      delete (globalThis as any).__boxelRenderContext;
+      let live1 = api.getFields(person, { usedLinksToFieldsOnly: true });
+      let live2 = api.getFields(person, { usedLinksToFieldsOnly: true });
+      assert.notStrictEqual(
+        live1,
+        live2,
+        'the live app always gets a fresh field map',
+      );
+    } finally {
+      delete (globalThis as any).__boxelRenderContext;
+    }
   });
 
   test('can drop reference to a card url', async function (assert) {
@@ -733,7 +1003,7 @@ module('Integration | Store', function (hooks) {
       await testRealm.write(
         `boom-person.gts`,
         `
-        import { contains, field, CardDef, Component, StringField } from 'https://cardstack.com/base/card-api';
+        import { contains, field, CardDef, Component, StringField } from '@cardstack/base/card-api';
 
         export class BoomPerson extends CardDef {
           static displayName = 'Boom Person';
@@ -792,6 +1062,213 @@ module('Integration | Store', function (hooks) {
     assert.ok(file, 'file exists');
     let fileJSON = JSON.parse(file!.content as string);
     assert.strictEqual(fileJSON.data.attributes.name, 'Andrea', 'file exists');
+  });
+
+  // The store's single write-permission check lives on the autosave path
+  // (`useEphemeralState`, consulted by `doAutoSave`). `persistAndUpdate` has no
+  // such guard, so a persist that bypasses the queue must re-apply the check or
+  // it will PATCH a realm the user cannot write to.
+  test<TestContextWithSave>('add() does not persist an existing card when the realm is read-only', async function (assert) {
+    (storeService as any).realm.permissions = () => ({
+      get canRead() {
+        return true;
+      },
+      get canWrite() {
+        return false;
+      },
+    });
+    let instance = (await storeService.get(
+      `${testRealmURL}Person/hassan`,
+    )) as any;
+
+    let writes: string[] = [];
+    this.onSave((url) => writes.push(url.href));
+
+    instance.name = 'Hassan Updated';
+    let result = await storeService.add(instance);
+    await settled();
+
+    assert.deepEqual(writes, [], 'no write is attempted without permission');
+    assert.true(
+      isCardInstance(result),
+      'add() still resolves with the instance rather than a permission error',
+    );
+    let file = await testRealmAdapter.openFile('Person/hassan.json');
+    assert.strictEqual(
+      JSON.parse(file!.content as string).data.attributes.name,
+      'Hassan',
+      'the durable document is untouched',
+    );
+  });
+
+  test('add() reports its save in the card save state', async function (assert) {
+    let instance = (await storeService.get(
+      `${testRealmURL}Person/hassan`,
+    )) as any;
+    instance.name = 'Hassan Updated';
+
+    await storeService.add(instance);
+
+    // add() persists outside the autosave queue, so it has to fold its own
+    // outcome into the save state the indicator renders.
+    let saveState = storeService.getSaveState(instance.id)!;
+    assert.false(
+      saveState.hasUnsavedChanges,
+      'the card no longer reports unsaved changes',
+    );
+    assert.ok(saveState.lastSaved, 'lastSaved reflects the add()-driven save');
+    assert.strictEqual(
+      saveState.lastSaveError,
+      undefined,
+      'no save error is reported',
+    );
+    assert.false(saveState.isSaving, 'the save is no longer in flight');
+  });
+
+  test('add() records a persistence failure in the card save state', async function (assert) {
+    let instance = (await storeService.get(
+      `${testRealmURL}Person/hassan`,
+    )) as any;
+    instance.name = 'Hassan Updated';
+
+    let store = storeService as any;
+    store.saveCardDocument = async () => {
+      throw new Error('intentional persistence failure');
+    };
+    try {
+      await storeService.add(instance);
+    } finally {
+      delete store.saveCardDocument;
+    }
+
+    let saveState = storeService.getSaveState(instance.id)!;
+    assert.ok(
+      saveState.lastSaveError,
+      'the failure is visible to the save indicator, not only to the caller',
+    );
+    assert.false(saveState.isSaving, 'the save is no longer in flight');
+  });
+
+  test('add() awaits durable persistence for an existing card', async function (assert) {
+    let queenzy = (await storeService.get(
+      `${testRealmURL}Person/queenzy`,
+    )) as any;
+    let instance = (await storeService.get(
+      `${testRealmURL}Person/hassan`,
+    )) as any;
+    // Mutate a scalar attribute and a relationship together: the two travel
+    // through different serialization paths, so a persist that awaited only one
+    // of them would still pass a scalar-only assertion.
+    instance.name = 'Hassan Updated';
+    instance.bestFriend = queenzy;
+
+    let result = await storeService.add(instance);
+    assert.true(
+      isCardInstance(result),
+      'add() resolves with the card instance',
+    );
+
+    // Read the backing JSON with no waitUntil: that is what makes this an
+    // assertion about ordering rather than about eventual consistency. An
+    // add() that resolved before the PATCH landed would still see the
+    // pre-mutation state here.
+    let file = await testRealmAdapter.openFile('Person/hassan.json');
+    let fileJSON = JSON.parse(file!.content as string);
+    assert.strictEqual(
+      fileJSON.data.attributes.name,
+      'Hassan Updated',
+      'the scalar mutation is durable as soon as add() resolves',
+    );
+    assert.ok(
+      (fileJSON.data.relationships.bestFriend.links.self as string).endsWith(
+        'queenzy',
+      ),
+      'the link mutation is durable as soon as add() resolves',
+    );
+  });
+
+  test('add() stays pending until an existing card is durably persisted', async function (assert) {
+    let instance = (await storeService.get(
+      `${testRealmURL}Person/hassan`,
+    )) as any;
+    instance.name = 'Hassan Updated';
+
+    let store = storeService as any;
+    let gate = new Deferred<void>();
+    // Keep the unbound original and call it with an explicit receiver, so the
+    // stub can be removed rather than replaced. `persistAndUpdate` lives on the
+    // prototype, so deleting the shadowing own property below restores the
+    // method exactly — assigning a bound copy back would leave a permanent own
+    // property with a different identity and arity.
+    let originalPersist = store.persistAndUpdate;
+    store.persistAndUpdate = async (...args: any[]) => {
+      await gate.promise;
+      return await originalPersist.call(store, ...args);
+    };
+
+    try {
+      let resolved = false;
+      let addPromise = storeService.add(instance).then((r) => {
+        resolved = true;
+        return r;
+      });
+
+      // Give a fire-and-forget implementation every opportunity to resolve
+      // early; a durable implementation must remain pending while the gate is
+      // held closed.
+      for (let i = 0; i < 10; i++) {
+        await Promise.resolve();
+      }
+      assert.false(
+        resolved,
+        'add() has not resolved while persistence is gated',
+      );
+
+      gate.fulfill();
+      await addPromise;
+      assert.true(resolved, 'add() resolves once persistence completes');
+    } finally {
+      delete store.persistAndUpdate;
+    }
+
+    let file = await testRealmAdapter.openFile('Person/hassan.json');
+    assert.strictEqual(
+      JSON.parse(file!.content as string).data.attributes.name,
+      'Hassan Updated',
+      'the mutation is durably persisted',
+    );
+  });
+
+  test('add() surfaces persistence failures for an existing card', async function (assert) {
+    let instance = (await storeService.get(
+      `${testRealmURL}Person/hassan`,
+    )) as any;
+    instance.name = 'Hassan Updated';
+
+    // Removed rather than reassigned in `finally`, for the reason given on the
+    // persistAndUpdate stub above.
+    let store = storeService as any;
+    store.saveCardDocument = async () => {
+      throw new Error('intentional persistence failure');
+    };
+
+    let result;
+    try {
+      result = await storeService.add(instance);
+    } finally {
+      delete store.saveCardDocument;
+    }
+
+    assert.false(
+      isCardInstance(result),
+      'add() resolves with a card error rather than the instance when persistence fails',
+    );
+    assert.ok(
+      (result as CardErrorJSONAPI).message.includes(
+        'intentional persistence failure',
+      ),
+      'the persistence error propagates to the caller instead of being swallowed',
+    );
   });
 
   test<TestContextWithSave>('can add a serialized instance to the store', async function (assert) {
@@ -1178,6 +1655,166 @@ module('Integration | Store', function (hooks) {
     assert.strictEqual(file, undefined, 'file no longer exists');
   });
 
+  test('subscribeToCardInvalidation fires the callback when the card is deleted', async function (assert) {
+    storeService.addReference(`${testRealmURL}Person/boris`);
+    await storeService.flush();
+
+    let fired = 0;
+    let unsubscribe = storeService.subscribeToCardInvalidation(
+      `${testRealmURL}Person/boris`,
+      () => {
+        fired += 1;
+      },
+    );
+
+    await storeService.delete(`${testRealmURL}Person/boris`);
+
+    assert.strictEqual(
+      fired,
+      1,
+      'the invalidation subscriber fires exactly once on delete',
+    );
+    unsubscribe();
+  });
+
+  test('subscribeToCardInvalidation unsubscribe stops firing the callback', async function (assert) {
+    storeService.addReference(`${testRealmURL}Person/boris`);
+    await storeService.flush();
+
+    let fired = 0;
+    let unsubscribe = storeService.subscribeToCardInvalidation(
+      `${testRealmURL}Person/boris`,
+      () => {
+        fired += 1;
+      },
+    );
+    unsubscribe();
+
+    await storeService.delete(`${testRealmURL}Person/boris`);
+
+    assert.strictEqual(fired, 0, 'no callbacks fire after unsubscribe');
+  });
+
+  test('a synchronously throwing invalidation subscriber does not break siblings', async function (assert) {
+    storeService.addReference(`${testRealmURL}Person/boris`);
+    await storeService.flush();
+
+    let originalError = console.error;
+    let captured: unknown[] = [];
+    console.error = (...args: unknown[]) => {
+      // Scope the count to the invalidation-subscriber errors this test is
+      // about. Setup can emit unrelated console.error noise whose timing is not
+      // fixed relative to this window — e.g. the fixture realm has no
+      // SystemCard, so matrix-service's async load of it 404s and reports here
+      // — and that must not race into the assertion. Forward everything else so
+      // genuine problems still surface.
+      if (
+        typeof args[0] === 'string' &&
+        args[0].includes('card invalidation subscriber')
+      ) {
+        captured.push(args);
+      } else {
+        originalError(...args);
+      }
+    };
+
+    let secondFired = 0;
+    let unsubscribeA = storeService.subscribeToCardInvalidation(
+      `${testRealmURL}Person/boris`,
+      () => {
+        throw new Error('intentional sync throw from invalidation subscriber');
+      },
+    );
+    let unsubscribeB = storeService.subscribeToCardInvalidation(
+      `${testRealmURL}Person/boris`,
+      () => {
+        secondFired += 1;
+      },
+    );
+
+    try {
+      await storeService.delete(`${testRealmURL}Person/boris`);
+
+      assert.strictEqual(
+        secondFired,
+        1,
+        'the second subscriber still runs after the first one throws',
+      );
+      assert.strictEqual(
+        captured.length,
+        1,
+        'the synchronous throw is reported via console.error exactly once',
+      );
+    } finally {
+      unsubscribeA();
+      unsubscribeB();
+      console.error = originalError;
+    }
+  });
+
+  test('an async-rejecting invalidation subscriber does not break siblings and does not surface as an unhandled rejection', async function (assert) {
+    storeService.addReference(`${testRealmURL}Person/boris`);
+    await storeService.flush();
+
+    let originalError = console.error;
+    let captured: unknown[] = [];
+    console.error = (...args: unknown[]) => {
+      // Scope the count to the invalidation-subscriber errors this test is
+      // about. Setup can emit unrelated console.error noise whose timing is not
+      // fixed relative to this window — e.g. the fixture realm has no
+      // SystemCard, so matrix-service's async load of it 404s and reports here
+      // — and that must not race into the assertion. Forward everything else so
+      // genuine problems still surface.
+      if (
+        typeof args[0] === 'string' &&
+        args[0].includes('card invalidation subscriber')
+      ) {
+        captured.push(args);
+      } else {
+        originalError(...args);
+      }
+    };
+
+    let secondFired = 0;
+    let unsubscribeA = storeService.subscribeToCardInvalidation(
+      `${testRealmURL}Person/boris`,
+      async () => {
+        await Promise.resolve();
+        throw new Error(
+          'intentional async rejection from invalidation subscriber',
+        );
+      },
+    );
+    let unsubscribeB = storeService.subscribeToCardInvalidation(
+      `${testRealmURL}Person/boris`,
+      () => {
+        secondFired += 1;
+      },
+    );
+
+    try {
+      await storeService.delete(`${testRealmURL}Person/boris`);
+      // Drain the microtask queue so the rejected promise's catch handler runs
+      // and any unhandled-rejection event would have already fired.
+      await settled();
+
+      assert.strictEqual(
+        secondFired,
+        1,
+        'the second subscriber still runs alongside the async-rejecting one',
+      );
+      assert.strictEqual(
+        captured.length,
+        1,
+        'the async rejection is reported via console.error exactly once',
+      );
+    } finally {
+      unsubscribeA();
+      unsubscribeB();
+      console.error = originalError;
+    }
+  });
+
   test('can patch an instance', async function (assert) {
     let instance = await storeService.patch(`${testRealmURL}Person/hassan`, {
       attributes: {
@@ -1221,14 +1858,240 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  // Loading is a read. Resolving a linksTo assigns the loaded target back onto
+  // the field, which notifies change subscribers — the same signal a user edit
+  // produces — so without care the mere act of viewing a card can dirty it and
+  // trigger an auto-save. That write is invisible to the user, bumps the
+  // instance's version, and schedules a reindex.
+  test<TestContextWithSave>('resolving a linksTo lazily issues no save', async function (assert) {
+    let hassanId = `${testRealmURL}Person/hassan`;
+    // A target of its own: deserialization resolves a link straight from the
+    // identity map when the target is already in the store, which skips the
+    // lazy path just as surely as side-loading does.
+    await testRealm.write(
+      'Person/ghost-friend.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'Ghost' },
+          meta: { adoptsFrom: { module: testRRI('person'), name: 'Person' } },
+        },
+      }),
+    );
+    await testRealm.write(
+      'Person/hassan.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'Hassan' },
+          relationships: {
+            bestFriend: {
+              links: { self: `${testRealmURL}Person/ghost-friend` },
+            },
+          },
+          meta: {
+            adoptsFrom: { module: testRRI('person'), name: 'Person' },
+          },
+        },
+      }),
+    );
+
+    // A card GET side-loads its linksTo targets into `included`, and
+    // deserialization resolves the field from there synchronously — never
+    // touching the lazy path this test is about. Writing the link unresolved
+    // on disk does not change that. Drop the side-load for this one document
+    // so the field deserializes to a not-loaded marker, and reading it drives
+    // the real lazy load — the path that assigns the target onto the field.
+    let cardService = getService('card-service');
+    let fetchJSON = cardService.fetchJSON.bind(cardService);
+    let intercepted = 0;
+    cardService.fetchJSON = (async (
+      url: string | URL,
+      args?: Parameters<typeof fetchJSON>[1],
+    ) => {
+      let doc = await fetchJSON(url, args);
+      if (String(url).replace(/\.json$/, '') === hassanId) {
+        intercepted++;
+        delete (doc as any)?.included;
+      }
+      return doc;
+    }) as typeof cardService.fetchJSON;
+
+    let saved: string[] = [];
+    this.onSave((url) => {
+      saved.push(url.href);
+    });
+
+    try {
+      let instance = (await storeService.get(hassanId)) as any;
+
+      // These two keep the test honest rather than describing behaviour: if
+      // the fetch is never intercepted, or the link arrives already resolved,
+      // the lazy path did not run and a save during it would go unnoticed.
+      assert.ok(intercepted > 0, 'the card fetch was intercepted');
+      assert.strictEqual(
+        instance.bestFriend,
+        undefined,
+        'the link is not loaded yet, so reading it takes the lazy path',
+      );
+
+      await storeService.flush();
+      await settled();
+
+      assert.strictEqual(
+        instance.bestFriend?.name,
+        'Ghost',
+        'the lazy load resolved the target and assigned it to the field',
+      );
+      assert.deepEqual(saved, [], 'no save was issued while loading');
+    } finally {
+      cardService.fetchJSON = fetchJSON;
+    }
+  });
+
+  // The plural sibling of the test above. It resolves through a different
+  // mechanism — a WatchedArray slot rather than a field setter — so suppressing
+  // the change notification in one says nothing about the other.
+  test<TestContextWithSave>('resolving a linksToMany lazily issues no save', async function (assert) {
+    let hassanId = `${testRealmURL}Person/hassan`;
+    await testRealm.write(
+      'Person/ghost-friend.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'Ghost' },
+          meta: { adoptsFrom: { module: testRRI('person'), name: 'Person' } },
+        },
+      }),
+    );
+    await testRealm.write(
+      'Person/hassan.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'Hassan' },
+          relationships: {
+            'friends.0': {
+              links: { self: `${testRealmURL}Person/ghost-friend` },
+            },
+          },
+          meta: {
+            adoptsFrom: { module: testRRI('person'), name: 'Person' },
+          },
+        },
+      }),
+    );
+
+    let cardService = getService('card-service');
+    let fetchJSON = cardService.fetchJSON.bind(cardService);
+    let intercepted = 0;
+    cardService.fetchJSON = (async (
+      url: string | URL,
+      args?: Parameters<typeof fetchJSON>[1],
+    ) => {
+      let doc = await fetchJSON(url, args);
+      if (String(url).replace(/\.json$/, '') === hassanId) {
+        intercepted++;
+        delete (doc as any)?.included;
+      }
+      return doc;
+    }) as typeof cardService.fetchJSON;
+
+    let saved: string[] = [];
+    this.onSave((url) => {
+      saved.push(url.href);
+    });
+
+    try {
+      let instance = (await storeService.get(hassanId)) as any;
+
+      assert.ok(intercepted > 0, 'the card fetch was intercepted');
+      // The proxy hides an unresolved slot, so an unloaded element reads as
+      // absent. Seeing the target here instead would mean it arrived resolved
+      // and the lazy path never ran.
+      assert.deepEqual(
+        instance.friends.map((f: any) => f?.name),
+        [undefined],
+        'the element is not loaded yet, so reading it takes the lazy path',
+      );
+
+      await storeService.flush();
+      await settled();
+
+      assert.deepEqual(
+        instance.friends.map((f: any) => f?.name),
+        ['Ghost'],
+        'the lazy load resolved the target into its slot',
+      );
+      assert.deepEqual(saved, [], 'no save was issued while loading');
+    } finally {
+      cardService.fetchJSON = fetchJSON;
+    }
+  });
+
+  test('a concurrent field write during store.patch is not clobbered by the patch’s stale snapshot', async function (assert) {
+    let targetId = `${testRealmURL}Person/hassan`;
+    let instance = (await storeService.get(targetId)) as any;
+
+    let gate = new Deferred<void>();
+    let enteredGate = new Deferred<void>();
+    let originalLoadPatchedInstances = (storeService as any)
+      .loadPatchedInstances;
+    (storeService as any).loadPatchedInstances = async function (
+      this: unknown,
+      ...args: any[]
+    ) {
+      let result = await originalLoadPatchedInstances.apply(this, args);
+      // simulate a slow relationship load (e.g. fetching a not-yet-cached
+      // linked card) so a concurrent field write on the same live instance
+      // can land in the window between the patch's snapshot and its
+      // eventual write-back
+      enteredGate.fulfill();
+      await gate.promise;
+      return result;
+    };
+
+    try {
+      let patchPromise = storeService.patch(targetId, {
+        relationships: {
+          bestFriend: {
+            links: { self: `${testRealmURL}Person/jade` },
+          },
+        },
+      });
+
+      // wait until the patch has actually reached the gated relationship
+      // load before mutating a sibling field, so the write lands squarely in
+      // the window the patch's snapshot needs to still be sensitive to
+      await enteredGate.promise;
+
+      // a sibling background task (e.g. an unrelated auto-linking step, as in
+      // the catalog listing-create flow) mutates a different field on the
+      // same live instance while the patch above is still in flight
+      instance.name = 'Race Winner';
+
+      gate.fulfill();
+      await patchPromise;
+    } finally {
+      (storeService as any).loadPatchedInstances = originalLoadPatchedInstances;
+    }
+
+    assert.strictEqual(
+      instance.name,
+      'Race Winner',
+      "the concurrent field write is not clobbered by the patch's stale snapshot",
+    );
+    assert.strictEqual(
+      instance.bestFriend?.id,
+      `${testRealmURL}Person/jade`,
+      'the patch itself was still applied',
+    );
+  });
+
   test('loads FileDef links from included resources', async function (assert) {
     await testRealm.writeMany(
       new Map<string, string>([
         [
           'gallery.gts',
           `
-            import { CardDef, field, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
-            import { FileDef } from "https://cardstack.com/base/file-api";
+            import { CardDef, field, linksTo, linksToMany } from "@cardstack/base/card-api";
+            import { FileDef } from "@cardstack/base/file-api";
 
             export class Gallery extends CardDef {
               @field hero = linksTo(FileDef);
@@ -1282,7 +2145,7 @@ module('Integration | Store', function (hooks) {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/card-api',
+                    module: '@cardstack/base/card-api',
                     name: 'FileDef',
                   },
                 },
@@ -1298,7 +2161,7 @@ module('Integration | Store', function (hooks) {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/card-api',
+                    module: '@cardstack/base/card-api',
                     name: 'FileDef',
                   },
                 },
@@ -1314,7 +2177,7 @@ module('Integration | Store', function (hooks) {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/card-api',
+                    module: '@cardstack/base/card-api',
                     name: 'FileDef',
                   },
                 },
@@ -1383,8 +2246,8 @@ module('Integration | Store', function (hooks) {
         [
           'gallery.gts',
           `
-            import { CardDef, field, linksTo } from "https://cardstack.com/base/card-api";
-            import { FileDef } from "https://cardstack.com/base/file-api";
+            import { CardDef, field, linksTo } from "@cardstack/base/card-api";
+            import { FileDef } from "@cardstack/base/file-api";
 
             export class Gallery extends CardDef {
               @field hero = linksTo(FileDef);
@@ -1469,7 +2332,11 @@ module('Integration | Store', function (hooks) {
     );
     assert.false(didSave, 'instance has not been persisted yet');
 
-    await waitUntil(() => didSave);
+    // The fire-and-forget save (doNotWaitForPersist) completes a write +
+    // incremental index round-trip before onSave fires — comfortably over the
+    // 1s waitUntil default under load. Match the save slack the sibling
+    // "adding to the store" test uses.
+    await waitUntil(() => didSave, { timeout: 10000 });
 
     let file = await testRealmAdapter.openFile('Person/hassan.json');
     assert.strictEqual(
@@ -1617,6 +2484,144 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  // A search result can resolve to prerendered HTML with no `item`
+  // serialization (the engine's prefer-HTML branch). The instances-level
+  // search must never fabricate or deposit anything for such an entry — an
+  // attribute-less stub would misrepresent the instance and could clobber a
+  // correctly-loaded full one. The route is overridden to return such a doc.
+  function overrideSearchWith(doc: unknown) {
+    registerRealmServerRoute({
+      path: '/_federated-search',
+      handler: async () =>
+        new Response(JSON.stringify(doc), {
+          status: 200,
+          headers: { 'content-type': SupportedMimeType.CardJson },
+        }),
+    });
+  }
+
+  // An entry that carries only an `html` rendering — no `item`.
+  function htmlOnlyEntryDoc(id: string, opts?: { isFileMeta?: boolean }) {
+    let htmlId = opts?.isFileMeta
+      ? `${id}#fitted`
+      : `${id}#fitted#${testRealmURL}person/Person`;
+    return {
+      data: [
+        {
+          type: 'entry',
+          id,
+          relationships: {
+            html: { data: [{ type: 'html', id: htmlId }] },
+          },
+        },
+      ],
+      included: [
+        {
+          type: 'html',
+          id: htmlId,
+          attributes: {
+            html: '<div>prerendered</div>',
+            cardType: 'Person',
+            format: 'fitted',
+          },
+          relationships: { styles: { data: [] } },
+        },
+      ],
+      meta: { page: { total: 1 } },
+    };
+  }
+
+  let personQuery = {
+    filter: {
+      on: { module: testRRI('person'), name: 'Person' },
+      eq: { name: 'Hassan' },
+    },
+  };
+
+  test('a search result with no item serialization is not deposited into the Store', async function (assert) {
+    let id = `${testRealmURL}Person/html-only`;
+    overrideSearchWith(htmlOnlyEntryDoc(id));
+    try {
+      let results = await storeService.search(personQuery, [testRealmURL]);
+      assert.strictEqual(
+        results.length,
+        0,
+        'the html-only entry is not returned as a hydrated instance',
+      );
+      assert.notOk(
+        isCardInstance(storeService.peek(id)),
+        'the html-only entry is not deposited in the Store',
+      );
+    } finally {
+      registerDefaultRoutes();
+    }
+  });
+
+  test('a search result with no item serialization leaves a resident full instance untouched', async function (assert) {
+    let id = `${testRealmURL}Person/hassan`;
+    // Seed the full instance into the Store first.
+    storeService.addReference(id);
+    await storeService.flush();
+    let before = storeService.peek(id);
+    assert.true(
+      isCardInstance(before),
+      'the full instance is resident before the search',
+    );
+
+    overrideSearchWith(htmlOnlyEntryDoc(id));
+    try {
+      let results = await storeService.search(personQuery, [testRealmURL]);
+      assert.strictEqual(
+        results.length,
+        0,
+        'an entry with no serialization contributes no instance',
+      );
+      let after = storeService.peek(id);
+      assert.strictEqual(
+        after,
+        before,
+        'the html-only entry left the resident full instance untouched',
+      );
+      assert.true(isCardInstance(after), 'still a full card instance');
+    } finally {
+      registerDefaultRoutes();
+    }
+  });
+
+  test('a file-meta search result with no item serialization leaves a resident FileDef untouched', async function (assert) {
+    await testRealm.write('hero.png', 'mock hero image');
+    let fileUrl = `${testRealmURL}hero.png`;
+    // Seed the live FileDef into the Store and retain it across the search.
+    let before = await storeService.get(fileUrl, { type: 'file-meta' });
+    storeService.addReference(fileUrl, { type: 'file-meta' });
+    assert.true(
+      (before as any)?.constructor?.isFileDef,
+      'the live FileDef is resident before the search',
+    );
+
+    overrideSearchWith(htmlOnlyEntryDoc(fileUrl, { isFileMeta: true }));
+    try {
+      let results = await storeService.search(personQuery, [testRealmURL]);
+      assert.strictEqual(
+        results.length,
+        0,
+        'an entry with no serialization contributes no instance',
+      );
+      assert.true(
+        (storeService.peek(fileUrl, { type: 'file-meta' }) as any)?.constructor
+          ?.isFileDef,
+        'the resident live FileDef is untouched',
+      );
+      assert.ok(
+        Object.is(storeService.peek(fileUrl, { type: 'file-meta' }), before),
+        'still the same resident FileDef',
+      );
+    } finally {
+      storeService.dropReference(fileUrl);
+      registerDefaultRoutes();
+    }
+  });
+
   test<TestContextWithSave>('an instance live updates from indexing events for an instance update', async function (assert) {
     assert.expect(2);
     let didSave = false;
@@ -1671,8 +2676,8 @@ module('Integration | Store', function (hooks) {
     await testRealm.write(
       `person.gts`,
       `
-      import { contains, field, Component, CardDef, } from 'https://cardstack.com/base/card-api';
-      import StringField from 'https://cardstack.com/base/string';
+      import { contains, field, Component, CardDef, } from '@cardstack/base/card-api';
+      import StringField from '@cardstack/base/string';
 
       export class Person extends CardDef {
         @field name = contains(StringField);
@@ -1696,6 +2701,120 @@ module('Integration | Store', function (hooks) {
       newInstance[localId],
       'the updated instance is a different object than the original instance',
     );
+  });
+
+  test('an instance live updates to a new type when its adoptsFrom changes', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}Person/hassan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    let original = storeService.peek(
+      `${testRealmURL}Person/hassan`,
+    ) as CardDefType;
+    assert.true(
+      original instanceof PersonDef,
+      'the card starts out as a Person',
+    );
+    assert.dom('[data-test-employee-badge]').doesNotExist();
+
+    // Re-point the card's meta.adoptsFrom at an unrelated type — mirrors a user
+    // changing the adoptsFrom of a realm index card (CardsGrid) to a custom
+    // index card by editing its JSON.
+    await testRealm.write(
+      'Person/hassan.json',
+      JSON.stringify({
+        data: {
+          attributes: {
+            name: 'Hassan',
+          },
+          meta: {
+            adoptsFrom: {
+              module: testRRI('employee'),
+              name: 'Employee',
+            },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+
+    await waitUntil(
+      () =>
+        storeService.peek(`${testRealmURL}Person/hassan`) instanceof
+        EmployeeDef,
+      { timeout: 5_000 },
+    );
+    let reloaded = storeService.peek(
+      `${testRealmURL}Person/hassan`,
+    ) as CardDefType;
+    assert.true(
+      reloaded instanceof EmployeeDef,
+      'the store now holds an Employee instance for the same id',
+    );
+
+    await waitFor('[data-test-employee-badge]', { timeout: 5_000 });
+    assert
+      .dom('[data-test-employee-badge]')
+      .containsText(
+        'Employee: Hassan',
+        'the card re-rendered using the new type',
+      );
+  });
+
+  test('an instance rebuilds when its adoptsFrom changes to an ancestor type', async function (assert) {
+    await testRealm.write(
+      'Manager/m1.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'Hassan' },
+          meta: {
+            adoptsFrom: { module: testRRI('manager'), name: 'Manager' },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+    setCardInOperatorModeState(`${testRealmURL}Manager/m1`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await waitFor('[data-test-manager-badge]');
+    let original = storeService.peek(
+      `${testRealmURL}Manager/m1`,
+    ) as CardDefType;
+    assert.true(original instanceof ManagerDef, 'the card starts as a Manager');
+
+    // Re-point at the ancestor type. A subtype check would treat the Manager
+    // instance as already compatible and keep rendering the subclass; the
+    // store must rebuild it as exactly Employee.
+    await testRealm.write(
+      'Manager/m1.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'Hassan' },
+          meta: {
+            adoptsFrom: { module: testRRI('employee'), name: 'Employee' },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+
+    await waitUntil(
+      () => {
+        let c = storeService.peek(`${testRealmURL}Manager/m1`);
+        return c instanceof EmployeeDef && !(c instanceof ManagerDef);
+      },
+      { timeout: 5_000 },
+    );
+    await waitFor('[data-test-employee-badge]', { timeout: 5_000 });
+    assert
+      .dom('[data-test-employee-badge]')
+      .containsText('Employee: Hassan', 'rebuilt as the ancestor type');
+    assert
+      .dom('[data-test-manager-badge]')
+      .doesNotExist('no longer rendered as the Manager subclass');
   });
 
   test('an instance can live update thru an error state', async function (assert) {
@@ -1775,7 +2894,7 @@ module('Integration | Store', function (hooks) {
     await testRealm.write(
       `foo.gts`,
       `
-        import { contains, CardDef } from 'https://cardstack.com/base/card-api';
+        import { contains, CardDef } from '@cardstack/base/card-api';
         export class Foo extends CardDef {}
       `.trim(),
     );
@@ -1812,7 +2931,7 @@ module('Integration | Store', function (hooks) {
     await testRealm.write(
       `foo.gts`,
       `
-        import { contains, CardDef } from 'https://cardstack.com/base/card-api';
+        import { contains, CardDef } from '@cardstack/base/card-api';
         export class Foo extends CardDef {}
       `.trim(),
     );

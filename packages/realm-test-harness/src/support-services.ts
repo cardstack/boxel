@@ -2,7 +2,9 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { existsSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { logger } from './logger';
+import puppeteer, { type Browser } from 'puppeteer';
+
+import { logger } from './logger.ts';
 
 import {
   boxelIconsDir,
@@ -28,8 +30,8 @@ import {
   workspaceRoot,
   type FactorySupportContext,
   type SynapseInstance,
-} from './shared';
-import { canConnectToPg } from './database';
+} from './shared.ts';
+import { canConnectToPg } from './database.ts';
 
 let log = logger('support-services');
 let preparePgPromise: Promise<void> | undefined;
@@ -38,72 +40,28 @@ function hostStartupLooksLikePortContention(logs: string): boolean {
   return /EADDRINUSE|address already in use/i.test(logs);
 }
 
-function boxelUIDistIsUsable(hostPackageDir: string): boolean {
-  let boxelUIDistDir = join(hostPackageDir, '..', 'boxel-ui', 'addon', 'dist');
-  return [
-    join(boxelUIDistDir, 'components.js'),
-    join(boxelUIDistDir, 'helpers.js'),
-    join(boxelUIDistDir, 'icons.js'),
-    join(boxelUIDistDir, 'styles', 'global.css'),
-  ].every((path) => existsSync(path));
+function boxelUIIsUsable(hostPackageDir: string): boolean {
+  let boxelUIDir = join(hostPackageDir, '..', 'boxel-ui');
+  return existsSync(join(boxelUIDir, 'declarations', 'components.d.ts'));
 }
 
 /**
  * Ensure boxel-ui dist artifacts exist for the host package. Tries in order:
- *   1. The current worktree's boxel-ui/addon/dist
+ *   1. The current worktree's boxel-ui/dist
  *   2. Symlink from the root repo's built boxel-ui dist (fast, avoids rebuild)
  *   3. Build boxel-ui in the current worktree (slow but always works)
  */
-function ensureBoxelUIDist(hostPackageDir: string): void {
-  if (boxelUIDistIsUsable(hostPackageDir)) {
+function ensureBoxelUIReady(hostPackageDir: string): void {
+  if (boxelUIIsUsable(hostPackageDir)) {
     return;
   }
 
-  let boxelUIAddonDir = join(hostPackageDir, '..', 'boxel-ui', 'addon');
-  let boxelUIDistDir = join(boxelUIAddonDir, 'dist');
+  let boxelUIAddonDir = join(hostPackageDir, '..', 'boxel-ui');
 
-  // Try to symlink from root repo first (fast path for worktrees).
-  let rootRepoCheckoutDir = findRootRepoCheckoutDir();
-  if (rootRepoCheckoutDir && rootRepoCheckoutDir !== workspaceRoot) {
-    let rootRepoBoxelUIDistDir = join(
-      rootRepoCheckoutDir,
-      'packages',
-      'boxel-ui',
-      'addon',
-      'dist',
-    );
-    if (
-      [
-        join(rootRepoBoxelUIDistDir, 'components.js'),
-        join(rootRepoBoxelUIDistDir, 'helpers.js'),
-        join(rootRepoBoxelUIDistDir, 'icons.js'),
-        join(rootRepoBoxelUIDistDir, 'styles', 'global.css'),
-      ].every((p) => existsSync(p))
-    ) {
-      supportLog.info(
-        `symlinking boxel-ui dist from root repo: ${rootRepoBoxelUIDistDir} -> ${boxelUIDistDir}`,
-      );
-      try {
-        if (existsSync(boxelUIDistDir)) {
-          rmSync(boxelUIDistDir, { recursive: true, force: true });
-        }
-        symlinkSync(rootRepoBoxelUIDistDir, boxelUIDistDir);
-        if (boxelUIDistIsUsable(hostPackageDir)) {
-          return;
-        }
-      } catch (error) {
-        supportLog.debug(
-          `symlink failed, will try building instead: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-    }
-  }
-
-  // Remove any leftover symlink so the build writes into the worktree,
-  // not through a symlink into the root repo.
-  if (existsSync(boxelUIDistDir)) {
-    rmSync(boxelUIDistDir, { recursive: true, force: true });
-  }
+  // boxel-ui's type build imports icon components from boxel-icons, so
+  // boxel-icons must be fully built (including its declarations) first. This
+  // runs before ensureIconsReady would otherwise reach it, and is idempotent.
+  ensureBoxelIconsDist();
 
   // Fall back to building boxel-ui.
   supportLog.info(`building boxel-ui dist at ${boxelUIAddonDir}...`);
@@ -118,10 +76,8 @@ function ensureBoxelUIDist(hostPackageDir: string): void {
         `Run \`cd ${boxelUIAddonDir} && pnpm build\` manually to diagnose.`,
     );
   }
-  if (!boxelUIDistIsUsable(hostPackageDir)) {
-    throw new Error(
-      `boxel-ui build succeeded but dist is still incomplete at ${boxelUIDistDir}`,
-    );
+  if (!boxelUIIsUsable(hostPackageDir)) {
+    throw new Error(`boxel-ui build succeeded but boxelUIIsUsable failed`);
   }
 }
 
@@ -179,7 +135,7 @@ function assertUsableHostDist(hostPackageDir: string): void {
 }
 
 async function loadSynapseModule() {
-  let moduleSpecifier = '../../matrix/docker/synapse/index.ts';
+  let moduleSpecifier = '../../matrix/support/synapse/index.ts';
   return (maybeRequire(moduleSpecifier) ?? (await import(moduleSpecifier))) as {
     registerUser: (
       synapse: SynapseInstance,
@@ -200,10 +156,173 @@ async function loadSynapseModule() {
 }
 
 async function loadMatrixEnvironmentConfigModule() {
-  let moduleSpecifier = '../../matrix/helpers/environment-config.ts';
+  let moduleSpecifier = '../../matrix/support/environment-config.ts';
   return (maybeRequire(moduleSpecifier) ?? (await import(moduleSpecifier))) as {
     getSynapseURL: (synapse?: { baseUrl?: string; port?: number }) => string;
   };
+}
+
+// A cold vite optimize of the host's transitive graph routinely exceeds
+// 90s, so the marker probe needs a generous budget. Env-overridable for
+// especially slow CI runners.
+const STANDBY_DOM_RENDER_TIMEOUT_MS =
+  parseInt(process.env.TEST_HARNESS_STANDBY_DOM_TIMEOUT_MS ?? '', 10) ||
+  240_000;
+
+// Per-attempt cap, bounded by the overall budget. Short enough that a boot
+// that stalls on a mid-optimize module error is abandoned for a fresh page
+// rather than burning the whole budget; long enough to clear a near-ready
+// optimize in one go.
+const STANDBY_DOM_ATTEMPT_TIMEOUT_MS = 60_000;
+
+// Chrome cold-start on a loaded CI runner can take longer than Puppeteer's
+// default 30s launch timeout to print its DevTools WS endpoint, so a single
+// slow start fails the whole support bring-up before the post-launch
+// render-retry loop below ever runs. Retry the launch on a fresh Chrome
+// process with a longer per-attempt budget, bounded by the standby gate's
+// overall deadline. From the first retry onward, pipe Chrome's own
+// stdout/stderr through node (dumpio) so a persistent failure records *why* it
+// could not start — sandbox denial, missing shared library, GPU init crash —
+// instead of only the bare "waiting for the WS endpoint URL" timeout.
+const STANDBY_LAUNCH_ATTEMPT_TIMEOUT_MS = 45_000;
+const STANDBY_LAUNCH_MAX_ATTEMPTS = 3;
+const STANDBY_LAUNCH_RETRY_BACKOFF_MS = 2_000;
+
+async function launchStandbyBrowser(deadline: number): Promise<Browser> {
+  let executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+  let verbose = process.env.TEST_HARNESS_STANDBY_VERBOSE === '1';
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= STANDBY_LAUNCH_MAX_ATTEMPTS; attempt++) {
+    let remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      break;
+    }
+    let timeout = Math.min(STANDBY_LAUNCH_ATTEMPT_TIMEOUT_MS, remaining);
+    // Attempt 1 stays quiet on the healthy path; any retry already means
+    // something is wrong, so capture Chrome's own output for the next failure.
+    let dumpio = verbose || attempt > 1;
+    supportLog.info(
+      `standby DOM gate: puppeteer.launch attempt ${attempt}/${STANDBY_LAUNCH_MAX_ATTEMPTS} ` +
+        `(timeout=${timeout}ms, executable=${
+          executablePath ?? 'puppeteer-bundled'
+        }, dumpio=${dumpio})`,
+    );
+    let startedAt = Date.now();
+    try {
+      let browser = await puppeteer.launch({
+        headless: true,
+        timeout,
+        dumpio,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+        ],
+        ...(executablePath ? { executablePath } : {}),
+      });
+      supportLog.info(
+        `standby DOM gate: puppeteer.launch attempt ${attempt} succeeded after ${
+          Date.now() - startedAt
+        }ms`,
+      );
+      return browser;
+    } catch (error) {
+      lastError = error;
+      supportLog.warn(
+        `standby DOM gate: puppeteer.launch attempt ${attempt} failed after ${
+          Date.now() - startedAt
+        }ms: ${
+          error instanceof Error ? error.message.split('\n')[0] : String(error)
+        }`,
+      );
+      if (
+        attempt === STANDBY_LAUNCH_MAX_ATTEMPTS ||
+        deadline - Date.now() <= STANDBY_LAUNCH_RETRY_BACKOFF_MS
+      ) {
+        break;
+      }
+      await new Promise((r) => setTimeout(r, STANDBY_LAUNCH_RETRY_BACKOFF_MS));
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(`puppeteer.launch failed: ${String(lastError)}`);
+}
+
+// Drive `<hostURL>/_standby` in a real (headless) browser and wait for the
+// `#standby-ready` marker the host app renders once its bundles have loaded
+// and the app shell has booted — the same signal the prerender's PagePool
+// waits on. This is the only check that proves vite served the full module
+// graph (not just the HTML shell) and the app can render DOM. Throws with
+// the captured vite logs if the marker never appears or vite exits.
+async function assertStandbyRendersDom(
+  hostURL: string,
+  getLogs: () => string,
+  getFatalExitCode: () => number | null,
+): Promise<void> {
+  let standbyURL = `${hostURL.replace(/\/$/, '')}/_standby`;
+  let deadline = Date.now() + STANDBY_DOM_RENDER_TIMEOUT_MS;
+  let browser = await launchStandbyBrowser(deadline);
+  let lastError: Error | undefined;
+  let startedAt = Date.now();
+  let attempt = 0;
+  supportLog.info(`standby DOM gate: probing ${standbyURL} for #standby-ready`);
+  try {
+    // Retry the whole navigation + marker wait on a fresh page each attempt,
+    // not just the connection phase. While vite is cold-optimizing, a first
+    // load can fetch the shell but error or stall on a module request and
+    // never render `#standby-ready`; that page stays permanently stuck, so a
+    // single `waitForFunction` would burn the entire budget on a dead boot.
+    // A fresh page reloads against the now-further-along optimizer (which
+    // keeps running server-side across page closes) and eventually succeeds.
+    // Mirrors the prerender PagePool's fresh-page standby retry.
+    for (;;) {
+      let fatal = getFatalExitCode();
+      if (fatal !== null) {
+        throw new Error(
+          `host app (vite preview) exited early with code ${fatal} while waiting for ${standbyURL} to render\n${getLogs()}`,
+        );
+      }
+      let remaining = deadline - Date.now();
+      if (remaining <= 0) {
+        throw new Error(
+          `Timed out after ${STANDBY_DOM_RENDER_TIMEOUT_MS}ms waiting for ${standbyURL} to render its DOM (#standby-ready)` +
+            (lastError ? `\nlast attempt: ${lastError.message}` : '') +
+            `\n${getLogs()}`,
+        );
+      }
+      let attemptTimeout = Math.min(STANDBY_DOM_ATTEMPT_TIMEOUT_MS, remaining);
+      attempt++;
+      let page = await browser.newPage();
+      try {
+        await page.goto(standbyURL, {
+          waitUntil: 'domcontentloaded',
+          timeout: attemptTimeout,
+        });
+        await page.waitForFunction(
+          () => !!document.querySelector('#standby-ready'),
+          { timeout: attemptTimeout },
+        );
+        supportLog.info(
+          `standby DOM gate: #standby-ready after ${Date.now() - startedAt}ms (${attempt} attempt(s))`,
+        );
+        return;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        supportLog.info(
+          `standby DOM gate: attempt ${attempt} did not render (${
+            Date.now() - startedAt
+          }ms elapsed): ${lastError.message.split('\n')[0]}`,
+        );
+        await new Promise((r) => setTimeout(r, 500));
+      } finally {
+        await page.close().catch(() => {});
+      }
+    }
+  } finally {
+    await browser.close().catch(() => {});
+  }
 }
 
 async function ensureHostReady(): Promise<{
@@ -239,7 +358,7 @@ async function ensureHostReady(): Promise<{
         // cache:prepare works in a fresh worktree without manual setup.
         hostPackageDir = buildHostDist();
       }
-      ensureBoxelUIDist(hostPackageDir);
+      ensureBoxelUIReady(hostPackageDir);
       assertUsableHostDist(hostPackageDir);
       // Hold the port until just before spawn so a sibling allocation
       // cannot race in and take it. See findAndHoldAvailablePort comment
@@ -285,6 +404,9 @@ async function ensureHostReady(): Promise<{
         logs = `${logs}${String(chunk)}`.slice(-20_000);
       });
 
+      // Phase 1: wait for vite preview to accept connections. This only
+      // proves the server is listening and can return the HTML shell — it
+      // never requests modules, so it does not prove the app can boot.
       await waitUntil(
         async () => {
           try {
@@ -310,6 +432,25 @@ async function ensureHostReady(): Promise<{
           interval: 500,
           timeoutMessage: `Timed out waiting for host app at ${hostURL}\n${logs}`,
         },
+      );
+
+      // Phase 2: prove vite can actually render the `/_standby` page's DOM,
+      // not just serve the HTML shell. A shell fetch never requests modules,
+      // so it does not kick vite's dep optimizer; only a browser-shaped
+      // navigation forces the (~1000-package) app graph to build, which can
+      // exceed 90s cold. The in-harness realm-server and prerenderer both
+      // drive `/_standby` through Puppeteer and block on the `#standby-ready`
+      // marker (packages/realm-server/prerender/page-pool.ts); gating their
+      // bring-up on the same marker here keeps them from spinning up while
+      // vite is still cold — the window where the prerender's standby load
+      // exhausts its retry budget and renders fail with ECONNREFUSED.
+      await assertStandbyRendersDom(
+        hostURL,
+        () => logs,
+        () =>
+          child.exitCode !== null && !hostStartupLooksLikePortContention(logs)
+            ? child.exitCode
+            : null,
       );
 
       return {
@@ -389,11 +530,11 @@ async function stopChildProcess(
 }
 
 class PrerenderPortContentionError extends Error {
-  constructor(
-    public readonly port: number,
-    message: string,
-  ) {
+  public readonly port: number;
+
+  constructor(port: number, message: string) {
     super(message);
+    this.port = port;
     this.name = 'PrerenderPortContentionError';
   }
 }
@@ -457,8 +598,8 @@ async function attemptStartHarnessPrerenderServer(options: {
     await portReservation.release();
   }
   let child = spawn(
-    'ts-node',
-    ['--transpileOnly', 'prerender/prerender-server', `--port=${port}`],
+    'node',
+    ['prerender/prerender-server.ts', `--port=${port}`],
     {
       cwd: realmServerDir,
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -572,73 +713,106 @@ function buildChildExitDiagnostic(buffers: {
 }
 
 /**
- * Ensure boxel-icons dist exists. In a worktree, symlink from the root repo
+ * Ensure boxel-icons is built — both the runtime `dist` (served to the host)
+ * and its type `declarations`. In a worktree, symlink dist from the root repo
  * if available, otherwise build.
+ *
+ * The declarations matter because boxel-ui's type build imports icon
+ * components from `@cardstack/boxel-icons/*`. Without the icon `.d.ts` files,
+ * `nodenext` resolution falls through the exports map to the built `dist/*.js`
+ * and infers each icon's default export as a bare `object`, which is not a
+ * Glint-invokable component — boxel-ui's build then fails with "Type 'object'
+ * is not assignable to type 'Icon'" on every icon usage. Note that neither a
+ * pre-existing `dist` nor the root-repo symlink brings the declarations along,
+ * so a dist-only state still needs a `build:types`.
  */
 function ensureBoxelIconsDist(): void {
   let distDir = join(boxelIconsDir, 'dist');
-  if (
+  let distExists = () =>
     existsSync(join(distDir, '@cardstack')) ||
-    existsSync(join(distDir, 'index.html'))
-  ) {
+    existsSync(join(distDir, 'index.html'));
+  let declarationsExist = () =>
+    existsSync(join(boxelIconsDir, 'declarations', 'types.d.ts'));
+
+  if (distExists() && declarationsExist()) {
     return;
   }
 
-  // Try to symlink from root repo (fast path for worktrees).
-  let rootRepoCheckoutDir = findRootRepoCheckoutDir();
-  if (rootRepoCheckoutDir && rootRepoCheckoutDir !== workspaceRoot) {
-    let rootRepoIconsDistDir = join(
-      rootRepoCheckoutDir,
-      'packages',
-      'boxel-icons',
-      'dist',
-    );
-    if (existsSync(join(rootRepoIconsDistDir, '@cardstack'))) {
-      supportLog.info(
-        `symlinking boxel-icons dist from root repo: ${rootRepoIconsDistDir} -> ${distDir}`,
+  if (!distExists()) {
+    // Try to symlink dist from root repo (fast path for worktrees).
+    let rootRepoCheckoutDir = findRootRepoCheckoutDir();
+    if (rootRepoCheckoutDir && rootRepoCheckoutDir !== workspaceRoot) {
+      let rootRepoIconsDistDir = join(
+        rootRepoCheckoutDir,
+        'packages',
+        'boxel-icons',
+        'dist',
       );
-      try {
-        if (existsSync(distDir)) {
-          rmSync(distDir, { recursive: true, force: true });
-        }
-        symlinkSync(rootRepoIconsDistDir, distDir);
-        if (existsSync(join(distDir, '@cardstack'))) {
-          return;
-        }
-      } catch (error) {
-        supportLog.debug(
-          `symlink failed, will try building instead: ${error instanceof Error ? error.message : String(error)}`,
+      if (existsSync(join(rootRepoIconsDistDir, '@cardstack'))) {
+        supportLog.info(
+          `symlinking boxel-icons dist from root repo: ${rootRepoIconsDistDir} -> ${distDir}`,
         );
+        try {
+          if (existsSync(distDir)) {
+            rmSync(distDir, { recursive: true, force: true });
+          }
+          symlinkSync(rootRepoIconsDistDir, distDir);
+        } catch (error) {
+          supportLog.debug(
+            `symlink failed, will try building instead: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
       }
     }
   }
 
-  // Remove any leftover symlink so the build writes into the worktree,
-  // not through a symlink into the root repo.
-  if (existsSync(distDir)) {
-    rmSync(distDir, { recursive: true, force: true });
+  if (!distExists()) {
+    // No dist anywhere — build it (which also emits the declarations). Remove
+    // any leftover symlink first so the build writes into the worktree, not
+    // through a symlink into the root repo.
+    if (existsSync(distDir)) {
+      rmSync(distDir, { recursive: true, force: true });
+    }
+    supportLog.info(`building boxel-icons dist at ${boxelIconsDir}...`);
+    let result = spawnSync('pnpm', ['build'], {
+      cwd: boxelIconsDir,
+      stdio: 'inherit',
+      env: process.env,
+    });
+    if (result.status !== 0) {
+      throw new Error(
+        `Failed to build boxel-icons at ${boxelIconsDir} (exit code ${result.status}). ` +
+          `Run \`cd ${boxelIconsDir} && pnpm build\` manually to diagnose.`,
+      );
+    }
+    if (!distExists()) {
+      throw new Error(
+        `Built boxel-icons at ${boxelIconsDir} but dist output is missing at ${distDir}`,
+      );
+    }
   }
 
-  // Fall back to building boxel-icons.
-  supportLog.info(`building boxel-icons dist at ${boxelIconsDir}...`);
-  let result = spawnSync('pnpm', ['build'], {
-    cwd: boxelIconsDir,
-    stdio: 'inherit',
-    env: process.env,
-  });
-  if (result.status !== 0) {
-    throw new Error(
-      `Failed to build boxel-icons at ${boxelIconsDir} (exit code ${result.status}). ` +
-        `Run \`cd ${boxelIconsDir} && pnpm build\` manually to diagnose.`,
-    );
-  }
-  if (
-    !existsSync(join(distDir, '@cardstack')) &&
-    !existsSync(join(distDir, 'index.html'))
-  ) {
-    throw new Error(
-      `Built boxel-icons at ${boxelIconsDir} but dist output is missing at ${distDir}`,
-    );
+  if (!declarationsExist()) {
+    // dist was provided pre-built or via the symlink above, neither of which
+    // brings the declarations. Emit just the declarations rather than redoing
+    // the (slow) rollup dist build.
+    supportLog.info(`building boxel-icons declarations at ${boxelIconsDir}...`);
+    let result = spawnSync('pnpm', ['build:types'], {
+      cwd: boxelIconsDir,
+      stdio: 'inherit',
+      env: process.env,
+    });
+    if (result.status !== 0) {
+      throw new Error(
+        `Failed to build boxel-icons declarations at ${boxelIconsDir} (exit code ${result.status}). ` +
+          `Run \`cd ${boxelIconsDir} && pnpm build:types\` manually to diagnose.`,
+      );
+    }
+    if (!declarationsExist()) {
+      throw new Error(
+        `Built boxel-icons declarations at ${boxelIconsDir} but declarations are missing`,
+      );
+    }
   }
 }
 

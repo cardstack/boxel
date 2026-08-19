@@ -1,12 +1,13 @@
-import {
+import fsExtra from 'fs-extra';
+const {
   writeFileSync,
   writeJSONSync,
   readdirSync,
   statSync,
   ensureDirSync,
   copySync,
-} from 'fs-extra';
-import { NodeAdapter } from '../../node-realm';
+} = fsExtra;
+import { NodeAdapter } from '../../node-realm.ts';
 import { dirname, join } from 'path';
 import { createHash } from 'crypto';
 import type {
@@ -17,9 +18,15 @@ import type {
   Plan,
   RealmAdapter,
   DefinitionLookup,
+  Query,
+  CardResource,
+  FileMetaResource,
+  QueryResultsMeta,
 } from '@cardstack/runtime-common';
 import {
   Realm,
+  searchEntryWireQueryFromQuery,
+  parseSearchEntryQueryFromPayload,
   baseRealm,
   VirtualNetwork,
   Worker,
@@ -33,8 +40,10 @@ import {
   uuidv4,
   RealmPaths,
   PUBLISHED_DIRECTORY_NAME,
+  DEFAULT_AUDIO_SIZE_LIMIT_BYTES,
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
+  DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
   type MatrixConfig,
   type QueuePublisher,
   type QueueRunner,
@@ -42,29 +51,30 @@ import {
   type PopulateCoordinator,
   CachingDefinitionLookup,
 } from '@cardstack/runtime-common';
-import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
+import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.ts';
 import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
-import { getLocalConfig as getSynapseConfig } from '../../synapse';
-import { RealmServer } from '../../server';
-import { sign as jwtSign } from 'jsonwebtoken';
+import { getLocalConfig as getSynapseConfig } from '../../synapse.ts';
+import { RealmServer } from '../../server.ts';
+import jsonwebtoken from 'jsonwebtoken';
+const { sign: jwtSign } = jsonwebtoken;
 import {
   RealmRegistryReconciler,
   type RealmRegistryRow,
-} from '../../lib/realm-registry-reconciler';
-import { upsertPublishedRealmInRegistry } from '../../lib/realm-registry-writes';
+} from '../../lib/realm-registry-reconciler.ts';
+import { upsertPublishedRealmInRegistry } from '../../lib/realm-registry-writes.ts';
 
 import {
   PgAdapter,
   PgQueuePublisher,
   PgQueueRunner,
 } from '@cardstack/postgres';
-import type { RealmHttpServer as Server } from '../../server';
+import type { RealmHttpServer as Server } from '../../server.ts';
 import { Socket as NetSocket } from 'net';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import {
   Prerenderer as LocalPrerenderer,
   type Prerenderer as TestPrerenderer,
-} from '../../prerender';
+} from '../../prerender/index.ts';
 
 import type { SuperTest, Test } from 'supertest';
 import supertest from 'supertest';
@@ -74,16 +84,16 @@ import type {
   MatrixEvent,
   RealmEvent,
   RealmEventContent,
-} from 'https://cardstack.com/base/matrix-event';
-import { createRemotePrerenderer } from '../../prerender/remote-prerenderer';
-import { createPrerenderHttpServer } from '../../prerender/prerender-app';
-import { buildCreatePrerenderAuth } from '../../prerender/auth';
+} from '@cardstack/base/matrix-event';
+import { createRemotePrerenderer } from '../../prerender/remote-prerenderer.ts';
+import { createPrerenderHttpServer } from '../../prerender/prerender-app.ts';
+import { buildCreatePrerenderAuth } from '../../prerender/auth.ts';
 import { Client as PgClient } from 'pg';
 import {
   isEnvironmentMode,
   getEnvironmentSlug,
   serviceURL,
-} from '../../lib/dev-service-registry';
+} from '../../lib/dev-service-registry.ts';
 
 /**
  * In environment mode we shift test ports by a deterministic offset derived
@@ -103,6 +113,61 @@ function environmentPortOffset(): number {
 }
 
 /** Return a test port, shifted by a per-environment offset when needed. */
+// Test-only: fetch the card/file-meta serializations matching a card-rooted
+// `Query` through the entry engine, returning them in the
+// `{ data, meta }` collection shape index assertions read. Requests the
+// data-only fieldset (one full `item` per entry).
+export async function searchCardsForTest(
+  engine: Realm['realmIndexQueryEngine'],
+  cardQuery: Query,
+  opts?: Parameters<Realm['realmIndexQueryEngine']['searchEntries']>[1],
+): Promise<{
+  data: (CardResource | FileMetaResource)[];
+  included: (CardResource | FileMetaResource)[];
+  meta: QueryResultsMeta;
+}> {
+  let doc = await engine.searchEntries(
+    parseSearchEntryQueryFromPayload(
+      searchEntryWireQueryFromQuery(cardQuery, { fields: ['item'] }),
+    ),
+    opts,
+  );
+  // The top-level result items (one per entry, by the entry's `item` rel) land
+  // in `data`; every other linked card/file-meta resource is sideloaded in
+  // `included` — the legacy collection shape these assertions read.
+  // Key by the full `(type, id)` the entry `item` relationship carries,
+  // not `id` alone — matches the wire contract (and the store's resolver).
+  let itemKeys = new Set<string>();
+  for (let entry of doc.data) {
+    let ref = entry.relationships.item?.data;
+    if (ref) {
+      itemKeys.add(`${ref.type}:${ref.id}`);
+    }
+  }
+  let itemsByKey = new Map<string, CardResource | FileMetaResource>();
+  let included: (CardResource | FileMetaResource)[] = [];
+  for (let resource of doc.included ?? []) {
+    if (resource.type !== 'card' && resource.type !== 'file-meta') {
+      continue;
+    }
+    if (resource.id == null) {
+      continue;
+    }
+    let key = `${resource.type}:${resource.id}`;
+    if (itemKeys.has(key)) {
+      itemsByKey.set(key, resource);
+    } else {
+      included.push(resource);
+    }
+  }
+  let data = doc.data
+    .map((entry) => entry.relationships.item?.data)
+    .filter((ref): ref is NonNullable<typeof ref> => ref != null)
+    .map((ref) => itemsByKey.get(`${ref.type}:${ref.id}`))
+    .filter((item): item is CardResource | FileMetaResource => Boolean(item));
+  return { data, included, meta: doc.meta };
+}
+
 export function testPort(basePort: number): number {
   return basePort + environmentPortOffset();
 }
@@ -203,14 +268,63 @@ export const testRealmInfo = {
   backgroundURL: null,
   iconURL: null,
   showAsCatalog: null,
-  interactHome: null,
-  hostHome: null,
   visibility: 'public',
   realmUserId: testRealmServerMatrixUserId,
   publishable: null,
   lastPublishedAt: null,
-  includePrerenderedDefaultRealmIndex: false,
+  includePrerenderedDefaultRealmIndex: null,
 };
+
+import {
+  realmInfoExtraKeys,
+  withoutRealmInfoExtras,
+} from '@cardstack/runtime-common/helpers/const';
+export { realmInfoExtraKeys, withoutRealmInfoExtras };
+
+// Asserts the realm-lifecycle timestamps `/_federated-info` adds on top of the
+// plain RealmInfo. Their values move with wall-clock time, so this checks
+// presence and parseability rather than exact values.
+export function assertRealmInfoExtras(
+  assert: Assert,
+  attributes: Record<string, unknown>,
+  label = '_federated-info',
+): void {
+  for (let key of realmInfoExtraKeys) {
+    let value = attributes[key];
+    assert.ok(key in attributes, `${label} includes ${key}`);
+    assert.ok(
+      value === null ||
+        (typeof value === 'string' && !Number.isNaN(Date.parse(value))),
+      `${label} ${key} is null or a parseable timestamp, got ${JSON.stringify(value)}`,
+    );
+  }
+}
+
+// Asserts a `/_federated-index-counts` attributes payload. Each count is either
+// null (index tables unavailable) or a non-negative integer; pass `expected` to
+// pin specific values.
+export function assertRealmIndexCounts(
+  assert: Assert,
+  attributes: Record<string, unknown>,
+  expected: {
+    cardCount?: number;
+    fileCount?: number;
+    definitionCount?: number;
+  } = {},
+): void {
+  for (let key of ['cardCount', 'fileCount', 'definitionCount'] as const) {
+    if (expected[key] !== undefined) {
+      assert.strictEqual(attributes[key], expected[key], `${key}`);
+      continue;
+    }
+    let value = attributes[key];
+    assert.ok(
+      value === null ||
+        (typeof value === 'number' && Number.isInteger(value) && value >= 0),
+      `${key} is null or a non-negative integer, got ${JSON.stringify(value)}`,
+    );
+  }
+}
 
 export const realmServerTestMatrix: MatrixConfig = {
   url: matrixURL,
@@ -219,6 +333,7 @@ export const realmServerTestMatrix: MatrixConfig = {
 export const realmServerSecretSeed = "mum's the word";
 export const realmSecretSeed = `shhh! it's a secret`;
 export const grafanaSecret = `shhh! it's a secret`;
+export const aiBotDelegationSecret = `delegation shared secret for tests`;
 
 function getMatrixRegistrationSecret(): string {
   let secret =
@@ -283,6 +398,11 @@ export function cleanWhiteSpace(text: string) {
 export function createVirtualNetwork() {
   let virtualNetwork = new VirtualNetwork();
   virtualNetwork.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
+  // Mirror the host's network.ts and main.ts symmetry: when the
+  // baseRealm fake URL is registered as a URL alias, also register the
+  // @cardstack/base/ realm-prefix mapping so unresolveURL on either
+  // form canonicalises to the same RRI.
+  virtualNetwork.addRealmMapping('@cardstack/base/', localBaseRealm);
   return virtualNetwork;
 }
 
@@ -620,7 +740,7 @@ export async function awaitPortRelease(
   );
 }
 
-function trackServer(server: Server): Server {
+export function trackServer(server: Server): Server {
   trackedServers.add(server);
   server.once('close', () => trackedServers.delete(server));
   return server;
@@ -703,7 +823,9 @@ export async function destroyTrackedQueueRunners(): Promise<void> {
 
 async function waitForQueueIdle(
   databaseName: string,
-  timeout = 30000,
+  // Generous: a template build's queue drains the realm's whole-realm
+  // prerender_html job (every card's HTML) after the index job resolves.
+  timeout = 300000,
 ): Promise<void> {
   await waitUntil(
     async () => {
@@ -713,6 +835,20 @@ async function waitForQueueIdle(
       });
       try {
         await client.connect();
+        // A rejected job means the template would snapshot with silently
+        // missing data (e.g. absent HTML) and surface later as confusing
+        // failures in unrelated tests — fail here, loudly and immediately.
+        let { rows: rejected } = await client.query<{
+          id: number;
+          job_type: string;
+        }>(`SELECT id, job_type FROM jobs WHERE status = 'rejected'`);
+        if (rejected.length > 0) {
+          throw new Error(
+            `job(s) rejected while waiting for queue to become idle: ${rejected
+              .map((row) => `${row.job_type}#${row.id}`)
+              .join(', ')}`,
+          );
+        }
         let {
           rows: [{ count: unfulfilledJobs }],
         } = await client.query<{ count: number }>(
@@ -734,6 +870,99 @@ async function waitForQueueIdle(
       timeoutMessage: 'waiting for queue to become idle',
     },
   );
+}
+
+// Pure diagnostics — never changes behavior. `_types` (and any reader of the
+// precomputed `realm_meta`) returns instances from the `realm_meta` row whose
+// `generation` equals `realm_generations.current_generation`. An empty result has
+// three distinguishable causes, and this dump tells them apart in the CI log
+// without needing another iteration:
+//   1. The from-scratch index produced no instance rows at all
+//      (boxel_index.instances = 0).
+//   2. Instances were indexed but their `types` couldn't be resolved (a render
+//      or module fetch failed) — `#fetchTypeSummary` requires `types->>0`, so
+//      those rows silently drop out of `realm_meta` (null_types > 0).
+//   3. No `realm_meta` row matches `current_generation` (a version mismatch —
+//      e.g. a from-scratch reset left only orphan rows), so the JOIN is empty
+//      even though instances exist (matched = NONE while instances > 0).
+// Logged unconditionally as a one-liner; degraded/error instance rows are
+// dumped only when something looks off. Wrapped so a diagnostics failure can
+// never affect a test result.
+export async function logRealmIndexDiagnostics(
+  dbAdapter: PgAdapter,
+  realmURL: string,
+  label: string,
+): Promise<void> {
+  try {
+    let [versionRow] = await dbAdapter.execute(
+      `SELECT current_generation FROM realm_generations WHERE realm_url = $1`,
+      { bind: [realmURL] },
+    );
+    let currentVersion = versionRow?.current_generation ?? null;
+
+    let metaRows = await dbAdapter.execute(
+      `SELECT generation,
+              COALESCE(jsonb_array_length(value->'instances'), -1) AS instances,
+              COALESCE(jsonb_array_length(value->'files'), -1) AS files
+       FROM realm_meta WHERE realm_url = $1 ORDER BY generation`,
+      { bind: [realmURL] },
+    );
+
+    let [counts] = await dbAdapter.execute(
+      `SELECT
+         COUNT(*) FILTER (WHERE type = 'instance' AND (is_deleted IS NULL OR is_deleted = false)) AS instances,
+         COUNT(*) FILTER (WHERE type = 'instance' AND types IS NULL AND (is_deleted IS NULL OR is_deleted = false)) AS null_types,
+         COUNT(*) FILTER (WHERE type = 'instance' AND has_error = true AND (is_deleted IS NULL OR is_deleted = false)) AS errored
+       FROM boxel_index WHERE realm_url = $1`,
+      { bind: [realmURL] },
+    );
+
+    let metaSummary =
+      metaRows
+        .map(
+          (r) => `v${r.generation}{instances:${r.instances},files:${r.files}}`,
+        )
+        .join(', ') || '(none)';
+    let matched = metaRows.find((r) => r.generation === currentVersion);
+    let nullTypes = Number(counts?.null_types ?? 0);
+    let errored = Number(counts?.errored ?? 0);
+
+    console.log(
+      `[realm-index-diag ${label}] realm=${realmURL} current_generation=${currentVersion} ` +
+        `realm_meta=[${metaSummary}] ` +
+        `matched=${matched ? `instances:${matched.instances}` : 'NONE(version-mismatch)'} ` +
+        `boxel_index.instances=${counts?.instances ?? '?'} null_types=${nullTypes} errored=${errored}`,
+    );
+
+    if (
+      !matched ||
+      Number(matched.instances) <= 0 ||
+      nullTypes > 0 ||
+      errored > 0
+    ) {
+      let badRows = await dbAdapter.execute(
+        `SELECT url, has_error, error_doc->>'message' AS message
+         FROM boxel_index
+         WHERE realm_url = $1 AND type = 'instance'
+           AND (types IS NULL OR has_error = true)
+           AND (is_deleted IS NULL OR is_deleted = false)
+         ORDER BY url
+         LIMIT 25`,
+        { bind: [realmURL] },
+      );
+      for (let r of badRows) {
+        console.log(
+          `[realm-index-diag ${label}]   instance ${r.url} has_error=${r.has_error} ` +
+            `error_doc.message=${r.message ?? 'none'}`,
+        );
+      }
+    }
+  } catch (e) {
+    console.log(
+      `[realm-index-diag ${label}] failed to gather diagnostics for ${realmURL}: ` +
+        `${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
 }
 
 interface CachedPermissionedRealmTemplateEntry {
@@ -1003,7 +1232,10 @@ export async function createRealm({
   enableFileWatcher = false,
   cardSizeLimitBytes,
   fileSizeLimitBytes,
+  audioSizeLimitBytes,
+  videoSizeLimitBytes,
   transpileCoordinator,
+  fullIndexOnStartup,
 }: {
   dir: string;
   definitionLookup: DefinitionLookup;
@@ -1020,12 +1252,20 @@ export async function createRealm({
   enableFileWatcher?: boolean;
   cardSizeLimitBytes?: number;
   fileSizeLimitBytes?: number;
+  audioSizeLimitBytes?: number;
+  videoSizeLimitBytes?: number;
   // CS-11030: optional cross-process transpile coordinator. Tests that
   // simulate two peer realms need each peer to hold its own coordinator
   // pointing at the same dbAdapter so the advisory-lock + NOTIFY plumbing
   // is the only thing serializing them — that's the behavior we want to
   // exercise.
   transpileCoordinator?: PopulateCoordinator;
+  // Forwarded to the Realm constructor's `fullIndexOnStartup` option so
+  // tests can exercise the bootstrap-realm code path in `Realm.#startup`
+  // (the kind='bootstrap' branch that triggers the CS-11245 broadcast).
+  // Production sets this via `resolveFullIndexOnStartup`; tests opt in
+  // explicitly because `createRealm` has no realm-registry row to read.
+  fullIndexOnStartup?: true;
   // if you are creating a realm  to test it directly without a server, you can
   // also specify `withWorker: true` to also include a worker with your realm
   withWorker?: true;
@@ -1073,28 +1313,41 @@ export async function createRealm({
     username: realmServerTestMatrix.username,
     seed: realmSecretSeed,
   });
-  let realm = new Realm({
-    url: realmURL,
-    adapter,
-    secretSeed: realmSecretSeed,
-    virtualNetwork,
-    dbAdapter,
-    queue: publisher,
-    matrixClient,
-    realmServerURL: new URL(new URL(realmURL).origin).href,
-    definitionLookup,
-    cardSizeLimitBytes:
-      cardSizeLimitBytes ??
-      Number(
-        process.env.CARD_SIZE_LIMIT_BYTES ?? DEFAULT_CARD_SIZE_LIMIT_BYTES,
-      ),
-    fileSizeLimitBytes:
-      fileSizeLimitBytes ??
-      Number(
-        process.env.FILE_SIZE_LIMIT_BYTES ?? DEFAULT_FILE_SIZE_LIMIT_BYTES,
-      ),
-    transpileCoordinator,
-  });
+  let realm = new Realm(
+    {
+      url: realmURL,
+      adapter,
+      secretSeed: realmSecretSeed,
+      virtualNetwork,
+      dbAdapter,
+      queue: publisher,
+      matrixClient,
+      realmServerURL: new URL(new URL(realmURL).origin).href,
+      definitionLookup,
+      cardSizeLimitBytes:
+        cardSizeLimitBytes ??
+        Number(
+          process.env.CARD_SIZE_LIMIT_BYTES ?? DEFAULT_CARD_SIZE_LIMIT_BYTES,
+        ),
+      fileSizeLimitBytes:
+        fileSizeLimitBytes ??
+        Number(
+          process.env.FILE_SIZE_LIMIT_BYTES ?? DEFAULT_FILE_SIZE_LIMIT_BYTES,
+        ),
+      audioSizeLimitBytes:
+        audioSizeLimitBytes ??
+        Number(
+          process.env.AUDIO_SIZE_LIMIT_BYTES ?? DEFAULT_AUDIO_SIZE_LIMIT_BYTES,
+        ),
+      videoSizeLimitBytes:
+        videoSizeLimitBytes ??
+        Number(
+          process.env.VIDEO_SIZE_LIMIT_BYTES ?? DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
+        ),
+      transpileCoordinator,
+    },
+    fullIndexOnStartup ? { fullIndexOnStartup: true as const } : undefined,
+  );
   if (worker) {
     virtualNetwork.mount(realm.handle);
     await worker.run();
@@ -1134,6 +1387,8 @@ export async function runTestRealmServer({
   enableFileWatcher = false,
   cardSizeLimitBytes,
   fileSizeLimitBytes,
+  audioSizeLimitBytes,
+  videoSizeLimitBytes,
   domainsForPublishedRealms = {
     boxelSpace: 'localhost',
     boxelSite: 'localhost',
@@ -1154,6 +1409,8 @@ export async function runTestRealmServer({
   enableFileWatcher?: boolean;
   cardSizeLimitBytes?: number;
   fileSizeLimitBytes?: number;
+  audioSizeLimitBytes?: number;
+  videoSizeLimitBytes?: number;
   domainsForPublishedRealms?: {
     boxelSpace?: string;
     boxelSite?: string;
@@ -1194,6 +1451,8 @@ export async function runTestRealmServer({
     definitionLookup,
     cardSizeLimitBytes,
     fileSizeLimitBytes,
+    audioSizeLimitBytes,
+    videoSizeLimitBytes,
   });
 
   await testRealm.logInToMatrix();
@@ -1228,6 +1487,7 @@ export async function runTestRealmServer({
     queue: publisher,
     getIndexHTML,
     grafanaSecret,
+    aiBotDelegationSecret,
     serverURL: new URL(realmURL.origin),
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
     domainsForPublishedRealms,
@@ -1377,6 +1637,7 @@ export async function runTestRealmServerWithRealms({
     queue: publisher,
     getIndexHTML,
     grafanaSecret,
+    aiBotDelegationSecret,
     serverURL,
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
     domainsForPublishedRealms,
@@ -1823,7 +2084,7 @@ function realmEventIsIndex(
 }
 
 // The three realm fixtures available under tests/fixtures/. See CS-10009.
-//   blank      — `.realm.json: {}` only; for tests that need a working realm
+//   blank      — empty directory; for tests that need a working realm
 //                with no card content.
 //   simple     — one card def (Person), one instance, one non-card file; for
 //                tests that need *some* indexed content but nothing exotic.
@@ -1833,7 +2094,7 @@ function realmEventIsIndex(
 export type RealmFixtureName = 'blank' | 'simple' | 'realistic';
 
 export function fixtureDir(name: RealmFixtureName): string {
-  return join(__dirname, '..', 'fixtures', name);
+  return join(import.meta.dirname, '..', 'fixtures', name);
 }
 
 type InternalPermissionedRealmSetupOptions = {
@@ -1846,6 +2107,8 @@ type InternalPermissionedRealmSetupOptions = {
   published?: boolean;
   cardSizeLimitBytes?: number;
   fileSizeLimitBytes?: number;
+  audioSizeLimitBytes?: number;
+  videoSizeLimitBytes?: number;
 };
 
 async function startPermissionedRealmFixture(
@@ -1862,6 +2125,8 @@ async function startPermissionedRealmFixture(
     published = false,
     cardSizeLimitBytes,
     fileSizeLimitBytes,
+    audioSizeLimitBytes,
+    videoSizeLimitBytes,
   }: InternalPermissionedRealmSetupOptions,
 ): Promise<{
   testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
@@ -1928,6 +2193,8 @@ async function startPermissionedRealmFixture(
     enableFileWatcher: subscribeToRealmEvents,
     cardSizeLimitBytes,
     fileSizeLimitBytes,
+    audioSizeLimitBytes,
+    videoSizeLimitBytes,
     prerenderer,
   });
 
@@ -1995,6 +2262,8 @@ export function setupPermissionedRealm(
     published = false,
     cardSizeLimitBytes,
     fileSizeLimitBytes,
+    audioSizeLimitBytes,
+    videoSizeLimitBytes,
   }: {
     permissions: RealmPermissions;
     realmURL?: URL;
@@ -2021,6 +2290,8 @@ export function setupPermissionedRealm(
     published?: boolean;
     cardSizeLimitBytes?: number;
     fileSizeLimitBytes?: number;
+    audioSizeLimitBytes?: number;
+    videoSizeLimitBytes?: number;
   },
 ) {
   let testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
@@ -2048,6 +2319,8 @@ export function setupPermissionedRealm(
         published,
         cardSizeLimitBytes,
         fileSizeLimitBytes,
+        audioSizeLimitBytes,
+        videoSizeLimitBytes,
       });
       testRealmServer = server;
 
@@ -2100,6 +2373,8 @@ function permissionedRealmTemplateCacheKey(
     published: Boolean(options.published),
     cardSizeLimitBytes: options.cardSizeLimitBytes ?? null,
     fileSizeLimitBytes: options.fileSizeLimitBytes ?? null,
+    audioSizeLimitBytes: options.audioSizeLimitBytes ?? null,
+    videoSizeLimitBytes: options.videoSizeLimitBytes ?? null,
     prerenderer: prerendererCacheKeyPart(options.prerenderer),
   });
 }
@@ -2150,6 +2425,11 @@ async function buildPermissionedRealmTemplate(
     );
 
     await waitForQueueIdle(builderDatabaseName);
+    await logRealmIndexDiagnostics(
+      dbAdapter,
+      (options.realmURL ?? testRealmURL).href,
+      'template-build',
+    );
     await teardownPermissionedRealmFixture(fixture.testRealmServer);
     fixture = undefined;
 
@@ -2248,7 +2528,12 @@ export function setupPermissionedRealmCached(
   }
   let acquiredTemplateDatabase: string | undefined;
 
-  hooks.before(async function () {
+  hooks.before(async function (assert) {
+    // The first template acquisition builds the fixture realm's index — a
+    // full boot whose queue drains the whole-realm prerender_html job. That
+    // build runs inside the module's first test's budget, so extend it past
+    // the suite-wide per-test timeout.
+    assert.timeout(300_000);
     let { templateDatabaseName } =
       await acquirePermissionedRealmTemplate(options);
     acquiredTemplateDatabase = templateDatabaseName;
@@ -2315,6 +2600,13 @@ async function buildPermissionedRealmsTemplate(
     );
 
     await waitForQueueIdle(builderDatabaseName);
+    for (let fixtureRealm of fixture.realms) {
+      await logRealmIndexDiagnostics(
+        dbAdapter,
+        fixtureRealm.realm.url,
+        'template-build',
+      );
+    }
     await teardownPermissionedRealmsFixture(fixture.realms);
     fixture = undefined;
 
@@ -2330,6 +2622,281 @@ async function buildPermissionedRealmsTemplate(
     if (fixture) {
       try {
         await teardownPermissionedRealmsFixture(fixture.realms);
+      } catch {
+        // best-effort cleanup
+      }
+    }
+    if (publisher) {
+      try {
+        await publisher.destroy();
+      } catch {
+        // best-effort cleanup
+      }
+    }
+    if (runner) {
+      try {
+        await runner.destroy();
+      } catch {
+        // best-effort cleanup
+      }
+    }
+    if (dbAdapter && !dbAdapter.isClosed) {
+      try {
+        await dbAdapter.close();
+      } catch {
+        // best-effort cleanup
+      }
+    }
+    try {
+      await dropDatabase(builderDatabaseName);
+    } catch {
+      // best-effort cleanup
+    }
+  }
+}
+
+// Periodic heartbeat for long indexing phases. A from-scratch index runs as a
+// single QUnit phase with no intermediate output, so a slow or stuck index
+// surfaces only as an opaque `Test took longer than Nms` phase timeout — no
+// signal about whether it was making progress or wedged. This logs elapsed
+// time plus index progress (boxel_index rows per realm + unfulfilled job
+// count) roughly every `intervalMs` while `fn` runs, so the next failure on
+// this path shows a moving row count (slow) versus a frozen one (stuck) and
+// which realm is mid-index. The next beat is scheduled only after the previous
+// one finishes, so a progress query slower than `intervalMs` can't pile up
+// concurrent queries on the same adapter during already-slow indexing. The
+// timer is unref'd by the suite bootstrap, so it never keeps the process alive
+// on its own; it only fires while the awaited work is holding the event loop.
+export async function withIndexProgressHeartbeat<T>(
+  label: string,
+  dbAdapter: PgAdapter,
+  fn: () => Promise<T>,
+  { intervalMs = 15000 }: { intervalMs?: number } = {},
+): Promise<T> {
+  let startedAt = Date.now();
+  let stopped = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let beat = async () => {
+    let elapsedS = Math.round((Date.now() - startedAt) / 1000);
+    let detail = '';
+    try {
+      let rows = await dbAdapter.execute(
+        `SELECT realm_url, COUNT(*)::int AS rows FROM boxel_index GROUP BY realm_url ORDER BY realm_url`,
+      );
+      let jobs = await dbAdapter.execute(
+        `SELECT COUNT(*)::int AS count FROM jobs WHERE status = 'unfulfilled'`,
+      );
+      detail = ` boxel_index=[${rows
+        .map((r) => `${r.realm_url}:${r.rows}`)
+        .join(', ')}] unfulfilled_jobs=${jobs[0]?.count ?? '?'}`;
+    } catch (e) {
+      detail = ` (progress query failed: ${(e as Error).message})`;
+    }
+    console.log(
+      `[index-heartbeat] ${label} still running after ${elapsedS}s;${detail}`,
+    );
+  };
+  let schedule = () => {
+    timer = setTimeout(async () => {
+      if (stopped) {
+        return;
+      }
+      await beat();
+      if (!stopped) {
+        schedule();
+      }
+    }, intervalMs);
+  };
+  schedule();
+  try {
+    return await fn();
+  } finally {
+    stopped = true;
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
+}
+
+// Template-database cache for a fully-indexed base realm. Cold-indexing the
+// whole base realm (every `.gts` definition rendered through the single-tab
+// in-process prerenderer) is the most expensive setup in the suite — tens of
+// seconds — and any test that does it inline pays that cost inside a QUnit
+// phase bounded by `config.testTimeout`. Building it once here, snapshotting
+// to a template database, and cloning that per test turns each test's
+// `base.start()` into a no-op: the cloned database already holds base's
+// `boxel_index` rows (so `isNewIndex()` is false and startup skips the
+// from-scratch pass) and its `modules` definition cache (so a later
+// `reindex()` re-derives every definition from a cache hit instead of a fresh
+// prerender). Keyed by base source path + prerenderer identity so a different
+// base directory or unrelated injected prerenderer doesn't reuse the wrong
+// snapshot; built at most once per qunit process.
+let baseRealmTemplateCache = new Map<string, { ready: Promise<void> }>();
+
+function baseRealmTemplateCacheKey(
+  basePath: string,
+  prerenderer: Prerenderer,
+): string {
+  return hashCacheKeyPayload({
+    version: 1,
+    type: 'base-realm',
+    basePath,
+    prerenderer: prerendererCacheKeyPart(prerenderer),
+  });
+}
+
+// Build (or reuse) a template database with the base realm fully indexed and
+// return its name. Pass the resulting name as `setupDB`'s `templateDatabase`
+// so each test clones a base-indexed database instead of re-indexing base.
+// `basePath` is the on-disk base realm source (packages/base).
+export async function acquireBaseRealmTemplate(
+  basePath: string,
+  prerenderer: Prerenderer,
+): Promise<string> {
+  let cacheKey = baseRealmTemplateCacheKey(basePath, prerenderer);
+  let templateDatabaseName = templateDatabaseNameForCacheKey(cacheKey);
+  let existing = baseRealmTemplateCache.get(cacheKey);
+  if (existing) {
+    await existing.ready;
+    return templateDatabaseName;
+  }
+
+  let entry: { ready: Promise<void> } = { ready: Promise.resolve() };
+  entry.ready = buildBaseRealmTemplate(cacheKey, basePath, prerenderer).catch(
+    async (error) => {
+      baseRealmTemplateCache.delete(cacheKey);
+      try {
+        await dropDatabase(templateDatabaseName);
+      } catch {
+        // best-effort cleanup
+      }
+      throw error;
+    },
+  );
+  baseRealmTemplateCache.set(cacheKey, entry);
+  await entry.ready;
+  return templateDatabaseName;
+}
+
+// Dedicated port for the throwaway base-realm server the template builder
+// stands up so the prerenderer can fetch base modules during the cold index.
+// Routed through `testPort()` like the rest of the suite so environment-mode
+// runs offset it per environment — two parallel realm-test processes both
+// building the template won't collide on `127.0.0.1` with EADDRINUSE. Kept
+// just below the prerender port (testPort(4460)); the builder also tears its
+// server down before any test's `beforeEach` binds its own ports.
+const baseRealmTemplateBuilderPort = testPort(4459);
+
+async function buildBaseRealmTemplate(
+  cacheKey: string,
+  basePath: string,
+  prerenderer: Prerenderer,
+): Promise<void> {
+  let templateDatabaseName = templateDatabaseNameForCacheKey(cacheKey);
+  let builderDatabaseName = builderDatabaseNameForCacheKey(cacheKey);
+
+  let dbAdapter: PgAdapter | undefined;
+  let publisher: QueuePublisher | undefined;
+  let runner: QueueRunner | undefined;
+  let httpServer: Server | undefined;
+  let base: Realm | undefined;
+
+  await dropDatabase(templateDatabaseName);
+  await dropDatabase(builderDatabaseName);
+
+  try {
+    dbAdapter = await createTestPgAdapter({
+      databaseName: builderDatabaseName,
+      templateDatabase: migratedTestDatabaseTemplate,
+    });
+    publisher = new PgQueuePublisher(dbAdapter);
+    runner = new PgQueueRunner({
+      adapter: dbAdapter,
+      workerId: 'base-template-worker',
+    });
+
+    let virtualNetwork = createVirtualNetwork();
+    let localBaseRealmURL = new URL(
+      `http://127.0.0.1:${baseRealmTemplateBuilderPort}/base/`,
+    );
+    virtualNetwork.addURLMapping(new URL(baseRealm.url), localBaseRealmURL);
+    // Mirror the symmetry from createVirtualNetwork: register the
+    // @cardstack/base/ realm-prefix mapping too. unresolveURL on the
+    // virtual base-realm URL needs the prefix mapping to canonicalise
+    // to RRI form, matching what the host-side prerender writes.
+    virtualNetwork.addRealmMapping('@cardstack/base/', localBaseRealmURL.href);
+
+    let definitionLookup = new CachingDefinitionLookup(
+      dbAdapter,
+      prerenderer,
+      virtualNetwork,
+      testCreatePrerenderAuth,
+    );
+
+    ({ realm: base } = await createRealm({
+      definitionLookup,
+      withWorker: true,
+      prerenderer,
+      dir: basePath,
+      realmURL: baseRealm.url,
+      virtualNetwork,
+      publisher,
+      runner,
+      dbAdapter,
+      deferStartUp: true,
+    }));
+    virtualNetwork.mount(base.handle);
+
+    let matrixClient = new MatrixClient({
+      matrixURL: realmServerTestMatrix.url,
+      username: realmServerTestMatrix.username,
+      seed: realmSecretSeed,
+    });
+    let server = new RealmServer({
+      realms: [base],
+      reconciler: makeTestReconciler(dbAdapter, [base]),
+      virtualNetwork,
+      matrixClient,
+      realmServerSecretSeed,
+      realmSecretSeed,
+      grafanaSecret,
+      aiBotDelegationSecret,
+      matrixRegistrationSecret,
+      realmsRootPath: dirSync().name,
+      dbAdapter,
+      queue: publisher,
+      getIndexHTML,
+      serverURL: new URL(`http://127.0.0.1:${baseRealmTemplateBuilderPort}`),
+      assetsURL: new URL(`http://example.com/notional-assets-host/`),
+      definitionLookup,
+      prerenderer,
+    });
+    httpServer = server.listen(baseRealmTemplateBuilderPort);
+    await withIndexProgressHeartbeat(
+      'base-realm template build (base.start)',
+      dbAdapter,
+      () => base!.start(),
+    );
+
+    await waitForQueueIdle(builderDatabaseName);
+
+    await closeServer(httpServer);
+    httpServer = undefined;
+    base.__testOnlyClearCaches();
+    base = undefined;
+
+    await publisher.destroy();
+    publisher = undefined;
+    await runner.destroy();
+    runner = undefined;
+    await dbAdapter.close();
+    dbAdapter = undefined;
+
+    await createTemplateSnapshot(builderDatabaseName, templateDatabaseName);
+  } finally {
+    if (httpServer) {
+      try {
+        await closeServer(httpServer);
       } catch {
         // best-effort cleanup
       }
@@ -2409,7 +2976,10 @@ export function setupPermissionedRealmsCached(
   }
   let acquiredTemplateDatabase: string | undefined;
 
-  hooks.before(async function () {
+  hooks.before(async function (assert) {
+    // See setupPermissionedRealmCached: the first acquisition builds the
+    // fixture realms' indexes, whole-realm prerender_html jobs included.
+    assert.timeout(300_000);
     let { templateDatabaseName } =
       await acquirePermissionedRealmsTemplate(options);
     acquiredTemplateDatabase = templateDatabaseName;
@@ -2474,3 +3044,44 @@ export const cardInfo = {
   summary: null,
   cardThumbnailURL: null,
 };
+
+// Builds the JSON string for a /realm.json RealmConfig card from a flat
+// config object ({ name, iconURL, backgroundURL, ... }). The card stores
+// `name` under cardInfo.name (matching the CardDef slot); other fields land
+// on attributes directly. Mirrors the host helper so realm-server tests can
+// build the same shape without depending on host.
+export function realmConfigCardJSON(
+  config: {
+    name?: string;
+    iconURL?: string;
+    backgroundURL?: string;
+    includePrerenderedDefaultRealmIndex?: boolean;
+  } = {},
+): string {
+  let attrs: Record<string, unknown> = {};
+  if (config.name !== undefined) {
+    attrs.cardInfo = { name: config.name };
+  }
+  if (config.iconURL !== undefined) {
+    attrs.iconURL = config.iconURL;
+  }
+  if (config.backgroundURL !== undefined) {
+    attrs.backgroundURL = config.backgroundURL;
+  }
+  if (config.includePrerenderedDefaultRealmIndex !== undefined) {
+    attrs.includePrerenderedDefaultRealmIndex =
+      config.includePrerenderedDefaultRealmIndex;
+  }
+  return JSON.stringify({
+    data: {
+      type: 'card',
+      attributes: attrs,
+      meta: {
+        adoptsFrom: {
+          module: '@cardstack/base/realm-config',
+          name: 'RealmConfig',
+        },
+      },
+    },
+  });
+}

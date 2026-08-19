@@ -1,10 +1,11 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename, join } from 'path';
 import { readFileSync, utimesSync, writeFileSync } from 'fs';
 import type { SuperTest, Test } from 'supertest';
 import type { Realm } from '@cardstack/runtime-common';
-import type { MatrixEvent } from 'https://cardstack.com/base/matrix-event';
-import type { RealmHttpServer as Server } from '../../server';
+import type { MatrixEvent } from '@cardstack/base/matrix-event';
+import type { RealmHttpServer as Server } from '../../server.ts';
 import type { DirResult } from 'tmp';
 import {
   createJWT,
@@ -12,7 +13,7 @@ import {
   setupPermissionedRealmCached,
   testRealmHref,
   waitUntil,
-} from '../helpers';
+} from '../helpers/index.ts';
 import type { PgAdapter as TestPgAdapter } from '@cardstack/postgres';
 
 const PERSON_CARD_SOURCE = `
@@ -21,8 +22,8 @@ import {
   field,
   Component,
   CardDef,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 
 export class Person extends CardDef {
   static displayName = 'Person';
@@ -46,8 +47,8 @@ import {
   field,
   Component,
   CardDef,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 
 export class Article extends CardDef {
   static displayName = 'Article';
@@ -95,7 +96,7 @@ const ARTICLE_INSTANCE = JSON.stringify({
   },
 });
 
-module(`realm-endpoints/${basename(__filename)}`, function () {
+module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
   module(
     'Realm-specific Endpoints | POST _reindex and _full-reindex',
     function (hooks) {

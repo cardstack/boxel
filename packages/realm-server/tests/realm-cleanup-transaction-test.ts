@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
@@ -8,18 +9,18 @@ import {
   query,
   removeRealmPermissions,
 } from '@cardstack/runtime-common';
-import { setupDB } from './helpers';
+import { setupDB } from './helpers/index.ts';
 import {
   deleteRegistryRowByUrl,
   insertSourceRealmInRegistry,
-} from '../lib/realm-registry-writes';
+} from '../lib/realm-registry-writes.ts';
 
 // CS-10898 regression test: an injected error after a registry-row delete
 // (but before the lock-holder transaction commits) must roll back BOTH the
 // registry-row delete AND the permissions delete. Pre-CS-10898 the handler
 // ran each helper through the shared dbAdapter, so each DELETE committed in
 // its own auto-tx and a mid-cleanup throw left the realm half-deleted.
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('CS-10898: realm cleanup transactionality', function (hooks) {
     let dbAdapter: PgAdapter;
     setupDB(hooks, {

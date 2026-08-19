@@ -5,8 +5,8 @@ import {
   field,
   Component,
   CardDef,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { Pet } from './pet';
 import { Person } from './person';
 import { GridContainer } from '@cardstack/boxel-ui/components';
@@ -14,8 +14,8 @@ import { GridContainer } from '@cardstack/boxel-ui/components';
 export class PetPerson extends CardDef {
   static displayName = 'Pet Person';
   @field firstName = contains(StringField);
-  @field pets = linksToMany(Pet);
-  @field friend = linksTo(Person);
+  @field pets = linksToMany(Pet, { searchable: true });
+  @field friend = linksTo(Person, { searchable: true });
   @field cardTitle = contains(StringField, {
     computeVia: function (this: PetPerson) {
       return `${this.firstName} Pet Person`;

@@ -1,16 +1,16 @@
 import type Owner from '@ember/owner';
+import { waitUntil } from '@ember/test-helpers';
 
 import type { RealmAction } from '@cardstack/runtime-common';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import type RealmService from '@cardstack/host/services/realm';
 
-import type { RealmEvent } from 'https://cardstack.com/base/matrix-event';
-
 import { setupAuthEndpoints } from '../';
 
 import type { MockSDK } from './_sdk';
 import type { Config } from '../mock-matrix';
+import type { RealmEvent } from '@cardstack/base/matrix-event';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
 
@@ -24,8 +24,50 @@ export class MockUtils {
   getRoomEvents = (roomId: string) => {
     return this.testState.sdk!.getRoomEvents(roomId);
   };
+  // Wait until the mock homeserver holds at least `count` m.room.message
+  // events for the room, then return them. Sending a message renders an
+  // optimistic bubble at click-time while the pre-send pipeline (context
+  // summary, card/file serialization, media uploads) continues past
+  // `settled()` — those legs run outside any test waiter; only the mutex
+  // dispatches (the sendEvent and room-state legs) are waiter-tracked.
+  // DOM-based waits therefore prove nothing about server-side delivery;
+  // assertions on `getRoomEvents` must wait on the server state itself.
+  waitForRoomMessages = async (roomId: string, count: number) => {
+    let messages = () =>
+      this.getRoomEvents(roomId).filter((e) => e.type === 'm.room.message');
+    try {
+      await waitUntil(() => messages().length >= count, { timeout: 10_000 });
+    } catch (e) {
+      // Dump the room's actual events so a send that failed (its optimistic
+      // bubble stays client-side and never reaches the mock homeserver) is
+      // distinguishable from a send that is merely slow.
+      let events = this.getRoomEvents(roomId);
+      throw new Error(
+        `timed out waiting for ${count} m.room.message event(s) in ${roomId}; ` +
+          `mock homeserver has ${events.length} event(s): ` +
+          JSON.stringify(
+            events.map((event) => ({
+              type: event.type,
+              event_id: event.event_id,
+            })),
+          ),
+      );
+    }
+    return messages();
+  };
   getRoomIds = () => {
-    return this.testState.sdk!.serverState.rooms.map((r) => r.id);
+    // A realm can fire a deferred `broadcastRealmEvent` (the trailing `index`
+    // event of an indexing run) after the owning test has ended and
+    // `setupMockMatrix`'s afterEach has torn the mock SDK down. The test
+    // adapter's broadcast path reads room ids through here; without this guard
+    // a late broadcast throws `Cannot read properties of undefined (reading
+    // 'serverState')` as a QUnit *global failure*, which fails an unrelated
+    // sibling test instead of the test that leaked the broadcast. No SDK means
+    // there are no rooms to deliver to, so report none.
+    if (!this.testState.sdk) {
+      return [];
+    }
+    return this.testState.sdk.serverState.rooms.map((r) => r.id);
   };
 
   getRoomIdForRealmAndUser = (realmURL: string, userId: string) => {
@@ -42,6 +84,14 @@ export class MockUtils {
 
   getSystemCardAccountData = () => {
     return this.testState.opts?.systemCardAccountData;
+  };
+
+  getActiveRealms = () => {
+    return this.testState.opts?.activeRealms ?? [];
+  };
+
+  getActiveRealmServers = () => {
+    return this.testState.opts?.activeRealmServers ?? [];
   };
 
   getRealmEventMessagesSince = (roomId: string, since: number) => {
@@ -80,6 +130,14 @@ export class MockUtils {
     );
   };
 
+  simulateToDeviceEvent = (
+    type: string,
+    content: Record<string, any>,
+    sender?: string,
+  ) => {
+    this.testState.sdk!.client!.simulateToDeviceEvent(type, content, sender);
+  };
+
   setReadReceipt = (roomId: string, eventId: string, reader: string) => {
     return this.testState.sdk!.serverState.addReceiptEvent(
       roomId,
@@ -94,6 +152,17 @@ export class MockUtils {
   };
   setActiveRealms = (realmURLs: string[]) => {
     this.testState.opts!.activeRealms = realmURLs;
+  };
+  setLoginFlows = (response: { flows: MatrixSDK.LoginFlow[] }) => {
+    this.testState.opts!.loginFlowsResponse = response;
+  };
+  setSsoLoginUrl = (url: string) => {
+    this.testState.opts!.ssoLoginUrl = url;
+  };
+  setLoginWithTokenInterceptor = (
+    fn: ((token: string) => Promise<MatrixSDK.LoginResponse>) | undefined,
+  ) => {
+    this.testState.opts!.loginWithTokenInterceptor = fn;
   };
   createAndJoinRoom = ({
     sender,
@@ -119,6 +188,9 @@ export class MockUtils {
   };
   setUploadContentInterceptor = (fn: (() => Promise<void>) | undefined) => {
     this.testState.opts!.uploadContentInterceptor = fn;
+  };
+  setSendEventInterceptor = (fn: (() => Promise<void>) | undefined) => {
+    this.testState.opts!.sendEventInterceptor = fn;
   };
 
   setRoomState = (

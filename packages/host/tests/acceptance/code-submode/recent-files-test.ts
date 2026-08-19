@@ -13,7 +13,7 @@ import { getService } from '@universal-ember/test-support';
 import * as MonacoSDK from 'monaco-editor';
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, baseRealmRRI } from '@cardstack/runtime-common';
 
 import type MonacoService from '@cardstack/host/services/monaco-service';
 
@@ -21,6 +21,7 @@ import {
   percySnapshot,
   setupLocalIndexing,
   setupRealmCacheTeardown,
+  testModuleRealm,
   testRealmURL,
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
@@ -28,6 +29,7 @@ import {
   setupAuthEndpoints,
   setupUserSubscription,
   withCachedRealmSetup,
+  realmConfigCardJSON,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import {
@@ -37,7 +39,7 @@ import {
 import { setupApplicationTest } from '../../helpers/setup';
 
 const indexCardSource = `
-  import { CardDef, Component } from "https://cardstack.com/base/card-api";
+  import { CardDef, Component } from "@cardstack/base/card-api";
 
   export class Index extends CardDef {
     static isolated = class Isolated extends Component<typeof this> {
@@ -51,8 +53,8 @@ const indexCardSource = `
 `;
 
 const personCardSource = `
-  import { contains, containsMany, field, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { contains, containsMany, field, linksToMany, CardDef, Component } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
   import { Friend } from './friend';
 
   export class Person extends CardDef {
@@ -91,8 +93,8 @@ const employeeCardSource = `
     contains,
     field,
     Component,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
   import { Person } from './person';
 
   export class Employee extends Person {
@@ -115,8 +117,8 @@ const inThisFileSource = `
     field,
     CardDef,
     FieldDef,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
 
   export const exportedVar = 'exported var';
 
@@ -161,8 +163,8 @@ const inThisFileSource = `
 `;
 
 const friendCardSource = `
-  import { contains, linksTo, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { contains, linksTo, field, CardDef, Component } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
 
   export class Friend extends CardDef {
     static displayName = 'Friend';
@@ -241,7 +243,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
+                  module: `${baseRealmRRI}spec`,
                   name: 'Spec',
                 },
               },
@@ -296,12 +298,12 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
           'z18.json': '{}',
           'z19.json': '{}',
           'zzz/zzz/file.json': '{}',
-          '.realm.json': {
+          'realm.json': realmConfigCardJSON({
             name: 'Test Workspace B',
             backgroundURL:
               'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
             iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-          },
+          }),
         },
       });
     });
@@ -317,7 +319,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
   test('recent file links are shown', async function (assert) {
     setRecentFiles([
       [testRealmURL, 'index.json'],
-      ['https://localhost:4202/test/', 'français.json'],
+      [`${testModuleRealm}`, 'français.json'],
       // @ts-ignore error on purpose
       'a-non-url-to-ignore',
     ]);
@@ -403,7 +405,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
       [testRealmURL, 'index.json', null],
       [testRealmURL, 'français.json', null],
       [testRealmURL, 'Person/1.json', null],
-      ['https://localhost:4202/test/', 'français.json', null],
+      [`${testModuleRealm}`, 'français.json', null],
     ]);
   });
 

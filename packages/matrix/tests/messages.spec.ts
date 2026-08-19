@@ -1,13 +1,15 @@
-import { expect, test } from './fixtures';
+import { expect, test } from './fixtures.ts';
 import type { Page } from '@playwright/test';
 
-import { Credentials, putEvent } from '../docker/synapse';
+import type { Credentials } from '../support/synapse/index.ts';
+import { putEvent } from '../support/synapse/index.ts';
 import {
   login,
   logout,
   createRoom,
   createSubscribedUserAndLogin,
   getRoomId,
+  openAiAssistant,
   openRoom,
   assertMessages,
   writeMessage,
@@ -19,9 +21,9 @@ import {
   setupTwoStackItems,
   showAllCards,
   waitUntil,
-} from '../helpers';
-import { appURL } from '../helpers/isolated-realm-server';
-import { APP_BOXEL_MESSAGE_MSGTYPE } from '../helpers/matrix-constants';
+} from '../helpers/index.ts';
+import { appURL } from '../support/isolated-realm-server.ts';
+import { APP_BOXEL_MESSAGE_MSGTYPE } from '../support/matrix-constants.ts';
 
 test.describe('Room messages', () => {
   test(`it can send a message in a room`, async ({ page }) => {
@@ -37,6 +39,7 @@ test.describe('Room messages', () => {
       page,
       'send-message',
     );
+    await openAiAssistant(page);
     let room1 = await getRoomId(page);
     await expect(page.locator('[data-test-new-session]')).toHaveCount(1);
     await expect(page.locator('[data-test-message-field]')).toHaveValue('');
@@ -89,7 +92,10 @@ test.describe('Room messages', () => {
     await assertMessages(page, messages);
 
     await logout(page);
-    await login(page, username, password, { url: appURL });
+    await login(page, username, password, {
+      url: appURL,
+      openAiAssistant: true,
+    });
     await openRoom(page, room1);
     await assertMessages(page, messages);
 
@@ -112,14 +118,34 @@ test.describe('Room messages', () => {
       page,
       'load-events',
     );
+    await openAiAssistant(page);
     let room1 = await getRoomId(page);
 
     for (let i = 1; i <= totalMessageCount; i++) {
       await sendMessage(page, room1, `message ${i}`);
     }
+
+    // Every message must be persisted on the server before logging out;
+    // otherwise the re-login below rebuilds a timeline that is missing whatever
+    // send had not yet landed. Verify the server side directly so a regression
+    // surfaces here rather than as a short count after pagination.
+    await expect
+      .poll(async () => {
+        let events = await getRoomEvents(username, password, room1);
+        return events.filter(
+          (e) =>
+            e.type === 'm.room.message' &&
+            e.content?.msgtype === APP_BOXEL_MESSAGE_MSGTYPE,
+        ).length;
+      })
+      .toBe(totalMessageCount);
+
     await logout(page);
 
-    await login(page, username, password, { url: appURL });
+    await login(page, username, password, {
+      url: appURL,
+      openAiAssistant: true,
+    });
     await openRoom(page, room1);
 
     await expect(page.locator('[data-test-message-idx]')).toHaveCount(
@@ -131,6 +157,7 @@ test.describe('Room messages', () => {
     page,
   }) => {
     const { username } = await createSubscribedUserAndLogin(page, 'markdown');
+    await openAiAssistant(page);
     let room1 = await getRoomId(page);
     await sendMessage(page, room1, 'message with _style_');
     await assertMessages(page, [
@@ -155,6 +182,7 @@ test.describe('Room messages', () => {
 
   test(`it can create a room specific pending message`, async ({ page }) => {
     await createSubscribedUserAndLogin(page, 'pending-message');
+    await openAiAssistant(page);
     let room1 = await getRoomId(page);
     await sendMessage(page, room1, 'Hello');
     let room2 = await createRoom(page);
@@ -193,13 +221,14 @@ test.describe('Room messages', () => {
       page,
       'add-card-markdown',
     );
+    await openAiAssistant(page);
     await page.locator(`[data-test-room-settled]`).waitFor();
 
     await page.locator('[data-test-attach-button]').click();
     await page.locator('[data-test-attach-card-btn]').click();
     await page.locator(`[data-test-search-field]`).fill(testCard);
-    await page.locator(`[data-test-card-catalog-item="${testCard}"]`).click();
-    await page.locator('[data-test-card-catalog-go-button]').click();
+    await page.locator(`[data-test-item-button="${testCard}"]`).click();
+    await page.locator('[data-test-card-chooser-go-button]').click();
     await expect(
       page.locator(`[data-test-attached-card="${testCard}"]`),
     ).toContainText('Hassan');
@@ -231,13 +260,14 @@ test.describe('Room messages', () => {
     const testCard = `${appURL}/mango-puppy`; // this is a 153KB card
     const { username, password, credentials } =
       await createSubscribedUserAndLogin(page, 'strip-base64');
+    await openAiAssistant(page);
     await page.locator(`[data-test-room-settled]`).waitFor();
     await page.locator('[data-test-attach-button]').click();
     await page.locator('[data-test-attach-card-btn]').click();
 
     await page.locator(`[data-test-search-field]`).fill('Mango the Puppy');
-    await page.locator(`[data-test-card-catalog-item="${testCard}"]`).click();
-    await page.locator('[data-test-card-catalog-go-button]').click();
+    await page.locator(`[data-test-item-button="${testCard}"]`).click();
+    await page.locator('[data-test-card-chooser-go-button]').click();
     await expect(
       page.locator(`[data-test-attached-card="${testCard}"]`),
     ).toContainText('Mango the Puppy');
@@ -273,6 +303,7 @@ test.describe('Room messages', () => {
   test('can send only a card as a message', async ({ page }) => {
     const testCard = `${appURL}/hassan`;
     const { username } = await createSubscribedUserAndLogin(page, 'card-only');
+    await openAiAssistant(page);
     let room1 = await getRoomId(page);
     await sendMessage(page, room1, undefined, [testCard]);
     await assertMessages(page, [
@@ -288,12 +319,11 @@ test.describe('Room messages', () => {
       page,
       'auto-attach-file',
     );
+    await openAiAssistant(page);
     await showAllCards(page);
     const testCard = `${appURL}/hassan`;
     await page.locator(`[data-test-cards-grid-item="${testCard}"]`).click();
-    await page
-      .locator(`[data-test-submode-switcher-button]`)
-      .click();
+    await page.locator(`[data-test-submode-switcher-button]`).click();
     await page.locator(`[data-test-boxel-menu-item-text="Code"]`).click();
 
     await expect(page.locator(`[data-test-attached-file]`)).toHaveCount(2);
@@ -346,15 +376,14 @@ test.describe('Room messages', () => {
       page,
       'ensure-files',
     );
+    await openAiAssistant(page);
     await showAllCards(page);
     const testCard = `${appURL}/hassan`;
     await page.locator(`[data-test-cards-grid-item="${testCard}"]`).click();
     await expect(
       page.locator(`[data-test-attached-card="${appURL}/hassan"]`),
     ).toHaveCount(1);
-    await page
-      .locator(`[data-test-submode-switcher-button]`)
-      .click();
+    await page.locator(`[data-test-submode-switcher-button]`).click();
     await page.locator(`[data-test-boxel-menu-item-text="Code"]`).click();
 
     await expect(
@@ -441,9 +470,7 @@ test.describe('Room messages', () => {
     );
     expect(petFile).toBeDefined();
     expect(petFile?.name).toStrictEqual('pet.gts');
-    expect(petFile?.contentType).toStrictEqual(
-      'text/typescript+glimmer',
-    );
+    expect(petFile?.contentType).toStrictEqual('text/typescript+glimmer');
     expect(petFile?.sourceUrl).toStrictEqual(`${appURL}/pet.gts`);
     expect(petFile?.url).toMatch(
       /^http:\/\/localhost:8008\/_matrix\/client\/v1\/media\/download\/localhost\/[A-Za-z0-9]+\?allow_redirect=true$/,
@@ -456,6 +483,7 @@ test.describe('Room messages', () => {
       page,
       'unsupported-type',
     );
+    await openAiAssistant(page);
     let room1 = await getRoomId(page);
 
     // Send a card that contains a type that matrix doesn't support
@@ -475,6 +503,7 @@ test.describe('Room messages', () => {
       page,
       'remove-card',
     );
+    await openAiAssistant(page);
     await page.locator(`[data-test-room-settled]`).waitFor();
 
     await selectCardFromCatalog(page, testCard);
@@ -534,6 +563,7 @@ test.describe('Room messages', () => {
       page,
       'render-multiple',
     );
+    await openAiAssistant(page);
     const message1 = {
       from: username,
       message: 'message 1',
@@ -558,7 +588,10 @@ test.describe('Room messages', () => {
     await assertMessages(page, [message1, message2]);
 
     await logout(page);
-    await login(page, username, password, { url: appURL });
+    await login(page, username, password, {
+      url: appURL,
+      openAiAssistant: true,
+    });
     await openRoom(page, room1);
     await assertMessages(page, [message1, message2]);
   });
@@ -570,6 +603,7 @@ test.describe('Room messages', () => {
       page,
       'multi-card',
     );
+    await openAiAssistant(page);
     const message = {
       from: username,
       message: 'message 1',
@@ -591,7 +625,10 @@ test.describe('Room messages', () => {
     await assertMessages(page, [message]);
 
     await logout(page);
-    await login(page, username, password, { url: appURL });
+    await login(page, username, password, {
+      url: appURL,
+      openAiAssistant: true,
+    });
     await openRoom(page, room1);
     await assertMessages(page, [message]);
   });
@@ -605,6 +642,7 @@ test.describe('Room messages', () => {
       page,
       'no-duplicate-cards',
     );
+    await openAiAssistant(page);
     await page.locator(`[data-test-room-settled]`).waitFor();
 
     await selectCardFromCatalog(page, testCard2);
@@ -636,6 +674,7 @@ test.describe('Room messages', () => {
     const testCard5 = `${appURL}/van-gogh`;
 
     await createSubscribedUserAndLogin(page, 'view-all');
+    await openAiAssistant(page);
     await page.locator(`[data-test-room-settled]`).waitFor();
 
     await selectCardFromCatalog(page, testCard1);
@@ -666,6 +705,7 @@ test.describe('Room messages', () => {
       credentials: Credentials;
     }> {
       const user = await createSubscribedUserAndLogin(page, prefix);
+      await openAiAssistant(page);
       await getRoomId(page);
       await showAllCards(page);
       return user;
@@ -961,6 +1001,7 @@ test.describe('Room messages', () => {
       page,
       'ai-panel-open',
     );
+    await openAiAssistant(page);
     await page
       .locator('[data-test-stack-card] [data-test-close-button]')
       .click();
@@ -988,6 +1029,7 @@ test.describe('Room messages', () => {
       page,
       'attach-multiple',
     );
+    await openAiAssistant(page);
     await page.locator(`[data-test-room-settled]`).waitFor();
     await showAllCards(page);
 
@@ -1028,6 +1070,7 @@ test.describe('Room messages', () => {
 
   test('it escapes html code sent by the user', async ({ page }) => {
     await createSubscribedUserAndLogin(page, 'escape-html');
+    await openAiAssistant(page);
     await page
       .locator('[data-test-message-field]')
       .fill('<h1>Hello, world!</h1><script>alert("Hello, world!")</script>');
@@ -1047,6 +1090,7 @@ test.describe('Room messages', () => {
 
   test('displays error message if message is too large', async ({ page }) => {
     await createSubscribedUserAndLogin(page, 'message-too-large');
+    await openAiAssistant(page);
 
     await page.locator('[data-test-message-field]').fill('a'.repeat(65000));
     await page.locator('[data-test-send-message-btn]').click();
@@ -1069,6 +1113,7 @@ test.describe('Room messages', () => {
       page,
       'filter-m-replace',
     );
+    await openAiAssistant(page);
     let room1 = await getRoomId(page);
 
     let event1 = await putEvent(

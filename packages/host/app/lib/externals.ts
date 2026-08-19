@@ -43,7 +43,7 @@ import * as emberProvideConsumeContextContextConsumer from 'ember-provide-consum
 import * as emberProvideConsumeContextContextProvider from 'ember-provide-consume-context/components/context-provider';
 import * as emberResources from 'ember-resources';
 import * as flat from 'flat';
-import * as lodash from 'lodash';
+import * as lodash from 'lodash-es';
 import * as matrixJsSDK from 'matrix-js-sdk';
 import * as rsvp from 'rsvp';
 import * as superFastMD5 from 'super-fast-md5';
@@ -56,9 +56,12 @@ import * as boxelUiModifiers from '@cardstack/boxel-ui/modifiers';
 
 import * as runtime from '@cardstack/runtime-common';
 import type { VirtualNetwork } from '@cardstack/runtime-common';
-import { fallbackShim } from '@cardstack/runtime-common/package-shim-handler';
+import {
+  PACKAGES_FAKE_ORIGIN,
+  fallbackShim,
+} from '@cardstack/runtime-common/package-shim-handler';
 
-import { shimHostCommands } from '../commands';
+import { shimHostTools } from '../tools';
 
 export function shimExternals(virtualNetwork: VirtualNetwork) {
   // Always shim qunit on the virtual network. In non-test environments (code
@@ -81,6 +84,17 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('@cardstack/boxel-ui/helpers', boxelUiHelpers);
   virtualNetwork.shimModule('@cardstack/boxel-ui/icons', boxelUiIcons);
   virtualNetwork.shimModule('@cardstack/boxel-ui/modifiers', boxelUiModifiers);
+  // Spec cards published for boxel-ui components use the bare specifier
+  // `@cardstack/boxel-ui/components` in their `ref.module`. The
+  // VirtualNetwork needs a realm mapping to translate that into the
+  // fake-packages URL form the rest of the runtime already accepts
+  // (see `isGloballyPublicDependency` in runtime-common/realm.ts).
+  // The shimModule calls above register the JS module; this registers
+  // the realm prefix so CodeRef.moduleHref resolves.
+  virtualNetwork.addRealmMapping(
+    '@cardstack/boxel-ui/',
+    `${PACKAGES_FAKE_ORIGIN}@cardstack/boxel-ui/`,
+  );
   virtualNetwork.shimModule('@glimmer/component', glimmerComponent);
   virtualNetwork.shimModule('@glimmer/tracking', glimmerTracking);
   virtualNetwork.shimModule('@ember/component', emberComponent);
@@ -167,10 +181,27 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('flat', flat);
   virtualNetwork.shimModule('@floating-ui/dom', floatingUiDom);
   virtualNetwork.shimModule('lodash', lodash);
+  virtualNetwork.shimModule('lodash-es', lodash);
   virtualNetwork.shimModule('matrix-js-sdk', matrixJsSDK);
   virtualNetwork.shimModule('rsvp', rsvp);
   virtualNetwork.shimModule('super-fast-md5', superFastMD5);
   virtualNetwork.shimModule('tracked-built-ins', tracked);
+  // BXL is card-facing: any card module may `import { expression, fx, jq }
+  // from '@cardstack/bxl'` for computeVia formulas. The async shim keeps the
+  // library out of the host's initial chunk graph — it loads only when a card
+  // that uses it loads. `expression()` evaluates synchronously (computeVia
+  // cannot await), so the resolver folds in the lazy formula families
+  // (statistical, Bessel, engineering/financial, validation) before serving
+  // the module: cards get the full Excel-function surface without knowing
+  // about chunking.
+  virtualNetwork.shimAsyncModule({
+    id: '@cardstack/bxl',
+    resolve: async () => {
+      let bxl = await import('@cardstack/bxl');
+      await bxl.loadAllFormulaExtensions();
+      return bxl;
+    },
+  });
   virtualNetwork.shimAsyncModule({
     id: 'ethers',
     resolve: () => import('ethers'),
@@ -180,8 +211,28 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
     resolve: () => import('uuid'),
   });
   virtualNetwork.shimAsyncModule({
+    id: 'yaml',
+    resolve: () => import('yaml'),
+  });
+  virtualNetwork.shimAsyncModule({
+    id: 'fflate',
+    resolve: () => import('fflate'),
+  });
+  virtualNetwork.shimAsyncModule({
+    id: '@cardstack/runtime-common/constants',
+    resolve: () => import('@cardstack/runtime-common/constants'),
+  });
+  virtualNetwork.shimAsyncModule({
     id: '@cardstack/runtime-common/marked-sync',
-    resolve: () => import('@cardstack/runtime-common/marked-sync.ts'),
+    resolve: () => import('@cardstack/runtime-common/marked-sync'),
+  });
+  virtualNetwork.shimAsyncModule({
+    id: '@cardstack/runtime-common/bfm-card-references',
+    resolve: () => import('@cardstack/runtime-common/bfm-card-references'),
+  });
+  virtualNetwork.shimAsyncModule({
+    id: '@cardstack/runtime-common/helpers/ai',
+    resolve: () => import('@cardstack/runtime-common/helpers/ai'),
   });
 
   shimModulesForLiveTests(virtualNetwork);
@@ -196,7 +247,7 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
     fallbackShim({ default: class {} }),
   );
 
-  shimHostCommands(virtualNetwork);
+  shimHostTools(virtualNetwork);
 }
 
 // Shims test-only module IDs into the virtual network as empty fallbacks so

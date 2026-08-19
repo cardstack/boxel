@@ -6,18 +6,14 @@
 
 const path = require('path');
 const fs = require('fs');
+const { sanitizeSlug } = require('../../../scripts/env-slug.js');
 
 function getEnvSlug() {
-  // Prefer ENV_SLUG from mise's env-vars.sh (canonical: scripts/env-slug.sh);
-  // fall back to computing it for non-mise contexts.
+  // Prefer ENV_SLUG from mise's env-vars.sh (already pre-sanitized by
+  // scripts/env-slug.sh); fall back to sanitizing BOXEL_ENVIRONMENT
+  // directly for non-mise contexts.
   if (process.env.ENV_SLUG) return process.env.ENV_SLUG;
-  const raw = process.env.BOXEL_ENVIRONMENT || '';
-  return raw
-    .toLowerCase()
-    .replace(/\//g, '-')
-    .replace(/[^a-z0-9-]/g, '')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '');
+  return sanitizeSlug(process.env.BOXEL_ENVIRONMENT);
 }
 
 function getTraefikDynamicDir() {

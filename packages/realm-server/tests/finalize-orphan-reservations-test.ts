@@ -1,4 +1,5 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { basename } from 'path';
 
 import type {
@@ -6,8 +7,8 @@ import type {
   JobsTable,
   PgAdapter,
 } from '@cardstack/postgres';
-import { finalizeOrphanedReservations } from '../lib/finalize-orphan-reservations';
-import { createTestPgAdapter, prepareTestDB } from './helpers';
+import { finalizeOrphanedReservations } from '../lib/finalize-orphan-reservations.ts';
+import { createTestPgAdapter, prepareTestDB } from './helpers/index.ts';
 
 async function insertJob(
   adapter: PgAdapter,
@@ -57,7 +58,7 @@ async function fetchReservation(
   return rows[0];
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('finalizeOrphanedReservations', function (hooks) {
     let adapter: PgAdapter;
 

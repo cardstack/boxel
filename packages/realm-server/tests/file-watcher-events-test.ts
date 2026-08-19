@@ -1,9 +1,11 @@
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 import type { Test, SuperTest } from 'supertest';
 import { join, basename } from 'path';
-import type { RealmHttpServer as Server } from '../server';
+import type { RealmHttpServer as Server } from '../server.ts';
 import type { DirResult } from 'tmp';
-import { removeSync, writeJSONSync, writeFileSync } from 'fs-extra';
+import fsExtra from 'fs-extra';
+const { removeSync, writeJSONSync, writeFileSync } = fsExtra;
 import type { Realm } from '@cardstack/runtime-common';
 import { rri } from '@cardstack/runtime-common';
 import {
@@ -12,15 +14,15 @@ import {
   waitForRealmEvent,
   type RealmRequest,
   withRealmPath,
-} from './helpers';
+} from './helpers/index.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import type { PgAdapter } from '@cardstack/postgres';
 import type {
   RealmEvent,
   UpdateRealmEventContent,
-} from 'https://cardstack.com/base/matrix-event';
+} from '@cardstack/base/matrix-event';
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('file watcher realm events', function (hooks) {
     let realmURL = new URL('http://127.0.0.1:4444/test/');
     let testRealm: Realm;
@@ -67,8 +69,8 @@ module(basename(__filename), function () {
       onRealmSetup,
       fileSystem: {
         'person.gts': `
-        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+        import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
 
         export class Person extends CardDef {
           @field firstName = contains(StringField);
@@ -299,8 +301,8 @@ module(basename(__filename), function () {
       realmEventTimestampStart = Date.now();
 
       let updatedPersonSource = `
-import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-import StringField from "https://cardstack.com/base/string";
+import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+import StringField from "@cardstack/base/string";
 
 export class Person extends CardDef {
   @field firstName = contains(StringField);

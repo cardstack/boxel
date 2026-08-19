@@ -5,30 +5,32 @@ import {
   type CodeRef,
   type Definition,
   type FieldDefinition,
-} from './index';
+} from './index.ts';
 import {
   type LooseSingleCardDocument,
   type CardResource,
   type Relationship,
   relationshipEntries,
   isCodeRef,
-} from './index';
-import { resolveCardReference } from './card-reference-resolver';
-import { isMeta, type CardFields, type Meta } from './resource-types';
-import type { DefinitionLookup } from './definition-lookup';
-import { serialize as serializeCodeRef } from './serializers/code-ref';
-import { maybeRelativeReference as makeRelativeReference } from './url';
+} from './index.ts';
+import type { VirtualNetwork } from './virtual-network.ts';
+import { isMeta, type CardFields, type Meta } from './resource-types.ts';
+import type { DefinitionLookup } from './definition-lookup.ts';
+import { serialize as serializeCodeRef } from './serializers/code-ref.ts';
+import { maybeRelativeReference as makeRelativeReference } from './url.ts';
 
 export default async function serialize({
   doc,
   definition,
   relativeTo,
   definitionLookup,
+  virtualNetwork,
 }: {
   doc: LooseSingleCardDocument;
   definition: Definition;
   relativeTo: URL;
   definitionLookup: DefinitionLookup;
+  virtualNetwork: VirtualNetwork;
 }): Promise<LooseSingleCardDocument> {
   const realmURL = doc.data.meta?.realmURL
     ? new URL(doc.data.meta.realmURL)
@@ -37,6 +39,7 @@ export default async function serialize({
   const codeRefOpts = {
     relativeTo,
     trimExecutableExtension: true as true,
+    virtualNetwork,
   };
   const metaCodeRefOpts = {
     ...codeRefOpts,
@@ -84,6 +87,7 @@ export default async function serialize({
       relativeTo,
       codeRefOpts: metaCodeRefOpts,
       definitionLookup,
+      virtualNetwork,
     });
   }
 
@@ -95,6 +99,7 @@ export default async function serialize({
       relativeTo,
       realmURL,
       definitionLookup,
+      virtualNetwork,
     });
     if (processedRelationships) {
       result.data.relationships = processedRelationships;
@@ -137,6 +142,14 @@ export default async function serialize({
 // `fieldOrCard` when fetching the child definition; otherwise nested
 // fields on the polymorphic subtype would be missing from the child
 // definition lookup and the values would silently drop.
+//
+// A compound field's child definition is not always resolvable: when
+// the field's declared type is an unexported class, its `fieldOrCard`
+// is a `fieldOf`/`ancestorOf` ref and the definition store only holds
+// entries for exports. Values under such a field can't be walked
+// schema-aware, so they pass through verbatim — this serializer's
+// output overwrites the stored source, and unnormalized inner code
+// refs are recoverable where dropped field data is not.
 async function processAttributes({
   attributes,
   definition,
@@ -145,6 +158,7 @@ async function processAttributes({
   relativeTo,
   codeRefOpts,
   definitionLookup,
+  virtualNetwork,
 }: {
   attributes: Record<string, any>;
   definition: Definition;
@@ -154,10 +168,12 @@ async function processAttributes({
   codeRefOpts: {
     relativeTo: URL;
     trimExecutableExtension: true;
+    virtualNetwork: VirtualNetwork;
     allowRelative?: true;
     maybeRelativeReference?: (reference: string) => string;
   };
   definitionLookup: DefinitionLookup;
+  virtualNetwork: VirtualNetwork;
 }): Promise<Record<string, any>> {
   const result: Record<string, any> = {};
 
@@ -209,9 +225,10 @@ async function processAttributes({
               itemAdoptsFrom,
               relativeTo,
               definitionLookup,
+              virtualNetwork,
             );
             if (!childDef) {
-              return {};
+              return item;
             }
             return await processAttributes({
               attributes: item,
@@ -221,6 +238,7 @@ async function processAttributes({
               relativeTo,
               codeRefOpts,
               definitionLookup,
+              virtualNetwork,
             });
           }),
         );
@@ -239,8 +257,10 @@ async function processAttributes({
         polymorphicAdoptsFrom,
         relativeTo,
         definitionLookup,
+        virtualNetwork,
       );
       if (!childDef) {
+        result[fieldName] = fieldValue;
         continue;
       }
       result[fieldName] = await processAttributes({
@@ -251,6 +271,7 @@ async function processAttributes({
         relativeTo,
         codeRefOpts,
         definitionLookup,
+        virtualNetwork,
       });
     }
   }
@@ -263,14 +284,27 @@ async function processAttributes({
 // that. Otherwise fall back to the field's declared `fieldOrCard`
 // type. Either source's CodeRef may be relative; resolve to absolute
 // before looking up.
+//
+// Returns undefined ONLY for a code ref that can't name an export (a
+// `fieldOf`/`ancestorOf` ref for an unexported class) — the callers'
+// preserve-verbatim handling is scoped to exactly that case. A
+// resolved ref whose definition is genuinely missing never gets here:
+// `lookupDefinition` throws for it, failing the write loudly instead
+// of silently preserving under a stale schema.
 async function resolveChildDef(
   fieldDefinition: FieldDefinition,
   polymorphicAdoptsFrom: CodeRef | undefined,
   relativeTo: URL,
   definitionLookup: DefinitionLookup,
+  virtualNetwork: VirtualNetwork,
 ): Promise<Definition | undefined> {
   let codeRef = polymorphicAdoptsFrom
-    ? codeRefWithAbsoluteIdentifier(polymorphicAdoptsFrom, relativeTo)
+    ? codeRefWithAbsoluteIdentifier(
+        polymorphicAdoptsFrom,
+        relativeTo,
+        undefined,
+        virtualNetwork,
+      )
     : fieldDefinition.fieldOrCard;
   if (!isResolvedCodeRef(codeRef)) {
     return undefined;
@@ -285,6 +319,7 @@ async function processRelationships({
   relativeTo,
   realmURL,
   definitionLookup,
+  virtualNetwork,
 }: {
   relationships: NonNullable<CardResource['relationships']>;
   definition: Definition;
@@ -292,6 +327,7 @@ async function processRelationships({
   relativeTo: URL;
   realmURL?: URL;
   definitionLookup: DefinitionLookup;
+  virtualNetwork: VirtualNetwork;
 }): Promise<NonNullable<CardResource['relationships']> | undefined> {
   const result: NonNullable<CardResource['relationships']> = {};
 
@@ -305,7 +341,7 @@ async function processRelationships({
         if (realmURL && selfLink) {
           try {
             selfLink = makeRelativeReference(
-              new URL(resolveCardReference(selfLink, relativeTo)),
+              virtualNetwork.resolveURL(selfLink, relativeTo),
               relativeTo,
               realmURL,
             );
@@ -359,7 +395,34 @@ async function processRelationships({
       metaFields,
       relativeTo,
       definitionLookup,
+      virtualNetwork,
     );
+
+    if (fieldDefinition === 'unresolvable') {
+      // The path crosses a compound field whose child definition can't
+      // be resolved (an unexported class). We can't tell what kind of
+      // relationship this is, but we know the card declares the holder
+      // field — preserve the relationship rather than dropping it.
+      if (Array.isArray(value)) {
+        result[relationshipKey] = value.map((entry) =>
+          normalizeRelationship(entry),
+        );
+      } else if (Array.isArray(value.data)) {
+        // JSON:API to-many `data: [...]` form. `normalizeRelationship`
+        // only derives links from a single-resource `data`, so expand to
+        // the indexed keys to-many relationships are stored under, one
+        // entry per resource identifier, before normalizing each.
+        value.data.forEach((item, index) => {
+          result[`${relationshipKey}.${index}`] = normalizeRelationship({
+            ...(value.meta ? { meta: value.meta } : {}),
+            data: item,
+          });
+        });
+      } else {
+        result[relationshipKey] = normalizeRelationship(value);
+      }
+      continue;
+    }
 
     if (!fieldDefinition || fieldDefinition.isComputed) {
       continue;
@@ -372,21 +435,25 @@ async function processRelationships({
       continue;
     }
 
-    const processedValue = normalizeRelationship(value);
-
     if (
       fieldDefinition.type === 'linksToMany' &&
       value.data &&
       Array.isArray(value.data)
     ) {
-      value.data.forEach((_, index) => {
-        result[`${relationshipKey}.${index}`] = {
-          links: processedValue.links,
-          meta: processedValue.meta,
-        };
+      // Fan the JSON:API to-many `data: [...]` form out into indexed
+      // keys, deriving each entry from its own resource identifier —
+      // normalizeRelationship only converts a single-resource `data`,
+      // so normalizing the array-valued relationship as one unit would
+      // lose every target that has no relationship-level links.
+      value.data.forEach((item, index) => {
+        result[`${relationshipKey}.${index}`] = normalizeRelationship({
+          ...(value.links ? { links: value.links } : {}),
+          ...(value.meta ? { meta: value.meta } : {}),
+          data: item,
+        });
       });
     } else {
-      result[relationshipKey] = processedValue;
+      result[relationshipKey] = normalizeRelationship(value);
     }
   }
 
@@ -399,13 +466,20 @@ async function processRelationships({
 // `meta.fields` sub-tree at the root; we walk it in parallel with the
 // path segments so polymorphic per-segment overrides drive the
 // definition lookup.
+//
+// Returns `undefined` when a segment does not exist on its definition
+// (or descends past a primitive) — the path names nothing the card
+// declares. Returns `'unresolvable'` when a segment exists but its
+// child definition can't be resolved (an unexported class), so the
+// caller can preserve the value rather than treat it as unknown.
 async function resolveDottedFieldDef(
   rootDefinition: Definition,
   dottedPath: string,
   metaFields: CardFields | undefined,
   relativeTo: URL,
   definitionLookup: DefinitionLookup,
-): Promise<FieldDefinition | undefined> {
+  virtualNetwork: VirtualNetwork,
+): Promise<FieldDefinition | 'unresolvable' | undefined> {
   let segments = dottedPath.split('.');
   let current: Pick<Definition, 'fields' | 'fieldDefs'> = rootDefinition;
   let currentMeta = metaFields;
@@ -429,9 +503,10 @@ async function resolveDottedFieldDef(
       polymorphicAdoptsFrom,
       relativeTo,
       definitionLookup,
+      virtualNetwork,
     );
     if (!next) {
-      return undefined;
+      return 'unresolvable';
     }
     current = next;
     currentMeta = isMeta(metaForSeg) ? metaForSeg.fields : undefined;
@@ -458,6 +533,7 @@ function processMetaFields({
   codeRefOpts: {
     relativeTo: URL;
     trimExecutableExtension: true;
+    virtualNetwork: VirtualNetwork;
     allowRelative?: true;
     maybeRelativeReference?: (reference: string) => string;
   };
@@ -498,6 +574,7 @@ function processMetaField({
   codeRefOpts: {
     relativeTo: URL;
     trimExecutableExtension: true;
+    virtualNetwork: VirtualNetwork;
     allowRelative?: true;
     maybeRelativeReference?: (reference: string) => string;
   };

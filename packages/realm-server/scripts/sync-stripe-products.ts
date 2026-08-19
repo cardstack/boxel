@@ -1,4 +1,4 @@
-import '../setup-logger';
+import '../setup-logger.ts';
 import { PgAdapter } from '@cardstack/postgres';
 
 async function fetchStripeProducts() {

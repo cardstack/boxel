@@ -6,9 +6,9 @@ import {
   contains,
   containsMany,
   linksToMany,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import MarkdownField from 'https://cardstack.com/base/markdown';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import MarkdownField from '@cardstack/base/markdown';
 import { gt } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
@@ -180,6 +180,12 @@ export class Wiki extends CardDef {
   @field content = contains(MarkdownField);
   @field tags = containsMany(StringField);
   @field relatedPages = linksToMany(() => Wiki);
+
+  // Software-factory brief contract: when this Wiki card is used as a
+  // factory brief, an optional absolute URL of an existing card to
+  // adjust. When set, the factory runs the adjust flow (seed from that
+  // card, then apply the brief adjustments); when empty, greenfield.
+  @field sourceCardUrl = contains(StringField);
 
   @field cardTitle = contains(StringField, {
     computeVia: function (this: Wiki) {
@@ -636,7 +642,7 @@ export class Wiki extends CardDef {
   static isolated = class Isolated extends Component<typeof this> {
     // Handle clicks on wiki links inside rendered markdown content
     // Resolves [[Name]] links by matching against relatedPages, falls back to URL
-    handleContentClick = (event: MouseEvent) => {
+    handleContentClick = (event: Event) => {
       const target = event.target as HTMLElement | null;
       const wikiLink = target?.closest?.('.wiki-link') as HTMLElement | null;
       if (!wikiLink) return;
@@ -681,7 +687,7 @@ export class Wiki extends CardDef {
       }
     };
 
-    handleTocClick = (event: MouseEvent) => {
+    handleTocClick = (event: Event) => {
       const target = event.target as HTMLElement | null;
       const anchor = target?.closest?.('a') as HTMLAnchorElement | null;
       if (!anchor) return;

@@ -14,7 +14,10 @@
 // thrown away after `run()`. Construction is cheap.
 import type { Program, AnyNode } from 'acorn';
 import type MagicString from 'magic-string';
-import { collectPatternBindings, isReferencePosition } from './pattern-helpers';
+import {
+  collectPatternBindings,
+  isReferencePosition,
+} from './pattern-helpers.ts';
 
 // One scope on the rewriter's scope stack. `function` scopes own `var`
 // / function-decl / parameter bindings; `block` scopes own
@@ -30,11 +33,13 @@ type WalkNode = AnyNode | null | undefined;
 export class IdentifierRewriter {
   private readonly scopeChain: Scope[] = [];
   private usesImportMeta = false;
+  private readonly ms: MagicString;
+  private readonly importedAccess: ReadonlyMap<string, string>;
 
-  constructor(
-    private readonly ms: MagicString,
-    private readonly importedAccess: ReadonlyMap<string, string>,
-  ) {}
+  constructor(ms: MagicString, importedAccess: ReadonlyMap<string, string>) {
+    this.ms = ms;
+    this.importedAccess = importedAccess;
+  }
 
   // Walk the AST. Returns true iff at least one `import.meta` usage
   // was rewritten — caller uses that to decide whether to declare the

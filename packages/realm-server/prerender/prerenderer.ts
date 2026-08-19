@@ -9,27 +9,27 @@ import {
   type RunCommandResponse,
   type ScreenshotPrerenderResponse,
 } from '@cardstack/runtime-common';
-import { BrowserManager } from './browser-manager';
+import { BrowserManager } from './browser-manager.ts';
 import {
   PagePool,
   StandbyTargetNotReadyError,
   type ConsoleErrorEntry,
-} from './page-pool';
-import { RenderRunner, type Timings } from './render-runner';
-import { isEnvironmentMode, serviceURL } from '../lib/dev-service-registry';
-import { toAffinityKey } from './affinity';
-import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel';
-import { AffinityActivityTracker } from './affinity-activity';
-import { AsyncSemaphore } from './async-semaphore';
+} from './page-pool.ts';
+import { RenderRunner, type Timings } from './render-runner.ts';
+import { isEnvironmentMode, serviceURL } from '../lib/dev-service-registry.ts';
+import { toAffinityKey } from './affinity.ts';
+import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel.ts';
+import { AffinityActivityTracker } from './affinity-activity.ts';
+import { AsyncSemaphore } from './async-semaphore.ts';
 import {
   type BatchOwner,
   computeBatchClearCacheGate,
-} from './batch-ownership-gate';
+} from './batch-ownership-gate.ts';
 import {
   AffinitySnapshotSampler,
   type PeakRegistration,
   decorateRenderErrorsWithTimings,
-} from './render-settlement';
+} from './render-settlement.ts';
 
 const log = logger('prerenderer');
 const defaultHostURL = isEnvironmentMode()
@@ -61,6 +61,11 @@ export class Prerenderer {
   #affinityIdleEvictMs: number;
   #semaphore: AsyncSemaphore;
   #restartInFlight: Promise<void> | null = null;
+  // Count of actual browser restarts performed (coalesced callers share
+  // one). Read by tests to assert a flow did NOT pay a restart — e.g. a
+  // visit following a cancelled render must acquire a fresh page rather
+  // than detour through the restart recovery lane.
+  #browserRestartCount = 0;
   // `clearCache` batch ownership (CS-10758 step 3). Maps affinityKey to
   // `{ batchId, since }` for the batch that currently owns the affinity's
   // warm loader. See `#gateClearCache` for the full policy. Populated on
@@ -110,6 +115,14 @@ export class Prerenderer {
             `batch ownership cleared for ${affinityKey} due to affinity disposal`,
           );
         }
+        // Drop the affinity's icon memo with the rest of its warm state.
+        // Disposal also clears the ownership entry above, which makes the
+        // owner-matched clear in `releaseBatch` a no-op for this affinity —
+        // without this, a job whose affinity is disposed mid-run (cancel,
+        // idle eviction, capacity pressure) would leave its memo behind
+        // until another job for the same realm replaced it. A still-running
+        // job just re-renders each type's icon once as the memo re-warms.
+        this.#renderRunner.clearIconMemo(affinityKey);
       },
     });
     this.#renderRunner = new RenderRunner({
@@ -209,6 +222,17 @@ export class Prerenderer {
     await this.#pagePool.warmStandbys();
   }
 
+  // Recycle the whole browser to pick up a redeployed host. Reuses the
+  // failure-recovery restart path (closeAll → restart Chrome → re-warm
+  // standbys); the full browser restart also clears Chrome's HTTP cache, so
+  // re-warmed pages reload the current host shell rather than a cached stale
+  // bundle. Coalesced via the same in-flight guard as #restartBrowser, so
+  // overlapping recycle signals collapse to one restart.
+  async recycle(): Promise<void> {
+    log.info('Recycling prerender browser to pick up a redeployed host');
+    await this.#restartBrowser();
+  }
+
   // Emit the `render cancelled` log line (format from CS-10872)
   // and, on a `rendering`-state cancel, tear down the affinity so
   // the next request gets a fresh tab rather than one whose
@@ -224,11 +248,30 @@ export class Prerenderer {
     let elapsed = Date.now() - startedAt;
     log.info(
       `render cancelled after ${elapsed}ms in state=${err.state} ` +
-        `affinity=${affinityKey} target=${target}`,
+        `affinity=${affinityKey} target=${target} ` +
+        `reason=${err.reason ?? '<none>'}`,
     );
     if (err.state === 'rendering') {
       try {
-        await this.#pagePool.disposeAffinity(affinityKey);
+        // Closing the page is what interrupts any CDP call the
+        // cancelled render abandoned mid-flight. The teardown is
+        // awaited: the caller is gone, so nothing is delayed by
+        // waiting, and by the time the cancellation propagates the
+        // pool's slot accounting has already released this page —
+        // the affinity's next visit materializes a fresh page
+        // instead of racing a background close at the pool ceiling
+        // (which reads as "no standby available" and needlessly
+        // routes that visit through the browser-restart recovery
+        // lane). A waiter that received the tab-queue lease in the
+        // window between release and this disposal is covered too:
+        // PagePool revalidates the lease after acquire and re-selects
+        // a live page rather than handing back the doomed one.
+        // The shared BrowserContext is retained so the next visit
+        // reuses the warm HTTP cache rather than paying the cold
+        // module-source waterfall.
+        await this.#pagePool.disposeAffinity(affinityKey, {
+          retainSharedContext: true,
+        });
         this.#renderRunner.clearAuthCache(affinityKey);
       } catch (disposeErr: any) {
         log.warn(
@@ -254,8 +297,19 @@ export class Prerenderer {
     let owner = this.#batchOwnership.get(affinityKey);
     if (owner?.batchId === batchId) {
       this.#batchOwnership.delete(affinityKey);
+      // The job's icon memo has no readers once its batch releases the
+      // affinity (a later job carries a different job key), so drop it
+      // rather than letting it idle until the next job replaces it.
+      this.#renderRunner.clearIconMemo(affinityKey);
       log.debug(`batch ${batchId} released ownership of ${affinityKey}`);
     }
+  }
+
+  // Read-only observability accessor used by tests. Callers outside of
+  // tests should not rely on this; it's a debugging surface, not a
+  // stable API.
+  getBrowserRestartCount(): number {
+    return this.#browserRestartCount;
   }
 
   // Read-only observability accessor used by tests. Callers outside of
@@ -266,6 +320,13 @@ export class Prerenderer {
   ): { batchId: string; since: number } | undefined {
     let owner = this.#batchOwnership.get(affinityKey);
     return owner ? { batchId: owner.batchId, since: owner.since } : undefined;
+  }
+
+  // Read-only observability accessor used by tests. Callers outside of
+  // tests should not rely on this shape; it's a debugging surface, not a
+  // stable API.
+  getIconMemo(affinityKey: string) {
+    return this.#renderRunner.getIconMemo(affinityKey);
   }
 
   // Back-compat static re-export: older callers / tests reference
@@ -616,7 +677,12 @@ export class Prerenderer {
 
   async prerenderVisit(
     rawArgs: PrerenderVisitArgs & {
-      opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
+      opts?: {
+        timeoutMs?: number;
+        simulateTimeoutMs?: number;
+        // Test-only: see the matching field on `prerenderVisitAttempt`.
+        simulateLegacyHost?: true;
+      };
       signal?: AbortSignal;
       // Test-only hook fired right after a page is acquired and its
       // bucket has been reset. Used by tests that need to seed the
@@ -643,9 +709,11 @@ export class Prerenderer {
       realm,
       url,
       auth,
+      visitType,
       renderOptions,
       fileData,
       types,
+      cardTypes,
       opts,
       priority,
       jobId,
@@ -701,10 +769,12 @@ export class Prerenderer {
             realm,
             url,
             auth,
+            visitType,
             opts,
             renderOptions: attemptOptions,
             fileData,
             types,
+            cardTypes,
             priority,
             jobId,
             signal,
@@ -734,10 +804,12 @@ export class Prerenderer {
               realm,
               url,
               auth,
+              visitType,
               opts,
               renderOptions: attemptOptions,
               fileData,
               types,
+              cardTypes,
               priority,
               jobId,
               signal,
@@ -854,6 +926,7 @@ export class Prerenderer {
 
   async #runRestart(): Promise<void> {
     log.warn('Restarting prerender browser');
+    this.#browserRestartCount++;
     await this.#pagePool.closeAll();
     await this.#browserManager.restartBrowser();
     await this.#pagePool.warmStandbys().catch((e) => {
@@ -923,6 +996,7 @@ export class Prerenderer {
           // log entirely so grep-able lines all describe real load.
           return;
         }
+        let swaps = this.#pagePool.getUnresponsiveTabSwaps();
         let perAffinity = snap.affinities
           .map((a) => {
             let q = a.byQueue;
@@ -959,7 +1033,15 @@ export class Prerenderer {
               a.tabQueuedByPriority,
               a.admissionQueuedByPriority,
             );
-            return `${a.affinityKey}(tabs=${a.tabCount}, pending=${a.pendingTotal}, max=${a.maxPending}${queueDetail}${admissionDetail}${priorityDetail})`;
+            // Cumulative count of warm tabs this affinity has had retired
+            // for failing the reuse responsiveness probe. Printed only
+            // once it's non-zero, so its presence on a line is itself the
+            // signal that this realm renders content that leaves the JS
+            // thread busy after a visit ends.
+            let swapCount = swaps[a.affinityKey] ?? 0;
+            let swapDetail =
+              swapCount > 0 ? `, unresponsiveSwaps=${swapCount}` : '';
+            return `${a.affinityKey}(tabs=${a.tabCount}, pending=${a.pendingTotal}, max=${a.maxPending}${queueDetail}${admissionDetail}${priorityDetail}${swapDetail})`;
           })
           .join(' ');
         log.info(

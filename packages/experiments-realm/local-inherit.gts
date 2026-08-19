@@ -3,7 +3,7 @@ import {
   field,
   CardDef,
   FieldDef,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 class GrandParent extends CardDef {
   static displayName = 'local grandparent';

@@ -18,7 +18,6 @@ import {
   contains,
   containsMany,
   field,
-  queryableValue,
   type CardContext,
   type Format,
   FieldDef,
@@ -36,12 +35,9 @@ interface CardListSignature {
   context?: CardContext;
 }
 
-export class JsonField extends FieldDef {
-  static [primitive]: Record<string, any>;
-  static [queryableValue](_value: any, _stack: BaseDef[]): null {
-    return null;
-  }
-}
+// `JsonField` lives in its own module so non-command code can reuse it.
+// Re-exported here so it is importable from this module too.
+export { JsonField } from '../json-field';
 
 export class QueryField extends FieldDef {
   static [primitive]: Query;
@@ -185,7 +181,7 @@ class SearchCardsResultEmbeddedView extends Component<
   }
 
   <template>
-    <div class='command-result'>
+    <div class='tool-call-result'>
       <CardList
         @cardIds={{this.cardIdsToDisplay}}
         @format='atom'
@@ -211,7 +207,7 @@ class SearchCardsResultEmbeddedView extends Component<
       </div>
     </div>
     <style scoped>
-      .command-result {
+      .tool-call-result {
         color: var(--boxel-dark);
         background-color: var(--boxel-light);
         border-radius: var(--boxel-border-radius);
@@ -255,7 +251,7 @@ class SearchCardsResultEmbeddedView extends Component<
 
 class SearchCardsResultIsolatedView extends SearchCardsResultEmbeddedView {
   <template>
-    <section class='command-result' data-test-command-result-isolated>
+    <section class='tool-call-result' data-test-tool-result-isolated>
       <header>
         <h3>Search Results</h3>
         <p class='result-count'>
@@ -277,10 +273,10 @@ class SearchCardsResultIsolatedView extends SearchCardsResultEmbeddedView {
       </div>
     </section>
     <style scoped>
-      .command-result {
+      .tool-call-result {
         padding: var(--boxel-sp-lg) var(--boxel-sp-xl);
       }
-      .command-result > * + * {
+      .tool-call-result > * + * {
         margin-top: var(--boxel-sp-lg);
       }
       h3 {

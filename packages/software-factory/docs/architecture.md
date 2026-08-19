@@ -10,6 +10,7 @@ sequenceDiagram
     UserClaudeCode->>Factory: Bootstrap process (factory:go)
     alt Is Target Realm Missing
         Factory->>HostedBoxel: Create target realm + test realm
+        Factory->>HostedBoxel: Write RealmDashboard dashboard (index.json) + CardsGrid
     end
     alt Is Target Realm Empty
         HostedBoxel-->>Factory: Reads brief
@@ -18,6 +19,8 @@ sequenceDiagram
         ClaudeCodeCLI->>HostedBoxel: Add Project (i.e. project spec)
         ClaudeCodeCLI->>HostedBoxel: Add High-Level Implementation Plan
         ClaudeCodeCLI->>HostedBoxel: Create issue for task breakdown
+        Note right of Factory: Once the bootstrap issue completes,<br>link the index's board to the IssueTracker<br>and the seed issue's project to the Project
+        Factory->>HostedBoxel: Patch index.json board link + seed issue project link
     end
     Note right of Factory: Prepare Context from Target Realm<br>include project spec, knowledge article,<br>next/current issue
     Note right of Factory: Prepare Prompt for agentic loop with Skills,<br >Tools & Context

@@ -1,12 +1,12 @@
 import { resolve } from 'node:path';
 
-import { expect, test } from './fixtures';
+import { expect, test } from './fixtures.ts';
 
-import { LintValidationStep } from '../src/validators/lint-step';
-import type { LintValidationDetails } from '../src/validators/lint-step';
-import { BAD_LINT_GTS } from './helpers/lint-test-fixtures';
-import { buildTestClient } from './helpers/test-client';
-import { createTestWorkspace } from './helpers/workspace-fixture';
+import { LintValidationStep } from '../src/validators/lint-step.ts';
+import type { LintValidationDetails } from '../src/validators/lint-step.ts';
+import { BAD_LINT_GTS } from './helpers/lint-test-fixtures.ts';
+import { buildTestClient } from './helpers/test-client.ts';
+import { createTestWorkspace } from './helpers/workspace-fixture.ts';
 
 const fixtureRealmDir = resolve(
   process.cwd(),

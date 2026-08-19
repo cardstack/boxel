@@ -3,11 +3,11 @@ import {
   field,
   Component,
   CardDef,
-  relativeTo,
   linksToMany,
   FieldDef,
   containsMany,
   getCardMeta,
+  resolveInstanceURL,
   type CardOrFieldTypeIcon,
   BaseDef,
   type CardContext,
@@ -27,7 +27,6 @@ import {
 } from '@cardstack/boxel-ui/components';
 import {
   getMenuItems,
-  cardIdToURL,
   codeRefWithAbsoluteIdentifier,
   ensureExtension,
   isPrimitive,
@@ -36,8 +35,7 @@ import {
   loadCardDef,
   Loader,
   realmURL,
-  resolveCardReference,
-  type CommandContext,
+  type ToolContext,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import { eq, not, type MenuItemOptions } from '@cardstack/boxel-ui/helpers';
@@ -57,9 +55,9 @@ import AppsIcon from '@cardstack/boxel-icons/apps';
 import LayoutList from '@cardstack/boxel-icons/layout-list';
 import { use, resource } from 'ember-resources';
 import { TrackedObject } from 'tracked-built-ins';
-import GenerateReadmeSpecCommand from '@cardstack/boxel-host/commands/generate-readme-spec';
-import PopulateWithSampleDataCommand from '@cardstack/boxel-host/commands/populate-with-sample-data';
-import GenerateExampleCardsCommand from '@cardstack/boxel-host/commands/generate-example-cards';
+import GenerateReadmeSpecTool from '@cardstack/boxel-host/commands/generate-readme-spec';
+import PopulateWithSampleDataTool from '@cardstack/boxel-host/commands/populate-with-sample-data';
+import GenerateExampleCardsTool from '@cardstack/boxel-host/commands/generate-example-cards';
 import { type GetMenuItemParams } from './menu-items';
 import { provide } from 'ember-provide-consume-context';
 import {
@@ -69,9 +67,9 @@ import {
 
 export type SpecType = 'card' | 'field' | 'component' | 'app' | 'command';
 
-class PopulateFieldSpecExampleCommand extends PopulateWithSampleDataCommand {
-  constructor(commandContext: CommandContext) {
-    super(commandContext);
+class PopulateFieldSpecExampleCommand extends PopulateWithSampleDataTool {
+  constructor(toolContext: ToolContext) {
+    super(toolContext);
   }
   protected get prompt() {
     return `Fill in sample data for this example on the card's spec.`;
@@ -82,20 +80,26 @@ class PopulateFieldSpecExampleCommand extends PopulateWithSampleDataCommand {
     if (!codeRef) {
       return [];
     }
+    // The attached-file identifier is read as a fetchable source URL (the AI
+    // source-file reader does `new URL(...)`), so the card's type module must
+    // resolve to a real URL — a scoped RRI can't be fetched.
     codeRef = codeRefWithAbsoluteIdentifier(
       codeRef,
-      cardIdToURL(card.id!),
+      card.id,
+      undefined,
     )! as ResolvedCodeRef;
-    let cardOrFieldModuleURL = codeRef.module
-      ? ensureExtension(codeRef.module, { default: '.gts' })
+    let moduleURL = codeRef.module
+      ? resolveInstanceURL(card, codeRef.module)
       : undefined;
-    return cardOrFieldModuleURL ? [cardOrFieldModuleURL] : [];
+    return moduleURL
+      ? [ensureExtension(moduleURL.href, { default: '.gts' })]
+      : [];
   }
 }
 
-class GenerateExamplesForFieldSpecCommand extends GenerateExampleCardsCommand {
-  constructor(commandContext: CommandContext) {
-    super(commandContext);
+class GenerateExamplesForFieldSpecCommand extends GenerateExampleCardsTool {
+  constructor(toolContext: ToolContext) {
+    super(toolContext);
   }
   protected getPrompt(count: number) {
     return `Generate ${count} additional examples on this card's spec.`;
@@ -127,7 +131,7 @@ interface SpecHeaderSignature {
 export class SpecHeader extends GlimmerComponent<SpecHeaderSignature> {
   get defaultIcon() {
     if (!this.args.model) {
-      return;
+      return undefined;
     }
     return this.args.model.constructor?.icon;
   }
@@ -275,15 +279,15 @@ export class SpecReadmeSection extends GlimmerComponent<SpecReadmeSectionSignatu
       return;
     }
 
-    let commandContext = this.args.context?.commandContext;
-    if (!commandContext) {
+    let toolContext = this.args.context?.toolContext;
+    if (!toolContext) {
       console.error('Command context not available');
       return;
     }
 
     try {
-      const generateReadmeSpecCommand = new GenerateReadmeSpecCommand(
-        commandContext,
+      const generateReadmeSpecCommand = new GenerateReadmeSpecTool(
+        toolContext,
       );
       await generateReadmeSpecCommand.execute({
         spec: this.args.model as Spec,
@@ -560,7 +564,9 @@ export class SpecModuleSection extends GlimmerComponent<SpecModuleSectionSignatu
       <div class='code-ref-container'>
         <FieldContainer @label='URL' @vertical={{true}} @labelFontSize='small'>
           <div class='code-ref-row'>
-            <RealmIcon class='realm-icon' @realmInfo={{this.realmInfo}} />
+            {{#if this.realmInfo}}
+              <RealmIcon class='realm-icon' @realmInfo={{this.realmInfo}} />
+            {{/if}}
             <span class='code-ref-value' data-test-module-href>
               {{this.moduleHref}}
             </span>
@@ -654,8 +660,11 @@ class Isolated extends Component<typeof Spec> {
     if (!this.args.model.ref || !this.args.model.id) {
       return undefined;
     }
-    let url = cardIdToURL(this.args.model.id);
-    let ref = codeRefWithAbsoluteIdentifier(this.args.model.ref, url);
+    let ref = codeRefWithAbsoluteIdentifier(
+      this.args.model.ref,
+      this.args.model.id,
+      undefined,
+    );
     if (!isResolvedCodeRef(ref)) {
       throw new Error('ref is not a resolved code ref');
     }
@@ -702,7 +711,7 @@ class Isolated extends Component<typeof Spec> {
 class Fitted extends Component<typeof Spec> {
   get defaultIcon() {
     if (!this.args.model) {
-      return;
+      return undefined;
     }
     return this.args.model.constructor?.icon;
   }
@@ -755,6 +764,17 @@ class Fitted extends Component<typeof Spec> {
         .spec-fitted {
           align-items: center;
         }
+        @container fitted-card (1.0 < aspect-ratio) and (250px <= width) {
+          .spec-fitted {
+            padding-inline: var(--boxel-sp-sm);
+            gap: var(--boxel-sp-xs);
+          }
+        }
+        @container fitted-card (aspect-ratio <= 1 / 1) and (150px <= width) and (170px <= height <= 250px) {
+          .spec-fitted :deep(.thumbnail-section) {
+            flex: 1;
+          }
+        }
       }
     </style>
   </template>
@@ -765,8 +785,11 @@ class Edit extends Component<typeof Spec> {
     if (!this.args.model.ref || !this.args.model.id) {
       return undefined;
     }
-    let url = cardIdToURL(this.args.model.id);
-    let ref = codeRefWithAbsoluteIdentifier(this.args.model.ref, url);
+    let ref = codeRefWithAbsoluteIdentifier(
+      this.args.model.ref,
+      this.args.model.id,
+      undefined,
+    );
     if (!isResolvedCodeRef(ref)) {
       throw new Error('ref is not a resolved code ref');
     }
@@ -802,8 +825,8 @@ class Edit extends Component<typeof Spec> {
     <style scoped>
       .container {
         --boxel-spec-background-color: #ebeaed;
-        --boxel-spec-code-ref-background-color: #e2e2e2;
-        --boxel-spec-code-ref-text-color: #646464;
+        --boxel-spec-code-ref-background-color: var(--boxel-300);
+        --boxel-spec-code-ref-text-color: var(--boxel-500);
 
         height: 100%;
         min-height: max-content;
@@ -811,7 +834,7 @@ class Edit extends Component<typeof Spec> {
         background-color: var(--boxel-spec-background-color);
       }
       :deep(.add-new) {
-        border: 1px solid var(--border, var(--boxel-border-color));
+        --boxel-button-color: var(--border);
       }
     </style>
   </template>
@@ -920,11 +943,15 @@ export class Spec extends CardDef {
       if (!this.ref || !this.ref.module) {
         return undefined;
       }
-      return resolveCardReference(this.ref.module, this.id ?? this[relativeTo]);
+      // `moduleHref` is consumed as a fetchable / absolute URL (source reader's
+      // `new URL(...)`, and URL-form comparisons in the code submode), so it
+      // must resolve to a real URL — RRI space would leave a scoped prefix that
+      // those readers can't use.
+      return resolveInstanceURL(this, this.ref.module)?.href;
     },
   });
   @field linkedExamples = linksToMany(CardDef);
-  @field containedExamples = containsMany(FieldDef, { isUsed: true });
+  @field containedExamples = containsMany(FieldDef);
   @field cardTitle = contains(SpecTitleField);
   @field cardDescription = contains(SpecDescriptionField);
 
@@ -947,7 +974,7 @@ export class Spec extends CardDef {
           label: 'Fill in Sample Data with AI',
           action: async () => {
             await new PopulateFieldSpecExampleCommand(
-              params.commandContext,
+              params.toolContext,
             ).execute({
               cardId: this.id,
             });
@@ -959,12 +986,13 @@ export class Spec extends CardDef {
           label: `Generate ${GENERATED_EXAMPLE_COUNT} examples with AI`,
           action: async () => {
             await new GenerateExamplesForFieldSpecCommand(
-              params.commandContext,
+              params.toolContext,
             ).execute({
               count: GENERATED_EXAMPLE_COUNT,
               codeRef: codeRefWithAbsoluteIdentifier(
                 this.ref,
-                cardIdToURL(this.id),
+                this.id,
+                undefined,
               ) as ResolvedCodeRef,
               realm: this[realmURL]?.href,
               exampleCard: this,
@@ -1052,7 +1080,7 @@ export class SpecTag extends GlimmerComponent<SpecTagSignature> {
   }
   <template>
     {{#if this.icon}}
-      <Pill @variant='muted' class='spec-tag-pill' ...attributes>
+      <Pill @variant='accent' class='spec-tag-pill' ...attributes>
         <:iconLeft>
           <this.icon width='18px' height='18px' />
         </:iconLeft>
@@ -1064,9 +1092,9 @@ export class SpecTag extends GlimmerComponent<SpecTagSignature> {
     {{/if}}
     <style scoped>
       .spec-tag-pill {
-        --pill-font: 500 var(--boxel-font-xs);
-        --pill-background-color: var(--boxel-200);
-        --pill-icon-size: 18px;
+        --boxel-pill-padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
+
+        flex-shrink: 0;
         word-break: initial;
         text-transform: uppercase;
       }

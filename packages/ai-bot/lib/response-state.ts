@@ -1,4 +1,4 @@
-import { thinkingMessage } from '../constants';
+import { thinkingMessage } from '../constants.ts';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
 import { cleanContent } from '@cardstack/runtime-common/ai';
 

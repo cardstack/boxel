@@ -10,14 +10,14 @@ import {
   REPLACE_MARKER,
   SEARCH_MARKER,
   SEPARATOR_MARKER,
-  baseRealm,
+  buildToolFunctionNameFromResolvedRef,
   rri,
   skillCardRef,
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import {
-  APP_BOXEL_COMMAND_REQUESTS_KEY,
+  APP_BOXEL_TOOL_REQUESTS_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
@@ -26,11 +26,9 @@ import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-
 import {
   addSkillToAiAssistant,
-  envSkillId,
+  skillsIndexId,
   testRealmURL,
   setupCardLogs,
   setupIntegrationTestRealm,
@@ -39,6 +37,7 @@ import {
   getMonacoContent,
   setMonacoContent,
   setupOperatorModeStateCleanup,
+  realmConfigCardJSON,
 } from '../../../helpers';
 import {
   CardDef,
@@ -56,8 +55,18 @@ import { setupMockMatrix } from '../../../helpers/mock-matrix';
 import { renderComponent } from '../../../helpers/render-component';
 import { setupRenderingTest } from '../../../helpers/setup';
 
+import type { FileDef } from '@cardstack/base/file-api';
+
 module('Integration | ai-assistant-panel | skills', function (hooks) {
   const realmName = 'Operator Mode Workspace';
+  // The tool `Skill/example` declares. A room's default skill is the skills
+  // index, which carries no tools of its own, so an applied tool call has to
+  // name one an attached skill actually declares — anything else is rejected
+  // as an unrecognized tool before the room's skills are re-uploaded.
+  const exampleSkillToolName = buildToolFunctionNameFromResolvedRef({
+    module: `${testRealmURL}search-and-open-card-command`,
+    name: 'default',
+  });
   let loader: Loader;
   let operatorModeStateService: OperatorModeStateService;
 
@@ -73,7 +82,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -182,9 +191,9 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
         }),
         'search-and-open-card-command.ts': `
             import { Command } from '@cardstack/runtime-common';
-            import { SearchCardsByTypeAndTitleCommand } from '@cardstack/boxel-host/commands/search-cards';
-            import ShowCardCommand from '@cardstack/boxel-host/commands/show-card';
-            import type { SearchCardsByTypeAndTitleInput } from 'https://cardstack.com/base/commands/search-card-result';
+            import { SearchCardsByTypeAndTitleTool } from '@cardstack/boxel-host/commands/search-cards';
+            import ShowCardTool from '@cardstack/boxel-host/commands/show-card';
+            import type { SearchCardsByTypeAndTitleInput } from '@cardstack/base/commands/search-card-result';
 
             export default class SearchAndOpenCardCommand extends Command<
               typeof SearchCardsByTypeAndTitleInput,
@@ -193,19 +202,19 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
               static displayName = 'SearchAndOpenCardCommand';
               static actionVerb = 'Search';
               async getInputType() {
-                return new SearchCardsByTypeAndTitleCommand(
-                  this.commandContext,
+                return new SearchCardsByTypeAndTitleTool(
+                  this.toolContext,
                 ).getInputType();
               }
               protected async run(
                 input: SearchCardsByTitleInput,
               ): Promise<undefined> {
-                let searchCommand = new SearchCardsByTypeAndTitleCommand(
-                  this.commandContext,
+                let searchCommand = new SearchCardsByTypeAndTitleTool(
+                  this.toolContext,
                 );
                 let searchResult = await searchCommand.execute(input);
                 if (searchResult.cardIds.length > 0) {
-                  let showCardCommand = new ShowCardCommand(this.commandContext);
+                  let showCardCommand = new ShowCardTool(this.toolContext);
                   await showCardCommand.execute({
                     cardId: searchResult.cardIds[0],
                   });
@@ -277,9 +286,26 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
             },
           },
         },
+        // A skill expressed as a markdown file (`boxel.kind: skill`), at the
+        // realm root so it appears directly in the file chooser's tree.
+        'realm-sync-skill.md': `---
+name: Realm Sync Skill
+description: A skill expressed as a markdown file
+boxel:
+  kind: skill
+  commands:
+    - codeRef:
+        module: '${testRealmURL}placeholder-command'
+        name: default
+      requiresApproval: false
+---
+# Realm Sync Skill
+
+Instructions live in the markdown body.
+`,
         'hello.txt': 'Hello, world!',
         'index.json': new CardsGrid(),
-        '.realm.json': `{ "name": "${realmName}" }`,
+        'realm.json': realmConfigCardJSON({ name: realmName }),
       },
     });
   });
@@ -339,9 +365,9 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     await click('[data-test-attach-button]');
     await click('[data-test-attach-card-btn]');
     await click(
-      '[data-test-card-catalog-item="http://test-realm/test/Skill/example"]',
+      '[data-test-item-button="http://test-realm/test/Skill/example"]',
     );
-    await click('[data-test-card-catalog-go-button]');
+    await click('[data-test-card-chooser-go-button]');
     await click(
       '[data-test-attached-card="http://test-realm/test/Person/fadhlan"] [data-test-remove-card-btn]',
     );
@@ -362,10 +388,8 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
       'disabled skill cards have not changed',
     );
     assert.deepEqual(
-      finalRoomStateSkillsJson.commandDefinitions.map((c: any) => c.sourceUrl),
-      initialRoomStateSkillsJson.commandDefinitions.map(
-        (c: any) => c.sourceUrl,
-      ),
+      finalRoomStateSkillsJson.toolDefinitions.map((c: any) => c.sourceUrl),
+      initialRoomStateSkillsJson.toolDefinitions.map((c: any) => c.sourceUrl),
       'command definitions have not changed',
     );
   });
@@ -377,9 +401,9 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     await click('[data-test-skill-menu][data-test-pill-menu-button]');
     await waitFor('[data-test-skill-menu] [data-test-pill-menu-add-button]');
     await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
-    await waitFor(`[data-test-card-catalog-item="${skillId}"]`);
-    await click(`[data-test-card-catalog-item="${skillId}"]`);
-    await click('[data-test-card-catalog-go-button]');
+    await waitFor(`[data-test-item-button="${skillId}"]`);
+    await click(`[data-test-item-button="${skillId}"]`);
+    await click('[data-test-card-chooser-go-button]');
 
     await waitUntil(
       () =>
@@ -401,6 +425,92 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     assert.dom('[data-test-skill-menu]').containsText('Skills: 2 of 2 active');
   });
 
+  test('skill picker can add a skill markdown file through the UI', async function (assert) {
+    const roomId = await renderAiAssistantPanel();
+    let skillId = `${testRealmURL}realm-sync-skill.md`;
+
+    await click('[data-test-skill-menu][data-test-pill-menu-button]');
+    await waitFor(
+      '[data-test-skill-menu] [data-test-pill-menu-add-markdown-button]',
+    );
+    await click(
+      '[data-test-skill-menu] [data-test-pill-menu-add-markdown-button]',
+    );
+
+    // The file chooser is scoped to skill markdown files.
+    await waitFor('[data-test-choose-file-modal]');
+    await waitFor('[data-test-file="realm-sync-skill.md"]');
+    await click('[data-test-file="realm-sync-skill.md"]');
+    await click('[data-test-choose-file-modal-add-button]');
+
+    await waitUntil(
+      () =>
+        Boolean(
+          getRoomState(
+            roomId,
+            APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+          )?.enabledSkillCards?.some((card: any) => card.sourceUrl === skillId),
+        ),
+      {
+        timeout: 5000,
+        timeoutMessage: `timed out waiting for ${skillId} to be enabled`,
+      },
+    );
+
+    let skillsState = getRoomState(roomId, APP_BOXEL_ROOM_SKILLS_EVENT_TYPE);
+    assert.ok(
+      skillsState.toolDefinitions?.some((c: any) =>
+        c.sourceUrl?.includes('placeholder-command'),
+      ),
+      "the markdown skill's frontmatter command is uploaded as a command definition",
+    );
+
+    await click('[data-test-skill-menu]');
+    assert
+      .dom(`[data-test-skill-toggle="${skillId}-on"]`)
+      .exists('the attached skill markdown is enabled in the menu');
+    assert
+      .dom('[data-test-skill-menu]')
+      .containsText(
+        'Realm Sync Skill',
+        'the pill is titled from the markdown frontmatter name',
+      );
+  });
+
+  test('canceling the skill-file chooser re-enables the add-markdown button', async function (assert) {
+    await renderAiAssistantPanel();
+
+    await click('[data-test-skill-menu][data-test-pill-menu-button]');
+    await waitFor(
+      '[data-test-skill-menu] [data-test-pill-menu-add-markdown-button]',
+    );
+    await click(
+      '[data-test-skill-menu] [data-test-pill-menu-add-markdown-button]',
+    );
+
+    await waitFor('[data-test-choose-file-modal]');
+    await click('[data-test-choose-file-modal-cancel-button]');
+
+    // Canceling settles the chooser promise, so the trigger button returns to
+    // its enabled state. A chooser that left its deferred unsettled would hang
+    // the attach task and leave this button stuck disabled.
+    await waitUntil(
+      () => !document.querySelector('[data-test-choose-file-modal]'),
+    );
+    assert
+      .dom('[data-test-skill-menu] [data-test-pill-menu-add-markdown-button]')
+      .isNotDisabled('the add-markdown button is re-enabled after canceling');
+
+    // The chooser can be reopened after canceling.
+    await click(
+      '[data-test-skill-menu] [data-test-pill-menu-add-markdown-button]',
+    );
+    await waitFor('[data-test-choose-file-modal]');
+    assert
+      .dom('[data-test-choose-file-modal]')
+      .exists('the chooser reopens after canceling');
+  });
+
   test('skill picker excludes already-enabled skills', async function (assert) {
     await renderAiAssistantPanel();
     let enabledSkillId = `${testRealmURL}Skill/example`;
@@ -418,13 +528,13 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     await waitFor('[data-test-skill-menu] [data-test-pill-menu-add-button]');
     await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
     await fillIn('[data-test-search-field]', 'Exanple');
-    await waitFor(`[data-test-card-catalog-item="${availableSkillId}"]`);
+    await waitFor(`[data-test-item-button="${availableSkillId}"]`);
 
     assert
-      .dom(`[data-test-card-catalog-item="${enabledSkillId}"]`)
+      .dom(`[data-test-item-button="${enabledSkillId}"]`)
       .doesNotExist('already-enabled skill is excluded from the picker');
     assert
-      .dom(`[data-test-card-catalog-item="${availableSkillId}"]`)
+      .dom(`[data-test-item-button="${availableSkillId}"]`)
       .exists('a different skill remains available in the picker');
   });
 
@@ -450,6 +560,27 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
       operatorModeStateService.getOpenCardIds().includes(skillId),
       'skill card is opened in operator mode',
     );
+  });
+
+  test('skill pill menu opens the skill markdown file', async function (assert) {
+    await renderAiAssistantPanel();
+
+    let skillId = `${testRealmURL}realm-sync-skill.md`;
+    await addSkillToAiAssistant(skillId);
+
+    assert
+      .dom(`[data-test-stack-card="${skillId}"]`)
+      .doesNotExist('skill file is not open before using the menu');
+
+    await click('[data-test-skill-menu]');
+    await click(`[data-test-skill-options-button="${skillId}"]`);
+    await waitFor('[data-test-boxel-menu-item-text="Open Skill File"]');
+    await click('[data-test-boxel-menu-item-text="Open Skill File"]');
+
+    await waitFor(`[data-test-stack-card="${skillId}"]`);
+    assert
+      .dom(`[data-test-stack-card="${skillId}"]`)
+      .exists('skill markdown file is opened as a stack item');
   });
 
   test('skill pill menu opens the skill card while in code mode', async function (assert) {
@@ -524,18 +655,18 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
 
     // Verify both rooms have command definitions
     assert.ok(
-      room1StateSkillsJson.commandDefinitions?.length > 0,
+      room1StateSkillsJson.toolDefinitions?.length > 0,
       'first room has command definitions',
     );
     assert.ok(
-      room2StateSkillsJson.commandDefinitions?.length > 0,
+      room2StateSkillsJson.toolDefinitions?.length > 0,
       'second room has command definitions',
     );
 
     // Verify the command definitions are the same between rooms when content hasn't changed
     assert.deepEqual(
-      room1StateSkillsJson.commandDefinitions,
-      room2StateSkillsJson.commandDefinitions,
+      room1StateSkillsJson.toolDefinitions,
+      room2StateSkillsJson.toolDefinitions,
       "command definitions are the same between rooms when content hasn't changed",
     );
 
@@ -581,28 +712,28 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
 
     // Verify the command definitions are different after content change
     assert.notDeepEqual(
-      room2StateSkillsJson.commandDefinitions,
-      room3StateSkillsJson.commandDefinitions,
+      room2StateSkillsJson.toolDefinitions,
+      room3StateSkillsJson.toolDefinitions,
       'command definitions are different after content change',
     );
 
     // Verify the command definitions have different URLs after content change
-    const room2CommandUrls = room2StateSkillsJson.commandDefinitions.map(
+    const room2CommandUrls = room2StateSkillsJson.toolDefinitions.map(
       (cmd: any) => cmd.url,
     );
-    const room3CommandUrls = room3StateSkillsJson.commandDefinitions.map(
+    const room3CommandUrls = room3StateSkillsJson.toolDefinitions.map(
       (cmd: any) => cmd.url,
     );
-    const room2CommandSourceUrls = room2StateSkillsJson.commandDefinitions.map(
+    const room2CommandSourceUrls = room2StateSkillsJson.toolDefinitions.map(
       (cmd: any) => cmd.sourceUrl,
     );
-    const room3CommandSourceUrls = room3StateSkillsJson.commandDefinitions.map(
+    const room3CommandSourceUrls = room3StateSkillsJson.toolDefinitions.map(
       (cmd: any) => cmd.sourceUrl,
     );
-    const room2CommandHashes = room2StateSkillsJson.commandDefinitions.map(
+    const room2CommandHashes = room2StateSkillsJson.toolDefinitions.map(
       (cmd: any) => cmd.contentHash,
     );
-    const room3CommandHashes = room3StateSkillsJson.commandDefinitions.map(
+    const room3CommandHashes = room3StateSkillsJson.toolDefinitions.map(
       (cmd: any) => cmd.contentHash,
     );
     assert.notDeepEqual(
@@ -680,30 +811,28 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
 
     // Verify the command definitions are different after content change
     assert.notDeepEqual(
-      room1State1SkillsJson.commandDefinitions,
-      room1State2SkillsJson.commandDefinitions,
+      room1State1SkillsJson.toolDefinitions,
+      room1State2SkillsJson.toolDefinitions,
       'command definitions are different after content change',
     );
 
     // Verify the command definitions have different URLs after content change
-    const room1State1CommandUrls = room1State1SkillsJson.commandDefinitions.map(
+    const room1State1CommandUrls = room1State1SkillsJson.toolDefinitions.map(
       (cmd: any) => cmd.url,
     );
-    const room1State2CommandUrls = room1State2SkillsJson.commandDefinitions.map(
+    const room1State2CommandUrls = room1State2SkillsJson.toolDefinitions.map(
       (cmd: any) => cmd.url,
     );
     const room1State1CommandSourceUrls =
-      room1State1SkillsJson.commandDefinitions.map((cmd: any) => cmd.sourceUrl);
+      room1State1SkillsJson.toolDefinitions.map((cmd: any) => cmd.sourceUrl);
     const room1State2CommandSourceUrls =
-      room1State2SkillsJson.commandDefinitions.map((cmd: any) => cmd.sourceUrl);
-    const room1State1CommandHashes =
-      room1State1SkillsJson.commandDefinitions.map(
-        (cmd: any) => cmd.contentHash,
-      );
-    const room1State2CommandHashes =
-      room1State2SkillsJson.commandDefinitions.map(
-        (cmd: any) => cmd.contentHash,
-      );
+      room1State2SkillsJson.toolDefinitions.map((cmd: any) => cmd.sourceUrl);
+    const room1State1CommandHashes = room1State1SkillsJson.toolDefinitions.map(
+      (cmd: any) => cmd.contentHash,
+    );
+    const room1State2CommandHashes = room1State2SkillsJson.toolDefinitions.map(
+      (cmd: any) => cmd.contentHash,
+    );
     assert.notDeepEqual(
       room1State1CommandUrls,
       room1State2CommandUrls,
@@ -760,10 +889,10 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     // different serialization. sourceUrl is the stable identifier.
     assert.strictEqual(
       finalRoomStateSkillsJson.enabledSkillCards.find(
-        (c: FileDef) => c.sourceUrl === envSkillId,
+        (c: FileDef) => c.sourceUrl === skillsIndexId,
       ).sourceUrl,
       initialRoomStateSkillsJson.enabledSkillCards.find(
-        (c: FileDef) => c.sourceUrl === envSkillId,
+        (c: FileDef) => c.sourceUrl === skillsIndexId,
       ).sourceUrl,
       'unchanged skill card is still present',
     );
@@ -820,10 +949,10 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: '721c8c78-d8c1-4cc1-a7e9-51d2d3143e4d',
-          name: 'SearchCardsByTypeAndTitleCommand_a959',
+          name: exampleSkillToolName,
           arguments: JSON.stringify({
             attributes: {
               cardDescription: 'Searching for card',
@@ -838,8 +967,8 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     });
     await settled();
     // Click on the apply button, skill card will be updated since it has changed
-    await waitFor('[data-test-message-idx="0"] [data-test-command-apply]');
-    await click('[data-test-message-idx="0"] [data-test-command-apply]');
+    await waitFor('[data-test-message-idx="0"] [data-test-tool-call-apply]');
+    await click('[data-test-message-idx="0"] [data-test-tool-call-apply]');
 
     const finalRoomStateSkillsJson = getRoomState(
       roomId,
@@ -855,10 +984,10 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     // different serialization. sourceUrl is the stable identifier.
     assert.strictEqual(
       finalRoomStateSkillsJson.enabledSkillCards.find(
-        (c: FileDef) => c.sourceUrl === envSkillId,
+        (c: FileDef) => c.sourceUrl === skillsIndexId,
       ).sourceUrl,
       initialRoomStateSkillsJson.enabledSkillCards.find(
-        (c: FileDef) => c.sourceUrl === envSkillId,
+        (c: FileDef) => c.sourceUrl === skillsIndexId,
       ).sourceUrl,
       'unchanged skill card is still present',
     );
@@ -943,10 +1072,10 @@ ${REPLACE_MARKER}
     // different serialization. sourceUrl is the stable identifier.
     assert.strictEqual(
       finalRoomStateSkillsJson.enabledSkillCards.find(
-        (c: FileDef) => c.sourceUrl === envSkillId,
+        (c: FileDef) => c.sourceUrl === skillsIndexId,
       ).sourceUrl,
       initialRoomStateSkillsJson.enabledSkillCards.find(
-        (c: FileDef) => c.sourceUrl === envSkillId,
+        (c: FileDef) => c.sourceUrl === skillsIndexId,
       ).sourceUrl,
       'unchanged skill card is still present',
     );
@@ -1004,17 +1133,6 @@ ${REPLACE_MARKER}
     );
     await settled();
 
-    const afterCodeModeRoomStateSkillsJson = getRoomState(
-      roomId,
-      APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
-    );
-
-    assert.notDeepEqual(
-      afterCodeModeRoomStateSkillsJson,
-      initialRoomStateSkillsJson,
-      'room state has changed to reference new skill card events',
-    );
-
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Interact"]');
 
@@ -1022,8 +1140,11 @@ ${REPLACE_MARKER}
     await click('[data-test-send-message-btn]');
     await waitFor('[data-test-message-idx]');
 
+    // Editing the command source and moving between submodes leave the room's
+    // skills alone — the defaults do not vary by submode — so the state taken
+    // before the edit is still the pre-send baseline.
     let expectedCommandDefinitionCount =
-      afterCodeModeRoomStateSkillsJson.commandDefinitions?.length ?? 0;
+      initialRoomStateSkillsJson.toolDefinitions?.length ?? 0;
 
     await waitUntil(
       () => {
@@ -1031,12 +1152,31 @@ ${REPLACE_MARKER}
           roomId,
           APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
         );
-        let currentLength = skillsState?.commandDefinitions?.length ?? 0;
+        let currentLength = skillsState?.toolDefinitions?.length ?? 0;
         return currentLength === expectedCommandDefinitionCount;
       },
       {
         timeoutMessage:
           'timed out waiting for command definitions to settle to expected count',
+      },
+    );
+
+    // The count is unchanged by an in-place definition update, so also wait
+    // for the definitions content itself to change before comparing.
+    await waitUntil(
+      () => {
+        let skillsState = getRoomState(
+          roomId,
+          APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+        );
+        return (
+          JSON.stringify(skillsState?.toolDefinitions) !==
+          JSON.stringify(initialRoomStateSkillsJson.toolDefinitions)
+        );
+      },
+      {
+        timeoutMessage:
+          'timed out waiting for command definitions content to update',
       },
     );
 
@@ -1046,12 +1186,12 @@ ${REPLACE_MARKER}
     );
 
     if (
-      (finalRoomStateSkillsJson.commandDefinitions?.length ?? 0) !==
+      (finalRoomStateSkillsJson.toolDefinitions?.length ?? 0) !==
       expectedCommandDefinitionCount
     ) {
       console.log(
-        `command definition count mismatch: afterCodeModeRoomStateSkills:\n${JSON.stringify(
-          afterCodeModeRoomStateSkillsJson,
+        `command definition count mismatch: initialRoomStateSkills:\n${JSON.stringify(
+          initialRoomStateSkillsJson,
           null,
           2,
         )}\nfinalRoomStateSkillsJson:\n${JSON.stringify(
@@ -1066,45 +1206,43 @@ ${REPLACE_MARKER}
     // to async linksTo relationship loading. Compare sourceUrls instead.
     assert.deepEqual(
       finalRoomStateSkillsJson.enabledSkillCards.map((c: any) => c.sourceUrl),
-      afterCodeModeRoomStateSkillsJson.enabledSkillCards.map(
-        (c: any) => c.sourceUrl,
-      ),
+      initialRoomStateSkillsJson.enabledSkillCards.map((c: any) => c.sourceUrl),
       'enabled skill cards are the same',
     );
     assert.deepEqual(
       finalRoomStateSkillsJson.disabledSkillCards.map((c: any) => c.sourceUrl),
-      afterCodeModeRoomStateSkillsJson.disabledSkillCards.map(
+      initialRoomStateSkillsJson.disabledSkillCards.map(
         (c: any) => c.sourceUrl,
       ),
       'disabled skill cards are the same',
     );
     assert.notDeepEqual(
-      finalRoomStateSkillsJson.commandDefinitions,
-      afterCodeModeRoomStateSkillsJson.commandDefinitions,
+      finalRoomStateSkillsJson.toolDefinitions,
+      initialRoomStateSkillsJson.toolDefinitions,
       'command definitions are different',
     );
 
     let baselineUnchangedCommandDefinitions =
-      afterCodeModeRoomStateSkillsJson.commandDefinitions.filter(
+      initialRoomStateSkillsJson.toolDefinitions.filter(
         (cmd: any) =>
           cmd.sourceUrl !==
           `${testRealmURL}search-and-open-card-command/default`,
       );
     let baselineChangedCommandDefinitions =
-      afterCodeModeRoomStateSkillsJson.commandDefinitions.filter(
+      initialRoomStateSkillsJson.toolDefinitions.filter(
         (cmd: any) =>
           cmd.sourceUrl ===
           `${testRealmURL}search-and-open-card-command/default`,
       );
 
     let finalUnchangedCommandDefinitions =
-      finalRoomStateSkillsJson.commandDefinitions.filter(
+      finalRoomStateSkillsJson.toolDefinitions.filter(
         (cmd: any) =>
           cmd.sourceUrl !==
           `${testRealmURL}search-and-open-card-command/default`,
       );
     let finalChangedCommandDefinitions =
-      finalRoomStateSkillsJson.commandDefinitions.filter(
+      finalRoomStateSkillsJson.toolDefinitions.filter(
         (cmd: any) =>
           cmd.sourceUrl ===
           `${testRealmURL}search-and-open-card-command/default`,
@@ -1133,14 +1271,14 @@ ${REPLACE_MARKER}
     );
 
     assert.strictEqual(
-      initialRoomStateSkillsJson.commandDefinitions.filter((cmd: any) =>
+      initialRoomStateSkillsJson.toolDefinitions.filter((cmd: any) =>
         cmd.name.includes('search-and-open-card-command'),
       ).length,
       1,
       'search-and-open-card-command is present',
     );
     assert.strictEqual(
-      initialRoomStateSkillsJson.commandDefinitions.filter((cmd: any) =>
+      initialRoomStateSkillsJson.toolDefinitions.filter((cmd: any) =>
         cmd.name.includes('placeholder'),
       ).length,
       0,
@@ -1154,14 +1292,14 @@ ${REPLACE_MARKER}
       APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
     );
     assert.strictEqual(
-      finalRoomStateSkillsJson.commandDefinitions.filter((cmd: any) =>
+      finalRoomStateSkillsJson.toolDefinitions.filter((cmd: any) =>
         cmd.name.includes('search-and-open-card-command'),
       ).length,
       1,
       'search-and-open-card-command is still present',
     );
     assert.strictEqual(
-      finalRoomStateSkillsJson.commandDefinitions.filter((cmd: any) =>
+      finalRoomStateSkillsJson.toolDefinitions.filter((cmd: any) =>
         cmd.name.includes('placeholder'),
       ).length,
       1,

@@ -4,10 +4,10 @@ import {
   field,
   Component,
   CardDef,
-} from 'https://cardstack.com/base/card-api';
-import BooleanField from 'https://cardstack.com/base/boolean';
-import StringField from 'https://cardstack.com/base/string';
-import AddressField from 'https://cardstack.com/base/address';
+} from '@cardstack/base/card-api';
+import BooleanField from '@cardstack/base/boolean';
+import StringField from '@cardstack/base/string';
+import AddressField from '@cardstack/base/address';
 import { Pet } from './pet';
 import { GridContainer } from '@cardstack/boxel-ui/components';
 import { Trips } from './trips';
@@ -127,8 +127,8 @@ export class Person extends CardDef {
   @field isCool = contains(BooleanField);
   @field isHuman = contains(BooleanField);
   @field address = contains(AddressField);
-  @field pet = linksTo(Pet);
-  @field trips = contains(Trips);
+  @field pet = linksTo(Pet, { searchable: true });
+  @field trips = contains(Trips, { searchable: 'countriesVisited' });
   @field cardTitle = contains(StringField, {
     computeVia: function (this: Person) {
       return [this.firstName, this.lastName].filter(Boolean).join(' ');

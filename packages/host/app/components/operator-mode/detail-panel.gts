@@ -9,7 +9,7 @@ import Component from '@glimmer/component';
 import Package from '@cardstack/boxel-icons/package';
 import { use, resource } from 'ember-resources';
 
-import startCase from 'lodash/startCase';
+import { startCase } from 'lodash-es';
 
 import { TrackedObject } from 'tracked-built-ins';
 
@@ -42,23 +42,23 @@ import {
   type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 
-import OpenCreateListingModalCommand from '@cardstack/host/commands/open-create-listing-modal';
 import { getCardType } from '@cardstack/host/resources/card-type';
 import type { Ready } from '@cardstack/host/resources/file';
 
 import {
   type ModuleDeclaration,
   isCardOrFieldDeclaration,
-  isCommandDeclaration,
+  isToolDeclaration,
+  isComponentDeclaration,
   isReexportCardOrField,
 } from '@cardstack/host/resources/module-contents';
 
 import { getResolvedCodeRefFromType } from '@cardstack/host/services/card-type-service';
-import type CommandService from '@cardstack/host/services/command-service';
+import type NetworkService from '@cardstack/host/services/network';
 import type RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
-
-import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
+import type ToolService from '@cardstack/host/services/tool-service';
+import OpenCreateListingModalTool from '@cardstack/host/tools/open-create-listing-modal';
 
 import { lastModifiedDate } from '../../resources/last-modified-date';
 
@@ -83,6 +83,7 @@ import type { SelectorItem } from './detail-panel-selector';
 import type { ModuleAnalysis } from '../../resources/module-contents';
 
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
+import type { CardDef, BaseDef } from '@cardstack/base/card-api';
 
 interface Signature {
   Element: HTMLElement;
@@ -111,9 +112,10 @@ interface Signature {
 }
 
 export default class DetailPanel extends Component<Signature> {
+  @service declare private network: NetworkService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private store: StoreService;
 
   private lastModified = lastModifiedDate(this, () => this.args.readyFile);
@@ -209,11 +211,19 @@ export default class DetailPanel extends Component<Signature> {
     );
   }
 
-  private get showCommandPanel() {
+  private get showToolPanel() {
     return (
       this.isModule &&
       this.args.selectedDeclaration &&
-      isCommandDeclaration(this.args.selectedDeclaration)
+      isToolDeclaration(this.args.selectedDeclaration)
+    );
+  }
+
+  private get showComponentPanel() {
+    return (
+      this.isModule &&
+      this.args.selectedDeclaration &&
+      isComponentDeclaration(this.args.selectedDeclaration)
     );
   }
 
@@ -237,6 +247,23 @@ export default class DetailPanel extends Component<Signature> {
   }
 
   private get definitionActions() {
+    // A component declaration isn't instantiable or inheritable like a card def,
+    // so the only definition action it supports is being published as a listing.
+    if (
+      this.args.selectedDeclaration &&
+      isComponentDeclaration(this.args.selectedDeclaration)
+    ) {
+      return this.realm.canWrite(this.args.readyFile.url) &&
+        this.args.selectedDeclaration.exportName
+        ? [
+            {
+              label: 'Create Listing',
+              icon: Package,
+              handler: this.createListing,
+            },
+          ]
+        : [];
+    }
     if (
       this.args.selectedDeclaration &&
       !isCardOrFieldDeclaration(this.args.selectedDeclaration)
@@ -427,8 +454,8 @@ export default class DetailPanel extends Component<Signature> {
   }
 
   @action private async createListing() {
-    const command = new OpenCreateListingModalCommand(
-      this.commandService.commandContext,
+    const command = new OpenCreateListingModalTool(
+      this.toolService.toolContext,
     );
     const targetRealm = this.operatorModeStateService.realmURL;
     if (!targetRealm) {
@@ -446,7 +473,19 @@ export default class DetailPanel extends Component<Signature> {
       }
       await command.execute({ openCardIds, codeRef, targetRealm });
     } else {
-      const codeRef: ResolvedCodeRef = this.selectedDeclarationAsCodeRef;
+      let codeRef: ResolvedCodeRef = this.selectedDeclarationAsCodeRef;
+      // A default-exported component surfaces with exportName 'default'; use the
+      // class's local name so the listing and its spec read as the component
+      // (e.g. "SubmissionTestComponent") rather than "default".
+      let decl = this.args.selectedDeclaration;
+      if (
+        decl &&
+        isComponentDeclaration(decl) &&
+        codeRef.name === 'default' &&
+        decl.localName
+      ) {
+        codeRef = { ...codeRef, name: decl.localName };
+      }
       let openCardIds: string[] = this.args.cardInstance?.id
         ? [this.args.cardInstance.id]
         : [];
@@ -497,7 +536,10 @@ export default class DetailPanel extends Component<Signature> {
   }
 
   private get isRealmIndexCardInstance() {
-    return isRealmIndexCard(this.args.cardInstance);
+    return isRealmIndexCard(
+      this.args.cardInstance,
+      this.network.virtualNetwork,
+    );
   }
 
   private get isEmptyFile() {
@@ -748,16 +790,34 @@ export default class DetailPanel extends Component<Signature> {
             {{/let}}
           {{/if}}
         </PanelSection>
-      {{else if this.showCommandPanel}}
+      {{else if this.showToolPanel}}
         <PanelSection as |PanelHeader|>
           <PanelHeader
-            aria-label='Command Panel Header'
-            data-test-command-panel-header
+            aria-label='Tool Panel Header'
+            data-test-tool-panel-header
           >
-            Command
+            Tool
           </PanelHeader>
           <ModuleDefinitionContainer
-            @title='Command'
+            @title='Tool'
+            @fileURL={{@readyFile.url}}
+            @name={{this.selectedDeclarationName}}
+            @fileExtension={{this.fileExtension}}
+            @isActive={{true}}
+            @actions={{this.definitionActions}}
+            @infoText={{this.lastModified.value}}
+          />
+        </PanelSection>
+      {{else if this.showComponentPanel}}
+        <PanelSection as |PanelHeader|>
+          <PanelHeader
+            aria-label='Component Panel Header'
+            data-test-component-panel-header
+          >
+            Component
+          </PanelHeader>
+          <ModuleDefinitionContainer
+            @title='Component'
             @fileURL={{@readyFile.url}}
             @name={{this.selectedDeclarationName}}
             @fileExtension={{this.fileExtension}}

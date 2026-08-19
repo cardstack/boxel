@@ -2,7 +2,7 @@ import {
   ensureTrailingSlash,
   type RealmPermissions,
 } from '@cardstack/runtime-common';
-import { createJWT } from '../jwt';
+import { createJWT } from '../jwt.ts';
 
 export function buildCreatePrerenderAuth(
   secretSeed: string,

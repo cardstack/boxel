@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <title>Boxel UI</title>
+    <meta name="description" content="" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <!-- Declares the boxel-ui cascade layer order. It lives here, ahead of
+         every stylesheet, because a layer's first appearance is what fixes its
+         precedence and bundlers prune this statement out of global.css. Mirrors
+         @cardstack/boxel-ui/styles/global.css — keep the two in sync. -->
+    <style>
+      @layer vendor, reset, utilities, boxelComponentL1, boxelComponentL2,
+        boxelComponentL3, boxelComponentL4;
+    </style>
+
+    {{content-for "head"}}
+
+    <link
+      integrity=""
+      rel="stylesheet"
+      crossorigin="anonymous"
+      href="/@embroider/virtual/vendor.css"
+    />
+    <link
+      integrity=""
+      rel="stylesheet"
+      crossorigin="anonymous"
+      href="/@embroider/virtual/app.css"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Antic&family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Fira+Code:wght@300..700&family=Geist:wght@100..900&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Lora:ital,wght@0,400..700;1,400..700&family=Oxanium:wght@200..800&family=Poppins:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&family=Roboto+Mono:ital,wght@0,100..700;1,100..700&family=Source+Code+Pro:ital,wght@0,200..900;1,200..900&family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap"
+      rel="stylesheet"
+    />
+    {{content-for "head-footer"}}
+  </head>
+  <body>
+    <div id="ember-basic-dropdown-wormhole"></div>
+    {{content-for "body"}}
+
+    <script src="/@embroider/virtual/vendor.js"></script>
+    <script type="module">
+      import Application from './app/app';
+      import environment from './app/config/environment';
+
+      Application.create(environment.APP);
+    </script>
+
+    {{content-for "body-footer"}}
+  </body>
+</html>

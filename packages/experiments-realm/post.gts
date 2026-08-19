@@ -5,9 +5,9 @@ import {
   Component,
   CardDef,
   FieldDef,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import TextAreaField from 'https://cardstack.com/base/text-area';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import TextAreaField from '@cardstack/base/text-area';
 import { Person } from './person';
 import FileTextIcon from '@cardstack/boxel-icons/file-text';
 
@@ -38,7 +38,7 @@ class VeryBasicField extends BasicField {
 export class Post extends CardDef {
   static displayName = 'Post';
   static icon = FileTextIcon;
-  @field author = linksTo(Person);
+  @field author = linksTo(Person, { searchable: ['pet', 'trips.countriesVisited'] });
   @field cardTitle = contains(StringField);
   @field body = contains(TextAreaField);
   @field titleRef = contains(VeryBasicField);

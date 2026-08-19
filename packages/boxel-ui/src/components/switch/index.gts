@@ -1,0 +1,100 @@
+import { on } from '@ember/modifier';
+import Component from '@glimmer/component';
+
+import { cn } from '../../helpers.gts';
+
+interface SwitchSiganture {
+  Args: SwitchArgs;
+  Element: HTMLLabelElement;
+}
+interface SwitchArgs {
+  disabled?: boolean;
+  isEnabled: boolean;
+  label: string;
+  onChange: () => void;
+}
+
+// eslint-disable-next-line ember/no-empty-glimmer-component-classes
+export default class Switch extends Component<SwitchSiganture> {
+  <template>
+    <label
+      class={{cn 'switch' checked=@isEnabled disabled=@disabled}}
+      data-test-switch-checked={{if @isEnabled 'on' 'off'}}
+      ...attributes
+    >
+      <span class='boxel-sr-only'>{{@label}}</span>
+      <input
+        {{on 'click' @onChange}}
+        {{on 'keypress' @onChange}}
+        class='switch-input'
+        type='checkbox'
+        checked={{@isEnabled}}
+        disabled={{@disabled}}
+        aria-checked={{@isEnabled}}
+        role='switch'
+      />
+    </label>
+
+    <style scoped>
+      @layer boxelComponentL1 {
+        .switch {
+          --_switch-bg-color: var(--boxel-switch-background, var(--input));
+          --_switch-active-color: var(
+            --boxel-switch-active-background,
+            var(--success, var(--primary))
+          );
+          --_switch-thumb-color: var(--boxel-switch-thumb, var(--background));
+
+          width: var(--boxel-switch-width, 2.125rem);
+          height: var(--boxel-switch-height, 1.25rem);
+          border-radius: 1.25rem;
+          padding: 1px;
+          display: inline-flex;
+          align-items: center;
+          transition: background-color 0.1s ease-in;
+          position: relative;
+          background-color: var(--_switch-bg-color);
+          color: var(--boxel-switch-foreground, var(--foreground));
+          border: 1px solid var(--border);
+          box-shadow: var(--shadow-xs);
+        }
+
+        input[type='checkbox'] {
+          appearance: none;
+        }
+
+        .switch-input {
+          margin: 0;
+          height: 100%;
+          aspect-ratio: 1;
+          background-color: var(--_switch-thumb-color);
+          border-radius: 50%;
+          margin-left: 0;
+          transition: margin-left 0.1s ease-in;
+        }
+
+        .switch.checked {
+          background-color: var(--_switch-active-color);
+        }
+
+        .switch.checked .switch-input {
+          margin-left: 49%;
+        }
+
+        .switch:hover,
+        .switch-input:hover {
+          cursor: pointer;
+        }
+
+        .switch.disabled {
+          opacity: 0.5;
+        }
+
+        .switch.disabled,
+        .switch.disabled .switch-input {
+          cursor: default;
+        }
+      }
+    </style>
+  </template>
+}

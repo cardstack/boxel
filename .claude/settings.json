@@ -1,0 +1,47 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm lint*)",
+      "Bash(npx eslint *)",
+      "Bash(aws --profile claude-staging *)",
+      "Bash(pnpm exec eslint *)",
+      "Bash(gh search *)",
+      "Bash(gh run download *)",
+      "Bash(mise tasks *)",
+      "Bash(npx tsc *)",
+      "Bash(node --check *)",
+      "Bash(npx vitest run *)",
+      "Bash(pnpm exec prettier *)",
+      "mcp__Linear__get_issue",
+      "mcp__Linear__list_comments",
+      "mcp__Linear__get_project",
+      "mcp__Linear__get_user",
+      "mcp__Linear__list_projects",
+      "mcp__Linear__list_issue_statuses",
+      "mcp__Linear__list_issues",
+      "mcp__github__pull_request_read",
+      "mcp__github__list_pull_requests",
+      "mcp__github__get_file_contents",
+      "mcp__github__search_code",
+      "mcp__github__list_commits",
+      "mcp__github__get_commit",
+      "mcp__github__get_me",
+      "mcp__github__actions_list",
+      "mcp__github__actions_get",
+      "mcp__github__get_job_logs",
+      "mcp__chrome-devtools__take_screenshot"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

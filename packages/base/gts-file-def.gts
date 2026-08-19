@@ -6,4 +6,11 @@ export class GtsFileDef extends TsFileDef {
   static validExtensions = new Set(['.gts']);
   // CS-10787: identify GTS content to markdown consumers.
   static markdownLanguage = 'gts';
+
+  // Same shared shells, code renderer, and profile axes as TsFileDef; only the
+  // labeled kind differs. `highlightTs` already marks up the `<template>` tags
+  // GTS adds, so the inherited CodePreview renders a `.gts` file correctly.
+  static fileKind = 'Glimmer TS';
 }
+
+export default GtsFileDef;

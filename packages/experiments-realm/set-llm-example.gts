@@ -1,10 +1,10 @@
-import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+import { CardDef, Component } from '@cardstack/base/card-api';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
-import SetActiveLLMCommand from '@cardstack/boxel-host/commands/set-active-llm';
-import CreateAiAssistantRoomCommand from '@cardstack/boxel-host/commands/create-ai-assistant-room';
-import OpenAiAssistantRoomCommand from '@cardstack/boxel-host/commands/open-ai-assistant-room';
+import SetActiveLLMTool from '@cardstack/boxel-host/commands/set-active-llm';
+import CreateAiAssistantRoomTool from '@cardstack/boxel-host/commands/create-ai-assistant-room';
+import OpenAiAssistantRoomTool from '@cardstack/boxel-host/commands/open-ai-assistant-room';
 import { Button } from '@cardstack/boxel-ui/components';
 
 class IsolatedTemplate extends Component<typeof SetLlmExample> {
@@ -13,18 +13,18 @@ class IsolatedTemplate extends Component<typeof SetLlmExample> {
 
   @action
   async createRoom() {
-    let commandContext = this.args.context?.commandContext;
-    if (!commandContext) return;
+    let toolContext = this.args.context?.toolContext;
+    if (!toolContext) return;
 
-    let createAIAssistantRoomCommand = new CreateAiAssistantRoomCommand(
-      commandContext,
+    let createAIAssistantRoomCommand = new CreateAiAssistantRoomTool(
+      toolContext,
     );
     let { roomId } = await createAIAssistantRoomCommand.execute({
       name: `Chat with ${this.modelId}`,
     });
 
-    let openAiAssistantRoomCommand = new OpenAiAssistantRoomCommand(
-      commandContext,
+    let openAiAssistantRoomCommand = new OpenAiAssistantRoomTool(
+      toolContext,
     );
     await openAiAssistantRoomCommand.execute({
       roomId,
@@ -37,10 +37,10 @@ class IsolatedTemplate extends Component<typeof SetLlmExample> {
   async setLLM() {
     if (!this.currentRoomId) return;
 
-    let commandContext = this.args.context?.commandContext;
-    if (!commandContext) return;
+    let toolContext = this.args.context?.toolContext;
+    if (!toolContext) return;
 
-    let setActiveLLMCommand = new SetActiveLLMCommand(commandContext);
+    let setActiveLLMCommand = new SetActiveLLMTool(toolContext);
 
     await setActiveLLMCommand.execute({
       model: this.modelId,

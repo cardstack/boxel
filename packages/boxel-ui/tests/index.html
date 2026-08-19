@@ -1,0 +1,37 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Boxel UI Tests</title>
+    <meta name="description" content="" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <!-- Declares the boxel-ui cascade layer order. It lives here, ahead of
+         every stylesheet, because a layer's first appearance is what fixes its
+         precedence and bundlers prune this statement out of global.css. Mirrors
+         ../src/styles/global.css — keep the two in sync. -->
+    <style>
+      @layer vendor, reset, utilities, boxelComponentL1, boxelComponentL2,
+        boxelComponentL3, boxelComponentL4;
+    </style>
+  </head>
+  <body>
+    <div id="qunit"></div>
+    <div id="qunit-fixture">
+      <div id="ember-testing-container">
+        <div id="ember-testing"></div>
+      </div>
+    </div>
+
+    <script src="/testem.js" integrity="" data-embroider-ignore></script>
+    <script type="module">
+      import 'ember-testing';
+    </script>
+
+    <script type="module">
+      import { start } from './test-helper.js';
+      import.meta.glob('./**/*.{js,ts,gjs,gts}', { eager: true });
+      start();
+    </script>
+  </body>
+</html>

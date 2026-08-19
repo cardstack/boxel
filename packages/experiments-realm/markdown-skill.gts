@@ -1,13 +1,13 @@
-import { contains, field, linksTo } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import { MarkdownDef } from 'https://cardstack.com/base/markdown-file-def';
-import { Skill } from 'https://cardstack.com/base/skill';
+import { contains, field, linksTo } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import MarkdownField from '@cardstack/base/markdown';
+import { MarkdownDef } from '@cardstack/base/markdown-file-def';
+import { Skill } from '@cardstack/base/skill';
 
 export class MarkdownSkill extends Skill {
   static displayName = 'Markdown Skill';
 
-  @field instructionsSource = linksTo(MarkdownDef);
+  @field instructionsSource = linksTo(MarkdownDef, { searchable: true });
   @field instructions = contains(MarkdownField, {
     computeVia: function (this: MarkdownSkill) {
       return this.instructionsSource?.content;

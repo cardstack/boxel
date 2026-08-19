@@ -1,7 +1,11 @@
 import type { Command } from 'commander';
-import { getProfileManager, type ProfileManager } from '../lib/profile-manager';
-import { FG_GREEN, FG_RED, FG_CYAN, DIM, RESET } from '../lib/colors';
-import { cliLog } from '../lib/cli-log';
+import {
+  getProfileManager,
+  type ProfileManager,
+} from '../lib/profile-manager.ts';
+import { FG_GREEN, FG_RED, FG_CYAN, DIM, RESET } from '../lib/colors.ts';
+import { cliLog } from '../lib/cli-log.ts';
+import { resolveRealmIdentifier } from '../lib/resolve-realm-identifier.ts';
 
 export interface RunCommandResult {
   status: 'ready' | 'error' | 'unusable';
@@ -33,6 +37,12 @@ export async function runCommand(
       'No active profile. Run `boxel profile add` to create one.',
     );
   }
+
+  let resolvedRealm = resolveRealmIdentifier(realmUrl, { profileManager: pm });
+  if (!resolvedRealm.ok) {
+    return { status: 'error', error: resolvedRealm.error };
+  }
+  realmUrl = resolvedRealm.url;
 
   let realmServerUrl = active.profile.realmServerUrl.replace(/\/$/, '');
   let url = `${realmServerUrl}/_run-command`;

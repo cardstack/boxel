@@ -26,7 +26,6 @@ import {
   loadCardDef,
   identifyCard,
   specRef,
-  resolveCardReference,
   rri,
   type CodeRef,
   type RealmResourceIdentifier,
@@ -44,15 +43,16 @@ import {
   type FieldOfType,
 } from '@cardstack/host/services/card-type-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
+import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import type RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
 
-import type { BaseDef, FieldType } from 'https://cardstack.com/base/card-api';
-import type { Spec } from 'https://cardstack.com/base/spec';
-
 import { SelectedTypePill } from './create-file-modal';
+
+import type { BaseDef, FieldType } from '@cardstack/base/card-api';
+import type { Spec } from '@cardstack/base/spec';
 
 interface Signature {
   Args: {
@@ -75,6 +75,7 @@ export default class EditFieldModal extends Component<Signature> {
 
   @tracked fieldNameErrorMessage: string | undefined;
   @service declare loaderService: LoaderService;
+  @service declare private network: NetworkService;
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
   @service declare private store: StoreService;
@@ -129,7 +130,7 @@ export default class EditFieldModal extends Component<Signature> {
     // When adding a new field, we want to default to the base string card
     if (!field) {
       let ref = {
-        module: rri('https://cardstack.com/base/card-api'), // This seems fundamental enough to be hardcoded
+        module: rri('@cardstack/base/card-api'), // This seems fundamental enough to be hardcoded
         name: 'StringField',
       };
       this.isFieldDef = true;
@@ -196,8 +197,9 @@ export default class EditFieldModal extends Component<Signature> {
 
         // This transforms relative module paths, such as "../person", to absolute ones -
         // we need that absolute path to load realm info
-        this.fieldModuleURL = rri(
-          resolveCardReference(spec.ref.module, spec.id),
+        this.fieldModuleURL = this.network.virtualNetwork.resolveRRI(
+          spec.ref.module,
+          spec.id,
         );
       }
     }

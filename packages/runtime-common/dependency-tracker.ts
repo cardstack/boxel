@@ -1,4 +1,4 @@
-import { executableExtensions } from './index';
+import { executableExtensions } from './index.ts';
 
 export type RuntimeDependencyNodeKind = 'module' | 'instance' | 'file';
 export type RuntimeDependencyContextMode = 'query' | 'non-query';
@@ -60,12 +60,6 @@ function canonicalURL(url: string): string | undefined {
   return url;
 }
 
-function hasPathExtension(url: string): boolean {
-  let lastSlash = url.lastIndexOf('/');
-  let segment = lastSlash !== -1 ? url.slice(lastSlash + 1) : url;
-  return segment.length > 0 && segment.includes('.');
-}
-
 function normalizeModuleURL(url: string): string | undefined {
   let canonical = canonicalURL(url);
   if (!canonical) {
@@ -79,12 +73,22 @@ function normalizeModuleURL(url: string): string | undefined {
   return canonical;
 }
 
+// An instance dependency is recorded in the form the index carries it: the
+// instance's `.json` URL. The `.json` suffix — not "the last path segment has a
+// dot" — is what says a reference already has that form, because card ids can
+// legitimately contain dots (a `ModelConfiguration/claude-sonnet-4.6`
+// instance, a `hello.test` instance). Reading such a dot as an extension would
+// leave the dep at a URL no index row carries, so changing the instance would
+// never invalidate this consumer. Two conventions make the suffix sufficient on
+// its own: files are tracked through `trackFile`, so an instance reference here
+// is never a file path, and a card id never ends in `.json` — that suffix
+// belongs to the row, not to the id.
 function normalizeInstanceURL(url: string): string | undefined {
   let canonical = canonicalURL(url);
   if (!canonical) {
     return undefined;
   }
-  if (!hasPathExtension(canonical)) {
+  if (!canonical.endsWith('.json')) {
     return `${canonical}.json`;
   }
   return canonical;
@@ -124,6 +128,23 @@ function isPromiseLike<T = unknown>(value: unknown): value is Promise<T> {
   );
 }
 
+// Shared identity for "no active context" so a context-keyed cache can dedup
+// tracking that happens outside any withContext scope (the relationship walk a
+// template render drives). A fresh object literal each call would defeat that.
+const EMPTY_CONTEXT: RuntimeDependencyTrackingContext = Object.freeze({});
+
+// NUL separates the two parts of a composite cache key. It can't appear in a
+// node kind or a URL, so distinct (kind, rawURL) pairs never collide into the
+// same key.
+const CACHE_KEY_SEPARATOR = '\0';
+
+function normalizeCacheKey(
+  kind: RuntimeDependencyNodeKind,
+  rawURL: string,
+): string {
+  return `${kind}${CACHE_KEY_SEPARATOR}${rawURL}`;
+}
+
 export class RuntimeDependencyTracker {
   #sessionKey: string | undefined;
   #isActive = false;
@@ -131,12 +152,50 @@ export class RuntimeDependencyTracker {
   #nodes = new Map<string, NodeRecord>();
   #rootCandidates = new Set<string>();
 
-  // Short-circuit cache: repeated field reads under the same context call
-  // #track with the same (kind, rawURL, context) triple. Skipping those is
-  // safe because all downstream work (normalization, Set.add) is idempotent.
-  #lastTrackKind: RuntimeDependencyNodeKind | undefined;
-  #lastTrackRawURL: string | undefined;
-  #lastTrackContext: RuntimeDependencyTrackingContext | undefined;
+  // Normalization is a pure function of (kind, rawURL), and a render walks the
+  // same module/instance URLs across a large linked-card graph, so the
+  // string-canonicalization work dominates without a cache. Memoize it keyed by
+  // a string (never a URL object) so repeats collapse to a single Map lookup.
+  #normalizeCache = new Map<string, string | undefined>();
+
+  // Recording a dependency is idempotent, so once a (kind, rawURL) has been
+  // tracked under a given context it never needs to run again. A linksToMany of
+  // N same-typed cards otherwise re-tracks that type's entire module graph once
+  // per element — O(N) redundant canonicalization. This dedups only stack-top
+  // contexts: those frames are built by withContext() (or the shared frozen
+  // EMPTY_CONTEXT) and never mutated, so their identity soundly stands in for
+  // their fields. Caller-supplied explicit contexts are part of the public API
+  // and structurally mutable, so identity is NOT a safe key for them — they are
+  // never deduped (matching the previous short-circuit's `!explicitContext`
+  // guard). A WeakMap lets entries fall away with the contexts; reset alongside
+  // #nodes so a cleared node map never leaves a stale "already tracked" marker
+  // that would drop a real dependency.
+  #trackedByContext = new WeakMap<
+    RuntimeDependencyTrackingContext,
+    Set<string>
+  >();
+
+  // Walk-level dedup for module-graph traversals (see shouldTrackModuleGraph).
+  // Keyed by value — every context dimension that affects how a node is
+  // recorded — so it collapses repeats that the identity-keyed
+  // #trackedByContext cannot: explicit contexts (exempt from identity dedup)
+  // and fresh merged contexts built by each withContext scope. Cleared in
+  // reset() alongside #nodes so a cleared node map never inherits a stale
+  // "already walked" marker that would drop real dependencies.
+  #trackedModuleGraphs = new Set<string>();
+
+  // Per-relationship-target dedup. A linksTo/linksToMany getter calls the
+  // relationship-dependency walk (instance/file dep + the linked type's module
+  // graph) on EVERY read, and a dense graph re-reads the same targets
+  // combinatorially — so the per-call guard work (prototype/identity lookups
+  // ahead of #trackedModuleGraphs, and the explicit-context branch of #track,
+  // which is exempt from identity dedup and re-records every time) dominates
+  // aggregate renders. This probe collapses every repeat to one Set lookup.
+  // Keyed by value (everything #track/#recordNode derive from a context, plus
+  // the target id) so a skipped repeat is a provable no-op, the same as
+  // #trackedModuleGraphs. Cleared in reset() alongside #nodes so a cleared node
+  // map never inherits a stale marker that would drop a real dependency.
+  #trackedRelationships = new Set<string>();
 
   startSession({
     sessionKey,
@@ -157,14 +216,97 @@ export class RuntimeDependencyTracker {
     }
     this.#isActive = false;
     this.#contextStack = [];
-    this.#clearTrackCache();
   }
 
   reset(): void {
     this.#nodes.clear();
     this.#rootCandidates.clear();
     this.#contextStack = [];
-    this.#clearTrackCache();
+    this.#normalizeCache.clear();
+    this.#trackedByContext = new WeakMap();
+    this.#trackedModuleGraphs.clear();
+    this.#trackedRelationships.clear();
+  }
+
+  // A module-graph walk (tracking a module plus its transitive consumed
+  // modules) records an identical node set every time it repeats under an
+  // equivalent context, so the walk only needs to run once per session — but
+  // the walks repeat heavily: every linksTo/linksToMany getter invocation
+  // re-walks the linked type's graph once PER ELEMENT, multiplying render cost
+  // by the graph size. Deduping inside #track can't help; by then the
+  // composite-key build + hash (the actual cost) is already paid. This probe
+  // lets callers skip the whole walk for the price of one Set lookup.
+  //
+  // Returns true exactly once per (scope, root module, recording-relevant
+  // context) per session; the caller must then perform the full walk. The key
+  // folds in contextLabel, consumer, and consumerKind — everything #track
+  // derives from a context when recording — so a skipped repeat is a provable
+  // no-op. `scope` namespaces call sites whose walks record different node
+  // sets (e.g. one excludes shimmed modules), keeping a probe at one site from
+  // suppressing a non-identical walk at another.
+  //
+  // Returns false while inactive: nothing records when inactive, so the walk
+  // would be pure waste, and nothing is marked so the walk still runs in a
+  // later active session.
+  shouldTrackModuleGraph(
+    scope: string,
+    rootModule: string,
+    explicitContext?: RuntimeDependencyTrackingContext,
+  ): boolean {
+    if (!this.#isActive) {
+      return false;
+    }
+    let context = explicitContext ?? this.#currentContext();
+    // consumerKind only influences recording when a consumer is present, and
+    // then it defaults to 'instance' (mirroring #normalizeConsumer) — fold the
+    // same resolution into the key so an omitted consumerKind dedups against
+    // an explicit 'instance'.
+    let consumerKind = context.consumer
+      ? (context.consumerKind ?? 'instance')
+      : '';
+    let key = [
+      scope,
+      contextLabel(context),
+      context.consumer ?? '',
+      consumerKind,
+      rootModule,
+    ].join(CACHE_KEY_SEPARATOR);
+    if (this.#trackedModuleGraphs.has(key)) {
+      return false;
+    }
+    this.#trackedModuleGraphs.add(key);
+    return true;
+  }
+
+  // Sibling of shouldTrackModuleGraph for the whole relationship-dependency walk
+  // (instance/file dep + module graph) keyed on the target id. Returns true
+  // exactly once per (recording-relevant context, id) per session; the caller
+  // then performs the walk. A given id resolves to one resource, so its kind
+  // (instance vs file) is fixed and need not be in the key. Returns false while
+  // inactive — nothing records, so the walk would be pure waste and nothing is
+  // marked, so it still runs in a later active session.
+  shouldTrackRelationship(
+    id: string,
+    explicitContext?: RuntimeDependencyTrackingContext,
+  ): boolean {
+    if (!this.#isActive) {
+      return false;
+    }
+    let context = explicitContext ?? this.#currentContext();
+    let consumerKind = context.consumer
+      ? (context.consumerKind ?? 'instance')
+      : '';
+    let key = [
+      contextLabel(context),
+      context.consumer ?? '',
+      consumerKind,
+      id,
+    ].join(CACHE_KEY_SEPARATOR);
+    if (this.#trackedRelationships.has(key)) {
+      return false;
+    }
+    this.#trackedRelationships.add(key);
+    return true;
   }
 
   withContext<T>(context: RuntimeDependencyTrackingContext, cb: () => T): T {
@@ -261,7 +403,7 @@ export class RuntimeDependencyTracker {
     if (!rootURL) {
       return;
     }
-    let normalized = normalizeByKind(rootKind, rootURL);
+    let normalized = this.#normalize(rootKind, rootURL);
     if (!normalized) {
       return;
     }
@@ -283,35 +425,55 @@ export class RuntimeDependencyTracker {
     }
 
     let context = explicitContext ?? this.#currentContext();
+    let key = normalizeCacheKey(kind, rawURL);
 
-    // The short-circuit cache only applies to stack-top contexts. Those frames
-    // are constructed inside withContext() and never mutated afterward, so
-    // reference equality is sound. Caller-supplied explicit contexts are
-    // structurally mutable, so identity equality does not imply field equality.
-    if (
-      !explicitContext &&
-      rawURL === this.#lastTrackRawURL &&
-      kind === this.#lastTrackKind &&
-      context === this.#lastTrackContext
-    ) {
+    // Already recorded this (kind, rawURL) under this stack-top context —
+    // nothing more to do (see #trackedByContext). A repeat would re-derive the
+    // identical node record, so skipping it is a pure no-op. Explicit contexts
+    // are mutable public API, so they bypass the dedup and always record.
+    let seen = explicitContext
+      ? undefined
+      : this.#trackedByContext.get(context);
+    if (seen?.has(key)) {
       return;
     }
 
-    let dep = normalizeByKind(kind, rawURL);
+    let dep = this.#normalize(kind, rawURL, key);
     if (!dep) {
       return;
     }
 
     if (!explicitContext) {
-      this.#lastTrackKind = kind;
-      this.#lastTrackRawURL = rawURL;
-      this.#lastTrackContext = context;
+      if (!seen) {
+        seen = new Set();
+        this.#trackedByContext.set(context, seen);
+      }
+      seen.add(key);
     }
 
     let label = contextLabel(context);
     let consumer = this.#normalizeConsumer(context, label);
 
     this.#recordNode(dep, kind, context.mode, label, !consumer);
+  }
+
+  #normalize(
+    kind: RuntimeDependencyNodeKind,
+    rawURL: string,
+    key: string = normalizeCacheKey(kind, rawURL),
+  ): string | undefined {
+    let cached = this.#normalizeCache.get(key);
+    if (cached !== undefined) {
+      return cached;
+    }
+    if (this.#normalizeCache.has(key)) {
+      // A URL with no canonical form (e.g. a non-http reference) memoizes as
+      // undefined; the `has` check keeps us from recomputing it.
+      return undefined;
+    }
+    let result = normalizeByKind(kind, rawURL);
+    this.#normalizeCache.set(key, result);
+    return result;
   }
 
   #normalizeConsumer(
@@ -325,13 +487,13 @@ export class RuntimeDependencyTracker {
       return null;
     }
     let preferredKind = context.consumerKind ?? 'instance';
-    let preferredURL = normalizeByKind(preferredKind, context.consumer);
+    let preferredURL = this.#normalize(preferredKind, context.consumer);
     if (preferredURL) {
       this.#recordNode(preferredURL, preferredKind, context.mode, label, false);
       return { url: preferredURL, kind: preferredKind };
     }
 
-    let fallbackFile = normalizeFileURL(context.consumer);
+    let fallbackFile = this.#normalize('file', context.consumer);
     if (fallbackFile) {
       this.#recordNode(fallbackFile, 'file', context.mode, label, false);
       return { url: fallbackFile, kind: 'file' };
@@ -369,13 +531,10 @@ export class RuntimeDependencyTracker {
   }
 
   #currentContext(): RuntimeDependencyTrackingContext {
-    return this.#contextStack[this.#contextStack.length - 1]?.context ?? {};
-  }
-
-  #clearTrackCache(): void {
-    this.#lastTrackKind = undefined;
-    this.#lastTrackRawURL = undefined;
-    this.#lastTrackContext = undefined;
+    return (
+      this.#contextStack[this.#contextStack.length - 1]?.context ??
+      EMPTY_CONTEXT
+    );
   }
 }
 
@@ -414,6 +573,21 @@ export function trackRuntimeModuleDependency(
   context?: RuntimeDependencyTrackingContext,
 ): void {
   getTracker().trackModule(url, context);
+}
+
+export function shouldTrackRuntimeModuleGraph(
+  scope: string,
+  rootModule: string,
+  context?: RuntimeDependencyTrackingContext,
+): boolean {
+  return getTracker().shouldTrackModuleGraph(scope, rootModule, context);
+}
+
+export function shouldTrackRuntimeRelationship(
+  id: string,
+  context?: RuntimeDependencyTrackingContext,
+): boolean {
+  return getTracker().shouldTrackRelationship(id, context);
 }
 
 export function trackRuntimeInstanceDependency(

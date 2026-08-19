@@ -1,38 +1,50 @@
-import { deleteFile, type DeleteResult } from '../commands/file/delete';
-import { read as fileRead, type ReadResult } from '../commands/file/read';
+import { deleteFile, type DeleteResult } from '../commands/file/delete.ts';
+import { read as fileRead, type ReadResult } from '../commands/file/read.ts';
 import {
   lint as coreLint,
   type LintResult,
   type LintMessage,
-} from '../commands/file/lint';
+} from '../commands/file/lint.ts';
 import {
   listFiles as coreListFiles,
   type ListFilesResult,
-} from '../commands/file/list';
+} from '../commands/file/list.ts';
 import {
   search as fileSearch,
   type SearchResult,
   type SearchCommandOptions,
-} from '../commands/search';
+} from '../commands/search.ts';
 import {
   readTranspiledModule,
   type ReadTranspiledResult,
-} from '../commands/read-transpiled';
+} from '../commands/read-transpiled.ts';
 import {
   touchFiles as coreTouchFiles,
   type TouchResult,
   type TouchCommandOptions,
-} from '../commands/file/touch';
-import { write as coreWrite, type WriteResult } from '../commands/file/write';
+} from '../commands/file/touch.ts';
+import {
+  write as coreWrite,
+  type WriteResult,
+} from '../commands/file/write.ts';
 import {
   cancelIndexing as coreCancelIndexing,
   type CancelIndexingResult,
-} from '../commands/realm/cancel-indexing';
-import { createRealm as coreCreateRealm } from '../commands/realm/create';
-import { pull as realmPull } from '../commands/realm/pull';
-import { sync as realmSync, type SyncResult } from '../commands/realm/sync';
-import { waitForReady as coreWaitForReady } from '../commands/realm/wait-for-ready';
-import { getProfileManager, type ProfileManager } from './profile-manager';
+} from '../commands/realm/cancel-indexing.ts';
+import { createRealm as coreCreateRealm } from '../commands/realm/create.ts';
+import { pull as realmPull } from '../commands/realm/pull.ts';
+import { sync as realmSync, type SyncResult } from '../commands/realm/sync.ts';
+import {
+  indexingErrors as coreIndexingErrors,
+  type IndexingErrorsResult,
+  type IndexingErrorsDocument,
+  type IndexingErrorsEntry,
+  type IndexingErrorEntry,
+  type BrokenLinkEntry,
+  type BrokenLinkLike,
+} from '../commands/realm/indexing-errors.ts';
+import { waitForReady as coreWaitForReady } from '../commands/realm/wait-for-ready.ts';
+import { getProfileManager, type ProfileManager } from './profile-manager.ts';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 export type {
@@ -71,6 +83,12 @@ export interface CreateRealmResult {
 export interface PullOptions {
   /** Delete local files that don't exist in the realm (default: false). */
   delete?: boolean;
+  /**
+   * Mirror the realm's `skills/` directory into the surrounding checkout's
+   * `.claude/skills/` so realm-authored skills are available to Claude Code
+   * (default: true; `BOXEL_DISABLE_CLAUDE_SKILLS_SYNC=1` also disables it).
+   */
+  claudeSkills?: boolean;
 }
 
 export interface PullResult {
@@ -90,6 +108,12 @@ export interface SyncOptions {
   delete?: boolean;
   /** Preview without making changes. */
   dryRun?: boolean;
+  /**
+   * Mirror the realm's `skills/` directory into the surrounding checkout's
+   * `.claude/skills/` so realm-authored skills are available to Claude Code
+   * (default: true; `BOXEL_DISABLE_CLAUDE_SKILLS_SYNC=1` also disables it).
+   */
+  claudeSkills?: boolean;
   /**
    * Block on the realm-server until uploaded cards have been indexed,
    * not just durably written. Appends `?waitForIndex=true` to the
@@ -131,6 +155,14 @@ export interface AtomicResult {
 }
 
 export type { CancelIndexingResult };
+export type {
+  IndexingErrorsResult,
+  IndexingErrorsDocument,
+  IndexingErrorsEntry,
+  IndexingErrorEntry,
+  BrokenLinkEntry,
+  BrokenLinkLike,
+};
 
 export class BoxelCLIClient {
   private pm: ProfileManager;
@@ -237,7 +269,8 @@ export class BoxelCLIClient {
 
   /**
    * Federated search across one or more realms via `_federated-search`.
-   * Delegates to the standalone `search()` in `commands/search.ts`.
+   * Delegates to the standalone `search()` in `commands/search.ts`, which
+   * returns the `item` serializations (the `card`/`file-meta` resources).
    */
   async search(
     realmUrls: string | string[],
@@ -416,6 +449,15 @@ export class BoxelCLIClient {
   }
 
   /**
+   * List every card or module in a realm whose latest indexing attempt
+   * errored. Returns the raw JSON-API document along with an `ok` flag for
+   * transport-level failures.
+   */
+  async realmIndexingErrors(realmUrl: string): Promise<IndexingErrorsResult> {
+    return coreIndexingErrors(realmUrl, { profileManager: this.pm });
+  }
+
+  /**
    * Return the cached per-realm JWT for a realm URL, acquiring it via the
    * realm server if necessary. Intended for scenarios like Playwright's
    * `page.route()` that need a raw token to inject into browser-side fetches.
@@ -451,15 +493,19 @@ export class BoxelCLIClient {
   }
 
   /**
-   * Return the realm-server JWT, fetching one via Matrix login if no token
-   * is cached. Use only when you need to hand the bare token to a downstream
-   * client that can't go through `authedServerFetch` (e.g. opencode's
-   * static-Authorization provider config). Prefer `authedServerFetch` for
-   * server endpoints called from JS — it handles per-request 401 retries
-   * that this getter cannot.
+   * Mint a long-lived realm-server JWT. Use only when you need to hand the bare
+   * token to a downstream client that can't go through `authedServerFetch`
+   * (e.g. opencode's static-Authorization provider config): such a client
+   * cannot notice a 401 and re-mint, so it gets a lifetime long enough to
+   * outlast a working session rather than the shorter one interactive callers
+   * take.
+   *
+   * Prefer `authedServerFetch` for server endpoints called from JS — it handles
+   * the per-request 401 retries this getter cannot, and so keeps the shorter
+   * lifetime.
    */
   async getServerToken(): Promise<string> {
-    return this.pm.getOrRefreshServerToken();
+    return this.pm.mintExtendedServerToken();
   }
 
   async pull(
@@ -469,6 +515,7 @@ export class BoxelCLIClient {
   ): Promise<PullResult> {
     return realmPull(realmUrl, localDir, {
       delete: options?.delete,
+      claudeSkills: options?.claudeSkills,
       profileManager: this.pm,
     });
   }
@@ -489,6 +536,7 @@ export class BoxelCLIClient {
       preferNewest: options?.preferNewest,
       delete: options?.delete,
       dryRun: options?.dryRun,
+      claudeSkills: options?.claudeSkills,
       waitForIndex: options?.waitForIndex,
       profileManager: this.pm,
     });

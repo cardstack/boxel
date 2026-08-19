@@ -19,49 +19,66 @@ import Modifier from 'ember-modifier';
 import { modifier } from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
 
-import { Pill } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
+  bfmRefFormatAndSize,
+  bfmResolvedEmbedStyle,
   CardContextName,
   cardTypeName,
   extractCardReferenceUrls,
+  extractFileReferenceUrls,
+  fileNameFromUrl,
   isCardErrorJSONAPI,
-  resolveCardReference,
+  resolveRRIReference,
+  rri,
   trimJsonExtension,
 } from '@cardstack/runtime-common';
-import { markdownToHtml } from '@cardstack/runtime-common/marked-sync';
+import {
+  isMarkdownOverRenderLimit,
+  markdownOversizedNoticeHtml,
+  markdownToHtml,
+} from '@cardstack/runtime-common/marked-sync';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
 
 import type StoreService from '@cardstack/host/services/store';
 
-import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardContext, CardDef, FileDef } from '@cardstack/base/card-api';
 
 type CardSlotFormat = 'atom' | 'embedded' | 'fitted' | 'isolated';
+type SlotState = 'resolved' | 'loading' | 'unresolved';
+type RefType = 'card' | 'file';
 
-interface ResolvedSlot {
+interface RenderSlot {
   element: HTMLElement;
-  card: CardDef;
+  // 'card' refs (`:card[URL]`) resolve to CardDef instances; 'file' refs
+  // (`:file[URL]`) resolve to FileDef instances. Both slot kinds are wired to
+  // `cardContext.cardComponentModifier` so operator-mode overlays can target
+  // them (the overlay layer distinguishes card vs. file targets).
+  refType: RefType;
+  kind: 'inline' | 'block';
+  state: SlotState;
   format: CardSlotFormat;
-  kind: 'inline' | 'block';
+  // Inline sizing (width/height) so loading and broken placeholders match the
+  // eventual card's footprint; also carries `overflow: hidden` for resolved
+  // fitted cards.
   style?: ReturnType<typeof htmlSafe>;
+  card?: CardDef; // present when refType === 'card' && state === 'resolved'
+  file?: FileDef; // present when refType === 'file' && state === 'resolved'
+  url?: string; // present when state === 'loading' | 'unresolved'
+  typeName?: string; // present when state === 'unresolved'
 }
-
-interface UnresolvedSlot {
-  element: HTMLElement;
-  url: string;
-  typeName: string;
-  kind: 'inline' | 'block';
-}
-
-type RenderSlot =
-  | (ResolvedSlot & { card: CardDef })
-  | (UnresolvedSlot & { card?: undefined });
 
 function resolveUrl(raw: string, baseUrl: string | undefined): string {
   try {
-    return trimJsonExtension(resolveCardReference(raw, baseUrl));
+    // Resolve in RRI space (no VirtualNetwork), the same way
+    // `extractCardReferenceUrls`/`extractFileReferenceUrls` resolve the refs
+    // that key `loadedCards`/`loadedFiles` — so a slot's resolved key matches
+    // the loaded instance's map key.
+    return trimJsonExtension(
+      resolveRRIReference(raw, baseUrl ? rri(baseUrl) : undefined),
+    );
   } catch {
     return trimJsonExtension(raw);
   }
@@ -95,7 +112,7 @@ const DEFAULT_CARD_CONTEXT: Partial<CardContext> = {
   cardComponentModifier: class NoOpModifier extends Modifier<any> {
     modify() {}
   },
-  commandContext: undefined,
+  toolContext: undefined,
 };
 
 export default class RenderedMarkdown extends Component<Signature> {
@@ -111,20 +128,32 @@ export default class RenderedMarkdown extends Component<Signature> {
 
   @tracked renderSlots: RenderSlot[] = [];
   @tracked private loadedCards = new Map<string, CardDef>();
+  @tracked private loadedFiles = new Map<string, FileDef>();
   private _modifierHasRun = false;
 
   // ── HTML rendering ──
 
   @cached
   get renderedHtml() {
-    let html = markdownToHtml(this.args.content);
+    let content = this.args.content;
+    // Skip the parse entirely for over-limit content so a multi-MB `.md` file
+    // or field value cannot block the render thread on the synchronous
+    // parse + sanitize + DOMParser pipeline.
+    if (isMarkdownOverRenderLimit(content)) {
+      return htmlSafe(markdownOversizedNoticeHtml(content));
+    }
+    let html = markdownToHtml(content);
     html = wrapTablesHtml(html);
 
-    let hasCardRefs = html.includes('data-boxel-bfm-type="card"');
-    if (typeof DOMParser !== 'undefined' && hasCardRefs) {
+    // Strip text from BFM refs (card and file) so raw URLs don't flash before
+    // the referenced instance loads.
+    let hasBfmRefs = html.includes('data-boxel-bfm-type=');
+    if (typeof DOMParser !== 'undefined' && hasBfmRefs) {
       let doc = new DOMParser().parseFromString(html, 'text/html');
       doc
-        .querySelectorAll('[data-boxel-bfm-type="card"]')
+        .querySelectorAll(
+          '[data-boxel-bfm-inline-ref], [data-boxel-bfm-block-ref]',
+        )
         .forEach((el) => (el.textContent = ''));
       html = doc.body.innerHTML;
     }
@@ -132,12 +161,21 @@ export default class RenderedMarkdown extends Component<Signature> {
     return htmlSafe(html);
   }
 
-  // ── Card loading ──
+  // ── Reference loading ──
 
   @cached
   private get cardReferenceUrls(): string[] {
     if (!this.args.content) return [];
     return extractCardReferenceUrls(
+      this.args.content,
+      this.args.cardReferenceBaseUrl ?? '',
+    );
+  }
+
+  @cached
+  private get fileReferenceUrls(): string[] {
+    if (!this.args.content) return [];
+    return extractFileReferenceUrls(
       this.args.content,
       this.args.cardReferenceBaseUrl ?? '',
     );
@@ -163,6 +201,28 @@ export default class RenderedMarkdown extends Component<Signature> {
     this.loadedCards = cards;
   });
 
+  private loadReferencedFiles = task({ restartable: true }, async () => {
+    let urls = this.fileReferenceUrls;
+    if (!urls.length) return;
+
+    let files = new Map<string, FileDef>();
+    await Promise.all(
+      urls.map(async (url) => {
+        try {
+          let result = await this.store.get<FileDef>(url, {
+            type: 'file-meta',
+          });
+          if (!isCardErrorJSONAPI(result)) {
+            files.set(url, result as FileDef);
+          }
+        } catch {
+          // skip files that can't be loaded
+        }
+      }),
+    );
+    this.loadedFiles = files;
+  });
+
   // ── Slot capture modifier ──
 
   captureCardSlots = modifier(
@@ -170,85 +230,118 @@ export default class RenderedMarkdown extends Component<Signature> {
       let baseUrl = this.args.cardReferenceBaseUrl ?? undefined;
       let pendingUpdate = false;
 
-      let showFallback = this._modifierHasRun || this.loadedCards.size > 0;
+      let showFallback =
+        this._modifierHasRun ||
+        this.loadedCards.size > 0 ||
+        this.loadedFiles.size > 0;
       this._modifierHasRun = true;
 
-      // Trigger card loading when content changes
+      // Trigger card + file loading when content changes
       this.loadReferencedCards.perform();
+      this.loadReferencedFiles.perform();
 
       let collectSlots = (): RenderSlot[] => {
         let cardsByUrl = this.loadedCards;
+        let filesByUrl = this.loadedFiles;
         let slots: RenderSlot[] = [];
-        let resolvedEls = new Set<HTMLElement>();
 
         for (let el of Array.from(
           element.querySelectorAll<HTMLElement>(
-            '[data-boxel-bfm-inline-ref][data-boxel-bfm-type="card"]',
+            '[data-boxel-bfm-type="card"], [data-boxel-bfm-type="file"]',
           ),
         )) {
-          let rawUrl = el.dataset.boxelBfmInlineRef;
+          let refType: RefType =
+            el.dataset.boxelBfmType === 'file' ? 'file' : 'card';
+          let isInline = !!el.dataset.boxelBfmInlineRef;
+          let rawUrl =
+            el.dataset.boxelBfmInlineRef ?? el.dataset.boxelBfmBlockRef ?? '';
           if (!rawUrl) continue;
-          let resolved = resolveUrl(rawUrl, baseUrl);
-          let card = cardsByUrl.get(resolved);
-          if (card) {
-            resolvedEls.add(el);
-            slots.push({ element: el, card, format: 'atom', kind: 'inline' });
-          }
-        }
+          let kind: 'inline' | 'block' = isInline ? 'inline' : 'block';
 
-        for (let el of Array.from(
-          element.querySelectorAll<HTMLElement>(
-            '[data-boxel-bfm-block-ref][data-boxel-bfm-type="card"]',
-          ),
-        )) {
-          let rawUrl = el.dataset.boxelBfmBlockRef;
-          if (!rawUrl) continue;
-          let resolved = resolveUrl(rawUrl, baseUrl);
-          let card = cardsByUrl.get(resolved);
-          if (card) {
-            let bfmFormat = el.dataset.boxelBfmFormat;
-            let format: CardSlotFormat =
-              bfmFormat === 'fitted' || bfmFormat === 'isolated'
-                ? bfmFormat
-                : 'embedded';
+          // Both inline and block refs derive their format and any fitted
+          // sizing from the BFM size attributes, so `:card[url | embedded]` and
+          // `::card[url | 400x300]` are honored alike. Only the default differs:
+          // an inline ref with no specifier falls back to atom, a block ref to
+          // embedded.
+          let derived = bfmRefFormatAndSize(
+            el.dataset.boxelBfmFormat,
+            el.dataset.boxelBfmWidth,
+            el.dataset.boxelBfmHeight,
+            isInline ? 'atom' : 'embedded',
+          );
+          let format: CardSlotFormat = derived.format;
+          let sizeStyle: string | undefined = derived.sizeStyle;
 
-            let style: ReturnType<typeof htmlSafe> | undefined;
-            if (format === 'fitted') {
-              let w = el.dataset.boxelBfmWidth;
-              let h = el.dataset.boxelBfmHeight;
-              let parts: string[] = [];
-              if (w && /^\d+%$/.test(w)) {
-                parts.push(`width: ${w}`);
-              } else if (w && /^\d+$/.test(w)) {
-                parts.push(`width: ${w}px`);
-              }
-              if (h && /^\d+$/.test(h)) {
-                parts.push(`height: ${h}px`);
-              }
-              parts.push('overflow: hidden');
-              style = htmlSafe(parts.join('; '));
+          // Non-atom slots carry a footprint so the instance occupies a
+          // definite box instead of collapsing (isolated/inline-embedded
+          // default templates lay out at 100%). Fitted uses its requested
+          // dimensions; embedded/isolated get shared defaults. The same style
+          // goes on the loading shimmer and broken-link box so the layout
+          // doesn't jump as the slot transitions between states, and the same
+          // helper drives the other render surfaces so footprints stay in
+          // lockstep.
+          let styleRaw = bfmResolvedEmbedStyle(format, kind, sizeStyle);
+          let style: ReturnType<typeof htmlSafe> | undefined = styleRaw
+            ? htmlSafe(styleRaw)
+            : undefined;
+
+          let resolvedUrl = resolveUrl(rawUrl, baseUrl);
+
+          if (refType === 'file') {
+            let file = filesByUrl.get(resolvedUrl);
+            if (file) {
+              slots.push({
+                element: el,
+                refType,
+                kind,
+                state: 'resolved',
+                format,
+                file,
+                style,
+              });
+              continue;
             }
-
-            resolvedEls.add(el);
-            slots.push({ element: el, card, format, kind: 'block', style });
+          } else {
+            let card = cardsByUrl.get(resolvedUrl);
+            if (card) {
+              slots.push({
+                element: el,
+                refType,
+                kind,
+                state: 'resolved',
+                format,
+                card,
+                style,
+              });
+              continue;
+            }
           }
-        }
 
-        if (!showFallback) return slots;
-        for (let el of Array.from(
-          element.querySelectorAll<HTMLElement>('[data-boxel-bfm-type="card"]'),
-        )) {
-          let url =
-            el.dataset.boxelBfmInlineRef || el.dataset.boxelBfmBlockRef || '';
-          if (!resolvedEls.has(el) && url) {
-            let kind: 'inline' | 'block' = el.dataset.boxelBfmInlineRef
-              ? 'inline'
-              : 'block';
+          // No matching instance yet: show the sized loading shimmer until the
+          // load settles (showFallback), then fall back to the broken-link box.
+          if (!showFallback) {
             slots.push({
               element: el,
-              url,
-              typeName: cardTypeName(url),
+              refType,
               kind,
+              state: 'loading',
+              format,
+              style,
+              url: rawUrl,
+            });
+          } else {
+            slots.push({
+              element: el,
+              refType,
+              kind,
+              state: 'unresolved',
+              format,
+              style,
+              url: rawUrl,
+              typeName:
+                refType === 'file'
+                  ? fileNameFromUrl(rawUrl)
+                  : cardTypeName(rawUrl),
             });
           }
         }
@@ -264,21 +357,14 @@ export default class RenderedMarkdown extends Component<Signature> {
           nextSlots.some((slot, index) => {
             let current = this.renderSlots[index];
             if (!current || current.element !== slot.element) return true;
+            if (current.refType !== slot.refType) return true;
             if (current.kind !== slot.kind) return true;
-            if (!!current.card !== !!slot.card) return true;
-            if (current.card && slot.card) {
-              return (
-                current.card !== slot.card ||
-                (current as ResolvedSlot).format !==
-                  (slot as ResolvedSlot).format
-              );
-            }
-            if (!current.card && !slot.card) {
-              return (
-                (current as UnresolvedSlot).url !== (slot as UnresolvedSlot).url
-              );
-            }
-            return false;
+            if (current.state !== slot.state) return true;
+            if (current.format !== slot.format) return true;
+            if (current.card !== slot.card) return true;
+            if (current.file !== slot.file) return true;
+            if (current.url !== slot.url) return true;
+            return String(current.style ?? '') !== String(slot.style ?? '');
           });
 
         if (didChange) {
@@ -305,16 +391,72 @@ export default class RenderedMarkdown extends Component<Signature> {
   <template>
     <div
       class='markdown-content'
-      {{this.captureCardSlots this.renderedHtml this.loadedCards}}
+      {{this.captureCardSlots
+        this.renderedHtml
+        this.loadedCards
+        this.loadedFiles
+      }}
     >
       {{this.renderedHtml}}
     </div>
     {{#each this.renderSlots key='element' as |slot|}}
       {{#in-element slot.element insertBefore=null}}
-        {{#if slot.card}}
-          {{#if (eq slot.kind 'inline')}}
+        {{#if (eq slot.state 'resolved')}}
+          {{#if (eq slot.refType 'file')}}
+            {{#if (eq slot.kind 'inline')}}
+              <span
+                class='markdown-bfm-card-slot
+                  {{if
+                    (eq slot.format "atom")
+                    "markdown-bfm-card-slot--inline"
+                    "markdown-bfm-card-slot--inline-embed"
+                  }}
+                  {{if slot.style "markdown-bfm-card-slot--fitted"}}'
+                style={{slot.style}}
+                data-test-markdown-bfm-inline-file
+                {{this.cardContext.cardComponentModifier
+                  cardId=slot.file.id
+                  format='data'
+                  fieldType=undefined
+                  fieldName=undefined
+                }}
+              >
+                <CardRenderer
+                  @card={{slot.file}}
+                  @format={{slot.format}}
+                  @displayContainer={{false}}
+                />
+              </span>
+            {{else}}
+              <div
+                class='markdown-bfm-card-slot markdown-bfm-card-slot--block
+                  {{if slot.style "markdown-bfm-card-slot--fitted"}}'
+                style={{slot.style}}
+                data-test-markdown-bfm-block-file
+                {{this.cardContext.cardComponentModifier
+                  cardId=slot.file.id
+                  format='data'
+                  fieldType=undefined
+                  fieldName=undefined
+                }}
+              >
+                <CardRenderer
+                  @card={{slot.file}}
+                  @format={{slot.format}}
+                  @displayContainer={{false}}
+                />
+              </div>
+            {{/if}}
+          {{else if (eq slot.kind 'inline')}}
             <span
-              class='markdown-bfm-card-slot markdown-bfm-card-slot--inline'
+              class='markdown-bfm-card-slot
+                {{if
+                  (eq slot.format "atom")
+                  "markdown-bfm-card-slot--inline"
+                  "markdown-bfm-card-slot--inline-embed"
+                }}
+                {{if slot.style "markdown-bfm-card-slot--fitted"}}'
+              style={{slot.style}}
               data-test-markdown-bfm-inline-card
               {{this.cardContext.cardComponentModifier
                 card=slot.card
@@ -349,27 +491,67 @@ export default class RenderedMarkdown extends Component<Signature> {
               />
             </div>
           {{/if}}
-        {{else}}
+        {{else if (eq slot.state 'loading')}}
           {{#if (eq slot.kind 'inline')}}
-            <Pill
-              @variant='muted'
-              @size='extra-small'
-              title={{slot.url}}
-              data-test-markdown-bfm-unresolved-inline
-            >
-              <:iconLeft><LinkOffIcon width='12' height='12' /></:iconLeft>
-              <:default>{{slot.typeName}}</:default>
-            </Pill>
+            {{#if (eq slot.format 'atom')}}
+              <span
+                class='markdown-bfm-loading markdown-bfm-loading--inline'
+                aria-hidden='true'
+                data-test-markdown-bfm-loading-inline
+              />
+            {{else}}
+              <span
+                class='markdown-bfm-loading markdown-bfm-loading--inline-embed markdown-bfm-loading--{{slot.format}}'
+                style={{slot.style}}
+                aria-hidden='true'
+                data-test-markdown-bfm-loading-inline
+              />
+            {{/if}}
           {{else}}
             <div
-              class='markdown-bfm-unresolved--block'
+              class='markdown-bfm-loading markdown-bfm-loading--block markdown-bfm-loading--{{slot.format}}'
+              style={{slot.style}}
+              aria-hidden='true'
+              data-test-markdown-bfm-loading-block
+            />
+          {{/if}}
+        {{else}}
+          {{#if (eq slot.kind 'inline')}}
+            {{#if (eq slot.format 'atom')}}
+              <span
+                class='markdown-bfm-broken markdown-bfm-broken--inline'
+                title={{slot.url}}
+                data-test-markdown-bfm-unresolved-inline
+              >
+                <span class='markdown-bfm-broken-label'>
+                  <LinkOffIcon width='12' height='12' />
+                  {{slot.typeName}}
+                </span>
+              </span>
+            {{else}}
+              <span
+                class='markdown-bfm-broken markdown-bfm-broken--inline-embed markdown-bfm-broken--{{slot.format}}'
+                style={{slot.style}}
+                title={{slot.url}}
+                data-test-markdown-bfm-unresolved-inline
+              >
+                <span class='markdown-bfm-broken-label'>
+                  <LinkOffIcon width='14' height='14' />
+                  {{slot.typeName}}
+                </span>
+              </span>
+            {{/if}}
+          {{else}}
+            <div
+              class='markdown-bfm-broken markdown-bfm-broken--block markdown-bfm-broken--{{slot.format}}'
+              style={{slot.style}}
               title={{slot.url}}
               data-test-markdown-bfm-unresolved-block
             >
-              <Pill @variant='muted' @size='small'>
-                <:iconLeft><LinkOffIcon width='14' height='14' /></:iconLeft>
-                <:default>{{slot.typeName}}</:default>
-              </Pill>
+              <span class='markdown-bfm-broken-label'>
+                <LinkOffIcon width='14' height='14' />
+                {{slot.typeName}}
+              </span>
             </div>
           {{/if}}
         {{/if}}
@@ -395,6 +577,25 @@ export default class RenderedMarkdown extends Component<Signature> {
           font-size: var(--markdown-font-size, inherit);
           font-family: var(--markdown-font-family, inherit);
           overflow: hidden;
+        }
+
+        /* Over-limit content notice + truncated plain-text preview */
+        .markdown-content :deep(.markdown-oversized-notice) {
+          margin: 0 0 var(--boxel-sp-xs);
+          font-style: italic;
+          color: var(--boxel-500);
+        }
+        .markdown-content :deep(.markdown-oversized-preview) {
+          max-height: 20rem;
+          overflow: auto;
+          white-space: pre-wrap;
+          word-break: break-word;
+          font-family: var(--md-mono);
+          font-size: 0.8125em;
+          background-color: var(--md-muted);
+          border: 1px solid var(--md-border);
+          border-radius: var(--boxel-border-radius);
+          padding: var(--boxel-sp-xs);
         }
 
         /* Heading */
@@ -660,6 +861,13 @@ export default class RenderedMarkdown extends Component<Signature> {
           display: inline-flex;
           vertical-align: middle;
         }
+        /* Inline embeds with an explicit non-atom format flow inline-block so a
+           sized card sits in the text run without the flex shrink behavior the
+           atom pill relies on. */
+        .markdown-bfm-card-slot--inline-embed {
+          display: inline-block;
+          vertical-align: middle;
+        }
         .markdown-bfm-card-slot--block {
           display: block;
         }
@@ -667,14 +875,53 @@ export default class RenderedMarkdown extends Component<Signature> {
           border-radius: var(--boxel-border-radius);
         }
 
+        /* Placeholder footprint shared by loading + broken states. The
+           default block sizes approximate the eventual card so the layout does
+           not jump when the card resolves; the slot's shared inline footprint
+           (fitted dimensions, inline embedded/isolated defaults, block
+           isolated min-height) overrides these when present. */
+        .markdown-bfm-loading--embedded,
+        .markdown-bfm-broken--embedded {
+          width: 100%;
+          min-height: 9.375rem;
+        }
+        .markdown-bfm-loading--isolated,
+        .markdown-bfm-broken--isolated {
+          width: 100%;
+          min-height: 18.75rem;
+        }
+        .markdown-bfm-loading--fitted,
+        .markdown-bfm-broken--fitted {
+          width: 15.625rem;
+          height: 10.625rem;
+        }
+
         /* Loading shimmer */
-        .markdown-content :deep([data-boxel-bfm-type='card']:empty) {
-          background-color: var(--boxel-light-200);
-          border-radius: var(--boxel-border-radius-sm);
+        .markdown-bfm-loading {
           position: relative;
           overflow: hidden;
+          max-width: 100%;
+          background-color: var(--boxel-light-200);
+          border-radius: var(--boxel-border-radius);
         }
-        .markdown-content :deep([data-boxel-bfm-type='card']:empty::after) {
+        .markdown-bfm-loading--inline {
+          display: inline-block;
+          width: 6em;
+          height: 1.2em;
+          vertical-align: middle;
+          border-radius: var(--boxel-border-radius-sm);
+        }
+        /* Inline embeds with an explicit non-atom format share the block
+           footprint classes but flow inline. */
+        .markdown-bfm-loading--inline-embed {
+          display: inline-block;
+          max-width: 100%;
+          vertical-align: middle;
+        }
+        .markdown-bfm-loading--block {
+          display: block;
+        }
+        .markdown-bfm-loading::after {
           content: '';
           position: absolute;
           inset: 0;
@@ -684,19 +931,8 @@ export default class RenderedMarkdown extends Component<Signature> {
             var(--boxel-light-100),
             transparent
           );
-          animation: bfm-shimmer 1.6s linear 0.5s infinite;
           transform: translateX(-100%);
-        }
-        .markdown-content :deep([data-boxel-bfm-inline-ref]:empty) {
-          display: inline-block;
-          width: 6em;
-          height: 1.2em;
-          vertical-align: middle;
-        }
-        .markdown-content :deep([data-boxel-bfm-block-ref]:empty) {
-          display: block;
-          width: 100%;
-          height: 3em;
+          animation: bfm-shimmer 1.6s linear 0.5s infinite;
         }
         @keyframes bfm-shimmer {
           0% {
@@ -707,10 +943,65 @@ export default class RenderedMarkdown extends Component<Signature> {
           }
         }
 
-        /* Unresolved block indicator */
-        .markdown-bfm-unresolved--block {
-          display: block;
+        /* Broken-link placeholder: a card-sized box with a faint diagonal
+           cross and a centered icon + type-name label (no chip). */
+        .markdown-bfm-broken {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          max-width: 100%;
+          border: 1px solid var(--md-border);
+          border-radius: var(--boxel-border-radius);
+          background-color: var(--boxel-light-100);
+          background-image:
+            linear-gradient(
+              to top right,
+              transparent calc(50% - 0.5px),
+              var(--md-border) calc(50% - 0.5px),
+              var(--md-border) calc(50% + 0.5px),
+              transparent calc(50% + 0.5px)
+            ),
+            linear-gradient(
+              to bottom right,
+              transparent calc(50% - 0.5px),
+              var(--md-border) calc(50% - 0.5px),
+              var(--md-border) calc(50% + 0.5px),
+              transparent calc(50% + 0.5px)
+            );
+          overflow: hidden;
+        }
+        .markdown-bfm-broken--inline {
+          display: inline-flex;
+          min-height: 1.6em;
+          padding: 0 var(--boxel-sp-5xs);
+          vertical-align: middle;
+          border-radius: var(--boxel-border-radius-sm);
+        }
+        /* Inline embeds with an explicit non-atom format share the block
+           footprint classes but flow inline. */
+        .markdown-bfm-broken--inline-embed {
+          display: inline-flex;
+          vertical-align: middle;
+        }
+        .markdown-bfm-broken--block {
+          display: flex;
           margin: var(--boxel-sp-xxxs) 0;
+        }
+        .markdown-bfm-broken-label {
+          display: inline-flex;
+          align-items: center;
+          gap: var(--boxel-sp-5xs);
+          padding: 0 var(--boxel-sp-4xs);
+          /* Match the box fill so the cross does not slice through the text. */
+          background-color: var(--boxel-light-100);
+          color: var(--boxel-500);
+          font-size: 0.75rem;
+          font-weight: 500;
+          line-height: 1.5;
+          white-space: nowrap;
+        }
+        .markdown-bfm-broken-label svg {
+          flex: none;
         }
       } /* end @layer baseComponent */
     </style>

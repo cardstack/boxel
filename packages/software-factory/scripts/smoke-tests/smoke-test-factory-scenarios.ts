@@ -24,22 +24,22 @@
  */
 
 // This should be first
-import '../../src/setup-logger';
+import '../../src/setup-logger.ts';
 
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
 
 import { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 
-import { inferDarkfactoryModuleUrl } from '../../src/factory-seed';
-import { logger } from '../../src/logger';
+import { inferDarkfactoryModuleUrl } from '../../src/factory-seed.ts';
+import { logger } from '../../src/logger.ts';
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
 let log = logger('smoke-factory-scenarios');
-let packageRoot = resolve(__dirname, '../..');
+let packageRoot = resolve(import.meta.dirname, '../..');
 
 const DEFAULT_BRIEF_URL =
   'http://localhost:4201/software-factory/Wiki/sticky-note';
@@ -178,7 +178,7 @@ function buildSpecDocument() {
       },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/spec',
+          module: '@cardstack/base/spec',
           name: 'Spec',
         },
       },
@@ -192,8 +192,8 @@ const WORKING_HELLO_GTS = `import {
   Component,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 
 export class HelloCard extends CardDef {
   static displayName = 'Hello Card';
@@ -217,8 +217,8 @@ const BUGGY_HELLO_GTS = `import {
   Component,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 
 export class HelloCard extends CardDef {
   static displayName = 'Hello Card';
@@ -237,7 +237,8 @@ export class HelloCard extends CardDef {
 `;
 
 // QUnit test for HelloCard
-const HELLO_TEST_GTS = `import { module, test } from 'qunit';
+const HELLO_TEST_GTS = `import QUnit from 'qunit';
+const { module, test } = QUnit;
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { renderCard } from '@cardstack/host/tests/helpers/render-component';
 import { getService } from '@universal-ember/test-support';

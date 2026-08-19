@@ -1,8 +1,8 @@
 import { FeaturedImageField } from './fields/featured-image';
-import DateTimeField from 'https://cardstack.com/base/datetime';
-import StringField from 'https://cardstack.com/base/string';
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import NumberField from 'https://cardstack.com/base/number';
+import DateTimeField from '@cardstack/base/datetime';
+import StringField from '@cardstack/base/string';
+import MarkdownField from '@cardstack/base/markdown';
+import NumberField from '@cardstack/base/number';
 import {
   CardDef,
   field,
@@ -11,7 +11,7 @@ import {
   Component,
   getCardMeta,
   linksToMany,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 import CalendarCog from '@cardstack/boxel-icons/calendar-cog';
 import BlogIcon from '@cardstack/boxel-icons/notebook';
@@ -29,7 +29,7 @@ import {
   markdownEmbedsForCards,
   markdownImage,
   formatDateTimeForMarkdown,
-} from 'https://cardstack.com/base/markdown-helpers';
+} from '@cardstack/base/markdown-helpers';
 
 class EmbeddedTemplate extends Component<typeof BlogPost> {
   <template>
@@ -629,7 +629,7 @@ export class BlogPost extends CardDef {
   });
   @field slug = contains(StringField);
   @field body = contains(MarkdownField);
-  @field authors = linksToMany(Author);
+  @field authors = linksToMany(Author, { searchable: 'blog' });
   @field publishDate = contains(DateTimeField);
   @field status = contains(Status, {
     computeVia: function (this: BlogPost) {
@@ -642,9 +642,11 @@ export class BlogPost extends CardDef {
       return 'Scheduled';
     },
   });
-  @field blog = linksTo(BlogAppCard, { isUsed: true });
+  @field blog = linksTo(BlogAppCard, {
+    searchable: true,
+  });
   @field featuredImage = contains(FeaturedImageField);
-  @field categories = linksToMany(BlogCategory);
+  @field categories = linksToMany(BlogCategory, { searchable: 'blog' });
   @field lastUpdated = contains(DateTimeField, {
     computeVia: function (this: BlogPost) {
       let lastModified = getCardMeta(this, 'lastModified');

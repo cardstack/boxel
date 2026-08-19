@@ -14,22 +14,17 @@ import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_LLM_MODE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
-  DEFAULT_LLM,
+  DEFAULT_FALLBACK_MODEL_ID,
   type LLMMode,
 } from '@cardstack/runtime-common/matrix-constants';
 
-import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
-import type * as CommandModule from 'https://cardstack.com/base/command';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-
-import type { Skill as SkillCard } from 'https://cardstack.com/base/skill';
-
-import CreateAiAssistantRoomCommand from '../commands/create-ai-assistant-room';
-
-import SummarizeSessionCommand from '../commands/summarize-session';
 import { Submodes } from '../components/submode-switcher';
 import { isMatrixError } from '../lib/matrix-utils';
 import { importResource } from '../resources/import';
+import CreateAiAssistantRoomTool from '../tools/create-ai-assistant-room';
+import SummarizeSessionTool from '../tools/summarize-session';
+import UpdateRoomSkillsTool from '../tools/update-room-skills';
+
 import { NewSessionIdPersistenceKey } from '../utils/local-storage-keys';
 
 import { titleize } from '../utils/titleize';
@@ -37,14 +32,17 @@ import { titleize } from '../utils/titleize';
 import { DEFAULT_MODULE_INSPECTOR_VIEW } from './operator-mode-state-service';
 
 import type CodeSemanticsService from './code-semantics-service';
-import type CommandService from './command-service';
 import type LocalPersistenceService from './local-persistence-service';
 import type MatrixService from './matrix-service';
 import type MonacoService from './monaco-service';
 import type OperatorModeStateService from './operator-mode-state-service';
-import type ResetService from './reset';
+import type SessionService from './session';
 import type StoreService from './store';
+import type ToolService from './tool-service';
 import type { Message } from '../lib/matrix-classes/message';
+import type { CardDef, Format } from '@cardstack/base/card-api';
+import type * as CommandModule from '@cardstack/base/command';
+import type { FileDef } from '@cardstack/base/file-api';
 
 export interface SessionRoomData {
   roomId: string;
@@ -56,12 +54,12 @@ export interface SessionRoomData {
 
 export default class AiAssistantPanelService extends Service {
   @service declare private codeSemanticsService: CodeSemanticsService;
-  @service declare private commandService: CommandService;
+  @service declare private toolService: ToolService;
   @service declare private matrixService: MatrixService;
   @service declare private monacoService: MonacoService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private localPersistenceService: LocalPersistenceService;
-  @service declare private reset: ResetService;
+  @service declare private session: SessionService;
   @service declare private store: StoreService;
 
   @tracked displayRoomError = false;
@@ -76,11 +74,30 @@ export default class AiAssistantPanelService extends Service {
 
   constructor(owner: Owner) {
     super(owner);
-    this.reset.register(this);
+    // resetState() BEFORE register(): register() can synchronously replay
+    // sessionStarted() (when a session is already established), and that arms
+    // loadRoomsTask. resetState() cancels loadRoomsTask, so registering first
+    // would immediately cancel the arm. No explicit arming here — the replay
+    // (or MatrixService's notifySessionStarted() broadcast at boot) covers it.
     this.resetState();
-    if (this.isOpen) {
-      this.loadRoomsTask.perform();
+    this.session.register(this);
+  }
+
+  sessionStarted() {
+    this.ensureRoomsLoaded();
+  }
+
+  // Enter a room if the panel is open and nothing is loaded/loading yet. Used
+  // by the session-start hook (re-arm after re-login, and boot replay); leaves
+  // an already-current room untouched so a passive broadcast never clobbers it.
+  private ensureRoomsLoaded() {
+    if (!this.isOpen) {
+      return;
     }
+    if (!this.matrixService.currentRoomId && !this.loadRoomsTask.isRunning) {
+      return this.loadRoomsTask.perform();
+    }
+    return undefined;
   }
 
   resetState() {
@@ -213,6 +230,11 @@ export default class AiAssistantPanelService extends Service {
   @action
   openPanel() {
     this.operatorModeStateService.openAiAssistant();
+    // Always re-run enterRoomInitially on an explicit open so the panel
+    // reselects the right room (persisted → latest → new) each time — the
+    // user may have switched or the persisted room may have changed while
+    // closed. (ensureRoomsLoaded()'s "leave the current room alone" guard is
+    // only for the passive session-start hook.)
     return this.loadRoomsTask.perform();
   }
 
@@ -293,46 +315,22 @@ export default class AiAssistantPanelService extends Service {
     );
   }
 
-  private async extractSkillsFromCurrentRoom(): Promise<{
-    enabledSkills: SkillCard[];
-    disabledSkills: SkillCard[];
-  }> {
-    let enabledSkills: SkillCard[] = [];
-    let disabledSkills: SkillCard[] = [];
-
-    if (this.currentRoomResource?.matrixRoom?.skillsConfig) {
-      const skillConfig = this.currentRoomResource.matrixRoom.skillsConfig;
-
-      // Extract enabled skills from the current room
-      if (skillConfig.enabledSkillCards?.length) {
-        for (const fileDef of skillConfig.enabledSkillCards) {
-          try {
-            const skill = await this.store.get(fileDef.sourceUrl);
-            if (skill && isCardInstance(skill)) {
-              enabledSkills.push(skill as SkillCard);
-            }
-          } catch (e) {
-            console.warn(`Failed to load skill from ${fileDef.sourceUrl}:`, e);
-          }
-        }
-      }
-
-      // Extract disabled skills from the current room
-      if (skillConfig.disabledSkillCards?.length) {
-        for (const fileDef of skillConfig.disabledSkillCards) {
-          try {
-            const skill = await this.store.get(fileDef.sourceUrl);
-            if (skill && isCardInstance(skill)) {
-              disabledSkills.push(skill as SkillCard);
-            }
-          } catch (e) {
-            console.warn(`Failed to load skill from ${fileDef.sourceUrl}:`, e);
-          }
-        }
-      }
-    }
-
-    return { enabledSkills, disabledSkills };
+  // The current room's skills as ids (the fileDefs' sourceUrls), for the
+  // "add same skills" flow. Id-based so it carries both `.md` skill files and
+  // legacy `Skill` cards; room creation re-resolves each id kind-agnostically.
+  private extractSkillIdsFromCurrentRoom(): {
+    enabledSkillIds: string[];
+    disabledSkillIds: string[];
+  } {
+    let skillConfig = this.currentRoomResource?.matrixRoom?.skillsConfig;
+    let toIds = (fileDefs: { sourceUrl?: string }[] | undefined): string[] =>
+      (fileDefs ?? [])
+        .map((fileDef) => fileDef.sourceUrl)
+        .filter((id): id is string => Boolean(id));
+    return {
+      enabledSkillIds: toIds(skillConfig?.enabledSkillCards),
+      disabledSkillIds: toIds(skillConfig?.disabledSkillCards),
+    };
   }
 
   private getPreferredLLMMode(): LLMMode | undefined {
@@ -424,8 +422,8 @@ export default class AiAssistantPanelService extends Service {
           // that can hang on 404s). Skills are applied in the background.
           roomId = await this.createFallbackRoom(name);
         } else {
-          let createRoomCommand = new CreateAiAssistantRoomCommand(
-            this.commandService.commandContext,
+          let createRoomCommand = new CreateAiAssistantRoomTool(
+            this.toolService.toolContext,
           );
 
           let input: any = { name };
@@ -433,23 +431,21 @@ export default class AiAssistantPanelService extends Service {
           if (llmMode) {
             input.llmMode = llmMode;
           }
-          let enabledSkills: SkillCard[] = [];
-          let disabledSkills: SkillCard[] = [];
+          let enabledSkillIds: string[] = [];
+          let disabledSkillIds: string[] = [];
 
           if (addSameSkills) {
-            const extractedSkills = await this.extractSkillsFromCurrentRoom();
-            enabledSkills = extractedSkills.enabledSkills;
-            disabledSkills = extractedSkills.disabledSkills;
+            ({ enabledSkillIds, disabledSkillIds } =
+              this.extractSkillIdsFromCurrentRoom());
           }
 
-          if (enabledSkills.length || disabledSkills.length) {
-            input.enabledSkills = enabledSkills;
-            input.disabledSkills = disabledSkills;
+          if (enabledSkillIds.length || disabledSkillIds.length) {
+            input.enabledSkillIds = enabledSkillIds;
+            input.disabledSkillIds = disabledSkillIds;
           } else {
-            // Use default skills
-            input.enabledSkills = await this.matrixService.loadDefaultSkills(
-              this.operatorModeStateService.state.submode,
-            );
+            // Use default skills (ids; may name `.md` skill files or cards)
+            input.enabledSkillIds =
+              await this.matrixService.loadDefaultSkills();
           }
 
           ({ roomId } = await createRoomCommand.execute(input));
@@ -510,7 +506,7 @@ export default class AiAssistantPanelService extends Service {
         {
           type: APP_BOXEL_ACTIVE_LLM,
           content: {
-            model: configuration?.modelId ?? DEFAULT_LLM,
+            model: configuration?.modelId ?? DEFAULT_FALLBACK_MODEL_ID,
             toolsSupported: Boolean(configuration?.toolsSupported),
             reasoningEffort: configuration?.reasoningEffort ?? undefined,
           },
@@ -524,7 +520,7 @@ export default class AiAssistantPanelService extends Service {
           content: {
             enabledSkillCards: [],
             disabledSkillCards: [],
-            commandDefinitions: [],
+            toolDefinitions: [],
           },
         },
       ],
@@ -541,25 +537,20 @@ export default class AiAssistantPanelService extends Service {
 
   private async applyDefaultSkillsToRoom(roomId: string) {
     try {
-      let skills = await this.matrixService.loadDefaultSkills(
-        this.operatorModeStateService.state.submode,
-      );
-      if (!skills.length) {
+      let skillIds = await this.matrixService.loadDefaultSkills();
+      if (!skillIds.length) {
         return;
       }
-      let enabledSkillFileDefs = await this.matrixService.uploadCards(skills);
-      let commandDefinitions = skills.flatMap((skill) => skill.commands);
-      let commandFileDefs =
-        await this.matrixService.uploadCommandDefinitions(commandDefinitions);
-      await this.matrixService.sendStateEvent(
-        roomId,
-        APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
-        {
-          enabledSkillCards: enabledSkillFileDefs.map((fd) => fd.serialize()),
-          disabledSkillCards: [],
-          commandDefinitions: commandFileDefs.map((fd) => fd.serialize()),
-        },
+      // Kind-agnostic: `UpdateRoomSkillsTool` resolves each id to a `.md`
+      // skill file or a legacy `Skill` card, uploads it, and populates the
+      // room's skills config + command definitions.
+      let updateRoomSkillsCommand = new UpdateRoomSkillsTool(
+        this.toolService.toolContext,
       );
+      await updateRoomSkillsCommand.execute({
+        roomId,
+        skillCardIdsToActivate: skillIds,
+      });
     } catch (e) {
       console.error('Failed to apply default skills to room:', e);
     }
@@ -569,8 +560,8 @@ export default class AiAssistantPanelService extends Service {
   private summarizeSessionTask = restartableTask(
     async (oldRoomId: string, newRoomId: string) => {
       try {
-        const summarizeCommand = new SummarizeSessionCommand(
-          this.commandService.commandContext,
+        const summarizeCommand = new SummarizeSessionTool(
+          this.toolService.toolContext,
         );
         const result = await summarizeCommand.execute({
           roomId: oldRoomId,

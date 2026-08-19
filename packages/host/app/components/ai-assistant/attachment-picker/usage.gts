@@ -8,11 +8,11 @@ import { TrackedArray } from 'tracked-built-ins';
 
 import { TrackedSet } from 'tracked-built-ins';
 
-import CardCatalogModal from '@cardstack/host/components/card-catalog/modal';
-
-import type { FileDef } from 'https://cardstack.com/base/file-api';
+import CardChooserModal from '@cardstack/host/components/card-chooser/modal';
 
 import AiAssistantAttachmentPicker from './index';
+
+import type { FileDef } from '@cardstack/base/file-api';
 
 export default class AiAssistantCardPickerUsage extends Component {
   cardIds: TrackedArray<string> = new TrackedArray([]);
@@ -72,7 +72,7 @@ export default class AiAssistantCardPickerUsage extends Component {
           <AttachedItems />
           <AttachButton />
         </AiAssistantAttachmentPicker>
-        <CardCatalogModal />
+        <CardChooserModal />
       </:example>
       <:api as |Args|>
         <Args.Object

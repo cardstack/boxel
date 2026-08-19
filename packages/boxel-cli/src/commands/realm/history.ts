@@ -3,9 +3,9 @@ import type { Command } from 'commander';
 import {
   CheckpointManager,
   type Checkpoint,
-} from '../../lib/checkpoint-manager';
-import { findCheckpoint } from '../../lib/find-checkpoint';
-import { prompt } from '../../lib/prompt';
+} from '../../lib/checkpoint-manager.ts';
+import { findCheckpoint } from '../../lib/find-checkpoint.ts';
+import { prompt } from '../../lib/prompt.ts';
 import {
   BOLD,
   DIM,
@@ -15,7 +15,7 @@ import {
   FG_RED,
   FG_YELLOW,
   RESET,
-} from '../../lib/colors';
+} from '../../lib/colors.ts';
 
 const DEFAULT_LIMIT = 100;
 

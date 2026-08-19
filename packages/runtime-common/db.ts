@@ -1,5 +1,5 @@
-import type { PgPrimitive } from './index';
-import type { Querier } from './expression';
+import type { PgPrimitive } from './index.ts';
+import type { Querier } from './expression.ts';
 
 export interface TypeCoercion {
   [column: string]: 'BOOLEAN' | 'JSON' | 'VARCHAR';

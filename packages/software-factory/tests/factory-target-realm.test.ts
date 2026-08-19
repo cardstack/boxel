@@ -1,19 +1,20 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { module, test } from 'qunit';
+import QUnit from 'qunit';
+const { module, test } = QUnit;
 
 import {
   setProfileManager,
   resetProfileManager,
 } from '@cardstack/boxel-cli/api';
 
-import { FactoryEntrypointUsageError } from '../src/factory-entrypoint-errors';
+import { FactoryEntrypointUsageError } from '../src/factory-entrypoint-errors.ts';
 import {
   bootstrapFactoryTargetRealm,
   resolveFactoryTargetRealm,
-} from '../src/factory-target-realm';
-import { installTestProfile } from './helpers/test-profile';
+} from '../src/factory-target-realm.ts';
+import { installTestProfile } from './helpers/test-profile.ts';
 
 const targetRealm = 'https://realms.example.test/testuser/personal/';
 

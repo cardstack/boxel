@@ -4,9 +4,9 @@ import {
   contains,
   StringField,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import NumberField from 'https://cardstack.com/base/number';
-import ColorField from 'https://cardstack.com/base/color';
+} from '@cardstack/base/card-api';
+import NumberField from '@cardstack/base/number';
+import ColorField from '@cardstack/base/color';
 
 import FilterSearch from '@cardstack/boxel-icons/filter-search';
 import FilePen from '@cardstack/boxel-icons/file-pen';
@@ -78,7 +78,10 @@ class DealStatusEdit extends Component<typeof DealStatus> {
     });
   }
 
-  @action onSelectStatus(status: DealStatus): void {
+  @action onSelectStatus(status: DealStatus | null): void {
+    if (!status) {
+      return;
+    }
     this.label = status.label;
     this.args.model.label = this.selectedStatus?.label;
     this.args.model.index = this.selectedStatus?.index;

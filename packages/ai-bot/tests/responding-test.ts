@@ -1,20 +1,22 @@
-import { module, test, assert } from 'qunit';
-import { Responder } from '../lib/responder';
-import { DEFAULT_EVENT_SIZE_MAX } from '../lib/matrix/response-publisher';
+import QUnit from 'qunit';
+const { module, test, assert } = QUnit;
+import { Responder } from '../lib/responder.ts';
+import { DEFAULT_EVENT_SIZE_MAX } from '../lib/matrix/response-publisher.ts';
 import FakeTimers from '@sinonjs/fake-timers';
-import { thinkingMessage } from '../constants';
+import { thinkingMessage } from '../constants.ts';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
-import type { CommandRequest } from '@cardstack/runtime-common/commands';
+import type { ToolRequest } from '@cardstack/runtime-common/commands';
 import {
   APP_BOXEL_REASONING_CONTENT_KEY,
-  APP_BOXEL_COMMAND_REQUESTS_KEY,
+  APP_BOXEL_TOOL_REQUESTS_KEY,
   APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
   APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
+  APP_BOXEL_RESPONSE_STREAM_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 import type OpenAI from 'openai';
-import { FakeMatrixClient } from './helpers/fake-matrix-client';
+import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';
 import { OpenAIError } from 'openai';
-import * as Sentry from '@sentry/node';
+import { errorReporter } from '../lib/sentry.ts';
 
 function snapshotWithContent(content: string): ChatCompletionSnapshot {
   return {
@@ -56,21 +58,21 @@ function chunkWithReasoning(
 }
 
 function snapshotWithToolCall(
-  commandRequest: Partial<CommandRequest>,
+  toolRequest: Partial<ToolRequest>,
 ): ChatCompletionSnapshot {
   let toolCall = {
     type: 'function',
   } as any;
-  if (commandRequest.arguments) {
+  if (toolRequest.arguments) {
     toolCall.function = (toolCall.function ?? {}) as any;
-    toolCall.function.arguments = JSON.stringify(commandRequest.arguments);
+    toolCall.function.arguments = JSON.stringify(toolRequest.arguments);
   }
-  if (commandRequest.name) {
+  if (toolRequest.name) {
     toolCall.function = (toolCall.function ?? {}) as any;
-    toolCall.function.name = commandRequest.name;
+    toolCall.function.name = toolRequest.name;
   }
-  if (commandRequest.id) {
-    toolCall.id = commandRequest.id;
+  if (toolRequest.id) {
+    toolCall.id = toolRequest.id;
   }
   return {
     choices: [
@@ -89,6 +91,15 @@ function snapshotWithToolCall(
   };
 }
 
+function snapshotWithContentAndToolCall(
+  content: string,
+  toolRequest: Partial<ToolRequest>,
+): ChatCompletionSnapshot {
+  let snapshot = snapshotWithToolCall(toolRequest);
+  snapshot.choices[0].message.content = content;
+  return snapshot;
+}
+
 module('Responding', (hooks) => {
   let fakeMatrixClient: FakeMatrixClient;
   let responder: Responder;
@@ -98,6 +109,11 @@ module('Responding', (hooks) => {
     clock = FakeTimers.install();
     fakeMatrixClient = new FakeMatrixClient();
     responder = new Responder(fakeMatrixClient, 'room-id', 'abc123agentId');
+    // Most tests here exercise room-edit streaming mechanics (thinking-message
+    // replacement, throttled edits, event splitting). Since the default mode is
+    // now to-device, pin room-edits as the module baseline; tests that target a
+    // different mode override this and reset it in their own teardown.
+    process.env.AI_BOT_STREAMING_MODE = 'room-edits';
   });
 
   hooks.afterEach(() => {
@@ -106,6 +122,7 @@ module('Responding', (hooks) => {
     responder.finalize();
     fakeMatrixClient.resetSentEvents();
     responder.matrixResponsePublisher.eventSizeMax = DEFAULT_EVENT_SIZE_MAX;
+    delete process.env.AI_BOT_STREAMING_MODE;
   });
 
   test('Sends thinking message', async () => {
@@ -263,6 +280,535 @@ module('Responding', (hooks) => {
     );
   });
 
+  test('`to-device` streaming mode: streams previews to the target device and lands one final consolidated room event', async () => {
+    process.env.AI_BOT_STREAMING_MODE = 'to-device';
+    try {
+      responder = new Responder(fakeMatrixClient, 'room-id', 'abc123agentId', {
+        userId: '@alice:example.com',
+        deviceId: 'DEVICEALICE',
+      });
+
+      await responder.ensureThinkingMessageSent();
+
+      // Stream several chunks — each is a state change that should trigger a
+      // throttled to-device preview, not a room edit.
+      for (let i = 0; i < 5; i++) {
+        await responder.onChunk({} as any, snapshotWithContent('content ' + i));
+        // Advance past the throttle window so each chunk gets its own send.
+        await clock.tickAsync(300);
+      }
+
+      let roomEvents = fakeMatrixClient.getSentEvents();
+      assert.equal(
+        roomEvents.length,
+        1,
+        'Only the thinking placeholder has landed as a room event so far',
+      );
+
+      let toDeviceEvents = fakeMatrixClient.getSentToDeviceEvents();
+      assert.ok(
+        toDeviceEvents.length >= 1,
+        'At least one preview was sent over to-device',
+      );
+      assert.ok(
+        toDeviceEvents.every(
+          (e) => e.eventType === APP_BOXEL_RESPONSE_STREAM_EVENT_TYPE,
+        ),
+        'All to-device events use the response-stream type',
+      );
+      let firstPreview =
+        toDeviceEvents[0].contentMap['@alice:example.com']?.['DEVICEALICE'];
+      assert.ok(firstPreview, 'Preview targets the originating device');
+      assert.equal(
+        (firstPreview as any).parentEventId,
+        '0',
+        'Preview attaches to the thinking placeholder event id',
+      );
+      assert.equal(
+        (firstPreview as any).roomId,
+        'room-id',
+        'Preview carries the correct roomId',
+      );
+      assert.deepEqual(
+        toDeviceEvents.map(
+          (e) =>
+            (e as any).contentMap['@alice:example.com']?.['DEVICEALICE']
+              ?.sequence,
+        ),
+        toDeviceEvents.map((_, i) => i),
+        'Sequence numbers are monotonic and start at 0',
+      );
+
+      await responder.finalize();
+
+      roomEvents = fakeMatrixClient.getSentEvents();
+      assert.equal(
+        roomEvents.length,
+        2,
+        'Placeholder plus one final consolidated room event',
+      );
+      assert.equal(
+        roomEvents[1].content.body,
+        'content 4',
+        'Final room event carries the full accumulated content',
+      );
+      assert.deepEqual(
+        roomEvents[1].content['m.relates_to'],
+        { rel_type: 'm.replace', event_id: '0' },
+        'Final room event replaces the thinking placeholder',
+      );
+      assert.deepEqual(
+        roomEvents[1].content.isStreamingFinished,
+        true,
+        'isStreamingFinished is set on the final room event',
+      );
+    } finally {
+      delete process.env.AI_BOT_STREAMING_MODE;
+    }
+  });
+
+  test('per-turn telemetry records mode, event counts, and token usage', async () => {
+    process.env.AI_BOT_STREAMING_MODE = 'to-device';
+    try {
+      responder = new Responder(fakeMatrixClient, 'room-id', 'abc123agentId', {
+        userId: '@alice:example.com',
+        deviceId: 'DEVICEALICE',
+      });
+
+      await responder.ensureThinkingMessageSent();
+
+      for (let i = 0; i < 5; i++) {
+        await responder.onChunk({} as any, snapshotWithContent('content ' + i));
+        await clock.tickAsync(300);
+      }
+
+      // The final chunk carries usage (the only chunk that does), which the
+      // Responder tallies for the telemetry line.
+      await responder.onChunk(
+        { usage: { prompt_tokens: 120, completion_tokens: 42 } } as any,
+        snapshotWithContent('content 4'),
+      );
+
+      let toDeviceCount = fakeMatrixClient.getSentToDeviceEvents().length;
+      await responder.finalize();
+
+      let telemetry = responder.turnTelemetry;
+      assert.equal(telemetry.mode, 'to-device', 'mode is recorded');
+      assert.equal(
+        telemetry.roomEvents,
+        2,
+        'room events = thinking placeholder + one final consolidated event',
+      );
+      assert.equal(
+        telemetry.toDeviceEvents,
+        toDeviceCount,
+        'to-device count matches the previews actually sent',
+      );
+      assert.ok(telemetry.toDeviceEvents >= 1, 'at least one preview was sent');
+      assert.equal(telemetry.promptTokens, 120, 'prompt tokens captured');
+      assert.equal(
+        telemetry.completionTokens,
+        42,
+        'completion tokens captured',
+      );
+      assert.equal(telemetry.canceled, false, 'not canceled');
+      assert.equal(telemetry.roomId, 'room-id', 'roomId recorded');
+      assert.equal(telemetry.agentId, 'abc123agentId', 'agentId recorded');
+      assert.ok(
+        telemetry.streamMs !== undefined &&
+          telemetry.streamMs <= telemetry.durationMs,
+        'streamMs isolates the streaming window and is no larger than whole-turn durationMs',
+      );
+    } finally {
+      delete process.env.AI_BOT_STREAMING_MODE;
+    }
+  });
+
+  test('a trailing usage-only chunk cannot flip a finished stream back to streaming, and its counts land on the final room event', async () => {
+    process.env.AI_BOT_STREAMING_MODE = 'to-device';
+    try {
+      responder = new Responder(fakeMatrixClient, 'room-id', 'agent-id', {
+        userId: '@alice:example.com',
+        deviceId: 'DEVICEALICE',
+      });
+      await responder.ensureThinkingMessageSent();
+
+      for (let i = 0; i < 3; i++) {
+        await responder.onChunk({} as any, snapshotWithContent('content ' + i));
+        await clock.tickAsync(300);
+      }
+
+      // The provider ends the answer...
+      await responder.onChunk(
+        {
+          choices: [{ delta: {}, finish_reason: 'stop', index: 0 }],
+        } as any,
+        snapshotWithContent('content 2'),
+      );
+      // ...and the throttled final room edit goes out before the usage
+      // arrives.
+      await clock.tickAsync(300);
+
+      let sentEvents = fakeMatrixClient.getSentEvents();
+      let finalEdit = sentEvents[sentEvents.length - 1];
+      assert.equal(
+        finalEdit.content.isStreamingFinished,
+        true,
+        'the stop chunk finished the stream',
+      );
+      assert.notOk(
+        JSON.parse(finalEdit.content.data as string).usage,
+        'the final edit went out before the usage chunk, so it carries no usage',
+      );
+
+      let roomEventsBeforeUsage = sentEvents.length;
+      let toDeviceEventsBeforeUsage =
+        fakeMatrixClient.getSentToDeviceEvents().length;
+
+      // The usage report trails the stop chunk on a chunk with no choices.
+      // It carries OpenRouter's extensions too: the prompt-cache split and
+      // the inline cost.
+      await responder.onChunk(
+        {
+          choices: [],
+          usage: {
+            prompt_tokens: 321,
+            completion_tokens: 45,
+            prompt_tokens_details: { cached_tokens: 300 },
+            cost: 0.0123,
+          },
+        } as any,
+        snapshotWithContent('content 2'),
+      );
+      // Give the throttle time to fire, as it would in production between the
+      // usage chunk and finalize. The trailing chunk changes nothing, so
+      // nothing may go out here: a send in this window is the regression —
+      // it re-marks the finished answer as streaming, and the client sticks
+      // on it.
+      await clock.tickAsync(300);
+      assert.equal(
+        fakeMatrixClient.getSentEvents().length,
+        roomEventsBeforeUsage,
+        'the trailing usage chunk triggers no room event of its own',
+      );
+      assert.equal(
+        fakeMatrixClient.getSentToDeviceEvents().length,
+        toDeviceEventsBeforeUsage,
+        'the trailing usage chunk triggers no to-device preview',
+      );
+
+      await responder.finalize();
+
+      sentEvents = fakeMatrixClient.getSentEvents();
+      let last = sentEvents[sentEvents.length - 1];
+      assert.equal(
+        last.content.isStreamingFinished,
+        true,
+        'the trailing usage chunk did not un-finish the stream',
+      );
+      assert.equal(
+        last.content.body,
+        'content 2',
+        'the usage edit re-sends the complete answer',
+      );
+      assert.deepEqual(
+        JSON.parse(last.content.data as string).usage,
+        {
+          promptTokens: 321,
+          completionTokens: 45,
+          cachedTokens: 300,
+          costUsd: 0.0123,
+        },
+        'the token counts, cache split, and cost ride the final room event',
+      );
+      assert.deepEqual(
+        last.content['m.relates_to'],
+        { rel_type: 'm.replace', event_id: '0' },
+        'the usage edit replaces the same message, not a new one',
+      );
+      assert.equal(
+        responder.turnTelemetry.promptTokens,
+        321,
+        'telemetry captured the prompt tokens',
+      );
+    } finally {
+      delete process.env.AI_BOT_STREAMING_MODE;
+    }
+  });
+
+  test('a trailing usage chunk that still carries an unfinished choice cannot flip a finished stream back to streaming', async () => {
+    // Same trap as the usage-only chunk above, but in the other shape
+    // providers use: the usage rides a chunk whose choice has no
+    // finish_reason. Deriving the finished flag from that chunk alone would
+    // flip it back off.
+    process.env.AI_BOT_STREAMING_MODE = 'to-device';
+    try {
+      responder = new Responder(fakeMatrixClient, 'room-id', 'agent-id', {
+        userId: '@alice:example.com',
+        deviceId: 'DEVICEALICE',
+      });
+      await responder.ensureThinkingMessageSent();
+
+      await responder.onChunk({} as any, snapshotWithContent('the answer'));
+      await clock.tickAsync(300);
+      await responder.onChunk(
+        {
+          choices: [{ delta: {}, finish_reason: 'stop', index: 0 }],
+        } as any,
+        snapshotWithContent('the answer'),
+      );
+      await clock.tickAsync(300);
+
+      let toDeviceEventsBeforeUsage =
+        fakeMatrixClient.getSentToDeviceEvents().length;
+      await responder.onChunk(
+        {
+          choices: [{ delta: {}, finish_reason: null, index: 0 }],
+          usage: { prompt_tokens: 100, completion_tokens: 10 },
+        } as any,
+        snapshotWithContent('the answer'),
+      );
+      await clock.tickAsync(300);
+      assert.equal(
+        fakeMatrixClient.getSentToDeviceEvents().length,
+        toDeviceEventsBeforeUsage,
+        'the trailing usage chunk triggers no to-device preview',
+      );
+
+      await responder.finalize();
+
+      let sentEvents = fakeMatrixClient.getSentEvents();
+      let last = sentEvents[sentEvents.length - 1];
+      assert.equal(
+        last.content.isStreamingFinished,
+        true,
+        'the trailing usage chunk did not un-finish the stream',
+      );
+      assert.deepEqual(
+        JSON.parse(last.content.data as string).usage,
+        { promptTokens: 100, completionTokens: 10 },
+        'the token counts ride the final room event',
+      );
+    } finally {
+      delete process.env.AI_BOT_STREAMING_MODE;
+    }
+  });
+
+  test('per-turn telemetry counts room-edits mid-turn events (the comparison baseline)', async () => {
+    // The module baseline is room-edits (set in beforeEach) — the "before" side
+    // of the streaming-mode comparison, where each mid-turn edit is its own room
+    // event. Pins that this stays high, so a regression that stopped counting
+    // mid-turn edits can't silently collapse it to ~2 like the other modes.
+    await responder.ensureThinkingMessageSent();
+    for (let i = 0; i < 5; i++) {
+      await responder.onChunk({} as any, snapshotWithContent('content ' + i));
+      await clock.tickAsync(300);
+    }
+    await responder.finalize();
+
+    let telemetry = responder.turnTelemetry;
+    assert.equal(telemetry.mode, 'room-edits', 'room-edits mode is active');
+    assert.ok(
+      telemetry.roomEvents > 2,
+      `room-edits emits a room event per mid-turn edit (got ${telemetry.roomEvents})`,
+    );
+    assert.equal(
+      telemetry.toDeviceEvents,
+      0,
+      'room-edits never uses the to-device channel',
+    );
+  });
+
+  test('default streaming mode (no env var) is to-device', async () => {
+    // Guards the default flip: with AI_BOT_STREAMING_MODE unset the turn runs
+    // in to-device mode, so only the placeholder + one consolidated room edit
+    // land regardless of whether a preview target is present.
+    delete process.env.AI_BOT_STREAMING_MODE;
+    await responder.ensureThinkingMessageSent();
+    for (let i = 0; i < 5; i++) {
+      await responder.onChunk({} as any, snapshotWithContent('content ' + i));
+      await clock.tickAsync(300);
+    }
+    await responder.finalize();
+
+    let telemetry = responder.turnTelemetry;
+    assert.equal(telemetry.mode, 'to-device', 'default mode is to-device');
+    assert.equal(
+      telemetry.roomEvents,
+      2,
+      `default collapses to placeholder + one final room edit (got ${telemetry.roomEvents})`,
+    );
+  });
+
+  test('per-turn telemetry is emitted once for a turn that errors without finalize', async () => {
+    // Several error paths in main.ts end a turn via onError() without ever
+    // calling finalize(); those turns still emit room events, so telemetry has
+    // to land from onError() too or the comparison loses them. Count actual
+    // emissions (guard-passes), not method invocations, by watching the
+    // telemetryLogged flag flip.
+    let emits = 0;
+    const responderAny = responder as unknown as {
+      logTurnTelemetry: () => void;
+      telemetryLogged: boolean;
+    };
+    const original = responderAny.logTurnTelemetry.bind(responder);
+    responderAny.logTurnTelemetry = () => {
+      const before = responderAny.telemetryLogged;
+      original();
+      if (!before && responderAny.telemetryLogged) {
+        emits++;
+      }
+    };
+
+    await responder.ensureThinkingMessageSent();
+    await responder.onChunk({} as any, snapshotWithContent('partial'));
+    await clock.tickAsync(300);
+    assert.equal(emits, 0, 'nothing is logged mid-turn');
+
+    await responder.onError('boom');
+    assert.equal(emits, 1, 'the error path emits the telemetry line');
+    assert.ok(
+      responder.turnTelemetry.roomEvents >= 2,
+      'the errored turn reports the room events it emitted (placeholder + error)',
+    );
+
+    // A late finalize() must not emit a second line for the same turn.
+    await responder.finalize();
+    assert.equal(emits, 1, 'the once-per-turn guard suppresses a duplicate');
+  });
+
+  test('`to-device` streaming mode without a target device falls back to `off` behavior', async () => {
+    process.env.AI_BOT_STREAMING_MODE = 'to-device';
+    try {
+      // No streamPreviewTarget passed (simulates a prompt from an older client
+      // that didn't stamp the originating device id).
+      responder = new Responder(fakeMatrixClient, 'room-id', 'abc123agentId');
+
+      await responder.ensureThinkingMessageSent();
+
+      for (let i = 0; i < 5; i++) {
+        await responder.onChunk({} as any, snapshotWithContent('content ' + i));
+        await clock.tickAsync(300);
+      }
+
+      let roomEvents = fakeMatrixClient.getSentEvents();
+      assert.equal(
+        roomEvents.length,
+        1,
+        'No intermediate room events while streaming',
+      );
+      let toDeviceEvents = fakeMatrixClient.getSentToDeviceEvents();
+      assert.equal(
+        toDeviceEvents.length,
+        0,
+        'No to-device previews sent when target device is unknown',
+      );
+
+      await responder.finalize();
+
+      roomEvents = fakeMatrixClient.getSentEvents();
+      assert.equal(
+        roomEvents.length,
+        2,
+        'Final consolidated room event still lands',
+      );
+      assert.equal(roomEvents[1].content.body, 'content 4');
+      assert.deepEqual(roomEvents[1].content.isStreamingFinished, true);
+    } finally {
+      delete process.env.AI_BOT_STREAMING_MODE;
+    }
+  });
+
+  test('`to-device` streaming mode: previews carry tool requests in the room-event wire shape', async () => {
+    process.env.AI_BOT_STREAMING_MODE = 'to-device';
+    try {
+      responder = new Responder(fakeMatrixClient, 'room-id', 'abc123agentId', {
+        userId: '@alice:example.com',
+        deviceId: 'DEVICEALICE',
+      });
+
+      await responder.ensureThinkingMessageSent();
+
+      await responder.onChunk(
+        {} as any,
+        snapshotWithToolCall({
+          id: 'tool-1',
+          name: 'searchCards',
+          arguments: { query: 'pets' },
+        }),
+      );
+      await clock.tickAsync(300);
+
+      let toDeviceEvents = fakeMatrixClient.getSentToDeviceEvents();
+      assert.ok(toDeviceEvents.length >= 1, 'A preview was sent');
+      let preview =
+        toDeviceEvents[toDeviceEvents.length - 1].contentMap[
+          '@alice:example.com'
+        ]?.['DEVICEALICE'];
+      assert.deepEqual(
+        (preview as any).toolRequests,
+        [{ id: 'tool-1', name: 'searchCards', arguments: { query: 'pets' } }],
+        'toolRequests is normalized to the room event’s { id, name, arguments: <object> } shape, not the raw OpenAI { function: { name, arguments: <string> } } shape',
+      );
+    } finally {
+      delete process.env.AI_BOT_STREAMING_MODE;
+    }
+  });
+
+  test('`off` streaming mode: only sends the thinking placeholder and a single final consolidated event', async () => {
+    process.env.AI_BOT_STREAMING_MODE = 'off';
+    try {
+      await responder.ensureThinkingMessageSent();
+
+      for (let i = 0; i < 10; i++) {
+        // The last chunk carries `finish_reason: 'stop'` — this pins the
+        // end-of-stream transition and would regress the bug where off mode
+        // let onChunk flip isStreamingFinished, causing finalize to skip the
+        // final consolidated send.
+        let chunk =
+          i === 9
+            ? ({
+                choices: [{ finish_reason: 'stop', index: 0, delta: {} }],
+              } as any)
+            : ({} as any);
+        await responder.onChunk(chunk, snapshotWithContent('content ' + i));
+      }
+
+      let sentEvents = fakeMatrixClient.getSentEvents();
+      assert.equal(
+        sentEvents.length,
+        1,
+        'No intermediate content events are sent while streaming in off mode',
+      );
+
+      await responder.finalize();
+
+      sentEvents = fakeMatrixClient.getSentEvents();
+      assert.equal(
+        sentEvents.length,
+        2,
+        'Only the thinking placeholder and one final consolidated event are sent',
+      );
+      assert.equal(
+        sentEvents[1].content.body,
+        'content 9',
+        'Final event carries the complete accumulated content',
+      );
+      assert.deepEqual(
+        sentEvents[1].content['m.relates_to'],
+        { rel_type: 'm.replace', event_id: '0' },
+        'Final event replaces the thinking placeholder',
+      );
+      assert.deepEqual(
+        sentEvents[1].content.isStreamingFinished,
+        true,
+        'isStreamingFinished is set on the final event',
+      );
+    } finally {
+      delete process.env.AI_BOT_STREAMING_MODE;
+    }
+  });
+
   test('Sends tool call event and replaces thinking message when tool call happens with no content', async () => {
     const patchArgs = {
       description: 'A new thing',
@@ -304,7 +850,7 @@ module('Responding', (hooks) => {
       'Initial body should be empty',
     );
     assert.deepEqual(
-      sentEvents[1].content[APP_BOXEL_COMMAND_REQUESTS_KEY],
+      sentEvents[1].content[APP_BOXEL_TOOL_REQUESTS_KEY],
       [
         {
           id: 'some-tool-call-id',
@@ -390,7 +936,7 @@ module('Responding', (hooks) => {
       'Initial body should be empty',
     );
     assert.deepEqual(
-      sentEvents[2].content[APP_BOXEL_COMMAND_REQUESTS_KEY],
+      sentEvents[2].content[APP_BOXEL_TOOL_REQUESTS_KEY],
       [
         {
           name: 'patchCardInstance',
@@ -400,7 +946,7 @@ module('Responding', (hooks) => {
       'Partial tool call event should be sent with correct content',
     );
     assert.deepEqual(
-      sentEvents[3].content[APP_BOXEL_COMMAND_REQUESTS_KEY],
+      sentEvents[3].content[APP_BOXEL_TOOL_REQUESTS_KEY],
       [
         {
           id: 'some-tool-call-id',
@@ -522,7 +1068,7 @@ module('Responding', (hooks) => {
       'Initial body should be empty',
     );
     assert.deepEqual(
-      sentEvents[2].content[APP_BOXEL_COMMAND_REQUESTS_KEY],
+      sentEvents[2].content[APP_BOXEL_TOOL_REQUESTS_KEY],
       [
         {
           id: 'tool-call-1-id',
@@ -609,7 +1155,7 @@ module('Responding', (hooks) => {
       'Thinking message, and event with content, and event with one tool call should be sent',
     );
     assert.deepEqual(
-      sentEvents[2].content[APP_BOXEL_COMMAND_REQUESTS_KEY],
+      sentEvents[2].content[APP_BOXEL_TOOL_REQUESTS_KEY],
       [
         {
           id: 'tool-call-1-id',
@@ -1135,8 +1681,8 @@ module('Responding', (hooks) => {
 
   test('onError does not report to Sentry when streaming is already finished', async () => {
     let sentryCalls: any[] = [];
-    let originalCaptureException = Sentry.captureException;
-    (Sentry as any).captureException = (...args: any[]) => {
+    let originalCaptureException = errorReporter.captureException;
+    errorReporter.captureException = (...args: any[]) => {
       sentryCalls.push(args);
       return '';
     };
@@ -1168,14 +1714,14 @@ module('Responding', (hooks) => {
         'No error events should be sent to Matrix',
       );
     } finally {
-      (Sentry as any).captureException = originalCaptureException;
+      errorReporter.captureException = originalCaptureException;
     }
   });
 
   test('onError reports to Sentry when streaming is not finished', async () => {
     let sentryCalls: any[] = [];
-    let originalCaptureException = Sentry.captureException;
-    (Sentry as any).captureException = (...args: any[]) => {
+    let originalCaptureException = errorReporter.captureException;
+    errorReporter.captureException = (...args: any[]) => {
       sentryCalls.push(args);
       return '';
     };
@@ -1192,7 +1738,7 @@ module('Responding', (hooks) => {
         'Sentry should be called when streaming is not finished',
       );
     } finally {
-      (Sentry as any).captureException = originalCaptureException;
+      errorReporter.captureException = originalCaptureException;
     }
   });
 
@@ -1279,6 +1825,42 @@ module('Responding', (hooks) => {
       sentEvents[3].content.errorMessage,
       'Error - All your base are belong to us',
       'Error message should be sent, replacing the original message',
+    );
+  });
+  test('a split answer carries its tool call only on the final event', async () => {
+    // The reader joins continuation events back into one message, so a tool
+    // call repeated across the pieces lands in that message twice. Anthropic
+    // rejects the whole request for it — "tool_use ids must be unique" — and
+    // the turn dies on the request after the one that split.
+    responder.matrixResponsePublisher.eventSizeMax = 1024; // 1KB max event size
+
+    await responder.ensureThinkingMessageSent();
+    await responder.onChunk(
+      {} as any,
+      snapshotWithContentAndToolCall('a'.repeat(3072), {
+        id: 'toolu_duplicated',
+        name: 'readRealmFile',
+        arguments: { urls: [] },
+      }),
+    );
+    await responder.finalize();
+
+    let sent = fakeMatrixClient.getSentEvents();
+    let continuedWithToolRequests = sent.filter(
+      (e: any) =>
+        e.content[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY] &&
+        (e.content[APP_BOXEL_TOOL_REQUESTS_KEY] ?? []).length > 0,
+    );
+    assert.equal(
+      continuedWithToolRequests.length,
+      0,
+      'no piece that continues into another carries the tool call',
+    );
+    assert.ok(
+      sent.some(
+        (e: any) => (e.content[APP_BOXEL_TOOL_REQUESTS_KEY] ?? []).length > 0,
+      ),
+      'the tool call still reaches the room, on the final piece',
     );
   });
 });

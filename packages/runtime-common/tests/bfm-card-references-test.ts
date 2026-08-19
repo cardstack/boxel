@@ -1,5 +1,5 @@
-import type { SharedTests } from '../helpers';
-import { cardTypeName } from '../bfm-card-references';
+import type { SharedTests } from '../helpers/index.ts';
+import { cardTypeName } from '../bfm-card-references.ts';
 
 const tests = Object.freeze({
   'cardTypeName extracts type from absolute URL': async (assert) => {

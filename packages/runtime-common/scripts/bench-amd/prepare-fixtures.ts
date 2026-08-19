@@ -17,7 +17,7 @@
 import { writeFileSync, readFileSync, mkdirSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 
-import { fixturesDir, repoRoot } from './paths';
+import { fixturesDir, repoRoot } from './paths.ts';
 
 const baseDir = path.join(repoRoot, 'packages/base');
 
@@ -35,11 +35,9 @@ const fixtures: { name: string; file: string }[] = [
   const ContentTag = await import('content-tag');
   (globalThis as any).ContentTagGlobal = ContentTag;
 
-  // transpile.ts is in the runtime-common package; ts-node intercepts the
-  // `.ts` extension via require.
-  const { transpileJS } =
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    require('../../transpile') as typeof import('../../transpile');
+  // transpile.ts is in the runtime-common package; native Node strips its
+  // types on import.
+  const { transpileJS } = await import('../../transpile.ts');
 
   mkdirSync(fixturesDir, { recursive: true });
 

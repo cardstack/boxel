@@ -7,8 +7,8 @@ import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import {
   getProfileManager,
   type ProfileManager,
-} from '../../lib/profile-manager';
-import { FG_GREEN, FG_CYAN, RESET } from '../../lib/colors';
+} from '../../lib/profile-manager.ts';
+import { FG_GREEN, FG_CYAN, RESET } from '../../lib/colors.ts';
 
 const REALM_NAME_PATTERN = /^[a-z0-9-]+$/;
 

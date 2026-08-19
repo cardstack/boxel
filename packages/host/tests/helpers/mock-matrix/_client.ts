@@ -14,9 +14,10 @@ import { BOT_TRIGGER_EVENT_TYPE } from '@cardstack/runtime-common';
 import { canonicalizeMatrixMediaKey } from '@cardstack/runtime-common/ai/matrix-utils';
 import {
   APP_BOXEL_ACTIVE_LLM,
-  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
   APP_BOXEL_REALMS_EVENT_TYPE,
+  APP_BOXEL_REALM_SERVERS_EVENT_TYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_REALM_EVENT_TYPE,
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
@@ -32,17 +33,15 @@ import type { ExtendedClient } from '@cardstack/host/services/matrix-sdk-loader'
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type { SerializedFile } from 'https://cardstack.com/base/file-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
-import type { CommandField } from 'https://cardstack.com/base/skill';
-
 import type { MockSDK } from './_sdk';
-
 import type { ServerState } from './_server-state';
-
 import type { Config } from '../mock-matrix';
+import type { CardDef } from '@cardstack/base/card-api';
+import type { SerializedFile } from '@cardstack/base/file-api';
+import type { FileDef } from '@cardstack/base/file-api';
+import type { MatrixEvent as DiscreteMatrixEvent } from '@cardstack/base/matrix-event';
+import type { ToolField } from '@cardstack/base/skill';
+
 import type {
   MSC3575SlidingSyncRequest,
   MSC3575SlidingSyncResponse,
@@ -98,6 +97,10 @@ export class MockClient implements ExtendedClient {
       return {
         realms: this.sdkOpts.activeRealms ?? [],
       } as unknown as K;
+    } else if (_eventType === APP_BOXEL_REALM_SERVERS_EVENT_TYPE) {
+      return {
+        realmServers: this.sdkOpts.activeRealmServers ?? [],
+      } as unknown as K;
     } else if (_eventType === APP_BOXEL_SYSTEM_CARD_EVENT_TYPE) {
       return (this.sdkOpts.systemCardAccountData ?? null) as unknown as K;
     } else if (_eventType === APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE) {
@@ -140,11 +143,24 @@ export class MockClient implements ExtendedClient {
       }),
     );
 
+    // The real matrix initial sync re-emits every account-data key, not just
+    // the legacy realms list. Re-emit both so boot-path handlers see the same
+    // echoes they would in production — notably the `app.boxel.realm-servers`
+    // echo a lazy-migration boot triggers by writing that key just before
+    // startClient().
     this.emitEvent(
       new MatrixEvent({
         type: APP_BOXEL_REALMS_EVENT_TYPE,
         content: {
           realms: this.sdkOpts.activeRealms ?? [],
+        },
+      }),
+    );
+    this.emitEvent(
+      new MatrixEvent({
+        type: APP_BOXEL_REALM_SERVERS_EVENT_TYPE,
+        content: {
+          realmServers: this.sdkOpts.activeRealmServers ?? [],
         },
       }),
     );
@@ -207,8 +223,7 @@ export class MockClient implements ExtendedClient {
   }
 
   async getOpenIdToken() {
-    let accessToken =
-      this.sdkOpts.loggedInAs ?? this.clientOpts.userId ?? 'mock-matrix-user';
+    let accessToken = this.loggedInAs ?? 'mock-matrix-user';
     let baseUrl = this.baseUrl ?? 'http://localhost';
     let matrixServerName: string;
     try {
@@ -230,6 +245,8 @@ export class MockClient implements ExtendedClient {
   ): Promise<{}> {
     if (type === APP_BOXEL_REALMS_EVENT_TYPE) {
       this.sdkOpts.activeRealms = (data as any).realms;
+    } else if (type === APP_BOXEL_REALM_SERVERS_EVENT_TYPE) {
+      this.sdkOpts.activeRealmServers = (data as any).realmServers;
     } else if (type === 'm.direct') {
       this.sdkOpts.directRooms = (data as any)[this.loggedInAs!];
     } else if (type === APP_BOXEL_SYSTEM_CARD_EVENT_TYPE) {
@@ -413,10 +430,41 @@ export class MockClient implements ExtendedClient {
     } as unknown as MatrixSDK.Room);
   }
 
+  // Mirrors what `loggedInAs` bootstraps at setup, so a test can drive the
+  // real login form. Any password is accepted.
   loginWithPassword(
-    _user: string,
+    user: string,
     _password: string,
   ): Promise<MatrixSDK.LoginResponse> {
+    let userId = user.startsWith('@') ? user : `@${user}:localhost`;
+    this.clientOpts.userId = userId;
+    return Promise.resolve({
+      access_token: 'mock-access-token',
+      device_id: 'mock-device-id',
+      user_id: userId,
+    } as MatrixSDK.LoginResponse);
+  }
+
+  loginFlows(): Promise<{ flows: MatrixSDK.LoginFlow[] }> {
+    return Promise.resolve(
+      this.sdkOpts.loginFlowsResponse ?? {
+        flows: [{ type: 'm.login.password' }],
+      },
+    );
+  }
+
+  getSsoLoginUrl(
+    _redirectUrl: string,
+    _loginType?: string,
+    _idpId?: string,
+  ): string {
+    return this.sdkOpts.ssoLoginUrl ?? 'http://example.invalid/sso';
+  }
+
+  loginWithToken(token: string): Promise<MatrixSDK.LoginResponse> {
+    if (this.sdkOpts.loginWithTokenInterceptor) {
+      return this.sdkOpts.loginWithTokenInterceptor(token);
+    }
     throw new Error('Method not implemented.');
   }
 
@@ -498,6 +546,9 @@ export class MockClient implements ExtendedClient {
     let localEvent = new MatrixEvent(localEventData);
     localEvent.setStatus('sending' as MatrixSDK.EventStatus.SENDING);
     this.emitEvent(localEvent);
+    if (this.sdkOpts.sendEventInterceptor) {
+      await this.sdkOpts.sendEventInterceptor();
+    }
     if (content.body?.match(/SENDING_DELAY_THEN_/)) {
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }
@@ -629,13 +680,14 @@ export class MockClient implements ExtendedClient {
   private eventHandlerType(type: string) {
     switch (type) {
       case APP_BOXEL_REALMS_EVENT_TYPE:
+      case APP_BOXEL_REALM_SERVERS_EVENT_TYPE:
       case APP_BOXEL_SYSTEM_CARD_EVENT_TYPE:
       case APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE:
       case 'm.direct':
         return this.sdk.ClientEvent.AccountData;
       case APP_BOXEL_ROOM_SKILLS_EVENT_TYPE:
       case APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE:
-      case APP_BOXEL_COMMAND_RESULT_EVENT_TYPE:
+      case APP_BOXEL_TOOL_RESULT_EVENT_TYPE:
       case APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE:
       case APP_BOXEL_ACTIVE_LLM:
       case APP_BOXEL_REALM_EVENT_TYPE:
@@ -707,6 +759,24 @@ export class MockClient implements ExtendedClient {
         break;
       default:
         throw assertNever(eventType);
+    }
+  }
+
+  // Dispatch a to-device event (e.g. ai-bot's `app.boxel.response-stream`
+  // streaming previews) to ClientEvent.ToDeviceEvent listeners. To-device
+  // messages are ephemeral, so unlike room events they are not recorded in
+  // serverState.
+  simulateToDeviceEvent(
+    type: string,
+    content: Record<string, any>,
+    sender?: string,
+  ) {
+    let event = new MatrixEvent({ type, content, sender });
+    let handlers = this.listeners[this.sdk.ClientEvent.ToDeviceEvent];
+    if (handlers) {
+      for (let handler of handlers) {
+        handler(event);
+      }
     }
   }
 
@@ -847,11 +917,11 @@ export class MockClient implements ExtendedClient {
     return await this.fileDefManager.uploadCards(cards);
   }
 
-  async uploadCommandDefinitions(
-    commandDefinitions: CommandField[],
+  async uploadToolDefinitions(
+    toolDefinitionFileDefs: ToolField[],
   ): Promise<FileDef[]> {
-    return await this.fileDefManager.uploadCommandDefinitions(
-      commandDefinitions,
+    return await this.fileDefManager.uploadToolDefinitions(
+      toolDefinitionFileDefs,
     );
   }
 

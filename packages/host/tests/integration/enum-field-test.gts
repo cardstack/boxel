@@ -11,7 +11,6 @@ import { module, test } from 'qunit';
 import {
   PermissionsContextName,
   type Permissions,
-  baseRealm,
   getField,
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
@@ -20,6 +19,7 @@ import {
   provideConsumeContext,
   setupCardLogs,
   setupIntegrationTestRealm,
+  testModuleRealm,
 } from '../helpers';
 import {
   setupBaseRealm,
@@ -59,7 +59,7 @@ module('Integration | enumField', function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
+    async () => await loader.import('@cardstack/base/card-api'),
   );
 
   test('edit renders a dropdown with the enum options', async function (assert) {
@@ -243,7 +243,7 @@ module('Integration | enumField', function (hooks) {
     let t1b = (await createFromSerialized(
       doc1.data,
       doc1,
-      new URL('https://localhost:4202/test/'),
+      new URL(`${testModuleRealm}`),
     )) as Task;
     assert.strictEqual(t1b.priority, 'Medium', 'single enum value round-trips');
 
@@ -253,7 +253,7 @@ module('Integration | enumField', function (hooks) {
     let t2b = (await createFromSerialized(
       doc2.data,
       doc2,
-      new URL('https://localhost:4202/test/'),
+      new URL(`${testModuleRealm}`),
     )) as Task;
     assert.ok(
       Array.isArray(t2b.priorities),
@@ -655,7 +655,7 @@ module('Integration | enumField', function (hooks) {
     let app = new CrmApp({ globalPriorityOptions: ['High', 'Low'] });
     let t = new Task({ crmApp: app as any, priority: 'High' });
 
-    const enumModule = await loader.import(`${baseRealm.url}enum`);
+    const enumModule = await loader.import('@cardstack/base/enum');
     const enumValues = (enumModule as any).enumValues;
 
     let values = enumValues(t, 'priority');
@@ -690,7 +690,7 @@ module('Integration | enumField', function (hooks) {
     let t = new Task({ priority: null });
 
     // Helpers include null only when provided explicitly
-    const enumModule = await loader.import(`${baseRealm.url}enum`);
+    const enumModule = await loader.import('@cardstack/base/enum');
     const enumValues = (enumModule as any).enumValues;
     assert.deepEqual(
       enumValues(t, 'priority'),
@@ -724,7 +724,7 @@ module('Integration | enumField', function (hooks) {
     let t2 = (await createFromSerialized(
       doc.data,
       doc,
-      new URL('https://localhost:4202/test/'),
+      new URL(`${testModuleRealm}`),
     )) as Task;
     assert.strictEqual(
       t2.priority,
@@ -840,7 +840,7 @@ module('Integration | enumField', function (hooks) {
     let t2 = (await createFromSerialized(
       doc.data,
       doc,
-      new URL('https://localhost:4202/test/'),
+      new URL(`${testModuleRealm}`),
     )) as Task;
     assert.deepEqual(
       t2.priorities,
@@ -956,7 +956,7 @@ module('Integration | enumField', function (hooks) {
     });
 
     // Helpers should reflect usage-level configuration
-    const enumModule = await loader.import(`${baseRealm.url}enum`);
+    const enumModule = await loader.import('@cardstack/base/enum');
     const enumValues = (enumModule as any).enumValues;
     assert.deepEqual(
       enumValues(t, 'priority'),

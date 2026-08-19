@@ -50,12 +50,72 @@ module('normalizeQueryDefinition', function () {
     let targetRef = codeRefWithAbsoluteIdentifier(
       fieldDefinition.fieldOrCard,
       new URL(resource.id!),
+      undefined,
     );
     assert.deepEqual(normalized?.query.filter, {
       eq: { city: 'NYC' },
       on: targetRef,
     });
-    assert.strictEqual(normalized?.realm, 'https://other.realm/');
+    assert.deepEqual(normalized?.realms, ['https://other.realm/']);
+  });
+
+  test('resolves relative code refs in RRI space', function (assert) {
+    let realmURL = new URL('https://realm.example/');
+    let resource: LooseCardResource = {
+      // A prefix-mapped realm's canonical instance id.
+      id: '@scope/realm/cards/1',
+      meta: {
+        adoptsFrom: {
+          module: rri('@scope/realm/base'),
+          name: 'BaseCard',
+        },
+      },
+      attributes: {},
+    };
+
+    let normalized = normalizeQueryDefinition({
+      fieldDefinition: {
+        ...fieldDefinition,
+        fieldOrCard: {
+          // Relative module: must resolve against the prefix-form id.
+          module: rri('../test-defs'),
+          name: 'Test',
+        },
+      },
+      queryDefinition: {},
+      realmURL,
+      fieldName: 'queryField',
+      resource,
+      resolvePathValue: () => undefined,
+    });
+
+    assert.ok(normalized, 'normalization succeeded');
+    assert.deepEqual(
+      normalized?.query.filter,
+      {
+        type: { module: rri('@scope/realm/test-defs'), name: 'Test' },
+      },
+      'relative module resolved against the prefix-form id, staying in RRI space',
+    );
+
+    // An already-absolute prefix module passes through unchanged.
+    let absolute = normalizeQueryDefinition({
+      fieldDefinition: {
+        ...fieldDefinition,
+        fieldOrCard: {
+          module: rri('@other/realm/defs'),
+          name: 'Test',
+        },
+      },
+      queryDefinition: {},
+      realmURL,
+      fieldName: 'queryField',
+      resource,
+      resolvePathValue: () => undefined,
+    });
+    assert.deepEqual(absolute?.query.filter, {
+      type: { module: rri('@other/realm/defs'), name: 'Test' },
+    });
   });
 
   test('injects on into leaf filter inside not', function (assert) {
@@ -64,6 +124,7 @@ module('normalizeQueryDefinition', function () {
     let targetRef = codeRefWithAbsoluteIdentifier(
       fieldDefinition.fieldOrCard,
       relativeTo,
+      undefined,
     );
 
     let normalized = normalizeQueryDefinition({
@@ -89,6 +150,7 @@ module('normalizeQueryDefinition', function () {
     let targetRef = codeRefWithAbsoluteIdentifier(
       fieldDefinition.fieldOrCard,
       relativeTo,
+      undefined,
     );
 
     let normalized = normalizeQueryDefinition({
@@ -119,6 +181,7 @@ module('normalizeQueryDefinition', function () {
     let targetRef = codeRefWithAbsoluteIdentifier(
       fieldDefinition.fieldOrCard,
       relativeTo,
+      undefined,
     );
 
     let normalized = normalizeQueryDefinition({
@@ -149,6 +212,7 @@ module('normalizeQueryDefinition', function () {
     let targetRef = codeRefWithAbsoluteIdentifier(
       fieldDefinition.fieldOrCard,
       relativeTo,
+      undefined,
     );
 
     let normalized = normalizeQueryDefinition({
@@ -189,6 +253,7 @@ module('normalizeQueryDefinition', function () {
     let targetRef = codeRefWithAbsoluteIdentifier(
       fieldDefinition.fieldOrCard,
       relativeTo,
+      undefined,
     );
     let typeRef = {
       module: rri('https://example.com/other'),
@@ -242,6 +307,7 @@ module('normalizeQueryDefinition', function () {
     let targetRef = codeRefWithAbsoluteIdentifier(
       fieldDefinition.fieldOrCard,
       relativeTo,
+      undefined,
     );
     assert.deepEqual(normalized?.query.filter, {
       any: [
@@ -270,6 +336,7 @@ module('normalizeQueryDefinition', function () {
     let targetRef = codeRefWithAbsoluteIdentifier(
       fieldDefinition.fieldOrCard,
       relativeTo,
+      undefined,
     );
     assert.deepEqual(normalized?.query.filter, {
       in: { color: ['red', 'blue', 'green'] },
@@ -319,12 +386,175 @@ module('normalizeQueryDefinition', function () {
     let targetRef = codeRefWithAbsoluteIdentifier(
       fieldDefinition.fieldOrCard,
       relativeTo,
+      undefined,
     );
     assert.deepEqual(normalized?.query.filter, {
       eq: { city: 'Paris' },
       on: targetRef,
     });
-    assert.strictEqual(normalized?.realm, realmURL.href);
+    assert.deepEqual(normalized?.realms, [realmURL.href]);
+  });
+
+  module('multiple realms', function () {
+    let realmURL = new URL('https://realm.example/');
+    // Stands in for the VirtualNetwork: maps a reference to the realm holding
+    // it. Two realms share a prefix so the longest-match rule is exercised.
+    let realmForReference = (reference: string): string | undefined => {
+      for (let realm of [
+        'https://other.realm/deep/',
+        'https://other.realm/',
+        realmURL.href,
+      ]) {
+        if (reference.startsWith(realm)) {
+          return realm;
+        }
+      }
+      return undefined;
+    };
+
+    function normalize(
+      realms: string | string[],
+      attributes: Record<string, any> = {},
+    ) {
+      let resource: LooseCardResource = {
+        id: 'https://realm.example/cards/1',
+        meta: {
+          adoptsFrom: {
+            module: rri('https://example.com/base'),
+            name: 'BaseCard',
+          },
+        },
+        attributes,
+      };
+      return normalizeQueryDefinition({
+        fieldDefinition,
+        queryDefinition: { filter: { eq: { city: 'NYC' } }, realms },
+        realmURL,
+        fieldName: 'queryField',
+        resource,
+        resolvePathValue: (path) => getValueForResourcePath(resource, path),
+        resolveRealmForReference: realmForReference,
+      });
+    }
+
+    test('an interpolation standing in for the whole list resolves every realm', function (assert) {
+      let normalized = normalize('$this.refs', {
+        refs: [
+          'https://other.realm/Pet/mango',
+          'https://realm.example/Pet/vanGogh',
+        ],
+      });
+      assert.deepEqual(normalized?.realms, [
+        'https://other.realm/',
+        realmURL.href,
+      ]);
+    });
+
+    test('references into one realm collapse to a single entry', function (assert) {
+      let normalized = normalize('$this.refs', {
+        refs: [
+          'https://other.realm/Pet/mango',
+          'https://other.realm/Pet/vanGogh',
+        ],
+      });
+      assert.deepEqual(
+        normalized?.realms,
+        ['https://other.realm/'],
+        'the realm is not repeated once per reference',
+      );
+    });
+
+    test('the deepest matching realm wins', function (assert) {
+      let normalized = normalize('$this.refs', {
+        refs: ['https://other.realm/deep/Pet/mango'],
+      });
+      assert.deepEqual(
+        normalized?.realms,
+        ['https://other.realm/deep/'],
+        'a realm nested under another is attributed to the nested one',
+      );
+    });
+
+    test('a reference no realm holds is dropped rather than searched locally', function (assert) {
+      let normalized = normalize('$this.refs', {
+        refs: ['https://unknown.realm/Pet/mango', 'https://other.realm/Pet/x'],
+      });
+      assert.deepEqual(
+        normalized?.realms,
+        ['https://other.realm/'],
+        'the unplaceable reference contributes no realm',
+      );
+    });
+
+    test('a query whose realms all resolve to nothing yields no query at all', function (assert) {
+      let normalized = normalize('$this.refs', {
+        refs: ['https://unknown.realm/Pet/mango'],
+      });
+      assert.strictEqual(
+        normalized,
+        null,
+        'falling back to the containing realm would search the wrong place',
+      );
+    });
+
+    test('an explicit list of realms is honored as written', function (assert) {
+      let normalized = normalize(['https://other.realm/', realmURL.href]);
+      assert.deepEqual(normalized?.realms, [
+        'https://other.realm/',
+        realmURL.href,
+      ]);
+    });
+
+    test('a mixed list keeps each entry to how it was authored', function (assert) {
+      // The literal was written into the query, so it is honored as written
+      // even when the resolver cannot place it; the interpolated sibling is the
+      // instance's data, so an unplaceable one is dropped. A single verdict for
+      // the whole list would have to get one of the two wrong.
+      let normalized = normalize(['https://peer.example/', '$this.refs'], {
+        refs: [
+          'https://other.realm/Pet/mango',
+          'https://nowhere.example/Pet/x',
+        ],
+      });
+      assert.deepEqual(
+        normalized?.realms,
+        ['https://peer.example/', 'https://other.realm/'],
+        'the literal survives, the placeable reference resolves, the unplaceable one is dropped',
+      );
+    });
+
+    test('an interpolation yielding a list is flattened, not nested', function (assert) {
+      // Inside a list, an interpolation standing in for several realms expands
+      // in place rather than becoming an array entry.
+      let normalized = normalize([realmURL.href, '$this.refs'], {
+        refs: [
+          'https://other.realm/Pet/mango',
+          'https://other.realm/deep/Pet/x',
+        ],
+      });
+      assert.deepEqual(normalized?.realms, [
+        realmURL.href,
+        'https://other.realm/',
+        'https://other.realm/deep/',
+      ]);
+    });
+
+    test('a realm named directly is honored even when the resolver cannot place it', function (assert) {
+      // A field may target a peer realm this process holds no mapping for.
+      // What it was authored as decides this, not how it is spelled: a realm
+      // href may legitimately omit the trailing slash, which the search-URL
+      // builder normalizes on its own.
+      assert.deepEqual(
+        normalize('https://peer.realm/somewhere/')?.realms,
+        ['https://peer.realm/somewhere/'],
+        'an unplaceable realm is used as written',
+      );
+      assert.deepEqual(
+        normalize('https://peer.example')?.realms,
+        ['https://peer.example'],
+        'a realm without a trailing slash is not mistaken for a resource',
+      );
+    });
   });
 });
 

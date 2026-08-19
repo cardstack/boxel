@@ -3,8 +3,8 @@ import {
   type RenderTimeoutDiagnostics,
   logger,
 } from '@cardstack/runtime-common';
-import type { PagePool } from './page-pool';
-import type { AffinityActivityTracker } from './affinity-activity';
+import type { PagePool } from './page-pool.ts';
+import type { AffinityActivityTracker } from './affinity-activity.ts';
 
 const log = logger('prerenderer');
 
@@ -16,7 +16,7 @@ const log = logger('prerenderer');
 //     timings + the captured affinity snapshot onto response.meta
 //     (decorateRenderErrorsWithTimings).
 // Both end up in `RenderTimeoutDiagnostics` on the eventual
-// `boxel_index.timing_diagnostics` JSONB column.
+// `boxel_index.diagnostics` JSONB column.
 
 // One registration with the shared peak sampler. `currentPeak()` samples
 // on demand and returns the richest observation seen so far; `stop()`
@@ -161,7 +161,7 @@ function isPeakBetter(
 // Merges timings + (optionally) affinitySnapshot onto `response.meta`,
 // lifting any host-side RenderError.diagnostics the handler attached
 // onto the inner error wrapper. Callers read `response.meta.diagnostics`
-// to persist into `timing_diagnostics`.
+// to persist into `diagnostics`.
 //
 // Why two channels: the response body carries the rendered HTML / card
 // JSON and needs to stay minimal; `response.meta` is the opt-in place
@@ -178,7 +178,7 @@ export interface RenderSettlementMeta {
   affinitySnapshot?: RenderTimeoutDiagnostics['affinitySnapshot'];
   // Worker-job priority of the request that produced this render.
   // Stamped into `response.meta.diagnostics.priority` so the indexer
-  // persists it on `boxel_index.timing_diagnostics`. `0` means
+  // persists it on `boxel_index.diagnostics`. `0` means
   // system-priority / undefined caller (default).
   priority?: number;
   // Whether this render landed on a reused / warm tab vs a freshly
@@ -226,7 +226,7 @@ export function decorateRenderErrorsWithTimings(
       // block — captured by render.meta and spread onto the card
       // response as `diagnostics`. Lift the same way as error-path
       // diagnostics so the computed-field counters reach the indexer's
-      // `boxel_index.timing_diagnostics` column.
+      // `boxel_index.diagnostics` column.
       if (key === 'card') {
         lift(sub);
       }
@@ -244,8 +244,16 @@ export function decorateRenderErrorsWithTimings(
     ...(tabReused !== undefined ? { tabReused } : {}),
   };
   let existingMeta = (r.meta as PrerenderResponseMeta | undefined) ?? {};
+  // Merge onto any diagnostics the response already carries rather than
+  // replacing them: the module-prerender route records definition-build
+  // findings (`searchablePathIssues`) on `meta.diagnostics`, and those must
+  // survive to `flattenPrerenderMeta` / `modules.diagnostics`. Timing fields
+  // are spread last so they win on the (disjoint) keys they own.
   r.meta = {
     ...existingMeta,
-    diagnostics,
+    diagnostics: {
+      ...existingMeta.diagnostics,
+      ...diagnostics,
+    },
   };
 }

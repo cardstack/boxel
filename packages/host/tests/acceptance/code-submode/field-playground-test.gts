@@ -22,6 +22,7 @@ import {
   setupUserSubscription,
   testRealmURL,
   withCachedRealmSetup,
+  realmConfigCardJSON,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import {
@@ -42,13 +43,14 @@ import {
   type Format,
 } from '../../helpers/playground';
 import { setRecentFiles } from '../../helpers/recent-files-cards';
+import { searchCardsForTest } from '../../helpers/search-cards';
 import { setupApplicationTest } from '../../helpers/setup';
 
 const { resolvedBaseRealmURL } = ENV;
 
-const authorCard = `import { contains, field, CardDef, Component, FieldDef } from "https://cardstack.com/base/card-api";
-  import MarkdownField from 'https://cardstack.com/base/markdown';
-  import StringField from "https://cardstack.com/base/string";
+const authorCard = `import { contains, field, CardDef, Component, FieldDef } from "@cardstack/base/card-api";
+  import MarkdownField from '@cardstack/base/markdown';
+  import StringField from "@cardstack/base/string";
   export class Author extends CardDef {
     static displayName = 'Author';
     @field firstName = contains(StringField);
@@ -105,10 +107,10 @@ const authorCard = `import { contains, field, CardDef, Component, FieldDef } fro
     }
 }`;
 
-const blogPostCard = `import { contains, containsMany, field, linksTo, CardDef, Component, FieldDef } from "https://cardstack.com/base/card-api";
-  import DateTimeField from 'https://cardstack.com/base/datetime';
-  import MarkdownField from 'https://cardstack.com/base/markdown';
-  import StringField from "https://cardstack.com/base/string";
+const blogPostCard = `import { contains, containsMany, field, linksTo, CardDef, Component, FieldDef } from "@cardstack/base/card-api";
+  import DateTimeField from '@cardstack/base/datetime';
+  import MarkdownField from '@cardstack/base/markdown';
+  import StringField from "@cardstack/base/string";
   import { Author } from './author';
 
   export class Status extends StringField {
@@ -198,7 +200,7 @@ const blogPostCard = `import { contains, containsMany, field, linksTo, CardDef, 
     }
 }`;
 
-const petCard = `import { contains, containsMany, field, CardDef, Component, FieldDef, StringField } from 'https://cardstack.com/base/card-api';
+const petCard = `import { contains, containsMany, field, CardDef, Component, FieldDef, StringField } from '@cardstack/base/card-api';
   export class ToyField extends FieldDef {
     static displayName = 'Toy';
     @field cardTitle = contains(StringField);
@@ -244,7 +246,7 @@ const commentSpec2 = {
         ],
       },
       adoptsFrom: {
-        module: 'https://cardstack.com/base/spec',
+        module: '@cardstack/base/spec',
         name: 'Spec',
       },
     },
@@ -292,7 +294,7 @@ const commentSpec1 = {
         ],
       },
       adoptsFrom: {
-        module: 'https://cardstack.com/base/spec',
+        module: '@cardstack/base/spec',
         name: 'Spec',
       },
     },
@@ -384,7 +386,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/spec',
+                    module: '@cardstack/base/spec',
                     name: 'Spec',
                   },
                 },
@@ -430,7 +432,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
                     ],
                   },
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/spec',
+                    module: '@cardstack/base/spec',
                     name: 'Spec',
                   },
                 },
@@ -469,7 +471,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
                     ],
                   },
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/spec',
+                    module: '@cardstack/base/spec',
                     name: 'Spec',
                   },
                 },
@@ -1129,12 +1131,12 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
           contents: {
             ...SYSTEM_CARD_FIXTURE_CONTENTS,
             'author.gts': authorCard,
-            '.realm.json': {
+            'realm.json': realmConfigCardJSON({
               name: `Test User's Workspace`,
               backgroundURL:
                 'https://i.postimg.cc/NjcjbyD3/4k-origami-flock.jpg',
               iconURL: 'https://i.postimg.cc/Rq550Bwv/T.png',
-            },
+            }),
           },
         });
 
@@ -1169,7 +1171,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
                     ],
                   },
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/spec',
+                    module: '@cardstack/base/spec',
                     name: 'Spec',
                   },
                 },
@@ -1189,17 +1191,17 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/spec',
+                    module: '@cardstack/base/spec',
                     name: 'Spec',
                   },
                 },
               },
             },
-            '.realm.json': {
+            'realm.json': realmConfigCardJSON({
               name: `Additional Workspace`,
               backgroundURL: 'https://i.postimg.cc/4ycXQZ94/4k-powder-puff.jpg',
               iconURL: 'https://i.postimg.cc/BZwv0LyC/A.png',
-            },
+            }),
           },
         });
       }));
@@ -1212,7 +1214,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
 
     test('can autogenerate new Spec and field instance (no preexisting Spec)', async function (assert) {
       let queryEngine = realm.realmIndexQueryEngine;
-      let { data: matching } = await queryEngine.searchCards({
+      let { data: matching } = await searchCardsForTest(queryEngine, {
         filter: {
           on: specRef,
           eq: {
@@ -1234,7 +1236,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       assertFieldExists(assert, 'edit');
       assert.dom('[data-test-field="quote"] input').hasNoValue();
 
-      ({ data: matching } = await queryEngine.searchCards({
+      ({ data: matching } = await searchCardsForTest(queryEngine, {
         filter: {
           on: specRef,
           eq: {

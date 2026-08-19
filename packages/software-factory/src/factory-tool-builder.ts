@@ -8,33 +8,43 @@
  */
 
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
-import type { RealmResourceIdentifier } from '@cardstack/runtime-common/card-reference-resolver';
+import type { RealmResourceIdentifier } from '@cardstack/runtime-common/realm-identifiers';
 
-import { fetchCardTypeSchema } from './darkfactory-schemas';
+import { fetchCardTypeSchema } from './darkfactory-schemas.ts';
 import {
   runEvaluateInMemory,
   type RunEvaluateInMemoryOptions,
   type RunEvaluateResult,
-} from './eval-execution';
-import type { ToolExecutor } from './factory-tool-executor';
-import type { ToolRegistry } from './factory-tool-registry';
+} from './eval-execution.ts';
+import type { ToolExecutor } from './factory-tool-executor.ts';
+import type { ToolRegistry } from './factory-tool-registry.ts';
 import {
   runInstantiateInMemory,
   type RunInstantiateInMemoryOptions,
   type RunInstantiateResult,
-} from './instantiate-execution';
+} from './instantiate-execution.ts';
 import {
   runLintInMemory,
   type RunLintInMemoryOptions,
   type RunLintResult,
-} from './lint-execution';
+} from './lint-execution.ts';
 import {
   runParseInMemory,
   type RunParseInMemoryOptions,
   type RunParseResult,
-} from './parse-execution';
-import { runTestsInMemory } from './test-run-execution';
-import type { RunTestsInMemoryOptions, RunTestsResult } from './test-run-types';
+} from './parse-execution.ts';
+import {
+  captureHtmlScreenshot,
+  type ScreenshotHtmlOptions,
+  type ScreenshotHtmlResult,
+} from './screenshot-execution.ts';
+import { catalogSkills, readSkillOnDemand } from './skill-catalog.ts';
+import { runTestsInMemory } from './test-run-execution.ts';
+import type {
+  RunTestsInMemoryOptions,
+  RunTestsResult,
+} from './test-run-types.ts';
+import type { ValidationRunCache } from './validation-run-cache.ts';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -84,6 +94,13 @@ export interface ToolBuilderConfig {
    * prerenderer so the realm reflects the agent's latest source.
    */
   syncWorkspace: () => Promise<{ ok: boolean; error?: string }>;
+  /**
+   * Shared with the post-signal_done validation pipeline — memoizes
+   * validation-engine runs per workspace fingerprint so the same unchanged
+   * realm state isn't validated twice (once by the agent's run_* tools,
+   * once by the pipeline).
+   */
+  validationCache?: ValidationRunCache;
   /** Injected for testing — defaults to runLintInMemory. */
   runLintInMemory?: (options: RunLintInMemoryOptions) => Promise<RunLintResult>;
   /** Injected for testing — defaults to runTestsInMemory. */
@@ -102,6 +119,10 @@ export interface ToolBuilderConfig {
   runInstantiateInMemory?: (
     options: RunInstantiateInMemoryOptions,
   ) => Promise<RunInstantiateResult>;
+  /** Injected for testing — defaults to captureHtmlScreenshot. */
+  captureHtmlScreenshot?: (
+    options: ScreenshotHtmlOptions,
+  ) => Promise<ScreenshotHtmlResult>;
 }
 
 export interface ToolCallEntry {
@@ -157,6 +178,10 @@ export function buildFactoryTools(
     buildRunEvaluateTool(config),
     buildRunParseTool(config),
     buildRunInstantiateTool(config),
+    buildListSkillsTool(),
+    buildReadSkillTool(),
+    buildScreenshotHtmlTool(config),
+    buildPostUpdateTool(),
     buildSignalDoneTool(),
     buildRequestClarificationTool(),
   ];
@@ -195,6 +220,26 @@ async function syncWorkspaceForToolRun(
   let result = await config.syncWorkspace();
   if (result.ok) return undefined;
   return `Failed to sync workspace to realm before ${toolName}: ${result.error ?? 'unknown error'}`;
+}
+
+/**
+ * A whole-realm `run_*` result that "passed" while checking zero
+ * files/modules/instances/tests is vacuous: it usually means the realm
+ * doesn't yet contain the files the agent intends to validate (a sync
+ * that hasn't landed, an index still catching up, or files that were
+ * never written) — not that the realm is genuinely clean. The agent
+ * must never count it as green, so the tools rewrite it into an error
+ * result. Single-file runs are exempt: an explicit `path` either
+ * resolves to one checked file or errors on its own.
+ */
+function vacuousPassMessage(toolName: string, what: string): string {
+  return (
+    `${toolName} found nothing to check (0 ${what}) — this is NOT a ` +
+    'pass. This tool already synced your workspace before running, ' +
+    "so either the realm index hasn't caught up yet (re-run this " +
+    `tool) or the ${what} you intend to validate were never ` +
+    'written. A green result must check at least one of them.'
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -249,7 +294,7 @@ function buildGetCardSchemaTool(config: ToolBuilderConfig): FactoryTool {
           description:
             'Absolute module URL of the card definition (e.g. the live ' +
             '`darkfactoryModuleUrl` from the system prompt for tracker ' +
-            'cards, or `https://cardstack.com/base/spec` for catalog Spec).',
+            'cards, or `@cardstack/base/spec` for catalog Spec).',
         },
         name: {
           type: 'string',
@@ -308,11 +353,20 @@ function buildRunTestsTool(config: ToolBuilderConfig): FactoryTool {
           errorMessage: syncError,
         };
       }
-      return execute({
+      let result = await execute({
         targetRealm: config.targetRealm,
         client: config.client,
         hostAppUrl: config.hostAppUrl ?? config.realmServerUrl,
+        cache: config.validationCache,
       });
+      if (result.status === 'passed' && result.testFiles.length === 0) {
+        return {
+          ...result,
+          status: 'error' as const,
+          errorMessage: vacuousPassMessage('run_tests', 'test files'),
+        };
+      }
+      return result;
     },
   };
 }
@@ -327,7 +381,10 @@ function buildRunLintTool(config: ToolBuilderConfig): FactoryTool {
       'details). Without "path", lints every .gts / .gjs / .ts / .js file ' +
       'in the target realm. With "path", lints only that single realm-' +
       'relative file — handy for a quick self-check right after writing ' +
-      'one file. Safe to call repeatedly for mid-turn self-validation — ' +
+      'one file. The tool pushes your workspace to the realm before ' +
+      'linting so files you just wrote are visible — the same sync the ' +
+      'orchestrator runs after signal_done, brought forward. ' +
+      'Safe to call repeatedly for mid-turn self-validation — ' +
       'this tool does NOT create a LintResult card or any other realm ' +
       'artifact. The orchestrator still runs the full validation pipeline ' +
       '(which writes a LintResult card) automatically after signal_done, ' +
@@ -348,12 +405,35 @@ function buildRunLintTool(config: ToolBuilderConfig): FactoryTool {
         typeof rawPath === 'string' && rawPath.trim() !== ''
           ? rawPath.trim()
           : undefined;
-      return execute({
+      let syncError = await syncWorkspaceForToolRun(config, 'run_lint');
+      if (syncError) {
+        return {
+          status: 'error',
+          filesChecked: 0,
+          filesWithErrors: 0,
+          errorCount: 0,
+          warningCount: 0,
+          durationMs: 0,
+          lintableFiles: [],
+          violations: [],
+          errorMessage: syncError,
+        };
+      }
+      let result = await execute({
         targetRealm: config.targetRealm,
         client: config.client,
         workspaceDir: config.workspaceDir,
+        cache: config.validationCache,
         ...(path ? { path } : {}),
       });
+      if (!path && result.status === 'passed' && result.filesChecked === 0) {
+        return {
+          ...result,
+          status: 'error' as const,
+          errorMessage: vacuousPassMessage('run_lint', 'lintable files'),
+        };
+      }
+      return result;
     },
   };
 }
@@ -410,12 +490,21 @@ function buildRunEvaluateTool(config: ToolBuilderConfig): FactoryTool {
           errorMessage: syncError,
         };
       }
-      return execute({
+      let result = await execute({
         targetRealm: config.targetRealm,
         realmServerUrl: config.realmServerUrl,
         client: config.client,
+        cache: config.validationCache,
         ...(path ? { path } : {}),
       });
+      if (!path && result.status === 'passed' && result.modulesChecked === 0) {
+        return {
+          ...result,
+          status: 'error' as const,
+          errorMessage: vacuousPassMessage('run_evaluate', 'evaluable modules'),
+        };
+      }
+      return result;
     },
   };
 }
@@ -436,7 +525,17 @@ function buildRunParseTool(config: ToolBuilderConfig): FactoryTool {
       'is required (paths without one are rejected) — whole-realm ' +
       'discovery already normalizes Spec linkedExamples to include .json, ' +
       'so the "parseableFiles" entries returned by a prior whole-realm ' +
-      'run can be fed straight back into "path" verbatim. Safe to call ' +
+      'run can be fed straight back into "path" verbatim. The tool ' +
+      'pushes your workspace to the realm before parsing so files you ' +
+      'just wrote are visible — the same sync the orchestrator runs ' +
+      'after signal_done, brought forward. CAVEAT on single-file runs: ' +
+      'a file is type-checked in isolation, so a file that imports ' +
+      'same-realm siblings (e.g. a component that `import type`s the ' +
+      'card module) can report cross-file resolution errors that a ' +
+      'whole-realm run does not. Whole-realm parse is the source of ' +
+      'truth — when a single-file run fails only on imports of files ' +
+      'you know exist, re-run without "path" instead of chasing the ' +
+      'errors. Safe to call ' +
       'repeatedly for mid-turn self-validation — this tool does NOT ' +
       'create a ParseResult card or any other realm artifact. The ' +
       'orchestrator still runs the full validation pipeline (which writes ' +
@@ -458,12 +557,34 @@ function buildRunParseTool(config: ToolBuilderConfig): FactoryTool {
         typeof rawPath === 'string' && rawPath.trim() !== ''
           ? rawPath.trim()
           : undefined;
-      return execute({
+      let syncError = await syncWorkspaceForToolRun(config, 'run_parse');
+      if (syncError) {
+        return {
+          status: 'error',
+          filesChecked: 0,
+          filesWithErrors: 0,
+          errorCount: 0,
+          durationMs: 0,
+          parseableFiles: [],
+          errors: [],
+          errorMessage: syncError,
+        };
+      }
+      let result = await execute({
         targetRealm: config.targetRealm,
         client: config.client,
         workspaceDir: config.workspaceDir,
+        cache: config.validationCache,
         ...(path ? { path } : {}),
       });
+      if (!path && result.status === 'passed' && result.filesChecked === 0) {
+        return {
+          ...result,
+          status: 'error' as const,
+          errorMessage: vacuousPassMessage('run_parse', 'parseable files'),
+        };
+      }
+      return result;
     },
   };
 }
@@ -484,7 +605,7 @@ function buildRunInstantiateTool(config: ToolBuilderConfig): FactoryTool {
       'is skipped entirely so the agent can self-check one instance in ' +
       'isolation. The path must end in `.json`. **Do NOT pass a `Spec/...json` ' +
       'path or any card whose `meta.adoptsFrom.module` is a base-realm URL ' +
-      '(`https://cardstack.com/base/...`). Specs adopt from the base realm, ' +
+      '(`@cardstack/base/...`). Specs adopt from the base realm, ' +
       'and the prerender refuses cross-origin module loads — the call would ' +
       'fail with "moduleUrl origin does not match realmUrl origin". To ' +
       'validate Specs, call this tool WITHOUT a path; it discovers your ' +
@@ -530,13 +651,234 @@ function buildRunInstantiateTool(config: ToolBuilderConfig): FactoryTool {
           errorMessage: syncError,
         };
       }
-      return execute({
+      let result = await execute({
         targetRealm: config.targetRealm,
         realmServerUrl: config.realmServerUrl,
         client: config.client,
         workspaceDir: config.workspaceDir,
+        cache: config.validationCache,
         ...(path ? { path } : {}),
       });
+      if (
+        !path &&
+        result.status === 'passed' &&
+        result.instancesChecked === 0
+      ) {
+        return {
+          ...result,
+          status: 'error' as const,
+          errorMessage: vacuousPassMessage(
+            'run_instantiate',
+            'Spec-linked instances',
+          ),
+        };
+      }
+      return result;
+    },
+  };
+}
+
+function buildListSkillsTool(): FactoryTool {
+  return {
+    name: 'list_skills',
+    description:
+      'List every skill available to load on demand — name, one-line ' +
+      'description, and the reference files each one carries. Your system ' +
+      'prompt front-loads only a core skill set; when the task at hand ' +
+      'touches a topic that core does not cover (theming, fitted formats, ' +
+      'file-backed fields, commands, catalog specs, queries, …), call this ' +
+      'to find the right skill, then load it with read_skill. Cheap to ' +
+      'call; results are stable for the whole run.',
+    parameters: { type: 'object', properties: {} },
+    execute: async () => {
+      let skills = await catalogSkills();
+      return { ok: true, skills };
+    },
+  };
+}
+
+function buildReadSkillTool(): FactoryTool {
+  return {
+    name: 'read_skill',
+    description:
+      'Read a skill on demand by name. Without "reference", returns the ' +
+      "skill's SKILL.md body plus the list of its reference file names; " +
+      'pass "reference" to fetch one reference file. Load skills ' +
+      'progressively: SKILL.md first, then only the reference files the ' +
+      'current work actually needs. Do NOT re-read skills whose full text ' +
+      'is already in your system prompt. Use list_skills to discover ' +
+      'available names.',
+    parameters: {
+      type: 'object',
+      properties: {
+        name: {
+          type: 'string',
+          description: 'Skill name exactly as returned by list_skills.',
+        },
+        reference: {
+          type: 'string',
+          description:
+            'Optional reference file name (e.g. `dev-fitted-formats.md`) ' +
+            'from the skill\'s "references" list.',
+        },
+      },
+      required: ['name'],
+    },
+    execute: async (args) => {
+      let name = requireStringArg(args, 'name', 'read_skill');
+      let rawReference = args.reference;
+      let reference =
+        typeof rawReference === 'string' && rawReference.trim() !== ''
+          ? rawReference.trim()
+          : undefined;
+      try {
+        let result = await readSkillOnDemand(name, reference);
+        return { ok: true, ...result };
+      } catch (error) {
+        return {
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+    },
+  };
+}
+
+/**
+ * The agent's live-blog channel. The tool itself just acknowledges — the
+ * orchestrator observes the call through the tool-call stream
+ * (`AgentContext.onToolCall`) and fans the post out to the run-log card
+ * and the current issue's comments. Keeping the tool side-effect-free
+ * means it works identically in every wiring (tests, prime turns, forks).
+ */
+function buildPostUpdateTool(): FactoryTool {
+  return {
+    name: 'post_update',
+    description:
+      'Post a short, social-media-style update about what you are doing ' +
+      'right now and why — it appears live on the run-log card and as a ' +
+      'comment on the issue you are working. Post at every meaningful ' +
+      'moment: kicking off a design, what a critique found, a decision ' +
+      'and its tradeoff, starting to code, recovering from a failed ' +
+      'check. First person, concrete, 1-3 sentences. This commentary ' +
+      'channel is as important as the artifacts themselves.',
+    parameters: {
+      type: 'object',
+      properties: {
+        headline: {
+          type: 'string',
+          description:
+            'One-line update, e.g. "Critique round 2: the fitted tile ' +
+            'was drowning in chrome — stripping it back."',
+        },
+        body: {
+          type: 'string',
+          description:
+            'Optional 1-3 sentence elaboration: the why, the tradeoff, ' +
+            'what is next. Renders as Boxel Flavored Markdown. When you ' +
+            'mention a card you created or touched, reference it with a ' +
+            'card directive using its WORKSPACE PATH (e.g. ' +
+            '"Garment/tee.json" or "Knowledge Articles/port-background.json") ' +
+            '— the run log resolves the path to the live card and the right ' +
+            'realm for you. Choose the form by how much the reader should ' +
+            'see: inline `:card[Path]` renders a small atom pill, use it for ' +
+            'a card named in passing; block `::card[Path]` renders the card ' +
+            'embedded, use it to spotlight one just-shipped card; ' +
+            '`::card[Path | fitted strip]` (or `fitted tile`, `fitted ' +
+            '400x200`) renders a sized tile, use it for a compact visual. ' +
+            'Prefer one embedded spotlight over many; use atoms for the rest.',
+        },
+        kind: {
+          type: 'string',
+          enum: ['comment', 'progress', 'decision'],
+          description:
+            'comment = commentary/context; progress = milestone within ' +
+            'the task; decision = a choice you made and why.',
+        },
+      },
+      required: ['headline'],
+    },
+    execute: async (args) => {
+      let headline = String(args.headline ?? '').trim();
+      if (!headline) {
+        return { ok: false, error: 'headline is required' };
+      }
+      return { ok: true, note: 'posted to the run log' };
+    },
+  };
+}
+
+function buildScreenshotHtmlTool(config: ToolBuilderConfig): FactoryTool {
+  let execute = config.captureHtmlScreenshot ?? captureHtmlScreenshot;
+  return {
+    name: 'screenshot_html',
+    description:
+      'Render a workspace HTML file in headless Chromium and write a PNG ' +
+      "screenshot into the workspace. Returns the PNG's workspace-relative " +
+      'path — then use your native Read tool on that path to SEE the image ' +
+      'and critique it. This powers the HTML-first design loop: write a ' +
+      'plain HTML+CSS mockup of the card (mobile isolated view, fitted ' +
+      'badge/strip/card tiles, embedded row) with REAL sample copy, ' +
+      'screenshot it, look at it, name the defects, revise, and repeat — ' +
+      'seconds per iteration, no lint or realm round-trip. Iterate on the ' +
+      'mockup until it is right BEFORE writing any .gts template; then ' +
+      'translate the accepted mockup into the card templates. Mockups and ' +
+      'screenshots are design artifacts — keep them under a `design/` ' +
+      'folder in the workspace.',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description: 'Workspace-relative path to the .html file to render.',
+        },
+        output_path: {
+          type: 'string',
+          description:
+            'Optional workspace-relative .png output path. Defaults to the ' +
+            'HTML path with the extension replaced by .png.',
+        },
+        width: {
+          type: 'number',
+          description: 'Viewport width in px (default 390 — mobile).',
+        },
+        height: {
+          type: 'number',
+          description: 'Viewport height in px (default 844 — mobile).',
+        },
+        full_page: {
+          type: 'boolean',
+          description:
+            'Capture the full scrollable page (default true) or just the viewport.',
+        },
+      },
+      required: ['path'],
+    },
+    execute: async (args) => {
+      let path = requireStringArg(args, 'path', 'screenshot_html');
+      let outputPath =
+        typeof args.output_path === 'string' && args.output_path.trim() !== ''
+          ? args.output_path.trim()
+          : undefined;
+      let result = await execute({
+        workspaceDir: config.workspaceDir,
+        path,
+        ...(outputPath ? { outputPath } : {}),
+        ...(typeof args.width === 'number' ? { width: args.width } : {}),
+        ...(typeof args.height === 'number' ? { height: args.height } : {}),
+        ...(typeof args.full_page === 'boolean'
+          ? { fullPage: args.full_page }
+          : {}),
+      });
+      if (result.ok) {
+        return {
+          ...result,
+          note:
+            `Screenshot written to ${result.outputPath}. Use the native ` +
+            'Read tool on that path to view the image and critique it.',
+        };
+      }
+      return result;
     },
   };
 }

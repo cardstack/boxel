@@ -1,10 +1,10 @@
-import { expect, test } from './fixtures';
+import { expect, test } from './fixtures.ts';
 import {
   getJoinedRooms,
   getAccountData,
   type Credentials,
-} from '../docker/synapse';
-import { appURL } from '../helpers/isolated-realm-server';
+} from '../support/synapse/index.ts';
+import { appURL } from '../support/isolated-realm-server.ts';
 import {
   assertLoggedIn,
   assertLoggedOut,
@@ -13,7 +13,7 @@ import {
   openRoot,
   createSubscribedUser,
   setupPermissions,
-} from '../helpers';
+} from '../helpers/index.ts';
 import jwt from 'jsonwebtoken';
 
 const REALM_SECRET_SEED = "shhh! it's a secret";
@@ -23,9 +23,9 @@ test.describe('Login', () => {
   let username: string;
   let password: string;
 
-test.beforeEach(async () => {
-  ({ username, password, credentials } =
-    await createSubscribedUser('login-tests'));
+  test.beforeEach(async () => {
+    ({ username, password, credentials } =
+      await createSubscribedUser('login-tests'));
     await setupPermissions(credentials.userId, `${appURL}/`);
   });
 
@@ -356,6 +356,38 @@ test.beforeEach(async () => {
     );
     await page.locator('[data-test-signout-button]').click();
     await expect(page.locator('[data-test-login-btn]')).toBeVisible();
+  });
+
+  test('it can log back in after logout without a page reload', async ({
+    page,
+  }) => {
+    await login(page, username, password, { url: appURL });
+    await assertLoggedIn(page, {
+      displayName: username,
+      userId: credentials.userId,
+    });
+
+    await logout(page);
+    await assertLoggedOut(page);
+    // The login form renders as soon as auth is cleared, but logout finishes
+    // asynchronously with a router transition to index-root that remounts the
+    // form. Wait for that transition to land (the path leaves the realm route)
+    // before filling, or the fields get wiped mid-fill — faster than any real
+    // user could type.
+    await page.waitForURL((url) => url.pathname === '/');
+
+    // Logout stays in-app (a router transition, not a page reload), so this
+    // second login runs against the matrix client that logout's `resetState()`
+    // recreated rather than a freshly booted one.
+    await page.locator('[data-test-username-field]').fill(username);
+    await page.locator('[data-test-password-field]').fill(password);
+    await page.locator('[data-test-login-btn]').click();
+
+    await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
+    await assertLoggedIn(page, {
+      displayName: username,
+      userId: credentials.userId,
+    });
   });
 
   test('it shows an error when invalid credentials are provided', async ({

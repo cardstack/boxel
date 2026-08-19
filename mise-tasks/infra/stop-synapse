@@ -2,4 +2,4 @@
 #MISE description="Stop the Matrix Synapse server"
 #MISE dir="packages/matrix"
 
-exec ts-node --transpileOnly ./scripts/synapse.ts stop
+exec node ./scripts/synapse.ts stop

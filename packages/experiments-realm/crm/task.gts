@@ -6,7 +6,7 @@ import {
   field,
   linksTo,
   linksToMany,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import {
   FieldContainer,
   Pill,
@@ -131,7 +131,6 @@ class TaskIsolated extends Component<typeof CRMTask> {
           <ProgressRadial
             @value={{this.progress}}
             @max={{100}}
-            @variant='circular'
             class='task-progress-radial'
           />
           {{#if this.hasProgress}}
@@ -139,7 +138,6 @@ class TaskIsolated extends Component<typeof CRMTask> {
               @value={{this.progress}}
               @max={{100}}
               @label={{this.progressLabel}}
-              @variant='horizontal'
               class='task-progress-bar'
             />
           {{/if}}
@@ -560,7 +558,7 @@ export class TaskEmbedded extends Component<typeof CRMTask> {
 export class CRMTask extends Task {
   static displayName = 'CRM Task';
   static icon = CheckboxIcon;
-  @field crmApp = linksTo(() => CrmApp);
+  @field crmApp = linksTo(() => CrmApp, { searchable: true });
   @field subtasks = linksToMany(() => CRMTask);
   @field status = contains(CRMTaskStatusField);
 
@@ -570,9 +568,12 @@ export class CRMTask extends Task {
     },
   });
 
-  @field assignee = linksTo(() => Representative);
+  @field assignee = linksTo(() => Representative, { searchable: 'crmApp' });
   @field contact = linksTo(() => Contact);
-  @field account = linksTo(() => Account);
+  @field account = linksTo(
+    () => Account,
+    { searchable: ['company.crmApp', 'crmApp', 'primaryContact.company.crmApp', 'primaryContact.crmApp'] },
+  );
   @field deal = linksTo(() => Deal);
 
   @field shortId = contains(StringField, {

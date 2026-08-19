@@ -1,16 +1,19 @@
-import type { RealmInfo } from './realm';
-import type { QueryResultsMeta, PrerenderedCard } from './index-query-engine';
-import type { CardTypeSummary, RealmMetaValue } from './index-structure';
+import type { QueryResultsMeta } from './index-query-engine.ts';
+import type { CardTypeSummary, RealmMetaValue } from './index-structure.ts';
 import {
   type CardResource,
+  type CssResource,
   type FileMetaResource,
-  type PrerenderedCardResource,
+  type HtmlQuery,
+  type HtmlResource,
+  type IconResource,
   type Saved,
+  type EntryResource,
   type Unsaved,
   isCardResource,
   isFileMetaResource,
-  isPrerenderedCardResource,
-} from './resource-types';
+  isEntryResource,
+} from './resource-types.ts';
 
 export interface SingleCardDocument<Identity extends Unsaved = Saved> {
   data: CardResource<Identity>;
@@ -22,14 +25,42 @@ export interface CardCollectionDocument<Identity extends Unsaved = Saved> {
   meta: QueryResultsMeta;
 }
 
-export interface PrerenderedCardCollectionDocument {
-  data: PrerenderedCardResource[];
+// The search response: heterogeneous `entry` resources in `data`,
+// with everything they compose — `html` renderings (plus their deduped `css`
+// stylesheets) and/or `card`/`file-meta` `item` serializations — riding in
+// `included`. Which branches appear per entry is governed by the query's
+// sparse fieldset (default: prefer `html`, fall back to `item`).
+export type EntryIncludedResource =
+  | HtmlResource
+  | CssResource
+  | IconResource
+  | CardResource<Saved>
+  | FileMetaResource;
+
+export interface EntryCollectionDocument {
+  data: EntryResource[];
+  included?: EntryIncludedResource[];
   meta: QueryResultsMeta & {
-    scopedCssUrls?: string[];
-    realmInfo?: RealmInfo;
-    isFileMeta?: boolean;
+    // The applied (bound or defaulted) htmlQuery, echoed once at the document
+    // level — it cannot vary across entries, so it is never repeated per
+    // entry. Present whenever the fieldset puts the html branch in play.
+    htmlQuery?: HtmlQuery;
   };
 }
+
+// The single-instance entry response (the card+html / file-meta+html GET): one
+// `entry` sourced by URL rather than by a query, with everything it composes
+// riding in `included`. The collection's document-level `meta` (page total,
+// htmlQuery echo) drops away — the single `entry` carries its own
+// `meta.generation`, and the caller named the format/renderType in the request.
+export interface EntrySingleDocument {
+  data: EntryResource;
+  included?: EntryIncludedResource[];
+}
+
+// The public-API name for the raw entry wire format a programmatic
+// `searchEntries` caller receives.
+export type SearchEntryResults = EntryCollectionDocument;
 
 export interface SingleFileMetaDocument {
   data: FileMetaResource;
@@ -37,12 +68,6 @@ export interface SingleFileMetaDocument {
 }
 export interface FileMetaCollectionDocument {
   data: FileMetaResource[];
-  included?: (FileMetaResource | CardResource<Saved>)[];
-  meta: QueryResultsMeta;
-}
-
-export interface LinkableCollectionDocument {
-  data: (CardResource<Saved> | FileMetaResource)[];
   included?: (FileMetaResource | CardResource<Saved>)[];
   meta: QueryResultsMeta;
 }
@@ -73,7 +98,7 @@ export function isCardDocumentString(maybeJsonString: string) {
 import {
   isSingleCardDocument,
   isCardCollectionDocument,
-} from './card-document-shape';
+} from './card-document-shape.ts';
 export { isSingleCardDocument, isCardCollectionDocument };
 
 export function isFileMetaCollectionDocument(
@@ -98,15 +123,9 @@ export function isFileMetaCollectionDocument(
   return data.every((resource) => isFileMetaResource(resource));
 }
 
-export function isLinkableCollectionDocument(
+export function isEntryCollectionDocument(
   doc: any,
-): doc is LinkableCollectionDocument {
-  return isCardCollectionDocument(doc) || isFileMetaCollectionDocument(doc);
-}
-
-export function isPrerenderedCardCollectionDocument(
-  doc: any,
-): doc is PrerenderedCardCollectionDocument {
+): doc is EntryCollectionDocument {
   if (typeof doc !== 'object' || doc == null) {
     return false;
   }
@@ -117,49 +136,56 @@ export function isPrerenderedCardCollectionDocument(
   if (!Array.isArray(data)) {
     return false;
   }
-  return data.every((resource) => isPrerenderedCardResource(resource));
+  // The guard runs on untrusted JSON: a present-but-malformed `included`
+  // would pass an unchecked guard and then throw in consumers that iterate
+  // it. Each member must be an identifiable resource; the four legal
+  // member types (`html` / `css` / `card` / `file-meta`) are not pinned
+  // individually so the wire can grow new included types compatibly.
+  if ('included' in doc && doc.included !== undefined) {
+    let { included } = doc;
+    if (!Array.isArray(included)) {
+      return false;
+    }
+    for (let resource of included) {
+      if (
+        typeof resource !== 'object' ||
+        resource == null ||
+        typeof resource.type !== 'string' ||
+        typeof resource.id !== 'string'
+      ) {
+        return false;
+      }
+    }
+  }
+  return data.every((resource) => isEntryResource(resource));
 }
 
-export function transformResultsToPrerenderedCardsDoc(results: {
-  prerenderedCards: PrerenderedCard[];
-  scopedCssUrls: string[];
-  meta: QueryResultsMeta & {
-    scopedCssUrls?: string[];
-    realmInfo?: RealmInfo;
-    isFileMeta?: boolean;
-  };
-}): PrerenderedCardCollectionDocument {
-  let { prerenderedCards, scopedCssUrls, meta } = results;
-
-  let data = prerenderedCards.map((card) => {
-    let resource: PrerenderedCardResource = {
-      type: 'prerendered-card',
-      id: card.url,
-      attributes: {
-        html: card.html || '',
-        ...(card.cardType ? { cardType: card.cardType } : {}),
-        ...(card.iconHtml ? { iconHtml: card.iconHtml } : {}),
-        ...(card.isError ? { isError: true as const } : {}),
-      },
-      relationships: {
-        'prerendered-card-css': {
-          data: [],
-        },
-      },
-      meta: {},
-    };
-    if (card.usedRenderType) {
-      resource.meta.adoptsFrom = card.usedRenderType;
+export function isEntrySingleDocument(doc: any): doc is EntrySingleDocument {
+  if (typeof doc !== 'object' || doc == null) {
+    return false;
+  }
+  if (!('data' in doc)) {
+    return false;
+  }
+  // Same untrusted-JSON discipline as the collection guard: a
+  // present-but-malformed `included` must fail rather than throw downstream.
+  if ('included' in doc && doc.included !== undefined) {
+    let { included } = doc;
+    if (!Array.isArray(included)) {
+      return false;
     }
-    return resource;
-  });
-
-  meta.scopedCssUrls = scopedCssUrls;
-
-  return {
-    data,
-    meta,
-  };
+    for (let resource of included) {
+      if (
+        typeof resource !== 'object' ||
+        resource == null ||
+        typeof resource.type !== 'string' ||
+        typeof resource.id !== 'string'
+      ) {
+        return false;
+      }
+    }
+  }
+  return isEntryResource(doc.data);
 }
 
 export type CardTypeSummaryKind = 'instance' | 'file';

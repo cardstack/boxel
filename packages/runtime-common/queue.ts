@@ -1,8 +1,48 @@
-import type { PgPrimitive } from './index';
-import type { Deferred } from './deferred';
+import type { PgPrimitive } from './index.ts';
+import type { Deferred } from './deferred.ts';
 
-export const systemInitiatedPriority = 0;
+// Job priority is a worker-reservation floor, not an ordering: a worker
+// dequeues only jobs whose priority is at or above its configured
+// minimum, oldest-first among those. A higher number therefore reserves
+// a job to more (and to more-dedicated) worker pools.
+//
+// The tiers:
+//
+//   | priority | job                                                     |
+//   | -------- | ------------------------------------------------------- |
+//   | 10       | user indexing (+ any user job); publish-awaited render  |
+//   |  9       | user prerender-html (the common case)                   |
+//   |  1       | system indexing (+ any system job)                      |
+//   |  0       | system prerender-html                                   |
+//
+// Prerender-html floors one tier below its initiator. The two initiator tiers
+// mirror each other: user prerender-html (9) is to user indexing (10) as
+// system prerender-html (0) is to system indexing (1). The gap does two
+// things. Everywhere, the same value rides to the prerender server as the
+// render's in-render admission priority (see prerender-headers), where higher
+// is dequeued first — so an index visit's render (its initiator tier) outranks
+// the slower prerender-html renders, keeping HTML rendering off the indexing
+// hot path at the render layer. And it lets a worker pool that floors at the
+// indexing tier reserve itself to indexing; that reserved lane is opt-in via
+// `--userIndexCount` + `--indexJobsOnly` (the contended matrix test stack runs
+// it to keep provisioning responsive — see worker-manager), and deployments
+// without it lean on high-priority-pool capacity instead.
+//
+// One render escapes the gap: a publish does not report its realm ready until
+// the published HTML exists, so a publish-awaited render is on the publish's
+// critical path and runs co-equal with indexing (10), admitted ahead of
+// ordinary user renders. Where the index lane is configured, its
+// `--indexJobsOnly` filter (not the priority floor) is what keeps a co-equal
+// publish render out of it.
+//
+// The high-priority pool floors at `userInitiatedPrerenderHtmlPriority` (9),
+// serving all user-initiated work — both render tiers and user indexing — and
+// never system-tier jobs; the all-priority pool floors at
+// `systemInitiatedPrerenderHtmlPriority` (0) and serves everything.
 export const userInitiatedPriority = 10;
+export const userInitiatedPrerenderHtmlPriority = 9;
+export const systemInitiatedPriority = 1;
+export const systemInitiatedPrerenderHtmlPriority = 0;
 
 export interface QueueRunner {
   start: () => Promise<void>;
@@ -97,7 +137,9 @@ export function getQueueJobCoalesceHandler(jobType: string) {
 export function normalizeQueueJobSpec(args: QueuePublishRequest): QueueJobSpec {
   return {
     ...args,
-    priority: args.priority ?? 0,
+    // A publish that doesn't state a priority is background work, so it
+    // takes the system-initiated tier.
+    priority: args.priority ?? systemInitiatedPriority,
   };
 }
 
@@ -136,10 +178,23 @@ export function makeQueueWaiter<TResult>(
 }
 
 export class Job<T> {
-  constructor(
-    readonly id: number,
-    private notifier: Deferred<T>,
-  ) {}
+  readonly id: number;
+  private notifier: Deferred<T>;
+  constructor(id: number, notifier: Deferred<T>) {
+    this.id = id;
+    this.notifier = notifier;
+    // The result promise is live from the moment the job is published,
+    // before any caller reads `.done` and attaches a handler. A job that
+    // settles to a rejection in that window — or whose result is never
+    // awaited at all — would otherwise surface as an unhandled rejection,
+    // which under native Node aborts the whole process. Awaiting `.done`
+    // is opt-in: a caller that cares about the outcome reads it and
+    // handles the rejection there, and still receives it even though this
+    // no-op ran first, because a promise delivers to every attached
+    // handler. This guard only suppresses the unhandled-rejection signal
+    // for an outcome nobody is awaiting.
+    this.notifier.promise.catch(() => {});
+  }
   get done(): Promise<T> {
     return this.notifier.promise;
   }

@@ -12,27 +12,22 @@ import {
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
+import type NetworkService from '@cardstack/host/services/network';
 import type RealmService from '@cardstack/host/services/realm';
-
-import type {
-  BoxComponent,
-  CardDef,
-  Format,
-} from 'https://cardstack.com/base/card-api';
 
 import { getClass, getTypes } from './meta';
 
 import type { Model as ParentModel } from '../render';
+import type { BoxComponent, CardDef, Format } from '@cardstack/base/card-api';
 
-// Stable internal key for the base CardsGrid type. We compare against
-// the internalKeyFor representation of the cards-grid module + name so
-// the check tolerates whatever resolved form the host's identify path
-// produces (e.g. realm-aliased base URLs).
-const CARDS_GRID_REF = {
-  module: 'https://cardstack.com/base/cards-grid',
-  name: 'CardsGrid',
-} as ResolvedCodeRef;
-const CARDS_GRID_INTERNAL_KEY = internalKeyFor(CARDS_GRID_REF, undefined);
+// Stable internal keys for the base card types recognized as a realm's
+// default index. We compare against the internalKeyFor representation of
+// each module + name so the check tolerates whatever resolved form the
+// host's identify path produces (e.g. realm-aliased base URLs).
+const DEFAULT_REALM_INDEX_REFS = [
+  { module: '@cardstack/base/cards-grid', name: 'CardsGrid' },
+  { module: '@cardstack/base/workspace', name: 'Workspace' },
+] as ResolvedCodeRef[];
 
 export interface Model {
   instance: CardDef;
@@ -41,7 +36,8 @@ export interface Model {
   // True when this render should be short-circuited to the realm-
   // index boilerplate placeholder instead of running through Glimmer.
   // Set only when `format === 'isolated'`, the card is the realm's
-  // default index, the type chain is base CardsGrid, and the realm
+  // default index, the type chain begins with a recognized default
+  // index card (CardsGrid or Workspace), and the realm
   // has not opted in via `includePrerenderedDefaultRealmIndex` on its
   // RealmConfig card. The orchestrator in `card-prerender.gts`
   // honours this flag by substituting the boilerplate string and
@@ -50,6 +46,7 @@ export interface Model {
 }
 
 export default class RenderHtmlRoute extends Route<Model> {
+  @service declare network: NetworkService;
   @service declare router: RouterService;
   @service declare realm: RealmService;
 
@@ -111,30 +108,42 @@ export default class RenderHtmlRoute extends Route<Model> {
     let useRealmIndexBoilerplate =
       format === 'isolated' &&
       level === 0 &&
-      this.#isDefaultRealmCardsGridIndex(instance, types);
+      this.#isDefaultRealmIndexCard(instance, types);
 
     return { format, instance, Component, useRealmIndexBoilerplate };
   }
 
   // True when the card under render is the realm's default index card
-  // AND its type chain begins with the base CardsGrid AND the realm
-  // has NOT opted in to keeping its prerendered isolated HTML via
+  // AND its type chain begins with a recognized default index card
+  // (CardsGrid or Workspace) AND the realm has NOT opted in to keeping
+  // its prerendered isolated HTML via
   // `RealmInfo.includePrerenderedDefaultRealmIndex`. The orchestrator
   // substitutes a boilerplate placeholder for the captured HTML in
   // that case so the indexer doesn't pay for the (expensive) grid
   // fan-out render of every card in the realm. Published realms
   // receive the opt-in automatically from the publish handler.
-  #isDefaultRealmCardsGridIndex(instance: CardDef, types: CodeRef[]): boolean {
+  #isDefaultRealmIndexCard(instance: CardDef, types: CodeRef[]): boolean {
     let cardRealmURL = instance[realmURL];
-    if (!cardRealmURL || !isRealmIndexCardId(instance.id, cardRealmURL)) {
+    if (
+      !cardRealmURL ||
+      !isRealmIndexCardId(
+        instance.id,
+        cardRealmURL,
+        this.network.virtualNetwork,
+      )
+    ) {
       return false;
     }
     let topType = types[0];
     if (!topType) {
       return false;
     }
-    let topKey = internalKeyFor(topType, undefined);
-    if (topKey !== CARDS_GRID_INTERNAL_KEY) {
+    let vn = this.network.virtualNetwork;
+    let topKey = internalKeyFor(topType, undefined, vn);
+    let isDefaultIndexType = DEFAULT_REALM_INDEX_REFS.some(
+      (ref) => internalKeyFor(ref, undefined, vn) === topKey,
+    );
+    if (!isDefaultIndexType) {
       return false;
     }
     let info = this.realm.info(cardRealmURL.href);

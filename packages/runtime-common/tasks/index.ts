@@ -7,18 +7,22 @@ import type {
   Reader,
   RealmPermissions,
   DefinitionLookup,
-} from '../index';
-import type { JobInfo, IndexingProgressEvent } from '../worker';
-export type * from './lint';
+  VirtualNetwork,
+} from '../index.ts';
+import type { JobInfo, IndexingProgressEvent } from '../worker.ts';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
+export type * from './lint.ts';
 export * from '#lint-task';
-export * from './full-reindex';
-export * from './daily-credit-grant';
-export * from './copy';
-export * from './indexer';
-export * from './run-command';
-export * from './screenshot-card';
+export * from './full-reindex.ts';
+export * from './daily-credit-grant.ts';
+export * from './copy.ts';
+export * from './indexer.ts';
+export * from './prerender-html.ts';
+export * from './prerender-html-reconcile.ts';
+export * from './run-command.ts';
+export * from './screenshot-card.ts';
 
-type LoggerInstance = ReturnType<typeof import('../index').logger>;
+type LoggerInstance = ReturnType<typeof import('../index.ts').logger>;
 
 export interface TaskArgs {
   dbAdapter: DBAdapter;
@@ -26,6 +30,7 @@ export interface TaskArgs {
   indexWriter: IndexWriter;
   prerenderer: Prerenderer;
   definitionLookup: DefinitionLookup;
+  virtualNetwork: VirtualNetwork;
   log: LoggerInstance;
   matrixURL: string;
   getReader(fetch: typeof global.fetch, realmURL: string): Reader;
@@ -33,6 +38,13 @@ export interface TaskArgs {
   createPrerenderAuth(userId: string, permissions: RealmPermissions): string;
   reportStatus(jobInfo: JobInfo | undefined, status: 'start' | 'finish'): void;
   reportProgress?(event: IndexingProgressEvent): void;
+  // Request that a realm event be broadcast to subscribed hosts. A task runs
+  // in a worker child that holds no matrix client; this callback bridges the
+  // event to the realm server (through the worker manager), which broadcasts
+  // it through the realm's matrix session rooms so it reaches subscribed hosts
+  // exactly as a web-tier-originated event does. Transport-agnostic: the task
+  // names its realm via the event's `realmURL` and does not know the wire path.
+  reportRealmEvent?(event: RealmEventContent): void;
 }
 
 export type Task<T, K> = (

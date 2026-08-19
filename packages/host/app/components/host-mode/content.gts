@@ -14,15 +14,15 @@ import { meta } from '@cardstack/runtime-common/constants';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
 
+import HostModeBreadcrumbs from './breadcrumbs';
+import HostModeCard from './card';
+import HostModeStack from './stack';
+
 import type {
   CardDef,
   ViewCardFn,
   CardCrudFunctions,
-} from 'https://cardstack.com/base/card-api';
-
-import HostModeBreadcrumbs from './breadcrumbs';
-import HostModeCard from './card';
-import HostModeStack from './stack';
+} from '@cardstack/base/card-api';
 
 interface Signature {
   Element: HTMLElement;
@@ -156,6 +156,7 @@ export default class HostModeContent extends Component<Signature> {
         top: var(--boxel-sp);
         left: var(--boxel-sp);
         z-index: 2;
+        max-width: calc(100% - 2 * var(--boxel-sp));
       }
 
       .host-mode-content.is-wide {
@@ -176,6 +177,16 @@ export default class HostModeContent extends Component<Signature> {
       .host-mode-content.is-wide .breadcrumb-container {
         top: var(--boxel-sp-lg);
         left: var(--boxel-sp-lg);
+        max-width: calc(100% - 2 * var(--boxel-sp-lg));
+      }
+
+      @media (max-width: 30rem) {
+        .breadcrumb-container,
+        .host-mode-content.is-wide .breadcrumb-container {
+          top: var(--boxel-sp-3xs);
+          left: var(--boxel-sp-3xs);
+          max-width: calc(100% - 2 * var(--boxel-sp-3xs));
+        }
       }
     </style>
   </template>

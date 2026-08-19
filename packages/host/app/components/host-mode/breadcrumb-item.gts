@@ -1,3 +1,4 @@
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 
@@ -11,13 +12,73 @@ import { getCard } from '@cardstack/host/resources/card-resource';
 import type { ComponentLike } from '@glint/template';
 
 interface Signature {
-  Element: HTMLButtonElement;
+  Element: HTMLButtonElement | HTMLSpanElement;
   Args: {
     cardId: string;
     disabled?: boolean;
-    onClick?: (cardId: string) => void;
+    isCurrent?: boolean;
+    onClick?: () => void;
   };
 }
+
+interface BreadcrumbItemContentSignature {
+  Args: {
+    icon?: ComponentLike<{ Element: SVGSVGElement }>;
+    hasCard: boolean;
+    isLoading: boolean;
+    label: string;
+  };
+}
+
+const BreadcrumbItemContent: TemplateOnlyComponent<BreadcrumbItemContentSignature> =
+  <template>
+    {{#if @hasCard}}
+      {{#if @icon}}
+        <@icon
+          class='breadcrumb-item-icon'
+          width='18'
+          height='18'
+          aria-hidden='true'
+        />
+      {{/if}}
+      <span class='label'>{{@label}}</span>
+    {{else if @isLoading}}
+      <span class='label muted'>
+        Loading…
+      </span>
+    {{else}}
+      <span class='label'>{{@label}}</span>
+    {{/if}}
+
+    <style scoped>
+      .breadcrumb-item-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        color: var(--boxel-highlight);
+      }
+
+      @media (max-width: 30rem) {
+        .breadcrumb-item-icon {
+          width: 0.75rem;
+          height: 0.75rem;
+        }
+      }
+
+      .label {
+        font: 500 var(--boxel-font-sm);
+        color: var(--boxel-light);
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .muted {
+        opacity: 0.7;
+        font-weight: 500;
+      }
+    </style>
+  </template>;
 
 export default class HostModeBreadcrumbItem extends Component<Signature> {
   @cached
@@ -42,12 +103,18 @@ export default class HostModeBreadcrumbItem extends Component<Signature> {
     return Boolean(this.args.cardId) && !this.card && !this.cardError;
   }
 
-  private get iconComponent(): ComponentLike | undefined {
+  private get iconComponent():
+    | ComponentLike<{
+        Element: SVGSVGElement;
+      }>
+    | undefined {
     if (!this.card) {
       return undefined;
     }
 
-    return cardTypeIcon(this.card) as ComponentLike | undefined;
+    return cardTypeIcon(this.card) as
+      | ComponentLike<{ Element: SVGSVGElement }>
+      | undefined;
   }
 
   private get label() {
@@ -72,47 +139,56 @@ export default class HostModeBreadcrumbItem extends Component<Signature> {
       return;
     }
 
-    if (this.args.onClick) {
-      this.args.onClick(this.args.cardId);
-    }
+    this.args.onClick?.();
   }
 
   <template>
-    <button
-      type='button'
-      class='breadcrumb-item'
-      disabled={{this.isDisabled}}
-      title={{this.label}}
-      data-test-host-mode-breadcrumb={{@cardId}}
-      {{on 'click' this.handleClick}}
-    >
-      {{#if this.card}}
-        {{#if this.iconComponent}}
-          {{#let this.iconComponent as |Icon|}}
-            <span class='icon' aria-hidden='true'>
-              <Icon />
-            </span>
-          {{/let}}
-        {{/if}}
-        <span class='label'>{{this.label}}</span>
-      {{else if this.isLoading}}
-        <span class='label muted'>
-          Loading…
+    {{#let this.iconComponent as |Icon|}}
+      {{#if @isCurrent}}
+        <span
+          class='breadcrumb-item'
+          aria-current='page'
+          title={{this.label}}
+          data-test-host-mode-breadcrumb={{@cardId}}
+        >
+          <BreadcrumbItemContent
+            @icon={{Icon}}
+            @hasCard={{if this.card true false}}
+            @isLoading={{this.isLoading}}
+            @label={{this.label}}
+          />
         </span>
       {{else}}
-        <span class='label'>{{this.label}}</span>
+        <button
+          type='button'
+          class='breadcrumb-item'
+          disabled={{this.isDisabled}}
+          title={{this.label}}
+          data-test-host-mode-breadcrumb={{@cardId}}
+          {{on 'click' this.handleClick}}
+        >
+          <BreadcrumbItemContent
+            @icon={{Icon}}
+            @hasCard={{if this.card true false}}
+            @isLoading={{this.isLoading}}
+            @label={{this.label}}
+          />
+        </button>
       {{/if}}
-    </button>
+    {{/let}}
 
     <style scoped>
       .breadcrumb-item {
         display: inline-flex;
         align-items: center;
-        gap: var(--boxel-sp-xxs);
+        gap: var(--boxel-sp-2xs);
         max-width: 16rem;
+        min-height: 1.5rem;
+        box-sizing: border-box;
         background: none;
         border: none;
-        padding: 0;
+        padding-block: var(--boxel-sp-4xs);
+        padding-inline: 0;
         margin: 0;
         color: inherit;
         white-space: nowrap;
@@ -120,30 +196,9 @@ export default class HostModeBreadcrumbItem extends Component<Signature> {
         overflow: hidden;
       }
 
-      .breadcrumb-item:focus-visible {
-        outline: 1px solid rgba(255, 255, 255, 0.6);
+      button.breadcrumb-item:focus-visible {
+        outline: 1px solid var(--boxel-light-60);
         border-radius: var(--boxel-border-radius-lg);
-      }
-
-      .icon {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 18px;
-        height: 18px;
-        color: var(--boxel-teal);
-      }
-
-      .label {
-        font: 500 var(--boxel-font-sm);
-        color: var(--boxel-light);
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-
-      .muted {
-        opacity: 0.7;
-        font-weight: 500;
       }
     </style>
   </template>

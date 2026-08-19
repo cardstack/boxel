@@ -27,7 +27,9 @@ import {
 } from './commands/search-card-result';
 import { eq, gt } from '@cardstack/boxel-ui/helpers';
 
-export type CommandStatus = 'applied' | 'ready' | 'applying';
+export type ToolCallStatus = 'applied' | 'ready' | 'applying';
+// Pre-rename spelling; new code imports `ToolCallStatus`.
+export type CommandStatus = ToolCallStatus;
 
 export class ApplyMarkdownEditInput extends CardDef {
   @field cardId = contains(StringField);
@@ -159,6 +161,28 @@ export class WriteTextFileInput extends CardDef {
   @field useNonConflictingFilename = contains(BooleanField);
 }
 
+export class MigrateSkillInput extends CardDef {
+  // The realm to migrate: legacy `Skill` cards are read from it and the
+  // resulting `skills/<name>/SKILL.md` files are written back into it.
+  @field realm = contains(StringField);
+  // Overwrite an existing `SKILL.md` at the target path. When false (default),
+  // a skill whose target already exists is left untouched and reported as
+  // skipped.
+  @field overwrite = contains(BooleanField);
+}
+
+export class MigrateSkillResult extends CardDef {
+  // Absolute URLs of the `SKILL.md` files written by this run.
+  @field migratedFiles = containsMany(StringField);
+  // Ids of legacy `Skill` cards skipped because their target `SKILL.md`
+  // already exists and `overwrite` was not set.
+  @field skippedSkillIds = containsMany(StringField);
+  // Ids of skills skipped because they had no instructions to write — e.g. a
+  // markdown-backed skill whose linked instructions did not resolve. Reported
+  // rather than written out as an empty `SKILL.md`.
+  @field emptySkillIds = containsMany(StringField);
+}
+
 export class WriteBinaryFileInput extends CardDef {
   @field path = contains(StringField);
   @field realm = contains(StringField);
@@ -213,17 +237,6 @@ export class CreateInstancesInput extends CardDef {
   @field realm = contains(StringField);
   @field count = contains(NumberField);
   @field exampleCard = linksTo(CardDef);
-}
-
-export class AskAiForCardJsonInput extends CreateInstancesInput {
-  @field prompt = contains(MarkdownField);
-  @field llmModel = contains(StringField);
-  @field skillCardIds = containsMany(StringField);
-}
-
-export class AskAiForCardJsonResult extends CardDef {
-  @field payload = contains(JsonField);
-  @field rawOutput = contains(StringField);
 }
 
 export class CreateInstanceResult extends CardDef {
@@ -313,8 +326,14 @@ export class CorrectnessResultCard extends CardDef {
 
 export class CreateAIAssistantRoomInput extends CardDef {
   @field name = contains(StringField);
+  // Legacy: skills passed as loaded `Skill` cards. Retained for back-compat.
   @field enabledSkills = linksToMany(Skill);
   @field disabledSkills = linksToMany(Skill);
+  // Skills passed by id (kind-agnostic): each id may name a `.md` skill file
+  // (`boxel.kind: skill`) or a legacy `Skill` card. Resolved via
+  // `loadSkillSource` at room creation. Preferred over the card fields above.
+  @field enabledSkillIds = containsMany(StringField);
+  @field disabledSkillIds = containsMany(StringField);
   @field llmMode = contains(StringField); // 'gpt-4o' or 'gpt-4o-mini'
 }
 
@@ -370,6 +389,7 @@ export class UseAiAssistantInput extends CardDef {
   @field openRoom = contains(BooleanField);
   @field skillCards = linksToMany(Skill);
   @field skillCardIds = containsMany(StringField);
+  @field attachOpenCards = contains(BooleanField); // also attach the cards currently open in the host
   @field attachedCards = linksToMany(CardDef);
   @field attachedCardIds = containsMany(StringField);
   @field attachedFileIdentifiers = containsMany(StringField);
@@ -450,6 +470,8 @@ export class RetrySubmissionWorkflowInput extends CardDef {
 
 export class ListingCreateInput extends CardDef {
   @field openCardIds = containsMany(StringField);
+  // installed with the listing but not shown in the listing detail view
+  @field supportingCardIds = containsMany(StringField);
   @field codeRef = contains(CodeRefField);
   @field targetRealm = contains(RealmField);
 }
@@ -551,15 +573,6 @@ export class SummarizeSessionResult extends CardDef {
   @field summary = contains(StringField);
 }
 
-export class AskAiInput extends CardDef {
-  @field prompt = contains(StringField);
-  @field llmMode = contains(StringField); // 'ask' or 'act'
-}
-
-export class AskAiOutput extends CardDef {
-  @field response = contains(StringField);
-}
-
 export {
   SearchCardsByQueryInput,
   SearchCardsByTypeAndTitleInput,
@@ -612,6 +625,82 @@ export class ExecuteAtomicOperationsInput extends CardDef {
 
 export class ExecuteAtomicOperationsResult extends CardDef {
   @field results = containsMany(JsonField);
+}
+
+// A publish destination for a realm. 'type' is 'subdirectory' (a Boxel Space
+// under the user's space domain, where 'name' is the realm-name path segment)
+// or 'custom' (a claimed custom domain, where 'name' is the full hostname).
+export class PublishTarget extends FieldDef {
+  @field type = contains(StringField);
+  @field name = contains(StringField);
+}
+
+export class PublishRealmInput extends CardDef {
+  @field realmURL = contains(StringField);
+  @field targets = containsMany(PublishTarget);
+  // Pre-resolved published-realm URLs. The publish UI builds these with live
+  // Matrix state, so it passes them directly instead of typed targets; they are
+  // merged with any resolved 'targets'. Provide at least one of the two.
+  @field publishedRealmURLs = containsMany(StringField);
+  // Bypass the pre-publish publishability gate (private-dependency and
+  // error-document violations). Defaults to false.
+  @field force = contains(BooleanField);
+}
+
+// Per-target outcome. The command resolves once the publish request is
+// accepted (the realm-server reindex then runs in the background), so 'status'
+// is 'published' (request accepted) or 'error'.
+export class PublishTargetResult extends FieldDef {
+  @field publishedRealmURL = contains(StringField);
+  @field status = contains(StringField);
+  @field error = contains(StringField);
+}
+
+export class PublishRealmResult extends CardDef {
+  @field results = containsMany(PublishTargetResult);
+}
+
+export class UnpublishRealmInput extends CardDef {
+  @field realmURL = contains(StringField);
+  // Supply either a typed target or a fully-resolved publishedRealmURL.
+  @field target = contains(PublishTarget);
+  @field publishedRealmURL = contains(StringField);
+}
+
+// 'status' is 'unpublished' or 'error'.
+export class UnpublishRealmResult extends CardDef {
+  @field publishedRealmURL = contains(StringField);
+  @field status = contains(StringField);
+  @field error = contains(StringField);
+}
+
+export class GetPublishedRealmsInput extends CardDef {
+  @field realmURL = contains(StringField);
+}
+
+// One published destination for a source realm. lastPublishedAt mirrors the
+// realm-server value: epoch milliseconds rendered as a string (Date.now()
+// .toString()); absent when the realm has never been published.
+export class PublishedRealmInfo extends FieldDef {
+  @field publishedRealmURL = contains(StringField);
+  @field lastPublishedAt = contains(StringField);
+}
+
+export class GetPublishedRealmsResult extends CardDef {
+  @field results = containsMany(PublishedRealmInfo);
+}
+
+// 'type' is 'subdirectory' | 'custom'; 'name' matches PublishTarget.name.
+export class CheckDomainAvailabilityInput extends CardDef {
+  @field type = contains(StringField);
+  @field name = contains(StringField);
+  @field realmURL = contains(StringField);
+}
+
+export class CheckDomainAvailabilityResult extends CardDef {
+  @field available = contains(BooleanField);
+  @field publishedRealmURL = contains(StringField);
+  @field reason = contains(StringField);
 }
 
 export class StoreAddInput extends CardDef {

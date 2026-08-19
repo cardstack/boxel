@@ -10,22 +10,22 @@
  */
 
 // This should be first
-import '../../src/setup-logger';
+import '../../src/setup-logger.ts';
 
 import { parseArgs } from 'node:util';
-import { logger } from '../../src/logger';
+import { logger } from '../../src/logger.ts';
 
 import type {
   KnowledgeArticleData,
   ProjectData,
   IssueData,
-} from '../../src/factory-agent';
-import { ContextBuilder } from '../../src/factory-context-builder';
+} from '../../src/factory-agent/index.ts';
+import { ContextBuilder } from '../../src/factory-context-builder.ts';
 import {
   DefaultSkillResolver,
   estimateTokens,
   SkillLoader,
-} from '../../src/factory-skill-loader';
+} from '../../src/factory-skill-loader.ts';
 
 // ---------------------------------------------------------------------------
 // Helpers

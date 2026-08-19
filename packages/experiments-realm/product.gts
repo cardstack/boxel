@@ -1,6 +1,6 @@
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import BooleanField from 'https://cardstack.com/base/boolean';
-import NumberField from 'https://cardstack.com/base/number';
+import MarkdownField from '@cardstack/base/markdown';
+import BooleanField from '@cardstack/base/boolean';
+import NumberField from '@cardstack/base/number';
 import { Seller as SellerCard } from './seller';
 import {
   MonetaryAmount as MonetaryAmountField,
@@ -14,8 +14,8 @@ import {
   containsMany,
   StringField,
   FieldsTypeFor,
-} from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
@@ -320,9 +320,6 @@ class Isolated extends Component<typeof Product> {
         padding: 7px 24px;
         border: 0;
       }
-      div[data-test-compound-field-format='atom'] {
-        display: inline-block;
-      }
     </style>
   </template>
 }
@@ -334,9 +331,9 @@ export class Product extends CardDef {
   // use title field for product title
 
   @field images = containsMany(StringField);
-  @field seller = linksTo(SellerCard);
-  @field unitPrice = contains(MonetaryAmountField);
-  @field shippingCost = contains(MonetaryAmountField);
+  @field seller = linksTo(SellerCard, { searchable: true });
+  @field unitPrice = contains(MonetaryAmountField, { searchable: 'currency' });
+  @field shippingCost = contains(MonetaryAmountField, { searchable: 'currency' });
   @field leadTimeDays = contains(NumberField);
   @field deliveryWindowDays = contains(NumberField);
   @field isReturnable = contains(BooleanField);
@@ -348,9 +345,7 @@ export class Product extends CardDef {
   });
 
   static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      <EmbeddedProductComponent @model={{@model}} />
-    </template>
+    <template><EmbeddedProductComponent @model={{@model}} /></template>
   };
 
   static isolated = Isolated;

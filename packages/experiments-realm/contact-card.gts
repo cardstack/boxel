@@ -1,5 +1,5 @@
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
 import {
   Component,
   CardDef,
@@ -8,7 +8,7 @@ import {
   contains,
   containsMany,
   linksToMany,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import ContactIcon from '@cardstack/boxel-icons/contact';
 
 class Alias extends CardDef {
