@@ -102,3 +102,5 @@ export class Mp3Def extends AudioDef {
     }
   }
 }
+
+export default Mp3Def;

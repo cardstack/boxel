@@ -32,15 +32,42 @@ export const BXL_REGISTRY: Record<string, BuiltinLibrary> = {
   formula: formulaLibrary,
 };
 
-export type BuiltinLibraryName =
-  | 'core'
-  | 'authorization'
-  | 'formula'
-  | 'formula-statistical'
-  | 'formula-bessel'
-  | 'formula-engineering'
-  | 'formula-financial'
-  | 'validation';
+/**
+ * Every builtin library BXL can resolve, eager and lazily chunked alike.
+ *
+ * `BuiltinLibraryName` is derived from this list rather than written beside
+ * it, so the names a caller may request and the names something has to load
+ * cannot drift apart: the lazy loader takes its work list from here, and the
+ * coverage gate checks that each one really registered.
+ */
+export const BUILTIN_LIBRARY_NAMES = [
+  'core',
+  'authorization',
+  'formula',
+  'formula-statistical',
+  'formula-bessel',
+  'formula-engineering',
+  'formula-financial',
+  'validation',
+] as const;
+
+export type BuiltinLibraryName = (typeof BUILTIN_LIBRARY_NAMES)[number];
+
+/**
+ * The libraries that ship in the initial bundle. Everything else in
+ * {@link BUILTIN_LIBRARY_NAMES} arrives through a lazy chunk.
+ */
+export const EAGER_BUILTIN_LIBRARIES: BuiltinLibraryName[] = [
+  'core',
+  'authorization',
+  'formula',
+];
+
+/** The lazily chunked libraries, as the complement of the eager ones. */
+export const LAZY_BUILTIN_LIBRARIES: BuiltinLibraryName[] =
+  BUILTIN_LIBRARY_NAMES.filter(
+    (name) => !EAGER_BUILTIN_LIBRARIES.includes(name),
+  );
 
 export const DEFAULT_BUILTIN_LIBRARIES: BuiltinLibraryName[] = [
   'core',

@@ -1,21 +1,23 @@
 import { ok, strictEqual } from 'node:assert';
-import { dateCases, type CoverageCase } from './case.ts';
+import type { CoverageCase } from './case.ts';
 
-// Every case here runs under each of `TIMEZONES` and has to give the same
-// answer in all of them: a serial names a calendar day, not an instant, and
-// indexing evaluates these in UTC while the author's browser does not.
-export const formulaDateCases: CoverageCase[] = dateCases([
+// A serial names a calendar day, not an instant, and indexing evaluates these
+// in UTC while the author's browser does not — so the runner's zone sweep
+// matters more here than anywhere else in the suite.
+export const formulaDateCases: CoverageCase[] = [
   // Serial 1 is 1900-01-01, and Excel's deliberate 1900 leap-year bug slips a
   // phantom 1900-02-29 in, so every later date sits one above a true day
   // count from the epoch. 2026-04-30 is the anchor the rest of the table
   // measures against.
   { covers: 'DATE/3', source: 'DATE(2026, 4, 30)', expected: 46142 },
-  // A month past 12 carries into the following year.
-  {
-    covers: 'DATE/3',
-    source: 'DATE(2026, 13, 1) == DATE(2027, 1, 1)',
-    expected: true,
-  },
+  // A month past 12 carries into the following year, month 0 carries back
+  // into the previous one, and a day past the month's end carries too. Each
+  // is asserted against the serial rather than against another DATE call —
+  // comparing two calls to the same function proves it is deterministic, not
+  // that it carries.
+  { covers: 'DATE/3', source: 'DATE(2026, 13, 1)', expected: 46388 },
+  { covers: 'DATE/3', source: 'DATE(2026, 0, 1)', expected: 45992 },
+  { covers: 'DATE/3', source: 'DATE(2026, 4, 31)', expected: 46143 },
   // YEAR, MONTH and DAY read back the three components DATE packed in.
   { covers: 'YEAR/1', source: 'YEAR(DATE(2026, 4, 30))', expected: 2026 },
   { covers: 'MONTH/1', source: 'MONTH(DATE(2026, 4, 30))', expected: 4 },
@@ -77,18 +79,18 @@ export const formulaDateCases: CoverageCase[] = dateCases([
     source: 'DATEVALUE("Thu Apr 30 2026")',
     expected: 46142,
   },
-  // Month arithmetic. EDATE clamps the day of month to the target month's
-  // last day rather than letting it overflow, so one month past January 31
-  // is February 28, not March 3.
-  {
-    covers: 'EDATE/2',
-    source: 'EDATE(DATE(2026, 1, 31), 1) == DATE(2026, 2, 28)',
-    expected: true,
-  },
+  // Month arithmetic, asserted on the serial rather than against another
+  // call: a comparison of two functions is satisfied by any pair that agrees,
+  // including two that are wrong together. EDATE clamps the day of month to
+  // the target month's last day rather than letting it overflow, so one month
+  // past January 31 is February 28 (serial 46081), not March 3.
+  { covers: 'EDATE/2', source: 'EDATE(DATE(2026, 1, 31), 1)', expected: 46081 },
+  // EOMONTH ignores the day entirely and answers the last day of the month
+  // the offset lands on: 2026-03-31.
   {
     covers: 'EOMONTH/2',
-    source: 'EOMONTH(DATE(2026, 2, 5), 1) == DATE(2026, 3, 31)',
-    expected: true,
+    source: 'EOMONTH(DATE(2026, 2, 5), 1)',
+    expected: 46112,
   },
   // The unit decides what the difference counts. "YM" is the month remainder
   // after whole years, so both the 2 years and the trailing 26 days drop out.
@@ -352,4 +354,4 @@ export const formulaDateCases: CoverageCase[] = dateCases([
       strictEqual(floored, today, 'flooring NOW must land on TODAY');
     },
   },
-]);
+];

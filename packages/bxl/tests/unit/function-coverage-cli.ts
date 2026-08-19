@@ -8,21 +8,44 @@
  * functions to cover is read out of the resolved registry rather than
  * maintained by hand, so adding a builtin without a case fails this suite.
  *
+ * Credit is transitive through a jq definition: a worker can earn it from the
+ * wrapper that calls it, so a case that reaches a name only through another
+ * function asserts that caller's result rather than the worker's own. Where
+ * the worker's contract is worth pinning on its own — the private helpers
+ * especially — the case calls it directly.
+ *
+ * "Exposed" is the union over the library sets BXL actually ships — what a
+ * card resolves against and what the authorization runtime does — and within
+ * each, every name a program can reach rather than only the ones `builtins`
+ * reports. A name callable but unlisted still needs a case; see
+ * PRIVATE_BUILTINS for why each of those is unlisted.
+ *
  * The inputs here are plain JSON, which is the whole function surface's
  * natural test bed. That BXL drives `computeVia` on real card instances —
  * including that each lazy family loads and dispatches inside the host
  * bundle — is proven by the host integration suites.
  *
- * See ./fixtures/function-coverage/runner.ts for how a case earns credit.
+ * See ./fixtures/function-coverage/runner.ts for how a case earns credit, and
+ * ./fixtures/function-coverage/gate.ts for the registry invariants the
+ * enumeration rests on.
  */
-import { resolveBuiltinRegistry } from '../../src/bxl/registry/index.ts';
-import { BXL_REGISTRY } from '../../src/bxl/registry/index.ts';
+import {
+  BXL_REGISTRY,
+  resolveBuiltinRegistry,
+} from '../../src/bxl/registry/index.ts';
 import { loadAllFormulaExtensions } from '../../src/index.ts';
 import {
   functionCoverageCases,
   UNREACHABLE_BUILTINS,
 } from './fixtures/function-coverage/index.ts';
+import { AUTHORIZATION_LIBRARIES } from './fixtures/function-coverage/case.ts';
 import {
+  PRIVATE_BUILTINS,
+  reachableNames,
+  registryGateFailures,
+} from './fixtures/function-coverage/gate.ts';
+import {
+  COVERAGE_ZONES,
   installInvocationRecorder,
   runCoverageCase,
 } from './fixtures/function-coverage/runner.ts';
@@ -32,9 +55,31 @@ import {
 await loadAllFormulaExtensions();
 
 const libraries = installInvocationRecorder();
-const exposed = new Set(resolveBuiltinRegistry(libraries).publicNames);
 
-const failures: string[] = [];
+const failures = registryGateFailures(libraries);
+
+// The surface to cover is what a program can reach in either shipped set, so
+// dropping a library from one set does not quietly shrink the gate.
+const exposed = new Set([
+  ...reachableNames(libraries),
+  ...reachableNames(AUTHORIZATION_LIBRARIES),
+]);
+
+const published = new Set([
+  ...resolveBuiltinRegistry(libraries).publicNames,
+  ...resolveBuiltinRegistry(AUTHORIZATION_LIBRARIES).publicNames,
+]);
+const notPrivate = [...PRIVATE_BUILTINS.keys()]
+  .filter((name) => !exposed.has(name) || published.has(name))
+  .sort();
+if (notPrivate.length > 0) {
+  failures.push(
+    'these names are recorded as callable-but-unlisted, but `builtins` now ' +
+      'reports them or nothing exposes them at all; drop them from ' +
+      `PRIVATE_BUILTINS\n    ${notPrivate.join(', ')}`,
+  );
+}
+
 const covered = new Set<string>();
 
 for (const testCase of functionCoverageCases) {
@@ -85,7 +130,7 @@ if (uncovered.length > 0) {
   const byLibrary = new Map<string, string[]>();
   for (const name of uncovered) {
     const library =
-      libraries.find(
+      Object.keys(BXL_REGISTRY).find(
         (candidate) =>
           name in BXL_REGISTRY[candidate].jq ||
           name in BXL_REGISTRY[candidate].native,
@@ -120,7 +165,7 @@ if (knownDefects.length > 0) {
 
 console.log(
   `BXL function coverage: ${covered.size} of ${exposed.size} exposed ` +
-    `functions invoked across ${functionCoverageCases.length} cases, ` +
-    `${UNREACHABLE_BUILTINS.size} unreachable, ` +
-    `${knownDefects.length} known defect(s)`,
+    `functions invoked across ${functionCoverageCases.length} cases under ` +
+    `${COVERAGE_ZONES.length} time zones, ${UNREACHABLE_BUILTINS.size} ` +
+    `unreachable, ${knownDefects.length} known defect(s)`,
 );
