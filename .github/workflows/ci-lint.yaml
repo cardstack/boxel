@@ -27,16 +27,7 @@ permissions:
 jobs:
   lint:
     name: Lint
-    # TEMPORARY — remove before merge, along with the branch name below.
-    #
-    # Larger runners draw from a concurrency pool separate from the standard
-    # one, so this job gets a runner immediately instead of queueing behind the
-    # apt stalls this branch exists to bound. They are billed per minute even on
-    # a public repository, where standard runners are free, so the override is
-    # narrowed to this one branch: every other branch, and main, stay on the
-    # free standard runner. `head_ref` is set for pull_request events and
-    # `ref_name` for push, so both paths resolve.
-    runs-on: ${{ (github.head_ref || github.ref_name) == 'cs-12549-stop-an-ubuntu-archive-outage-from-wedging-ci-jobs-for-six' && 'ubuntu-latest-m' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 25
     concurrency:
       group: lint-${{ github.head_ref || github.run_id }}
