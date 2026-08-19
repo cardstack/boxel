@@ -5,9 +5,9 @@ import {
   field,
   linksTo,
   linksToMany,
-  NumberField,
   StringField,
 } from '@cardstack/base/card-api';
+import NumberField from '@cardstack/base/number';
 import LayersIcon from '@cardstack/boxel-icons/layers';
 
 import { Campaign } from '../campaign';
