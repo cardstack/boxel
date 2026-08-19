@@ -271,8 +271,10 @@ these lists. The cost is that a **newly added function in any of those
 categories — volatile, aggregate, side-effecting, error-masking,
 metadata-reading — is permitted in every denylist profile until someone adds it
 to the right set**, including `derive`, which is what `computeVia` runs under,
-where a volatile call means a computed field that changes on every index. Classification is by base name, case-folded and without
-arity, so jq's `now` and Excel's `NOW` are one entry.
+where a volatile call means a computed field that changes on every index.
+
+Classification is by base name, case-folded and without arity, so jq's `now`
+and Excel's `NOW` are one entry.
 
 ### Vendored divergence is recorded, and the record is prose
 
