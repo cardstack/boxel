@@ -85,25 +85,29 @@ function shows(snippet: string) {
 }
 
 /**
- * The bullet paragraph introduced by `lead`, up to the blank line that ends it.
- * Used to pin which list a name is in — a name that moves between the refused
- * and allowed lists has to move in this file too.
+ * The names the paragraph introduced by `lead` lists, read as its backticked
+ * spans. Exact tokens rather than substrings: `env` must not be satisfied by
+ * some longer word that happens to contain it, and a name must not count as
+ * listed because it appears inside a neighbouring code span.
  */
-function paragraph(lead: string): string {
+function listedNames(lead: string): string[] {
   const start = skill.indexOf(lead);
   ok(start !== -1, `the skill no longer has a "${lead}" paragraph`);
   const end = skill.indexOf('\n\n', start);
-  return flatten(skill.slice(start, end === -1 ? undefined : end));
+  const body = flatten(skill.slice(start, end === -1 ? undefined : end));
+  return Array.from(body.matchAll(/`([^`]+)`/g), (match) => match[1].trim());
 }
 
-/** Asserts `name` is listed in `lead`'s paragraph and not in `otherLead`'s. */
-function listedUnder(name: string, lead: string, otherLead: string) {
-  const mine = paragraph(lead);
-  const theirs = paragraph(otherLead);
-  ok(mine.includes(name), `"${name}" is no longer listed under "${lead}"`);
-  ok(
-    !theirs.includes(name),
-    `"${name}" has moved into "${otherLead}" — this case says otherwise`,
+/**
+ * Asserts the paragraph lists exactly `covered` — every name the cases below
+ * exercise, and nothing else. An entry added to the skill without a case, moved
+ * between the two lists, or dropped from either fails here.
+ */
+function listsExactly(lead: string, covered: Array<string | string[]>) {
+  deepStrictEqual(
+    listedNames(lead).sort(),
+    covered.flat().sort(),
+    `the "${lead}" list and this suite's cases have diverged`,
   );
 }
 
@@ -240,71 +244,54 @@ check('every call the skill lists as refused is refused', () => {
   shows(
     'Refused: volatile calls (`TODAY`, `NOW`, `RAND`, `RANDBETWEEN`) · request,',
   );
-  for (const name of [
-    'TODAY',
-    'NOW',
-    'RAND',
-    'RANDBETWEEN',
-    '@User',
-    '$new',
-    'def',
-    'try',
-    'catch',
-    'error',
-    'label',
-    'break',
-    '|=',
-    '..',
-    '@csv',
-    'debug',
-    'env',
-    'input',
-    'builtins',
-  ]) {
-    listedUnder(name, REFUSED_LEAD, ALLOWED_LEAD);
-  }
-  const refused: Array<[string, () => unknown, string]> = [
-    ['TODAY()', () => expression(fx`TODAY()`), 'derive-call-banned'],
-    ['NOW()', () => expression(fx`NOW()`), 'derive-call-banned'],
-    ['RAND()', () => expression(fx`RAND()`), 'derive-call-banned'],
+  // Each entry: the names it covers in the skill's list, a source that reaches
+  // them, and the diagnostic code the factory must answer with.
+  const refused: Array<[string | string[], () => unknown, string]> = [
+    ['TODAY', () => expression(fx`TODAY()`), 'derive-call-banned'],
+    ['NOW', () => expression(fx`NOW()`), 'derive-call-banned'],
+    ['RAND', () => expression(fx`RAND()`), 'derive-call-banned'],
     [
-      'RANDBETWEEN(1, 6)',
+      'RANDBETWEEN',
       () => expression(fx`RANDBETWEEN(1, 6)`),
       'derive-call-banned',
     ],
-    ['@User.id', () => expression(fx`@User.id`), 'derive-context-banned'],
-    ['$new.total', () => expression(fx`$new.total`), 'derive-context-banned'],
+    ['@User', () => expression(fx`@User.id`), 'derive-context-banned'],
+    ['@Env', () => expression(fx`@Env.region`), 'derive-context-banned'],
+    ['$new', () => expression(fx`$new.total`), 'derive-context-banned'],
+    ['$old', () => expression(fx`$old.total`), 'derive-context-banned'],
     ['def', () => expression(jq`def f: . + 1; f`), 'derive-def-banned'],
-    ['try/catch', () => expression(jq`try .a catch "x"`), 'derive-try-banned'],
+    [
+      ['try', 'catch'],
+      () => expression(jq`try .a catch "x"`),
+      'derive-try-banned',
+    ],
     ['error', () => expression(jq`error("boom")`), 'derive-call-banned'],
     [
-      'label/break',
+      ['label', 'break'],
       () => expression(jq`label $out | .a, break $out`),
       'derive-control-flow-banned',
     ],
+    ['=', () => expression(jq`.total = 5`), 'derive-assignment-banned'],
+    ['|=', () => expression(jq`.total |= . + 1`), 'derive-assignment-banned'],
     [
-      'assignment =',
-      () => expression(jq`.total = 5`),
-      'derive-assignment-banned',
-    ],
-    [
-      'assignment |=',
-      () => expression(jq`.total |= . + 1`),
-      'derive-assignment-banned',
-    ],
-    [
-      'recursive descent',
+      '..',
       () => expression(jq`.. | numbers`),
       'derive-recursive-descent-banned',
     ],
     ['@csv', () => expression(jq`[.a, .b] | @csv`), 'derive-format-banned'],
     ['debug', () => expression(jq`debug`), 'derive-call-banned'],
     ['env', () => expression(jq`env`), 'derive-call-banned'],
+    ['stderr', () => expression(jq`stderr`), 'derive-call-banned'],
+    ['halt', () => expression(jq`halt`), 'derive-call-banned'],
     ['input', () => expression(jq`input`), 'derive-call-banned'],
     ['builtins', () => expression(jq`builtins | length`), 'derive-call-banned'],
   ];
-  for (const [label, make, code] of refused) {
-    strictEqual(rejectionCode(make), code, `${label} should be ${code}`);
+  listsExactly(
+    REFUSED_LEAD,
+    refused.map(([names]) => names),
+  );
+  for (const [names, make, code] of refused) {
+    strictEqual(rejectionCode(make), code, `${names} should be ${code}`);
   }
 });
 
@@ -312,27 +299,6 @@ check(
   'every form the skill lists as allowed runs and produces its value',
   () => {
     shows('Allowed and useful: `IFERROR` / `IFNA` · optional access (`.a?`)');
-    for (const name of [
-      'IFERROR',
-      'IFNA',
-      '.a?',
-      'SUM',
-      'AVERAGE',
-      'COUNT',
-      'NPV',
-      'isEmail',
-      'LET',
-      'reduce',
-      'foreach',
-      'keys',
-      'to_entries',
-      'group_by',
-      'unique',
-      'tojson',
-    ]) {
-      listedUnder(name, ALLOWED_LEAD, REFUSED_LEAD);
-    }
-
     // Constructing proves nothing on its own: the derive profile only screens the
     // names it bans, so a name the registry has never heard of constructs too.
     // Each of these therefore evaluates, and an unknown name is the control.
@@ -345,10 +311,10 @@ check(
       status: 'Open',
       a: 7,
     };
-    const allowed: Array<[string, () => unknown, unknown]> = [
+    const allowed: Array<[string | string[], () => unknown, unknown]> = [
       ['IFERROR', () => expression(fx`IFERROR(Amount, 0)`).call(card), 4],
       ['IFNA', () => expression(fx`IFNA(Amount, 0)`).call(card), 4],
-      ['optional access', () => expression(jq`.a?`).call(card), 7],
+      ['.a?', () => expression(jq`.a?`).call(card), 7],
       ['SUM', () => expression(fx`SUM([Claims[].Paid])`).call(card), 15],
       [
         'AVERAGE',
@@ -367,7 +333,7 @@ check(
         () => expression(fx`LET(t, SUM([Claims[].Paid]), t > 100)`).call(card),
         false,
       ],
-      ['binding', () => expression(jq`. as $x | $x.a`).call(card), 7],
+      ['. as $x | …', () => expression(jq`. as $x | $x.a`).call(card), 7],
       [
         'reduce',
         () => expression(jq`reduce .items[] as $i (0; . + $i)`).call(card),
@@ -395,13 +361,22 @@ check(
       ['keys', () => expression(jq`keys | length`).call(card), 7],
       ['tojson', () => expression(jq`tojson | length > 0`).call(card), true],
     ];
-    for (const [label, run, expected] of allowed) {
-      strictEqual(
-        rejectionCode(() => run()),
-        'accepted',
-        `${label} threw`,
-      );
-      strictEqual(run(), expected, `${label} produced the wrong value`);
+    listsExactly(
+      ALLOWED_LEAD,
+      allowed.map(([names]) => names),
+    );
+    for (const [names, run, expected] of allowed) {
+      // One evaluation per case: a throw and a wrong value are distinguished by
+      // where this lands, not by running the source twice.
+      let value: unknown;
+      try {
+        value = run();
+      } catch (error) {
+        throw new Error(
+          `${names} threw instead of evaluating: ${(error as Error).message.split('\n')[0]}`,
+        );
+      }
+      strictEqual(value, expected, `${names} produced the wrong value`);
     }
 
     const unknown = expression(fx`TOTALLYFAKE(1)`);
