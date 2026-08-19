@@ -56,6 +56,64 @@ versions may change syntax behavior until `1.0.0`.
   TypeScript — `engines.node` is now `>=24`.
 - Relative import specifiers use `.ts` extensions throughout.
 
+### Fixed
+
+- **Twenty functions that answered something other than their specification.**
+  On the jq side: named captures now travel on a match, so `capture`, `sub` and
+  `gsub` can read them, and a group that did not participate reports an absent
+  capture rather than crashing; `round` ties away from zero; `isinfinite`
+  excludes NaN, and `isfinite` with it; `lgamma_r` returns a magnitude and sign
+  pair; `scalars_or_empty` keeps empty collections; `max_by` breaks ties
+  on the last maximum, as jq does; `inputs` yields an empty stream. On the Excel
+  side: `PROPER`, `TRIM`, `SEARCH` (wildcards), `SUBSTITUTE` (an occurrence at
+  position 0), `TEXT` (date format codes), `NUMBERVALUE` (percent signs and
+  spaces), `CHAR` (bounded to 1–255), `ISEVEN`/`ISODD` (truncation),
+  `WEEKDAY`/`WEEKNUM` (every return type), `ISOWEEKNUM`, `TIMEVALUE` (AM/PM),
+  `BASE`/`BIN2HEX`/`DEC2HEX`/`OCT2HEX` (upper-case digits), `COMPLEX` (`-i`),
+  `ERF`/`ERFC` (full double precision), `WEIBULL_DIST` (shape and scale),
+  `T_TEST` (Welch degrees of freedom), `IRR`/`IRR_BY`/`XIRR` (`#NUM!` for a
+  series with no root), the `TBILL` family (maturity within a year) and
+  `COUPDAYS` (a real coupon period under actual/actual). Each is pinned by a
+  case in the function-coverage suite; see `src/*/UPSTREAM-DIFFS.md`.
+
+- **Excel wildcards are matched in linear time.** `SEARCH` and the `COUNTIF`
+  family of criteria share one matcher that walks the text once. Compiling `*`
+  to a regex's `.*` made a pattern carrying several stars exponential — a stray
+  run of asterisks over an ordinary text field took tens of seconds, blocking an
+  indexing worker or the browser's main thread.
+
+- **`max_by`/`min_by` on an empty array yield `null`**, as `max`/`min` already
+  did, rather than an empty stream.
+
+- **Numeric literals accept an exponent.** `1e3`, `1E-3` and `5e-324` are
+  single numbers in both readable and canonical-jq syntax, where the tokenizer
+  previously ended the literal at the first digit and read the rest as a name.
+
+- **`ACCRINT` counts quasi-coupon periods on every basis.** Interest accrues per
+  period on the schedule `first_interest` anchors: periods a holding covers whole
+  each earn one coupon, the period it opens in earns the share of its own length
+  it covers, and settlement's distance from a reference coupon date is a signed
+  share of a single period. Measuring the holding as a whole instead, as
+  `par * rate * YEARFRAC(issue, settlement)`, is what an implementation that
+  never reads the schedule answers. The two coincide wherever every period the
+  holding touches measures its nominal `year / frequency`, and part where a
+  period's own day count differs — which is every actual/360 and actual/365
+  period, and a 30/360 one whose boundaries carry different day numbers. An
+  actual/360 semiannual period runs 181 to 184 days against a nominal 180; a US
+  30/360 semiannual period between two month ends counts 178, 179, 182 or 183.
+  The gap is usually a fraction of a coupon and grows with the holding, reaching
+  a coupon or more only over decades. The bases also disagree with each other, so
+  a basis argument now moves the answer where it used to be inert.
+
+- **`ACCRINT`'s 30/360 reads a February month end as the 30th.** The US 30/360 a
+  bond schedule is measured with carries the last-day-of-February rules on top of
+  the day-31 rules: February's month end counts as the 30th when it opens a span,
+  and when it closes one whose start is a February month end too or whose own
+  length is being measured. So a holding from one February month end to the next
+  is a whole year and earns exactly one coupon. `DAYS360` keeps the day-31 rules
+  alone, since Excel's shipped `DAYS360` parts from the February rules its own
+  documentation gives while Excel's bond functions apply them.
+
 ### Removed
 
 - **`BXL_BUILD_INFO.buildTime`.** Only a bundling step ever set it; the const

@@ -230,23 +230,62 @@ interface AudioDecoderLike {
   close?: () => Promise<void> | void;
 }
 
-type AudioDecoderConstructor = new (options?: {
-  sampleRate?: number;
-}) => AudioDecoderLike;
+type OfflineAudioContextConstructor = new (
+  numberOfChannels: number,
+  length: number,
+  sampleRate: number,
+) => AudioDecoderLike;
 
-function audioDecoderConstructor(): AudioDecoderConstructor | undefined {
+type AudioContextConstructor = new () => AudioDecoderLike;
+
+// The band every Web Audio implementation must accept for a context's sample
+// rate. A container may state a rate outside it (FLAC admits up to 655350 Hz);
+// the context gets the nearest legal rate and `decodeAudioData` resamples the
+// decoded audio to it, which an amplitude envelope doesn't notice.
+const MIN_CONTEXT_SAMPLE_RATE_HZ = 8000;
+const MAX_CONTEXT_SAMPLE_RATE_HZ = 96000;
+const DEFAULT_CONTEXT_SAMPLE_RATE_HZ = 44100;
+
+function contextSampleRate(sampleRateHz: number | undefined): number {
+  if (
+    sampleRateHz === undefined ||
+    !Number.isFinite(sampleRateHz) ||
+    sampleRateHz <= 0
+  ) {
+    return DEFAULT_CONTEXT_SAMPLE_RATE_HZ;
+  }
+  return Math.min(
+    Math.max(sampleRateHz, MIN_CONTEXT_SAMPLE_RATE_HZ),
+    MAX_CONTEXT_SAMPLE_RATE_HZ,
+  );
+}
+
+// Build a decoding context, or undefined where Web Audio is missing entirely.
+//
+// An OfflineAudioContext decodes without touching an output device, which is
+// what a headless indexing pass wants — a live AudioContext would try to open
+// hardware. Fall back to the real thing where offline isn't available.
+//
+// The offline constructor requires its render parameters up front. The render
+// graph never runs — only `decodeAudioData` is used — so channel count and
+// length are minimal; the sample rate is the one parameter that matters,
+// because decoded audio is resampled to the context's rate. Callers pass the
+// rate the container header stated so the analysis sees native resolution.
+function makeAudioDecoder(
+  sampleRateHz: number | undefined,
+): AudioDecoderLike | undefined {
   let scope = globalThis as unknown as {
     OfflineAudioContext?: unknown;
     AudioContext?: unknown;
     webkitAudioContext?: unknown;
   };
-  // An OfflineAudioContext decodes without touching an output device, which is
-  // what a headless indexing pass wants — a live AudioContext would try to open
-  // hardware. Fall back to the real thing where offline isn't available.
-  let candidate =
-    scope.OfflineAudioContext ?? scope.AudioContext ?? scope.webkitAudioContext;
-  return typeof candidate === 'function'
-    ? (candidate as AudioDecoderConstructor)
+  if (typeof scope.OfflineAudioContext === 'function') {
+    let Offline = scope.OfflineAudioContext as OfflineAudioContextConstructor;
+    return new Offline(1, 1, contextSampleRate(sampleRateHz));
+  }
+  let Live = scope.AudioContext ?? scope.webkitAudioContext;
+  return typeof Live === 'function'
+    ? new (Live as AudioContextConstructor)()
     : undefined;
 }
 
@@ -255,8 +294,9 @@ function audioDecoderConstructor(): AudioDecoderConstructor | undefined {
 // still index with its header-derived metadata intact.
 export async function extractAudioWaveform(
   bytes: Uint8Array,
-  barCount = WAVEFORM_BAR_COUNT,
+  opts: { barCount?: number; sampleRateHz?: number } = {},
 ): Promise<WaveformMetadata> {
+  let { barCount = WAVEFORM_BAR_COUNT, sampleRateHz } = opts;
   if (bytes.byteLength === 0) {
     return { decodeStatus: 'skipped', decodeError: 'File is empty' };
   }
@@ -271,17 +311,15 @@ export async function extractAudioWaveform(
       )} MB unbudgeted ceiling`,
     };
   }
-  let Decoder = audioDecoderConstructor();
-  if (!Decoder) {
-    return {
-      decodeStatus: 'unsupported',
-      decodeError: 'Web Audio is not available in this environment',
-    };
-  }
-
   let context: AudioDecoderLike | undefined;
   try {
-    context = new Decoder();
+    context = makeAudioDecoder(sampleRateHz);
+    if (!context) {
+      return {
+        decodeStatus: 'unsupported',
+        decodeError: 'Web Audio is not available in this environment',
+      };
+    }
     // `decodeAudioData` detaches the buffer it is given, so hand it a copy —
     // otherwise the caller's bytes, which other extractors still need to read,
     // come back as a zero-length view.

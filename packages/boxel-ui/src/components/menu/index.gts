@@ -8,6 +8,7 @@ import cn from '../../helpers/cn.ts';
 import compact from '../../helpers/compact.ts';
 import type { MenuDivider } from '../../helpers/menu-divider.ts';
 import type { MenuAction, MenuItem } from '../../helpers/menu-item.ts';
+import { eq } from '../../helpers/truth-helpers.ts';
 import CheckMark from '../../icons/check-mark.gts';
 import LoadingIndicator from '../loading-indicator/index.gts';
 
@@ -35,6 +36,7 @@ interface Signature {
   Args: {
     class?: string;
     closeMenu?: () => void;
+    isRounded?: boolean;
     itemClass?: string;
     items: Array<MenuItem | MenuDivider>;
     loading?: boolean;
@@ -50,7 +52,15 @@ export default class Menu extends Component<Signature> {
   }
 
   <template>
-    <ul role='menu' class={{cn 'boxel-menu' @class}} ...attributes>
+    <ul
+      role='menu'
+      class={{cn
+        'boxel-menu'
+        @class
+        boxel-menu--rounded=(if (eq @isRounded false) false true)
+      }}
+      ...attributes
+    >
       {{#if @loading}}
         <li role='none' class='boxel-menu__item' data-test-boxel-menu-loading>
           <div class='boxel-menu__item__content'>
@@ -136,60 +146,78 @@ export default class Menu extends Component<Signature> {
     <style scoped>
       @layer boxelComponentL1 {
         .boxel-menu {
-          --boxel-menu-border-radius: var(--boxel-border-radius);
-          --boxel-menu-color: var(--boxel-light);
-          --boxel-menu-text-color: var(--boxel-dark);
-          --boxel-menu-current-color: var(--boxel-light-100);
-          --boxel-menu-selected-color: var(--boxel-highlight);
-          --boxel-menu-disabled-color: var(--boxel-highlight);
-          --boxel-menu-font: 500 var(--boxel-font-sm);
-          --boxel-menu-item-gap: var(--boxel-sp-xxs);
-          --boxel-menu-item-content-padding: var(--boxel-sp-xs) var(--boxel-sp);
+          --_menu-background: var(--boxel-menu-color, var(--background));
+          --_menu-foreground: var(--boxel-menu-text-color, var(--foreground));
+          --_menu-hover-background: var(
+            --boxel-menu-current-color,
+            var(--boxel-50)
+          );
+          --_menu-selected-background: var(
+            --boxel-menu-selected-color,
+            var(--primary)
+          );
+          --_menu-selected-foreground: var(
+            --boxel-menu-selected-font-color,
+            var(--primary-foreground)
+          );
+          --_menu-selected-hover-foreground: var(
+            --boxel-menu-selected-hover-font-color
+          );
+          --_menu-font: var(--boxel-menu-font, 500 var(--boxel-font-sm));
+          --_menu-radius: var(--boxel-menu-radius, var(--radius));
+          --_menu-item-gap: var(--boxel-menu-item-gap, var(--boxel-sp-2xs));
+          --_menu-item-padding: var(
+            --boxel-menu-item-content-padding,
+            var(--boxel-sp-xs) var(--boxel-sp)
+          );
+          --_menu-item-radius: var(--boxel-menu-item-border-radius);
+
           list-style-type: none;
           margin: 0;
           padding: 0;
-          color: var(--boxel-menu-text-color, inherit);
-          background-color: var(--boxel-menu-color);
-          border-radius: var(--boxel-menu-border-radius);
+          color: var(--_menu-foreground);
+          background-color: var(--_menu-background);
+        }
+        .boxel-menu--rounded {
+          border-radius: var(--_menu-radius);
         }
 
         .boxel-menu__item {
-          font: var(--boxel-menu-font);
+          font: var(--_menu-font);
           font-family: inherit;
           letter-spacing: var(--boxel-lsp-sm);
+          border-radius: var(--_menu-item-radius);
         }
 
         .boxel-menu__item--checked {
-          background-color: var(--boxel-menu-selected-background-color);
-          color: var(--boxel-menu-selected-font-color);
+          background-color: var(--_menu-selected-background);
+          color: var(--_menu-selected-foreground);
         }
 
         .boxel-menu__item--checked:not(.boxel-menu__item--disabled):hover {
-          color: var(--boxel-menu-selected-hover-font-color);
+          color: var(--_menu-selected-hover-foreground);
         }
 
         .boxel-menu__item:not(.boxel-menu__item--disabled):hover {
-          background-color: var(--boxel-menu-current-color);
+          background-color: var(--_menu-hover-background);
           cursor: pointer;
         }
 
-        .boxel-menu__item:first-child:hover {
+        .boxel-menu--rounded > .boxel-menu__item:first-child:hover {
           border-top-left-radius: inherit;
           border-top-right-radius: inherit;
         }
-
-        .boxel-menu__item:last-child:hover {
+        .boxel-menu--rounded > .boxel-menu__item:last-child:hover {
           border-bottom-left-radius: inherit;
           border-bottom-right-radius: inherit;
         }
-
-        .boxel-menu__item:only-child:hover {
+        .boxel-menu--rounded > .boxel-menu__item:only-child:hover {
           border-radius: inherit;
         }
 
         .boxel-menu__item > .boxel-menu__item__content {
           width: 100%;
-          padding: var(--boxel-menu-item-content-padding);
+          padding: var(--_menu-item-padding);
           display: flex;
           justify-content: space-between;
           align-items: center;
@@ -210,17 +238,17 @@ export default class Menu extends Component<Signature> {
         }
 
         .boxel-menu__item__content:focus-visible {
-          outline: var(--boxel-outline);
+          outline: 1px solid var(--ring);
         }
 
         .boxel-menu__item--dangerous {
           --icon-color: currentColor;
-          color: var(--destructive, var(--boxel-danger));
+          color: var(--destructive);
           fill: currentColor;
         }
         .boxel-menu__item--dangerous:not(:disabled):hover {
           background-color: color-mix(in oklab, currentColor 10%, transparent);
-          color: var(--destructive, var(--boxel-danger-hover));
+          color: var(--destructive);
         }
 
         .boxel-menu__item--disabled,
@@ -234,15 +262,15 @@ export default class Menu extends Component<Signature> {
            select chip). */
         .boxel-menu__item--header,
         .boxel-menu__item--header.boxel-menu__item:hover {
-          background-color: var(--boxel-teal);
-          color: var(--boxel-dark);
+          background-color: var(--primary);
+          color: var(--primary-foreground);
           cursor: default;
         }
-        .boxel-menu__item--header:first-child {
+        .boxel-menu--rounded > .boxel-menu__item--header:first-child {
           border-top-left-radius: inherit;
           border-top-right-radius: inherit;
         }
-        .boxel-menu__item--header:last-child {
+        .boxel-menu--rounded > .boxel-menu__item--header:last-child {
           border-bottom-left-radius: inherit;
           border-bottom-right-radius: inherit;
         }
@@ -258,14 +286,14 @@ export default class Menu extends Component<Signature> {
           margin: 0;
           border: 0;
           height: 0;
-          border-bottom: 1px solid var(--boxel-purple-300);
+          border-bottom: 1px solid var(--boxel-400);
         }
 
         .menu-item {
           width: 100%;
           display: flex;
           align-items: center;
-          gap: var(--boxel-menu-item-gap);
+          gap: var(--_menu-item-gap);
           text-transform: capitalize;
         }
         .menu-item__icon-url {
@@ -279,7 +307,7 @@ export default class Menu extends Component<Signature> {
         }
 
         .check-icon {
-          --icon-color: var(--boxel-highlight);
+          --icon-color: var(--primary);
           visibility: collapse;
           display: contents;
         }

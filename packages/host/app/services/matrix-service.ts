@@ -1520,6 +1520,14 @@ export default class MatrixService extends Service {
     }
   });
 
+  // Whether the background loop above is still working through its attempts.
+  // It is bounded, so a server can remain unreachable after the loop has given
+  // up and nothing will try again this session. Surfaces that name the failure
+  // read this so they don't keep promising a retry that has stopped.
+  get isRetryingUnreachableRealmServers(): boolean {
+    return this.retryUnreachableRealmServersTask.isRunning;
+  }
+
   async createRealmSession(realmURL: URL) {
     await this.#clientReadyDeferred.promise;
     return this.client.createRealmSession(realmURL);

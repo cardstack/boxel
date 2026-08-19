@@ -1,4 +1,5 @@
 import { isExcelBlank } from './common.ts';
+import { excelWildcardMatchesWhole } from './wildcard.ts';
 
 export type CriteriaMatcher = (value: unknown) => boolean;
 
@@ -38,39 +39,6 @@ function hasWildcards(value: string) {
   }
 
   return false;
-}
-
-function wildcardToRegex(value: string) {
-  let escaped = false;
-  let pattern = '^';
-
-  for (const char of value) {
-    if (escaped) {
-      pattern += char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      escaped = false;
-      continue;
-    }
-
-    if (char === '~') {
-      escaped = true;
-      continue;
-    }
-
-    if (char === '*') {
-      pattern += '.*';
-      continue;
-    }
-
-    if (char === '?') {
-      pattern += '.';
-      continue;
-    }
-
-    pattern += char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  }
-
-  pattern += '$';
-  return new RegExp(pattern, 'i');
 }
 
 function normalizeStringValue(value: unknown) {
@@ -117,7 +85,10 @@ function compareValues(left: unknown, right: unknown, operator: string) {
     }
 
     if (hasWildcards(right)) {
-      const matched = wildcardToRegex(right).test(normalizeStringValue(left));
+      const matched = excelWildcardMatchesWhole(
+        right,
+        normalizeStringValue(left),
+      );
       return operator === '=' ? matched : !matched;
     }
   }

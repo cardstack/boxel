@@ -70,11 +70,9 @@ export default class RenameSession extends Component<Signature> {
 
     <style scoped>
       .rename-session {
-        --boxel-button-color: var(--boxel-light);
-
+        --boxel-input-outline: none;
         min-height: unset;
       }
-
       .rename-field {
         padding: 0 var(--boxel-sp-xs);
       }
@@ -86,9 +84,6 @@ export default class RenameSession extends Component<Signature> {
         justify-content: flex-end;
         gap: var(--boxel-sp-xs);
         padding: var(--boxel-sp-xs);
-      }
-      .footer :deep(.boxel-button:not(:disabled)) {
-        --boxel-button-text-color: var(--boxel-dark);
       }
     </style>
   </template>

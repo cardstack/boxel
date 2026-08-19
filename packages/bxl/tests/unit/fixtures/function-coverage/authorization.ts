@@ -1,5 +1,9 @@
 import { ok, strictEqual } from 'node:assert';
-import { jqCases, type CoverageCase } from './case.ts';
+import {
+  inAuthorizationLibraries,
+  jqCases,
+  type CoverageCase,
+} from './case.ts';
 
 // A two-type model: group membership feeds document viewing, and an explicit
 // `banned` relation subtracts from it — enough shape for every list and check
@@ -96,4 +100,4 @@ export const authorizationCases: CoverageCase[] = jqCases([
     source: 'ip_in_cidr("10.2.2.3"; "10.1.0.0/16")',
     expected: false,
   },
-]);
+]).map(inAuthorizationLibraries);

@@ -35,6 +35,7 @@ let component: TemplateOnlyComponent<Signature> = <template>
     @isOpen={{true}}
     @onClose={{@onCancel}}
     style={{cssVar boxel-modal-offset-top='40vh'}}
+    data-theme='light'
   >
     <section class='delete {{@containerClass}}'>
       <div class='content' data-test-delete-msg>

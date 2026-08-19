@@ -55,3 +55,5 @@ export class M4aDef extends AudioDef {
     };
   }
 }
+
+export default M4aDef;

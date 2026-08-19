@@ -1,6 +1,7 @@
 import {
   assertNumber,
   assertString,
+  captureGroupNames,
   createItem,
   delPaths,
   has,
@@ -23,7 +24,6 @@ import { compare } from '../compare.ts';
 import { JqArgumentError, JqEvaluateError } from '../../errors.ts';
 import { getPath } from '../utils/getPath.ts';
 import { setPath } from '../utils/setPath.ts';
-import { builtinJqFilters } from './builtinJqFilters.ts';
 import { applyNamedFormat } from '../applyFormat.ts';
 import {
   gmtime as gmtimeValue,
@@ -40,7 +40,6 @@ import {
 } from '../runtimeState.ts';
 
 const MIN_NORMAL = 2.2250738585072014e-308;
-const PUBLIC_SANDBOX_BLOCKED_BUILTINS = new Set(['env/0']);
 
 function containsValue(haystack: unknown, needle: unknown): boolean {
   if (typeOf(haystack) !== typeOf(needle)) {
@@ -88,20 +87,6 @@ function trimStringValue(
   return output;
 }
 
-function publicBuiltinNames(): string[] {
-  return [
-    ...new Set([
-      ...Object.keys(builtinJqFilters),
-      ...Object.keys(builtinNativeFilters),
-    ]),
-  ]
-    .filter(
-      (name) =>
-        !name.startsWith('_') && !PUBLIC_SANDBOX_BLOCKED_BUILTINS.has(name),
-    )
-    .sort();
-}
-
 function rawCompactString(value: unknown): string {
   return typeOf(value) === Type.string
     ? (value as string)
@@ -132,7 +117,8 @@ function applyBinaryMath(
 //   - `gamma/0` and `tgamma/0` both compute true Γ (Excel-canonical)
 //   - `atan2/2` follows jq/POSIX argument order (y; x) — see filter below
 //   - the sandbox has no I/O, so `input/0` and its siblings raise
-//     notImplementedError rather than reading a stream
+//     notImplementedError rather than reading a stream, and `inputs/0`
+//     yields the empty stream of a runtime that is out of inputs
 // ────────────────────────────────────────────────────────────────────
 
 const F64_BUF = new ArrayBuffer(8);
@@ -187,6 +173,15 @@ function roundHalfToEven(x: number): number {
   if (absFrac > 0.5) return truncated + Math.sign(frac);
   // Tie: round to even.
   return truncated % 2 === 0 ? truncated : truncated + Math.sign(frac);
+}
+
+/** Round-half-away-from-zero, the mode C's `round` and Excel's ROUND use. */
+function roundHalfAwayFromZero(x: number): number {
+  if (!Number.isFinite(x)) return x;
+  const truncated = Math.trunc(x);
+  const frac = x - truncated;
+  if (Math.abs(frac) < 0.5) return truncated;
+  return truncated + Math.sign(frac);
 }
 
 /** IEEE remainder: x - n*y where n = round-half-to-even(x/y). */
@@ -501,6 +496,14 @@ function isScalar(value: unknown): boolean {
   );
 }
 
+/** True if value is an array or object with nothing in it. */
+function isEmptyCollection(value: unknown): boolean {
+  const t = typeOf(value);
+  if (t === Type.array) return (value as unknown[]).length === 0;
+  if (t === Type.object) return Object.keys(value as object).length === 0;
+  return false;
+}
+
 /* eslint-disable require-yield -- Every entry in this table is a generator so
    the evaluator can drive them all through one protocol. Filters whose only
    outcome is a signal — raising a jq error, or halting the program — reach the
@@ -540,31 +543,36 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
     ) {
       const str = assertString(input);
       const r = new RegExp(regex, (flags ?? '') + 'd');
+      const names = captureGroupNames(regex);
 
       if (flags && flags.includes('g')) {
         const m = Array.from(str.matchAll(r));
         if (returnOnlyBoolean) {
           yield m.length !== 0;
         } else {
-          yield m.map(transformRegExpMatch);
+          yield m.map((match) => transformRegExpMatch(match, names));
         }
       } else {
         const m = str.match(r);
         if (returnOnlyBoolean) {
           yield !!m;
         } else if (m) {
-          yield [transformRegExpMatch(m)];
+          yield [transformRegExpMatch(m, names)];
         }
       }
     },
     *'_max_by_impl/1'(input: any[], ref: any[][]) {
+      // An empty array has a null maximum, as max/0 and min/0 also report.
       if (input.length === 0) {
+        yield null;
         return;
       }
 
+      // Ties resolve to the last maximum, where _min_by_impl keeps the first.
+      // The asymmetry is jq's.
       let bestIndex = 0;
       for (let i = 1; i < input.length; i++) {
-        if (compare(ref[i], ref[bestIndex]) > 0) {
+        if (compare(ref[i], ref[bestIndex]) >= 0) {
           bestIndex = i;
         }
       }
@@ -573,6 +581,7 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
     },
     *'_min_by_impl/1'(input: any[], ref: any[][]) {
       if (input.length === 0) {
+        yield null;
         return;
       }
 
@@ -590,22 +599,6 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
         .map((item, i) => ({ item, ref: ref[i] }))
         .sort((a, b) => compare(a.ref, b.ref))
         .map(({ item }) => item);
-    },
-    *'_unique_by_impl/1'(input: any[], ref: any[][]) {
-      const items = input
-        .map((value, i) => ({ value, ref: ref[i] }))
-        .sort((a, b) => compare(a.ref, b.ref));
-
-      const output: any[] = [];
-      let previousRef: any[] | undefined;
-      for (const item of items) {
-        if (!previousRef || compare(previousRef, item.ref) !== 0) {
-          output.push(item.value);
-          previousRef = item.ref;
-        }
-      }
-
-      yield output;
     },
     *'_strindices/1'(input: string, needle: string) {
       yield indices(input, needle);
@@ -643,33 +636,11 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
     *'atanh/0'(input: unknown) {
       yield applyUnaryMath(input, Math.atanh);
     },
-    *'bsearch/1'(input: unknown, target: unknown) {
-      if (typeOf(input) !== Type.array) {
-        throw new JqArgumentError('Expected an array');
-      }
-
-      const values = input as unknown[];
-      let low = 0;
-      let high = values.length - 1;
-
-      while (low <= high) {
-        const mid = Math.floor((low + high) / 2);
-        const direction = compare(values[mid], target);
-        if (direction === 0) {
-          yield mid;
-          return;
-        }
-        if (direction < 0) {
-          low = mid + 1;
-        } else {
-          high = mid - 1;
-        }
-      }
-
-      yield -1 - low;
-    },
     *'builtins/0'() {
-      yield publicBuiltinNames();
+      // The names this reports depend on which libraries a program resolved,
+      // so resolveRegistry replaces the entry once it knows them. Declaring it
+      // here is what puts `builtins/0` itself into that list.
+      throw new JqEvaluateError('builtins/0 requires a resolved registry');
     },
     *'cbrt/0'(input: unknown) {
       yield applyUnaryMath(input, Math.cbrt);
@@ -899,6 +870,13 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
     *'input/0'() {
       throw notImplementedError('input/0');
     },
+    *'inputs/0'() {
+      // Every remaining input, of which a sandbox with no input stream has
+      // none — the same empty stream jq gives once its inputs are exhausted.
+      // jq derives this from repeat(input), which is not available here
+      // because input/0 raises instead of signalling end-of-input; restore
+      // the jq-source definition if input/0 ever reads a real stream.
+    },
     *'input_filename/0'() {
       throw notImplementedError('input_filename/0');
     },
@@ -906,7 +884,12 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
       throw notImplementedError('input_line_number/0');
     },
     *'isinfinite/0'(input: unknown) {
-      yield typeOf(input) === Type.number && !Number.isFinite(input as number);
+      // NaN is not an infinity, so it is excluded here just as C's isinf
+      // excludes it. isfinite/0 is defined in terms of this filter, so a NaN
+      // counted as infinite would come back non-finite as well.
+      yield typeOf(input) === Type.number &&
+        !Number.isFinite(input as number) &&
+        !Number.isNaN(input as number);
     },
     *'isnan/0'(input: unknown) {
       yield typeOf(input) === Type.number && Number.isNaN(input as number);
@@ -962,10 +945,14 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
       yield lgammaApprox(assertNumber(input));
     },
     *'lgamma_r/0'(input: unknown) {
-      // C lgamma_r returns ln|Γ(x)| via return value and the sign of Γ(x)
-      // via a pointer arg. Without pointers in jq we yield just the log
-      // magnitude; users needing the sign should compute it from x.
-      yield lgammaApprox(assertNumber(input));
+      // C lgamma_r reports ln|Γ(x)| through its return value and the sign of
+      // Γ(x) through a pointer arg; jq returns the two as a pair, and so does
+      // this. Γ is positive everywhere above zero and alternates sign between
+      // the poles below it, so the sign follows from ⌊x⌋'s parity, and is
+      // reported as positive at the poles themselves.
+      const x = assertNumber(input);
+      const sign = x < 0 && Math.floor(x) % 2 !== 0 ? -1 : 1;
+      yield [lgammaApprox(x), sign];
     },
     *'localtime/0'(input: unknown) {
       if (typeOf(input) !== Type.number) {
@@ -1082,7 +1069,9 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
       yield roundHalfToEven(assertNumber(input));
     },
     *'round/0'(input: unknown) {
-      yield Math.round(assertNumber(input));
+      // Ties go away from zero, matching C's round: -2.5 is -3, not -2.
+      // (Math.round ties toward +Infinity, which agrees only on positives.)
+      yield roundHalfAwayFromZero(assertNumber(input));
     },
     *'rtrimstr/1'(input: unknown, right: unknown) {
       const str = assertString(input);
@@ -1092,8 +1081,9 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
         : str;
     },
     *'scalars_or_empty/0'(input: unknown) {
-      // Yield input if it's null/boolean/number/string, otherwise no output.
-      if (isScalar(input)) yield input;
+      // Scalars, plus the empty array and empty object — keeping those is the
+      // whole of what separates this filter from `scalars`.
+      if (isScalar(input) || isEmptyCollection(input)) yield input;
     },
     *'scalb/2'(_input: unknown, x: unknown, n: unknown) {
       // Identical to ldexp in IEEE 754 environments (no FLT_RADIX != 2).
@@ -1269,22 +1259,6 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
         );
       }
       yield new TextEncoder().encode(input as string).length;
-    },
-    *'unique/0'(input: unknown) {
-      if (typeOf(input) !== Type.array) {
-        throw new JqArgumentError('Expected an array');
-      }
-      const sorted = [...(input as unknown[])].sort(compare);
-      const output: unknown[] = [];
-      for (const value of sorted) {
-        if (
-          output.length === 0 ||
-          compare(output[output.length - 1], value) !== 0
-        ) {
-          output.push(value);
-        }
-      }
-      yield output;
     },
     *'trunc/0'(input: unknown) {
       yield Math.trunc(assertNumber(input));

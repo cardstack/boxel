@@ -187,4 +187,23 @@ for (const lowerJq of [
   );
 }
 
+// Excel's positional INDEX shadows jq's two-argument object-building INDEX, so
+// only that call shape is flagged. One argument is jq's own index-of and three
+// is Excel's row-and-column lookup, neither of which collides with anything.
+for (const [expression, expected] of [
+  ['INDEX(.rows; .id)', true],
+  ['index(.rows; .id)', true],
+  ['INDEX(.names, 2)', false],
+  ['INDEX(.names, 2, 1)', false],
+  ['index("na")', false],
+  ['INDEX("na")', false],
+] as [string, boolean][]) {
+  const result = lintBxlExpression(expression);
+  strictEqual(
+    result.issues.some((issue) => issue.code === 'jq-index-shadowed-by-excel'),
+    expected,
+    `${expression} ${expected ? 'must' : 'must NOT'} report the shadowed INDEX`,
+  );
+}
+
 console.log('BXL linter: edge-case diagnostics passed');

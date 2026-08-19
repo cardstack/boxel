@@ -195,12 +195,18 @@ function waveformBarsFor(model: FileModelLike, format: FileFormat): number[] {
   if (!Array.isArray(values)) {
     return [];
   }
+  // Every producer persists bars as 0..1 amplitudes — decoded RMS of float
+  // samples, MP3's side-info envelope normalized to its own peak, the WAV
+  // streaming envelope — while the renderers draw bar heights from 0–100.
+  // The projection owns that scale conversion; a renderer given raw
+  // amplitudes would crush every bar to its minimum sliver height and draw
+  // silence.
   let normalized = values
     .filter(
       (value): value is number =>
         typeof value === 'number' && Number.isFinite(value),
     )
-    .map((value) => Math.max(0, Math.min(100, value)));
+    .map((value) => Math.max(0, Math.min(100, value * 100)));
   let budget =
     format === 'fitted'
       ? FITTED_WAVEFORM_BAR_BUDGET
