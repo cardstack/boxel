@@ -43,6 +43,7 @@ jobs:
   check-percy:
     name: Check if Percy is needed
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       percy_needed: ${{ steps.check.outputs.percy_needed }}
     steps:
@@ -106,6 +107,7 @@ jobs:
     # differently-seeded index.
     name: Check if cached index is usable
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       use_cache: ${{ steps.check.outputs.use_cache }}
     steps:
@@ -935,6 +937,7 @@ jobs:
       cancel-in-progress: true
     needs: [host-test, check-percy]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -955,6 +958,7 @@ jobs:
       cancel-in-progress: true
     needs: host-test
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       # checks/pull-requests: needed by publish-unit-test-result-action to post
       # the junit summary back to the PR / commit.
@@ -1055,6 +1059,7 @@ jobs:
       cancel-in-progress: true
     needs: host-test
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
 
@@ -1095,6 +1100,7 @@ jobs:
       cancel-in-progress: true
     needs: [host-test, host-merge-reports-and-publish]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write
 
