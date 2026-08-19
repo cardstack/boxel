@@ -87,6 +87,7 @@ export default class PillMenu extends Component<Signature> {
     {{else}}
       <Button
         @kind='secondary'
+        @size='extra-small'
         {{on 'click' this.expandMenu}}
         class='pill-menu-button'
         data-test-pill-menu-button
@@ -152,12 +153,12 @@ export default class PillMenu extends Component<Signature> {
       .pill-menu-button {
         --boxel-button-font: 600 var(--boxel-font-xs);
         --boxel-button-secondary-border: transparent;
-        --boxel-button-secondary-active-border: var(--boxel-400);
         --boxel-button-border-radius: var(--boxel-border-radius-pill);
+        --boxel-button-min-width: 0;
         --boxel-button-transition:
           var(--boxel-transition-properties), scale 0.15s ease-out;
         padding-inline: var(--boxel-sp-sm);
-        gap: var(--boxel-sp-2xs);
+        gap: var(--boxel-sp-3xs);
         width: fit-content;
         white-space: nowrap;
       }
@@ -290,7 +291,6 @@ export default class PillMenu extends Component<Signature> {
       .minimized-arrow {
         transform: rotate(180deg);
         transform-origin: center;
-        margin-left: var(--boxel-sp-xs);
         flex-shrink: 0;
       }
 

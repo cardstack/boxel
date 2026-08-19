@@ -66,7 +66,8 @@ export default class LLMModeToggle extends Component<Signature> {
     </div>
     <style scoped>
       .llm-mode-toggle {
-        --llm-mode-toggle-height: 1.875rem;
+        /* Matches the extra-small trigger pills sharing the footer row. */
+        --llm-mode-toggle-height: var(--boxel-button-xs);
         --llm-mode-toggle-inset: 0.125rem;
         --llm-mode-option-width: 2.5rem;
         --llm-mode-option-height: calc(

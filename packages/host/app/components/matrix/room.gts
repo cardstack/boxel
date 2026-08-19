@@ -551,15 +551,6 @@ export default class Room extends Component<Signature> {
         color: var(--boxel-light);
       }
 
-      .chat-input-area :deep(.pill-menu-button) {
-        height: 22px;
-        gap: var(--boxel-sp-xxxs);
-      }
-
-      .chat-input-area :deep(.pill-menu-button:hover) {
-        border-color: var(--boxel-dark);
-      }
-
       .llm-select {
         /* The LLM menu opens noticeably taller than the skill menu; a longer
            duration keeps the expanding edge moving at about the same speed. */
@@ -580,10 +571,6 @@ export default class Room extends Component<Signature> {
 
         justify-content: flex-start;
         text-wrap: balance;
-      }
-
-      .chat-input-area :deep(.minimized-arrow) {
-        margin-left: 0;
       }
     </style>
   </template>
