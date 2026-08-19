@@ -360,22 +360,22 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
               />
             </codeBlock.actions>
           {{else if this.codeDiffResource.isLoadingDiff}}
-            {{! The header needs only the file URL, which is known as soon as
-            the patch is parsed, so a diff still being fetched can name the file
-            it belongs to. Without this the whole block renders empty and an
-            unresolved patch is indistinguishable from nothing at all. A patch
-            that failed is not shown here — it has the footer's alert to speak
-            for it. }}
-            {{#if @codeData.fileUrl}}
-              <codeBlock.diffEditorHeader
-                @codeData={{@codeData}}
-                @diffEditorStats={{null}}
-                @originalUploadedFileUrl={{@codePatchResult.originalUploadedFileUrl}}
-                @codePatchStatus={{@codePatchStatus}}
-                @userMessageThisMessageIsRespondingTo={{@userMessageThisMessageIsRespondingTo}}
-                @codePatchErrorMessage={{this.codePatchErrorMessage}}
-              />
-            {{/if}}
+            {{! Together with the branch above, this makes the states a patch can
+            be rendered in exhaustive: once `modify` returns, the resource holds
+            code, or an error, or a running load. There is no fourth state, and
+            the empty block this branch replaced was it. A load only runs once a
+            file URL is known — `modify` records an error and returns without
+            performing when there isn't one — so the header can always name its
+            file here. A failed patch is not shown in this branch; the footer's
+            alert speaks for it. }}
+            <codeBlock.diffEditorHeader
+              @codeData={{@codeData}}
+              @diffEditorStats={{null}}
+              @originalUploadedFileUrl={{@codePatchResult.originalUploadedFileUrl}}
+              @codePatchStatus={{@codePatchStatus}}
+              @userMessageThisMessageIsRespondingTo={{@userMessageThisMessageIsRespondingTo}}
+              @codePatchErrorMessage={{this.codePatchErrorMessage}}
+            />
             <div class='code-patch-loading' data-test-code-patch-loading>
               <LoadingIndicator @color='var(--boxel-light)' />
               <span>Loading diff…</span>

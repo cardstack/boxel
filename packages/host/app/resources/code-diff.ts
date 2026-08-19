@@ -28,10 +28,17 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
   @tracked errorMessage: string | undefined | null = null;
   codePatchStatus: CodePatchStatus | undefined | null = null;
 
-  // Deliberately untracked: `modify` consults this to decide whether a load is
-  // already under way, and consuming tracked state there would re-enter
-  // `modify` every time the load changed it. The template reads the task's own
-  // `isRunning` instead, which is tracked and safe to render from.
+  // Untracked on purpose. `modify` runs inside the resource's tracked cache, so
+  // anything it reads there re-runs it when written — and it does read load
+  // state: `isDataLoaded` consumes `originalCode` and `modifiedCode`, and
+  // `errorMessage` is tracked as well. What keeps that entanglement safe is an
+  // invariant worth stating, because an edit can break it without looking
+  // wrong: every path in `modify` that reads those returns without writing
+  // them, so a finished load costs one further `modify` and stops. Keeping the
+  // mid-flight signal out of the entanglement spares a second invalidation per
+  // load; a path that read either one and then started a load would re-enter
+  // without bound. The template reads the task's own `isRunning`, which is
+  // tracked and safe to render from.
   private loadInFlight = false;
   private abortController: AbortController | undefined;
 
@@ -66,7 +73,18 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
     // holding neither code nor a message to show, and asking the realm for the
     // file again each time it happened.
     if (!inputsChanged) {
-      if (this.isDataLoaded || this.errorMessage || this.loadInFlight) {
+      // `applied` is checked first, and not only for cheapness: it is a
+      // terminal state with no diff to fetch, and it is the one state a load
+      // returns from without recording either code or an error. Falling through
+      // to `load.perform()` in it would write the state this condition just
+      // read, from inside the same cache computation — dirtying the resource's
+      // own cache and re-entering `modify` on every read.
+      if (
+        codePatchStatus === 'applied' ||
+        this.isDataLoaded ||
+        this.errorMessage ||
+        this.loadInFlight
+      ) {
         return;
       }
     } else {
