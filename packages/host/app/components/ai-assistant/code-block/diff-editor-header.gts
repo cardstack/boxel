@@ -47,7 +47,7 @@ export default class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEd
             {{this.fileName}}
           </div>
 
-          <div class='dropdown-container'>
+          <div class='dropdown-container' data-theme='light'>
             <AttachedFileDropdownMenu
               @file={{this.file}}
               @isNewFile={{bool @codeData.isNewFile}}

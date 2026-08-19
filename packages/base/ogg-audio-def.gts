@@ -55,3 +55,5 @@ export class OggDef extends AudioDef {
     };
   }
 }
+
+export default OggDef;

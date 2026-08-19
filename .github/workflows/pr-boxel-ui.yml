@@ -8,6 +8,7 @@ on:
       - ".github/workflows/pr-boxel-ui.yml"
       - "package.json"
       - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
 
 permissions:
   contents: read

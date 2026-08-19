@@ -501,6 +501,7 @@ export default class SubmodeLayout extends Component<Signature> {
                 workspace-button--chooser-open=this.workspaceChooserOpened
               }}
               {{on 'click' this.toggleWorkspaceChooser}}
+              data-workspace-chooser-toggle
               data-test-workspace-chooser-toggle
             />
             {{#if this.workspaceChooserOpened}}
@@ -614,6 +615,7 @@ export default class SubmodeLayout extends Component<Signature> {
             @defaultSize={{this.aiPanelWidths.defaultWidth}}
             @minSize={{this.aiPanelWidths.minWidth}}
             @collapsible={{false}}
+            data-theme='dark'
           >
             <AiAssistantPanel
               @onClose={{this.aiAssistantPanelService.closePanel}}

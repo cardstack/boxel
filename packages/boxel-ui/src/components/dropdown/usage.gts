@@ -11,10 +11,7 @@ import BoxelMenu from '../menu/index.gts';
 import BoxelDropdown from './index.gts';
 
 export default class BoxelDropdownUsage extends Component {
-  dropdownVariants = ['default', 'primary', 'secondary'];
-
   @tracked shouldDropdownAutoClose = false;
-  @tracked variant: undefined | 'primary' | 'secondary' | 'default' = undefined;
 
   @action log(string: string): void {
     console.log(string);
@@ -34,10 +31,7 @@ export default class BoxelDropdownUsage extends Component {
         open.
       </:description>
       <:example>
-        <BoxelDropdown
-          @autoClose={{this.shouldDropdownAutoClose}}
-          @variant={{this.variant}}
-        >
+        <BoxelDropdown @autoClose={{this.shouldDropdownAutoClose}}>
           <:trigger as |bindings|>
             <BoxelButton {{bindings}}>
               Trigger
@@ -84,14 +78,6 @@ export default class BoxelDropdownUsage extends Component {
           @description='CSS Class to apply to the dropdown content div'
           @hideControls={{true}}
         />
-        <Args.String
-          @name='variant'
-          @optional={{true}}
-          @description='Theme-based variant for consistent styling'
-          @options={{this.dropdownVariants}}
-          @onInput={{fn (mut this.variant)}}
-          @value={{this.variant}}
-        />
         <Args.Bool
           @name='matchTriggerWidth'
           @description='Whether to match the width of the trigger'
@@ -121,6 +107,23 @@ export default class BoxelDropdownUsage extends Component {
           @description='Content to show on dropdown. The provided block is rendered when trigger is triggered. Yields close action to close the dropdown'
         />
       </:api>
+      <:cssVars as |Css|>
+        <Css.Basic
+          @name='--boxel-dropdown-background-color'
+          @type='background-color'
+        />
+        <Css.Basic @name='--boxel-dropdown-text-color' @type='color' />
+        <Css.Basic @name='--boxel-dropdown-border-color' @type='color' />
+        <Css.Basic
+          @name='--boxel-dropdown-box-shadow'
+          @type='box-shadow'
+          @description='(css shorthand property)'
+        />
+        <Css.Basic
+          @name='--boxel-dropdown-content-border-radius'
+          @type='border-radius'
+        />
+      </:cssVars>
     </FreestyleUsage>
   </template>
 }
