@@ -65,7 +65,7 @@ actor and mutation context (`@User`, `@Env`, `$new`, `$old`) · user-defined
 `def` helpers · jq `try` / `catch` · `error` · `label` / `break` · assignment
 (`=`, `|=`) · recursive descent (`..`) · format filters (`@csv`) · control and
 side-effect calls (`debug`, `env`, `input`, `stderr`, `halt`) · runtime metadata
-(`builtins`, `modulemeta`).
+(`builtins`).
 
 Allowed and useful: `IFERROR` / `IFNA` · optional access (`.a?`) · aggregates
 (`SUM`, `AVERAGE`, `COUNT`, `NPV`) · validator helpers (`isEmail`) · `LET` ·
@@ -95,16 +95,29 @@ computeVia: expression(fx`SUM([Claims[].Paid])`);
 computeVia: expression(jq`[.claims[] | .paidAmount] | add // 0`);
 ```
 
-Same for `AVERAGE`, `COUNT`, `MAX`, `MIN`, `SUMIF`. The rule: if the expression
-contains `[]` or an iterating path, the aggregate's argument must be wrapped in
-`[…]`.
+Same for `AVERAGE`, `COUNT`, `MAX`, `MIN`, `SUMIF`. Collect **the argument that
+iterates**, and only that one — the rule is narrower than "wrap everything", and
+wrapping the wrong thing is its own bug:
+
+- An iterating path is what needs it: `SUM([Claims[].Paid])`,
+  `SUMIF([Claims[].Paid], ">6")`.
+- A field that already holds an array is a single value. `SUM(Amounts)` over a
+  `containsMany(NumberField)` is correct as it stands.
+- A comma list is collected by the compiler, which is why the multi-argument
+  spelling has never shown the trap: `SUM(Paid, Reserve)` compiles to
+  `SUM([.paid, .reserve])`, and even `SUM(Claims[].Paid, 0)` becomes
+  `SUM([.claims[].paid, 0])`. Write the `[…]` anyway — the single-argument form
+  is what an author reaches for next.
+- **Never wrap a scalar parameter.** `ROUND([1.234], 2)` and
+  `NPV([0.1], CashFlows)` hand an array to a function that wants a number; each
+  returns null.
 
 Passing a `schema` is the other way to get this right — with field metadata, the
 compiler collects implicitly, so `SUM("Line Item"."Line Total")` compiles to
 `SUM([.lineItems[].lineTotal])`. Without a schema, quoted multi-word labels fail
-loudly (`Cannot index string with string`) and bare PascalCase falls back to a
-single-word camelCase path. A card gets no schema unless the expression passes
-one.
+loudly (`Cannot index string with string`) and a bare PascalCase label resolves
+to a single camelCase path segment. A card gets no schema unless the expression
+passes one.
 
 Check the compiled jq when in doubt — the factory exposes it:
 
@@ -127,6 +140,14 @@ computeVia: expression('"\(.bpSystolic)/\(.bpDiastolic)"');
 computeVia: expression(jq`"\(.bpSystolic)/\(.bpDiastolic)"`);
 ```
 
+Either tag preserves it — both read the raw strings, so `` fx`"\(.bpSystolic)"` ``
+interpolates too. The plain string is the one broken form.
+
+Inside `\(…)` you are in jq, and the readable-syntax pass does not reach in:
+a PascalCase label there is read as a function call, and
+`` fx`"\(PaidAmount) paid"` `` throws `'PaidAmount/0' is not defined` the first
+time the field is read. Write the path — `` fx`"\(.paidAmount) paid"` ``.
+
 ## 5. Blank inputs: what propagates, what absorbs
 
 Missing and null operands are tolerated rather than fatal, which means a wrong
@@ -137,7 +158,7 @@ answer is quiet. The model, for a card whose numeric fields are unset:
 | `` fx`Paid + Reserve` ``              | `null`  | null propagates through arithmetic          |
 | `` fx`Paid + 5` ``                    | `5`     | a null addend contributes nothing           |
 | `` fx`SUM(Paid, Reserve)` ``          | `0`     | aggregates skip blanks, Excel-style         |
-| `` fx`ROUND(Paid + Reserve)` ``       | `0`     | `ROUND` absorbs null (and error sentinels)  |
+| `` fx`ROUND(Paid + Reserve)` ``       | `0`     | `ROUND` absorbs a null operand              |
 | `` fx`Premium / 0` ``                 | `null`  | division by zero yields null, not `#DIV/0!` |
 | `` jq`[.claims[] \| .paid] \| add` `` | `null`  | `add` over an empty array is null           |
 | `` jq`.name \| startswith("a")` ``    | `false` | string predicates on null are false         |
@@ -151,17 +172,27 @@ Guard with `//`, the jq alternative operator: `(Paid // 0) + (Reserve // 0)`,
 `` fx`Name & " (" & (Tier // "") & ")"` ``, or use `CONCAT` / `TEXTJOIN`, which
 drop blanks.
 
-## 6. Excel error sentinels never crash the card
+## 6. Excel error sentinels blank the field; other failures fail the card
 
-Sentinels (`#N/A`, `#DIV/0!`, `#VALUE!`, `#REF!`, `#NAME?`, `#NUM!`) are raised
-as values inside evaluation and caught at the factory boundary, which returns
-`null`. A failing formula leaves one blank field; it does not fail the card or
-the realm's index pass.
+Sentinels (`#N/A`, `#DIV/0!`, `#VALUE!`, `#REF!`, `#NUM!`) are raised as values
+inside evaluation and caught at the factory boundary, which returns `null`. That
+much is safe: `` fx`INDEX(Rows, 99)` `` leaves one blank field rather than
+failing the card.
 
-Catch them deliberately when a fallback reads better than a blank:
+A sentinel blanks the **whole** expression, not the sub-call that raised it — it
+propagates out through every enclosing call until the boundary catches it.
+`` fx`ROUND(NA()) + 5` `` is null, not 5, even though `ROUND` absorbs a null
+operand. Catch it where you want the fallback:
 `` fx`IFERROR(VLOOKUP(Sku, Rows, 2, FALSE), "unlisted")` ``,
 `` fx`IFNA(NA(), "none")` ``. An `AVERAGE` over an empty collection raises
 `#DIV/0!` and therefore lands as null.
+
+Anything that is **not** a sentinel does fail the card. A misspelled function
+name compiles happily and throws on the first read — `` fx`SUMM([Amounts])` ``
+gives `'SUMM/1' is not defined` — and so does a structural operation applied to
+the wrong shape (`` jq`unique` `` over an object rather than an array). Those
+surface as an indexing error on the instance, not as a blank field, so a typo in
+a formula is a broken card and not a quiet null.
 
 ## 7. Linked cards, query-backed inverses, and staleness
 
@@ -187,7 +218,10 @@ Guidance: aggregate over query-backed inverses for display and reporting; do not
 treat such a field as a promptly-correct index-time fact, and do not build a
 filter or sort that depends on it being current. When the aggregate must be
 index-accurate, put the edge on the aggregating card (a stored `linksToMany`)
-so a write to either side invalidates it.
+so a write to either side invalidates it. Where you accept the lag, say so in a
+comment at the field — the indexed value is server-computed and may differ from
+the one on screen, and the next reader has no other way to tell that was a
+choice.
 
 ## 8. Cyclic card graphs are safe but clipped
 
@@ -204,10 +238,14 @@ Two consequences for data modeling:
 - Read a value from the near side of a cycle, not by walking back across it. A
   claim reaching `.policy.annualPremium` is fine; a policy reaching
   `.claims[].policy.annualPremium` gets null.
-- A computed whose program enumerates its own card (`tojson`, `keys`, `unique`
-  over `.`) re-enters the field it is producing. That in-flight read is blank —
-  the spreadsheet circular-reference surface — so the value comes out as if the
-  field were empty rather than recursing.
+- A computed whose program reads the **values** of its own card — `tojson`,
+  `to_entries`, `. == .` over `.` — re-enters the field it is producing. That
+  in-flight read is blank, the spreadsheet circular-reference surface, so
+  `` jq`tojson` `` on a card yields `{"a":1,"derived":null}` rather than
+  recursing. `` jq`keys` `` is safe for the opposite reason: it reads the field
+  names, never their values, so nothing re-enters. `` jq`unique` `` over `.`
+  is not a self-reference problem at all — it throws, because `unique` wants an
+  array and a card is an object.
 
 ## 9. Dates: serials are safe, "today" is not available
 
@@ -289,15 +327,18 @@ and fails to identify.
 
 ## Reviewing a card's BXL
 
-1. Every aggregate's argument is wrapped in `[…]`.
-2. Every `\(…)` source is `` jq`…` ``-tagged.
-3. Every divisor and every `&` operand that can be blank is guarded.
-4. No formula reads the clock; date output is a serial or a span, not a phrase.
+1. Every aggregate argument that iterates is collected — `SUM([Claims[].Paid])`,
+   never `SUM(Claims[].Paid)` — and no scalar parameter is.
+2. Every `\(…)` source is tagged, and every label inside `\(…)` is a jq path.
+3. Every divisor that can be blank is guarded; every `&` on a blank-able operand
+   is guarded or rewritten as `CONCAT` / `TEXTJOIN`.
+4. Date output is a serial or a span, not a rendered phrase.
 5. Aggregates over query-backed inverses are display values, not filter or sort
-   keys.
-6. Structured output has `{ as: … }`.
-7. A field whose indexed value is deliberately allowed to lag says so in a
-   comment at the field.
+   keys — and a field left to lag says so in a comment.
+6. Output shaped as an object or an array of objects for a `FieldDef`-typed field
+   has `{ as: … }`.
+7. Every function name is spelled the way the catalog spells it — a typo indexes
+   as an error, not as a blank.
 
 ## Where these rules are pinned
 
@@ -336,6 +377,7 @@ The engine itself — the compiler, the jq runtime, the formula libraries, the
 mutation and authorization profiles — is documented in `packages/bxl/docs/` and
 is not this skill's subject.
 
-The glossary's **bxl** and `computeVia: expression(...)` entries name
-`library-bxl` and `extension-libs/bxl/` as their reference targets; this skill is
-that reference.
+The glossary's **bxl** entry points at `library-bxl` and `extension-libs/bxl/`,
+and its `computeVia: expression(...)` entry at `library-bxl` and
+`bxl-computevia-fields`. Those are reserved names rather than files that exist —
+what they describe is this skill.

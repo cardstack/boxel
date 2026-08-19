@@ -192,12 +192,16 @@ These apply regardless of the tag:
 - **Null-tolerant arithmetic.** `null - 5`, `5 / 0`, `null * x`,
   `null | startswith("a")` all return `null` / `false` instead of
   throwing.
-- **Aggregates take a collected array.** Function arguments are jq
-  streams, so `SUM(Claims[].Paid)` calls `SUM` once per claim and the
-  field receives one value per element. Collect first —
-  `SUM([Claims[].Paid])` — or supply a `schema`, which makes implicit
-  iteration collect on its own (`SUM("Line Item"."Line Total")` compiles
-  to `SUM([.lineItems[].lineTotal])`).
+- **A single-argument aggregate takes a collected array.** Function
+  arguments are jq streams, so `SUM(Claims[].Paid)` calls `SUM` once per
+  claim and yields one output per claim rather than a total. Collect the
+  iterating argument — `SUM([Claims[].Paid])` — or supply a `schema`,
+  which makes implicit iteration collect on its own
+  (`SUM("Line Item"."Line Total")` compiles to
+  `SUM([.lineItems[].lineTotal])`). A comma list is already collected by
+  the compiler (`SUM(Paid, Reserve)` → `SUM([.paid, .reserve])`), and a
+  scalar parameter must not be wrapped: `ROUND([1.234], 2)` hands an
+  array to a function that wants a number.
 
 ## Mixed-syntax expressions
 

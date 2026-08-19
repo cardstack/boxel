@@ -5,22 +5,46 @@
 // authors a set of concrete behaviors — which tag preserves `\(…)`, what the
 // derive profile refuses, how an aggregate reads a collection, what a blank
 // input produces. It ships to authors who cannot run the engine to check, so
-// each claim is pinned here twice:
+// each behavioral claim is pinned here twice:
 //
 //   1. The snippet the skill shows must still appear in the skill text, so a
 //      rewrite that changes an example has to come through this file.
 //   2. The behavior that snippet claims must still hold against the engine.
 //
-// Claims that need a live card runtime — query-backed inverse staleness, the
-// `{ id }` clip across a cycle, the memoized-then-written paint — are pinned by
-// the host integration suites the skill names; the last case here asserts those
-// pointers still resolve.
+// What that does and does not cover is worth stating plainly, because a guard
+// trusted past its reach is worse than none. It covers the engine behaviors
+// reachable from plain Node: tag dispatch, every derive refusal and every
+// allowed form, the aggregate-collect rules, the blank-input table, sentinel
+// versus non-sentinel failure, the date-function zone sweep, memoization modes,
+// `{ as: … }` shapes, and self-enumeration. Two things it cannot check:
+//
+//   - Prose. A `shows()` snippet proves the example is still on the page, not
+//     that the sentence around it still says the right thing. The reason
+//     columns, the guidance paragraphs, and §7/§10's architectural claims are
+//     read by people, not by this file.
+//   - Anything needing a live card runtime. Query-backed inverse staleness and
+//     the `{ id }` clip across a cycle are pinned by the host integration
+//     suites the skill names, and the last case here asserts those pointers
+//     resolve. §10's stale-paint interaction with Glimmer's render flush is NOT
+//     pinned anywhere — it follows from runloop ordering, and the mitigation
+//     the skill gives (`memoize: false`) is what is pinned.
 
-import { existsSync } from 'node:fs';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { deepStrictEqual, ok, strictEqual } from 'node:assert';
 import { join } from 'node:path';
-import { evaluateBxl, expression, fx, jq } from '../../src/index.ts';
+import {
+  evaluateBxl,
+  expression,
+  fx,
+  jq,
+  loadAllFormulaExtensions,
+} from '../../src/index.ts';
+
+// The host folds every lazy formula family into the default library set before
+// serving `@cardstack/bxl` to card code, so a card reaches `NPV` and `isEmail`
+// as readily as `ROUND`. Do the same here or those cases would assert against a
+// narrower library than the skill's audience has.
+await loadAllFormulaExtensions();
 
 const REPO_ROOT = join(import.meta.dirname, '..', '..', '..', '..');
 const SKILL_PATH = join(
@@ -60,6 +84,32 @@ function shows(snippet: string) {
   );
 }
 
+/**
+ * The bullet paragraph introduced by `lead`, up to the blank line that ends it.
+ * Used to pin which list a name is in — a name that moves between the refused
+ * and allowed lists has to move in this file too.
+ */
+function paragraph(lead: string): string {
+  const start = skill.indexOf(lead);
+  ok(start !== -1, `the skill no longer has a "${lead}" paragraph`);
+  const end = skill.indexOf('\n\n', start);
+  return flatten(skill.slice(start, end === -1 ? undefined : end));
+}
+
+/** Asserts `name` is listed in `lead`'s paragraph and not in `otherLead`'s. */
+function listedUnder(name: string, lead: string, otherLead: string) {
+  const mine = paragraph(lead);
+  const theirs = paragraph(otherLead);
+  ok(mine.includes(name), `"${name}" is no longer listed under "${lead}"`);
+  ok(
+    !theirs.includes(name),
+    `"${name}" has moved into "${otherLead}" — this case says otherwise`,
+  );
+}
+
+const REFUSED_LEAD = 'Refused: volatile calls';
+const ALLOWED_LEAD = 'Allowed and useful:';
+
 // ------------------------------------------------- tag dispatch
 
 check('a plain string drops the backslash before `(`', () => {
@@ -69,31 +119,68 @@ check('a plain string drops the backslash before `(`', () => {
   // eslint-disable-next-line no-useless-escape -- the useless escape IS the trap
   const asAuthorTyped = '"\(.bpSystolic)/\(.bpDiastolic)"';
   strictEqual(
-    asAuthorTyped,
-    '"(.bpSystolic)/(.bpDiastolic)"',
-    'a JS string literal drops the backslash before `(`',
-  );
-  strictEqual(
     evaluateBxl(asAuthorTyped, { bpSystolic: 120, bpDiastolic: 80 }).value,
     '(.bpSystolic)/(.bpDiastolic)',
-    'so the interpolation is inert, and nothing throws to say so',
+    'the interpolation is inert, and nothing throws to say so',
   );
 });
 
-check('the jq tag preserves the interpolation', () => {
+check('either tag preserves the interpolation', () => {
   shows('expression(jq`"\\(.bpSystolic)/\\(.bpDiastolic)"`)');
+  shows('Either tag preserves it — both read the raw strings');
+  const bp = { bpSystolic: 120, bpDiastolic: 80 };
   strictEqual(
-    expression(jq`"\(.bpSystolic)/\(.bpDiastolic)"`).call({
-      bpSystolic: 120,
-      bpDiastolic: 80,
-    }),
+    expression(jq`"\(.bpSystolic)/\(.bpDiastolic)"`).call(bp),
     '120/80',
   );
+  strictEqual(
+    expression(fx`"\(.bpSystolic)/\(.bpDiastolic)"`).call(bp),
+    '120/80',
+    'fx reads String.raw too, so the checklist must say tagged, not jq-tagged',
+  );
 });
 
-check('fx resolves a bare PascalCase label to a camelCase path', () => {
-  shows('The compiler resolves them to `.paidAmount`');
+check('a PascalCase label inside an interpolation is not resolved', () => {
+  shows("throws `'PaidAmount/0' is not defined` the first");
+  shows('Write the path — `` fx`"\\(.paidAmount) paid"` ``');
+  const card = { paidAmount: 10 };
+  // Construction is fine either way; the failure waits for the first read.
+  const unresolved = expression(fx`"\(PaidAmount) paid"`);
+  let message = '';
+  try {
+    unresolved.call(card);
+  } catch (error) {
+    message = (error as Error).message;
+  }
+  ok(
+    message.includes(`'PaidAmount/0' is not defined`),
+    `expected an undefined-function throw, got: ${message.split('\n')[0]}`,
+  );
+  strictEqual(
+    expression(fx`"\(.paidAmount) paid"`).call(card),
+    '10 paid',
+    'the path spelling is what works',
+  );
+});
+
+check('the tag table rows still read true', () => {
+  // The "Why" column is the reason an author picks a tag, so it is pinned with
+  // the row rather than left to prose.
+  shows(
+    '| `\\(…)` jq interpolation                     | `` jq`…` ``     | A plain string drops the backslash — see trap 4        |',
+  );
+  shows(
+    '| Bare PascalCase field labels (`PaidAmount`) | `` fx`…` ``     | The compiler resolves them to `.paidAmount`            |',
+  );
+  shows(
+    '| Quoted multi-word labels (`"Line Item"`)    | `fx` + `schema` | Label resolution needs the schema — see trap 3         |',
+  );
   strictEqual(expression(fx`PaidAmount`).bxl.compiledSource, '.paidAmount');
+  strictEqual(
+    expression('PaidAmount').bxl.compiledSource,
+    '.paidAmount',
+    'a plain string compiles like fx, which the row below the table states',
+  );
 });
 
 check('IF is the Excel function, if/then/end is the jq construct', () => {
@@ -153,6 +240,29 @@ check('every call the skill lists as refused is refused', () => {
   shows(
     'Refused: volatile calls (`TODAY`, `NOW`, `RAND`, `RANDBETWEEN`) · request,',
   );
+  for (const name of [
+    'TODAY',
+    'NOW',
+    'RAND',
+    'RANDBETWEEN',
+    '@User',
+    '$new',
+    'def',
+    'try',
+    'catch',
+    'error',
+    'label',
+    'break',
+    '|=',
+    '..',
+    '@csv',
+    'debug',
+    'env',
+    'input',
+    'builtins',
+  ]) {
+    listedUnder(name, REFUSED_LEAD, ALLOWED_LEAD);
+  }
   const refused: Array<[string, () => unknown, string]> = [
     ['TODAY()', () => expression(fx`TODAY()`), 'derive-call-banned'],
     ['NOW()', () => expression(fx`NOW()`), 'derive-call-banned'],
@@ -198,30 +308,115 @@ check('every call the skill lists as refused is refused', () => {
   }
 });
 
-check('every form the skill lists as allowed constructs', () => {
-  shows('Allowed and useful: `IFERROR` / `IFNA` · optional access (`.a?`)');
-  const allowed: Array<[string, () => unknown]> = [
-    ['IFERROR', () => expression(fx`IFERROR(Amount, 0)`)],
-    ['IFNA', () => expression(fx`IFNA(Amount, 0)`)],
-    ['optional access', () => expression(jq`.a?`)],
-    ['SUM', () => expression(fx`SUM([Claims[].Paid])`)],
-    ['AVERAGE', () => expression(fx`AVERAGE([Claims[].Paid])`)],
-    ['COUNT', () => expression(fx`COUNT([Claims[].Paid])`)],
-    ['NPV', () => expression(fx`NPV(0.1, CashFlows)`)],
-    ['isEmail', () => expression(fx`isEmail(Email)`)],
-    ['LET', () => expression(fx`LET(t, SUM([Claims[].Paid]), t > 100)`)],
-    ['binding', () => expression(jq`. as $x | $x.a`)],
-    ['reduce', () => expression(jq`reduce .items[] as $i (0; . + $i)`)],
-    ['keys', () => expression(jq`keys`)],
-    ['to_entries', () => expression(jq`to_entries | map(.key)`)],
-    ['group_by', () => expression(jq`group_by(.status) | length`)],
-    ['unique', () => expression(jq`[.claims[]] | unique | length`)],
-    ['tojson', () => expression(jq`tojson | length`)],
-  ];
-  for (const [label, make] of allowed) {
-    strictEqual(rejectionCode(make), 'accepted', `${label} should construct`);
-  }
-});
+check(
+  'every form the skill lists as allowed runs and produces its value',
+  () => {
+    shows('Allowed and useful: `IFERROR` / `IFNA` · optional access (`.a?`)');
+    for (const name of [
+      'IFERROR',
+      'IFNA',
+      '.a?',
+      'SUM',
+      'AVERAGE',
+      'COUNT',
+      'NPV',
+      'isEmail',
+      'LET',
+      'reduce',
+      'foreach',
+      'keys',
+      'to_entries',
+      'group_by',
+      'unique',
+      'tojson',
+    ]) {
+      listedUnder(name, ALLOWED_LEAD, REFUSED_LEAD);
+    }
+
+    // Constructing proves nothing on its own: the derive profile only screens the
+    // names it bans, so a name the registry has never heard of constructs too.
+    // Each of these therefore evaluates, and an unknown name is the control.
+    const card = {
+      amount: 4,
+      claims: [{ paid: 10 }, { paid: 5 }],
+      cashFlows: [-100, 60, 60],
+      email: 'ops@example.com',
+      items: [1, 2, 3],
+      status: 'Open',
+      a: 7,
+    };
+    const allowed: Array<[string, () => unknown, unknown]> = [
+      ['IFERROR', () => expression(fx`IFERROR(Amount, 0)`).call(card), 4],
+      ['IFNA', () => expression(fx`IFNA(Amount, 0)`).call(card), 4],
+      ['optional access', () => expression(jq`.a?`).call(card), 7],
+      ['SUM', () => expression(fx`SUM([Claims[].Paid])`).call(card), 15],
+      [
+        'AVERAGE',
+        () => expression(fx`AVERAGE([Claims[].Paid])`).call(card),
+        7.5,
+      ],
+      ['COUNT', () => expression(fx`COUNT([Claims[].Paid])`).call(card), 2],
+      [
+        'NPV',
+        () => expression(fx`ROUND(NPV(0.1, CashFlows), 4)`).call(card),
+        3.7566,
+      ],
+      ['isEmail', () => expression(fx`isEmail(Email)`).call(card), true],
+      [
+        'LET',
+        () => expression(fx`LET(t, SUM([Claims[].Paid]), t > 100)`).call(card),
+        false,
+      ],
+      ['binding', () => expression(jq`. as $x | $x.a`).call(card), 7],
+      [
+        'reduce',
+        () => expression(jq`reduce .items[] as $i (0; . + $i)`).call(card),
+        6,
+      ],
+      [
+        'foreach',
+        () =>
+          expression(jq`[foreach .items[] as $i (0; . + $i)] | last`).call(
+            card,
+          ),
+        6,
+      ],
+      [
+        'group_by',
+        () => expression(jq`[.claims[]] | group_by(.paid) | length`).call(card),
+        2,
+      ],
+      [
+        'unique',
+        () => expression(jq`[.claims[] | .paid] | unique | length`).call(card),
+        2,
+      ],
+      ['to_entries', () => expression(jq`to_entries | length`).call(card), 7],
+      ['keys', () => expression(jq`keys | length`).call(card), 7],
+      ['tojson', () => expression(jq`tojson | length > 0`).call(card), true],
+    ];
+    for (const [label, run, expected] of allowed) {
+      strictEqual(
+        rejectionCode(() => run()),
+        'accepted',
+        `${label} threw`,
+      );
+      strictEqual(run(), expected, `${label} produced the wrong value`);
+    }
+
+    const unknown = expression(fx`TOTALLYFAKE(1)`);
+    let controlMessage = '';
+    try {
+      unknown.call(card);
+    } catch (error) {
+      controlMessage = (error as Error).message;
+    }
+    ok(
+      controlMessage.includes('is not defined'),
+      'control: an unknown function name must fail on read, or the cases above prove nothing',
+    );
+  },
+);
 
 // ------------------------------------------------- aggregates over collections
 
@@ -243,13 +438,72 @@ check('collecting first aggregates once', () => {
   strictEqual(compute.call(twoClaims), 15);
 });
 
-check('the jq spelling with an empty-case fallback', () => {
-  shows('computeVia: expression(jq`[.claims[] | .paidAmount] | add // 0`);');
+check('the WRONG example is the uncollected one', () => {
+  // Pinning the two code lines against their comments, not just the sources:
+  // swapping them would otherwise leave both snippets on the page and teach the
+  // exact inverse of the trap.
+  shows(
+    '// WRONG — compiles to SUM(.claims[].paid); with two claims the field gets [10, 5]\ncomputeVia: expression(fx`SUM(Claims[].Paid)`);',
+  );
+  shows(
+    '// RIGHT — collect first, then aggregate: 15\ncomputeVia: expression(fx`SUM([Claims[].Paid])`);',
+  );
+  shows(
+    '// RIGHT — the jq spelling, with a fallback for the empty case\ncomputeVia: expression(jq`[.claims[] | .paidAmount] | add // 0`);',
+  );
   const compute = expression(jq`[.claims[] | .paidAmount] | add // 0`);
   strictEqual(compute.call({ claims: [] }), 0);
   strictEqual(
     compute.call({ claims: [{ paidAmount: 10 }, { paidAmount: 5 }] }),
     15,
+  );
+});
+
+check('the collect rule is only for the argument that iterates', () => {
+  shows('Collect **the argument that iterates**, and only that one');
+  shows(
+    '`SUM(Amounts)` over a `containsMany(NumberField)` is correct as it stands',
+  );
+  strictEqual(
+    expression(fx`SUM(Amounts)`).call({ amounts: [10, 5] }),
+    15,
+    'an array-valued field is one value already',
+  );
+
+  shows('`SUM(Paid, Reserve)` compiles to');
+  shows('`SUM([.paid, .reserve])`, and even `SUM(Claims[].Paid, 0)` becomes');
+  shows('`SUM([.claims[].paid, 0])`');
+  strictEqual(
+    expression(fx`SUM(Paid, Reserve)`).bxl.compiledSource,
+    'SUM([.paid, .reserve])',
+  );
+  const multiArg = expression(fx`SUM(Claims[].Paid, 0)`);
+  strictEqual(multiArg.bxl.compiledSource, 'SUM([.claims[].paid, 0])');
+  strictEqual(
+    multiArg.call(twoClaims),
+    15,
+    'a comma list collects, so the multi-argument spelling never showed the trap',
+  );
+
+  shows('**Never wrap a scalar parameter.** `ROUND([1.234], 2)` and');
+  shows(
+    '`NPV([0.1], CashFlows)` hand an array to a function that wants a number',
+  );
+  strictEqual(
+    expression(fx`ROUND([1.234], 2)`).call({}),
+    null,
+    'a wrapped scalar blanks the field',
+  );
+  strictEqual(
+    expression(fx`NPV([0.1], CashFlows)`).call({ cashFlows: [-100, 60, 60] }),
+    null,
+  );
+  strictEqual(
+    expression(fx`ROUND(NPV(0.1, CashFlows), 4)`).call({
+      cashFlows: [-100, 60, 60],
+    }),
+    3.7566,
+    'unwrapped, the same call works',
   );
 });
 
@@ -305,39 +559,41 @@ check('the factory exposes the compiled jq and the dependency list', () => {
 const noAmounts = {};
 
 check('the blank-input table still reads true', () => {
+  // Whole rows, reason column included: the stated mechanism is as much a claim
+  // as the value, and a wrong mechanism is what sends an author down a wrong fix.
   const rows: Array<[string, () => unknown, unknown]> = [
     [
-      '| `` fx`Paid + Reserve` ``              | `null`  |',
+      '| `` fx`Paid + Reserve` ``              | `null`  | null propagates through arithmetic          |',
       () => expression(fx`Paid + Reserve`).call(noAmounts),
       null,
     ],
     [
-      '| `` fx`Paid + 5` ``                    | `5`     |',
+      '| `` fx`Paid + 5` ``                    | `5`     | a null addend contributes nothing           |',
       () => expression(fx`Paid + 5`).call(noAmounts),
       5,
     ],
     [
-      '| `` fx`SUM(Paid, Reserve)` ``          | `0`     |',
+      '| `` fx`SUM(Paid, Reserve)` ``          | `0`     | aggregates skip blanks, Excel-style         |',
       () => expression(fx`SUM(Paid, Reserve)`).call(noAmounts),
       0,
     ],
     [
-      '| `` fx`ROUND(Paid + Reserve)` ``       | `0`     |',
+      '| `` fx`ROUND(Paid + Reserve)` ``       | `0`     | `ROUND` absorbs a null operand              |',
       () => expression(fx`ROUND(Paid + Reserve)`).call(noAmounts),
       0,
     ],
     [
-      '| `` fx`Premium / 0` ``                 | `null`  |',
+      '| `` fx`Premium / 0` ``                 | `null`  | division by zero yields null, not `#DIV/0!` |',
       () => expression(fx`Premium / 0`).call({ premium: 100 }),
       null,
     ],
     [
-      '| `` jq`[.claims[] \\| .paid] \\| add` `` | `null`  |',
+      '| `` jq`[.claims[] \\| .paid] \\| add` `` | `null`  | `add` over an empty array is null           |',
       () => expression(jq`[.claims[] | .paid] | add`).call({ claims: [] }),
       null,
     ],
     [
-      '| `` jq`.name \\| startswith("a")` ``    | `false` |',
+      '| `` jq`.name \\| startswith("a")` ``    | `false` | string predicates on null are false         |',
       () => expression(jq`.name | startswith("a")`).call(noAmounts),
       false,
     ],
@@ -386,9 +642,70 @@ check('`&` renders a blank operand as the text null', () => {
 // ------------------------------------------------- Excel error sentinels
 
 check('an uncaught sentinel lands as null, not a throw', () => {
-  shows('caught at the factory boundary, which returns\n`null`');
+  shows('caught at the factory boundary, which returns `null`');
+  shows('`` fx`INDEX(Rows, 99)` `` leaves one blank field');
   strictEqual(expression(fx`NA()`).call(noAmounts), null);
+  strictEqual(expression(fx`INDEX(Rows, 99)`).call({ rows: [1, 2, 3] }), null);
+  // Every sentinel the skill names has to be one this engine actually raises,
+  // or an author waits for an error that never comes. #NAME? is deliberately
+  // absent from that list: nothing throws it, and the failure it stands for in
+  // a spreadsheet — an unknown function — is the non-sentinel case below.
+  for (const sentinel of ['#N/A', '#DIV/0!', '#VALUE!', '#REF!', '#NUM!']) {
+    shows(sentinel);
+  }
+  ok(
+    !skillFlat.includes('#NAME?'),
+    'the skill lists #NAME?, which this engine never raises',
+  );
 });
+
+check('a sentinel blanks the whole expression, not just its own call', () => {
+  shows('`` fx`ROUND(NA()) + 5` `` is null, not 5');
+  shows('even though `ROUND` absorbs a null operand');
+  strictEqual(
+    expression(fx`ROUND(Paid) + 5`).call(noAmounts),
+    5,
+    'a null operand is absorbed by ROUND, so the addition still runs',
+  );
+  strictEqual(
+    expression(fx`ROUND(NA()) + 5`).call(noAmounts),
+    null,
+    'a sentinel propagates out of ROUND and blanks the field',
+  );
+});
+
+check(
+  'a non-sentinel failure fails the card instead of blanking a field',
+  () => {
+    shows("gives `'SUMM/1' is not defined`");
+    shows('surface as an indexing error on the instance, not as a blank field');
+    // A misspelled name passes the profile check — nothing validates that a name
+    // exists — and throws on first read, which is what reaches the indexer.
+    const misspelled = expression(fx`SUMM([Amounts])`);
+    let message = '';
+    try {
+      misspelled.call({ amounts: [1, 2] });
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    ok(
+      message.includes(`'SUMM/1' is not defined`),
+      `expected an undefined-function throw, got: ${message.split('\n')[0] || '(no throw)'}`,
+    );
+
+    shows('(`` jq`unique` `` over an object rather than an array)');
+    let structuralMessage = '';
+    try {
+      expression(jq`unique`).call({ a: 1 });
+    } catch (error) {
+      structuralMessage = (error as Error).message;
+    }
+    ok(
+      structuralMessage.length > 0,
+      'a structural op on the wrong shape must throw rather than blank the field',
+    );
+  },
+);
 
 check('the catch-it-deliberately examples still work', () => {
   shows('fx`IFERROR(VLOOKUP(Sku, Rows, 2, FALSE), "unlisted")`');
@@ -516,42 +833,88 @@ check(
 
 // ------------------------------------------------- self-referential compute
 
+/**
+ * Installs `source` as a computed getter on a record and reads it, counting how
+ * many times the getter is entered — one entry is the read itself, a second is
+ * the program re-entering the field it is producing.
+ */
+function selfRead(source: unknown) {
+  const compute = expression(source as never);
+  let entries = 0;
+  const record: Record<string, unknown> = {
+    a: 1,
+    get derived() {
+      entries += 1;
+      return compute.call(this);
+    },
+  };
+  try {
+    return { value: record.derived, entries, threw: false };
+  } catch (error) {
+    return { value: (error as Error).message, entries, threw: true };
+  }
+}
+
 check(
-  'a compute that enumerates its own record reads that field as blank',
+  'reading a record’s own values re-enters and reads the field blank',
   () => {
-    shows('That in-flight read is blank —');
-    const selfJson = expression(jq`tojson`);
-    const record = {
-      a: 1,
-      get serialized() {
-        return selfJson.call(this);
-      },
-    };
-    strictEqual(
-      record.serialized,
-      '{"a":1,"serialized":null}',
-      'the in-flight field serializes as null instead of recursing',
-    );
+    shows('`` jq`tojson` `` on a card yields `{"a":1,"derived":null}`');
+    const serialized = selfRead(jq`tojson`);
+    strictEqual(serialized.threw, false);
+    strictEqual(serialized.value, '{"a":1,"derived":null}');
+    strictEqual(serialized.entries, 2, 'the program re-entered the field');
   },
 );
+
+check('`keys` reads field names, so nothing re-enters', () => {
+  shows('it reads the field names, never their values, so nothing re-enters');
+  const named = selfRead(jq`keys`);
+  strictEqual(named.threw, false);
+  deepStrictEqual(named.value, ['a', 'derived']);
+  strictEqual(named.entries, 1, 'no re-entry — the values were never read');
+});
+
+check('`unique` over a record throws rather than reading blank', () => {
+  shows('is not a self-reference problem at all — it throws, because `unique`');
+  const deduped = selfRead(jq`unique`);
+  strictEqual(deduped.threw, true, 'unique over an object must throw');
+});
 
 // ------------------------------------------------- the skill's own pointers
 
 check('every repo path the skill cites exists', () => {
-  const cited = [
-    ...new Set(
-      Array.from(
-        skill.matchAll(/`(packages\/[A-Za-z0-9._/-]+)`/g),
-        (match) => match[1],
-      ),
+  const cited = new Set(
+    Array.from(
+      skill.matchAll(/`(packages\/[A-Za-z0-9._/-]+)`/g),
+      (match) => match[1],
     ),
-  ];
-  ok(
-    cited.length >= 6,
-    `expected the pinned-rules list, found ${cited.length}`,
   );
+  // A floor on the count would let a citation be dropped silently, so the
+  // pointers the skill's pinned-rules list is built on are named here.
+  for (const required of [
+    'packages/bxl/tests/boxel/authoring-skill-claims.ts',
+    'packages/host/tests/helpers/cards/bxl-tracking.ts',
+    'packages/host/tests/integration/bxl-expression-test.gts',
+    'packages/host/tests/integration/bxl-platform-module-test.gts',
+    'packages/host/tests/integration/bxl-cyclic-graph-test.gts',
+    'packages/bxl/tests/boxel/',
+    'packages/bxl/docs/',
+  ]) {
+    ok(cited.has(required), `the skill no longer cites ${required}`);
+  }
   for (const path of cited) {
     ok(existsSync(join(REPO_ROOT, path)), `the skill cites a missing ${path}`);
+  }
+  // The docs are cited by bare filename, relative to the `packages/bxl/docs/`
+  // entry above, so a rename there would otherwise slip through.
+  for (const doc of Array.from(
+    skill.matchAll(/`([a-z-]+\.md)`/g),
+    (match) => match[1],
+  )) {
+    ok(
+      existsSync(join(REPO_ROOT, 'packages/bxl/docs', doc)),
+      `the skill cites a missing packages/bxl/docs/${doc}`,
+    );
   }
 });
 
