@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "firstName": "Lisa",
+      "lastName": "Moreno",
+      "email": "lisa@morenocuts.example",
+      "jobTitle": "Reel editor",
+      "rateNote": "\u00a325 per reel \u00b7 48h turnaround",
+      "cardInfo": {
+        "name": null,
+        "summary": "Cuts the class reels and the choreography edits.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../freelancer",
+        "name": "Freelancer"
+      }
+    },
+    "relationships": {
+      "specialties.0": {
+        "links": {
+          "self": "../../Tag/skill-reel-editing"
+        }
+      }
+    }
+  }
+}

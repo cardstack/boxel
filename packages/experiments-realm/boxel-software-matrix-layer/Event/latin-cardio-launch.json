@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Latin Cardio launch class",
+      "kind": "Class",
+      "startsAt": "2026-08-27T18:30:00Z",
+      "endsAt": "2026-08-27T19:30:00Z",
+      "cardInfo": {
+        "name": null,
+        "summary": "First run of the new Latin Cardio block.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../event",
+        "name": "Event"
+      }
+    }
+  }
+}

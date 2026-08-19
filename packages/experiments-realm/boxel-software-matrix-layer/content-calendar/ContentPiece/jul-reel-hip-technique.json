@@ -1,0 +1,40 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Hip technique in 30 seconds",
+      "platform": "instagram_reel",
+      "scheduledAt": "2026-07-09T19:00:00Z",
+      "status": "done",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "handedTo": {
+        "links": {
+          "self": "../Freelancer/lisa-moreno"
+        }
+      },
+      "series": {
+        "links": {
+          "self": null
+        }
+      },
+      "sourceIdea": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../content-piece",
+        "name": "ContentPiece"
+      }
+    }
+  }
+}

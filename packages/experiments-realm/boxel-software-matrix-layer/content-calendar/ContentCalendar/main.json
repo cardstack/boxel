@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "studioName": "Ritmo Zumba with Rich",
+      "cardInfo": {
+        "name": null,
+        "summary": "Multi-platform content plan for a solo Zumba instructor: calendar, bundles, idea backlog, recurring series and the freelancer bench.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../content-calendar",
+        "name": "ContentCalendar"
+      }
+    }
+  }
+}

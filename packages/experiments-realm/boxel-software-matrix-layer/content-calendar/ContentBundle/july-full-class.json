@@ -1,0 +1,52 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "July full-class drop",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "anchor": {
+        "links": {
+          "self": "../ContentPiece/jul-yt-full-class"
+        }
+      },
+      "supporting.0": {
+        "links": {
+          "self": "../ContentPiece/jul-reel-hip-technique"
+        }
+      },
+      "supporting.1": {
+        "links": {
+          "self": "../ContentPiece/jul-tiktok-merengue"
+        }
+      },
+      "supporting.2": {
+        "links": {
+          "self": "../ContentPiece/jul-playlist-post"
+        }
+      },
+      "campaign": {
+        "links": {
+          "self": null
+        }
+      },
+      "promotes": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../content-bundle",
+        "name": "ContentBundle"
+      }
+    }
+  }
+}

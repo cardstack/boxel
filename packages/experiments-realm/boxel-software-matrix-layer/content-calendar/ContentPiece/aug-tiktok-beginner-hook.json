@@ -1,0 +1,40 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "What nobody tells beginners about Zumba",
+      "platform": "tiktok",
+      "scheduledAt": "2026-08-13T20:00:00Z",
+      "status": "done",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "handedTo": {
+        "links": {
+          "self": null
+        }
+      },
+      "series": {
+        "links": {
+          "self": null
+        }
+      },
+      "sourceIdea": {
+        "links": {
+          "self": "../ContentIdea/three-common-mistakes"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../content-piece",
+        "name": "ContentPiece"
+      }
+    }
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Latin Cardio countdown sticker",
+      "platform": "instagram_story",
+      "scheduledAt": "2026-08-21T08:00:00Z",
+      "status": "planned",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "handedTo": {
+        "links": {
+          "self": null
+        }
+      },
+      "series": {
+        "links": {
+          "self": null
+        }
+      },
+      "sourceIdea": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../content-piece",
+        "name": "ContentPiece"
+      }
+    }
+  }
+}

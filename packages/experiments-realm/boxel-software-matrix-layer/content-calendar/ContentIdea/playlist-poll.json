@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Let them vote on next month's playlist",
+      "thought": "Poll sticker, four track options.",
+      "hunchPlatform": "instagram_story",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../content-idea",
+        "name": "ContentIdea"
+      }
+    },
+    "relationships": {
+      "themes.0": {
+        "links": {
+          "self": "../../Tag/zumba-community"
+        }
+      }
+    }
+  }
+}

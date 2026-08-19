@@ -31,6 +31,10 @@ interface CalendarSignature {
     onSelectEvent?: (event: CalendarEvent) => void;
     onRescheduleEvent?: (event: CalendarEvent, newDate: Date) => void;
     onAddEvent?: (date: Date) => void;
+    // A drop that did not start on a chip in this calendar — an unscheduled
+    // item dragged in from a backlog elsewhere on the page. The host reads the
+    // payload off the DragEvent, since only it knows what it put there.
+    onExternalDrop?: (event: DragEvent, date: Date) => void;
     // The day currently being created, if any. Drives the spinner and the
     // disabled state on that day's + button, so a slow create cannot be
     // clicked three more times — which is exactly how a calendar ends up with
@@ -149,7 +153,7 @@ export class Calendar extends GlimmerComponent<CalendarSignature> {
 
   dragEnterDay = (day: CalendarDay, e: DragEvent) => {
     e.preventDefault();
-    if (this.draggingEvent) {
+    if (this.draggingEvent || this.args.onExternalDrop) {
       this.dragOverKey = this.dayKey(day);
     }
   };
@@ -164,6 +168,7 @@ export class Calendar extends GlimmerComponent<CalendarSignature> {
     this.draggingEvent = undefined;
     this.dragOverKey = undefined;
     if (!event) {
+      this.args.onExternalDrop?.(e, day.date);
       return;
     }
     this.args.onRescheduleEvent?.(event, day.date);

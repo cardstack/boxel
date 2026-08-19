@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Partner work for absolute beginners",
+      "thought": "Two-person routine that works even if only one of them has done Zumba before. Film at the Tuesday class.",
+      "hunchPlatform": "instagram_reel",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../content-idea",
+        "name": "ContentIdea"
+      }
+    },
+    "relationships": {
+      "themes.0": {
+        "links": {
+          "self": "../../Tag/zumba-beginners"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,67 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Latin Cardio launch",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "anchor": {
+        "links": {
+          "self": "../ContentPiece/aug-yt-latin-choreo"
+        }
+      },
+      "supporting.0": {
+        "links": {
+          "self": "../ContentPiece/aug-reel-latin-teaser"
+        }
+      },
+      "supporting.1": {
+        "links": {
+          "self": "../ContentPiece/aug-story-countdown"
+        }
+      },
+      "supporting.2": {
+        "links": {
+          "self": "../ContentPiece/aug-thumbnail-set"
+        }
+      },
+      "supporting.3": {
+        "links": {
+          "self": "../ContentPiece/aug-tiktok-latin-hook"
+        }
+      },
+      "supporting.4": {
+        "links": {
+          "self": "../ContentPiece/aug-fb-launch-post"
+        }
+      },
+      "supporting.5": {
+        "links": {
+          "self": "../ContentPiece/aug-reel-launch-recap"
+        }
+      },
+      "campaign": {
+        "links": {
+          "self": null
+        }
+      },
+      "promotes": {
+        "links": {
+          "self": "../../Event/latin-cardio-launch"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../content-bundle",
+        "name": "ContentBundle"
+      }
+    }
+  }
+}

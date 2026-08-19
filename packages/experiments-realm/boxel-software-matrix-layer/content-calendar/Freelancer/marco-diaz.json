@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "firstName": "Marco",
+      "lastName": "Diaz",
+      "email": "marco@diazgraphics.example",
+      "jobTitle": "Graphic designer",
+      "rateNote": "\u00a340 per thumbnail set",
+      "cardInfo": {
+        "name": null,
+        "summary": "Thumbnails and class posters.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../freelancer",
+        "name": "Freelancer"
+      }
+    },
+    "relationships": {
+      "specialties.0": {
+        "links": {
+          "self": "../../Tag/skill-thumbnails"
+        }
+      }
+    }
+  }
+}
