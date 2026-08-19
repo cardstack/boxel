@@ -324,6 +324,9 @@ class ContentCalendarConsole extends GlimmerComponent<ConsoleSignature> {
   platformLabel = (piece: ContentPiece): string =>
     platformStyle(piece?.platform).label;
 
+  platformLabelFor = (value?: string | null): string =>
+    platformStyle(value).label;
+
   // ── Creating ───────────────────────────────────────────────────────────
 
   /**
@@ -1088,7 +1091,9 @@ class ContentCalendarConsole extends GlimmerComponent<ConsoleSignature> {
                     >
                       <span class='row-title'>{{idea.cardTitle}}</span>
                       {{#if idea.hunchPlatform}}
-                        <span class='row-meta'>{{idea.hunchPlatform}}</span>
+                        <span class='row-meta'>{{this.platformLabelFor
+                            idea.hunchPlatform
+                          }}</span>
                       {{/if}}
                     </button>
                     <Button
