@@ -1,0 +1,40 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "layer": "03",
+      "layerName": "Structures",
+      "lane": "Components & Views",
+      "concept": "Calendar",
+      "symbol": "Ca",
+      "implemented": false,
+      "evidenceTier": "POC realm",
+      "auditStatus": "POC only",
+      "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/components/calendar.gts (Calendar — hand-rolled month grid: drag-to-reschedule, kind→color event chips, day overflow expansion, create affordance with in-flight guard; mounted by App 2's Planning tab)",
+      "reference": null,
+      "catalogMatch": null,
+      "provenance": "periodic:Calendar",
+      "domainKit": null,
+      "owner": "lucas",
+      "workState": "In Progress",
+      "notes": "App 2: Talent & Resource Tracker | Row recovered 2026-08-19: the machine columns had been stamped with Card List's evidence, so the matrix carried two Card List rows and no Calendar row. Audit counts taken before this date omit Calendar.",
+      "sharedSpec": null,
+      "specTarget": null,
+      "consumers": "talent-resource-tracker",
+      "consumerExamples": "{\"talent-resource-tracker\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/talent-resource-tracker/TalentResourceTracker/tracker\"}",
+      "catalogDisposition": null,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../matrix-concept",
+        "name": "MatrixConcept"
+      }
+    }
+  }
+}
