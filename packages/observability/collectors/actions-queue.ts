@@ -144,7 +144,23 @@ async function gh<T>(url: string, token: string): Promise<T> {
     rateLimitRemaining = Number(remaining);
   }
   if (!res.ok) {
-    throw new Error(`GET ${url} → ${res.status} ${res.statusText}`);
+    // GitHub distinguishes its refusals only in the response body: a rejected
+    // credential, a token whose repository access omits this one, and an
+    // exhausted rate limit are all 403. Carrying the body and the remaining
+    // budget into the error means the emitted collector-error line says which,
+    // rather than leaving it to be inferred.
+    let detail = '';
+    try {
+      detail = (await res.text()).slice(0, 300).replace(/\s+/g, ' ').trim();
+    } catch {
+      // A body that cannot be read is not worth failing over; the status still
+      // carries most of the signal.
+    }
+    throw new Error(
+      `GET ${url} → ${res.status} ${res.statusText}` +
+        (detail ? ` — ${detail}` : '') +
+        ` (rate limit remaining: ${res.headers.get('x-ratelimit-remaining') ?? 'unknown'})`,
+    );
   }
   return (await res.json()) as T;
 }
