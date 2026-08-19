@@ -168,19 +168,23 @@ class ContentCalendarConsole extends GlimmerComponent<ConsoleSignature> {
   }
 
   /**
-   * This calendar's owner key, as a realm-relative path.
+   * This calendar's owner key: the last two segments of its id, e.g.
+   * `ContentCalendar/main`.
    *
-   * Relative, not the absolute id, so the same content is portable between
-   * realms — the demo fixtures read identically served from localhost and from
-   * staging, where the absolute ids differ.
+   * Not the absolute id, and deliberately not the realm-relative path either.
+   * Realm depth varies — served from staging this tree IS the realm root, but
+   * locally the same tree is a subfolder of the experiments realm, so a
+   * relative path gains a `boxel-software-matrix-layer/` segment and the same
+   * content stops matching. The type folder plus the instance name is stable in
+   * both, which is what makes the demo fixtures portable.
    */
   get calendarKey(): string | undefined {
     let id = this.args.calendarId;
     if (!id) {
       return undefined;
     }
-    let realm = this.args.realm;
-    return realm && id.startsWith(realm) ? id.slice(realm.length) : id;
+    let path = id.replace(/\.json$/, '').split('/').filter(Boolean);
+    return path.slice(-2).join('/') || undefined;
   }
 
   // A realm can hold more than one calendar, so every collection is scoped to
