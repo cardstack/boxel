@@ -15,6 +15,13 @@
         "module": "../content-calendar",
         "name": "ContentCalendar"
       }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../../Theme/ritmo-studio"
+        }
+      }
     }
   }
 }
