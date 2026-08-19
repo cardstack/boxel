@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Content Series",
+      "specType": "card",
+      "ref": {
+        "module": "../content-calendar/content-series",
+        "name": "ContentSeries"
+      },
+      "readMe": "# Content Series\n\n## Summary\nContent that repeats \u2014 the weekly class reminder, the Monday motivation post.\nRecurring content is a solo creator's bread and butter and the first thing to\nslip when a launch eats the week, so the calendar has to pre-populate it.\n\n## Composition\n`cadence` (weekly / fortnightly / monthly), `dayOfWeek` and `timeOfDay` describe\nthe slot; `rhythm` computes the human reading of it. `nextOccurrences(series,\nfrom, count)` returns the next slots: fixed-day cadences step by day count,\nmonthly steps whole months so a series never drifts the way a 30-day step does.\n\n## Why materialisation is bounded\nThere is no scheduler a card can reach in this platform, so each occurrence is a\nreal ContentPiece minted on demand, a bounded number at a time. An unbounded\nhorizon would put hundreds of cards in the realm. This is a workaround for a\nplatform gap, recorded rather than hidden \u2014 note the matrix `Schedule` block does\n**not** help here: it models availability (business hours, holidays for SLA\narithmetic), not recurrence.\n\n## Non-goals\nNo exceptions calendar, no \"skip this one occurrence\" state \u2014 editing or deleting\na materialised piece is the escape hatch, and it never alters the series.",
+      "cardInfo": {
+        "name": "Content Series",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../content-calendar/ContentSeries/tuesday-class-reminder"
+        }
+      }
+    }
+  }
+}

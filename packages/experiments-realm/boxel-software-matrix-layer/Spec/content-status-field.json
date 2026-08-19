@@ -1,0 +1,26 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Content Status",
+      "specType": "field",
+      "ref": {
+        "module": "../content-calendar/content-fields",
+        "name": "ContentStatusField"
+      },
+      "readMe": "# Content Status\n\n## Summary\nThree states, one click apart: Planned \u2192 In Progress \u2192 Done. No approval stages\n\u2014 a solo creator reviewing their own work is not a workflow.\n\n## Composition\n`nextContentStatus()` cycles, wrapping, and treats an unset status as entering at\nthe first stage, which is what makes the one-click change in the app safe on a\npiece that has never been touched. Hues route through `stateColor` like every\nother state colour in this realm.\n\n## Recorded gap\nThe matrix **Status** concept is audited \"Extract from listing\" \u2014 a generic\noption set with a transition graph already exists inside the catalog blog app.\nThis field is a local stand-in so the app could ship, recorded against that\nconcept rather than hand-rolled silently. It is the third status enum in this\nrealm waiting on the shared block.",
+      "cardInfo": {
+        "name": "Content Status",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

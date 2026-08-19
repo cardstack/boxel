@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Content Bundle",
+      "specType": "card",
+      "ref": {
+        "module": "../content-calendar/content-bundle",
+        "name": "ContentBundle"
+      },
+      "readMe": "# Content Bundle\n\n## Summary\nAn anchor piece plus everything that promotes it \u2014 the answer to \"did anyone\nmake the Reddit post?\", which in a solo creator's case is \"did I remember the\nstory countdown?\". A bundle is what makes a launch legible as one thing.\n\n## Composition\n- `anchor` is the main piece (usually the video); `supporting` is everything\n  promoting it.\n- `pieceCount`, `doneCount` and `completion` are computed across the links, and\n  every one of them filters `Boolean` first: a linked slot reads `undefined`\n  while loading and forever if broken, so an unfiltered count would let a dead\n  reference inflate the denominator.\n- There is deliberately **no back-link from ContentPiece**. Bidirectional\n  `linksTo` across two modules invites `cardOrThunk was undefined`, and this\n  realm's convention is to derive the reverse by filtering (Booking/Match does\n  the same). The app resolves a piece's bundle from the loaded bundle list.\n- `promotes` links the Event a bundle exists to fill; `campaign` is optional\n  grouping above it.\n\n## Formats\n`embedded` carries the completion pill, a ProgressBar against `pieceCount`, and\nthe piece checklist. `fitted` reduces to the count and an in-flight/complete\nstate.\n\n## Non-goals\nNo dependency ordering or gating between pieces \u2014 a bundle is a checklist, not a\nworkflow.",
+      "cardInfo": {
+        "name": "Content Bundle",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../content-calendar/ContentBundle/latin-cardio-launch"
+        }
+      }
+    }
+  }
+}

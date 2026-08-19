@@ -1,0 +1,26 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Platform",
+      "specType": "field",
+      "ref": {
+        "module": "../content-calendar/content-fields",
+        "name": "PlatformField"
+      },
+      "readMe": "# Platform\n\n## Summary\nWhere a piece publishes: Instagram Reel / Story / Post, TikTok, YouTube,\nFacebook. An option set rather than a string, so every consumer keys off a\nstable value.\n\n## Why the hues are derived, not branded\nEach platform carries a `hue` resolved through `stateColor`, which returns a\nchecked background/foreground pair mixed in oklch from the design tokens. The\nbrand palette is deliberately **not** reproduced as literals: a linked Theme\nreskins every chip, and a fill can never drift out of contrast with its own text\nbecause both derive from one hue. `PLATFORM_COLORS` is the map the month\nCalendar consumes as `@kindColors`.\n\n## Exports\n`PLATFORMS` (value, label, two-letter `short` for calendar chips, hue, icon),\n`platformStyle()` with a graceful unknown-value fallback, plus label/short/icon/\ncolour maps and the `PlatformField` enum with atom and embedded chips.",
+      "cardInfo": {
+        "name": "Platform",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
