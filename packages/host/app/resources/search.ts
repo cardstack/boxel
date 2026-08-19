@@ -292,6 +292,15 @@ export class SearchResource<
         if (isDestroyed(this) || isDestroying(this)) {
           return;
         }
+        // A newer filter may have become the active one while this resolved
+        // (sibling canonicalizations race, and a cache-warm import resolves
+        // ahead of a cold one). Drop the stale result so a late resolution
+        // can't clobber the current filter's result and leave `source` pointing
+        // at a filter that's no longer active — which would keep the search a
+        // server-only passthrough until the next query change.
+        if (this.activeQuery?.filter !== filter) {
+          return;
+        }
         this.canonicalizedFilter = {
           source: filter,
           filter: canonical,

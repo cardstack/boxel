@@ -1171,8 +1171,16 @@ export class IndexQueryEngine {
             }
           }
         }
-      } catch {
-        // fall through to the spelling-based keys
+      } catch (error) {
+        // A ref that names no resolvable type falls through to the
+        // spelling-based keys (matching nothing unless rows were stamped under
+        // that spelling) — the same way the engine's top-level catch treats a
+        // nonexistent type as an empty result rather than an error. Any other
+        // failure is unexpected and propagates rather than silently
+        // narrowing the match.
+        if (!isFilterRefersToNonexistentTypeError(error)) {
+          throw error;
+        }
       }
     }
     return keys;
