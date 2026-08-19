@@ -263,13 +263,13 @@ const SAMPLE_GLTF = {
   textures: [{}],
 };
 
-function gltfJson(doc: object): ArrayBuffer {
-  return toArrayBuffer(new TextEncoder().encode(JSON.stringify(doc)));
+function gltfJson(doc: object): Uint8Array {
+  return new TextEncoder().encode(JSON.stringify(doc));
 }
 
 // Wrap a glTF document in a binary GLB container: the 12-byte header followed by
 // a single JSON chunk (padded to a 4-byte boundary with spaces, per spec).
-function buildGlb(doc: object): ArrayBuffer {
+function buildGlb(doc: object): Uint8Array {
   let jsonBytes = new TextEncoder().encode(JSON.stringify(doc));
   let pad = (4 - (jsonBytes.length % 4)) % 4;
   let chunkLength = jsonBytes.length + pad;
@@ -286,7 +286,7 @@ function buildGlb(doc: object): ArrayBuffer {
   for (let i = 0; i < pad; i++) {
     bytes[20 + jsonBytes.length + i] = 0x20; // space padding
   }
-  return buf;
+  return bytes;
 }
 
 module('Unit | model metadata extractors | parseGltf', function () {
@@ -342,9 +342,78 @@ module('Unit | model metadata extractors | parseGltf', function () {
     );
   });
 
+  test('applies a node scale to the bounding box', function (assert) {
+    let parsed = parseGltf(
+      gltfJson({
+        ...SAMPLE_GLTF,
+        nodes: [{ mesh: 0, scale: [2, 2, 2] }],
+        scenes: [{ nodes: [0] }],
+      }),
+    );
+    assert.strictEqual(
+      parsed?.gltfMetadata.dimensions,
+      '4 × 8 × 12',
+      'mesh-space 2 × 4 × 6 under a 2× node scale',
+    );
+  });
+
+  test('applies an explicit node matrix to the bounding box', function (assert) {
+    let parsed = parseGltf(
+      gltfJson({
+        ...SAMPLE_GLTF,
+        // prettier-ignore
+        nodes: [{ mesh: 0, matrix: [2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 1] }],
+        scenes: [{ nodes: [0] }],
+      }),
+    );
+    assert.strictEqual(parsed?.gltfMetadata.dimensions, '4 × 8 × 12');
+  });
+
+  test('unions instanced meshes at their node translations', function (assert) {
+    let parsed = parseGltf(
+      gltfJson({
+        asset: { version: '2.0' },
+        meshes: [{ primitives: [{ attributes: { POSITION: 0 }, mode: 4 }] }],
+        accessors: [
+          {
+            type: 'VEC3',
+            count: 3,
+            min: [-0.5, -0.5, -0.5],
+            max: [0.5, 0.5, 0.5],
+          },
+        ],
+        nodes: [{ mesh: 0 }, { mesh: 0, translation: [10, 0, 0] }],
+        scenes: [{ nodes: [0, 1] }],
+      }),
+    );
+    assert.strictEqual(
+      parsed?.gltfMetadata.dimensions,
+      '11 × 1 × 1',
+      'two instances of a unit cube 10 apart',
+    );
+  });
+
+  test('skips non-numeric accessor bounds instead of reporting NaN', function (assert) {
+    let parsed = parseGltf(
+      gltfJson({
+        asset: { version: '2.0' },
+        meshes: [{ primitives: [{ attributes: { POSITION: 0 }, mode: 4 }] }],
+        accessors: [
+          { type: 'VEC3', count: 3, min: ['oops', -2, -3], max: [1, 2, 3] },
+        ],
+      }),
+    );
+    assert.strictEqual(parsed?.gltfMetadata.vertexCount, 3, 'still a glTF');
+    assert.strictEqual(
+      parsed?.gltfMetadata.dimensions,
+      undefined,
+      'malformed bounds yield no dimensions',
+    );
+  });
+
   test('returns undefined for non-glTF content', function (assert) {
     assert.strictEqual(
-      parseGltf(toArrayBuffer(new TextEncoder().encode('not a model'))),
+      parseGltf(new TextEncoder().encode('not a model')),
       undefined,
       'random text',
     );
@@ -354,9 +423,36 @@ module('Unit | model metadata extractors | parseGltf', function () {
       'JSON without an asset object',
     );
     assert.strictEqual(
-      parseGltf(new ArrayBuffer(0)),
+      parseGltf(gltfJson({ asset: 'hello' })),
       undefined,
-      'empty buffer',
+      'asset that is not an object',
+    );
+    assert.strictEqual(
+      parseGltf(gltfJson({ asset: {} })),
+      undefined,
+      'asset object without a version string',
+    );
+    assert.strictEqual(parseGltf(new Uint8Array(0)), undefined, 'empty buffer');
+  });
+
+  test('returns undefined for unreadable GLB containers', function (assert) {
+    let versionOne = buildGlb(SAMPLE_GLTF);
+    new DataView(versionOne.buffer).setUint32(4, 1, true);
+    assert.strictEqual(parseGltf(versionOne), undefined, 'version 1 GLB');
+
+    let truncated = buildGlb(SAMPLE_GLTF);
+    assert.strictEqual(
+      parseGltf(truncated.slice(0, truncated.byteLength - 8)),
+      undefined,
+      'JSON chunk longer than the buffer',
+    );
+
+    let binFirst = buildGlb(SAMPLE_GLTF);
+    new DataView(binFirst.buffer).setUint32(16, 0x004e4942, true); // 'BIN\0'
+    assert.strictEqual(
+      parseGltf(binFirst),
+      undefined,
+      'first chunk is not JSON',
     );
   });
 });

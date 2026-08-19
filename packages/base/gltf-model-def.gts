@@ -82,12 +82,7 @@ async function extractGltfAttributes(
     );
     return { ...base };
   }
-  let parsed = parseGltf(
-    bytes.buffer.slice(
-      bytes.byteOffset,
-      bytes.byteOffset + bytes.byteLength,
-    ) as ArrayBuffer,
-  );
+  let parsed = parseGltf(bytes);
   if (!parsed) {
     throw new FileContentMismatchError(
       `File does not contain a parseable ${containerLabel}`,
