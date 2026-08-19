@@ -50,6 +50,40 @@ runs:
     # `timeout-minutes` is not supported on a composite action's steps, so the
     # ceiling is applied per command instead. `timeout` exits 124 when it fires,
     # which fails the step under the default `-e` shell.
+    # Runner network trouble on Azure VMs presents as connections that stall
+    # rather than fail, and disabling checksum offload is the long-standing
+    # workaround (actions/runner-images#1187). ci-host.yaml already applies
+    # this, but only after this action has run — leaving this action's apt call,
+    # the one that has actually wedged, in the unmitigated window. Non-fatal:
+    # it is a mitigation rather than a requirement, and a runner need not have
+    # an interface by this name.
+    - name: Disable TCP/UDP network offloading
+      shell: bash
+      run: |
+        sudo ethtool -K eth0 tx off rx off ||
+          echo "could not disable offloading on eth0; continuing"
+
+    # apt reaches Ubuntu through Azure Traffic Manager, which resolves to a
+    # regional mirror — so an unhealthy backend stalls some runners while
+    # others are unaffected, and neither Canonical's nor Azure's status page
+    # would report it. A job that wedges in apt uploads no logs at all, so
+    # record which mirror this runner resolved to, and how fast it answers,
+    # while there is still something to record. Evidence only: never fails the
+    # step, and bounded so the probe cannot become the hang it is looking for.
+    - name: Probe the apt mirrors
+      shell: bash
+      run: |
+        codename=$(. /etc/os-release && echo "${VERSION_CODENAME:-}")
+        mirrors=$(cat /etc/apt/apt-mirrors.txt 2>/dev/null ||
+          echo "http://azure.archive.ubuntu.com/ubuntu/")
+        while read -r mirror; do
+          [ -n "$mirror" ] || continue
+          curl -sS --max-time 10 -o /dev/null \
+            -w "apt-mirror-probe %{http_code} ip=%{remote_ip} connect=%{time_connect}s total=%{time_total}s $mirror\n" \
+            "${mirror%/}/dists/${codename}/InRelease" ||
+            echo "apt-mirror-probe UNREACHABLE $mirror"
+        done <<< "$mirrors"
+
     - name: Install mkcert
       shell: bash
       run: |
