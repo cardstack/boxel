@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Latin Cardio \u2014 full choreography walkthrough",
+      "platform": "youtube",
+      "scheduledAt": "2026-08-19T10:00:00Z",
+      "status": "in_progress",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      },
+      "brief": "The anchor for the new block. Rough cut is with Lisa."
+    },
+    "relationships": {
+      "handedTo": {
+        "links": {
+          "self": "../Freelancer/lisa-moreno"
+        }
+      },
+      "series": {
+        "links": {
+          "self": null
+        }
+      },
+      "sourceIdea": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../content-piece",
+        "name": "ContentPiece"
+      }
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Beginners",
+      "ellipsize": true,
+      "color": "#f2d9e6",
+      "fontColor": "#2b2b2b",
+      "borderColor": "#f2d9e6",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/tag",
+        "name": "default"
+      }
+    }
+  }
+}

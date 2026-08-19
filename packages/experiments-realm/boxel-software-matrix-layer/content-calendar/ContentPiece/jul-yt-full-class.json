@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Full 40-minute Latin cardio class",
+      "platform": "youtube",
+      "scheduledAt": "2026-07-24T10:00:00Z",
+      "status": "done",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      },
+      "brief": "Filmed at the Saturday session."
+    },
+    "relationships": {
+      "handedTo": {
+        "links": {
+          "self": "../Freelancer/lisa-moreno"
+        }
+      },
+      "series": {
+        "links": {
+          "self": null
+        }
+      },
+      "sourceIdea": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../content-piece",
+        "name": "ContentPiece"
+      }
+    }
+  }
+}

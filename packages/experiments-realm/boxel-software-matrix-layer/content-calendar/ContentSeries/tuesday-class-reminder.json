@@ -1,0 +1,25 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Tuesday class reminder",
+      "platform": "facebook",
+      "cadence": "weekly",
+      "dayOfWeek": 2,
+      "timeOfDay": "18:00",
+      "active": true,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../content-series",
+        "name": "ContentSeries"
+      }
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Latin",
+      "ellipsize": true,
+      "color": "#f6dcc8",
+      "fontColor": "#2b2b2b",
+      "borderColor": "#f6dcc8",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/tag",
+        "name": "default"
+      }
+    }
+  }
+}

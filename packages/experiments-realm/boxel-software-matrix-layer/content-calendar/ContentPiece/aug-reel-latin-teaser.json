@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Latin Cardio teaser \u2014 15 second hook",
+      "platform": "instagram_reel",
+      "scheduledAt": "2026-08-20T19:00:00Z",
+      "status": "in_progress",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      },
+      "brief": "Pull the best 15 seconds from the walkthrough."
+    },
+    "relationships": {
+      "handedTo": {
+        "links": {
+          "self": "../Freelancer/lisa-moreno"
+        }
+      },
+      "series": {
+        "links": {
+          "self": null
+        }
+      },
+      "sourceIdea": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../content-piece",
+        "name": "ContentPiece"
+      }
+    }
+  }
+}

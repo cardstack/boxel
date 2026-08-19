@@ -1,0 +1,34 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Salsa footwork drill breakdown",
+      "thought": "Slow it to half speed, then full. People keep asking about the cross-step.",
+      "hunchPlatform": "tiktok",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../content-idea",
+        "name": "ContentIdea"
+      }
+    },
+    "relationships": {
+      "themes.0": {
+        "links": {
+          "self": "../../Tag/zumba-technique"
+        }
+      },
+      "themes.1": {
+        "links": {
+          "self": "../../Tag/zumba-latin"
+        }
+      }
+    }
+  }
+}

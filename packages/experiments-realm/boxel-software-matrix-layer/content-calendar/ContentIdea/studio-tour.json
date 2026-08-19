@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "New studio tour",
+      "thought": "Walk-through once the mirrors go in.",
+      "hunchPlatform": "instagram_story",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../content-idea",
+        "name": "ContentIdea"
+      }
+    },
+    "relationships": {
+      "themes.0": {
+        "links": {
+          "self": "../../Tag/zumba-community"
+        }
+      }
+    }
+  }
+}

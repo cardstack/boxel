@@ -1,0 +1,25 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Monday motivation",
+      "platform": "instagram_story",
+      "cadence": "weekly",
+      "dayOfWeek": 1,
+      "timeOfDay": "07:30",
+      "active": true,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../content-series",
+        "name": "ContentSeries"
+      }
+    }
+  }
+}

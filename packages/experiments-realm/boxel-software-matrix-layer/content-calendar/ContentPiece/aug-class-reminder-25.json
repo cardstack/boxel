@@ -1,0 +1,40 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Tuesday 6:30 class \u2014 Latin block week 1",
+      "platform": "facebook",
+      "scheduledAt": "2026-08-25T18:00:00Z",
+      "status": "planned",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "handedTo": {
+        "links": {
+          "self": null
+        }
+      },
+      "series": {
+        "links": {
+          "self": "../ContentSeries/tuesday-class-reminder"
+        }
+      },
+      "sourceIdea": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../content-piece",
+        "name": "ContentPiece"
+      }
+    }
+  }
+}
