@@ -1,0 +1,40 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Save the date \u2014 Latin Cardio starts 27 Aug",
+      "platform": "instagram_story",
+      "scheduledAt": "2026-08-12T08:00:00Z",
+      "status": "done",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "handedTo": {
+        "links": {
+          "self": null
+        }
+      },
+      "series": {
+        "links": {
+          "self": null
+        }
+      },
+      "sourceIdea": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../content-piece",
+        "name": "ContentPiece"
+      }
+    }
+  }
+}
