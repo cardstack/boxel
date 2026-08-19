@@ -141,6 +141,12 @@ jobs:
               # that reads the skill file, so an edit to the skill has to run
               # that suite too.
               - 'packages/boxel-cli/plugin/skills/bxl-authoring/**'
+              # That suite also asserts the host suites the skill cites still
+              # exist. `bxl-test` runs unconditionally on main, so without
+              # these a host-only rename would merge green and redden main on
+              # a commit whose own CI never ran the failing suite.
+              - 'packages/host/tests/integration/bxl-*'
+              - 'packages/host/tests/helpers/cards/bxl-*'
             bench-amd:
               # The AMD transpiler is a runtime-common module with no
               # cross-workspace deps that affect its wall-time, so the
