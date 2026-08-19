@@ -208,9 +208,11 @@ export default class AiAssistantPanel extends Component<Signature> {
 
     <style scoped>
       :global(:root) {
-        --ai-assistant-menu-background: #4f4b57;
-        --past-sessions-divider-color: #75707e;
-        --ai-assistant-menu-hover-background: #797788;
+        --ai-assistant-menu-background: var(--boxel-650);
+        --ai-assistant-menu-foreground: var(--boxel-light);
+        --ai-assistant-menu-border: var(--boxel-light-25);
+        --ai-assistant-menu-divider: var(--boxel-575);
+        --ai-assistant-menu-hover-background: var(--boxel-700);
       }
 
       .left-border {

@@ -122,7 +122,8 @@ CompareOp          = "==" | "!=" | "<" | "<=" | ">" | ">=" ;
 Identifier         = Letter, { Letter | Digit | "_" } ;
 QuotedLabel        = String ;
 String             = '"', { JsonStringChar }, '"' ;
-Number             = Digit, { Digit }, [ ".", Digit, { Digit } ] ;
+Number             = Digit, { Digit }, [ ".", Digit, { Digit } ],
+                     [ ("e" | "E"), [ "+" | "-" ], Digit, { Digit } ] ;
 
 NativeExpr         = (* Any expression accepted by the jqxl parser. *) ;
 Letter             = "A".."Z" | "a".."z" | "_" ;

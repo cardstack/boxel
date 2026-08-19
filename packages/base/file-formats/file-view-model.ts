@@ -154,6 +154,7 @@ export interface FileViewModel {
   model3d?: any;
   fontMetadata?: any;
   htmlMetadata?: any;
+  officeMetadata?: any;
   posterMetadata?: any;
   thumbnailMetadata?: any;
 }
@@ -194,12 +195,18 @@ function waveformBarsFor(model: FileModelLike, format: FileFormat): number[] {
   if (!Array.isArray(values)) {
     return [];
   }
+  // Every producer persists bars as 0..1 amplitudes — decoded RMS of float
+  // samples, MP3's side-info envelope normalized to its own peak, the WAV
+  // streaming envelope — while the renderers draw bar heights from 0–100.
+  // The projection owns that scale conversion; a renderer given raw
+  // amplitudes would crush every bar to its minimum sliver height and draw
+  // silence.
   let normalized = values
     .filter(
       (value): value is number =>
         typeof value === 'number' && Number.isFinite(value),
     )
-    .map((value) => Math.max(0, Math.min(100, value)));
+    .map((value) => Math.max(0, Math.min(100, value * 100)));
   let budget =
     format === 'fitted'
       ? FITTED_WAVEFORM_BAR_BUDGET
@@ -268,6 +275,26 @@ function heroFactFor(
   }
   if (model.documentInfo?.pageCount) {
     return `${model.documentInfo.pageCount} pages`;
+  }
+  if (['word', 'presentation', 'spreadsheet'].includes(kind)) {
+    // An Office file's most identifying fact is its structural count: a
+    // document's pages, a deck's slides, a workbook's sheets.
+    let office = model.officeMetadata;
+    if (kind === 'presentation' && office?.slideCount != null) {
+      return `${office.slideCount} ${office.slideCount === 1 ? 'slide' : 'slides'}`;
+    }
+    if (kind === 'spreadsheet' && office?.sheetCount != null) {
+      return `${office.sheetCount} ${office.sheetCount === 1 ? 'sheet' : 'sheets'}`;
+    }
+    if (office?.pageCount != null) {
+      return `${office.pageCount} ${office.pageCount === 1 ? 'page' : 'pages'}`;
+    }
+    if (office?.wordCount != null) {
+      return `${office.wordCount.toLocaleString()} words`;
+    }
+    if (office?.title) {
+      return String(office.title);
+    }
   }
   if (kind === 'archive' && model.archiveContents?.length) {
     return `${model.archiveContents.length} entries`;
@@ -407,6 +434,13 @@ export function fileViewModel(
 
   let fontMetadata = file.fontMetadata;
   let htmlMetadata = file.htmlMetadata;
+  let officeMetadata = file.officeMetadata;
+  // The authoring application, trimmed of the version/platform tail LibreOffice
+  // appends ("LibreOffice/6.1.5.2$Linux…" → "LibreOffice") so it reads as a fact
+  // rather than a build string.
+  let officeApp = officeMetadata?.application
+    ? String(officeMetadata.application).split(/[/$]/)[0]!.trim()
+    : undefined;
   let facts = [
     file.language,
     file.encoding?.videoCodec ??
@@ -440,11 +474,18 @@ export function fileViewModel(
     htmlMetadata?.elementCount
       ? `${htmlMetadata.elementCount.toLocaleString()} elements`
       : undefined,
+    officeApp,
+    // A document's word count reads beside its page-count hero; a deck/workbook
+    // already lead with slides/sheets, so their word count is left off.
+    officeMetadata?.kind === 'word' && officeMetadata?.wordCount != null
+      ? `${officeMetadata.wordCount.toLocaleString()} words`
+      : undefined,
   ]
     .filter(Boolean)
     .map(String);
 
-  let title = file.title ?? htmlMetadata?.documentTitle;
+  let title =
+    file.title ?? htmlMetadata?.documentTitle ?? officeMetadata?.title;
 
   return {
     id: file.id,
@@ -544,6 +585,7 @@ export function fileViewModel(
     model3d: file.model3d,
     fontMetadata,
     htmlMetadata,
+    officeMetadata,
     posterMetadata: file.posterMetadata,
     thumbnailMetadata: file.thumbnailMetadata,
   };

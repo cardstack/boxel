@@ -1,33 +1,27 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-import { concat } from '@ember/helper';
 
-import cn from '../../helpers/cn.ts';
 import cssVar from '../../helpers/css-var.ts';
 import LoadingIndicatorIcon from '../../icons/loading-indicator.gts';
 
 interface Signature {
   Args: {
     color?: string;
-    variant?: 'primary' | 'secondary' | 'muted' | 'destructive' | 'default';
+    size?: string;
   };
   Element: HTMLSpanElement;
 }
 
 const LoadingIndicator: TemplateOnlyComponent<Signature> = <template>
   <span
-    class={{cn
-      'boxel-loading-indicator'
-      (if @variant (concat 'variant-' @variant) 'variant-default')
+    class='boxel-loading-indicator'
+    style={{cssVar
+      icon-color=(if @color @color 'var(--loading-indicator-color)')
+      boxel-loading-indicator-size=@size
     }}
     data-test-loading-indicator
     ...attributes
   >
-    <LoadingIndicatorIcon
-      style={{cssVar
-        icon-color=(if @color @color 'var(--loading-indicator-color)')
-      }}
-      role='presentation'
-    />
+    <LoadingIndicatorIcon role='presentation' />
   </span>
   <style scoped>
     /* zero specificity default sizing */
@@ -36,40 +30,26 @@ const LoadingIndicator: TemplateOnlyComponent<Signature> = <template>
         --boxel-loading-indicator-size,
         var(--boxel-icon-sm)
       );
+      --loading-indicator-color: var(
+        --boxel-loading-indicator-color,
+        currentColor
+      );
       display: inline-block;
       width: var(--loading-indicator-size);
       height: var(--loading-indicator-size);
       flex-shrink: 0;
     }
 
-    .variant-default {
-      --loading-indicator-color: var(--foreground);
+    .boxel-loading-indicator :deep(svg) {
+      display: block;
+      width: var(--loading-indicator-size);
+      height: var(--loading-indicator-size);
     }
 
-    .variant-primary {
-      --loading-indicator-color: var(--primary-foreground);
-    }
-
-    .variant-secondary {
-      --loading-indicator-color: var(--secondary-foreground);
-    }
-
-    .variant-muted {
-      --loading-indicator-color: var(--muted-foreground);
-    }
-
-    .variant-destructive {
-      --loading-indicator-color: var(--destructive-foreground);
-    }
-
-    /*
-      Only animate if the user has not said that they want reduced motion
-    */
+    /* Only animate if the user has not said that they want reduced motion */
     @media (prefers-reduced-motion: no-preference) {
       .boxel-loading-indicator :deep(svg) {
         animation: var(--boxel-infinite-spin-animation);
-        width: var(--loading-indicator-size);
-        height: var(--loading-indicator-size);
       }
     }
   </style>

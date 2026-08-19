@@ -292,7 +292,7 @@ export default class BoxelInput extends Component<Signature> {
             var(--border, var(--boxel-form-control-border-color));
           border-radius: var(--boxel-form-control-border-radius);
           box-shadow: var(--boxel-form-control-box-shadow);
-          outline: 1px solid transparent;
+          outline: var(--boxel-input-outline, 1px solid transparent);
           transition:
             var(--boxel-transition-properties),
             outline-color var(--boxel-transition);

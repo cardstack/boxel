@@ -1,4 +1,5 @@
 import { Deferred } from './deferred.ts';
+import { resolveRangeHeader } from './http-range.ts';
 import {
   awaitRealmIndexSettled,
   indexingConcurrencyGroup,
@@ -307,6 +308,19 @@ export interface FileRef {
   path: LocalPath;
   content: ReadableStream<Uint8Array> | Readable | Uint8Array | string;
   lastModified: number;
+  // Total byte size of `content`, when the adapter knows it without reading
+  // the bytes (e.g. from the stat it already performed). Lets streamed file
+  // responses carry a Content-Length, which browsers need before they will
+  // treat media as seekable / of known duration.
+  size?: number;
+  // Open a bounded byte range of the file, [start, end] inclusive, without
+  // materializing the rest. Present when the adapter can do this cheaply
+  // (e.g. a bounded fs read stream); together with `size` it enables HTTP
+  // Range (206) serving. Both offsets are within `size`.
+  createRangeStream?: (
+    start: number,
+    end: number,
+  ) => ReadableStream<Uint8Array> | Readable;
 
   [key: symbol]: object;
 }
@@ -4021,6 +4035,86 @@ export class Realm {
     if (createdFromDb != null) {
       headers['x-created'] = formatRFC7231(createdFromDb * 1000);
     }
+
+    // Byte size when knowable without reading the bytes. `ref.size` is
+    // consulted before `ref.content` because adapters expose `content` as a
+    // lazy getter that opens a real stream on first touch — a ranged or 416
+    // response must never pay for (and then strand) a full-file stream.
+    // String bodies are left to the HTTP layer, which measures and sets
+    // Content-Length for them itself.
+    let sliceableBytes =
+      ref.size == null && ref.content instanceof Uint8Array
+        ? ref.content
+        : undefined;
+    let totalSize = ref.size ?? sliceableBytes?.byteLength;
+    if (totalSize != null) {
+      headers['content-length'] = String(totalSize);
+    }
+    let rangeCapable =
+      totalSize != null &&
+      (sliceableBytes != null || typeof ref.createRangeStream === 'function');
+    if (rangeCapable) {
+      headers['accept-ranges'] = 'bytes';
+      let rangeHeader =
+        request.method === 'GET' ? request.headers.get('range') : null;
+      // A Range is conditional on If-Range when present: a validator that no
+      // longer matches means the client's byte offsets refer to a different
+      // representation, so the full body is the correct answer.
+      let ifRange = request.headers.get('if-range');
+      if (rangeHeader && (!ifRange || (etag && ifRange === etag))) {
+        let resolution = resolveRangeHeader(rangeHeader, totalSize!);
+        if (resolution.kind === 'unsatisfiable') {
+          return createResponse({
+            body: null,
+            init: {
+              status: 416,
+              headers: {
+                ...headers,
+                'content-range': `bytes */${totalSize}`,
+                'content-length': '0',
+              },
+            },
+            requestContext,
+          });
+        }
+        if (resolution.kind === 'range') {
+          let { start, end } = resolution;
+          let rangeHeaders = {
+            ...headers,
+            'content-range': `bytes ${start}-${end}/${totalSize}`,
+            'content-length': String(end - start + 1),
+          };
+          if (sliceableBytes) {
+            return createResponse({
+              body: sliceableBytes.subarray(start, end + 1) as BodyInit,
+              init: { status: 206, headers: rangeHeaders },
+              requestContext,
+            });
+          }
+          let rangeContent = ref.createRangeStream!(start, end);
+          if (rangeContent instanceof ReadableStream) {
+            return createResponse({
+              body: rangeContent,
+              init: { status: 206, headers: rangeHeaders },
+              requestContext,
+            });
+          }
+          if (!isNode) {
+            throw new Error(
+              `Cannot handle node stream in a non-node environment`,
+            );
+          }
+          let response = createResponse({
+            body: null,
+            init: { status: 206, headers: rangeHeaders },
+            requestContext,
+          }) as ResponseWithNodeStream;
+          response.nodeStream = rangeContent;
+          return response;
+        }
+      }
+    }
+
     if (
       ref.content instanceof ReadableStream ||
       ref.content instanceof Uint8Array ||

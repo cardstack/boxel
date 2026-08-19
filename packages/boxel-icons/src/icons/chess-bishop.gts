@@ -13,11 +13,11 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
     stroke-linecap='round'
     stroke-linejoin='round'
     stroke-width='2'
-    class='icon icon-tabler icons-tabler-outline icon-tabler-chess-bishop'
+    class='lucide lucide-chess-bishop'
     viewBox='0 0 24 24'
     ...attributes
-  ><path stroke='none' d='M0 0h24v24H0z' /><path
-      d='m8 16-1.447.724a1 1 0 0 0-.553.894V20h12v-2.382a1 1 0 0 0-.553-.894L16 16zM11 4a1 1 0 1 0 2 0 1 1 0 1 0-2 0M9.5 16C7.833 16 7 14.331 7 13q0-5.5 5-7c3.333 1 5 3.427 5 7 0 1.284-.775 2.881-2.325 3H9.5M15 8l-3 3M12 5v1'
+  ><path
+      d='M5 20a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v1a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1zM15 18c1.5-.615 3-2.461 3-4.923C18 8.769 14.5 4.462 12 2 9.5 4.462 6 8.77 6 13.077 6 15.539 7.5 17.385 9 18M16 7l-2.5 2.5M9 2h6'
     /></svg>
 </template>;
 

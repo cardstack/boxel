@@ -13,13 +13,16 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
     stroke-linecap='round'
     stroke-linejoin='round'
     stroke-width='2'
-    class='icon icon-tabler icons-tabler-outline icon-tabler-database-x'
+    class='lucide lucide-database-x'
     viewBox='0 0 24 24'
     ...attributes
-  ><path stroke='none' d='M0 0h24v24H0z' /><path
-      d='M4 6c0 1.657 3.582 3 8 3s8-1.343 8-3-3.582-3-8-3-8 1.343-8 3'
-    /><path d='M4 6v6c0 1.657 3.582 3 8 3q.807 0 1.57-.058M20 13.5V6' /><path
-      d='M4 12v6c0 1.657 3.582 3 8 3q.577 0 1.132-.03M22 22l-5-5M17 22l5-5'
+  ><path
+      d='m17 17 5 5M19.323 13.744A9 3 0 0 0 21 12M21 13.127V5M22 17l-5 5M3 12a9 3 0 0 0 10.563 2.954'
+    /><path d='M3 5v14a9 3 0 0 0 10 2.981' /><ellipse
+      cx='12'
+      cy='5'
+      rx='9'
+      ry='3'
     /></svg>
 </template>;
 

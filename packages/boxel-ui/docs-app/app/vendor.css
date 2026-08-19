@@ -1,0 +1,3 @@
+/* Freestyle's stylesheet, layered so boxel-ui's cascade wins in the explorer.
+   Its own injection is turned off in ember-cli-build.js. */
+@import url('ember-freestyle/vendor/ember-freestyle.css') layer(vendor);

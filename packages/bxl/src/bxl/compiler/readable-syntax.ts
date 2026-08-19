@@ -1013,6 +1013,7 @@ function tokenize(source: string): Token[] {
     if (/[0-9]/.test(char)) {
       let value = char;
       let hasDecimal = false;
+      let hasExponent = false;
       const start = index;
       index++;
       while (index < source.length) {
@@ -1021,10 +1022,26 @@ function tokenize(source: string): Token[] {
           value += source[index++];
           continue;
         }
-        if (current === '.' && !hasDecimal && source[index + 1] !== '.') {
+        if (
+          current === '.' &&
+          !hasDecimal &&
+          !hasExponent &&
+          source[index + 1] !== '.'
+        ) {
           hasDecimal = true;
           value += source[index++];
           continue;
+        }
+        // An exponent takes an optional sign and then at least one digit, so
+        // `1e3` is one number while the `e` starting a name stays a name.
+        if ((current === 'e' || current === 'E') && !hasExponent) {
+          const signed = ['+', '-'].includes(source[index + 1] ?? '');
+          if (/[0-9]/.test(source[index + (signed ? 2 : 1)] ?? '')) {
+            hasExponent = true;
+            value += source[index++];
+            if (signed) value += source[index++];
+            continue;
+          }
         }
         break;
       }

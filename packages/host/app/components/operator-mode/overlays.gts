@@ -21,7 +21,7 @@ import type { CardDefOrId } from './stack-item';
 
 import type { RenderedCardForOverlayActions } from '../../resources/element-tracker';
 import type { CardDef, Format, ViewCardFn } from '@cardstack/base/card-api';
-import type { MiddlewareState } from '@floating-ui/dom';
+import type { MiddlewareState, ReferenceElement } from '@floating-ui/dom';
 
 interface OverlaySignature {
   Args: {
@@ -43,6 +43,76 @@ interface OverlaySignature {
       isHovered: boolean,
     ];
   };
+}
+
+// A per-edge inset large enough to leave that edge effectively unclipped — it
+// extends the clip region a full viewport past the box on that side, well
+// beyond any overlay chrome.
+const UNCLIPPED_EDGE = '-100vmax';
+
+// Returns the `clip-path` that hides the portion of an overlay scrolled behind
+// a sticky header (e.g. the rich-markdown compose toolbar), or '' when the card
+// is clear of the header. `refTop` is the decorated card's viewport top and
+// `headerBottom` the header's viewport bottom, so `headerBottom - refTop` is how
+// far the overlay's top has slid under the header.
+//
+// Only the top edge is clipped; the other three are left unclipped. The header
+// is a horizontal top occluder, so the top clip line (anchored at
+// `headerBottom`) alone hides everything above it — regardless of which edge of
+// the overlay that content sits on. Clipping the sides/bottom would serve no
+// occlusion purpose and would crop chrome that legitimately hangs past the box:
+// the box-shadow ring, and above all a type-label that has flipped below the
+// card (which happens exactly when the card nears the top of its boundary — the
+// same moment this clip engages). A below-flipped label is still hidden while
+// it's above `headerBottom` (the top inset catches it) and shown once it clears
+// the header, which is the correct behavior. '' fully restores the overlay when
+// nothing occludes it. Exported for unit testing.
+export function stickyHeaderClipPath(
+  refTop: number,
+  headerBottom: number,
+): string {
+  let clipTop = Math.max(0, headerBottom - refTop);
+  return clipTop > 0
+    ? `inset(${clipTop}px ${UNCLIPPED_EDGE} ${UNCLIPPED_EDGE} ${UNCLIPPED_EDGE})`
+    : '';
+}
+
+// Finds the sticky header an overlay should clip against: the nearest
+// `[data-overlay-clip-header]` inside the reference card's enclosing
+// `[data-overlay-clip-container]` (the rich-markdown editor). Returns null for
+// cards outside a marked container — so the clip is a no-op for non-editor
+// overlay consumers (spec-preview, playground) and the `querySelector` never
+// runs for them. Scoped to the nearest container, so nested editors clip
+// against their own toolbar. Exported for unit testing.
+export function stickyClipHeaderFor(reference: Element): HTMLElement | null {
+  return (
+    reference
+      .closest('[data-overlay-clip-container]')
+      ?.querySelector<HTMLElement>('[data-overlay-clip-header]') ?? null
+  );
+}
+
+// Reads the live rects of `reference` and its clip container's sticky header
+// and assigns the resulting clip to `floating.style.clipPath` — the glue that
+// turns the pure helpers above into the running fix. Both elements must be laid
+// out in the document. Clears to '' when the reference is not an HTMLElement,
+// sits in no marked container, or has scrolled clear of the header. Exported so
+// a test can drive it without standing up the floating-ui middleware.
+export function applyStickyHeaderClip(
+  reference: ReferenceElement,
+  floating: HTMLElement,
+): void {
+  let clipPath = '';
+  if (reference instanceof HTMLElement) {
+    let header = stickyClipHeaderFor(reference);
+    if (header) {
+      clipPath = stickyHeaderClipPath(
+        reference.getBoundingClientRect().top,
+        header.getBoundingClientRect().bottom,
+      );
+    }
+  }
+  floating.style.clipPath = clipPath;
 }
 
 export default class Overlays extends Component<OverlaySignature> {
@@ -134,6 +204,24 @@ export default class Overlays extends Component<OverlaySignature> {
         floating.style.borderRadius =
           window.getComputedStyle(reference).borderRadius;
       }
+
+      // Clip the overlay where a scrolled card slides behind a sticky header
+      // (the rich-markdown compose toolbar) — otherwise the adorn outline paints
+      // on top of the toolbar, because the overlay is a positioned sibling above
+      // the card's stacking-context-sealed subtree and z-index can't arbitrate
+      // it. Mirrors the overflow-occlusion the stack-item header
+      // already relies on, but at the toolbar's dynamic bottom edge. `stickyClipHeaderFor`
+      // is a no-op outside a marked clip container, so this stays inert for
+      // non-editor overlay consumers. Always assigned so the clip clears as the
+      // card scrolls back into the clear.
+      //
+      // The inset is measured in viewport px and applied to the floating
+      // element's own (pre-transform) box. In production the offset parent is
+      // unscaled, so the clip lands exactly at the header's bottom edge. Unlike
+      // the x/y offsets below we deliberately don't divide `clipTop` by the
+      // parent scale — under the test runner's #ember-testing scale the clip
+      // line is therefore only approximate, which doesn't affect real users.
+      applyStickyHeaderClip(reference, floating);
 
       // Position the overlay from the live reference rect relative to the
       // floating element's own offset parent, rather than floating-ui's

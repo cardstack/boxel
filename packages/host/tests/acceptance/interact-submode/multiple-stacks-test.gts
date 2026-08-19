@@ -4,6 +4,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
+  setupRealmCacheTeardown,
   percySnapshot,
   testModuleRealm,
   testRealmURL,
@@ -19,11 +20,14 @@ module(
   'Acceptance | interact submode | multiple stacks tests',
   function (hooks) {
     let { setActiveRealms } = setupInteractSubmodeTests(hooks, {
-      reuseIndexAcrossTests: 'interactMultipleStacks',
       setRealm() {},
     });
 
-    module('2 stacks', function () {
+    module('2 stacks', function (hooks) {
+      // The helper's realm-building beforeEach runs for these tests too, and
+      // caches under this module's name, which the outer prefix cannot match.
+      setupRealmCacheTeardown(hooks);
+
       test('restoring the stacks from query param', async function (assert) {
         await visitOperatorMode({
           stacks: [
@@ -254,7 +258,11 @@ module(
       });
     });
 
-    module('expand to full width', function () {
+    module('expand to full width', function (hooks) {
+      // The helper's realm-building beforeEach runs for these tests too, and
+      // caches under this module's name, which the outer prefix cannot match.
+      setupRealmCacheTeardown(hooks);
+
       test('expanding a card in a two-stack layout hides the other stack', async function (assert) {
         let fadhlanId = `${testRealmURL}Person/fadhlan`;
         let mangoId = `${testRealmURL}Pet/mango`;

@@ -1,8 +1,6 @@
-import { registerDestructor } from '@ember/destroyable';
 import { concat, fn, hash } from '@ember/helper';
 import { action } from '@ember/object';
 import { guidFor } from '@ember/object/internals';
-import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 import BasicDropdown from 'ember-basic-dropdown/components/basic-dropdown';
 import type { Dropdown } from 'ember-basic-dropdown/types';
@@ -41,7 +39,6 @@ interface Signature {
     matchTriggerWidth?: boolean;
     onClose?: () => void;
     registerAPI?: (publicAPI: Dropdown) => void;
-    variant?: 'primary' | 'secondary' | 'default';
   };
   Blocks: {
     content: [{ close: () => void }];
@@ -62,13 +59,7 @@ interface Signature {
 
 // Needs to be class, BasicDropdown doesn't work with const
 class BoxelDropdown extends Component<Signature> {
-  private themeObserver?: MutationObserver | null = null;
   private dropdownId = guidFor(this);
-
-  constructor(owner: Owner, args: Signature['Args']) {
-    super(owner, args);
-    registerDestructor(this, () => this.stopObservingTheme());
-  }
 
   get dropdownEl(): HTMLElement | null {
     return document.getElementById(this.dropdownId);
@@ -124,24 +115,9 @@ class BoxelDropdown extends Component<Signature> {
 
     const hasThemeVariables = hasBackground || hasForeground || parentHasTheme;
 
-    const variant = this.args.variant || 'default';
-    const variantColors = {
-      default: {
-        bg: 'var(--background, var(--boxel-light))',
-        fg: 'var(--foreground, var(--boxel-dark))',
-      },
-      primary: {
-        bg: 'var(--primary, var(--boxel-600))',
-        fg: 'var(--primary-foreground, var(--boxel-light))',
-      },
-      secondary: {
-        bg: 'var(--secondary, var(--boxel-400))',
-        fg: 'var(--secondary-foreground, var(--boxel-dark))',
-      },
-    };
-
     if (hasThemeVariables) {
-      const { bg, fg } = variantColors[variant];
+      const bg = 'var(--background, var(--boxel-light))';
+      const fg = 'var(--foreground, var(--boxel-dark))';
       const themeVars = {
         '--theme-highlight': `color-mix(in oklch, ${bg} 92%, ${fg})`,
         '--theme-highlight-hover': `color-mix(in oklch, ${bg} 88%, ${fg})`,
@@ -159,29 +135,16 @@ class BoxelDropdown extends Component<Signature> {
     }
   }
 
-  private startObservingTheme() {
+  // One-shot copy of the trigger's computed theme onto the shared wormhole.
+  // Every open re-syncs before the content renders, so a theme that changes
+  // while the dropdown is open corrects itself on the next open — no
+  // mutation observation needed.
+  private syncTheme() {
     if (!this.dropdownEl) {
       return;
     }
-
     this.syncCustomProps();
     this.detectAndSetThemeColors();
-
-    this.stopObservingTheme();
-    this.themeObserver = new MutationObserver(() => {
-      this.syncCustomProps();
-      this.detectAndSetThemeColors();
-    });
-    this.themeObserver.observe(this.dropdownEl, {
-      attributes: true,
-      attributeFilter: ['style', 'class'],
-      subtree: false,
-    });
-  }
-
-  private stopObservingTheme() {
-    this.themeObserver?.disconnect();
-    this.themeObserver = null;
   }
 
   @action registerAPI(publicAPI: DropdownAPI | null) {
@@ -197,11 +160,10 @@ class BoxelDropdown extends Component<Signature> {
   }
 
   @action onOpen() {
-    this.startObservingTheme();
+    this.syncTheme();
   }
 
   @action onClose() {
-    this.stopObservingTheme();
     this.args.onClose?.();
   }
 
@@ -236,11 +198,7 @@ class BoxelDropdown extends Component<Signature> {
       <dd.Content
         @onMouseLeave={{fn this.onMouseLeave dd}}
         data-test-boxel-dropdown-content
-        class={{cn
-          'boxel-dropdown__content'
-          @contentClass
-          (if @variant (concat 'variant-' @variant) 'variant-default')
-        }}
+        class={{cn 'boxel-dropdown__content' @contentClass}}
         {{focusTrap
           isActive=dd.isOpen
           focusTrapOptions=(hash
@@ -258,7 +216,7 @@ class BoxelDropdown extends Component<Signature> {
     </BasicDropdown>
 
     <style scoped>
-      @layer {
+      @layer boxelComponentL1 {
         .boxel-dropdown__content {
           --boxel-dropdown-content-border-radius: var(--boxel-border-radius);
           --dropdown-background-color: var(
@@ -272,6 +230,12 @@ class BoxelDropdown extends Component<Signature> {
           --dropdown-text-color: var(
             --boxel-dropdown-text-color,
             var(--foreground, var(--boxel-dark))
+          );
+          /* The fallback keeps the hovered menu item from resolving an
+             undefined var. */
+          --dropdown-selected-text-color: var(
+            --boxel-dropdown-selected-text-color,
+            var(--dropdown-text-color)
           );
           --dropdown-shadow: 0 5px 15px 0 rgb(0 0 0 / 25%);
           --dropdown-highlight-color: var(
@@ -288,80 +252,36 @@ class BoxelDropdown extends Component<Signature> {
           border: 1px solid var(--dropdown-border-color);
           color: var(--dropdown-text-color);
           border-radius: var(--boxel-dropdown-content-border-radius);
-          box-shadow: 0 5px 15px 0 rgb(0 0 0 / 25%);
+          box-shadow: var(
+            --boxel-dropdown-box-shadow,
+            0 5px 15px 0 rgb(0 0 0 / 25%)
+          );
         }
 
         /* Menu styling cater for dropdown */
-        .boxel-dropdown__content :deep(.boxel-menu:not(.themeless)) {
-          --boxel-menu-color: var(--dropdown-background-color) !important;
-          --boxel-menu-text-color: var(--dropdown-text-color) !important;
-          --boxel-menu-hover-color: var(--dropdown-hover-color) !important;
-          --boxel-menu-current-color: var(--dropdown-hover-color) !important;
-          --boxel-menu-selected-font-color: var(
-            --dropdown-text-color
-          ) !important;
+        .boxel-dropdown__content :deep(.boxel-menu) {
+          --boxel-menu-color: var(--dropdown-background-color);
+          --boxel-menu-text-color: var(--dropdown-text-color);
+          --boxel-menu-current-color: var(--dropdown-hover-color);
+          --boxel-menu-selected-font-color: var(--dropdown-text-color);
         }
 
+        /* Dangerous items keep their own destructive hover color, and
+           header items keep their own inert header colors. */
         .boxel-dropdown__content
           :deep(
-            .boxel-menu:not(.themeless)
-              .boxel-menu__item:not(.boxel-menu__item--disabled):hover
+            .boxel-menu
+              .boxel-menu__item:not(
+                .boxel-menu__item--disabled,
+                .boxel-menu__item--dangerous,
+                .boxel-menu__item--header
+              ):hover
           ) {
           color: var(--dropdown-selected-text-color);
         }
 
-        .boxel-dropdown__content
-          :deep(.boxel-menu:not(.themeless) .boxel-menu__separator) {
-          border-bottom-color: var(--dropdown-border-color) !important;
-        }
-
-        .boxel-dropdown__content[class*='variant-'] {
-          --dropdown-highlight-color: var(
-            --boxel-dropdown-highlight-color,
-            var(--theme-highlight, var(--boxel-highlight))
-          );
-          --dropdown-hover-color: var(
-            --boxel-dropdown-hover-color,
-            var(--theme-hover, var(--boxel-light-100))
-          );
-        }
-
-        .boxel-dropdown__content.variant-primary {
-          --dropdown-highlight-color: var(
-            --boxel-dropdown-highlight-color,
-            var(--primary, var(--boxel-600))
-          );
-          --dropdown-hover-color: var(
-            --boxel-dropdown-hover-color,
-            var(--theme-hover, var(--boxel-500))
-          );
-          --dropdown-selected-text-color: var(
-            --primary-foreground,
-            var(--foreground, var(--boxel-light))
-          );
-          --dropdown-focus-border-color: var(
-            --primary,
-            var(--boxel-outline-color)
-          );
-        }
-
-        .boxel-dropdown__content.variant-secondary {
-          --dropdown-highlight-color: var(
-            --boxel-dropdown-highlight-color,
-            var(--secondary, var(--boxel-400))
-          );
-          --dropdown-hover-color: var(
-            --boxel-dropdown-hover-color,
-            var(--theme-hover, var(--boxel-light-100))
-          );
-          --dropdown-selected-text-color: var(
-            --secondary-foreground,
-            var(--foreground, var(--boxel-dark))
-          );
-          --dropdown-focus-border-color: var(
-            --secondary,
-            var(--boxel-outline-color)
-          );
+        .boxel-dropdown__content :deep(.boxel-menu .boxel-menu__separator) {
+          border-bottom-color: var(--dropdown-border-color);
         }
 
         .ember-basic-dropdown-content--below.gap-above {

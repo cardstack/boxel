@@ -47,7 +47,7 @@ const Header: TemplateOnlyComponent<Signature> = <template>
     {{/if}}
   </header>
   <style scoped>
-    @layer {
+    @layer boxelComponentL1 {
       header {
         --_h-padding: var(--boxel-sp);
         --_h-min-height: 1.875rem; /* 30px */

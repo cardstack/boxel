@@ -126,7 +126,11 @@ interface Signature {
 
 export default class SubmodeSwitcher extends Component<Signature> {
   <template>
-    <div data-test-submode-switcher={{@submode}} ...attributes>
+    <div
+      data-theme='dark'
+      data-test-submode-switcher={{@submode}}
+      ...attributes
+    >
       <BoxelDropdown
         @contentClass={{if
           @isCollapsed
@@ -163,7 +167,8 @@ export default class SubmodeSwitcher extends Component<Signature> {
         </:trigger>
         <:content as |dd|>
           <Menu
-            class='submode-switcher-dropdown-menu themeless'
+            class='submode-switcher-dropdown-menu'
+            @isRounded={{false}}
             @closeMenu={{dd.close}}
             @items={{this.buildMenuItems}}
           />
@@ -172,17 +177,21 @@ export default class SubmodeSwitcher extends Component<Signature> {
     </div>
     <style scoped>
       :global(:root) {
-        --submode-switcher-dropdown-content-border-radius: 0 0
-          var(--boxel-border-radius) var(--boxel-border-radius);
-        --submode-switcher-dropdown-content-bg-color: rgba(0, 0, 0, 0.5);
         --submode-switcher-width: 10.5rem; /* 168px */
         --submode-switcher-height: var(--container-button-size);
+        --submode-switcher-dropdown-content-border-radius: 0 0
+          var(--boxel-border-radius) var(--boxel-border-radius);
       }
       :global(.submode-switcher-dropdown) {
+        --boxel-dropdown-background-color: var(--boxel-dark-50);
+        --boxel-dropdown-text-color: var(--boxel-light);
+        --boxel-dropdown-hover-color: var(--boxel-dark-30);
         --boxel-dropdown-content-border-radius: var(
           --submode-switcher-dropdown-content-border-radius
         );
-        background-color: var(--submode-switcher-dropdown-content-bg-color);
+        --host-outline-offset: -2px;
+        border: none;
+        overflow: hidden;
       }
       :global(.submode-switcher-dropdown--detached) {
         --submode-switcher-dropdown-content-border-radius: var(
@@ -190,16 +199,9 @@ export default class SubmodeSwitcher extends Component<Signature> {
         );
       }
       .submode-switcher-dropdown-menu {
+        --icon-color: currentColor;
         width: var(--submode-switcher-width);
-        color: var(--boxel-light);
         font: 500 var(--boxel-font-sm);
-
-        --icon-color: var(--boxel-light);
-        --boxel-menu-border-radius: var(
-          --submode-switcher-dropdown-content-border-radius
-        );
-        --boxel-menu-color: var(--submode-switcher-dropdown-content-bg-color);
-        --boxel-menu-current-color: rgba(0, 0, 0, 0.3);
         --boxel-menu-item-gap: var(--boxel-sp-sm);
         --boxel-menu-item-content-padding: var(--boxel-sp-xs);
       }

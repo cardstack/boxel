@@ -37,6 +37,7 @@ export type FileDefExport = {
       contentHash?: string;
       contentSize?: number;
       toolContext?: ToolContext;
+      fileSizeLimitBytes?: number;
     },
   ) => Promise<any>;
 };
@@ -72,6 +73,7 @@ export class FileDefAttributesExtractor {
   #baseFileDefCodeRef: ResolvedCodeRef;
   #contentHash: string | undefined;
   #contentSize: number | undefined;
+  #fileSizeLimitBytes: number | undefined;
   #fileBytes: Uint8Array | undefined;
   #buildError: (url: string, error: unknown) => RenderError;
   #toolContext: ToolContext | undefined;
@@ -87,6 +89,7 @@ export class FileDefAttributesExtractor {
     baseFileDefCodeRef,
     contentHash,
     contentSize,
+    fileSizeLimitBytes,
     fileBytes,
     buildError,
     toolContext,
@@ -99,6 +102,11 @@ export class FileDefAttributesExtractor {
     baseFileDefCodeRef: ResolvedCodeRef;
     contentHash: string | undefined;
     contentSize: number | undefined;
+    // The realm's configured file-size ceiling. Threaded through to each leaf
+    // `extractAttributes` so a format that parses bytes at index time (the 3D
+    // model defs) caps that work at the same limit the write path enforces,
+    // rather than a hard-coded default.
+    fileSizeLimitBytes?: number;
     fileBytes?: Uint8Array;
     buildError: (url: string, error: unknown) => RenderError;
     // Owner-carrying context that index-time tool schema generation
@@ -117,6 +125,7 @@ export class FileDefAttributesExtractor {
     this.#baseFileDefCodeRef = baseFileDefCodeRef;
     this.#contentHash = contentHash;
     this.#contentSize = contentSize;
+    this.#fileSizeLimitBytes = fileSizeLimitBytes;
     this.#fileBytes = fileBytes;
     this.#buildError = buildError;
     this.#toolContext = toolContext;
@@ -176,6 +185,7 @@ export class FileDefAttributesExtractor {
           {
             contentHash: this.#contentHash,
             contentSize: this.#contentSize,
+            fileSizeLimitBytes: this.#fileSizeLimitBytes,
             toolContext: this.#toolContext,
           },
         );

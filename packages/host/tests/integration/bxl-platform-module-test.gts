@@ -101,6 +101,22 @@ module('Integration | bxl platform module', function (hooks) {
     assert.strictEqual(searchDoc.lossRatio, 0.4567);
   });
 
+  test('every lazy formula chunk loads and dispatches through the platform module', async function (assert) {
+    let searchDoc = await indexedSearchDoc(
+      `${testRealmURL}LazyFormulaProbe/probe`,
+    );
+
+    // Each family is a separate dynamic import, so one chunk being reachable
+    // says nothing about the others. computeVia is synchronous and cannot
+    // await an import mid-compute, which is why the shim has to fold every
+    // chunk in before serving the module — a family that never loaded would
+    // surface here as an unknown-function error, not a wrong number.
+    assert.strictEqual(searchDoc.standardNormalCdf, 0.5, 'statistical');
+    assert.strictEqual(searchDoc.besselFirstKind, 0.7652, 'bessel');
+    assert.strictEqual(searchDoc.decodedBinary, 42, 'engineering');
+    assert.true(searchDoc.contactEmailValid, 'validation');
+  });
+
   test('the imported module is served to the realm module through the loader', async function (assert) {
     let mod: Record<string, unknown> = await loader.import(
       `${testRealmURL}tracking`,

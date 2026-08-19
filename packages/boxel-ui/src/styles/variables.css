@@ -132,7 +132,7 @@
 
   /* outline */
   --boxel-outline-width: 2px;
-  --boxel-outline-color: var(--boxel-blue);
+  --boxel-outline-color: var(--primary, var(--boxel-highlight));
   --boxel-outline-style: solid;
   --boxel-outline: var(--boxel-outline-width) var(--boxel-outline-style)
     var(--boxel-outline-color);
@@ -167,6 +167,7 @@
   --boxel-450: #919191;
   --boxel-500: #5a586a;
   --boxel-550: #525252;
+  --boxel-575: #4f4b57;
   --boxel-600: #413e4e;
   --boxel-650: #3b394b;
   --boxel-700: #272330;
@@ -194,10 +195,14 @@
   /* Primary colors */
   --boxel-light: #fff;
   --boxel-dark: #000;
+  --boxel-light-10: rgba(255, 255, 255, 0.1);
+  --boxel-light-25: rgba(255, 255, 255, 0.25);
   --boxel-light-35: rgba(255, 255, 255, 0.35);
+  --boxel-light-50: rgba(255, 255, 255, 0.5);
   --boxel-light-60: rgba(255, 255, 255, 0.6);
   --boxel-light-70: rgba(255, 255, 255, 0.7);
   --boxel-dark-10: rgba(0, 0, 0, 0.1);
+  --boxel-dark-30: rgba(0, 0, 0, 0.3);
   --boxel-dark-40: rgba(0, 0, 0, 0.4);
   --boxel-dark-50: rgba(0, 0, 0, 0.5);
   --boxel-dark-80: rgba(0, 0, 0, 0.8);
@@ -227,7 +232,7 @@
   --boxel-purple-900: var(--boxel-700); /* Card Wallet bg */
 
   /* Boxel neutrals */
-  --boxel-light-100: #f4f4f4;
+  --boxel-light-100: var(--boxel-50); /* formerly: #f4f4f4; */
   --boxel-light-200: var(--boxel-200); /* formerly: #f0f0f0; */
   --boxel-light-300: var(--boxel-200); /* formerly: #efefef; */
   --boxel-light-400: var(--boxel-200);

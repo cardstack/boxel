@@ -6,6 +6,15 @@
     <meta name="description" content="" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
 
+    <!-- Declares the boxel-ui cascade layer order. It lives here, ahead of
+         every stylesheet, because a layer's first appearance is what fixes its
+         precedence and bundlers prune this statement out of global.css. Mirrors
+         @cardstack/boxel-ui/styles/global.css — keep the two in sync. -->
+    <style>
+      @layer vendor, reset, utilities, boxelComponentL1, boxelComponentL2,
+        boxelComponentL3, boxelComponentL4;
+    </style>
+
     {{content-for "head"}} {{content-for "test-head"}}
 
     <link rel="stylesheet" href="/@embroider/virtual/vendor.css" />
