@@ -154,10 +154,15 @@ export default class PillMenu extends Component<Signature> {
         --boxel-button-secondary-border: transparent;
         --boxel-button-secondary-active-border: var(--boxel-400);
         --boxel-button-border-radius: var(--boxel-border-radius-pill);
+        --boxel-button-transition:
+          var(--boxel-transition-properties), scale 0.15s ease-out;
         padding-inline: var(--boxel-sp-sm);
         gap: var(--boxel-sp-2xs);
         width: fit-content;
         white-space: nowrap;
+      }
+      .pill-menu-button:not(:disabled):active {
+        scale: 0.96;
       }
       .menu-header {
         overflow: hidden;
@@ -368,8 +373,11 @@ export default class PillMenu extends Component<Signature> {
   // happens here, once that animation on the menu root itself completes.
   // Animation names are matched by prefix: scoped CSS appends a suffix to
   // keyframe names.
-  @action private handleMenuAnimationEnd(event: AnimationEvent) {
-    if (event.target !== event.currentTarget) {
+  @action private handleMenuAnimationEnd(event: Event) {
+    if (
+      !(event instanceof AnimationEvent) ||
+      event.target !== event.currentTarget
+    ) {
       return;
     }
     if (event.animationName.startsWith('pill-menu-expand')) {
