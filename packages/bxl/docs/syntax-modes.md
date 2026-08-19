@@ -16,12 +16,17 @@ locked down by a case in [`../tests/boxel/`](../tests/boxel/).
 
 ## Using BXL Inside Boxel
 
-In a Boxel realm, import from the uploaded realm bundle using the
-relative path to that bundle:
+In a Boxel realm, import the platform module by its bare specifier —
+the host serves it to card code, and the package root is the
+card-facing entry:
 
 ```ts
-import { expression, fx, jq } from '../bxl';
+import { expression, fx, jq } from '@cardstack/bxl';
 ```
+
+A realm that carries its own uploaded bundle imports that bundle by
+relative path instead (`from '../bxl'`); everything below applies the
+same either way.
 
 `expression` is the same compute factory as `bxl` / `expr`; it returns
 a function shaped for `computeVia`. The factory validates the source against
@@ -30,7 +35,7 @@ or request-scoped expressions are rejected before Boxel runs the field.
 
 ```ts
 @field subtotal = contains(NumberField, {
-  computeVia: expression(fx`SUM("Line Item".Amount)`),
+  computeVia: expression(fx`SUM([LineItems[].Amount])`),
 });
 
 @field slug = contains(StringField, {
@@ -158,7 +163,7 @@ Watch for:
 ```ts
 expression(fx`ROUND(Salary / 2080, 2)`);
 expression(fx`PatientId & " — " & FirstName & " " & LastName`);
-expression(fx`SUM(Patients[].Billing.RoomCharge)`);
+expression(fx`SUM([Patients[].Billing.RoomCharge])`);
 ```
 
 The compiler treats `` fx`…` `` exactly like a plain string —
@@ -187,6 +192,12 @@ These apply regardless of the tag:
 - **Null-tolerant arithmetic.** `null - 5`, `5 / 0`, `null * x`,
   `null | startswith("a")` all return `null` / `false` instead of
   throwing.
+- **Aggregates take a collected array.** Function arguments are jq
+  streams, so `SUM(Claims[].Paid)` calls `SUM` once per claim and the
+  field receives one value per element. Collect first —
+  `SUM([Claims[].Paid])` — or supply a `schema`, which makes implicit
+  iteration collect on its own (`SUM("Line Item"."Line Total")` compiles
+  to `SUM([.lineItems[].lineTotal])`).
 
 ## Mixed-syntax expressions
 

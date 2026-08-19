@@ -137,6 +137,10 @@ jobs:
               # shared CI-boot paths trigger it.
               - *shared
               - 'packages/bxl/**'
+              # The card-authoring skill's claims are pinned by a BXL suite
+              # that reads the skill file, so an edit to the skill has to run
+              # that suite too.
+              - 'packages/boxel-cli/plugin/skills/bxl-authoring/**'
             bench-amd:
               # The AMD transpiler is a runtime-common module with no
               # cross-workspace deps that affect its wall-time, so the
