@@ -23,7 +23,10 @@
       "operatingHours": "Mon–Fri 07:00–19:00",
       "totalBins": 180,
       "occupiedBins": 140,
-      "zones": ["T1", "T2"],
+      "zones": [
+        "T1",
+        "T2"
+      ],
       "cardInfo": {
         "name": "Trafford Overflow"
       }
@@ -32,7 +35,8 @@
       "adoptsFrom": {
         "module": "../warehouse",
         "name": "Warehouse"
-      }
+      },
+      "_touched": 1787047219533
     }
   }
 }

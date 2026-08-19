@@ -229,6 +229,16 @@ class TicketRecord extends Component<typeof Ticket> {
 
     <style scoped>
       .rec {
+        /* The container the `@container rec` rule below queries. An isolated card
+           gets NO container from the host — every ancestor up to the panel is
+           `container-type: normal` — so a bare `@container (max-width: 44rem)`
+           here matched nothing and `.rec-body` never collapsed to one column in a
+           narrow panel. Named, because an unnamed container is claimed by the
+           nearest query and this template also renders fitted cards that query
+           `fitted-card`. `inline-size` rather than `size`: the card scrolls, and
+           `size` needs a definite block size. */
+        container-name: rec;
+        container-type: inline-size;
         display: flex;
         flex-direction: column;
         min-height: 100%;
@@ -384,7 +394,7 @@ class TicketRecord extends Component<typeof Ticket> {
         font-size: var(--boxel-font-size-xs);
         font-weight: 600;
       }
-      @container (max-width: 44rem) {
+      @container rec (max-width: 44rem) {
         .rec-body {
           grid-template-columns: 1fr;
         }

@@ -26,7 +26,8 @@
       "adoptsFrom": {
         "module": "../queue",
         "name": "Queue"
-      }
+      },
+      "_touched": 1787047303246
     }
   }
 }

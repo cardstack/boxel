@@ -31,7 +31,8 @@
       "adoptsFrom": {
         "module": "../knowledge-article",
         "name": "KnowledgeArticle"
-      }
+      },
+      "_touched": 1787047301078
     }
   }
 }

@@ -10,6 +10,8 @@ import {
 import MarkdownField from '@cardstack/base/markdown';
 import enumField from '@cardstack/base/enum';
 import BookOpenIcon from '@cardstack/boxel-icons/book-open';
+import GlobeIcon from '@cardstack/boxel-icons/globe';
+import LockIcon from '@cardstack/boxel-icons/lock';
 
 import { TicketCategory } from './ticket-category';
 import { StatePill } from './components/state-pill';
@@ -108,6 +110,17 @@ export class KnowledgeArticle extends CardDef {
         .replace(/\s+/g, ' ')
         .trim();
       return text.length > 180 ? `${text.slice(0, 177)}…` : text;
+    },
+  });
+
+  /* The tall fitted quanta had a second slot that re-printed categoryName —
+     the same word the body already showed, so 5 of the 16 sizes spent a row
+     saying nothing new. Keywords were declared and never rendered anywhere,
+     which made them the obvious thing to put there. Capped at 4 so the row
+     stays one line at 150px. */
+  @field keywordLabel = contains(StringField, {
+    computeVia: function (this: KnowledgeArticle) {
+      return (this.keywords ?? []).filter(Boolean).slice(0, 4).join(' · ');
     },
   });
 
@@ -342,24 +355,34 @@ export class KnowledgeArticle extends CardDef {
     <template>
       <article class='fit'>
         <header class='r-head'>
+          <BookOpenIcon class='fit-glyph' role='presentation' />
           <h3 class='title'>{{@model.title}}</h3>
           <span class='badge'>{{@model.status}}</span>
         </header>
         <div class='r-body'>
           <span class='line'>{{@model.categoryName}}</span>
-          <span class='line line-2'>{{if
-              @model.isInternal
-              'Agents only'
-              'Customers'
-            }}</span>
           <p class='blurb'>{{@model.excerpt}}</p>
-          <span class='tail'>{{@model.categoryName}}</span>
+          <span class='tail'>{{@model.keywordLabel}}</span>
         </div>
-        <footer class='r-meta'>{{if
-            @model.isInternal
-            'Internal'
-            'Public'
-          }}</footer>
+        {{! The status badge above already says "Published". A bare "Public"
+            under it, in the same size and the same muted colour, read as the
+            SAME field wrapped onto two lines — and "Published / Internal" read
+            as a contradiction. So the audience gets a glyph (a different kind of
+            mark, not another grey word) and wording that cannot be mistaken for
+            a lifecycle state. The pair is wrapped because the wide+short quantum
+            turns .r-meta into a column, which would otherwise stack the icon
+            above its own label. }}
+        <footer class='r-meta'>
+          <span class='aud'>
+            {{#if @model.isInternal}}
+              <LockIcon class='meta-glyph' role='presentation' />
+              Internal only
+            {{else}}
+              <GlobeIcon class='meta-glyph' role='presentation' />
+              Customer-facing
+            {{/if}}
+          </span>
+        </footer>
       </article>
       <style scoped>
         /* Same skeleton as ticket.gts: one `.fit` grid, no container declared
@@ -391,6 +414,23 @@ export class KnowledgeArticle extends CardDef {
           gap: 5px;
           min-width: 0;
         }
+        /* fitted-card Rule 2: the anchor. Without it these cells were a title at
+           weight 600 plus a badge — no image, no glyph, and 600 is not the
+           "decisively loud" type the rule accepts as a substitute, so all 16
+           sizes read as bare text. This is the card's OWN icon, the same one its
+           isolated section headers use, which is what makes it identity rather
+           than decoration.
+
+           Sized in em with a px floor so it never shrinks to a dot; `align-self`
+           because the head is a baseline row and an SVG has no baseline; muted so
+           the title stays the loudest thing in the cell. */
+        .fit-glyph {
+          flex: none;
+          align-self: center;
+          width: max(11px, 1.1em);
+          height: max(11px, 1.1em);
+          color: var(--muted-foreground, var(--boxel-450));
+        }
         .title {
           flex: 1;
           min-width: 0;
@@ -421,6 +461,19 @@ export class KnowledgeArticle extends CardDef {
           gap: 2px;
           min-width: 0;
         }
+        .aud {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          min-width: 0;
+          white-space: nowrap;
+        }
+        .meta-glyph {
+          flex: none;
+          width: max(9px, 0.95em);
+          height: max(9px, 0.95em);
+        }
+
         .line {
           font-size: var(--type-base);
           color: var(--muted-foreground, var(--boxel-450));
@@ -505,8 +558,15 @@ export class KnowledgeArticle extends CardDef {
           }
         }
         @container fitted-card (width <= 170px) {
-          .line-2 {
+          .fit-glyph {
             display: none;
+          }
+          /* The glyph is dropped just above, so from here down the anchor is
+             type alone — and fitted-card Rule 2's typographic path wants real
+             weight. Weight only, never size: at 150px the title is one word from
+             wrapping and Rule 1 (nothing clipped) outranks Rule 2. */
+          .title {
+            font-weight: 700;
           }
         }
       </style>

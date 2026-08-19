@@ -188,14 +188,18 @@ export class TicketCategory extends CardDef {
     <template>
       <article class='fit'>
         <header class='r-head'>
+          <FolderIcon class='fit-glyph' role='presentation' />
           <h3 class='title'>{{@model.title}}</h3>
           <span class='badge'>{{@model.defaultPriority}}</span>
         </header>
+        {{! A TicketCategory has four facts — priority, path, what it's for, and
+            where its tickets land — but the template had five slots, so
+            defaultQueueName filled three of them and `path` filled two. Four
+            slots now, one fact each; the fifth (.tail) is gone rather than
+            padded with a repeat. }}
         <div class='r-body'>
           <span class='line'>{{@model.path}}</span>
-          <span class='line line-2'>{{@model.defaultQueueName}}</span>
-          <p class='blurb'>{{@model.path}}</p>
-          <span class='tail'>{{@model.defaultQueueName}}</span>
+          <p class='blurb'>{{@model.cardInfo.summary}}</p>
         </div>
         <footer class='r-meta'>{{@model.defaultQueueName}}</footer>
       </article>
@@ -228,6 +232,23 @@ export class TicketCategory extends CardDef {
           align-items: baseline;
           gap: 5px;
           min-width: 0;
+        }
+        /* fitted-card Rule 2: the anchor. Without it these cells were a title at
+           weight 600 plus a badge — no image, no glyph, and 600 is not the
+           "decisively loud" type the rule accepts as a substitute, so all 16
+           sizes read as bare text. This is the card's OWN icon, the same one its
+           isolated section headers use, which is what makes it identity rather
+           than decoration.
+
+           Sized in em with a px floor so it never shrinks to a dot; `align-self`
+           because the head is a baseline row and an SVG has no baseline; muted so
+           the title stays the loudest thing in the cell. */
+        .fit-glyph {
+          flex: none;
+          align-self: center;
+          width: max(11px, 1.1em);
+          height: max(11px, 1.1em);
+          color: var(--muted-foreground, var(--boxel-450));
         }
         .title {
           flex: 1;
@@ -275,15 +296,6 @@ export class TicketCategory extends CardDef {
           -webkit-box-orient: vertical;
           overflow: hidden;
         }
-        .tail {
-          display: none;
-          margin-top: auto;
-          font-size: var(--type-base);
-          color: var(--muted-foreground, var(--boxel-450));
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
         .r-meta {
           grid-area: meta;
           display: none;
@@ -326,9 +338,6 @@ export class TicketCategory extends CardDef {
           .blurb {
             -webkit-line-clamp: 4;
           }
-          .tail {
-            display: block;
-          }
         }
         @container fitted-card (width > 300px) and (height <= 130px) {
           .fit {
@@ -343,8 +352,15 @@ export class TicketCategory extends CardDef {
           }
         }
         @container fitted-card (width <= 170px) {
-          .line-2 {
+          .fit-glyph {
             display: none;
+          }
+          /* The glyph is dropped just above, so from here down the anchor is
+             type alone — and fitted-card Rule 2's typographic path wants real
+             weight. Weight only, never size: at 150px the title is one word from
+             wrapping and Rule 1 (nothing clipped) outranks Rule 2. */
+          .title {
+            font-weight: 700;
           }
         }
       </style>

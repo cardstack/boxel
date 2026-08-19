@@ -9,6 +9,7 @@ import { type Query, rri } from '@cardstack/runtime-common';
 import CardList from '@cardstack/base/components/card-list';
 import enumField from '@cardstack/base/enum';
 import CircleUserIcon from '@cardstack/boxel-icons/circle-user';
+import TicketIcon from '@cardstack/boxel-icons/ticket';
 
 import { PersonBase } from './person-base';
 
@@ -127,7 +128,7 @@ export class SupportContact extends PersonBase {
         </dl>
 
         <section class='hist'>
-          <h2>Their tickets</h2>
+          <h2><TicketIcon class='sec-icon' role='presentation' />Their tickets</h2>
           {{#if this.realms.length}}
             <CardList
               @context={{@context}}
@@ -218,10 +219,23 @@ export class SupportContact extends PersonBase {
           overflow-wrap: anywhere;
         }
         .hist h2 {
+          display: flex;
+          align-items: center;
+          gap: 6px;
           margin: 0 0 var(--boxel-sp-xs);
           font-size: 0.625rem;
           letter-spacing: 0.1em;
           text-transform: uppercase;
+          color: var(--muted-foreground, var(--boxel-450));
+        }
+        /* Rule 5: one icon per section header, quiet by design — muted colour and
+           ~1em with a px floor, so it identifies the section without competing
+           with it. Same size in every header, which is what makes the card
+           scannable by shape on a second visit. */
+        .sec-icon {
+          width: max(14px, 1em);
+          height: max(14px, 1em);
+          flex: 0 0 auto;
           color: var(--muted-foreground, var(--boxel-450));
         }
         .empty {
@@ -404,13 +418,15 @@ export class SupportContact extends PersonBase {
           <h3 class='title'>{{@model.title}}</h3>
           <span class='badge'>{{@model.tier}}</span>
         </header>
+        {{! A contact is four facts — tier, employer, email, phone — but the
+            template had five slots, so `company` and `email` each filled two.
+            The prose slot is gone rather than padded: a contact record has no
+            prose. }}
         <div class='r-body'>
           <span class='line'>{{@model.company}}</span>
-          <span class='line line-2'>{{@model.email}}</span>
-          <p class='blurb'>{{@model.email}}</p>
           <span class='tail'>{{@model.phone}}</span>
         </div>
-        <footer class='r-meta'>{{@model.company}}</footer>
+        <footer class='r-meta'>{{@model.email}}</footer>
       </article>
       <style scoped>
         /* Same skeleton as ticket.gts: one `.fit` grid, no container declared
@@ -492,15 +508,6 @@ export class SupportContact extends PersonBase {
           overflow: hidden;
           text-overflow: ellipsis;
         }
-        .blurb {
-          display: none;
-          margin: 0;
-          font-size: var(--type-base);
-          color: var(--muted-foreground, var(--boxel-450));
-          -webkit-line-clamp: 2;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
-        }
         .tail {
           display: none;
           margin-top: auto;
@@ -543,15 +550,7 @@ export class SupportContact extends PersonBase {
             display: flex;
           }
         }
-        @container fitted-card (height > 160px) {
-          .blurb {
-            display: -webkit-box;
-          }
-        }
         @container fitted-card (height > 240px) {
-          .blurb {
-            -webkit-line-clamp: 4;
-          }
           .tail {
             display: block;
           }
@@ -566,11 +565,6 @@ export class SupportContact extends PersonBase {
             flex-direction: column;
             align-items: flex-end;
             gap: 1px;
-          }
-        }
-        @container fitted-card (width <= 170px) {
-          .line-2 {
-            display: none;
           }
         }
       </style>

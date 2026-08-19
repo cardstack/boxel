@@ -10,6 +10,7 @@ import { type Query, rri } from '@cardstack/runtime-common';
 import CardList from '@cardstack/base/components/card-list';
 import enumField from '@cardstack/base/enum';
 import HeadsetIcon from '@cardstack/boxel-icons/headset';
+import TicketIcon from '@cardstack/boxel-icons/ticket';
 
 import { PersonBase } from './person-base';
 
@@ -84,6 +85,16 @@ export class SupportAgent extends PersonBase {
     },
   });
 
+  // The fitted badge shows the bare tier ("L2"); printing the full shared
+  // label ("L2 · Specialist") in the body underneath it repeated the badge.
+  // Descriptor half only, still from the one shared map.
+  @field tierDescriptor = contains(StringField, {
+    computeVia: function (this: SupportAgent) {
+      let label = AGENT_TIER_LABELS[this.tier ?? ''] ?? '';
+      return label.split(' · ')[1] ?? label;
+    },
+  });
+
   @field skillSummary = contains(StringField, {
     computeVia: function (this: SupportAgent) {
       let skills = (this.skills ?? []).filter(Boolean);
@@ -149,7 +160,7 @@ export class SupportAgent extends PersonBase {
         {{/if}}
 
         <section class='work'>
-          <h2>Assigned to them</h2>
+          <h2><TicketIcon class='sec-icon' role='presentation' />Assigned to them</h2>
           {{#if this.realms.length}}
             <CardList
               @context={{@context}}
@@ -237,10 +248,23 @@ export class SupportAgent extends PersonBase {
           gap: var(--boxel-sp-4xs);
         }
         .work h2 {
+          display: flex;
+          align-items: center;
+          gap: 6px;
           margin: 0 0 var(--boxel-sp-xs);
           font-size: 0.625rem;
           letter-spacing: 0.1em;
           text-transform: uppercase;
+          color: var(--muted-foreground, var(--boxel-450));
+        }
+        /* Rule 5: one icon per section header, quiet by design — muted colour and
+           ~1em with a px floor, so it identifies the section without competing
+           with it. Same size in every header, which is what makes the card
+           scannable by shape on a second visit. */
+        .sec-icon {
+          width: max(14px, 1em);
+          height: max(14px, 1em);
+          flex: 0 0 auto;
           color: var(--muted-foreground, var(--boxel-450));
         }
         .empty {
@@ -389,13 +413,15 @@ export class SupportAgent extends PersonBase {
           <h3 class='title'>{{@model.title}}</h3>
           <span class='badge'>{{@model.tier}}</span>
         </header>
+        {{! Was: tierLabel in .line AND .r-meta, skillSummary in .line-2 AND
+            .blurb — so most sizes printed two of their four values twice, and
+            .line restated the badge. One fact per slot. }}
         <div class='r-body'>
-          <span class='line'>{{@model.tierLabel}}</span>
-          <span class='line line-2'>{{@model.skillSummary}}</span>
+          <span class='line'>{{@model.tierDescriptor}}</span>
           <p class='blurb'>{{@model.skillSummary}}</p>
           <span class='tail'>{{@model.email}}</span>
         </div>
-        <footer class='r-meta'>{{@model.tierLabel}}</footer>
+        <footer class='r-meta'>{{@model.phone}}</footer>
       </article>
       <style scoped>
         /* Same skeleton as ticket.gts: one `.fit` grid, no container declared
@@ -554,9 +580,6 @@ export class SupportAgent extends PersonBase {
           }
         }
         @container fitted-card (width <= 170px) {
-          .line-2 {
-            display: none;
-          }
         }
       </style>
     </template>
