@@ -6,6 +6,7 @@
       "platform": "instagram_story",
       "scheduledAt": "2026-08-17T00:00:00Z",
       "status": "done",
+      "calendarId": "content-calendar/ContentCalendar/main",
       "cardInfo": {
         "name": null,
         "summary": null,

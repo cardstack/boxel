@@ -26,6 +26,15 @@ export class ContentBundle extends CardDef {
   @field supporting = linksToMany(ContentPiece);
   @field campaign = linksTo(Campaign);
   @field promotes = linksTo(Event);
+  /**
+   * Which calendar owns this. A plain key rather than a `linksTo`: the console
+   * lives in the calendar's own module, so a link back to it is a module cycle
+   * that fails with `cardOrThunk was undefined` even in thunk form (verified —
+   * it broke every instance). Scoping is all this needs to do; a calendar
+   * reaches its content by live query, not by traversing a link.
+   */
+  @field calendarId = contains(StringField);
+
 
   // Linked slots read undefined while loading and forever if broken, so every
   // count filters first — otherwise a dead link inflates the denominator.

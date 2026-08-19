@@ -20,6 +20,15 @@ export class Freelancer extends Contact {
 
   @field specialties = linksToMany(Tag);
   @field rateNote = contains(StringField);
+  /**
+   * Which calendar owns this. A plain key rather than a `linksTo`: the console
+   * lives in the calendar's own module, so a link back to it is a module cycle
+   * that fails with `cardOrThunk was undefined` even in thunk form (verified —
+   * it broke every instance). Scoping is all this needs to do; a calendar
+   * reaches its content by live query, not by traversing a link.
+   */
+  @field calendarId = contains(StringField);
+
 }
 
 export default Freelancer;

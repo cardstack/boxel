@@ -8,6 +8,7 @@
       "dayOfWeek": 1,
       "timeOfDay": "07:30",
       "active": true,
+      "calendarId": "content-calendar/ContentCalendar/main",
       "cardInfo": {
         "name": null,
         "summary": null,

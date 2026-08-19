@@ -6,6 +6,7 @@
       "platform": "instagram_reel",
       "scheduledAt": "2026-07-09T11:00:00Z",
       "status": "done",
+      "calendarId": "content-calendar/ContentCalendar/main",
       "cardInfo": {
         "name": null,
         "summary": null,
