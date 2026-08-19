@@ -234,23 +234,30 @@ jobs:
 
       - name: Disable TCP/UDP network offloading
         run: sudo ethtool -K eth0 tx off rx off
-      # Install + restart dbus/upower BEFORE the test services come up.
-      # `sudo service dbus restart` triggers chrome's NetworkChangeNotifier
-      # in any already-running chromium (the prerender's standby probe and
-      # the realm-server's prerender workers), which aborts every in-flight
-      # h2 stream with ERR_NETWORK_CHANGED and leaves wait-for-host-standby
-      # stuck waiting for #standby-ready that never lands.
-      # These packages are absent from the runner image, so this step has to
-      # reach Ubuntu's mirrors. Bound it: apt retries a degraded mirror with
-      # long internal timeouts, so without a ceiling an upstream archive
-      # outage hangs the job rather than failing it.
-      - name: Install D-Bus helpers
-        timeout-minutes: 5
+      # EXPERIMENT — this replaces an apt install of dbus-x11 and upower, added
+      # in October 2025 to reduce Percy instability. Every Percy cause diagnosed
+      # since has been elsewhere (a module-level panel-width singleton, the
+      # discovery browser's font cache), so whether these packages still earn
+      # their place is untested. They are the last apt call in this workflow,
+      # and upower alone pulls in six dependencies including the iOS device
+      # libraries, to report the battery level of a phone that is not attached.
+      #
+      # The tests still run under `dbus-run-session`. If the image does not
+      # provide it the test step fails immediately with a command-not-found
+      # rather than hanging, so this is a cheap thing to be wrong about. The
+      # probe records what the image actually ships either way.
+      - name: Report D-Bus tooling provided by the runner image
         run: |
-          sudo apt-get update -o Acquire::Retries=3
-          sudo apt-get install -y -o Acquire::Retries=3 dbus-x11 upower
-          sudo service dbus restart
-          sudo service upower restart
+          for tool in dbus-run-session dbus-launch upower; do
+            if command -v "$tool" >/dev/null 2>&1; then
+              echo "present: $tool ($(command -v "$tool"))"
+            else
+              echo "ABSENT:  $tool"
+            fi
+          done
+          ls -l /run/dbus/system_bus_socket 2>&1 || echo "no system bus socket"
+          dpkg -l dbus dbus-bin dbus-daemon dbus-x11 upower 2>/dev/null |
+            awk '/^[a-z]/ {print "  dpkg:", $1, $2, $3}' || true
 
       # Trust mkcert's root in the system store too, so plain `curl` (which
       # ignores NODE_EXTRA_CA_CERTS) can validate Traefik's leaf.
@@ -503,23 +510,30 @@ jobs:
       # https://github.com/actions/runner-images/issues/1187#issuecomment-686735760
       - name: Disable TCP/UDP network offloading
         run: sudo ethtool -K eth0 tx off rx off
-      # Install + restart dbus/upower BEFORE the test services come up.
-      # `sudo service dbus restart` triggers chrome's NetworkChangeNotifier
-      # in any already-running chromium (the prerender's standby probe and
-      # the realm-server's prerender workers), which aborts every in-flight
-      # h2 stream with ERR_NETWORK_CHANGED and leaves wait-for-host-standby
-      # stuck waiting for #standby-ready that never lands.
-      # These packages are absent from the runner image, so this step has to
-      # reach Ubuntu's mirrors. Bound it: apt retries a degraded mirror with
-      # long internal timeouts, so without a ceiling an upstream archive
-      # outage hangs the job rather than failing it.
-      - name: Install D-Bus helpers
-        timeout-minutes: 5
+      # EXPERIMENT — this replaces an apt install of dbus-x11 and upower, added
+      # in October 2025 to reduce Percy instability. Every Percy cause diagnosed
+      # since has been elsewhere (a module-level panel-width singleton, the
+      # discovery browser's font cache), so whether these packages still earn
+      # their place is untested. They are the last apt call in this workflow,
+      # and upower alone pulls in six dependencies including the iOS device
+      # libraries, to report the battery level of a phone that is not attached.
+      #
+      # The tests still run under `dbus-run-session`. If the image does not
+      # provide it the test step fails immediately with a command-not-found
+      # rather than hanging, so this is a cheap thing to be wrong about. The
+      # probe records what the image actually ships either way.
+      - name: Report D-Bus tooling provided by the runner image
         run: |
-          sudo apt-get update -o Acquire::Retries=3
-          sudo apt-get install -y -o Acquire::Retries=3 dbus-x11 upower
-          sudo service dbus restart
-          sudo service upower restart
+          for tool in dbus-run-session dbus-launch upower; do
+            if command -v "$tool" >/dev/null 2>&1; then
+              echo "present: $tool ($(command -v "$tool"))"
+            else
+              echo "ABSENT:  $tool"
+            fi
+          done
+          ls -l /run/dbus/system_bus_socket 2>&1 || echo "no system bus socket"
+          dpkg -l dbus dbus-bin dbus-daemon dbus-x11 upower 2>/dev/null |
+            awk '/^[a-z]/ {print "  dpkg:", $1, $2, $3}' || true
 
       # Trust mkcert's root in the system store too, so plain `curl` (which
       # ignores NODE_EXTRA_CA_CERTS) can validate Traefik's leaf.
