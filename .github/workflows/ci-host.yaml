@@ -949,13 +949,16 @@ jobs:
       # `percy build:reject` authenticates with BrowserStack account
       # credentials rather than the project token: @percy/cli-build reads
       # BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY (see
-      # fetchCredentials in @percy/cli-build). Until those secrets exist the
-      # step skips itself rather than failing the job.
+      # fetchCredentials in @percy/cli-build). Both are required — the CLI
+      # exits non-zero when either is missing — so the step runs only when
+      # both are present and otherwise skips itself rather than failing the
+      # job.
       - name: Reject the Percy build when a host shard failed
         if: >-
           needs.host-test.result != 'success'
           && steps.finalize.outputs.build_id != ''
           && env.BROWSERSTACK_USERNAME != ''
+          && env.BROWSERSTACK_ACCESS_KEY != ''
         run: |
           set -eo pipefail
           npx percy build:reject "${{ steps.finalize.outputs.build_id }}"
@@ -964,12 +967,18 @@ jobs:
         env:
           PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
 
+      # The exact complement of the reject step's condition, so an incomplete
+      # build never passes through both silently.
       - name: Note that an incomplete build was left unrejected
         if: >-
           needs.host-test.result != 'success'
-          && env.BROWSERSTACK_USERNAME == ''
+          && (
+            steps.finalize.outputs.build_id == ''
+            || env.BROWSERSTACK_USERNAME == ''
+            || env.BROWSERSTACK_ACCESS_KEY == ''
+          )
         run: |
-          echo "::warning::host-test finished as '${{ needs.host-test.result }}', so this Percy build's snapshot set is incomplete, but BROWSERSTACK_USERNAME / BROWSERSTACK_ACCESS_KEY are not configured — the build could not be rejected and may be auto-approved into the baseline."
+          echo "::warning::host-test finished as '${{ needs.host-test.result }}', so this Percy build's snapshot set is incomplete, but it could not be rejected and may be auto-approved into the baseline. Percy build id: '${{ steps.finalize.outputs.build_id }}' (empty means the finalize output could not be parsed); BROWSERSTACK_USERNAME set: ${{ env.BROWSERSTACK_USERNAME != '' }}; BROWSERSTACK_ACCESS_KEY set: ${{ env.BROWSERSTACK_ACCESS_KEY != '' }}."
 
   host-merge-reports-and-publish:
     name: Merge Host reports and publish
