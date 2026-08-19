@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Content Idea",
+      "specType": "card",
+      "ref": {
+        "module": "../content-calendar/content-idea",
+        "name": "ContentIdea"
+      },
+      "readMe": "# Content Idea\n\n## Summary\nAn unscheduled thought, captured at the moment it lands \u2014 usually mid-class. The\nbacklog feeds the calendar: drag an idea onto a day, or schedule it for today,\nand it becomes a planned ContentPiece that keeps a link back.\n\n## Composition\n`title` plus a free-text `thought`, optional `themes` (base Tag) and an optional\n`hunchPlatform` \u2014 a guess, not a commitment, which is the point of a backlog\nentry.\n\n## Finding worth recording\nThis extends `CardDef` directly rather than the matrix **Note** concept, because\nthere is no Note CardDef in this realm \u2014 its only evidence is a ticket message\nFieldDef. Note therefore remains unproven as a base card, and this app is where\nthat showed up.\n\n## Non-goals\nIdeas never appear on the calendar. An idea with a date is a ContentPiece; the\ndistinction is the whole value of the backlog.",
+      "cardInfo": {
+        "name": "Content Idea",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../content-calendar/ContentIdea/partner-work-beginners"
+        }
+      }
+    }
+  }
+}

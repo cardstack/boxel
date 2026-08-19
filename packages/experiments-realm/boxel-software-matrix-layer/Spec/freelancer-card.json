@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Freelancer",
+      "specType": "card",
+      "ref": {
+        "module": "../content-calendar/freelancer",
+        "name": "Freelancer"
+      },
+      "readMe": "# Freelancer\n\n## Summary\nSomeone the creator hands work to \u2014 the reel editor, the graphics person. A\nbench freelancer IS a Contact; the specialization is what they are good at\n(`specialties`, base Tag) and what they cost (`rateNote`).\n\n## They are records, not users\nNothing is ever sent to a freelancer by this app. They do not log in, and the\napp has no notification channel to reach them with \u2014 the matrix `Remind` block is\naudited as blocked on three absent pieces (an identity concept, a\ncard-reachable scheduler, a notification channel). The honest affordance is the\nhanded-to marker on a piece plus the waiting-on view, both of which are just\nstate the creator reads.\n\n## Finding worth recording\nContact's `role` (a CRM enum: decision maker, champion) and `account` link stay\nempty here. That is the App 4 finding repeating on a second consumer, and two\nvoices asking for the same thing is the case for extracting the CRM specifics to\nan extending card so the base Contact is a plain person.\n\n## Non-goals\nNo invoicing, no contracts, no time tracking \u2014 a different app.",
+      "cardInfo": {
+        "name": "Freelancer",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../content-calendar/Freelancer/lisa-moreno"
+        }
+      }
+    }
+  }
+}

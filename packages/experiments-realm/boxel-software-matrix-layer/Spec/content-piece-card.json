@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Content Piece",
+      "specType": "card",
+      "ref": {
+        "module": "../content-calendar/content-piece",
+        "name": "ContentPiece"
+      },
+      "readMe": "# Content Piece\n\n## Summary\nOne thing that publishes once, on one platform, at one time \u2014 the atomic unit of\nthe Content Calendar. Everything else in the app is a way of grouping or\nscheduling these.\n\n## Composition\n- `platform` and `status` are option-set fields, not strings: the calendar's\n  colour mapping and the status filter both key off the stored value, and a\n  hand-typed \"Youtube\" would break each of them silently.\n- `scheduledAt` is a `DateTimeField` because a post has a time of day. Store it\n  so the intended *local* time lands on the intended date \u2014 in UTC+8 an 18:00\n  clock-face authored as UTC lands on tomorrow, and day placement is the one\n  thing a calendar has to get right.\n- `handedTo` links a Freelancer. Null means the work is the creator's own; there\n  is no separate \"assignee\" concept, because there is only one person.\n- `sourceIdea` and `series` record where the piece came from \u2014 a backlog idea\n  that got scheduled, or an occurrence a cadence produced.\n\n## Formats\n`fitted` leads with the platform mark and the title, revealing the date, then the\nstatus pill, then the handed-to line as height allows. `embedded` is a row with\nthe status pill inline. `isolated` is the brief plus a facts grid.\n\n## Non-goals\nNo publishing, no analytics, no per-platform character counting. The piece\nrecords intent and state; the posting happens in the platform's own app.",
+      "cardInfo": {
+        "name": "Content Piece",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../content-calendar/ContentPiece/aug-yt-latin-choreo"
+        }
+      }
+    }
+  }
+}
