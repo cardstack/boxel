@@ -49,6 +49,10 @@ jobs:
     name: Software Factory Tests (shard ${{ matrix.shard.index }}/${{ matrix.shard.total }})
     needs: test-web-assets
     runs-on: ubuntu-latest
+    # Deliberately generous: this job's runtime varies about fivefold between
+    # concurrent shards, and successful runs have reached ~96 minutes. A tighter
+    # ceiling would fail work that would have passed.
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
