@@ -472,17 +472,17 @@ module('Unit | marked-sync', function () {
     );
   });
 
-  test('indented code blocks are left verbatim', function (assert) {
-    const markdown = 'Example:\n\n    🚧 SITE UNDER CONSTRUCTION 🚧\n\n🌟 tail';
+  test('a decorative bullet indented four spaces under a list item renders as a nested list', function (assert) {
+    const markdown = '- item one\n    🌟 nested point';
     const result = markdownToHtml(markdown, { sanitize: false });
 
-    assert.false(
-      result.includes('* 🚧'),
-      'no list marker is inserted into the indented code block',
+    assert.true(
+      result.includes('<li>🌟 nested point</li>'),
+      'the indented decorative bullet becomes its own list item',
     );
     assert.true(
-      result.includes('<li>🌟 tail</li>'),
-      'normalization still applies outside the indented block',
+      /<li>item one[\s\S]*<ul>[\s\S]*🌟 nested point/.test(result),
+      'the decorative bullet nests as a sub-list under the parent item',
     );
   });
 

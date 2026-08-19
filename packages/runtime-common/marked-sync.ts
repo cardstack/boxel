@@ -88,18 +88,17 @@ const CODE_FENCE_PATTERN = /^(\s*)(`{3,}|~{3,})(.*)\r?$/;
 // list marker.
 const LIST_PREFIXED_CODE_FENCE_PATTERN =
   /^(\s*)(?:[-*+]|\d{1,9}[.)])\s+(`{3,}|~{3,})(.*)\r?$/;
-// A 4-space (or tab) indented line outside a fence is an indented code block
-// to marked, and the extraction side treats its <pre> exactly like a fenced
-// one — so rewriting it corrupts code the same way. The rewrite is cosmetic
-// when skipped wrongly and destructive when applied wrongly, so indented
-// lines are left alone.
-const INDENTED_CODE_PATTERN = /^(?: {4}|\t)/;
-
 // Prefix decorative bullets with a standard list marker so marked treats them
-// as list items — but never inside code blocks (fenced or indented). Code
-// content must survive rendering verbatim: search/replace patches are
-// extracted back out of the rendered HTML, and an inserted marker makes the
-// patch text no longer match the file it targets.
+// as list items — but never inside fenced code blocks. Fenced content must
+// survive rendering verbatim: search/replace patches are extracted back out
+// of the rendered HTML, and an inserted marker makes the patch text no longer
+// match the file it targets.
+//
+// Only *fenced* blocks are protected. A 4-space indented line is an indented
+// code block to marked in some contexts, but inside a list item the same
+// indentation is ordinary list content (a nested bullet); telling the two
+// apart needs block context that only the lexer has. Since the patch format
+// is always fenced, indented code blocks are left to the rewrite.
 function normalizeDecorativeBullets(markdown: string): string {
   let inFence = false;
   let fenceChar = '';
@@ -126,9 +125,6 @@ function normalizeDecorativeBullets(markdown: string): string {
         inFence = true;
         fenceChar = openMatch[2][0];
         fenceLength = openMatch[2].length;
-        return line;
-      }
-      if (INDENTED_CODE_PATTERN.test(line)) {
         return line;
       }
       return line.replace(
