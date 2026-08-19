@@ -250,7 +250,23 @@
           },
           "overrides": []
         },
-        "options": {},
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "calcs": [
+              "lastNotNull",
+              "max"
+            ],
+            "sortBy": "Last *",
+            "sortDesc": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
         "description": "Queued depth rising while running stays flat means the pool is saturated, not slow."
       },
       {
@@ -373,7 +389,23 @@
           },
           "overrides": []
         },
-        "options": {},
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "calcs": [
+              "lastNotNull",
+              "max"
+            ],
+            "sortBy": "Last *",
+            "sortDesc": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
         "description": "How long jobs have been waiting, measured from job creation."
       },
       {
@@ -410,7 +442,7 @@
               "uid": "loki"
             },
             "editorMode": "code",
-            "expr": "sum by (key) (max_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"group\" | dimension=\"branch\" | unwrap queued [$__interval]))",
+            "expr": "topk(10, sum by (key) (max_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"group\" | dimension=\"branch\" | unwrap queued [$__interval])))",
             "refId": "A",
             "queryType": "range",
             "legendFormat": "{{key}}"
@@ -422,7 +454,23 @@
           },
           "overrides": []
         },
-        "options": {},
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "calcs": [
+              "lastNotNull",
+              "max"
+            ],
+            "sortBy": "Last *",
+            "sortDesc": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
         "description": "Queued jobs grouped by branch, from the collector's per-group snapshot lines."
       },
       {
@@ -446,7 +494,7 @@
               "uid": "loki"
             },
             "editorMode": "code",
-            "expr": "sum by (key) (max_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"group\" | dimension=\"actor\" | unwrap queued [$__interval]))",
+            "expr": "topk(10, sum by (key) (max_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"group\" | dimension=\"actor\" | unwrap queued [$__interval])))",
             "refId": "A",
             "queryType": "range",
             "legendFormat": "{{key}}"
@@ -458,7 +506,23 @@
           },
           "overrides": []
         },
-        "options": {},
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "calcs": [
+              "lastNotNull",
+              "max"
+            ],
+            "sortBy": "Last *",
+            "sortDesc": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
         "description": "Queued jobs grouped by actor, from the collector's per-group snapshot lines."
       },
       {
@@ -482,7 +546,7 @@
               "uid": "loki"
             },
             "editorMode": "code",
-            "expr": "sum by (key) (max_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"group\" | dimension=\"workflow\" | unwrap queued [$__interval]))",
+            "expr": "topk(10, sum by (key) (max_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"group\" | dimension=\"workflow\" | unwrap queued [$__interval])))",
             "refId": "A",
             "queryType": "range",
             "legendFormat": "{{key}}"
@@ -494,7 +558,23 @@
           },
           "overrides": []
         },
-        "options": {},
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "calcs": [
+              "lastNotNull",
+              "max"
+            ],
+            "sortBy": "Last *",
+            "sortDesc": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
         "description": "Queued jobs grouped by workflow, from the collector's per-group snapshot lines."
       },
       {
@@ -518,7 +598,7 @@
               "uid": "loki"
             },
             "editorMode": "code",
-            "expr": "sum by (key) (max_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"group\" | dimension=\"branch\" | unwrap running [$__interval]))",
+            "expr": "topk(10, sum by (key) (max_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"group\" | dimension=\"branch\" | unwrap running [$__interval])))",
             "refId": "A",
             "queryType": "range",
             "legendFormat": "{{key}}"
@@ -530,7 +610,23 @@
           },
           "overrides": []
         },
-        "options": {},
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "calcs": [
+              "lastNotNull",
+              "max"
+            ],
+            "sortBy": "Last *",
+            "sortDesc": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
         "description": "Runners currently held, grouped by branch."
       },
       {
@@ -554,7 +650,7 @@
               "uid": "loki"
             },
             "editorMode": "code",
-            "expr": "sum by (key) (max_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"group\" | dimension=\"actor\" | unwrap running [$__interval]))",
+            "expr": "topk(10, sum by (key) (max_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"group\" | dimension=\"actor\" | unwrap running [$__interval])))",
             "refId": "A",
             "queryType": "range",
             "legendFormat": "{{key}}"
@@ -566,7 +662,23 @@
           },
           "overrides": []
         },
-        "options": {},
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "calcs": [
+              "lastNotNull",
+              "max"
+            ],
+            "sortBy": "Last *",
+            "sortDesc": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
         "description": "Runners currently held, grouped by actor."
       },
       {
@@ -590,7 +702,7 @@
               "uid": "loki"
             },
             "editorMode": "code",
-            "expr": "sum by (key) (max_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"group\" | dimension=\"workflow\" | unwrap running [$__interval]))",
+            "expr": "topk(10, sum by (key) (max_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"group\" | dimension=\"workflow\" | unwrap running [$__interval])))",
             "refId": "A",
             "queryType": "range",
             "legendFormat": "{{key}}"
@@ -602,7 +714,23 @@
           },
           "overrides": []
         },
-        "options": {},
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "calcs": [
+              "lastNotNull",
+              "max"
+            ],
+            "sortBy": "Last *",
+            "sortDesc": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
         "description": "Runners currently held, grouped by workflow."
       },
       {
@@ -700,7 +828,23 @@
           },
           "overrides": []
         },
-        "options": {},
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "calcs": [
+              "lastNotNull",
+              "max"
+            ],
+            "sortBy": "Last *",
+            "sortDesc": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
         "description": "Sampling stops rather than reporting partial depth when this nears the reserve."
       },
       {
