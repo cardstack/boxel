@@ -68,7 +68,9 @@ function usage(): never {
   --interval  Seconds between samples. Default ${DEFAULT_INTERVAL_SECONDS}.
   --once      Take a single sample and exit, rather than looping.
 
-  Requires GITHUB_TOKEN with \`actions: read\` on the repository.`,
+  Requires a token only to raise the API rate limit from 60 to 5,000 requests
+  an hour. Against a public repository it needs no permissions at all; against
+  a private one it needs Actions: Read-only.`,
   );
   process.exit(2);
 }
@@ -103,7 +105,8 @@ function parseArgs(argv: string[]): Options {
     '';
   if (!token) {
     console.error(
-      'set ACTIONS_COLLECTOR_GITHUB_TOKEN or GITHUB_TOKEN (needs actions: read)',
+      'set ACTIONS_COLLECTOR_GITHUB_TOKEN or GITHUB_TOKEN — any token raises the\n' +
+        'rate limit from 60 to 5,000 requests an hour; see --help',
     );
     process.exit(2);
   }

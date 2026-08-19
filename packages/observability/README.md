@@ -124,10 +124,19 @@ couple of minutes, and a per-invocation Fargate task would spend longer
 starting than working. FireLens applies `service=actions-collector`, which is
 what the dashboard selects on.
 
-Before the first apply, put a GitHub token with `actions: read` at
-`/<env>/boxel/ACTIONS_COLLECTOR_GITHUB_TOKEN`. It is deliberately not managed
-by Terraform, like the other secrets on that path. The collector accepts either
-that name or a plain `GITHUB_TOKEN`, which is the convenient one locally.
+Before the first apply, put a GitHub token at
+`/<env>/boxel/ACTIONS_COLLECTOR_GITHUB_TOKEN` as a `SecureString`. It is
+deliberately not managed by Terraform, like the other secrets on that path. The
+collector accepts either that name or a plain `GITHUB_TOKEN`, which is the
+convenient one locally.
+
+The token's only job is the rate limit: these endpoints are readable without
+authentication on a public repository, but unauthenticated callers get 60
+requests an hour against the 5,000 an authenticated one gets, and a single
+sample can cost sixty. So the token needs **no permissions** while `boxel` is
+public — a fine-grained token scoped to _Public repositories (read-only)_, or
+even a classic token with no scopes ticked, is enough. Were the repository ever
+made private, it would need Actions: Read-only on it.
 
 Build and deploy with the **Manual Deploy [actions-collector]** workflow. It is
 `workflow_dispatch` only — putting the deploy of a queue sampler on a CI
