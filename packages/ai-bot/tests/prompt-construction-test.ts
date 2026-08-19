@@ -40,6 +40,9 @@ import {
   ensureTrailingSlash,
   skillCardRef,
   rri,
+  SEARCH_MARKER,
+  SEPARATOR_MARKER,
+  REPLACE_MARKER,
 } from '@cardstack/runtime-common';
 import {
   absolutizeSkillLinks,
@@ -3551,9 +3554,11 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
   });
 
-  test('Elides code blocks in prompt and includes results', async () => {
-    // sending older codeblocks back to the model just confuses it and wastes tokens
-    // so we need to remove them from the prompt
+  test('Keeps past code blocks verbatim in the prompt', async () => {
+    // Eliding old code blocks rewrote already-sent history (the placeholder
+    // text even changed once the patch result arrived), which broke the
+    // cache prefix — and models imitated the "[Omitting …]" placeholder in
+    // place of a real patch, stalling the session. The blocks stay verbatim.
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
@@ -3577,12 +3582,23 @@ Current date and time: 2025-06-11T11:43:00.533Z
       messageText(messages![2]),
       'Updating the file...\n' +
         'http://test.com/spaghetti-recipe.gts\n' +
-        '[Omitting previously suggested and applied code change]\n' +
+        `${SEARCH_MARKER}\n` +
+        'this is the riveting content of the spaghetti-recipe.gts file\n' +
+        `${SEPARATOR_MARKER}\n` +
+        'this is the engaging content of the spaghetti-recipe.gts file\n' +
+        `${REPLACE_MARKER}\n` +
         '\n' +
         'I will also create a file for rigatoni:\n' +
         '\n' +
         'http://test.com/rigatoni-recipe.gts\n' +
-        '[Omitting previously suggested code change that failed to apply]\n',
+        `${SEARCH_MARKER}\n` +
+        `${SEPARATOR_MARKER}\n` +
+        'this is the holy content of the rigatoni-recipe.gts file\n' +
+        `${REPLACE_MARKER}\n`,
+    );
+    assert.false(
+      messageText(messages![2]).includes('[Omitting'),
+      'no elision placeholder appears in the prompt',
     );
   });
 

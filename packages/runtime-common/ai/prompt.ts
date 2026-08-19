@@ -80,11 +80,6 @@ import { isMarkdownFile } from '../paths.ts';
 import { SKILL_INSTRUCTIONS_MESSAGE, SYSTEM_MESSAGE } from './constants.ts';
 import { MAX_CORRECTNESS_FIX_ATTEMPTS } from './correctness-constants.ts';
 import { humanReadable } from '../code-ref.ts';
-import {
-  SEARCH_MARKER,
-  REPLACE_MARKER,
-  SEPARATOR_MARKER,
-} from '../constants.ts';
 
 const CARD_PATCH_COMMAND_NAMES = new Set(['patchCardInstance', 'patchFields']);
 const CHECK_CORRECTNESS_TOOL_NAME = 'checkCorrectness';
@@ -1565,11 +1560,13 @@ export async function buildPromptForModel(
     let body = event.content.body;
 
     if (event.sender === aiBotUserId) {
-      let codePatchResults = getCodePatchResults(
-        event as CardMessageEvent,
-        history,
-      );
-      let content = elideCodeBlocks(body, codePatchResults);
+      // Past search/replace blocks ride in history verbatim. Eliding them
+      // rewrote already-sent messages — the placeholder text even changed
+      // once the patch result arrived — which broke the cache prefix, and
+      // models imitated the "[Omitting …]" placeholder in place of a real
+      // patch, stalling the session. Carrying the blocks forward costs
+      // cached-read tokens instead.
+      let content = body;
       let toolCalls = toToolCalls(event as CardMessageEvent);
       if (content || toolCalls.length) {
         let historicalMessage: OpenAIPromptMessage = {
@@ -2617,58 +2614,6 @@ export function isCodePatchResultEvent(
     event.content['m.relates_to']?.rel_type ===
       APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE
   );
-}
-
-function elideCodeBlocks(
-  content: string,
-  codePatchResults: CodePatchResultEvent[],
-) {
-  const DEFAULT_PLACEHOLDER: string =
-    '[Omitting previously suggested code change]';
-  const PLACEHOLDERS = {
-    applied: '[Omitting previously suggested and applied code change]',
-    failed: '[Omitting previously suggested code change that failed to apply]',
-  };
-
-  function getPlaceholder(codeBlockIndex: number) {
-    let codePatchResult = codePatchResults.find((codePatchResult) => {
-      return codePatchResult.content.codeBlockIndex === codeBlockIndex;
-    });
-    if (codePatchResult) {
-      return (
-        PLACEHOLDERS[codePatchResult.content['m.relates_to'].key] ??
-        DEFAULT_PLACEHOLDER
-      );
-    }
-    return DEFAULT_PLACEHOLDER;
-  }
-
-  let codeBlockIndex = 0;
-
-  while (
-    content.includes(SEARCH_MARKER) &&
-    content.includes(SEPARATOR_MARKER) &&
-    content.includes(REPLACE_MARKER)
-  ) {
-    const searchStartIndex: number = content.indexOf(SEARCH_MARKER);
-    const separatorIndex: number = content.indexOf(
-      SEPARATOR_MARKER,
-      searchStartIndex,
-    );
-    const replaceEndIndex: number = content.indexOf(
-      REPLACE_MARKER,
-      separatorIndex,
-    );
-
-    // replace the content between the markers with a placeholder
-    content =
-      content.substring(0, searchStartIndex) +
-      getPlaceholder(codeBlockIndex) +
-      content.substring(replaceEndIndex + REPLACE_MARKER.length);
-
-    codeBlockIndex++;
-  }
-  return content;
 }
 
 export function mxcUrlToHttp(mxc: string, baseUrl: string): string {
