@@ -257,6 +257,15 @@ catalog:
   yaml: ^2.5.1
   yargs: ^17.5.1
 
+# pnpm 11 defaults this to `install`, making every `pnpm run` first check
+# node_modules freshness and silently run a full install when the check
+# fails. The check never passes in CI, so each of the ~9 services `run-p`
+# boots kicks off its own concurrent workspace-wide install into the same
+# node_modules; when they collide badly enough, start:matrix never reaches
+# `docker run` and the shard dies with "Failed to reach Synapse". Disabling
+# restores pnpm 10 behavior: scripts run against node_modules as-is.
+verifyDepsBeforeRun: false
+
 minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
   - "@glint/ember-tsc"

@@ -708,7 +708,6 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
         flex-wrap: wrap;
         gap: var(--boxel-sp-xs);
         padding: var(--boxel-sp-xs);
-        border-bottom: var(--boxel-border);
         background-color: transparent;
       }
 

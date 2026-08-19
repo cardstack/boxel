@@ -17,6 +17,7 @@ on:
       - ".github/workflows/ci-host.yaml"
       - "package.json"
       - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
       # CI boot path: see comment on the equivalent block in ci.yaml.
       - ".mise.toml"
       - ".github/actions/**"
@@ -150,7 +151,7 @@ jobs:
           use_cache=true
           while IFS= read -r file; do
             case "$file" in
-              packages/realm-server/*|packages/runtime-common/*|packages/postgres/*|packages/boxel-ui/*|package.json|pnpm-lock.yaml)
+              packages/realm-server/*|packages/runtime-common/*|packages/postgres/*|packages/boxel-ui/*|package.json|pnpm-lock.yaml|pnpm-workspace.yaml)
                 use_cache=false
                 echo "Index-behavior change detected: $file"
                 break

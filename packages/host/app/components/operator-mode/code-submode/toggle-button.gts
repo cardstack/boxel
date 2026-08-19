@@ -22,7 +22,8 @@ const ToggleButton: TemplateOnlyComponent<ToggleButtonSignature> = <template>
   <Button
     @disabled={{@disabled}}
     @kind={{if @isActive 'primary-dark'}}
-    @size='extra-small'
+    @size='small'
+    @rectangular={{true}}
     class={{cn 'toggle-button' active=@isActive}}
     ...attributes
   >
@@ -44,7 +45,7 @@ const ToggleButton: TemplateOnlyComponent<ToggleButtonSignature> = <template>
       --boxel-button-letter-spacing: var(--boxel-lsp-xs);
       --boxel-button-min-width: 6rem;
       --boxel-button-padding: 0;
-      border-radius: var(--boxel-border-radius-sm);
+
       flex: 1;
       justify-content: space-between;
       white-space: nowrap;

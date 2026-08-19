@@ -165,8 +165,6 @@ export default class CardPill extends Component<CardPillSignature> {
       .fallback-card-icon {
         display: block;
         flex-shrink: 0;
-        --icon-background-color: var(--boxel-error-500);
-        --icon-color: var(--boxel-light);
       }
       .card-content {
         max-width: 100px;
