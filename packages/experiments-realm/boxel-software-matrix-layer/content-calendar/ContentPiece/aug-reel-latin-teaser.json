@@ -7,7 +7,7 @@
       "scheduledAt": "2026-08-20T11:00:00Z",
       "status": "in_progress",
       "brief": "Pull the best 15 seconds from the walkthrough.",
-      "calendarId": "content-calendar/ContentCalendar/main",
+      "calendarId": "ContentCalendar/main",
       "cardInfo": {
         "name": null,
         "summary": null,

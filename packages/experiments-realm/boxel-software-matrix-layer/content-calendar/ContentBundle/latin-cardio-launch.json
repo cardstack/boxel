@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "title": "Latin Cardio launch",
-      "calendarId": "content-calendar/ContentCalendar/main",
+      "calendarId": "ContentCalendar/main",
       "cardInfo": {
         "name": null,
         "summary": null,
