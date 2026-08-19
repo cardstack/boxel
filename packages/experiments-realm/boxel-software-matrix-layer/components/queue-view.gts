@@ -1002,11 +1002,24 @@ export class QueueView extends GlimmerComponent<Signature> {
         align-items: stretch;
         min-width: 0;
       }
+      /* A <label> wrapping the row checkbox, so the whole strip is the hit area.
+         The focus ring is the checkbox's own — the label is not focusable — but
+         the hit area still needs to show itself, or a pointer sitting on it gets
+         `cursor: pointer` and nothing else. */
       .pick {
         display: flex;
         align-items: center;
         padding-left: var(--boxel-sp-xs);
         cursor: pointer;
+      }
+      .pick:hover {
+        background: color-mix(in oklch, var(--foreground) 5%, transparent);
+      }
+      /* The checkbox inside is what takes focus, so the visible ring is drawn
+         from here when it does. */
+      .pick:focus-within {
+        outline: 2px solid var(--primary, var(--boxel-highlight));
+        outline-offset: -2px;
       }
       .bulk {
         display: flex;
@@ -1214,10 +1227,21 @@ export class QueueView extends GlimmerComponent<Signature> {
         font-size: var(--boxel-font-size-xs);
         line-height: 1.55;
       }
-      /* The consequence, set apart: it is the part nobody can infer. */
+      /* The consequence, set apart: it is the part nobody can infer.
+         It used to be set apart by `color: var(--primary)` — an accent used as
+         TEXT, which boxel-theming §2 forbids for a structural reason: a theme
+         guarantees the PAIR (`--primary` with `--primary-foreground`), and nobody
+         ever checked `--primary` against `--background`. Teal-on-white was a
+         contrast gamble here and could vanish entirely under a dark theme.
+         The accent survives as a MARK — a rule down the left edge, which §2
+         explicitly allows — while the text itself sits on `--foreground`, and the
+         weight does the emphasis. */
       .pinfo-f {
-        color: var(--primary, var(--boxel-highlight));
+        color: var(--foreground, var(--boxel-dark));
         font-weight: 600;
+        padding-left: var(--boxel-sp-xxs);
+        border-left: 2px solid
+          color-mix(in oklch, var(--primary, var(--boxel-highlight)) 55%, transparent);
       }
       .count-keys {
         color: var(--muted-foreground, var(--boxel-450));

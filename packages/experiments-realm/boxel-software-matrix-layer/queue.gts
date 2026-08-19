@@ -15,6 +15,7 @@ import {
   type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
 import InboxIcon from '@cardstack/boxel-icons/inbox';
+import UsersIcon from '@cardstack/boxel-icons/users';
 
 // The Ticket CodeRef, built from the REALM URL at read time.
 //
@@ -72,6 +73,18 @@ export class Queue extends CardDef {
   @field tierLabel = contains(StringField, {
     computeVia: function (this: Queue) {
       return AGENT_TIER_LABELS[this.tier ?? ''] ?? this.tier ?? '';
+    },
+  });
+
+  // The fitted badge already shows the bare tier ("L2"), so the footer must
+  // not print the full shared label ("L2 · Specialist") underneath it — two
+  // overlapping strings in the same muted style read as one field wrapped onto
+  // two lines. This is the descriptor half only, still derived from the one
+  // shared map so the wording cannot drift from the badge's.
+  @field tierDescriptor = contains(StringField, {
+    computeVia: function (this: Queue) {
+      let label = AGENT_TIER_LABELS[this.tier ?? ''] ?? '';
+      return label.split(' · ')[1] ?? label;
     },
   });
 
@@ -195,7 +208,7 @@ export class Queue extends CardDef {
         {{/if}}
 
         <section class='team'>
-          <h2>Who works this queue</h2>
+          <h2><UsersIcon class='sec-icon' role='presentation' />Who works this queue</h2>
           {{#if @model.agents.length}}
             <ul class='team-list'>
               {{#each @fields.agents as |Agent|}}
@@ -311,10 +324,23 @@ export class Queue extends CardDef {
           font-size: var(--boxel-font-size-xs);
         }
         .team h2 {
+          display: flex;
+          align-items: center;
+          gap: 6px;
           margin: 0 0 var(--boxel-sp-xs);
           font-size: 0.625rem;
           letter-spacing: 0.1em;
           text-transform: uppercase;
+          color: var(--muted-foreground, var(--boxel-450));
+        }
+        /* Rule 5: one icon per section header, quiet by design — muted colour and
+           ~1em with a px floor, so it identifies the section without competing
+           with it. Same size in every header, which is what makes the card
+           scannable by shape on a second visit. */
+        .sec-icon {
+          width: max(14px, 1em);
+          height: max(14px, 1em);
+          flex: 0 0 auto;
           color: var(--muted-foreground, var(--boxel-450));
         }
         .team-list {
@@ -395,16 +421,18 @@ export class Queue extends CardDef {
     <template>
       <article class='fit'>
         <header class='r-head'>
+          <InboxIcon class='fit-glyph' role='presentation' />
           <h3 class='title'>{{@model.title}}</h3>
           <span class='badge'>{{@model.tier}}</span>
         </header>
+        {{! .line-2 and .blurb both printed `description`, so every size that
+            showed both said the same sentence twice. One prose slot only. }}
         <div class='r-body'>
           <span class='line'>{{@model.agentCount}}</span>
-          <span class='line line-2'>{{@model.description}}</span>
           <p class='blurb'>{{@model.description}}</p>
           <span class='tail'>{{@model.policyName}}</span>
         </div>
-        <footer class='r-meta'>{{@model.tierLabel}}</footer>
+        <footer class='r-meta'>{{@model.tierDescriptor}}</footer>
       </article>
       <style scoped>
         /* Same skeleton as ticket.gts: one `.fit` grid, no container declared
@@ -435,6 +463,23 @@ export class Queue extends CardDef {
           align-items: baseline;
           gap: 5px;
           min-width: 0;
+        }
+        /* fitted-card Rule 2: the anchor. Without it these cells were a title at
+           weight 600 plus a badge — no image, no glyph, and 600 is not the
+           "decisively loud" type the rule accepts as a substitute, so all 16
+           sizes read as bare text. This is the card's OWN icon, the same one its
+           isolated section headers use, which is what makes it identity rather
+           than decoration.
+
+           Sized in em with a px floor so it never shrinks to a dot; `align-self`
+           because the head is a baseline row and an SVG has no baseline; muted so
+           the title stays the loudest thing in the cell. */
+        .fit-glyph {
+          flex: none;
+          align-self: center;
+          width: max(11px, 1.1em);
+          height: max(11px, 1.1em);
+          color: var(--muted-foreground, var(--boxel-450));
         }
         .title {
           flex: 1;
@@ -550,8 +595,15 @@ export class Queue extends CardDef {
           }
         }
         @container fitted-card (width <= 170px) {
-          .line-2 {
+          .fit-glyph {
             display: none;
+          }
+          /* The glyph is dropped just above, so from here down the anchor is
+             type alone — and fitted-card Rule 2's typographic path wants real
+             weight. Weight only, never size: at 150px the title is one word from
+             wrapping and Rule 1 (nothing clipped) outranks Rule 2. */
+          .title {
+            font-weight: 700;
           }
         }
       </style>

@@ -49,7 +49,8 @@
       "adoptsFrom": {
         "module": "../sla-policy",
         "name": "SlaPolicy"
-      }
+      },
+      "_touched": 1787047305147
     }
   }
 }

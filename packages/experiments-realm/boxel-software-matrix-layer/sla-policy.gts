@@ -12,6 +12,9 @@ import NumberField from '@cardstack/base/number';
 import BooleanField from '@cardstack/base/boolean';
 import enumField from '@cardstack/base/enum';
 import ShieldCheckIcon from '@cardstack/boxel-icons/shield-check';
+import TargetIcon from '@cardstack/boxel-icons/target';
+import ClockIcon from '@cardstack/boxel-icons/clock';
+import SirenIcon from '@cardstack/boxel-icons/siren';
 
 import { Schedule } from './schedule';
 import { TicketPriorityField, ticketPriorityFactor } from './ticket-taxonomy';
@@ -277,7 +280,7 @@ export class SlaPolicy extends CardDef {
         </header>
 
         <section class='sect'>
-          <h2>Applies when</h2>
+          <h2><TargetIcon class='sec-icon' role='presentation' />Applies when</h2>
           {{#if @model.conditions.length}}
             <div class='chips'>
               {{#each @fields.conditions as |Condition|}}
@@ -292,7 +295,7 @@ export class SlaPolicy extends CardDef {
         </section>
 
         <section class='sect'>
-          <h2>Targets</h2>
+          <h2><TargetIcon class='sec-icon' role='presentation' />Targets</h2>
           <div class='tablewrap'>
             <table class='matrix'>
               <caption class='sr-only'>Targets by priority</caption>
@@ -321,7 +324,7 @@ export class SlaPolicy extends CardDef {
         </section>
 
         <section class='sect'>
-          <h2>Clock runs on</h2>
+          <h2><ClockIcon class='sec-icon' role='presentation' />Clock runs on</h2>
           {{#if @model.businessHours}}
             <@fields.businessHours @format='embedded' />
           {{else}}
@@ -331,7 +334,7 @@ export class SlaPolicy extends CardDef {
         </section>
 
         <section class='sect'>
-          <h2>On breach</h2>
+          <h2><SirenIcon class='sec-icon' role='presentation' />On breach</h2>
           {{#if @model.breachActions.length}}
             <ol class='actions'>
               {{! Not `as |action|`: in a strict-mode template `action`
@@ -396,10 +399,23 @@ export class SlaPolicy extends CardDef {
           gap: var(--boxel-sp-xs);
         }
         .sect h2 {
+          display: flex;
+          align-items: center;
+          gap: 6px;
           margin: 0;
           font-size: 0.625rem;
           letter-spacing: 0.1em;
           text-transform: uppercase;
+          color: var(--muted-foreground, var(--boxel-450));
+        }
+        /* Rule 5: one icon per section header, quiet by design — muted colour and
+           ~1em with a px floor, so it identifies the section without competing
+           with it. Same size in every header, which is what makes the card
+           scannable by shape on a second visit. */
+        .sec-icon {
+          width: max(14px, 1em);
+          height: max(14px, 1em);
+          flex: 0 0 auto;
           color: var(--muted-foreground, var(--boxel-450));
         }
         .chips {
@@ -515,16 +531,22 @@ export class SlaPolicy extends CardDef {
     <template>
       <article class='fit'>
         <header class='r-head'>
+          <ShieldCheckIcon class='fit-glyph' role='presentation' />
           <h3 class='title'>{{@model.title}}</h3>
           <span class='badge'>{{@model.targetSummary}}</span>
         </header>
+        {{! Every slot here used to be filled with whatever computed was handy,
+            so measured against a real instance 14 of the 16 sizes printed two
+            values twice: targetSummary in both the badge and the footer, and
+            conditionSummary in both .line and .blurb. Each slot now carries a
+            DISTINCT value — condition, prose, breach actions, hours — so no
+            quantum repeats itself. }}
         <div class='r-body'>
           <span class='line'>{{@model.conditionSummary}}</span>
-          <span class='line line-2'>{{@model.businessHoursSummary}}</span>
-          <p class='blurb'>{{@model.conditionSummary}}</p>
+          <p class='blurb'>{{@model.cardInfo.summary}}</p>
           <span class='tail'>{{@model.breachActionSummary}}</span>
         </div>
-        <footer class='r-meta'>{{@model.targetSummary}}</footer>
+        <footer class='r-meta'>{{@model.businessHoursSummary}}</footer>
       </article>
       <style scoped>
         /* Same skeleton as ticket.gts: one `.fit` grid, no container declared
@@ -555,6 +577,23 @@ export class SlaPolicy extends CardDef {
           align-items: baseline;
           gap: 5px;
           min-width: 0;
+        }
+        /* fitted-card Rule 2: the anchor. Without it these cells were a title at
+           weight 600 plus a badge — no image, no glyph, and 600 is not the
+           "decisively loud" type the rule accepts as a substitute, so all 16
+           sizes read as bare text. This is the card's OWN icon, the same one its
+           isolated section headers use, which is what makes it identity rather
+           than decoration.
+
+           Sized in em with a px floor so it never shrinks to a dot; `align-self`
+           because the head is a baseline row and an SVG has no baseline; muted so
+           the title stays the loudest thing in the cell. */
+        .fit-glyph {
+          flex: none;
+          align-self: center;
+          width: max(11px, 1.1em);
+          height: max(11px, 1.1em);
+          color: var(--muted-foreground, var(--boxel-450));
         }
         .title {
           flex: 1;
@@ -670,8 +709,15 @@ export class SlaPolicy extends CardDef {
           }
         }
         @container fitted-card (width <= 170px) {
-          .line-2 {
+          .fit-glyph {
             display: none;
+          }
+          /* The glyph is dropped just above, so from here down the anchor is
+             type alone — and fitted-card Rule 2's typographic path wants real
+             weight. Weight only, never size: at 150px the title is one word from
+             wrapping and Rule 1 (nothing clipped) outranks Rule 2. */
+          .title {
+            font-weight: 700;
           }
         }
       </style>

@@ -12,7 +12,8 @@ import { GetCardCommand } from '@cardstack/boxel-host/commands/get-card';
 import { Ticket } from '../ticket';
 import { Queue } from '../queue';
 import { TicketMessageField } from '../ticket-message-field';
-import { SupportAgent, nextTier, AGENT_TIER_LABELS } from '../support-agent';
+import type { SupportAgent } from '../support-agent';
+import { nextTier, AGENT_TIER_LABELS } from '../support-agent';
 
 class EscalateInput extends CardDef {
   @field ticket = linksTo(() => Ticket, { searchable: true });

@@ -14,7 +14,8 @@
       "adoptsFrom": {
         "module": "../service-desk",
         "name": "ServiceDesk"
-      }
+      },
+      "_touched": 1787047303873
     },
     "relationships": {
       "cardInfo.theme": {

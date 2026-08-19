@@ -32,7 +32,7 @@ import { SupportContact } from './support-contact';
 import { SupportAgent } from './support-agent';
 import { KnowledgeArticle } from './knowledge-article';
 import { CollectionPanel } from './components/collection-panel';
-import type { DataColumn } from './components/data-table';
+import type { TableColumn } from './table';
 import { QueueView } from './components/queue-view';
 import { WorkRail } from './components/work-rail';
 import { TicketWorkspace } from './components/ticket-workspace';
@@ -50,7 +50,7 @@ interface Panel {
    */
   cardClass?: typeof CardDef;
   /** Table columns for the catalogue panels. Keys read off the instance. */
-  columns?: DataColumn[];
+  columns?: TableColumn[];
   searchPlaceholder?: string;
   /** Singular noun for the New button — "New" alone says nothing about what. */
   newLabel?: string;
@@ -639,6 +639,13 @@ class ServiceDeskConsole extends GlimmerComponent<ConsoleSignature> {
         font-weight: 600;
         cursor: pointer;
       }
+      /* Hover previews the active state — the same colour the `.pan-on` tab
+         takes, without claiming its underline. Focus-visible was already here;
+         hover was not, and a tab that only responds once you have committed to
+         clicking it gives the pointer nothing to aim at. */
+      .pan:hover {
+        color: var(--foreground, var(--boxel-dark));
+      }
       .pan:focus-visible {
         outline: 2px solid var(--primary, var(--boxel-highlight));
         outline-offset: 2px;
@@ -848,7 +855,17 @@ export class ServiceDesk extends CardDef {
           flex: none;
           width: 1.5rem;
           height: 1.5rem;
-          color: var(--primary, var(--boxel-highlight));
+          /* The accent MIXED TOWARD the foreground rather than used raw.
+             `--primary` alone was never contrast-checked against this ground, and
+             an icon is a glyph — §2's own word for the case it forbids. Mixing in
+             oklch keeps the brand read while guaranteeing the glyph resolves on a
+             light or a dark ground: --foreground flips with the theme, so the mix
+             flips with it. */
+          color: color-mix(
+            in oklch,
+            var(--primary, var(--boxel-highlight)) 62%,
+            var(--foreground, var(--boxel-dark))
+          );
         }
         .sd-main {
           flex: 1;
@@ -896,7 +913,17 @@ export class ServiceDesk extends CardDef {
           flex: none;
           width: 0.9rem;
           height: 0.9rem;
-          color: var(--primary, var(--boxel-highlight));
+          /* The accent MIXED TOWARD the foreground rather than used raw.
+             `--primary` alone was never contrast-checked against this ground, and
+             an icon is a glyph — §2's own word for the case it forbids. Mixing in
+             oklch keeps the brand read while guaranteeing the glyph resolves on a
+             light or a dark ground: --foreground flips with the theme, so the mix
+             flips with it. */
+          color: color-mix(
+            in oklch,
+            var(--primary, var(--boxel-highlight)) 62%,
+            var(--foreground, var(--boxel-dark))
+          );
         }
       </style>
     </template>
@@ -947,7 +974,17 @@ export class ServiceDesk extends CardDef {
           width: 1em;
           height: 1em;
           font-size: var(--type-title);
-          color: var(--primary, var(--boxel-highlight));
+          /* The accent MIXED TOWARD the foreground rather than used raw.
+             `--primary` alone was never contrast-checked against this ground, and
+             an icon is a glyph — §2's own word for the case it forbids. Mixing in
+             oklch keeps the brand read while guaranteeing the glyph resolves on a
+             light or a dark ground: --foreground flips with the theme, so the mix
+             flips with it. */
+          color: color-mix(
+            in oklch,
+            var(--primary, var(--boxel-highlight)) 62%,
+            var(--foreground, var(--boxel-dark))
+          );
         }
         .r-title {
           margin: 0;

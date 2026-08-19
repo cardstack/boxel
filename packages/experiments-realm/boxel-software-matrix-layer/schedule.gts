@@ -12,6 +12,7 @@ import TimeField from '@cardstack/base/time';
 import BooleanField from '@cardstack/base/boolean';
 import enumField from '@cardstack/base/enum';
 import CalendarCogIcon from '@cardstack/boxel-icons/calendar-cog';
+import CalendarOffIcon from '@cardstack/boxel-icons/calendar-off';
 import { htmlSafe } from '@ember/template';
 
 import type { BusinessSchedule, DayWindow } from './utils/sla';
@@ -218,6 +219,17 @@ export class Schedule extends CardDef {
     },
   });
 
+  // The fitted footer used to repeat `summary`, which the body already showed —
+  // measured against a real instance the hours string printed THREE times in one
+  // cell. Whether this is the schedule new queues inherit is the one fact about a
+  // Schedule that nothing else on the card states, so the footer carries it. Both
+  // branches return text: an empty footer at 14 of 16 sizes is its own defect.
+  @field defaultLabel = contains(StringField, {
+    computeVia: function (this: Schedule) {
+      return this.isDefault ? 'Default schedule' : 'Alternate schedule';
+    },
+  });
+
   @field holidayCount = contains(StringField, {
     computeVia: function (this: Schedule) {
       let n = (this.holidays ?? []).filter(Boolean).length;
@@ -319,7 +331,7 @@ export class Schedule extends CardDef {
         </section>
 
         <section class='holidays'>
-          <h2>Holidays</h2>
+          <h2><CalendarOffIcon class='sec-icon' role='presentation' />Holidays</h2>
           {{#if @model.holidays.length}}
             <ul class='holiday-list'>
               {{#each @fields.holidays as |Holiday|}}
@@ -453,9 +465,22 @@ export class Schedule extends CardDef {
           opacity: 0.6;
         }
         .holidays h2 {
+          display: flex;
+          align-items: center;
+          gap: 6px;
           margin: 0 0 var(--boxel-sp-xs);
           font-size: var(--boxel-font-size-sm);
           font-weight: 700;
+        }
+        /* Rule 5: one icon per section header, quiet by design — muted colour and
+           ~1em with a px floor, so it identifies the section without competing
+           with it. Same size in every header, which is what makes the card
+           scannable by shape on a second visit. */
+        .sec-icon {
+          width: max(14px, 1em);
+          height: max(14px, 1em);
+          flex: 0 0 auto;
+          color: var(--muted-foreground, var(--boxel-450));
         }
         .holiday-list {
           list-style: none;
@@ -559,16 +584,19 @@ export class Schedule extends CardDef {
     <template>
       <article class='fit'>
         <header class='r-head'>
+          <CalendarCogIcon class='fit-glyph' role='presentation' />
           <h3 class='title'>{{@model.title}}</h3>
           <span class='badge'>{{@model.timeZone}}</span>
         </header>
+        {{! Five slots, five DISTINCT values. Previously `summary` filled .line,
+            .blurb and .r-meta while `holidayCount` filled .line-2 and .tail, so
+            11 of the 16 sizes repeated themselves. }}
         <div class='r-body'>
           <span class='line'>{{@model.summary}}</span>
-          <span class='line line-2'>{{@model.holidayCount}}</span>
-          <p class='blurb'>{{@model.summary}}</p>
+          <p class='blurb'>{{@model.cardInfo.summary}}</p>
           <span class='tail'>{{@model.holidayCount}}</span>
         </div>
-        <footer class='r-meta'>{{@model.summary}}</footer>
+        <footer class='r-meta'>{{@model.defaultLabel}}</footer>
       </article>
       <style scoped>
         /* Same skeleton as ticket.gts: one `.fit` grid, no container declared
@@ -599,6 +627,23 @@ export class Schedule extends CardDef {
           align-items: baseline;
           gap: 5px;
           min-width: 0;
+        }
+        /* fitted-card Rule 2: the anchor. Without it these cells were a title at
+           weight 600 plus a badge — no image, no glyph, and 600 is not the
+           "decisively loud" type the rule accepts as a substitute, so all 16
+           sizes read as bare text. This is the card's OWN icon, the same one its
+           isolated section headers use, which is what makes it identity rather
+           than decoration.
+
+           Sized in em with a px floor so it never shrinks to a dot; `align-self`
+           because the head is a baseline row and an SVG has no baseline; muted so
+           the title stays the loudest thing in the cell. */
+        .fit-glyph {
+          flex: none;
+          align-self: center;
+          width: max(11px, 1.1em);
+          height: max(11px, 1.1em);
+          color: var(--muted-foreground, var(--boxel-450));
         }
         .title {
           flex: 1;
@@ -714,8 +759,15 @@ export class Schedule extends CardDef {
           }
         }
         @container fitted-card (width <= 170px) {
-          .line-2 {
+          .fit-glyph {
             display: none;
+          }
+          /* The glyph is dropped just above, so from here down the anchor is
+             type alone — and fitted-card Rule 2's typographic path wants real
+             weight. Weight only, never size: at 150px the title is one word from
+             wrapping and Rule 1 (nothing clipped) outranks Rule 2. */
+          .title {
+            font-weight: 700;
           }
         }
       </style>

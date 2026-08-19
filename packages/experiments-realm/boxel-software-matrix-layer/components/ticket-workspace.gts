@@ -2297,10 +2297,14 @@ export class TicketWorkspace extends GlimmerComponent<Signature> {
         text-overflow: ellipsis;
         white-space: nowrap;
       }
+      /* A score is data, and data does not get a brand hue: `--primary` as text
+         has no contrast guarantee against `--background` (boxel-theming §2).
+         Tabular figures at weight 700 on `--foreground` is what makes a number
+         read as a number. */
       .kb-score {
         font-variant-numeric: tabular-nums;
         font-weight: 700;
-        color: var(--primary, var(--boxel-highlight));
+        color: var(--foreground, var(--boxel-dark));
       }
       .facts {
         margin: 0;
@@ -2401,6 +2405,12 @@ export class TicketWorkspace extends GlimmerComponent<Signature> {
       .comp-tab.on {
         color: var(--foreground, var(--boxel-dark));
         border-bottom-color: var(--primary, var(--boxel-highlight));
+      }
+      /* Same reasoning as the panel tabs: hover previews what `.comp-tab.on`
+         becomes. Reply mode is a choice made before typing, so the control has to
+         look reachable at rest and respond on approach. */
+      .comp-tab:hover {
+        color: var(--foreground, var(--boxel-dark));
       }
       .comp-tab:focus-visible {
         outline: 2px solid var(--primary, var(--boxel-highlight));

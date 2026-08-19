@@ -30,7 +30,7 @@ import {
 } from '@cardstack/boxel-ui/icons';
 import type { CardContext, CardDef } from '@cardstack/base/card-api';
 
-import { DataTable, type DataColumn } from './data-table';
+import { Table, type TableColumn } from '../table';
 
 type View = 'grid' | 'strip' | 'table';
 
@@ -41,7 +41,7 @@ interface Signature {
     context?: CardContext;
     realms: string[];
     /** Table columns. Keys are read straight off the resolved instance. */
-    columns: DataColumn[];
+    columns: TableColumn[];
     /** What the panel is called, for the table caption and the empty state. */
     label: string;
     searchPlaceholder?: string;
@@ -301,14 +301,20 @@ export class CollectionPanel extends GlimmerComponent<Signature> {
       <div class='cp-bar'>
         <label class='sr-only' for='cp-search-{{@label}}'>Search
           {{@label}}</label>
-        <BoxelInput
-          id='cp-search-{{@label}}'
-          class='cp-search'
-          @type='search'
-          @value={{this.search}}
-          @onInput={{this.setSearch}}
-          @placeholder={{if @searchPlaceholder @searchPlaceholder 'Search…'}}
-        />
+        {{! The wrapper is not decoration. A `class` passed to BoxelInput lands on
+            its inner <input>, whose parent is BoxelInput's own GRID — so every
+            flex property written for it sat on a grid item and did nothing at
+            all, silently. `.cp-search` has to be the flex child the bar sizes. }}
+        <div class='cp-search'>
+          <BoxelInput
+            id='cp-search-{{@label}}'
+            @type='search'
+            @value={{this.search}}
+            @onInput={{this.setSearch}}
+            @placeholder={{if @searchPlaceholder @searchPlaceholder 'Search…'}}
+            autocomplete='off'
+          />
+        </div>
         {{#if this.search}}
           <Button
             @kind='secondary'
@@ -316,8 +322,16 @@ export class CollectionPanel extends GlimmerComponent<Signature> {
             {{on 'click' this.clear}}
           >Clear</Button>
         {{/if}}
-        <span class='cp-grow'></span>
-        {{#if this.cardCrudFunctions.createCard}}
+        <div class='cp-right'>
+          {{! View selector first, then the add action — §7's order. A `+ Add`
+              sitting before the switcher reads as a fourth view option, which is
+              the confusion the comment below was already fighting. }}
+          <ViewSelector
+            @items={{this.viewOptions}}
+            @selectedId={{this.view}}
+            @onChange={{this.setView}}
+          />
+          {{#if this.cardCrudFunctions.createCard}}
           {{! The one thing this bar is FOR. It was grey-on-grey and sitting
               flush against the view switcher, so the only action in the
               toolbar looked like a third view option. Filled, iconed, and
@@ -336,19 +350,8 @@ export class CollectionPanel extends GlimmerComponent<Signature> {
             New
             {{@newLabel}}
           </Button>
-        {{/if}}
-        {{! boxel-ui's ViewSelector, not a hand-rolled IconButton group. The
-            hand-rolled one was copied from the talent tracker without checking
-            whether the library already had it — it does, and its version is
-            built on RadioInput, which is the correct semantics for "one of
-            three" where a row of aria-pressed buttons only approximates it.
-            The `table` option is passed in because VIEW_OPTIONS ships
-            card/strip/grid and this panel has no card view. }}
-        <ViewSelector
-          @items={{this.viewOptions}}
-          @selectedId={{this.view}}
-          @onChange={{this.setView}}
-        />
+          {{/if}}
+        </div>
       </div>
 
       {{#if this.problem}}
@@ -358,22 +361,29 @@ export class CollectionPanel extends GlimmerComponent<Signature> {
         </div>
 
       {{else if (eq this.view 'table')}}
-        <DataTable
+        {{! The realm's shared Table, the same one order-fulfilment, revenue-os
+            and table-demo use. It was a separate DataTable here because the
+            shared component lived in another realm at the time and could not be
+            imported; now that both sit in this realm they are siblings, so the
+            duplicate has no reason to exist. Sort stays OWNED HERE — passing
+            `onSort` puts the table in controlled mode so it reflects this
+            component's order instead of re-sorting rows that are already sorted. }}
+        <Table
           class={{if this.isRefreshing 'cp-busy'}}
           @columns={{@columns}}
-          @rows={{this.rows}}
+          @items={{this.rows}}
           @rowKey='id'
           @sortKey={{this.sortKey}}
           @sortDescending={{this.sortDescending}}
           @onSort={{this.sortBy}}
-          @onSelectRow={{this.openRow}}
+          @onRowClick={{this.openRow}}
           @caption={{@label}}
           @emptyMessage={{this.emptyMessage}}
         >
           <:cell as |row column|>
             {{get row column.key}}
           </:cell>
-        </DataTable>
+        </Table>
 
       {{else if @context.searchResultsComponent}}
         {{#let (component @context.searchResultsComponent) as |Search|}}
@@ -410,6 +420,11 @@ export class CollectionPanel extends GlimmerComponent<Signature> {
 
     <style scoped>
       .cp {
+        /* The shell sits in a card of unknown width, so the toolbar sizes against
+           its OWN container rather than the viewport. Named, because this panel
+           also renders fitted tiles that query `fitted-card`. */
+        container-type: inline-size;
+        container-name: cp;
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-xs);
@@ -421,15 +436,41 @@ export class CollectionPanel extends GlimmerComponent<Signature> {
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-xs);
+        /* Wrapping is the narrow fallback, not the default — see the reflow
+           order below. */
         flex-wrap: wrap;
       }
+      /* `flex: 0 1 24rem`, NOT `flex: 1` + `max-width: 24rem`. The two look
+         equivalent and are not: with flex-grow the search is ALLOCATED the whole
+         remaining line and max-width only clamps what it PAINTS, so the
+         difference stays allocated as dead space that shoves everything after it
+         across. Basis-as-maximum with no grow paints the same width, keeps the
+         item shrinkable so the reflow order below still works, and leaves the
+         slack at the end of the group where it belongs. */
       .cp-search {
-        flex: 1;
-        min-width: 12rem;
-        max-width: 24rem;
+        flex: 0 1 24rem;
+        min-width: 8rem;
       }
-      .cp-grow {
-        flex: 1;
+      /* The right group takes the slack via ONE margin-left:auto, replacing a
+         `.cp-grow` spacer that was a second flex-grow item competing with the
+         search for the same space. Two groups is also what makes the ordered
+         reflow possible — a bare spacer has nothing to wrap as a unit. */
+      .cp-right {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        flex: 0 0 auto;
+        margin-left: auto;
+      }
+      /* The reflow, in order, and no step ever introduces a scroller:
+         1. the search shrinks toward min-width (it is the only elastic item);
+         2. the toolbar wraps BETWEEN the two groups, right group right-aligned. */
+      @container cp (width < 34rem) {
+        .cp-right {
+          margin-left: 0;
+          justify-content: flex-end;
+          flex: 1 0 100%;
+        }
       }
       .cp-new {
         display: inline-flex;

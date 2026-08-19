@@ -20,7 +20,8 @@
       "adoptsFrom": {
         "module": "../ticket-category",
         "name": "TicketCategory"
-      }
+      },
+      "_touched": 1787047305865
     }
   }
 }
