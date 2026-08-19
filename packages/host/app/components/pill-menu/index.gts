@@ -1,13 +1,16 @@
+import { registerDestructor } from '@ember/destroyable';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
+import { buildWaiter, type Token } from '@ember/test-waiters';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-
-import ChevronLeft from '@cardstack/boxel-icons/chevron-left';
 
 import { Button, Header } from '@cardstack/boxel-ui/components';
 
 import { DropdownArrowFilled } from '@cardstack/boxel-ui/icons';
+
+const waiter = buildWaiter('pill-menu:collapse-animation-waiter');
 
 export type PillMenuItem = {
   cardId: string;
@@ -35,7 +38,11 @@ export default class PillMenu extends Component<Signature> {
     {{#if this.isExpanded}}
       <div
         class='pill-menu
-          {{if (has-block "contentActions") "has-content-actions"}}'
+          {{if (has-block "contentActions") "has-content-actions"}}
+          {{if this.isExpanding "is-expanding"}}
+          {{if this.isCollapsing "is-collapsing"}}'
+        {{on 'animationend' this.handleMenuAnimationEnd}}
+        {{on 'animationcancel' this.handleMenuAnimationEnd}}
         ...attributes
       >
         <Header class='menu-header' data-test-pill-menu-header>
@@ -57,7 +64,11 @@ export default class PillMenu extends Component<Signature> {
               class='header-button'
               data-test-pill-menu-button
             >
-              <ChevronLeft class='collapse-icon' width='16' height='16' />
+              <DropdownArrowFilled
+                class='collapse-icon'
+                width='8px'
+                height='8px'
+              />
             </button>
           </:detail>
         </Header>
@@ -109,6 +120,34 @@ export default class PillMenu extends Component<Signature> {
         letter-spacing: var(--boxel-lsp);
         box-shadow: var(--boxel-box-shadow);
         transition: width 0.2s ease-in;
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        .pill-menu {
+          /* The collapsed pill row's height, so the swap between button and
+             menu lands exactly where the height animation starts/ends. */
+          --pill-menu-collapsed-height: 2.5rem;
+
+          /* Lets the height keyframe interpolate to its auto endpoint. */
+          interpolate-size: allow-keywords;
+          overflow: hidden;
+          animation: pill-menu-expand var(--pill-menu-expand-duration, 0.2s)
+            ease-out;
+        }
+        .pill-menu.is-collapsing {
+          /* A separately named animation: only an animation-name change
+             restarts the animation and re-arms its animationend event. */
+          animation: pill-menu-collapse
+            var(--pill-menu-collapse-duration, 0.15s) ease-in forwards;
+        }
+
+        /* While the menu height is animating, the squeezed content region
+           would briefly become scrollable and flash a scrollbar; suppress it
+           for the duration. hidden (not clip) keeps the region
+           programmatically scrollable for the scroll-into-view modifier. */
+        .pill-menu.is-expanding .menu-content-scroll,
+        .pill-menu.is-collapsing .menu-content-scroll {
+          overflow-y: hidden;
+        }
       }
       .pill-menu-button {
         --boxel-button-font: 600 var(--boxel-font-xs);
@@ -250,6 +289,30 @@ export default class PillMenu extends Component<Signature> {
         flex-shrink: 0;
       }
 
+      @keyframes pill-menu-expand {
+        /* min-height is pinned in both keyframes so the base
+           min-height: max-content doesn't hold the menu open mid-animation. */
+        from {
+          height: var(--pill-menu-collapsed-height);
+          min-height: 0;
+        }
+        to {
+          height: auto;
+          min-height: 0;
+        }
+      }
+
+      @keyframes pill-menu-collapse {
+        from {
+          height: auto;
+          min-height: 0;
+        }
+        to {
+          height: var(--pill-menu-collapsed-height);
+          min-height: 0;
+        }
+      }
+
       @keyframes scroll-pill-menu-content {
         0% {
           opacity: 0;
@@ -265,14 +328,73 @@ export default class PillMenu extends Component<Signature> {
   </template>
 
   @tracked isExpanded = false;
+  @tracked private isExpanding = false;
+  @tracked private isCollapsing = false;
+  private collapseWaiterToken: Token | undefined;
+
+  constructor(owner: Owner, args: Signature['Args']) {
+    super(owner, args);
+    registerDestructor(this, () => this.releaseCollapseWaiter());
+  }
+
+  private get prefersReducedMotion() {
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }
 
   @action expandMenu() {
+    this.isCollapsing = false;
+    this.releaseCollapseWaiter();
     this.isExpanded = true;
+    // Mirrors the expand animation's lifetime; with reduced motion no
+    // animation (and no animationend to clear this) runs.
+    this.isExpanding = !this.prefersReducedMotion;
     this.args.onExpand?.();
   }
 
   @action collapseMenu() {
+    if (this.isCollapsing) {
+      return;
+    }
+    if (this.prefersReducedMotion) {
+      // No exit animation will run, so there is no animationend to wait for.
+      this.finishCollapse();
+      return;
+    }
+    this.isCollapsing = true;
+    this.collapseWaiterToken = waiter.beginAsync();
+  }
+
+  // The menu stays in the DOM while the collapse animation plays; removal
+  // happens here, once that animation on the menu root itself completes.
+  // Animation names are matched by prefix: scoped CSS appends a suffix to
+  // keyframe names.
+  @action private handleMenuAnimationEnd(event: AnimationEvent) {
+    if (event.target !== event.currentTarget) {
+      return;
+    }
+    if (event.animationName.startsWith('pill-menu-expand')) {
+      this.isExpanding = false;
+      return;
+    }
+    if (
+      this.isCollapsing &&
+      event.animationName.startsWith('pill-menu-collapse')
+    ) {
+      this.finishCollapse();
+    }
+  }
+
+  private finishCollapse() {
+    this.isCollapsing = false;
+    this.releaseCollapseWaiter();
     this.isExpanded = false;
     this.args.onCollapse?.();
+  }
+
+  private releaseCollapseWaiter() {
+    if (this.collapseWaiterToken) {
+      waiter.endAsync(this.collapseWaiterToken);
+      this.collapseWaiterToken = undefined;
+    }
   }
 }

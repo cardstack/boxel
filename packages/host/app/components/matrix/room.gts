@@ -560,6 +560,13 @@ export default class Room extends Component<Signature> {
         border-color: var(--boxel-dark);
       }
 
+      .llm-select {
+        /* The LLM menu opens noticeably taller than the skill menu; a longer
+           duration keeps the expanding edge moving at about the same speed. */
+        --pill-menu-expand-duration: 0.25s;
+        --pill-menu-collapse-duration: 0.19s;
+      }
+
       .llm-select :deep(.menu-content) {
         margin-right: calc(-2 * var(--boxel-sp-sm));
         width: 100%;
