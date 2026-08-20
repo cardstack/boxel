@@ -84,6 +84,11 @@ suppress_key_server_warning: true
 ui_auth:
   session_timeout: "300s"
 
+login_via_existing_session:
+  enabled: true
+  require_ui_auth: false
+  token_timeout: "2m"
+
 email:
   smtp_host: "boxel-smtp"
   smtp_port: 25
