@@ -60,20 +60,26 @@ export default class PatchCodeTool extends HostBaseTool<
     let finalFileIdentifier = fileUrl;
     let lintIssues: string[] = [];
     if (results.some((r) => r.status === 'applied')) {
+      let preLintCode = patchedCode;
       if (patchedCode.trim() !== '' && this.isLintableFile(fileUrl)) {
         let lintResult = await this.lintAndFix(fileUrl, patchedCode);
         patchedCode = lintResult.output;
         lintIssues = lintResult.lintIssues ?? [];
       }
 
-      // An applied patch always changed the pre-lint content, so ending up
-      // back at the original file means the autofix/format pass reverted
-      // the whole edit. Re-patching can never make progress from here —
-      // any further attempt round-trips to this same content — so say so
+      // The patch changed the pre-lint content, yet the autofix/format pass
+      // brought it back to the original file: the formatter reverted the
+      // whole edit. Re-patching can never make progress from here — any
+      // further attempt round-trips to this same content — so say so
       // alongside the lint issues instead of writing a no-op save that
-      // would keep the model trying.
+      // would keep the model trying. Requiring that the pre-lint content
+      // actually differed keeps the message truthful for paths where no
+      // formatter ran (non-lintable targets, blank results) and for block
+      // sets that cancel each other out.
       let revertedByFormatter =
-        sourceContent !== '' && patchedCode === sourceContent;
+        sourceContent !== '' &&
+        preLintCode !== sourceContent &&
+        patchedCode === sourceContent;
       if (revertedByFormatter) {
         lintIssues = [
           ...lintIssues,
