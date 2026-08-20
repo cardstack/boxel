@@ -62,7 +62,9 @@ const MONTHS = [
   'Dec',
 ];
 
-function datePart(value?: Date | null): { day: string; month: string } | null {
+export function datePart(
+  value?: Date | null,
+): { day: string; month: string } | null {
   if (!value) {
     return null;
   }
