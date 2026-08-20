@@ -744,13 +744,15 @@ class ClubConsole extends GlimmerComponent<ConsoleSignature> {
             </aside>
             <section class='member-home'>
               {{#if this.selectedMember}}
-                <button
-                  type='button'
-                  class='member-card-link'
-                  title='Open member card'
-                  {{on 'click' (fn this.open this.selectedMember)}}
-                >Open card
-                  <ExternalLinkIcon class='inline-icon' /></button>
+                <div class='member-home-toolbar'>
+                  <button
+                    type='button'
+                    class='member-card-link'
+                    title='Open member card'
+                    {{on 'click' (fn this.open this.selectedMember)}}
+                  >Open card
+                    <ExternalLinkIcon class='inline-icon' /></button>
+                </div>
                 <LoyaltyDashboard
                   @account={{this.selectedMember}}
                   @tier={{this.selectedTier}}
@@ -1302,21 +1304,24 @@ class ClubConsole extends GlimmerComponent<ConsoleSignature> {
         border: 1px solid var(--border, var(--boxel-200));
         border-radius: var(--boxel-border-radius-lg);
         background: var(--card, var(--boxel-light));
-        padding: var(--boxel-sp-lg);
+        padding: var(--boxel-sp-xs) var(--boxel-sp-lg) var(--boxel-sp-lg);
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp);
-        position: relative;
+      }
+      /* In flow above the dashboard so it can never sit on the tier badge. */
+      .member-home-toolbar {
+        display: flex;
+        justify-content: flex-end;
+        margin-bottom: calc(-1 * var(--boxel-sp-xs));
       }
       .member-card-link {
-        position: absolute;
-        top: var(--boxel-sp-xs);
-        right: var(--boxel-sp-xs);
         display: inline-flex;
         align-items: center;
         gap: 0.25rem;
         border: none;
         background: none;
+        padding: 0;
         color: var(--muted-foreground, var(--boxel-450));
         font-size: var(--boxel-font-size-xs);
         cursor: pointer;
