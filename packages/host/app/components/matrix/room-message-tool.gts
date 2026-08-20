@@ -225,6 +225,13 @@ export default class RoomMessageTool extends Component<Signature> {
     return this.matrixService.failedToolState.get(toolRequest.id);
   }
 
+  // Execution failure reported through a room event (as opposed to
+  // failedToolState, which is this tab's in-memory state for a failure it
+  // produced itself).
+  private get failedToolCallState() {
+    return this.args.messageTool.status === 'failed' && !this.failedToolState;
+  }
+
   private get invalidToolCallState() {
     return (
       this.args.messageTool.status === 'invalid' &&
@@ -237,7 +244,11 @@ export default class RoomMessageTool extends Component<Signature> {
   }
 
   private get hasFailedState() {
-    return !!(this.failedToolState || this.didFailCorrectnessCheck);
+    return !!(
+      this.failedToolState ||
+      this.failedToolCallState ||
+      this.didFailCorrectnessCheck
+    );
   }
 
   <template>
@@ -299,6 +310,19 @@ export default class RoomMessageTool extends Component<Signature> {
         {{#if this.failedToolState}}
           <Alert @type='error' as |Alert|>
             <Alert.Messages @messages={{array this.failedToolState.message}} />
+            <Alert.Action @action={{@runCommand}} @actionName='Retry' />
+          </Alert>
+        {{else if this.failedToolCallState}}
+          <Alert @type='error' as |Alert|>
+            <Alert.Messages
+              @messages={{array
+                (if
+                  @messageTool.failureReason
+                  @messageTool.failureReason
+                  'Tool call failed.'
+                )
+              }}
+            />
             <Alert.Action @action={{@runCommand}} @actionName='Retry' />
           </Alert>
         {{else if this.invalidToolCallState}}
