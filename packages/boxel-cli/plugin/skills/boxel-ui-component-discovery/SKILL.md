@@ -47,7 +47,7 @@ of truth for what's available and what each component is called.
    ```sh
    boxel search --realm <catalog-realm-url> --query '{
      "filter": {
-       "on": { "module": "https://cardstack.com/base/spec", "name": "Spec" },
+       "on": { "module": "@cardstack/base/spec", "name": "Spec" },
        "eq": { "specType": "component" }
      }
    }' --json

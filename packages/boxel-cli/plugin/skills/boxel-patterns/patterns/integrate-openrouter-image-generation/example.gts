@@ -5,9 +5,9 @@ import {
   contains,
   field,
   linksTo,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
 import SendRequestViaProxyCommand from '@cardstack/boxel-host/tools/send-request-via-proxy';
 import WriteBinaryFileCommand from '@cardstack/boxel-host/tools/write-binary-file';
 

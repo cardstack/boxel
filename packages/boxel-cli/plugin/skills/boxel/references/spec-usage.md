@@ -4,7 +4,7 @@
 
 For each top-level card definition, write a Catalog Spec card instance in the realm's `Spec/` folder. This makes the card discoverable in the Boxel catalog.
 
-Specs adopt from the `Spec` class exported by `https://cardstack.com/base/spec` — that module lives in the base realm, not your realm.
+Specs adopt from the `Spec` class exported by `@cardstack/base/spec` — that module lives in the base realm, not your realm.
 
 ### Required shape
 
@@ -23,7 +23,7 @@ Specs adopt from the `Spec` class exported by `https://cardstack.com/base/spec` 
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/spec",
+        "module": "@cardstack/base/spec",
         "name": "Spec"
       }
     }
@@ -57,8 +57,8 @@ import { Author } from './author';
 
 **Field specs (contains/containsMany):**
 ```gts
-import StringField from 'https://cardstack.com/base/string';
-import AddressField from 'https://cardstack.com/base/address-field';
+import StringField from '@cardstack/base/string';
+import AddressField from '@cardstack/base/address-field';
 @field name = contains(StringField);
 @field addresses = containsMany(AddressField);
 ```
@@ -87,8 +87,8 @@ This document provides real-world usage examples for each spec type based on act
 #### Import
 ```typescript
 import { Author } from './author';
-import { Country } from 'https://cardstack.com/base/country';
-import { Skill } from 'https://cardstack.com/base/skill';
+import { Country } from '@cardstack/base/country';
+import { Skill } from '@cardstack/base/skill';
 ```
 
 #### Usage as a Field
@@ -121,8 +121,8 @@ export class BlogPost extends CardDef {
 
 #### Import
 ```typescript
-import StringField from 'https://cardstack.com/base/string';
-import DateField from 'https://cardstack.com/base/date';
+import StringField from '@cardstack/base/string';
+import DateField from '@cardstack/base/date';
 import { SocialMediaLink } from './social-media-link';
 ```
 

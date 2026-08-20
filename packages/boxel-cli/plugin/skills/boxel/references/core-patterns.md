@@ -46,9 +46,9 @@ export class AddressField extends FieldDef {
 
 ### 1. Card Definition with Safe Computed cardTitle
 ```gts
-import { CardDef, field, contains, linksTo, containsMany, linksToMany, Component } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import DateField from 'https://cardstack.com/base/date';
+import { CardDef, field, contains, linksTo, containsMany, linksToMany, Component } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import DateField from '@cardstack/base/date';
 import FileTextIcon from '@cardstack/boxel-icons/file-text';
 import { Author } from './author';
 
@@ -88,8 +88,8 @@ export class BlogPost extends CardDef {
 **CRITICAL:** Every FieldDef file must import FieldDef and MUST be exported:
 
 ```gts
-import { FieldDef, field, contains, Component } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+import { FieldDef, field, contains, Component } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import LocationIcon from '@cardstack/boxel-icons/map-pin';
 import { concat } from '@ember/helper';
 

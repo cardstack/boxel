@@ -23,7 +23,7 @@ Two pieces make this work:
 
 ```ts
 // full-record.gts
-import { CardDef, Component, field, contains, linksTo } from 'https://cardstack.com/base/card-api';
+import { CardDef, Component, field, contains, linksTo } from '@cardstack/base/card-api';
 import { Command } from '@cardstack/runtime-common';
 import SaveCardCommand from '@cardstack/boxel-host/tools/save-card';
 
@@ -152,7 +152,7 @@ The full record's `isolated` template should open with a visible banner — "SEN
 
 - A `<full-record>.gts` card in the workspace (~1100 lines including section layout + nav + sync flow). The pattern was originally extracted from a school-LMS sensitive-record + public-stub split.
 - `SyncOperationalStubCommand` lives in the same file as the full record (single-file convention: the Command that mutates a card lives with that card).
-- Composes with: [`linksTo`](https://cardstack.com/base/card-api), `SaveCardCommand`, `Command<TInput, undefined>`.
+- Composes with: `linksTo`, `SaveCardCommand`, `Command<TInput, undefined>`.
 
 ## See also
 

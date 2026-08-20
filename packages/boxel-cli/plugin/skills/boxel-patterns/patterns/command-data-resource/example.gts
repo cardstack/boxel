@@ -1,10 +1,10 @@
-import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
-import { commandData } from 'https://cardstack.com/base/resources/command-data';
+import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
+import { commandData } from '@cardstack/base/resources/command-data';
 import GetAllRealmMetasCommand from '@cardstack/boxel-host/tools/get-all-realm-metas';
 import type {
   GetAllRealmMetasResult,
   RealmMetaField,
-} from 'https://cardstack.com/base/command';
+} from '@cardstack/base/command';
 
 // 🧩 PATTERN: commandData<T> reactive resource
 //

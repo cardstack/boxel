@@ -4,11 +4,11 @@ import {
   field,
   contains,
   linksTo,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
-import FileDef from 'https://cardstack.com/base/file-api';
-import ImageDef from 'https://cardstack.com/base/image-file-def';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
+import FileDef from '@cardstack/base/file-api';
+import ImageDef from '@cardstack/base/image-file-def';
 import MusicIcon from '@cardstack/boxel-icons/music';
 
 // PATTERN: realm audio file -> linksTo(FileDef) -> native audio player.

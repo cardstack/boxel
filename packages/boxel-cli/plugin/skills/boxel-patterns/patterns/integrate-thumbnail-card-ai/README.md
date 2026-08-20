@@ -135,7 +135,7 @@ Pair with [`link-command-menu-item`](../link-command-menu-item/README.md) to mak
 ```ts
 import { getCardMenuItems, type GetCardMenuItemParams, type MenuItemOptions } from '@cardstack/runtime-common';
 import GenerateThumbnailCommand from '@cardstack/boxel-host/tools/generate-thumbnail';
-import { realmURL } from 'https://cardstack.com/base/card-api';
+import { realmURL } from '@cardstack/base/card-api';
 import WandIcon from '@cardstack/boxel-icons/wand';
 
 class MyCard extends CardDef {
@@ -167,7 +167,7 @@ class MyCard extends CardDef {
 
 - **OpenRouter sometimes returns no image.** The model can produce text-only responses if the prompt is ambiguous or unsafe. The command throws with the model's text fallback in the error message — surface that to the user (it's usually actionable feedback like "I can't generate images of real people"). Don't swallow it.
 - **`targetCardId` patches BEFORE returning.** If the patch fails (realm permission, indexing race) you still get the file written but the `cardInfo.cardThumbnail` link doesn't land. The command throws, but the orphaned file stays in the realm. Worth a "list orphaned thumbnails" cleanup pattern if this matters at scale.
-- **`cardInfo.cardThumbnail` requires the target's CardDef to use the default cardInfo passthrough.** A CardDef that overrides `cardInfo` to a non-default shape may not have a `cardThumbnail` field — the patch will fail. Check the base [`CardInfoField`](https://cardstack.com/base/card-api) if unsure.
+- **`cardInfo.cardThumbnail` requires the target's CardDef to use the default cardInfo passthrough.** A CardDef that overrides `cardInfo` to a non-default shape may not have a `cardThumbnail` field — the patch will fail. Check the base `CardInfoField` in `@cardstack/base/card-api` if unsure.
 - **MIME → extension mapping is fixed.** PNG/JPG/WebP/GIF/SVG/AVIF only. Unrecognised MIME defaults to `png`. The OpenRouter image models almost always return PNG, so this rarely matters.
 - **`sourceImageUrl` `fetch` runs in the host, not the realm proxy.** If your source image is on a CORS-locked domain, you may need to route it through `SendRequestViaProxyCommand` first and convert to a data URL, then pass the data URL.
 - **Costs add up.** Each call is an OpenRouter image-gen request. Don't wire it to a `@tracked` getter or anything that recomputes on render — only call from explicit user actions or one-shot install flows.

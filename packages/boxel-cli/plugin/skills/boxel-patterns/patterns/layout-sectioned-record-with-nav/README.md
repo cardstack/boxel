@@ -20,8 +20,8 @@ The pattern composes naturally with `organize-sensitive-stub-pair` (the left rai
 ## Recipe shape
 
 ```ts
-import { CardDef, Component, field, contains, linksTo } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+import { CardDef, Component, field, contains, linksTo } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
@@ -138,9 +138,9 @@ Each section is a `FieldDef` with its own `embedded` view. Keep them in a siblin
 
 ```ts
 // profile-sections.gts
-import { FieldDef, Component, field, contains } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import DateField from 'https://cardstack.com/base/date';
+import { FieldDef, Component, field, contains } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import DateField from '@cardstack/base/date';
 
 export class IdentitySection extends FieldDef {
   static displayName = 'Identity';

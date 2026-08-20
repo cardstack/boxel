@@ -10,10 +10,10 @@ import {
   FieldDef,
   contains,
   field,
-} from 'https://cardstack.com/base/card-api';
-import BooleanField from 'https://cardstack.com/base/boolean';
-import NumberField from 'https://cardstack.com/base/number';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import BooleanField from '@cardstack/base/boolean';
+import NumberField from '@cardstack/base/number';
+import StringField from '@cardstack/base/string';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import { Star, StarHalfFill, StarFilled } from '@cardstack/boxel-ui/icons';
 

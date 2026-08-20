@@ -1,11 +1,11 @@
 ## Worked example: `Note` card with custom markdown
 
 ```gts
-import { CardDef, field, contains, linksTo, Component } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import MarkdownField from 'https://cardstack.com/base/markdown';
+import { CardDef, field, contains, linksTo, Component } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import MarkdownField from '@cardstack/base/markdown';
 import { markdownEscape } from '@cardstack/boxel-ui/helpers';
-import { markdownLinkForCard, formatDateTimeForMarkdown } from 'https://cardstack.com/base/markdown-helpers';
+import { markdownLinkForCard, formatDateTimeForMarkdown } from '@cardstack/base/markdown-helpers';
 import { Author } from './author';
 
 export class Note extends CardDef {

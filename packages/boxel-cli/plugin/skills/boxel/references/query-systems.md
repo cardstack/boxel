@@ -208,7 +208,7 @@ The newer display surface for a list of results (the `<SearchResults>` component
 - Treat a query result as a field → query-backed fields (`linksTo` / `linksToMany` with a `query`).
 
 ```gts
-import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+import { CardDef, Component } from '@cardstack/base/card-api';
 import {
   searchEntryWireQueryFromQuery,
   type SearchEntryWireQuery,

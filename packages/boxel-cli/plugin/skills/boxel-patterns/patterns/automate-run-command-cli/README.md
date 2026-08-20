@@ -29,7 +29,7 @@ The first argument is the Command's module spec: realm URL, `::`, exported class
 ## Recipe shape
 
 ```ts
-import { Command } from 'https://cardstack.com/base/command';
+import { Command } from '@cardstack/base/command';
 
 export class ReindexInput extends CardDef {
   @field targetRealm = contains(StringField);

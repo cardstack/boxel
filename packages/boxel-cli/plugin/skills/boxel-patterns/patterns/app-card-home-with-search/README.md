@@ -17,9 +17,9 @@ validated: source-proven
 
 ```ts
 // surge.gts (or row-and-rail.gts, or whatever the brand demands)
-import { CardDef, Component, field, contains, linksTo } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import TextAreaField from 'https://cardstack.com/base/text-area';
+import { CardDef, Component, field, contains, linksTo } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import TextAreaField from '@cardstack/base/text-area';
 import {
   codeRef,
   realmURL,
