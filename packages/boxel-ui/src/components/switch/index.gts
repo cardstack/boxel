@@ -15,16 +15,30 @@ interface SwitchArgs {
   onChange: (isEnabled: boolean) => void;
 }
 
-function announceChange(onChange: SwitchArgs['onChange'], event: Event) {
-  onChange((event.target as HTMLInputElement).checked);
+/* Fully controlled: preventDefault keeps the checkbox from toggling itself
+   (click covers pointer and Space alike), so the DOM checked property — and
+   the aria-checked the browser derives from it — only ever changes when
+   @isEnabled does. Without this, an @onChange that drops the value would
+   leave the native state disagreeing with the rendered one. */
+function toggleOnClick(
+  isEnabled: boolean,
+  onChange: SwitchArgs['onChange'],
+  event: Event,
+) {
+  event.preventDefault();
+  onChange(!isEnabled);
 }
 
 /* Enter is inert on checkboxes, listed in WAI-ARIA as optional for role=switch,
    so it gets its own keydown path. https://www.w3.org/WAI/ARIA/apg/patterns/switch/ */
-function toggleOnEnter(onChange: SwitchArgs['onChange'], event: KeyboardEvent) {
-  if (event.key === 'Enter') {
+function toggleOnEnter(
+  isEnabled: boolean,
+  onChange: SwitchArgs['onChange'],
+  event: Event,
+) {
+  if (event instanceof KeyboardEvent && event.key === 'Enter') {
     event.preventDefault();
-    onChange(!(event.target as HTMLInputElement).checked);
+    onChange(!isEnabled);
   }
 }
 
@@ -35,14 +49,16 @@ const Switch: TemplateOnlyComponent<SwitchSignature> = <template>
     ...attributes
   >
     <span class='boxel-sr-only'>{{@label}}</span>
+    {{! a native checkbox's checkedness maps to aria-checked automatically;
+        an explicit binding could disagree with it }}
+    {{! template-lint-disable require-mandatory-role-attributes }}
     <input
-      {{on 'change' (fn announceChange @onChange)}}
-      {{on 'keydown' (fn toggleOnEnter @onChange)}}
+      {{on 'click' (fn toggleOnClick @isEnabled @onChange)}}
+      {{on 'keydown' (fn toggleOnEnter @isEnabled @onChange)}}
       class='switch-input'
       type='checkbox'
       checked={{@isEnabled}}
       disabled={{@disabled}}
-      aria-checked={{if @isEnabled 'true' 'false'}}
       role='switch'
     />
   </label>

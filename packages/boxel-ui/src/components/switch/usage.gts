@@ -52,8 +52,10 @@ export default class SwitchUsage extends Component {
       <FreestyleUsage @name='Switch'>
         <:description>
           A switch is a component that allows the user to switch a setting on or
-          off. It toggles on click, Space, and Enter, and announces itself to
-          assistive technology as a switch.
+          off. It responds to click, Space, and Enter, and announces itself to
+          assistive technology as a switch. It is fully controlled: the switch
+          never changes state on its own — it calls onChange with the new value,
+          and only moves when isEnabled is updated to match.
         </:description>
         <:example>
           <Switch
@@ -72,7 +74,7 @@ export default class SwitchUsage extends Component {
           />
           <Args.Bool
             @name='isEnabled'
-            @description='Whether the switch is on'
+            @description='Whether the switch is on. The single source of truth: the switch only moves when this changes'
             @defaultValue={{false}}
             @value={{this.isEnabled}}
             @onInput={{fn (mut this.isEnabled)}}
@@ -87,7 +89,7 @@ export default class SwitchUsage extends Component {
           />
           <Args.Action
             @name='onChange'
-            @description='Called with the new on/off state when the user toggles the switch'
+            @description='Called with the requested on/off state when the user toggles the switch. Update isEnabled here to apply the change'
           />
         </:api>
         <:cssVars as |Css|>
