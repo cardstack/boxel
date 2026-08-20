@@ -281,7 +281,7 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
 
   get hasModel3d() {
     let m = this.args.model?.model3d;
-    return Boolean(m?.meshes || m?.triangles);
+    return Boolean(m?.meshes || m?.triangles || m?.vertices || m?.dimensions);
   }
 
   get hasFontMetadata() {

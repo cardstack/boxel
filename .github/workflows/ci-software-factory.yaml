@@ -49,6 +49,10 @@ jobs:
     name: Software Factory Tests (shard ${{ matrix.shard.index }}/${{ matrix.shard.total }})
     needs: test-web-assets
     runs-on: ubuntu-latest
+    # Deliberately generous: this job's runtime varies about fivefold between
+    # concurrent shards, and successful runs have reached ~96 minutes. A tighter
+    # ceiling would fail work that would have passed.
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
@@ -76,10 +80,21 @@ jobs:
           shopt -s dotglob
           cp -a .test-web-assets-artifact/. ./
       - name: Install Playwright Browsers
-        # --with-deps also apt-installs the system libraries Playwright needs;
-        # without it CI fails with "Host system is missing dependencies to run
-        # browsers".
-        run: pnpm exec playwright install --with-deps
+        # `--with-deps` bundles two unrelated operations: fetching the browsers
+        # from Microsoft's CDN, and apt-installing the system libraries they
+        # link against. Only the second reaches Ubuntu's mirrors, and that is
+        # where this step stalls — it has sat here for as long as 170 minutes,
+        # holding a runner, while the browser download itself has never been
+        # implicated. Splitting them bounds the half that fails without
+        # touching the half that works.
+        #
+        # A healthy install of both takes about a minute, so five is generous.
+        # The deps half is still required: without it Playwright reports "Host
+        # system is missing dependencies to run browsers".
+        timeout-minutes: 10
+        run: |
+          pnpm exec playwright install
+          timeout 5m pnpm exec playwright install-deps
         working-directory: packages/software-factory
       - name: Run Node tests
         if: ${{ matrix.shard.index == 1 }}

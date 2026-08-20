@@ -284,4 +284,93 @@ ${REPLACE_MARKER}`;
     );
     assert.strictEqual(result.results[0]?.status, 'applied');
   });
+
+  test('reports when the formatter reverts an applied patch and skips the save', async function (assert) {
+    let toolService = getService('tool-service');
+    let patchCodeCommand = new PatchCodeTool(toolService.toolContext);
+
+    const originalSource = `import {
+  contains,
+  field,
+  CardDef,
+  Component,
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
+export class Task extends CardDef {
+  static displayName = 'Task';
+  @field cardTitle = contains(StringField);
+  @field cardDescription = contains(StringField);
+  @field priority = contains(NumberField);
+}`;
+
+    // The lint/format pass undoes whatever the patch did, returning the
+    // file byte-identical to what is on disk.
+    adapter.lintStub = async (): Promise<LintResult> => {
+      return { output: originalSource, fixed: true, messages: [] };
+    };
+
+    const codeBlock = `${SEARCH_MARKER}
+  static displayName = 'Task';
+${SEPARATOR_MARKER}
+  static displayName = 'Task';
+
+${REPLACE_MARKER}`;
+
+    let result = await patchCodeCommand.execute({
+      fileIdentifier: fileUrl,
+      codeBlocks: [codeBlock],
+    });
+
+    assert.strictEqual(result.results[0]?.status, 'applied');
+    assert.strictEqual(
+      result.patchedContent,
+      originalSource,
+      'the formatter round-tripped the content back to the original',
+    );
+    assert.ok(
+      result.lintIssues?.some((issue: string) =>
+        issue.includes('formatter reverted the applied changes'),
+      ),
+      'the reverted-by-formatter notice is reported alongside lint issues',
+    );
+  });
+
+  test('does not claim a formatter revert when blocks cancel out and no formatter ran', async function (assert) {
+    let toolService = getService('tool-service');
+    let patchCodeCommand = new PatchCodeTool(toolService.toolContext);
+
+    adapter.lintStub = async () => {
+      assert.ok(false, 'lint should not run for json files');
+      return { output: '', fixed: false, messages: [] };
+    };
+
+    // Each block changes content individually, so both apply, but together
+    // they round-trip to the original file. No formatter was involved, so
+    // the reverted-by-formatter notice would be a lie the model acts on.
+    const blockForward = `${SEARCH_MARKER}
+  "title": "Old title",
+${SEPARATOR_MARKER}
+  "title": "New title",
+${REPLACE_MARKER}`;
+    const blockBack = `${SEARCH_MARKER}
+  "title": "New title",
+${SEPARATOR_MARKER}
+  "title": "Old title",
+${REPLACE_MARKER}`;
+
+    let result = await patchCodeCommand.execute({
+      fileIdentifier: jsonFileUrl,
+      codeBlocks: [blockForward, blockBack],
+    });
+
+    assert.strictEqual(result.results[0]?.status, 'applied');
+    assert.strictEqual(result.results[1]?.status, 'applied');
+    assert.notOk(
+      result.lintIssues?.some((issue: string) =>
+        issue.includes('formatter reverted'),
+      ),
+      'no reverted-by-formatter notice when no formatter ran',
+    );
+  });
 });

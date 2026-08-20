@@ -25,6 +25,7 @@ export default class ButtonUsage extends Component {
   @tracked disabled?: boolean;
   @tracked loading?: boolean;
   @tracked rectangular?: boolean;
+  @tracked pill?: boolean;
 
   // for @as === 'anchor'
   @tracked href = '#';
@@ -63,6 +64,7 @@ export default class ButtonUsage extends Component {
             @href={{this.href}}
             @route={{this.route}}
             @rectangular={{this.rectangular}}
+            @pill={{this.pill}}
             {{on 'click' this.alert}}
           >
             Sample CTA
@@ -127,6 +129,14 @@ export default class ButtonUsage extends Component {
           @description='Changes the level of border-radius roundness'
           @onInput={{fn (mut this.rectangular)}}
           @value={{this.rectangular}}
+          @defaultValue={{false}}
+        />
+        <Args.Bool
+          @name='pill'
+          @optional={{true}}
+          @description='Uses the pill border-radius (--boxel-border-radius-pill)'
+          @onInput={{fn (mut this.pill)}}
+          @value={{this.pill}}
           @defaultValue={{false}}
         />
         <Args.Bool
@@ -252,6 +262,26 @@ export default class ButtonUsage extends Component {
         <Css.Basic @name='--boxel-button-min-width' @type='min-width' />
         <Css.Basic @name='--boxel-button-padding' @type='padding' />
         <Css.Basic @name='--boxel-button-box-shadow' @type='box-shadow' />
+        <Css.Basic
+          @name='--boxel-button-disabled-background'
+          @type='background-color'
+          @description='disabled state'
+        />
+        <Css.Basic
+          @name='--boxel-button-disabled-border'
+          @type='border'
+          @description='disabled state (css shorthand property)'
+        />
+        <Css.Basic
+          @name='--boxel-button-disabled-foreground'
+          @type='color'
+          @description='disabled state'
+        />
+        <Css.Basic
+          @name='--boxel-button-disabled-opacity'
+          @type='opacity'
+          @description='disabled state'
+        />
         <Css.Basic
           @name='--boxel-button-loading-icon-size'
           @type='width, height'
