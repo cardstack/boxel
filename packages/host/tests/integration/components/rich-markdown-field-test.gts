@@ -133,6 +133,115 @@ module('Integration | RichMarkdownField', function (hooks) {
     );
   });
 
+  test('docked toolbar and editor mount share an overflow-clipping wrapper so the sticky toolbar corners conform to the rounded editor outline', async function (assert) {
+    class TestCard extends CardDef {
+      @field body = contains(RichMarkdownField);
+      static edit = class Edit extends Component<typeof this> {
+        <template><@fields.body /></template>
+      };
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-card.gts': { TestCard },
+      },
+    });
+
+    let card = new TestCard({
+      body: new RichMarkdownField({ content: 'Edit me' }),
+    });
+    let root = await renderCard(loader, card, 'edit');
+    await waitFor('[data-test-codemirror-body]', { timeout: 5000 });
+
+    let wrapper = root.querySelector(
+      '[data-test-codemirror-body]',
+    ) as HTMLElement;
+    assert.dom(wrapper).exists('the clipping wrapper is rendered');
+    // The wrapper must clip (not scroll) so the toolbar's square bottom
+    // corners follow the editor's rounded outline when it docks at the
+    // bottom, while keeping position: sticky resolving to the outer panel.
+    // Assert both axes (the shorthand): the source sets `overflow: clip`, and
+    // it is both axes that must stay out of scroll-container territory — a
+    // stray `overflow-x: visible` would let the corners spill horizontally.
+    let overflow = getComputedStyle(wrapper);
+    assert.strictEqual(
+      overflow.overflowX,
+      'clip',
+      'the wrapper clips overflow-x',
+    );
+    assert.strictEqual(
+      overflow.overflowY,
+      'clip',
+      'the wrapper clips overflow-y',
+    );
+    // The clip only rounds the toolbar's corners because the wrapper itself
+    // carries a radius — delete that declaration and the clip has nothing to
+    // round off, and the reported square-corner bug returns with every other
+    // assertion here still green. Assert it is non-zero rather than a specific
+    // px, since the radius token is themeable per card.
+    assert.notStrictEqual(
+      getComputedStyle(wrapper).borderRadius,
+      '0px',
+      'the wrapper is rounded, so the clip has corners to round off',
+    );
+    // Toolbar + mount live inside the wrapper (so they get clipped)…
+    assert
+      .dom('[data-test-markdown-toolbar]', wrapper)
+      .exists('the toolbar is inside the clipping wrapper');
+    assert
+      .dom('[data-test-codemirror-mount]', wrapper)
+      .exists('the editor mount is inside the clipping wrapper');
+    // …but the wrapper is nested directly in the bordered/rounded editor.
+    assert
+      .dom(wrapper.parentElement)
+      .hasClass(
+        'codemirror-editor',
+        'the wrapper is a direct child of the editor container',
+      );
+  });
+
+  test('the Add-embed dropdown escapes the corner-clipping wrapper so it stays visible when the toolbar docks at the bottom', async function (assert) {
+    class TestCard extends CardDef {
+      @field body = contains(RichMarkdownField);
+      static edit = class Edit extends Component<typeof this> {
+        <template><@fields.body /></template>
+      };
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-card.gts': { TestCard },
+      },
+    });
+
+    let card = new TestCard({
+      body: new RichMarkdownField({ content: 'Edit me' }),
+    });
+    let root = await renderCard(loader, card, 'edit');
+    await waitFor('[data-test-codemirror-body]', { timeout: 5000 });
+
+    // No embed is referenced yet, so the toolbar shows the Add-embed trigger.
+    await click('[data-test-toolbar="add-embed"]');
+    // BoxelDropdown renders the menu in the shared dropdown wormhole at the app
+    // root, so it lives outside `.codemirror-body` entirely — the `overflow:
+    // clip` corner box is not in its ancestor chain and cannot swallow it when
+    // the toolbar docks at the bottom, where an in-box menu would have zero
+    // room below it. Query the whole document since the menu is not under the
+    // card's render root.
+    let popover = document.querySelector('[data-test-toolbar-embed-popover]');
+    let clipBox = root.querySelector('[data-test-codemirror-body]');
+    assert.ok(popover, 'the Add-embed dropdown opens');
+    assert
+      .dom('[data-test-codemirror-body]')
+      .exists('the corner-clip box is present');
+    assert.notOk(
+      clipBox?.contains(popover),
+      'the Add-embed menu renders outside the corner-clip box, so the clip cannot swallow it',
+    );
+  });
+
   test('renders with null content without error', async function (assert) {
     class TestCard extends CardDef {
       @field body = contains(RichMarkdownField);

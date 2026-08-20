@@ -57,10 +57,13 @@ export const FILEDEF_CODE_REF_BY_EXTENSION: Readonly<
   '.m4v': { module: baseModule('mp4-video-def'), name: 'Mp4Def' },
   '.mov': { module: baseModule('mov-video-def'), name: 'MovDef' },
   '.webm': { module: baseModule('webm-video-def'), name: 'WebmDef' },
-  // 3D model formats. STL is raw triangle geometry; 3MF is a zipped OPC package.
-  // Both extend ThreeDModelDef, which renders a live client-side WebGL viewer.
+  // 3D model formats. STL is raw triangle geometry; 3MF is a zipped OPC
+  // package; GLB/glTF are the binary and JSON forms of the same scene format.
+  // All extend ThreeDModelDef, which renders a live client-side WebGL viewer.
   '.stl': { module: baseModule('stl-model-def'), name: 'StlDef' },
   '.3mf': { module: baseModule('three-mf-def'), name: 'ThreeMfDef' },
+  '.glb': { module: baseModule('gltf-model-def'), name: 'GlbDef' },
+  '.gltf': { module: baseModule('gltf-model-def'), name: 'GltfDef' },
   '.zip': { module: baseModule('zip-file-def'), name: 'ZipDef' },
   '.woff2': { module: baseModule('woff2-font-def'), name: 'Woff2Def' },
   '.woff': { module: baseModule('woff-font-def'), name: 'WoffDef' },

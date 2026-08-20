@@ -59,6 +59,7 @@ interface Signature {
     kind?: BoxelButtonKind;
     loading?: boolean;
     models?: any;
+    pill?: boolean;
     query?: any;
     rectangular?: boolean;
     route?: any;
@@ -78,6 +79,7 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
       (concat 'kind-' (if @kind @kind 'default'))
       loading=@loading
       rectangular=@rectangular
+      pill=@pill
     )
     as |classes|
   }}
@@ -179,6 +181,12 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
       .boxel-button:not(.rectangular) {
         border-radius: var(--boxel-button-border-radius, 100px);
       }
+      .boxel-button:is(.pill) {
+        border-radius: var(
+          --boxel-button-border-radius,
+          var(--boxel-border-radius-pill)
+        );
+      }
       .boxel-button:not(:disabled):hover {
         background-color: color-mix(
           in oklab,
@@ -219,7 +227,7 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
           --boxel-button-disabled-foreground,
           var(--boxel-button-text-color)
         );
-        opacity: var(--button-button-disabled-opacity, 0.5);
+        opacity: var(--boxel-button-disabled-opacity, 0.5);
         cursor: default;
       }
 

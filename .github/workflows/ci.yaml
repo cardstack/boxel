@@ -25,6 +25,7 @@ jobs:
   change-check:
     name: Check which packages changed
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       boxel: ${{ steps.filter.outputs.boxel }}
       ai-bot: ${{ steps.filter.outputs.ai-bot }}
@@ -184,6 +185,7 @@ jobs:
     needs: change-check
     if: needs.change-check.outputs.ai-bot == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     services:
       postgres:
         image: postgres:16
@@ -217,6 +219,7 @@ jobs:
     needs: change-check
     if: needs.change-check.outputs.bot-runner == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     concurrency:
       group: bot-runner-test-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -232,6 +235,7 @@ jobs:
     needs: change-check
     if: needs.change-check.outputs.bxl == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     concurrency:
       group: bxl-test-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -256,6 +260,7 @@ jobs:
     needs: change-check
     if: needs.change-check.outputs.eslint-plugin-boxel == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     concurrency:
       group: eslint-plugin-boxel-test-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -276,6 +281,7 @@ jobs:
     needs: change-check
     if: needs.change-check.outputs.eslint-plugin-cardstack-host == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     concurrency:
       group: eslint-plugin-cardstack-host-test-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -296,6 +302,7 @@ jobs:
     needs: change-check
     if: needs.change-check.outputs.postgres-migrations == 'true' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     concurrency:
       group: postgres-migration-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -358,6 +365,7 @@ jobs:
     needs: [change-check]
     if: needs.change-check.outputs.boxel-ui == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     concurrency:
       group: boxel-ui-test-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -383,6 +391,7 @@ jobs:
     needs: change-check
     if: needs.change-check.outputs.boxel-ui == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     concurrency:
       group: boxel-ui-raw-icon-changes-only-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -400,6 +409,7 @@ jobs:
     needs: change-check
     if: needs.change-check.outputs.boxel-icons == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     concurrency:
       group: boxel-icons-raw-icon-changes-only-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -417,6 +427,7 @@ jobs:
     needs: [change-check, test-web-assets]
     if: needs.change-check.outputs.matrix == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
@@ -541,6 +552,7 @@ jobs:
     # !cancelled() makes it run even if a matrix-client-test shard fails, but still respects cancellation
     if: ${{ !cancelled() && (needs.change-check.outputs.matrix == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true') }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     concurrency:
       group: matrix-client-merge-reports-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -625,6 +637,7 @@ jobs:
     needs: [change-check, test-web-assets]
     if: needs.change-check.outputs.realm-server == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     concurrency:
       group: realm-server-test-${{ matrix.shardIndex }}-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -759,6 +772,7 @@ jobs:
       cancel-in-progress: true
     needs: [change-check, realm-server-test]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
@@ -824,6 +838,7 @@ jobs:
     # before enforcement is turned on. See CS-10983.
     if: needs.change-check.outputs.bench-amd == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     concurrency:
       group: amd-transpile-bench-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -864,6 +879,7 @@ jobs:
     # so a slow web-assets build doesn't gate the bench.
     if: needs.change-check.outputs.bench-realm == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     concurrency:
       group: realm-bench-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -916,6 +932,7 @@ jobs:
     needs: [change-check, test-web-assets]
     if: needs.change-check.outputs.vscode-boxel-tools == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     concurrency:
       group: vscode-boxel-tools-test-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -949,6 +966,7 @@ jobs:
     needs: [change-check, test-web-assets]
     if: needs.change-check.outputs.boxel-cli == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     concurrency:
       group: boxel-cli-build-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -982,6 +1000,7 @@ jobs:
     # CS-11161) needs to fail here pre-merge rather than on main post-merge.
     if: needs.change-check.outputs.boxel-cli == 'true' || needs.change-check.outputs.realm-server == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     concurrency:
       group: boxel-cli-test-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -1066,6 +1085,8 @@ jobs:
     needs: [change-check, test-web-assets]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    # Must exceed the 45-minute ceiling on the index step below.
+    timeout-minutes: 60
     concurrency:
       group: cache-index-${{ github.run_id }}
       cancel-in-progress: false
