@@ -201,6 +201,8 @@ export class Loader {
   // collectKnownModuleDependencies is stable and can be reused across repeated
   // loader.import() calls (e.g. when deserializing 22 cards of the same type).
   private knownDepsCache = new Map<string, Set<string>>();
+  // Module identifier → the key it is tracked under (see trackingKey).
+  private trackingKeyCache = new Map<string, string>();
   private identities = new WeakMap<
     Function,
     { module: string; name: string }
@@ -246,6 +248,7 @@ export class Loader {
       this.modules.clear();
       this.moduleCanonicalURLs.clear();
       this.knownDepsCache.clear();
+      this.trackingKeyCache.clear();
     });
   }
 
@@ -429,17 +432,12 @@ export class Loader {
     let resolvedModule = new URL(moduleIdentifier);
     let resolvedModuleIdentifier = resolvedModule.href;
     if (!this.moduleShims.has(resolvedModuleIdentifier)) {
-      // Normalize tracker keys to the virtual-alias URL form when one
-      // exists (the dependency tracker requires `http://`/`https://`
-      // URLs — see `canonicalURL` in dependency-tracker.ts — so RRI
-      // prefix forms can't be used as keys). Without this, a base
-      // module imported via the virtual alias
-      // (`https://cardstack.com/base/X`) and the same module imported
-      // via the RRI prefix (`@cardstack/base/X` → resolveImport →
-      // resolved real URL `https://localhost:4201/base/X`) get tracked
-      // as two separate entries.
-      let trackingKey = this.canonicalizeTrackingKey(resolvedModuleIdentifier);
-      trackRuntimeModuleDependency(trackingKey, dependencyTrackingContext);
+      // Tracked under the form the index names this module's realm by, so a
+      // module reached by any of its spellings is one node rather than several.
+      trackRuntimeModuleDependency(
+        this.trackingKey(resolvedModuleIdentifier),
+        dependencyTrackingContext,
+      );
     }
 
     await this.advanceToState(resolvedModule, 'evaluated');
@@ -546,18 +544,6 @@ export class Loader {
     return result;
   }
 
-  // The runtime dependency tracker keys module nodes by http(s) URL — its
-  // canonicalURL guard drops realm-prefix identifiers (see
-  // dependency-tracker.ts) — and this loader collapses each tracked module
-  // onto its virtual-alias URL when one is registered (see
-  // canonicalizeTrackingKey). Converts any module identifier, canonical RRI
-  // form included, into that tracking-key form. Callers recording
-  // loader-derived module identifiers with the tracker must cross this
-  // boundary; identifiers stay in canonical RRI form everywhere else.
-  dependencyTrackingKey(moduleIdentifier: string): string {
-    return this.canonicalizeTrackingKey(this.resolveImport(moduleIdentifier));
-  }
-
   private trackKnownModuleDependencies(
     rootModuleIdentifier: string,
     dependencyTrackingContext?: RuntimeDependencyTrackingContext,
@@ -580,11 +566,10 @@ export class Loader {
       rootModuleIdentifier,
     )) {
       if (!this.moduleShims.has(moduleIdentifier)) {
-        // Same canonicalization as the top-level import-time tracking
-        // call — collapse virtual-alias / resolved real URL forms onto
-        // the virtual-alias URL.
-        let trackingKey = this.canonicalizeTrackingKey(moduleIdentifier);
-        trackRuntimeModuleDependency(trackingKey, dependencyTrackingContext);
+        trackRuntimeModuleDependency(
+          this.trackingKey(moduleIdentifier),
+          dependencyTrackingContext,
+        );
       }
     }
   }
@@ -920,6 +905,50 @@ export class Loader {
       : trimmed;
   }
 
+  // The key a module is recorded under with the dependency tracker: the form
+  // the index carries for that module's realm, so a dep here matches the rows
+  // invalidation searches.
+  //
+  // A realm reached through a registered prefix is named by its RRI. A realm
+  // that has only a URL mapping — the alias a test or deployment serves it
+  // under — is named by that alias, not by the host actually serving it.
+  // `unresolveURL` covers the first and leaves the second alone (it maps an
+  // alias *to* the real URL, never back), so the alias case needs its own fold.
+  // Memoized because the dependency walk re-derives the key for every module in
+  // a root's transitive set on every import of that root, and the alias branch
+  // below allocates a URL. Keyed by the raw identifier so the trim is memoized
+  // too. Discarded with the other mapping-derived caches when a realm mapping
+  // changes, since the key it produces is only stable between those changes.
+  private trackingKey(moduleIdentifier: string): string {
+    let cached = this.trackingKeyCache.get(moduleIdentifier);
+    if (cached !== undefined) {
+      return cached;
+    }
+    let key = this.computeTrackingKey(moduleIdentifier);
+    this.trackingKeyCache.set(moduleIdentifier, key);
+    return key;
+  }
+
+  private computeTrackingKey(moduleIdentifier: string): string {
+    let trimmed = trimModuleIdentifier(moduleIdentifier);
+    if (!this.virtualNetwork) {
+      return trimmed;
+    }
+    let unresolved = this.virtualNetwork.unresolveURL(trimmed);
+    if (unresolved !== trimmed) {
+      return unresolved;
+    }
+    try {
+      let virtual = this.virtualNetwork.mapURL(trimmed, 'real-to-virtual');
+      if (virtual) {
+        return virtual.href;
+      }
+    } catch {
+      // Not a parseable URL — a prefix-form identifier, already canonical.
+    }
+    return trimmed;
+  }
+
   private getModule(moduleIdentifier: string): Module | undefined {
     return this.modules.get(this.moduleCacheKey(moduleIdentifier));
   }
@@ -947,18 +976,6 @@ export class Loader {
   // virtual-alias (`https://cardstack.com/base/X`) and resolved real URL
   // (`https://localhost:4201/base/X`) for the same module. Returns the
   // input unchanged when no virtual alias is registered.
-  private canonicalizeTrackingKey(moduleIdentifier: string): string {
-    if (!this.virtualNetwork) {
-      return moduleIdentifier;
-    }
-    try {
-      let parsed = new URL(moduleIdentifier);
-      let virtual = this.virtualNetwork.mapURL(parsed, 'real-to-virtual');
-      return virtual ? virtual.href : moduleIdentifier;
-    } catch {
-      return moduleIdentifier;
-    }
-  }
 
   private captureIdentitiesOfModuleExports(
     module: any,
