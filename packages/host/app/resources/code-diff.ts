@@ -1,3 +1,4 @@
+import { registerDestructor } from '@ember/destroyable';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
@@ -27,8 +28,27 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
   @tracked errorMessage: string | undefined | null = null;
   codePatchStatus: CodePatchStatus | undefined | null = null;
 
+  // Untracked on purpose. `modify` runs inside the resource's tracked cache, so
+  // anything it reads there re-runs it when written — and it does read load
+  // state: `isDataLoaded` consumes `originalCode` and `modifiedCode`, and
+  // `errorMessage` is tracked as well. What keeps that entanglement safe is an
+  // invariant worth stating, because an edit can break it without looking
+  // wrong: every path in `modify` that reads those returns without writing
+  // them, so a finished load costs one further `modify` and stops. Keeping the
+  // mid-flight signal out of the entanglement spares a second invalidation per
+  // load; a path that read either one and then started a load would re-enter
+  // without bound. The template reads the task's own `isRunning`, which is
+  // tracked and safe to render from.
+  private loadInFlight = false;
+  private abortController: AbortController | undefined;
+
   @service declare private cardService: CardService;
   @service declare private toolService: ToolService;
+
+  constructor(owner: object) {
+    super(owner);
+    registerDestructor(this, () => this.abortController?.abort());
+  }
 
   modify(_positional: never[], named: CodeDiffResourceArgs['named']) {
     let { fileUrl, searchReplaceBlock, codePatchStatus } = named;
@@ -36,36 +56,50 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
       this.fileUrl !== fileUrl ||
       this.searchReplaceBlock !== searchReplaceBlock;
     let appliedStateChanged =
-      this.codePatchStatus === 'applied' || codePatchStatus === 'applied';
-    if (fileOrPatchChanged || appliedStateChanged) {
-      this.originalCode = null;
-      this.modifiedCode = null;
-    }
-    this.errorMessage = null;
+      this.codePatchStatus !== codePatchStatus &&
+      (this.codePatchStatus === 'applied' || codePatchStatus === 'applied');
+    let inputsChanged = fileOrPatchChanged || appliedStateChanged;
+
     this.fileUrl = fileUrl;
     this.searchReplaceBlock = searchReplaceBlock;
     this.codePatchStatus = codePatchStatus;
 
-    if (!fileUrl) {
+    // These arguments are recomputed on every invalidation of the room
+    // resource, which during streaming arrives continuously — so `modify` runs
+    // far more often than anything about this diff actually changes. Only a
+    // change to what is being diffed justifies discarding what we have and
+    // starting again. Restarting on every invalidation cancelled the load
+    // mid-flight and cleared the error along with it, leaving the resource
+    // holding neither code nor a message to show, and asking the realm for the
+    // file again each time it happened.
+    if (!inputsChanged) {
+      // `applied` is checked first, and not only for cheapness: it is a
+      // terminal state with no diff to fetch, and it is the one state a load
+      // returns from without recording either code or an error. Falling through
+      // to `load.perform()` in it would write the state this condition just
+      // read, from inside the same cache computation — dirtying the resource's
+      // own cache and re-entering `modify` on every read.
+      if (
+        codePatchStatus === 'applied' ||
+        this.isDataLoaded ||
+        this.errorMessage ||
+        this.loadInFlight
+      ) {
+        return;
+      }
+    } else {
       this.originalCode = null;
       this.modifiedCode = null;
+      this.errorMessage = null;
+    }
+
+    if (!fileUrl) {
       this.errorMessage = 'Missing file URL in the code block';
       return;
     }
 
     if (!searchReplaceBlock) {
-      this.originalCode = null;
-      this.modifiedCode = null;
       this.errorMessage = 'Missing search and replace block';
-      return;
-    }
-
-    if (
-      !fileOrPatchChanged &&
-      codePatchStatus !== 'applied' &&
-      this.originalCode != null &&
-      this.modifiedCode != null
-    ) {
       return;
     }
 
@@ -76,7 +110,33 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
     return this.originalCode != null && this.modifiedCode != null;
   }
 
+  // True between starting a load and having something to show for it, so a
+  // patch whose diff has not arrived can say so rather than render as nothing.
+  get isLoadingDiff() {
+    return this.load.isRunning && !this.isDataLoaded && !this.errorMessage;
+  }
+
   private load = restartableTask(async () => {
+    // Cancelling the task does not cancel a request already in flight, so
+    // without this an abandoned load runs to completion and its answer is
+    // merely discarded — the work still reaches the realm.
+    this.abortController?.abort();
+    let abortController = new AbortController();
+    this.abortController = abortController;
+    this.loadInFlight = true;
+    try {
+      await this.loadDiff(abortController.signal);
+    } finally {
+      // Only the newest run owns the flag. A superseded run settling later must
+      // not report that loading has finished on behalf of the one that replaced
+      // it.
+      if (this.abortController === abortController) {
+        this.loadInFlight = false;
+      }
+    }
+  });
+
+  private async loadDiff(signal: AbortSignal) {
     let { fileUrl, searchReplaceBlock, codePatchStatus } = this;
     if (codePatchStatus === 'applied') {
       this.originalCode = null;
@@ -95,17 +155,32 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
     if (!fileUrl || !searchReplaceBlock) {
       return;
     }
+    // This runs outside the task, so cancelling the task does not stop it here:
+    // every await is a point where a newer load may have taken over, and the
+    // abort signal only reaches the fetch. Check ownership after each one
+    // before writing to the resource, or a superseded load resumes later and
+    // overwrites the state — and the diff on screen — belonging to the patch
+    // that replaced it.
+    let originalCode: string;
     try {
-      let result = await this.cardService.getSource(new URL(fileUrl));
-      if (result.status === 404) {
-        this.originalCode = ''; // We are creating a new file, so we don't have the original code
-      } else {
-        this.originalCode = result.content;
+      let result = await this.cardService.getSource(new URL(fileUrl), {
+        signal,
+      });
+      if (signal.aborted) {
+        return;
       }
+      // A 404 means we are creating a new file, so there is no original code.
+      originalCode = result.status === 404 ? '' : result.content;
     } catch (error) {
+      if (signal.aborted) {
+        // Superseded by a newer load, or the resource went away. Neither is a
+        // failure to report.
+        return;
+      }
       this.errorMessage = `Failed to load code from ${fileUrl}`;
       return;
     }
+    this.originalCode = originalCode;
 
     let applySearchReplaceBlockCommand = new ApplySearchReplaceBlockTool(
       this.toolService.toolContext,
@@ -114,16 +189,23 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
     try {
       let { resultContent: patchedCode } =
         await applySearchReplaceBlockCommand.execute({
-          fileContent: this.originalCode,
+          // This load's own code, not whatever the resource holds by now.
+          fileContent: originalCode,
           codeBlock: searchReplaceBlock,
         });
+      if (signal.aborted) {
+        return;
+      }
       this.modifiedCode = patchedCode;
     } catch (error) {
-      this.modifiedCode = this.originalCode;
+      if (signal.aborted) {
+        return;
+      }
+      this.modifiedCode = originalCode;
       this.errorMessage =
         error instanceof Error ? error.message : String(error);
     }
-  });
+  }
 }
 
 export function getCodeDiffResultResource(
