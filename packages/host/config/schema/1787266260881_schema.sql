@@ -88,6 +88,8 @@
    size_bytes NOT NULL,
    created_at NOT NULL,
    last_accessed_at NOT NULL,
+   width INTEGER,
+   height INTEGER,
    PRIMARY KEY ( realm_url, source_url, capture_spec_hash, source_generation ) 
 );
 

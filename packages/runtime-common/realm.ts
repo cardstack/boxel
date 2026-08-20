@@ -4263,6 +4263,8 @@ export class Realm {
           ...entryKey,
           bytes,
           contentType: outcome.contentType ?? 'image/png',
+          width: outcome.width ?? null,
+          height: outcome.height ?? null,
           lane: 'on-demand',
         });
         entry = await findMediaCacheEntry(this.#dbAdapter, entryKey);

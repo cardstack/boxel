@@ -668,6 +668,7 @@ const reportHostShellToManager = async () => {
   let server = new RealmServer({
     realms,
     reconciler,
+    mediaCacheAdapter,
     virtualNetwork,
     matrixClient,
     realmsRootPath,
