@@ -808,11 +808,19 @@ export default class InteractSubmode extends Component {
         action: () => this.createCardInstance.perform(),
         icon: IconSearch,
       }),
-      new MenuItem({
-        label: 'Upload File…',
-        action: () => this.triggerUploadFile(),
-        icon: Upload,
-      }),
+      // An upload needs a writable destination, so the entry only appears
+      // once one exists — which also covers the moment before realm info
+      // has populated. The sibling entries pass an undefined realm through
+      // to the store, which picks a default; an upload has no such path.
+      ...(this.operatorModeStateService.getWritableRealmURL()
+        ? [
+            new MenuItem({
+              label: 'Upload File…',
+              action: () => this.triggerUploadFile(),
+              icon: Upload,
+            }),
+          ]
+        : []),
       new MenuDivider(),
       new MenuItem({
         label: 'Open Code Mode',
@@ -842,10 +850,11 @@ export default class InteractSubmode extends Component {
   private triggerUploadFile() {
     // Same destination convention as the other create actions in this
     // menu: the current workspace when it is writable, otherwise the
-    // default writable realm.
+    // default writable realm. The menu omits this entry when neither
+    // exists, so the guard is a no-op backstop rather than an error path.
     let realm = this.operatorModeStateService.getWritableRealmURL();
     if (!realm) {
-      throw new Error('No writable realm found');
+      return;
     }
     this.uploadFiles.perform(ri(realm.href)).catch((error) => {
       console.error('Unexpected error during file upload', error);
@@ -853,16 +862,7 @@ export default class InteractSubmode extends Component {
   }
 
   private uploadFiles = dropTask(async (realm: RealmIdentifier) => {
-    let files = await this.fileUpload.pickLocalFiles({});
-    if (files.length === 0) {
-      return;
-    }
-    // Parallel POSTs are safe: the realm advisory lock serializes
-    // writes server-side (packages/runtime-common/realm.ts).
-    let tasks = files.map((file) =>
-      this.fileUpload.uploadProvidedFile({ realm, file }),
-    );
-    let results = await Promise.all(tasks.map((task) => task.result));
+    let results = await this.fileUpload.pickAndUploadFiles(realm);
     let firstSuccess = results.find((fileDef) => fileDef?.url);
     if (firstSuccess?.url) {
       this.viewCard(this.rightMostStackIndex, firstSuccess.url, 'isolated', {
