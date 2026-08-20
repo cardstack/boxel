@@ -60,6 +60,23 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       );
     });
 
+    test('HEAD is not admitted to the screenshot route', async function (assert) {
+      // checkPermission exempts HEAD from auth realm-wide, so if this route
+      // answered HEAD it would hand unauthenticated callers an existence /
+      // size / content-hash oracle over a private realm's captures. The
+      // dispatch is GET-only; a HEAD falls through to the generic handlers
+      // and never gets the route's briefly-cacheable miss shape.
+      let response = await request
+        .head('/_screenshot/some-card')
+        .set('Accept', 'image/png');
+      assert.notStrictEqual(response.status, 200);
+      assert.notStrictEqual(
+        response.headers['cache-control'],
+        `private, max-age=${MEDIA_CACHE_MAX_AGE_SECONDS}`,
+        'the screenshot miss response did not answer',
+      );
+    });
+
     test('a declared-name request misses the same way', async function (assert) {
       let response = await request
         .get('/_screenshot/some-card?name=hero')

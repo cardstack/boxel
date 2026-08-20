@@ -11,6 +11,10 @@
     "#fetch": {
       "node": "./fetch-node.ts",
       "browser": "./fetch-browser.ts"
+    },
+    "#media-cache-stream": {
+      "node": "./media-cache-stream-node.ts",
+      "browser": "./media-cache-stream-browser.ts"
     }
   },
   "exports": {
