@@ -6,7 +6,7 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { scheduleOnce } from '@ember/runloop';
 import { htmlSafe } from '@ember/template';
-import { Tooltip } from '@cardstack/boxel-ui/components';
+import { BoxelDropdown, Tooltip } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
@@ -526,18 +526,20 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
 
   // ── Markdown embed chooser (toolbar) ────────────────────────────────────
 
-  @tracked _embedPopoverOpen = false;
-
   get _currentBfmRef(): BfmRefRange | undefined {
     return this._selectionInfo?.currentRef;
   }
 
-  _toggleEmbedPopover = () => {
-    this._embedPopoverOpen = !this._embedPopoverOpen;
+  // Close the Add-embed dropdown, then open the chooser. The dropdown lives in
+  // BoxelDropdown's wormhole (outside the toolbar's corner-clip box), so its
+  // positioning, viewport-edge flipping, and outside-click dismissal are the
+  // dropdown's concern, not ours.
+  _chooseEmbed = (close: () => void, defaultTab: 'card' | 'file') => {
+    close();
+    this._openEmbedChooser(defaultTab);
   };
 
   _openEmbedChooser = async (defaultTab: 'card' | 'file') => {
-    this._embedPopoverOpen = false;
     let chooser = this.cardContext?.markdownEmbedChooser;
     if (!chooser) {
       // No chooser provided (e.g. card running outside the host) — warn and
@@ -938,129 +940,136 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
         data-test-codemirror-editor
         ...attributes
       >
-        {{! ── Docked toolbar ── }}
-        {{! template-lint-disable no-pointer-down-event-binding }}
-        <div
-          class='codemirror-toolbar'
-          data-overlay-clip-header
-          data-test-markdown-toolbar
-        >
-          {{yield to='leadingControls'}}
-          {{#if (has-block 'leadingControls')}}
-            <span class='toolbar-divider'></span>
-          {{/if}}
+        <div class='codemirror-body' data-test-codemirror-body>
+          {{! ── Docked toolbar ── }}
+          {{! template-lint-disable no-pointer-down-event-binding }}
+          <div
+            class='codemirror-toolbar'
+            data-overlay-clip-header
+            data-test-markdown-toolbar
+          >
+            {{yield to='leadingControls'}}
+            {{#if (has-block 'leadingControls')}}
+              <span class='toolbar-divider'></span>
+            {{/if}}
 
-          {{#if this._currentBfmRef}}
-            <Tooltip @placement='top' data-test-toolbar-tooltip='edit-embed'>
-              <:trigger>
-                <button
-                  class='toolbar-btn'
-                  data-test-toolbar='edit-embed'
-                  type='button'
-                  aria-label='Edit embed'
-                  {{on 'mousedown' this._preventFocusLoss}}
-                  {{on 'click' this._openEditEmbed}}
-                ><PencilIcon width='16' height='16' /></button>
-              </:trigger>
-              <:content>
-                <span class='toolbar-tooltip'>
-                  <span class='toolbar-tooltip__label'>Edit embed</span>
-                </span>
-              </:content>
-            </Tooltip>
-          {{else}}
-            <div class='toolbar-embed-trigger'>
-              <Tooltip @placement='top' data-test-toolbar-tooltip='add-embed'>
+            {{#if this._currentBfmRef}}
+              <Tooltip @placement='top' data-test-toolbar-tooltip='edit-embed'>
                 <:trigger>
                   <button
-                    class='toolbar-btn
-                      {{if this._embedPopoverOpen "toolbar-btn--active"}}'
-                    data-test-toolbar='add-embed'
+                    class='toolbar-btn'
+                    data-test-toolbar='edit-embed'
                     type='button'
-                    aria-label='Add embed'
-                    aria-expanded={{if this._embedPopoverOpen 'true' 'false'}}
+                    aria-label='Edit embed'
                     {{on 'mousedown' this._preventFocusLoss}}
-                    {{on 'click' this._toggleEmbedPopover}}
-                  ><PlusIcon width='16' height='16' /></button>
+                    {{on 'click' this._openEditEmbed}}
+                  ><PencilIcon width='16' height='16' /></button>
                 </:trigger>
                 <:content>
                   <span class='toolbar-tooltip'>
-                    <span class='toolbar-tooltip__label'>Add embed</span>
+                    <span class='toolbar-tooltip__label'>Edit embed</span>
                   </span>
                 </:content>
               </Tooltip>
-              {{#if this._embedPopoverOpen}}
-                <div
-                  class='toolbar-embed-popover'
-                  data-test-toolbar-embed-popover
-                >
-                  <button
-                    type='button'
-                    class='toolbar-embed-popover__item'
-                    data-test-toolbar-embed='card'
-                    {{on 'mousedown' this._preventFocusLoss}}
-                    {{on 'click' (fn this._openEmbedChooser 'card')}}
-                  >Add a card</button>
-                  <button
-                    type='button'
-                    class='toolbar-embed-popover__item'
-                    data-test-toolbar-embed='file'
-                    {{on 'mousedown' this._preventFocusLoss}}
-                    {{on 'click' (fn this._openEmbedChooser 'file')}}
-                  >Add a file</button>
-                </div>
-              {{/if}}
-            </div>
-          {{/if}}
-          <span class='toolbar-divider'></span>
-
-          {{#each this.toolbarButtons as |btn|}}
-            {{#if btn.divider}}
-              <span class='toolbar-divider'></span>
             {{else}}
-              {{! Every item gets a styled tooltip — the label, plus a shortcut
+              {{! The dropdown renders in the shared wormhole (BoxelDropdown),
+                  so it escapes the toolbar's corner-clip box and handles its
+                  own viewport-edge flipping and outside-click dismissal. }}
+              <BoxelDropdown @contentClass='toolbar-embed-popover'>
+                <:trigger as |bindings|>
+                  <Tooltip
+                    @placement='top'
+                    data-test-toolbar-tooltip='add-embed'
+                  >
+                    <:trigger>
+                      <button
+                        class='toolbar-btn'
+                        data-test-toolbar='add-embed'
+                        type='button'
+                        aria-label='Add embed'
+                        {{on 'mousedown' this._preventFocusLoss}}
+                        {{bindings}}
+                      ><PlusIcon width='16' height='16' /></button>
+                    </:trigger>
+                    <:content>
+                      <span class='toolbar-tooltip'>
+                        <span class='toolbar-tooltip__label'>Add embed</span>
+                      </span>
+                    </:content>
+                  </Tooltip>
+                </:trigger>
+                <:content as |dd|>
+                  <div
+                    class='toolbar-embed-menu'
+                    data-test-toolbar-embed-popover
+                  >
+                    <button
+                      type='button'
+                      class='toolbar-embed-popover__item'
+                      data-test-toolbar-embed='card'
+                      {{on 'click' (fn this._chooseEmbed dd.close 'card')}}
+                    >Add a card</button>
+                    <button
+                      type='button'
+                      class='toolbar-embed-popover__item'
+                      data-test-toolbar-embed='file'
+                      {{on 'click' (fn this._chooseEmbed dd.close 'file')}}
+                    >Add a file</button>
+                  </div>
+                </:content>
+              </BoxelDropdown>
+            {{/if}}
+            <span class='toolbar-divider'></span>
+
+            {{#each this.toolbarButtons as |btn|}}
+              {{#if btn.divider}}
+                <span class='toolbar-divider'></span>
+              {{else}}
+                {{! Every item gets a styled tooltip — the label, plus a shortcut
                   key badge when the item has a CodeMirror binding. The tooltip
                   is suppressed while the control is disabled. }}
-              <Tooltip
-                @placement='top'
-                @disabled={{btn.disabled}}
-                data-test-toolbar-tooltip={{btn.testId}}
-              >
-                <:trigger>
-                  <button
-                    class='toolbar-btn {{if btn.active "toolbar-btn--active"}}'
-                    data-test-toolbar={{btn.testId}}
-                    type='button'
-                    aria-label={{btn.label}}
-                    aria-pressed={{btn.ariaPressed}}
-                    disabled={{btn.disabled}}
-                    {{on 'mousedown' this._preventFocusLoss}}
-                    {{on 'click' btn.action}}
-                  >{{#let btn.icon as |Icon|}}<Icon
-                        width='16'
-                        height='16'
-                      />{{/let}}</button>
-                </:trigger>
-                <:content>
-                  <span class='toolbar-tooltip'>
-                    <span class='toolbar-tooltip__label'>{{btn.label}}</span>
-                    {{#if btn.shortcut}}
-                      <kbd class='shortcut-key'>{{btn.shortcut}}</kbd>
-                    {{/if}}
-                  </span>
-                </:content>
-              </Tooltip>
-            {{/if}}
-          {{/each}}
-        </div>
+                <Tooltip
+                  @placement='top'
+                  @disabled={{btn.disabled}}
+                  data-test-toolbar-tooltip={{btn.testId}}
+                >
+                  <:trigger>
+                    <button
+                      class='toolbar-btn
+                        {{if btn.active "toolbar-btn--active"}}'
+                      data-test-toolbar={{btn.testId}}
+                      type='button'
+                      aria-label={{btn.label}}
+                      aria-pressed={{btn.ariaPressed}}
+                      disabled={{btn.disabled}}
+                      {{on 'mousedown' this._preventFocusLoss}}
+                      {{on 'click' btn.action}}
+                    >{{#let btn.icon as |Icon|}}<Icon
+                          width='16'
+                          height='16'
+                        />{{/let}}</button>
+                  </:trigger>
+                  <:content>
+                    <span class='toolbar-tooltip'>
+                      <span class='toolbar-tooltip__label'>{{btn.label}}</span>
+                      {{#if btn.shortcut}}
+                        <kbd class='shortcut-key'>{{btn.shortcut}}</kbd>
+                      {{/if}}
+                    </span>
+                  </:content>
+                </Tooltip>
+              {{/if}}
+            {{/each}}
+          </div>
 
-        {{! template-lint-disable no-invalid-interactive }}
-        <div
-          class='codemirror-mount'
-          data-test-codemirror-mount
-          {{on 'mousedown' this._focusEditorOnPointerDown}}
-          {{this.mountEditor this.cm @content @onUpdate this.livePreview}}
-        ></div>
+          {{! template-lint-disable no-invalid-interactive }}
+          <div
+            class='codemirror-mount'
+            data-test-codemirror-mount
+            {{on 'mousedown' this._focusEditorOnPointerDown}}
+            {{this.mountEditor this.cm @content @onUpdate this.livePreview}}
+          ></div>
+        </div>
       </div>
 
       {{#if this.livePreview}}
@@ -1167,6 +1176,32 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
         .codemirror-editor:focus-within {
           border-color: var(--ring, var(--boxel-highlight));
           outline-color: var(--ring, var(--boxel-highlight));
+        }
+
+        /* Wraps the sticky toolbar + editor mount so the editor's rounded
+           corners clip the toolbar's square bottom corners when it docks at
+           the bottom on scroll. `overflow: clip` (not `hidden`) does this
+           without establishing a scroll container, so the toolbar keeps
+           sticking to the outer scroll panel. The radius is inset by the 1px
+           border so it hugs the border's inner curve.
+
+           The toolbar's two menus must escape this clip: when the toolbar
+           docks at the bottom there is zero room below it inside the box, so a
+           menu rendered here would be swallowed while its trigger still looks
+           normal. Both escape by rendering in the shared dropdown wormhole at
+           the app root, outside this subtree entirely — the mode selector via
+           BoxelSelect (without `renderInPlace`) and the Add-embed menu via
+           BoxelDropdown. */
+        .codemirror-body {
+          display: flex;
+          flex-direction: column;
+          flex: 1;
+          min-height: 0;
+          /* Inset by the 1px border; clamped at 0 so a card that themes
+             `--boxel-border-radius` below 1px doesn't drive the calc negative
+             (which would invalidate the declaration). */
+          border-radius: max(0px, calc(var(--boxel-border-radius) - 1px));
+          overflow: clip;
         }
 
         /* Fill the field so clicking anywhere below the text focuses it. */
@@ -1438,7 +1473,11 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
           background: color-mix(in oklab, currentColor 8%, transparent);
         }
 
-        .toolbar-btn--active:not(:disabled) {
+        /* `[aria-expanded='true']` covers the Add-embed trigger while its
+           dropdown is open — BoxelDropdown's trigger modifier sets that
+           attribute, so the button reads active without a tracked flag. */
+        .toolbar-btn--active:not(:disabled),
+        .toolbar-btn[aria-expanded='true']:not(:disabled) {
           background: var(--primary, var(--boxel-200));
           color: var(--primary-foreground, var(--boxel-700));
         }
@@ -1479,39 +1518,6 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
           margin: 0 var(--boxel-sp-5xs);
         }
 
-        .toolbar-embed-trigger {
-          position: relative;
-          display: inline-flex;
-        }
-        .toolbar-embed-popover {
-          position: absolute;
-          top: 100%;
-          left: 0;
-          margin-top: 4px;
-          min-width: 140px;
-          background: var(--boxel-light);
-          color: var(--boxel-dark);
-          border: 1px solid var(--boxel-300);
-          border-radius: var(--boxel-border-radius);
-          box-shadow: var(--boxel-deep-box-shadow);
-          padding: var(--boxel-sp-4xs) 0;
-          z-index: 5;
-          display: flex;
-          flex-direction: column;
-        }
-        .toolbar-embed-popover__item {
-          appearance: none;
-          background: none;
-          border: none;
-          text-align: left;
-          padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
-          font: var(--boxel-font-sm);
-          cursor: pointer;
-        }
-        .toolbar-embed-popover__item:hover {
-          background: var(--boxel-100);
-        }
-
         .codemirror-editor-loading {
           min-height: 120px;
           display: flex;
@@ -1520,6 +1526,35 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
           color: var(--boxel-400, #999);
           font-style: italic;
         }
+      }
+    </style>
+    {{! The Add-embed dropdown content renders in the shared wormhole, outside
+        this component's scoped-style reach — so its rules are matched by the
+        @contentClass here rather than scoped. BoxelDropdown provides the
+        surface (background, border, radius, shadow); these add the menu's
+        padding and the item layout. }}
+    {{! template-lint-disable require-scoped-style }}
+    <style>
+      .boxel-dropdown__content.toolbar-embed-popover {
+        min-width: 140px;
+        padding: var(--boxel-sp-4xs) 0;
+      }
+      .toolbar-embed-popover .toolbar-embed-menu {
+        display: flex;
+        flex-direction: column;
+      }
+      .toolbar-embed-popover .toolbar-embed-popover__item {
+        appearance: none;
+        background: none;
+        border: none;
+        text-align: left;
+        padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
+        font: var(--boxel-font-sm);
+        color: inherit;
+        cursor: pointer;
+      }
+      .toolbar-embed-popover .toolbar-embed-popover__item:hover {
+        background: color-mix(in oklab, currentColor 8%, transparent);
       }
     </style>
   </template>
