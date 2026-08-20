@@ -6,7 +6,7 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { scheduleOnce } from '@ember/runloop';
 import { htmlSafe } from '@ember/template';
-import { Tooltip } from '@cardstack/boxel-ui/components';
+import { BoxelDropdown, Tooltip } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
@@ -526,57 +526,20 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
 
   // ── Markdown embed chooser (toolbar) ────────────────────────────────────
 
-  @tracked _embedPopoverOpen = false;
-  // Inline style pinning the popover under its trigger. The popover is
-  // `position: fixed` (see below) so it escapes the `.codemirror-body` corner
-  // clip, which means it needs explicit viewport coordinates rather than the
-  // `top: 100%` an in-flow absolute box would get for free.
-  @tracked _embedPopoverStyle = '';
-  _embedTriggerEl: HTMLElement | null = null;
-
   get _currentBfmRef(): BfmRefRange | undefined {
     return this._selectionInfo?.currentRef;
   }
 
-  // Pin the popover directly under the trigger, in viewport coordinates. The
-  // trigger is inside a sticky toolbar, so this is recomputed on scroll/resize
-  // (see `_trackEmbedPopover`) to keep the two glued together.
-  _positionEmbedPopover = () => {
-    let trigger = this._embedTriggerEl;
-    if (!trigger) return;
-    let r = trigger.getBoundingClientRect();
-    this._embedPopoverStyle = `position: fixed; top: ${r.bottom + 4}px; left: ${r.left}px;`;
+  // Close the Add-embed dropdown, then open the chooser. The dropdown lives in
+  // BoxelDropdown's wormhole (outside the toolbar's corner-clip box), so its
+  // positioning, viewport-edge flipping, and outside-click dismissal are the
+  // dropdown's concern, not ours.
+  _chooseEmbed = (close: () => void, defaultTab: 'card' | 'file') => {
+    close();
+    this._openEmbedChooser(defaultTab);
   };
-
-  _toggleEmbedPopover = (e: Event) => {
-    if (this._embedPopoverOpen) {
-      this._embedPopoverOpen = false;
-      return;
-    }
-    this._embedTriggerEl = e.currentTarget as HTMLElement;
-    this._positionEmbedPopover();
-    this._embedPopoverOpen = true;
-  };
-
-  // While the popover is open, keep it pinned under the trigger as the outer
-  // panel scrolls or the window resizes. Installed on the popover element, so
-  // its lifecycle tracks the popover's presence in the DOM.
-  _trackEmbedPopover = modifier(() => {
-    this._positionEmbedPopover();
-    let reposition = () => this._positionEmbedPopover();
-    window.addEventListener('scroll', reposition, {
-      capture: true,
-      passive: true,
-    });
-    window.addEventListener('resize', reposition);
-    return () => {
-      window.removeEventListener('scroll', reposition, { capture: true });
-      window.removeEventListener('resize', reposition);
-    };
-  });
 
   _openEmbedChooser = async (defaultTab: 'card' | 'file') => {
-    this._embedPopoverOpen = false;
     let chooser = this.cardContext?.markdownEmbedChooser;
     if (!chooser) {
       // No chooser provided (e.g. card running outside the host) — warn and
@@ -1009,50 +972,52 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
                 </:content>
               </Tooltip>
             {{else}}
-              <div class='toolbar-embed-trigger'>
-                <Tooltip @placement='top' data-test-toolbar-tooltip='add-embed'>
-                  <:trigger>
-                    <button
-                      class='toolbar-btn
-                        {{if this._embedPopoverOpen "toolbar-btn--active"}}'
-                      data-test-toolbar='add-embed'
-                      type='button'
-                      aria-label='Add embed'
-                      aria-expanded={{if this._embedPopoverOpen 'true' 'false'}}
-                      {{on 'mousedown' this._preventFocusLoss}}
-                      {{on 'click' this._toggleEmbedPopover}}
-                    ><PlusIcon width='16' height='16' /></button>
-                  </:trigger>
-                  <:content>
-                    <span class='toolbar-tooltip'>
-                      <span class='toolbar-tooltip__label'>Add embed</span>
-                    </span>
-                  </:content>
-                </Tooltip>
-                {{#if this._embedPopoverOpen}}
+              {{! The dropdown renders in the shared wormhole (BoxelDropdown),
+                  so it escapes the toolbar's corner-clip box and handles its
+                  own viewport-edge flipping and outside-click dismissal. }}
+              <BoxelDropdown @contentClass='toolbar-embed-popover'>
+                <:trigger as |bindings|>
+                  <Tooltip
+                    @placement='top'
+                    data-test-toolbar-tooltip='add-embed'
+                  >
+                    <:trigger>
+                      <button
+                        class='toolbar-btn'
+                        data-test-toolbar='add-embed'
+                        type='button'
+                        aria-label='Add embed'
+                        {{on 'mousedown' this._preventFocusLoss}}
+                        {{bindings}}
+                      ><PlusIcon width='16' height='16' /></button>
+                    </:trigger>
+                    <:content>
+                      <span class='toolbar-tooltip'>
+                        <span class='toolbar-tooltip__label'>Add embed</span>
+                      </span>
+                    </:content>
+                  </Tooltip>
+                </:trigger>
+                <:content as |dd|>
                   <div
-                    class='toolbar-embed-popover'
-                    style={{htmlSafe this._embedPopoverStyle}}
+                    class='toolbar-embed-menu'
                     data-test-toolbar-embed-popover
-                    {{this._trackEmbedPopover}}
                   >
                     <button
                       type='button'
                       class='toolbar-embed-popover__item'
                       data-test-toolbar-embed='card'
-                      {{on 'mousedown' this._preventFocusLoss}}
-                      {{on 'click' (fn this._openEmbedChooser 'card')}}
+                      {{on 'click' (fn this._chooseEmbed dd.close 'card')}}
                     >Add a card</button>
                     <button
                       type='button'
                       class='toolbar-embed-popover__item'
                       data-test-toolbar-embed='file'
-                      {{on 'mousedown' this._preventFocusLoss}}
-                      {{on 'click' (fn this._openEmbedChooser 'file')}}
+                      {{on 'click' (fn this._chooseEmbed dd.close 'file')}}
                     >Add a file</button>
                   </div>
-                {{/if}}
-              </div>
+                </:content>
+              </BoxelDropdown>
             {{/if}}
             <span class='toolbar-divider'></span>
 
@@ -1223,10 +1188,10 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
            The toolbar's two menus must escape this clip: when the toolbar
            docks at the bottom there is zero room below it inside the box, so a
            menu rendered here would be swallowed while its trigger still looks
-           normal. Both are kept out — the mode selector wormholes out of place
-           (BoxelSelect without `renderInPlace`) and the Add-embed popover is
-           `position: fixed` (its containing block is the viewport, so this
-           clip can't reach it). */
+           normal. Both escape by rendering in the shared dropdown wormhole at
+           the app root, outside this subtree entirely — the mode selector via
+           BoxelSelect (without `renderInPlace`) and the Add-embed menu via
+           BoxelDropdown. */
         .codemirror-body {
           display: flex;
           flex-direction: column;
@@ -1508,7 +1473,11 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
           background: color-mix(in oklab, currentColor 8%, transparent);
         }
 
-        .toolbar-btn--active:not(:disabled) {
+        /* `[aria-expanded='true']` covers the Add-embed trigger while its
+           dropdown is open — BoxelDropdown's trigger modifier sets that
+           attribute, so the button reads active without a tracked flag. */
+        .toolbar-btn--active:not(:disabled),
+        .toolbar-btn[aria-expanded='true']:not(:disabled) {
           background: var(--primary, var(--boxel-200));
           color: var(--primary-foreground, var(--boxel-700));
         }
@@ -1549,41 +1518,6 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
           margin: 0 var(--boxel-sp-5xs);
         }
 
-        .toolbar-embed-trigger {
-          position: relative;
-          display: inline-flex;
-        }
-        /* `position: fixed` (coordinates set inline from the trigger's rect)
-           so the popover escapes the `.codemirror-body` corner clip — its
-           containing block is the viewport, which that clip can't reach. An
-           absolute popover here would be swallowed once the toolbar docks at
-           the bottom, where there is no room left below it inside the clip. */
-        .toolbar-embed-popover {
-          position: fixed;
-          min-width: 140px;
-          background: var(--boxel-light);
-          color: var(--boxel-dark);
-          border: 1px solid var(--boxel-300);
-          border-radius: var(--boxel-border-radius);
-          box-shadow: var(--boxel-deep-box-shadow);
-          padding: var(--boxel-sp-4xs) 0;
-          z-index: 5;
-          display: flex;
-          flex-direction: column;
-        }
-        .toolbar-embed-popover__item {
-          appearance: none;
-          background: none;
-          border: none;
-          text-align: left;
-          padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
-          font: var(--boxel-font-sm);
-          cursor: pointer;
-        }
-        .toolbar-embed-popover__item:hover {
-          background: var(--boxel-100);
-        }
-
         .codemirror-editor-loading {
           min-height: 120px;
           display: flex;
@@ -1592,6 +1526,35 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
           color: var(--boxel-400, #999);
           font-style: italic;
         }
+      }
+    </style>
+    {{! The Add-embed dropdown content renders in the shared wormhole, outside
+        this component's scoped-style reach — so its rules are matched by the
+        @contentClass here rather than scoped. BoxelDropdown provides the
+        surface (background, border, radius, shadow); these add the menu's
+        padding and the item layout. }}
+    {{! template-lint-disable require-scoped-style }}
+    <style>
+      .boxel-dropdown__content.toolbar-embed-popover {
+        min-width: 140px;
+        padding: var(--boxel-sp-4xs) 0;
+      }
+      .toolbar-embed-popover .toolbar-embed-menu {
+        display: flex;
+        flex-direction: column;
+      }
+      .toolbar-embed-popover .toolbar-embed-popover__item {
+        appearance: none;
+        background: none;
+        border: none;
+        text-align: left;
+        padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
+        font: var(--boxel-font-sm);
+        color: inherit;
+        cursor: pointer;
+      }
+      .toolbar-embed-popover .toolbar-embed-popover__item:hover {
+        background: color-mix(in oklab, currentColor 8%, transparent);
       }
     </style>
   </template>

@@ -100,10 +100,12 @@ export default class MarkdownEditorModeSelect extends GlimmerComponent<Signature
     {{! template-lint-disable require-scoped-style }}
     <style>
       .boxel-select__dropdown.markdown-editor-mode-select-dropdown {
-        /* Match the trigger: 2px less rounded than the default menu radius. */
-        --boxel-form-control-border-radius: calc(
-          var(--boxel-border-radius) - 2px
-        );
+        /* The trigger's 2px-tighter radius arrives on the wormhole via
+           BoxelSelect's `--boxel-form-control-border-radius` sync (resolved
+           against the card theme at the trigger). Don't re-declare it here:
+           this element sits at the app root, where the card's
+           `--boxel-border-radius` doesn't apply, so a local `calc()` would
+           override the synced value with the app default under a theme. */
         width: max-content;
         min-width: 7rem;
       }

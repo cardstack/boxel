@@ -161,10 +161,19 @@ module('Integration | RichMarkdownField', function (hooks) {
     // The wrapper must clip (not scroll) so the toolbar's square bottom
     // corners follow the editor's rounded outline when it docks at the
     // bottom, while keeping position: sticky resolving to the outer panel.
+    // Assert both axes (the shorthand): the source sets `overflow: clip`, and
+    // it is both axes that must stay out of scroll-container territory — a
+    // stray `overflow-x: visible` would let the corners spill horizontally.
+    let overflow = getComputedStyle(wrapper);
     assert.strictEqual(
-      getComputedStyle(wrapper).overflowY,
+      overflow.overflowX,
       'clip',
-      'the wrapper clips its overflow',
+      'the wrapper clips overflow-x',
+    );
+    assert.strictEqual(
+      overflow.overflowY,
+      'clip',
+      'the wrapper clips overflow-y',
     );
     // The clip only rounds the toolbar's corners because the wrapper itself
     // carries a radius — delete that declaration and the clip has nothing to
@@ -215,19 +224,21 @@ module('Integration | RichMarkdownField', function (hooks) {
 
     // No embed is referenced yet, so the toolbar shows the Add-embed trigger.
     await click('[data-test-toolbar="add-embed"]');
-    let popover = root.querySelector(
-      '[data-test-toolbar-embed-popover]',
-    ) as HTMLElement;
-    assert.dom(popover).exists('the Add-embed dropdown opens');
-    // The dropdown must not be swallowed by `.codemirror-body`'s `overflow:
-    // clip`: when the toolbar docks at the bottom there is zero room below it
-    // inside that box. `position: fixed` roots the dropdown to the viewport —
-    // a box the clip cannot reach — so it stays visible and clickable. An
-    // absolute dropdown (its containing block inside the clip) would be cut off.
-    assert.strictEqual(
-      getComputedStyle(popover).position,
-      'fixed',
-      'the Add-embed dropdown is fixed-positioned so the corner clip cannot swallow it',
+    // BoxelDropdown renders the menu in the shared dropdown wormhole at the app
+    // root, so it lives outside `.codemirror-body` entirely — the `overflow:
+    // clip` corner box is not in its ancestor chain and cannot swallow it when
+    // the toolbar docks at the bottom, where an in-box menu would have zero
+    // room below it. Query the whole document since the menu is not under the
+    // card's render root.
+    let popover = document.querySelector('[data-test-toolbar-embed-popover]');
+    let clipBox = root.querySelector('[data-test-codemirror-body]');
+    assert.ok(popover, 'the Add-embed dropdown opens');
+    assert
+      .dom('[data-test-codemirror-body]')
+      .exists('the corner-clip box is present');
+    assert.notOk(
+      clipBox?.contains(popover),
+      'the Add-embed menu renders outside the corner-clip box, so the clip cannot swallow it',
     );
   });
 
