@@ -8,8 +8,10 @@
         "notes": null,
         "cardThumbnailURL": null
       },
-      "cssImports": [],
-      "cssVariables": ":root {\n  --primary: #0e6b3c;\n  --accent: #d9a91d;\n  --background: #f6f8f5;\n  --card: #ffffff;\n  --foreground: #16241b;\n  --muted-foreground: #5a6b60;\n  --border: #dbe4dc;\n}"
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&display=swap"
+      ],
+      "cssVariables": ":root {\n  --primary: #0e6b3c;\n  --primary-foreground: #f6f8f5;\n  --accent: #d9a91d;\n  --accent-foreground: #2b2003;\n  --background: #f6f8f5;\n  --card: #ffffff;\n  --card-foreground: #16241b;\n  --foreground: #16241b;\n  --muted: #e9efe8;\n  --muted-foreground: #5a6b60;\n  --border: #dbe4dc;\n  --destructive: #b3402e;\n  --font-heading: 'Barlow Condensed', 'Arial Narrow', sans-serif;\n  --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;\n}"
     },
     "meta": {
       "adoptsFrom": {
