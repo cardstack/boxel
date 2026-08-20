@@ -96,3 +96,30 @@ export async function captureSpecHash(spec: CaptureSpec): Promise<string> {
     new TextEncoder().encode(canonicalCaptureSpecString(spec)),
   );
 }
+
+// The spec's canonical query string — '' for the all-defaults spec — so a
+// served URL round-trips through `parseCaptureSpecParams` back to the same
+// canonical form.
+export function canonicalCaptureSpecQuery(spec: CaptureSpec): string {
+  let searchParams = new URLSearchParams();
+  if (spec.format !== DEFAULT_CAPTURE_FORMAT) {
+    searchParams.set('format', spec.format);
+  }
+  let qs = searchParams.toString();
+  return qs.length > 0 ? `?${qs}` : '';
+}
+
+// The durable served URL for one capture of one instance: the platform's
+// only public screenshot URL form. A re-capture changes what this URL
+// serves, never the URL itself.
+export function screenshotURLFor({
+  realmURL,
+  instanceLocalPath,
+  spec,
+}: {
+  realmURL: string;
+  instanceLocalPath: string;
+  spec: CaptureSpec;
+}): string {
+  return `${realmURL}_screenshot/${instanceLocalPath}${canonicalCaptureSpecQuery(spec)}`;
+}
