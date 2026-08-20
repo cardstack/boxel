@@ -1165,13 +1165,14 @@ export class HtmlMetadataField extends FieldDef {
 // `3D model` inspector section, the same way `encoding` serves audio and video.
 //
 // Every fact here is read from the file's HEAD at index time (see the
-// `*-meta-extractor` modules). The true geometry — transform-correct dimensions,
-// full triangle counts — is deliberately left to the live client-side viewer
-// (`Model3DPreview`), which already loads and measures the mesh; paying for a
-// full geometry scan at index time would duplicate that for no gain. So a value
-// is present here only when it sits cheaply in the header: a binary STL's facet
-// count, a slicer 3MF's configured face/part counts, the package's materials and
-// provenance.
+// `*-meta-extractor` modules). A value is present only when it sits cheaply in
+// the header: a binary STL's facet count, a slicer 3MF's configured face/part
+// counts, the package's materials and provenance, or — for glTF, which
+// describes its own scene graph — the vertex count and the transform-composed
+// bounding box. What is *not* read here is geometry a header doesn't already
+// summarize (an STL/3MF's true extent, a full triangle scan); that is left to
+// the live client-side viewer (`Model3DPreview`), which already loads and
+// measures the mesh, so a full scan at index time would duplicate it for no gain.
 export class Model3dMetadataField extends FieldDef {
   static displayName = '3D Model Metadata';
   static icon = CubeIcon;
@@ -1185,9 +1186,21 @@ export class Model3dMetadataField extends FieldDef {
   // Triangle/facet count where the header carries it (a binary STL's facet
   // count, a slicer 3MF's summed configured face count); absent otherwise.
   @field triangles = contains(NumberField);
+  // Summed across a glTF's mesh-primitive POSITION accessors; other formats'
+  // headers carry no vertex count.
+  @field vertices = contains(NumberField);
   @field materials = contains(NumberField);
   @field materialNames = containsMany(StringField);
   @field unit = contains(StringField);
+  // Scene-graph facts a glTF header enumerates directly.
+  @field nodes = contains(NumberField);
+  @field animations = contains(NumberField);
+  @field textures = contains(NumberField);
+  // Model-space bounding box, "X × Y × Z", from a glTF's POSITION accessor
+  // bounds placed through its scene-graph node transforms (so a scaled or
+  // instanced mesh reports the size it renders at). Unitless: glTF distances are
+  // nominally meters, but files routinely ignore that.
+  @field dimensions = contains(StringField);
   // Authoring/slicer application (3MF) or the binary STL header string.
   @field generator = contains(StringField);
   @field solidName = contains(StringField);
@@ -1219,8 +1232,24 @@ export class Model3dMetadataField extends FieldDef {
         {{#if @model.triangles}}
           <div class='row'><dt>Triangles</dt><dd>{{@model.triangles}}</dd></div>
         {{/if}}
+        {{#if @model.vertices}}
+          <div class='row'><dt>Vertices</dt><dd>{{@model.vertices}}</dd></div>
+        {{/if}}
+        {{#if @model.dimensions}}
+          <div class='row'><dt>Size</dt><dd>{{@model.dimensions}}</dd></div>
+        {{/if}}
         {{#if @model.unit}}
           <div class='row'><dt>Units</dt><dd>{{@model.unit}}</dd></div>
+        {{/if}}
+        {{#if @model.nodes}}
+          <div class='row'><dt>Nodes</dt><dd>{{@model.nodes}}</dd></div>
+        {{/if}}
+        {{#if @model.animations}}
+          <div class='row'><dt>Animations</dt><dd
+            >{{@model.animations}}</dd></div>
+        {{/if}}
+        {{#if @model.textures}}
+          <div class='row'><dt>Textures</dt><dd>{{@model.textures}}</dd></div>
         {{/if}}
         {{#if @model.materialNames.length}}
           <div class='row'><dt>Materials</dt><dd

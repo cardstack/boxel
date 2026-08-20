@@ -70,9 +70,71 @@ bfmMarked.use({
   },
 });
 
+// The trailing `\s+|\r?$` alternation keeps a bullet that ends its line —
+// with or without trailing text — normalizable; split('\n') has already
+// consumed the newline the old whole-string pattern used to match.
 const DECORATIVE_BULLET_PATTERN =
   // eslint-disable-next-line no-misleading-character-class -- match pictographic symbols plus a few geometric glyphs not covered by the Unicode class
-  /(^|\n)(\s*)([\p{Extended_Pictographic}★•▪●❖✦✧◉◦◾◽⬢⬡☑✔☑️➤➔➜➡→])(\s+)/gu;
+  /^(\s*)([\p{Extended_Pictographic}★•▪●❖✦✧◉◦◾◽⬢⬡☑✔☑️➤➔➜➡→])(\s+|\r?$)/u;
+
+// `.` never matches `\r`, so on CRLF input the greedy group stops before a
+// trailing `\r`; the explicit `\r?` lets `$` still anchor. Without it no
+// fence line would ever match CRLF content and the tracker would rewrite
+// fenced code.
+const CODE_FENCE_PATTERN = /^(\s*)(`{3,}|~{3,})(.*)\r?$/;
+// Markdown can open a fence on the same line as a list marker (`- ```gts`);
+// marked treats that as fenced code, so the tracker must too. Only openers
+// take this form — a closing fence cannot carry an info string, let alone a
+// list marker.
+const LIST_PREFIXED_CODE_FENCE_PATTERN =
+  /^(\s*)(?:[-*+]|\d{1,9}[.)])\s+(`{3,}|~{3,})(.*)\r?$/;
+// Prefix decorative bullets with a standard list marker so marked treats them
+// as list items — but never inside fenced code blocks. Fenced content must
+// survive rendering verbatim: search/replace patches are extracted back out
+// of the rendered HTML, and an inserted marker makes the patch text no longer
+// match the file it targets.
+//
+// Only *fenced* blocks are protected. A 4-space indented line is an indented
+// code block to marked in some contexts, but inside a list item the same
+// indentation is ordinary list content (a nested bullet); telling the two
+// apart needs block context that only the lexer has. Since the patch format
+// is always fenced, indented code blocks are left to the rewrite.
+function normalizeDecorativeBullets(markdown: string): string {
+  let inFence = false;
+  let fenceChar = '';
+  let fenceLength = 0;
+  return markdown
+    .split('\n')
+    .map((line) => {
+      if (inFence) {
+        let closeMatch = line.match(CODE_FENCE_PATTERN);
+        if (
+          closeMatch &&
+          closeMatch[2][0] === fenceChar &&
+          closeMatch[2].length >= fenceLength &&
+          closeMatch[3].trim() === ''
+        ) {
+          inFence = false;
+        }
+        return line;
+      }
+      let openMatch =
+        line.match(CODE_FENCE_PATTERN) ??
+        line.match(LIST_PREFIXED_CODE_FENCE_PATTERN);
+      if (openMatch) {
+        inFence = true;
+        fenceChar = openMatch[2][0];
+        fenceLength = openMatch[2].length;
+        return line;
+      }
+      return line.replace(
+        DECORATIVE_BULLET_PATTERN,
+        (_match, indentation, bullet, whitespace) =>
+          `${indentation}* ${bullet}${whitespace}`,
+      );
+    })
+    .join('\n');
+}
 
 const DEFAULT_MARKED_SYNC_OPTIONS = {
   escapeHtmlInCodeBlocks: true,
@@ -187,11 +249,7 @@ export function markdownToHtml(
     return '';
   }
   // Marked only treats ASCII list markers, so prefix decorative bullets with a standard marker.
-  let normalizedMarkdown = markdown.replace(
-    DECORATIVE_BULLET_PATTERN,
-    (_match, boundary, indentation, bullet, whitespace) =>
-      `${boundary}${indentation}* ${bullet}${whitespace}`,
-  );
+  let normalizedMarkdown = normalizeDecorativeBullets(markdown);
   let html = markedSync(normalizedMarkdown, {
     escapeHtmlInCodeBlocks: opts.escapeHtmlInCodeBlocks,
     enableMonacoSyntaxHighlighting: opts.enableMonacoSyntaxHighlighting,
