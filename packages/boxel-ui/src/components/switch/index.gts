@@ -6,12 +6,17 @@ import { cn } from '../../helpers.gts';
 
 interface SwitchSignature {
   Args: SwitchArgs;
+  Blocks: {
+    default?: [];
+  };
   Element: HTMLLabelElement;
 }
 interface SwitchArgs {
   disabled?: boolean;
   isEnabled: boolean;
-  label: string;
+  /* names the switch for assistive technology when no block is given; a
+     yielded visible label names it instead, so pass one or the other */
+  label?: string;
   onChange: (isEnabled: boolean) => void;
 }
 
@@ -44,23 +49,34 @@ function toggleOnEnter(
 
 const Switch: TemplateOnlyComponent<SwitchSignature> = <template>
   <label
-    class={{cn 'switch' checked=@isEnabled disabled=@disabled}}
+    class={{cn
+      'switch'
+      checked=@isEnabled
+      disabled=@disabled
+      has-label=(has-block)
+    }}
     data-test-switch-checked={{if @isEnabled 'on' 'off'}}
     ...attributes
   >
-    <span class='boxel-sr-only'>{{@label}}</span>
-    {{! a native checkbox's checkedness maps to aria-checked automatically;
-        an explicit binding could disagree with it }}
-    {{! template-lint-disable require-mandatory-role-attributes }}
-    <input
-      {{on 'click' (fn toggleOnClick @isEnabled @onChange)}}
-      {{on 'keydown' (fn toggleOnEnter @isEnabled @onChange)}}
-      class='switch-input'
-      type='checkbox'
-      checked={{@isEnabled}}
-      disabled={{@disabled}}
-      role='switch'
-    />
+    {{#if (has-block)}}
+      <span class='switch-label'>{{yield}}</span>
+    {{else}}
+      <span class='boxel-sr-only'>{{@label}}</span>
+    {{/if}}
+    <span class='switch-track'>
+      {{! a native checkbox's checkedness maps to aria-checked automatically;
+          an explicit binding could disagree with it }}
+      {{! template-lint-disable require-mandatory-role-attributes }}
+      <input
+        {{on 'click' (fn toggleOnClick @isEnabled @onChange)}}
+        {{on 'keydown' (fn toggleOnEnter @isEnabled @onChange)}}
+        class='switch-input'
+        type='checkbox'
+        checked={{@isEnabled}}
+        disabled={{@disabled}}
+        role='switch'
+      />
+    </span>
   </label>
 
   <style scoped>
@@ -83,16 +99,29 @@ const Switch: TemplateOnlyComponent<SwitchSignature> = <template>
           color-mix(in oklch, var(--primary-foreground) 12%, transparent)
         );
 
+        display: inline-flex;
+        align-items: center;
+        position: relative;
+        color: var(--boxel-switch-foreground, var(--foreground));
+      }
+
+      .switch.has-label {
+        gap: var(--boxel-sp-xs);
+      }
+
+      /* With no visible label the wrapper has no other content, so it sizes
+         exactly to this track and consumer CSS on the label element keeps
+         behaving as if the label were the track itself. */
+      .switch-track {
         box-sizing: border-box;
+        flex: none;
         width: var(--_switch-width);
         height: var(--_switch-height);
         border-radius: var(--boxel-border-radius-pill);
         padding: 1px;
         display: inline-flex;
         align-items: center;
-        position: relative;
         background-color: var(--_switch-bg-color);
-        color: var(--boxel-switch-foreground, var(--foreground));
         border: 1px solid var(--border);
         box-shadow: var(--shadow-xs);
       }
@@ -113,14 +142,14 @@ const Switch: TemplateOnlyComponent<SwitchSignature> = <template>
            foreground-derived color keeps the thumb visible in themes where
            --input and --background nearly coincide. */
         box-shadow: 0 0 0 1px var(--_switch-thumb-edge-color);
-        /* the control's ring is drawn on the label below; the UA ring here
+        /* the control's ring is drawn on the track below; the UA ring here
            would halo the thumb instead */
         outline: none;
       }
 
-      /* Extends the clickable surface past the drawn track so the control
-         meets the 24px minimum target size (WCAG 2.5.8) without growing
-         visually. Part of the label, so clicks here toggle as usual. */
+      /* Extends the clickable surface past the drawn control so it meets the
+         24px minimum target size (WCAG 2.5.8) without growing visually. Part
+         of the label, so clicks here toggle as usual. */
       .switch::before {
         content: '';
         position: absolute;
@@ -144,11 +173,11 @@ const Switch: TemplateOnlyComponent<SwitchSignature> = <template>
         );
       }
 
-      .switch.checked {
+      .switch.checked .switch-track {
         background-color: var(--_switch-active-color);
       }
 
-      .switch:has(:focus-visible) {
+      .switch:has(:focus-visible) .switch-track {
         outline: 2px solid var(--ring);
         outline-offset: 2px;
       }
@@ -161,7 +190,7 @@ const Switch: TemplateOnlyComponent<SwitchSignature> = <template>
       }
 
       @media (prefers-reduced-motion: no-preference) {
-        .switch {
+        .switch-track {
           transition: background-color 0.1s ease-in;
         }
 

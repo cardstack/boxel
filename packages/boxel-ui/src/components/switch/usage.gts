@@ -17,9 +17,16 @@ export default class SwitchUsage extends Component {
   @tracked isDisabled = false;
   @tracked label = 'Switch';
 
+  @tracked isLabeledEnabled = false;
+
   @action
   handleChange(isEnabled: boolean) {
     this.isEnabled = isEnabled;
+  }
+
+  @action
+  handleLabeledChange(isEnabled: boolean) {
+    this.isLabeledEnabled = isEnabled;
   }
 
   @cssVariable({ cssClassName: 'switch-freestyle-container' })
@@ -80,7 +87,9 @@ export default class SwitchUsage extends Component {
           off. It responds to click, Space, and Enter, and announces itself to
           assistive technology as a switch. It is fully controlled: the switch
           never changes state on its own — it calls onChange with the new value,
-          and only moves when isEnabled is updated to match.
+          and only moves when isEnabled is updated to match. Pass label for a
+          visually-hidden accessible name, or yield a block to render a visible
+          label beside the track — one of the two is required.
         </:description>
         <:example>
           <Switch
@@ -93,9 +102,14 @@ export default class SwitchUsage extends Component {
         <:api as |Args|>
           <Args.String
             @name='label'
-            @description='Accessible label for the switch (visually hidden, read by screen readers)'
+            @description='Accessible label for the switch (visually hidden, read by screen readers). Not needed when a block provides a visible label'
             @value={{this.label}}
             @onInput={{fn (mut this.label)}}
+            @optional={{true}}
+          />
+          <Args.Yield
+            @description='Visible label rendered beside the track, programmatically associated with the switch'
+            @optional={{true}}
           />
           <Args.Bool
             @name='isEnabled'
@@ -183,6 +197,22 @@ export default class SwitchUsage extends Component {
             @onInput={{this.boxelSwitchHitInset.update}}
           />
         </:cssVars>
+      </FreestyleUsage>
+
+      <FreestyleUsage @name='Switch with a visible label'>
+        <:description>
+          Yielding a block renders it as a visible label beside the track;
+          clicking the text toggles the switch, and it names the control for
+          assistive technology, so no label arg is needed.
+        </:description>
+        <:example>
+          <Switch
+            @isEnabled={{this.isLabeledEnabled}}
+            @onChange={{this.handleLabeledChange}}
+          >
+            Email notifications
+          </Switch>
+        </:example>
       </FreestyleUsage>
     </div>
   </template>
