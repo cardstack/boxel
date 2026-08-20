@@ -29,7 +29,7 @@ import {
   type FieldsTypeFor,
   type EditCardFn,
   type Format,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import { Button } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier';

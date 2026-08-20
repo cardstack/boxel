@@ -370,6 +370,416 @@ let c = 3;
       );
   });
 
+  // The code block's arguments are recomputed on every invalidation of the room
+  // resource, which during streaming arrives continuously. Each of those used to
+  // restart the load, cancelling the request in flight and leaving the block
+  // with neither a diff nor an error to show — an empty box — while asking the
+  // realm for the file again every time.
+  test('re-rendering with unchanged inputs neither refetches the file nor blanks the diff', async function (assert) {
+    let getSourceCallCount = 0;
+    cardService.getSource = async () => {
+      getSourceCallCount++;
+      return Promise.resolve({
+        status: 200,
+        contentType: 'application/vnd.card+source',
+        content: 'let a = 1;\nlet b = 2;',
+      });
+    };
+
+    let monacoSDK = await monacoService.getMonacoContext();
+    let component: any = null;
+
+    class TestComponent extends Component {
+      @tracked htmlParts = [];
+
+      constructor(owner: Owner, args: any) {
+        super(owner, args);
+        component = this;
+      }
+
+      <template>
+        <FormattedAiBotMessage
+          @monacoSDK={{monacoSDK}}
+          @htmlParts={{this.htmlParts}}
+          @roomId='!abcd'
+          @eventId='1234'
+          @isStreaming={{false}}
+          @isLastAssistantMessage={{true}}
+        />
+      </template>
+    }
+
+    await renderComponent(TestComponent);
+    if (!component) {
+      throw new Error('Component not found');
+    }
+
+    let codeBlockHtml = `<pre data-code-language="typescript">
+https://example.com/file.ts
+${SEARCH_MARKER}
+let a = 1;
+${SEPARATOR_MARKER}
+let a = 2;
+${REPLACE_MARKER}
+</pre>`;
+
+    component.htmlParts = parseHtmlContent(codeBlockHtml, roomId, eventId);
+    await settled();
+    await waitFor('.code-block-diff');
+    assert.strictEqual(
+      getSourceCallCount,
+      1,
+      'the file is fetched once to build the diff',
+    );
+
+    // Fresh CodeData objects carrying identical values, which is what an
+    // invalidation of the room resource produces.
+    for (let i = 0; i < 5; i++) {
+      component.htmlParts = parseHtmlContent(codeBlockHtml, roomId, eventId);
+      await settled();
+    }
+
+    assert.strictEqual(
+      getSourceCallCount,
+      1,
+      'unchanged inputs do not send the realm another request',
+    );
+    assert.dom('.code-block-diff').exists('the diff survives re-rendering');
+    assert
+      .dom('[data-test-apply-code-button]')
+      .exists('the apply button survives re-rendering');
+    assert
+      .dom('[data-test-code-patch-loading]')
+      .doesNotExist('the block is not left in a loading state');
+  });
+
+  // The other arm of the same early return. A load that failed must be left
+  // alone too: retrying it on every invalidation is a request storm against
+  // exactly the URL that was already failing, and clearing the message with it
+  // leaves the block with nothing to show for the failure.
+  test('a failed load is not retried on every invalidation, and its message survives', async function (assert) {
+    let getSourceCallCount = 0;
+    cardService.getSource = async () => {
+      getSourceCallCount++;
+      throw new Error('realm unavailable');
+    };
+
+    let monacoSDK = await monacoService.getMonacoContext();
+    let component: any = null;
+
+    class TestComponent extends Component {
+      @tracked htmlParts = [];
+
+      constructor(owner: Owner, args: any) {
+        super(owner, args);
+        component = this;
+      }
+
+      <template>
+        <FormattedAiBotMessage
+          @monacoSDK={{monacoSDK}}
+          @htmlParts={{this.htmlParts}}
+          @roomId='!abcd'
+          @eventId='1234'
+          @isStreaming={{false}}
+          @isLastAssistantMessage={{true}}
+        />
+      </template>
+    }
+
+    await renderComponent(TestComponent);
+    if (!component) {
+      throw new Error('Component not found');
+    }
+
+    let codeBlockHtml = `<pre data-code-language="typescript">
+https://example.com/file.ts
+${SEARCH_MARKER}
+let a = 1;
+${SEPARATOR_MARKER}
+let a = 2;
+${REPLACE_MARKER}
+</pre>`;
+
+    component.htmlParts = parseHtmlContent(codeBlockHtml, roomId, eventId);
+    await settled();
+    await waitFor('[data-test-error-message]');
+    assert.strictEqual(getSourceCallCount, 1, 'the file is fetched once');
+
+    for (let i = 0; i < 5; i++) {
+      component.htmlParts = parseHtmlContent(codeBlockHtml, roomId, eventId);
+      await settled();
+    }
+
+    assert.strictEqual(
+      getSourceCallCount,
+      1,
+      'a failing load is not retried on every invalidation',
+    );
+    assert
+      .dom('[data-test-error-message]')
+      .exists('and its message is still on screen');
+  });
+
+  // Cancelling the task does not cancel the request behind it, so a superseded
+  // load has to be stopped explicitly or its work still reaches the realm.
+  test('a superseded load aborts its request rather than leaving it running', async function (assert) {
+    let signals: (AbortSignal | undefined)[] = [];
+    cardService.getSource = async (
+      _url: any,
+      opts?: { signal?: AbortSignal },
+    ) => {
+      signals.push(opts?.signal);
+      return Promise.resolve({
+        status: 200,
+        contentType: 'application/vnd.card+source',
+        content: 'let a = 1;\nlet b = 2;',
+      });
+    };
+
+    let monacoSDK = await monacoService.getMonacoContext();
+    let component: any = null;
+
+    class TestComponent extends Component {
+      @tracked htmlParts = [];
+
+      constructor(owner: Owner, args: any) {
+        super(owner, args);
+        component = this;
+      }
+
+      <template>
+        <FormattedAiBotMessage
+          @monacoSDK={{monacoSDK}}
+          @htmlParts={{this.htmlParts}}
+          @roomId='!abcd'
+          @eventId='1234'
+          @isStreaming={{false}}
+          @isLastAssistantMessage={{true}}
+        />
+      </template>
+    }
+
+    await renderComponent(TestComponent);
+    if (!component) {
+      throw new Error('Component not found');
+    }
+
+    let blockFor = (
+      replacement: string,
+    ) => `<pre data-code-language="typescript">
+https://example.com/file.ts
+${SEARCH_MARKER}
+let a = 1;
+${SEPARATOR_MARKER}
+${replacement}
+${REPLACE_MARKER}
+</pre>`;
+
+    component.htmlParts = parseHtmlContent(
+      blockFor('let a = 2;'),
+      roomId,
+      eventId,
+    );
+    await settled();
+    assert.strictEqual(signals.length, 1, 'the first load ran');
+    assert.false(
+      signals[0]?.aborted,
+      'its signal is live while it is the current load',
+    );
+
+    // A genuinely different patch, so the load is restarted rather than reused.
+    component.htmlParts = parseHtmlContent(
+      blockFor('let a = 3;'),
+      roomId,
+      eventId,
+    );
+    await settled();
+
+    assert.strictEqual(signals.length, 2, 'the changed patch started a load');
+    assert.true(
+      signals[0]?.aborted,
+      'the superseded load had its request aborted',
+    );
+    assert.false(signals[1]?.aborted, 'the current load is untouched');
+  });
+
+  // `loadDiff` runs outside the task, so cancelling the task does not stop it —
+  // it keeps going at every await, and the abort signal only reaches the fetch.
+  // A superseded load that resumes afterwards must not write its answer over
+  // the patch that replaced it.
+  test('a superseded load that resolves late does not overwrite the newer diff', async function (assert) {
+    let releases: Array<(content: string) => void> = [];
+    cardService.getSource = async () => {
+      let content = await new Promise<string>((resolve) => {
+        releases.push(resolve);
+      });
+      return {
+        status: 200,
+        contentType: 'application/vnd.card+source',
+        content,
+      };
+    };
+
+    let monacoSDK = await monacoService.getMonacoContext();
+    let component: any = null;
+
+    class TestComponent extends Component {
+      @tracked htmlParts = [];
+
+      constructor(owner: Owner, args: any) {
+        super(owner, args);
+        component = this;
+      }
+
+      <template>
+        <FormattedAiBotMessage
+          @monacoSDK={{monacoSDK}}
+          @htmlParts={{this.htmlParts}}
+          @roomId='!abcd'
+          @eventId='1234'
+          @isStreaming={{false}}
+          @isLastAssistantMessage={{true}}
+        />
+      </template>
+    }
+
+    await renderComponent(TestComponent);
+    if (!component) {
+      throw new Error('Component not found');
+    }
+
+    let blockFor = (
+      search: string,
+      replacement: string,
+    ) => `<pre data-code-language="typescript">
+https://example.com/file.ts
+${SEARCH_MARKER}
+${search}
+${SEPARATOR_MARKER}
+${replacement}
+${REPLACE_MARKER}
+</pre>`;
+
+    // The abandoned load searches for something the file does not contain, so
+    // if it ever finishes it reports that the patch could not be applied. That
+    // makes the clobber observable without reading anything out of the diff
+    // editor, whose internals are not this test's business.
+    component.htmlParts = parseHtmlContent(
+      blockFor('let missing = 0;', 'let a = 2;'),
+      roomId,
+      eventId,
+    );
+    await waitUntil(() => releases.length === 1);
+
+    // A patch that does apply takes over before the first one has its source.
+    component.htmlParts = parseHtmlContent(
+      blockFor('let a = 1;', 'let a = 3;'),
+      roomId,
+      eventId,
+    );
+    await waitUntil(() => releases.length === 2);
+
+    // The newer load finishes first and puts its diff on screen.
+    releases[1]('let a = 1;');
+    await settled();
+    await waitFor('.code-block-diff');
+    assert
+      .dom('[data-test-error-message]')
+      .doesNotExist('the applicable patch loaded cleanly');
+
+    // Only now does the abandoned one come back with its answer.
+    releases[0]('let a = 1;');
+    await settled();
+
+    assert
+      .dom('[data-test-error-message]')
+      .doesNotExist(
+        'the abandoned load does not report its failure over the newer patch',
+      );
+    assert.dom('.code-block-diff').exists('the newer diff is still on screen');
+    assert
+      .dom('[data-test-apply-code-button]')
+      .exists('and is still the one on offer');
+  });
+
+  test('a patch whose diff has not arrived says so instead of rendering nothing', async function (assert) {
+    let releaseGetSource: (() => void) | undefined;
+    cardService.getSource = async () => {
+      await new Promise<void>((resolve) => {
+        releaseGetSource = resolve;
+      });
+      return {
+        status: 200,
+        contentType: 'application/vnd.card+source',
+        content: 'let a = 1;\nlet b = 2;',
+      };
+    };
+
+    // Deliberately not awaited: the assertion is about the window before the
+    // fetch settles, which is exactly what `settled()` would wait past.
+    let rendering = renderFormattedAiBotMessage({
+      htmlParts: parseHtmlContent(
+        `<pre data-code-language="typescript">
+https://example.com/file.ts
+${SEARCH_MARKER}
+let a = 1;
+${SEPARATOR_MARKER}
+let a = 2;
+${REPLACE_MARKER}
+</pre>`,
+        roomId,
+        eventId,
+      ),
+      isStreaming: false,
+      isLastAssistantMessage: true,
+    });
+
+    try {
+      await waitFor('[data-test-code-patch-loading]');
+      assert
+        .dom('[data-test-code-patch-loading]')
+        .exists('the pending patch is visible while its diff loads');
+      assert
+        .dom('[data-test-file-name]')
+        .containsText('file.ts', 'and it names the file it belongs to');
+    } finally {
+      // Release even if the wait above failed, so a broken assertion fails the
+      // test rather than leaving the render promise pending forever.
+      releaseGetSource?.();
+      await rendering;
+    }
+
+    assert
+      .dom('[data-test-code-patch-loading]')
+      .doesNotExist('the loading state gives way to the diff');
+    assert.dom('.code-block-diff').exists();
+  });
+
+  // The model names the file it is patching and what it writes is not always a
+  // URL. Constructing one unguarded threw out of a getter, taking the whole
+  // message render down rather than just the header.
+  test('a file name that is not a URL does not break the render', async function (assert) {
+    await renderFormattedAiBotMessage({
+      htmlParts: parseHtmlContent(
+        `<pre data-code-language="typescript">
+malformed file url
+${SEARCH_MARKER}
+let a = 1;
+</pre>`,
+        roomId,
+        eventId,
+      ),
+      isStreaming: false,
+      isLastAssistantMessage: true,
+    });
+
+    assert.dom('.code-block').exists('the message still renders');
+    assert
+      .dom('[data-test-file-name]')
+      .containsText('malformed file url', 'falling back to the raw name');
+  });
+
   test('it will render either standard code editor or diff editor during streaming depending on whether the individual search/replace blocks are complete', async function (assert) {
     let monacoSDK = await monacoService.getMonacoContext();
     let component: any = null;

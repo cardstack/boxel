@@ -172,9 +172,9 @@ notice, but the commit still proceeds. CI lint remains the real gate, so still
 fix what the warning reports. Do **not** pass `git commit --no-verify` — that
 skips the autofix and is what lets trivial lint errors waste a CI run.
 
-### boxel-cli commit prefixes
+### Published-package commit prefixes
 
-PRs touching `packages/boxel-cli/**` must use a conventional-commit prefix in the **PR title** (not the commit message — squash isn't used; the on-`main` workflow reads the PR title via `gh api`). The PR-title check (`.github/workflows/boxel-cli-pr-title.yml`) enforces this.
+Two packages publish to npm — `packages/boxel-cli` and `packages/bxl` — and a PR touching either must use a conventional-commit prefix in the **PR title** (not the commit message — squash isn't used; the on-`main` workflows read the PR title via `gh api`). A path-scoped PR-title check per package (`.github/workflows/boxel-cli-pr-title.yml`, `.github/workflows/bxl-pr-title.yml`) enforces it.
 
 | Prefix                                                     | Bump level (per touched surface) |
 | ---------------------------------------------------------- | -------------------------------- |
@@ -183,7 +183,9 @@ PRs touching `packages/boxel-cli/**` must use a conventional-commit prefix in th
 | `fix:` / `perf:` / `refactor:`                             | patch                            |
 | `chore:` / `docs:` / `test:` / `build:` / `ci:` / `style:` | none                             |
 
-Scopes are allowed: `feat(profile): …`. Other monorepo packages are unaffected — this only applies when the PR's diff touches `packages/boxel-cli/**`.
+Scopes are allowed: `feat(profile): …`. One title covers both packages when a PR touches both; each decides its own bump from it. Every other package in the monorepo is unaffected — a PR whose diff touches neither published package takes a plain descriptive title with no prefix.
+
+A bumpable prefix is necessary but not sufficient: each flow also asks whether the merge changed anything its tarball ships, so a `fix:` touching only tests or CI config publishes nothing.
 
 **Edge case:** bumping `BOXEL_SKILLS_VERSION` in `packages/boxel-cli/scripts/build-skills.ts` regenerates plugin skill content. Use `fix(skills):` (routine refresh) or `feat(skills):` (additive content), never `chore:` — a `chore:` prefix means no `plugin.json` bump, and the marketplace cache won't refresh for users. See `packages/boxel-cli/plugin/README.md` for full surface-scoping rules.
 

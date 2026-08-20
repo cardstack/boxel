@@ -54,9 +54,9 @@ module('Integration | Store | module rebuild', function (hooks) {
   let realmService: RealmService;
 
   // These tests are about what the loader and the index do to each other when
-  // executable source changes, so they cannot share an index across tests the
-  // way the rest of the Store suite does: a restored index means the realm
-  // started with `skipBootIndex`, and then no fixture module was ever loaded
+  // executable source changes, so they cannot share a cached realm across
+  // tests the way the rest of the Store suite does: a test that restores one
+  // never indexes its fixtures itself, so no fixture module was ever loaded
   // into the loader for a write to invalidate or a flush to record.
   setupLocalIndexing(hooks);
   setupOnSave(hooks);

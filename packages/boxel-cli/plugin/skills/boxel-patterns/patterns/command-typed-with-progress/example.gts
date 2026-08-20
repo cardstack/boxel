@@ -1,5 +1,5 @@
 import { Command } from '@cardstack/runtime-common/commands';
-import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
+import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';
 import { tracked } from '@glimmer/tracking';
 
 // 🧩 PATTERN: Typed Command with tracked progressStep

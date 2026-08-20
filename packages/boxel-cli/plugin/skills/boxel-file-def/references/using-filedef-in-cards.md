@@ -1,11 +1,11 @@
 ## Using FileDef in Cards
 
 ```gts
-import { CardDef, field, linksTo } from 'https://cardstack.com/base/card-api';
-import ImageDef from 'https://cardstack.com/base/image-file-def';
-import PngDef from 'https://cardstack.com/base/png-image-def';
-import FileDef from 'https://cardstack.com/base/file-api';
-import MarkdownDef from 'https://cardstack.com/base/markdown-file-def';
+import { CardDef, field, linksTo } from '@cardstack/base/card-api';
+import ImageDef from '@cardstack/base/image-file-def';
+import PngDef from '@cardstack/base/png-image-def';
+import FileDef from '@cardstack/base/file-api';
+import MarkdownDef from '@cardstack/base/markdown-file-def';
 
 export class ProductListing extends CardDef {
   @field photo = linksTo(PngDef); // Specifically PNG
@@ -20,7 +20,7 @@ export class ProductListing extends CardDef {
 The A Million Dreams karaoke card keeps a multi-megabyte MP3 out of card JSON by linking to the realm file:
 
 ```gts
-import { FileDef, ImageDef, linksTo } from 'https://cardstack.com/base/card-api';
+import { FileDef, ImageDef, linksTo } from '@cardstack/base/card-api';
 
 @field mp3FileDef = linksTo(FileDef);
 @field coverArt = linksTo(ImageDef);
@@ -49,7 +49,7 @@ When generated media arrives as a `data:image/...;base64,...`, write it to the r
 
 ```gts
 import WriteBinaryFileCommand from '@cardstack/boxel-host/tools/write-binary-file';
-import { ImageDef, linksTo } from 'https://cardstack.com/base/card-api';
+import { ImageDef, linksTo } from '@cardstack/base/card-api';
 
 @field outputImage = linksTo(ImageDef);
 

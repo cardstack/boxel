@@ -1,3 +1,4 @@
+import { parseGltf, isGlbContainer } from '@cardstack/base/gltf-meta-extractor';
 import { parseStl } from '@cardstack/base/stl-meta-extractor';
 import { parseThreeMf } from '@cardstack/base/three-mf-meta-extractor';
 import { zipSync, strToU8 } from 'fflate';
@@ -235,6 +236,238 @@ module('Unit | model metadata extractors | parseThreeMf', function () {
     assert.strictEqual(
       parseThreeMf(toArrayBuffer(new TextEncoder().encode('not a zip'))),
       undefined,
+    );
+  });
+});
+
+// A glTF document with one indexed triangle mesh: 24 vertices, a 36-index
+// (12-triangle) buffer, and a POSITION bounding box of 2 × 4 × 6.
+const SAMPLE_GLTF = {
+  asset: { version: '2.0', generator: 'Test Exporter 1.0' },
+  meshes: [
+    { primitives: [{ attributes: { POSITION: 0 }, indices: 1, mode: 4 }] },
+  ],
+  accessors: [
+    {
+      type: 'VEC3',
+      componentType: 5126,
+      count: 24,
+      min: [-1, -2, -3],
+      max: [1, 2, 3],
+    },
+    { type: 'SCALAR', componentType: 5123, count: 36 },
+  ],
+  materials: [{}, {}],
+  nodes: [{}, {}, {}],
+  animations: [{}],
+  textures: [{}],
+};
+
+function gltfJson(doc: object): Uint8Array {
+  return new TextEncoder().encode(JSON.stringify(doc));
+}
+
+// Wrap a glTF document in a binary GLB container: the 12-byte header followed by
+// a single JSON chunk (padded to a 4-byte boundary with spaces, per spec).
+function buildGlb(doc: object): Uint8Array {
+  let jsonBytes = new TextEncoder().encode(JSON.stringify(doc));
+  let pad = (4 - (jsonBytes.length % 4)) % 4;
+  let chunkLength = jsonBytes.length + pad;
+  let total = 12 + 8 + chunkLength;
+  let buf = new ArrayBuffer(total);
+  let view = new DataView(buf);
+  let bytes = new Uint8Array(buf);
+  view.setUint32(0, 0x46546c67, true); // 'glTF'
+  view.setUint32(4, 2, true); // version 2
+  view.setUint32(8, total, true); // total length
+  view.setUint32(12, chunkLength, true); // JSON chunk length
+  view.setUint32(16, 0x4e4f534a, true); // 'JSON'
+  bytes.set(jsonBytes, 20);
+  for (let i = 0; i < pad; i++) {
+    bytes[20 + jsonBytes.length + i] = 0x20; // space padding
+  }
+  return bytes;
+}
+
+module('Unit | model metadata extractors | parseGltf', function () {
+  test('reads counts and bounds from a .gltf JSON document', function (assert) {
+    let parsed = parseGltf(gltfJson(SAMPLE_GLTF));
+    let g = parsed?.gltfMetadata;
+    assert.strictEqual(g?.container, 'gltf');
+    assert.strictEqual(g?.gltfVersion, '2.0');
+    assert.strictEqual(g?.generator, 'Test Exporter 1.0');
+    assert.strictEqual(g?.vertexCount, 24, 'POSITION accessor count');
+    assert.strictEqual(g?.triangleCount, 12, '36 indices / 3');
+    assert.strictEqual(g?.dimensions, '2 × 4 × 6', 'max minus min per axis');
+    assert.strictEqual(g?.meshCount, 1);
+    assert.strictEqual(g?.materialCount, 2);
+    assert.strictEqual(g?.nodeCount, 3);
+    assert.strictEqual(g?.animationCount, 1);
+    assert.strictEqual(g?.textureCount, 1);
+  });
+
+  test('reads the same facts from a .glb binary container', function (assert) {
+    let parsed = parseGltf(buildGlb(SAMPLE_GLTF));
+    let g = parsed?.gltfMetadata;
+    assert.strictEqual(g?.container, 'glb', 'detected the GLB magic');
+    assert.strictEqual(g?.vertexCount, 24);
+    assert.strictEqual(g?.triangleCount, 12);
+    assert.strictEqual(g?.dimensions, '2 × 4 × 6');
+  });
+
+  test('counts triangles from POSITION when a primitive is not indexed', function (assert) {
+    let parsed = parseGltf(
+      gltfJson({
+        asset: { version: '2.0' },
+        meshes: [{ primitives: [{ attributes: { POSITION: 0 }, mode: 4 }] }],
+        accessors: [{ type: 'VEC3', count: 9 }],
+      }),
+    );
+    assert.strictEqual(parsed?.gltfMetadata.vertexCount, 9);
+    assert.strictEqual(parsed?.gltfMetadata.triangleCount, 3, '9 vertices / 3');
+  });
+
+  test('honors triangle-strip topology', function (assert) {
+    let parsed = parseGltf(
+      gltfJson({
+        asset: { version: '2.0' },
+        meshes: [{ primitives: [{ attributes: { POSITION: 0 }, mode: 5 }] }],
+        accessors: [{ type: 'VEC3', count: 6 }],
+      }),
+    );
+    assert.strictEqual(
+      parsed?.gltfMetadata.triangleCount,
+      4,
+      'strip: count - 2',
+    );
+  });
+
+  test('applies a node scale to the bounding box', function (assert) {
+    let parsed = parseGltf(
+      gltfJson({
+        ...SAMPLE_GLTF,
+        nodes: [{ mesh: 0, scale: [2, 2, 2] }],
+        scenes: [{ nodes: [0] }],
+      }),
+    );
+    assert.strictEqual(
+      parsed?.gltfMetadata.dimensions,
+      '4 × 8 × 12',
+      'mesh-space 2 × 4 × 6 under a 2× node scale',
+    );
+  });
+
+  test('applies an explicit node matrix to the bounding box', function (assert) {
+    let parsed = parseGltf(
+      gltfJson({
+        ...SAMPLE_GLTF,
+        // prettier-ignore
+        nodes: [{ mesh: 0, matrix: [2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 1] }],
+        scenes: [{ nodes: [0] }],
+      }),
+    );
+    assert.strictEqual(parsed?.gltfMetadata.dimensions, '4 × 8 × 12');
+  });
+
+  test('unions instanced meshes at their node translations', function (assert) {
+    let parsed = parseGltf(
+      gltfJson({
+        asset: { version: '2.0' },
+        meshes: [{ primitives: [{ attributes: { POSITION: 0 }, mode: 4 }] }],
+        accessors: [
+          {
+            type: 'VEC3',
+            count: 3,
+            min: [-0.5, -0.5, -0.5],
+            max: [0.5, 0.5, 0.5],
+          },
+        ],
+        nodes: [{ mesh: 0 }, { mesh: 0, translation: [10, 0, 0] }],
+        scenes: [{ nodes: [0, 1] }],
+      }),
+    );
+    assert.strictEqual(
+      parsed?.gltfMetadata.dimensions,
+      '11 × 1 × 1',
+      'two instances of a unit cube 10 apart',
+    );
+  });
+
+  test('skips non-numeric accessor bounds instead of reporting NaN', function (assert) {
+    let parsed = parseGltf(
+      gltfJson({
+        asset: { version: '2.0' },
+        meshes: [{ primitives: [{ attributes: { POSITION: 0 }, mode: 4 }] }],
+        accessors: [
+          { type: 'VEC3', count: 3, min: ['oops', -2, -3], max: [1, 2, 3] },
+        ],
+      }),
+    );
+    assert.strictEqual(parsed?.gltfMetadata.vertexCount, 3, 'still a glTF');
+    assert.strictEqual(
+      parsed?.gltfMetadata.dimensions,
+      undefined,
+      'malformed bounds yield no dimensions',
+    );
+  });
+
+  test('returns undefined for non-glTF content', function (assert) {
+    assert.strictEqual(
+      parseGltf(new TextEncoder().encode('not a model')),
+      undefined,
+      'random text',
+    );
+    assert.strictEqual(
+      parseGltf(gltfJson({ hello: 'world' })),
+      undefined,
+      'JSON without an asset object',
+    );
+    assert.strictEqual(
+      parseGltf(gltfJson({ asset: 'hello' })),
+      undefined,
+      'asset that is not an object',
+    );
+    assert.strictEqual(
+      parseGltf(gltfJson({ asset: {} })),
+      undefined,
+      'asset object without a version string',
+    );
+    assert.strictEqual(parseGltf(new Uint8Array(0)), undefined, 'empty buffer');
+  });
+
+  test('returns undefined for unreadable GLB containers but still detects the container', function (assert) {
+    // These bytes can't be summarized, yet they announce the GLB magic — so the
+    // call site keeps the 3D card (via isGlbContainer) instead of demoting to a
+    // plain FileDef the way a genuinely non-glTF file does.
+    let versionOne = buildGlb(SAMPLE_GLTF);
+    new DataView(versionOne.buffer).setUint32(4, 1, true);
+    assert.strictEqual(parseGltf(versionOne), undefined, 'version 1 GLB');
+    assert.true(isGlbContainer(versionOne), 'version 1 still a GLB container');
+
+    let truncated = buildGlb(SAMPLE_GLTF).slice(0, 24);
+    assert.strictEqual(
+      parseGltf(truncated),
+      undefined,
+      'JSON chunk longer than the buffer',
+    );
+    assert.true(isGlbContainer(truncated), 'truncated still a GLB container');
+
+    let binFirst = buildGlb(SAMPLE_GLTF);
+    new DataView(binFirst.buffer).setUint32(16, 0x004e4942, true); // 'BIN\0'
+    assert.strictEqual(
+      parseGltf(binFirst),
+      undefined,
+      'first chunk is not JSON',
+    );
+    assert.true(isGlbContainer(binFirst), 'BIN-first still a GLB container');
+  });
+
+  test('non-glTF bytes are not a GLB container', function (assert) {
+    // The other side of the call-site decision: these demote to a plain FileDef.
+    assert.false(isGlbContainer(gltfJson({ asset: 'hello' })), 'plain JSON');
+    assert.false(
+      isGlbContainer(new TextEncoder().encode('not a model')),
+      'random text',
     );
   });
 });

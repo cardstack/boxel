@@ -6,7 +6,7 @@ import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 
-import { Alert } from '@cardstack/boxel-ui/components';
+import { Alert, LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { and, bool, eq } from '@cardstack/boxel-ui/helpers';
 
 import { markdownToHtml } from '@cardstack/runtime-common/marked-sync';
@@ -359,6 +359,27 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
                 @modifiedCode={{this.codeDiffResource.modifiedCode}}
               />
             </codeBlock.actions>
+          {{else if this.codeDiffResource.isLoadingDiff}}
+            {{! Together with the branch above, this makes the states a patch can
+            be rendered in exhaustive: once `modify` returns, the resource holds
+            code, or an error, or a running load. There is no fourth state, and
+            the empty block this branch replaced was it. A load only runs once a
+            file URL is known — `modify` records an error and returns without
+            performing when there isn't one — so the header can always name its
+            file here. A failed patch is not shown in this branch; the footer's
+            alert speaks for it. }}
+            <codeBlock.diffEditorHeader
+              @codeData={{@codeData}}
+              @diffEditorStats={{null}}
+              @originalUploadedFileUrl={{@codePatchResult.originalUploadedFileUrl}}
+              @codePatchStatus={{@codePatchStatus}}
+              @userMessageThisMessageIsRespondingTo={{@userMessageThisMessageIsRespondingTo}}
+              @codePatchErrorMessage={{this.codePatchErrorMessage}}
+            />
+            <div class='code-patch-loading' data-test-code-patch-loading>
+              <LoadingIndicator @color='var(--boxel-light)' />
+              <span>Loading diff…</span>
+            </div>
           {{/if}}
 
           {{#if this.codePatchErrorMessage}}
@@ -402,5 +423,18 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
         {{/if}}
       {{/if}}
     </CodeBlock>
+
+    <style scoped>
+      .code-patch-loading {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-sm);
+        background-color: var(--boxel-dark);
+        color: var(--boxel-light);
+        font-size: var(--boxel-font-size-sm);
+        line-height: var(--boxel-line-height-sm);
+      }
+    </style>
   </template>
 }

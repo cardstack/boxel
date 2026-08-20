@@ -31,7 +31,7 @@ Use this for the theme artifact itself. Use `boxel-design` when the task is prim
    - `StyleReference`: visual DNA, inspirations, and wallpaper imagery matter.
    - `DetailedStyleReference`: a complete design system needs documented palette, type, layout, motion, components, voice, and quality rules.
    - `BrandGuide`: logo/mark usage, official brand colors, functional palette, typography, or brand governance matters.
-   - Boxel built-in feature work: use `https://cardstack.com/base/Theme/boxel-brand-guide` as the source of truth.
+   - Boxel built-in feature work: use `@cardstack/base/Theme/boxel-brand-guide` as the source of truth.
 
 3. **Gather source material.**
    - Existing Theme/BrandGuide JSON, if present.

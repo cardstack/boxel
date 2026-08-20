@@ -1,12 +1,16 @@
 import { expect, test } from './fixtures.ts';
+import { getAccountData, updateAccountData } from '../support/synapse/index.ts';
 import {
   createSubscribedUser,
   getMatrixTestContext,
+  getUniqueUsername,
   subjectFor,
   updateSynapseUser,
 } from '../helpers/index.ts';
 import { appURL } from '../support/isolated-realm-server.ts';
 import { browserLogin } from '../../boxel-cli/src/lib/sso-login.ts';
+import { ensurePersonalRealm } from '../../boxel-cli/src/lib/personal-realm.ts';
+import { APP_BOXEL_REALMS_EVENT_TYPE } from '../support/matrix-constants.ts';
 
 // The realm server serves the host app, so /cli-auth lives at its root. Taken
 // from `appURL` rather than written out, since that names a realm on the same
@@ -104,6 +108,100 @@ test.describe('boxel-cli browser authorization', () => {
       { headers: { Authorization: `Bearer ${auth.accessToken}` } },
     );
     expect(whoami.status).toBe(200);
+  });
+
+  // A Google identity whose verified email matches no account gets a brand-new
+  // one, minted by Synapse's mapping provider with no Boxel page in the loop —
+  // the browser goes IdP → Synapse → the CLI's listener, so the web signup
+  // bootstrap that gives an account its personal realm never runs. The CLI
+  // closes that gap itself after saving the profile (`ensurePersonalRealm`,
+  // exercised here directly the same way `browserLogin` is): the account must
+  // come out with a personal realm, indistinguishable from one that signed up
+  // through the web.
+  test('a Google sign-in that mints a brand-new account gives it a personal realm', async ({
+    page,
+  }) => {
+    const { matrixUrl } = getMatrixTestContext();
+    const username = getUniqueUsername('cli-sso-new');
+    const userEmail = `${username}@example.com`;
+    const serverIndexUrl = new URL(appURL).origin;
+
+    const auth = await browserLogin({
+      matrixUrl: matrixUrl!,
+      hostUrl: HOST_URL,
+      log: () => {},
+      openBrowserFn: async (authUrl) => {
+        await page.goto(authUrl);
+        await page.locator('[data-test-cli-auth-google]').click();
+        await page.locator('input[name="username"]').fill(subjectFor(username));
+        await page.locator('textarea[name="claims"]').fill(
+          JSON.stringify({
+            email: userEmail,
+            email_verified: true,
+            name: 'CLI New Google User',
+          }),
+        );
+        await page.locator('input[type="submit"]').click();
+        return true;
+      },
+    });
+
+    // A brand-new account, its localpart derived from the email's local part.
+    expect(auth.userId).toBe(`@${username}:localhost`);
+
+    // The realm server speaks HTTPS with the mkcert leaf, which this runner
+    // process has no CA path to (NODE_EXTRA_CA_CERTS is only guaranteed in
+    // mise-run children — see isolated-realm-server.ts, which relaxes its
+    // spawned services the same way). Loopback only, so relax validation just
+    // around the bootstrap calls.
+    const priorTlsSetting = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+    try {
+      const result = await ensurePersonalRealm(auth, `${serverIndexUrl}/`);
+      expect(result).toEqual({
+        outcome: 'created',
+        realmUrl: `${serverIndexUrl}/${username}/personal/`,
+      });
+
+      // Running it again — a second `boxel profile add` for the same account —
+      // must leave the account alone rather than erroring or double-linking.
+      expect(await ensurePersonalRealm(auth, `${serverIndexUrl}/`)).toEqual({
+        outcome: 'has-realms',
+      });
+
+      // The realm exists on the server but the account's realm list has lost
+      // it — the bootstrap must re-link via the server's collision response
+      // rather than failing on it. This is the one leg that pins the CLI's
+      // parsing of that response against what the realm server actually
+      // emits; the unit suite can only exercise it against a stub.
+      await updateAccountData(
+        auth.userId,
+        auth.accessToken,
+        APP_BOXEL_REALMS_EVENT_TYPE,
+        JSON.stringify({ realms: [] }),
+      );
+      expect(await ensurePersonalRealm(auth, `${serverIndexUrl}/`)).toEqual({
+        outcome: 'linked',
+        realmUrl: `${serverIndexUrl}/${username}/personal/`,
+      });
+    } finally {
+      if (priorTlsSetting === undefined) {
+        delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+      } else {
+        process.env.NODE_TLS_REJECT_UNAUTHORIZED = priorTlsSetting;
+      }
+    }
+
+    // The account's realm list — what a web session assembles from — names the
+    // new realm, exactly as it would after a web signup (see cli-signup.spec).
+    const realms = await getAccountData<{ realms: string[] } | undefined>(
+      auth.userId,
+      auth.accessToken,
+      APP_BOXEL_REALMS_EVENT_TYPE,
+    );
+    expect(realms).toEqual({
+      realms: [`${serverIndexUrl}/${username}/personal/`],
+    });
   });
 
   test('reaches password reset without leaving the authorization', async ({

@@ -9,6 +9,12 @@ boxel:
 
 You are the orchestrator of the Boxel AI Assistant. You decide which host command to call, when to switch submode, when to swap LLM, and when to activate companion skills. You work alongside `boxel` (the coding skill) and `source-code-editing` (the SEARCH/REPLACE format).
 
+## 🚨 Read this before planning anything
+
+**[`references/host-commands-reference.md`](references/host-commands-reference.md) is where the host commands come from — not this file.** Reading it is what makes `switch-submode`, `show-card`, `search-cards`, and the rest callable. Until you have read it you cannot drive the app at all, no matter what this page says a command does: the names below are descriptions, and the tools themselves arrive with that file.
+
+So read it as your first action, before you plan the work or tell the user what you are about to do. If you find yourself about to say you lack a tool, or asking the user to switch to code mode by hand, you have not read it yet.
+
 ---
 
 ## ⚠️ Master Decision Tree
@@ -41,6 +47,7 @@ You are the orchestrator of the Boxel AI Assistant. You decide which host comman
   └─ NO → activate via update-room-skills_3875
 → Need file content? read-file-for-ai-assistant
 → Use SEARCH/REPLACE. For NEW files: add "(new)" after the URL in the SEARCH/REPLACE block.
+→ Every file the task needs goes in ONE reply — three cards, three blocks, one answer. Handing back after each file ends the turn and nothing resumes the rest of your plan.
 → For code-change intent, ALWAYS use SEARCH/REPLACE. Data/document commands are secondary.
 → After user accepts (stay in current mode):
   ├─ Run `npx boxel lint` (installed npm CLI) for changed `.gts` files (`boxel/references/lint-workflow.md`)
@@ -62,7 +69,7 @@ You are the orchestrator of the Boxel AI Assistant. You decide which host comman
 
 Full create/edit tool tables, file naming, and path rules: `references/card-tool-selection.md`.
 
-> **⚠️ Streaming rule:** Create and edit files with SEARCH/REPLACE — avoid `write-text-file`. Tool calls don't stream — the whole payload must be generated before the user sees anything, so the UI looks frozen. SEARCH/REPLACE streams visibly for `.gts` and `.json` alike.
+> **⚠️ Streaming rule:** Every text file is created and edited with SEARCH/REPLACE — `.gts`, `.json`, `.md`, `README`, all of them — adding `(new)` after the URL to create one. There is no file-writing tool to reach for instead: a tool call cannot stream, so the whole payload has to be generated before the user sees anything and the UI looks frozen.
 
 ### Step 5 — Search / find
 
@@ -105,27 +112,27 @@ Full create/edit tool tables, file naming, and path rules: `references/card-tool
 
 Batch your reads: fetch the always-relevant set in one multi-file read when this skill activates, and pull by-task references the same way — everything you know you need in one go, not one or two per turn.
 
-Always-relevant:
-- `references/assistant-persona.md` — Communication style. Concise, intent-based responses.
-- `references/calling-commands.md` — JSON structure for all tool calls. Required before any command execution.
-- `references/user-environment-awareness.md` — Parse workspace, mode, open cards from each message.
-- `references/host-commands-reference.md` — Full catalog of every host command, what it does, approval rules.
+Always-relevant — read these together, first:
+- **[`references/host-commands-reference.md`](references/host-commands-reference.md)** — **the host commands themselves.** Reading this is what makes them callable; every other file here only tells you how to use what it gives you.
+- [`references/calling-commands.md`](references/calling-commands.md) — JSON structure for all tool calls. Required before any command execution.
+- [`references/assistant-persona.md`](references/assistant-persona.md) — Communication style. Concise, intent-based responses.
+- [`references/user-environment-awareness.md`](references/user-environment-awareness.md) — Parse workspace, mode, open cards from each message.
 
 By task:
-- `references/choosing-llm-models.md` — Model selection. Check when code tasks detected or debugging stuck.
-- `references/searching-and-querying.md` — Query syntax for finding cards.
-- `references/workflows-and-orchestration.md` — Multi-step patterns (migrations, bulk operations).
-- `references/markdown-edit.md` — Editing long markdown fields surgically.
-- `../boxel/references/lint-workflow.md` — Required installed npm `boxel` lint gate for `.gts` code tasks.
+- [`references/choosing-llm-models.md`](references/choosing-llm-models.md) — Model selection. Check when code tasks detected or debugging stuck.
+- [`references/searching-and-querying.md`](references/searching-and-querying.md) — Query syntax for finding cards.
+- [`references/workflows-and-orchestration.md`](references/workflows-and-orchestration.md) — Multi-step patterns (migrations, bulk operations).
+- [`references/markdown-edit.md`](references/markdown-edit.md) — Editing long markdown fields surgically.
+- [`../boxel/references/lint-workflow.md`](../boxel/references/lint-workflow.md) — Required installed npm `boxel` lint gate for `.gts` code tasks.
 
 Troubleshooting:
-- `references/common-errors.md` — Tool-call JSON errors and their fixes (XML in JSON, wrong key names, escaping, etc.).
+- [`references/common-errors.md`](references/common-errors.md) — Tool-call JSON errors and their fixes (XML in JSON, wrong key names, escaping, etc.).
 
 Specialty:
-- `references/indexing-operations.md` — Realm reindexing commands.
-- `references/fresh-realm-push-integrity.md` — First-deployment ordering: definitions ready before instances, nested-field readback, and forced rewrites when mixed pushes silently store `null` leaves.
-- `references/diagnosing-broken-links.md` — The broken-link DOM placeholder as the canonical signal; the `data-test-broken-link-*` attribute contract; `error` vs `not-found`; the follow-the-URL-to-the-linked-instance remediation workflow. (Card-author side: `boxel/references/defensive-link-traversal.md`.)
-- `references/source-code-editing.md` — Cross-link to the SEARCH/REPLACE skill.
+- [`references/indexing-operations.md`](references/indexing-operations.md) — Realm reindexing commands.
+- [`references/fresh-realm-push-integrity.md`](references/fresh-realm-push-integrity.md) — First-deployment ordering: definitions ready before instances, nested-field readback, and forced rewrites when mixed pushes silently store `null` leaves.
+- [`references/diagnosing-broken-links.md`](references/diagnosing-broken-links.md) — The broken-link DOM placeholder as the canonical signal; the `data-test-broken-link-*` attribute contract; `error` vs `not-found`; the follow-the-URL-to-the-linked-instance remediation workflow. (Card-author side: `boxel/references/defensive-link-traversal.md`.)
+- [`references/source-code-editing.md`](references/source-code-editing.md) — Cross-link to the SEARCH/REPLACE skill.
 
 ## Sibling skills
 

@@ -2,7 +2,7 @@
 
 Use this before writing or finalizing `.gts` files. Missing imports compile late and usually cost a server render/lint repair turn, so treat import preflight as part of authoring.
 
-Research note: a May 2026 scan of active `boxel-workspaces` realm/source `.gts` files found the most common modules were `https://cardstack.com/base/card-api`, base fields, `@cardstack/boxel-ui/helpers`, `@glimmer/tracking`, `@ember/modifier`, `@cardstack/boxel-ui/components`, `@ember/helper`, `@ember/object`, `ember-modifier`, and `ember-concurrency`. The common missing-import failures are template helpers/modifiers: `{{on ...}}`, `(fn ...)`, `concat`, `get`, `array`, `hash`, and Boxel helper predicates/formatters. `perform` is not a safe template helper in strict-mode realm GTS: do not import `ember-concurrency/helpers/perform`, and do not write `(perform this.someTask)`.
+Research note: a May 2026 scan of active `boxel-workspaces` realm/source `.gts` files found the most common modules were `@cardstack/base/card-api`, base fields, `@cardstack/boxel-ui/helpers`, `@glimmer/tracking`, `@ember/modifier`, `@cardstack/boxel-ui/components`, `@ember/helper`, `@ember/object`, `ember-modifier`, and `ember-concurrency`. The common missing-import failures are template helpers/modifiers: `{{on ...}}`, `(fn ...)`, `concat`, `get`, `array`, `hash`, and Boxel helper predicates/formatters. `perform` is not a safe template helper in strict-mode realm GTS: do not import `ember-concurrency/helpers/perform`, and do not write `(perform this.someTask)`.
 
 ## Import Preflight
 
@@ -45,7 +45,7 @@ import {
   field,
   linksTo,
   linksToMany,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 ```
 
 For query refs, follow `query-systems.md`: import `realmURL` from `@cardstack/runtime-common` and use `codeRef(...)`; do not hand-roll URLs or use `Symbol.for('realmURL')`.
@@ -53,17 +53,17 @@ For query refs, follow `query-systems.md`: import `realmURL` from `@cardstack/ru
 Common base fields:
 
 ```gts
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
-import BooleanField from 'https://cardstack.com/base/boolean';
-import DateField from 'https://cardstack.com/base/date';
-import DateTimeField from 'https://cardstack.com/base/datetime';
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import TextAreaField from 'https://cardstack.com/base/text-area';
-import UrlField from 'https://cardstack.com/base/url';
-import ColorField from 'https://cardstack.com/base/color';
-import EmailField from 'https://cardstack.com/base/email';
-import PhoneNumberField from 'https://cardstack.com/base/phone-number';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
+import BooleanField from '@cardstack/base/boolean';
+import DateField from '@cardstack/base/date';
+import DateTimeField from '@cardstack/base/datetime';
+import MarkdownField from '@cardstack/base/markdown';
+import TextAreaField from '@cardstack/base/text-area';
+import UrlField from '@cardstack/base/url';
+import ColorField from '@cardstack/base/color';
+import EmailField from '@cardstack/base/email';
+import PhoneNumberField from '@cardstack/base/phone-number';
 ```
 
 Template interaction helpers:

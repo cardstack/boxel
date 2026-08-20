@@ -191,7 +191,19 @@ export default class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEd
   }
 
   private get fileName() {
-    return new URL(this.fileUrl ?? '').pathname.split('/').pop() || '';
+    let fileUrl = this.fileUrl;
+    if (!fileUrl) {
+      return '';
+    }
+    try {
+      return new URL(fileUrl).pathname.split('/').pop() || '';
+    } catch {
+      // The model names the file it is patching, and what it writes is not
+      // always a URL. Falling back to the last path segment keeps a header that
+      // is merely wrong from taking the whole message down with it; whether the
+      // patch can be applied is reported separately.
+      return fileUrl.split('/').pop() || '';
+    }
   }
 
   private get sourceUrl(): string | null {

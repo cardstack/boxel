@@ -14,15 +14,15 @@ When user has multiple open cards, the navigation stack provides context:
 const openCardStack = [
   'https://app.boxel.ai/user/BlogApp',
   'https://app.boxel.ai/user/BlogPost/1',
-  'https://cardstack.com/base/Author/jane'  // May be read-only realm
+  '@cardstack/base/Author/jane'  // May be read-only realm
 ];
 
 const currentCard = openCardStack[openCardStack.length - 1];
-const navigationPath = openCardStack.map(url => url.split('/').pop());
+const navigationPath = openCardStack.map(id => id.split('/').pop());
 // → ['BlogApp', '1', 'jane']
 ```
 
-Use stack URLs to fetch card details and understand user's exploration path.
+Use stack ids to fetch card details and understand user's exploration path.
 
 
 ## Location Parsing

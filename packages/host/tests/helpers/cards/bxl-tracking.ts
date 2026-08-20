@@ -255,8 +255,11 @@ export const bxlTrackingCardSource = `
 // realm's first-ever index pass the live index is empty, so POL-100's
 // claims aggregations bake in their empty-set values; the next visit of
 // the policy converges them. Tests that assert converged aggregations
-// re-write POL-100 with `bxlTrackingPol100Renewal` to trigger that visit.
-function pol100Doc(policyStatus: string) {
+// re-write POL-100 with `bxlTrackingPol100Renewal` to trigger that visit;
+// a test needing more than one such visit builds its own docs with
+// `bxlTrackingPol100Doc`, since a re-write of identical content is a
+// no-op.
+export function bxlTrackingPol100Doc(policyStatus: string) {
   return {
     data: {
       type: 'card',
@@ -277,7 +280,7 @@ function pol100Doc(policyStatus: string) {
   };
 }
 
-export const bxlTrackingPol100Renewal = pol100Doc('Renewed');
+export const bxlTrackingPol100Renewal = bxlTrackingPol100Doc('Renewed');
 
 export const bxlTrackingRealmContents: Record<
   string,
@@ -364,7 +367,7 @@ export const bxlTrackingRealmContents: Record<
       },
     },
   },
-  'Policy/pol-100.json': pol100Doc('Active'),
+  'Policy/pol-100.json': bxlTrackingPol100Doc('Active'),
   'Policy/pol-200.json': {
     data: {
       type: 'card',

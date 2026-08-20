@@ -6,6 +6,7 @@ import {
   getEnvironmentFromMatrixId,
   getUsernameFromMatrixId,
 } from '../lib/profile-manager.ts';
+import { ensurePersonalRealm } from '../lib/personal-realm.ts';
 import { prompt, promptPassword } from '../lib/prompt.ts';
 import { SsoTimeoutError, browserLogin } from '../lib/sso-login.ts';
 import {
@@ -444,6 +445,36 @@ async function addProfileViaBrowser(
     displayName,
     realmServerUrl,
   );
+
+  // The browser can hand back a brand-new account: a Google sign-in whose
+  // verified email matches nothing gets one minted by Synapse itself, with no
+  // Boxel code involved — so nothing has given it the personal realm the web
+  // signup flow would have. Give it one here. For every other account this is
+  // a no-op (accounts that went through a signup flow already have a realm),
+  // and a failure only warns: the profile works without it, and signing in to
+  // the web app offers workspace creation.
+  try {
+    const result = await ensurePersonalRealm(auth, realmServerUrl);
+    if (result.outcome === 'created') {
+      console.log(
+        `${FG_GREEN}✓${RESET} Created your personal workspace: ${FG_CYAN}${result.realmUrl}${RESET}`,
+      );
+    } else if (result.outcome === 'linked') {
+      console.log(
+        `${FG_GREEN}✓${RESET} Reconnected your personal workspace: ${FG_CYAN}${result.realmUrl}${RESET}`,
+      );
+    }
+  } catch (err) {
+    console.log(
+      `${FG_YELLOW}Warning:${RESET} could not set up a personal workspace: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+    console.log(
+      `${DIM}You can create one by signing in at ${realmServerUrl}${RESET}`,
+    );
+  }
+
   return { status: 'added', matrixId: auth.userId };
 }
 

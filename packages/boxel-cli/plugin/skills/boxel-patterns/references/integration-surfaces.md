@@ -6,9 +6,9 @@ Every place a Boxel card can reach for capability. Use this as a lookup when pla
 
 ---
 
-## 1. Base Card APIs (URL-pinned)
+## 1. Base Card APIs
 
-The Boxel base realm. Always available. Imports live at `https://cardstack.com/base/<name>`.
+The Boxel base realm. Always available. Imports live at `@cardstack/base/<name>`.
 
 | Module | Provides | Use for |
 |---|---|---|
@@ -193,7 +193,7 @@ Substantial libraries shipped inside the realm filesystem rather than via npm �
 Common kinds of realm-bundled libraries:
 
 - **UI surface frameworks** — layout primitives (Layout / Pane / Form / Grid / Cell / Run / Lift), focus-tree keyboard nav, pluggable CSS themes.
-- **Computation runtimes** — bxl-style unified runtimes that combine a jq-flavored JSON query language with Excel-compatible formula libraries (Bessel, statistical, financial, engineering, validation).
+- **Computation runtimes** — unified runtimes that combine a jq-flavored JSON query language with Excel-compatible formula libraries (Bessel, statistical, financial, engineering, validation). bxl itself is no longer one of these: the host serves it as the platform module `@cardstack/bxl` (see `libraries.md` and `bxl-authoring`), and only realms carrying an older uploaded bundle still import it by relative path.
 - **Canvas / flow editors** — XYFlow-style node-graph editors, flowcharts, canvas pan/zoom.
 
 Ask the user which of these (or other) realm-bundled libraries the workspace hosts. The extension pattern (e.g. `library-<name>`) has the import root and idiomatic usage. The realm-bundle-shim convention (how to ship a library inside a realm) also lives in extensions.

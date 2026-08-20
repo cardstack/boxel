@@ -621,6 +621,114 @@ export class MyCard extends CardDef {
       );
     });
 
+    test('no-whitespace-for-layout is not reported for realm content', async function (assert) {
+      // The rule trims each line of a text node before matching, so what it
+      // flags is adjacent "space or &nbsp;" pairs in the authored text —
+      // deliberate visual spacing in realm content. It has no autofix and
+      // its message doesn't identify the offending characters, so reporting
+      // it invites whitespace-only rewrites the formatter reverts. The rule
+      // is disabled for every template-lint invocation.
+      let longText =
+        'WELCOME TO MY HOMEPAGE &nbsp;&nbsp;&nbsp; HOT SITE AWARD WINNER &nbsp;&nbsp;&nbsp; BEST VIEWED IN 800x600 &nbsp;&nbsp;&nbsp;';
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .send(`import { CardDef } from '@cardstack/base/card-api';
+export class MyCard extends CardDef {
+}
+<template>
+  <div class='marquee'>
+    <span>${longText}</span>
+  </div>
+</template>
+`);
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let responseJson = JSON.parse(response.text);
+      // Prettier wraps the over-width text node; incidental to the rule
+      // (which trims lines before matching), asserted only to pin that the
+      // fixture exercises the formatted path.
+      assert.ok(
+        /<span>[^<]*\n[^<]*<\/span>/.test(responseJson.output),
+        'prettier wrapped the long text node across lines',
+      );
+      let whitespaceMessage = responseJson.messages.find(
+        (m: any) => m.ruleId === 'no-whitespace-for-layout',
+      );
+      assert.notOk(
+        whitespaceMessage,
+        'no-whitespace-for-layout is not reported for wrapped long text',
+      );
+
+      // The scope-pinning case: a short line prettier leaves untouched. On
+      // main this reports the rule with no wrapping in play, so it fails
+      // there for the same reason as the fixture above — proving the
+      // disable covers authored &nbsp; runs, not some formatter-introduced
+      // subset.
+      let shortResponse = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .send(`import { CardDef } from '@cardstack/base/card-api';
+export class MyCard extends CardDef {
+}
+<template>
+  <span>A &nbsp;&nbsp; B</span>
+</template>
+`);
+
+      assert.strictEqual(shortResponse.status, 200, 'HTTP 200 status');
+      let shortJson = JSON.parse(shortResponse.text);
+      let shortWhitespaceMessage = shortJson.messages.find(
+        (m: any) => m.ruleId === 'no-whitespace-for-layout',
+      );
+      assert.notOk(
+        shortWhitespaceMessage,
+        'no-whitespace-for-layout is not reported for a short, unwrapped &nbsp; run',
+      );
+    });
+
+    test('other template-lint rules from the extends chain still fire', async function (assert) {
+      // The linter is constructed with an inline config object spread from
+      // the host's .template-lintrc.js; the real risk in that swap is
+      // silently losing the extends chain. Pin it with a core recommended
+      // rule that realm content should still trip.
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .send(`import { CardDef } from '@cardstack/base/card-api';
+export class MyCard extends CardDef {
+}
+<template>
+  <div>{{{this.html}}}</div>
+</template>
+`);
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let responseJson = JSON.parse(response.text);
+      let tripleCurlies = responseJson.messages.find(
+        (m: any) => m.ruleId === 'no-triple-curlies',
+      );
+      assert.ok(
+        tripleCurlies,
+        'no-triple-curlies from the extends chain is still reported',
+      );
+    });
+
     test('handles nested template structures correctly', async function (assert) {
       let response = await request
         .post('/_lint')

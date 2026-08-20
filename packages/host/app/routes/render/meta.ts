@@ -402,7 +402,10 @@ export default class RenderMetaRoute extends Route<Model> {
     let extractStart = performance.now();
     beginRuntimeDependencyTrackingSession({
       sessionKey: `${renderModel.cardId}|${renderModel.nonce}|file-extract`,
-      rootURL: fileURL,
+      // Canonicalized for the same reason as the card render's root: exclusion
+      // is a string comparison, so the root has to be in the form the tracked
+      // deps carry. A no-op for a realm with no prefix mapping.
+      rootURL: this.network.virtualNetwork.unresolveURL(fileURL),
       rootKind: 'file',
     });
     this.#authGuard.register();

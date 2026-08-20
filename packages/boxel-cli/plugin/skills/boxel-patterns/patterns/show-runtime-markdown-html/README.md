@@ -13,8 +13,8 @@ validated: source-proven
 **Recipe shape:**
 
 ```ts
-import { Component } from 'https://cardstack.com/base/card-api';
-import MarkdownField from 'https://cardstack.com/base/markdown';
+import { Component } from '@cardstack/base/card-api';
+import MarkdownField from '@cardstack/base/markdown';
 
 class BlogPost extends CardDef {
   @field cardTitle = contains(StringField);
@@ -57,6 +57,6 @@ For finer control (custom renderers, inline rendering, embedded BFM):
 - **Mermaid + math add bundle weight.** They lazy-load on first use; first render of a card containing them takes longer.
 - **Edit format is separate.** This pattern is for `isolated`/`embedded`. For editing markdown, MarkdownField's edit template provides a textarea + live preview by default.
 
-**Source:** `boxel-catalog/blog-app/blog-post.gts` (long-form post with BFM body), `boxel-catalog/system-card/model-configuration.gts` (markdown description fields). The base implementation is in `@cardstack/boxel-ui` and `https://cardstack.com/base/markdown`.
+**Source:** `boxel-catalog/blog-app/blog-post.gts` (long-form post with BFM body), `boxel-catalog/system-card/model-configuration.gts` (markdown description fields). The base implementation is in `@cardstack/boxel-ui` and `@cardstack/base/markdown`.
 
 **See also:** `boxel-flavored-markdown` (the dialect), `boxel-markdown-format` (the inverse — emitting markdown from cards), `boxel/references/template-syntax.md` (the `<@fields.body />` delegation rule).

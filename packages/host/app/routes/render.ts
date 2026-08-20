@@ -335,7 +335,12 @@ export default class RenderRoute extends Route<Model> {
     }
     beginRuntimeDependencyTrackingSession({
       sessionKey: key,
-      rootURL: id,
+      // Canonicalized to the same form the tracked consumers carry. The route's
+      // `id` arrives URL-shaped, while the instance ids card-api records as
+      // consumers are canonical — and root exclusion is a string comparison, so
+      // a root in the other spelling fails to exclude itself and the rendered
+      // row is emitted as its own dependency.
+      rootURL: this.network.virtualNetwork.unresolveURL(id),
       // A fused index render (cardRender + fileExtract in one pass) hydrates
       // the card, so its session root is the instance; the file extract it
       // performs runs in its own session (see the render.meta route).

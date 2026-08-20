@@ -1,9 +1,30 @@
 import { module, test } from 'qunit';
 
 import {
+  SEARCH_MARKER,
+  SEPARATOR_MARKER,
+  REPLACE_MARKER,
+} from '@cardstack/runtime-common';
+import { escapeHtmlOutsideCodeBlocks } from '@cardstack/runtime-common/helpers/html';
+import {
   markedSync,
   markdownToHtml,
 } from '@cardstack/runtime-common/marked-sync';
+
+import { parseHtmlContent } from '@cardstack/host/lib/formatted-message/utils';
+
+// The render path a bot message's code patch travels before the host applies
+// it: markdown body → bodyHTML (message.ts) → parseHtmlContent →
+// codeData.searchReplaceBlock. The patch must survive this byte-identical —
+// the applier matches it against the target file.
+function roundTripSearchReplaceBlock(body: string) {
+  let html = markdownToHtml(escapeHtmlOutsideCodeBlocks(body), {
+    sanitize: false,
+    escapeHtmlInCodeBlocks: true,
+  });
+  let parts = parseHtmlContent(html, 'room-1', 'event-1');
+  return parts.find((p) => p.type === 'pre_tag')?.codeData ?? null;
+}
 
 module('Unit | marked-sync', function () {
   test('markedSync converts markdown to HTML', function (assert) {
@@ -341,6 +362,127 @@ module('Unit | marked-sync', function () {
     assert.true(
       result.includes('Footnote content.'),
       'footnote content survives DOMPurify sanitization',
+    );
+  });
+
+  test('markdownToHtml prefixes decorative bullets with a list marker', function (assert) {
+    const markdown = '🌟 First point\n🌟 Second point';
+    const result = markdownToHtml(markdown);
+
+    assert.true(
+      result.includes('<li>🌟 First point</li>'),
+      'emoji-led lines become list items',
+    );
+    assert.true(
+      result.includes('<li>🌟 Second point</li>'),
+      'each emoji-led line is its own list item',
+    );
+  });
+
+  test('markdownToHtml leaves fenced code block content verbatim when lines start with decorative bullets', function (assert) {
+    const markdown = [
+      '🌟 A real list item',
+      '```gts',
+      "  <span class='marquee-text'>",
+      '    🚧 SITE UNDER CONSTRUCTION 🚧',
+      '  </span>',
+      '```',
+    ].join('\n');
+    const result = markdownToHtml(markdown, { sanitize: false });
+
+    assert.true(
+      result.includes('<li>🌟 A real list item</li>'),
+      'bullet normalization still applies outside the fence',
+    );
+    assert.true(
+      result.includes('    🚧 SITE UNDER CONSTRUCTION 🚧'),
+      'emoji-led line inside the fence is unchanged',
+    );
+    assert.false(
+      result.includes('* 🚧'),
+      'no list marker is inserted inside the fence',
+    );
+  });
+
+  test('a code patch round-trips byte-identical through render and extraction', function (assert) {
+    const search = [
+      "        <div class='marquee-wrap'>",
+      '            🚧 SITE UNDER CONSTRUCTION 🚧 &nbsp;&nbsp;&nbsp; BEST VIEWED IN',
+      '        </div>',
+    ].join('\n');
+    const block = `${SEARCH_MARKER}\n${search}\n${SEPARATOR_MARKER}\nreplaced\n${REPLACE_MARKER}`;
+    const body = `Fixing the file now.\n\n\`\`\`gts\nhttps://example.test/hello-world.gts\n${block}\n\`\`\``;
+
+    const codeData = roundTripSearchReplaceBlock(body);
+    assert.ok(codeData, 'a code block was extracted');
+    assert.strictEqual(
+      codeData!.searchReplaceBlock,
+      block,
+      'the extracted patch is byte-identical to what the bot authored',
+    );
+  });
+
+  test('a code patch round-trips intact from CRLF input', function (assert) {
+    const search = '            🚧 SITE UNDER CONSTRUCTION 🚧';
+    const block = `${SEARCH_MARKER}\n${search}\n${SEPARATOR_MARKER}\nreplaced\n${REPLACE_MARKER}`;
+    const body =
+      `Fixing the file now.\n\n\`\`\`gts\nhttps://example.test/hello-world.gts\n${block}\n\`\`\``.replace(
+        /\n/g,
+        '\r\n',
+      );
+
+    const codeData = roundTripSearchReplaceBlock(body);
+    assert.ok(codeData, 'a code block was extracted from CRLF input');
+    assert.ok(
+      codeData!.searchReplaceBlock?.includes(search),
+      'the emoji-led search line survives unmutated',
+    );
+    assert.false(
+      (codeData!.searchReplaceBlock ?? '').includes('* 🚧'),
+      'no list marker was inserted into the CRLF fenced content',
+    );
+  });
+
+  test('a fence opened on a list-item line is respected and does not invert fence tracking', function (assert) {
+    const markdown = [
+      '- ```gts',
+      '  🚧 SITE UNDER CONSTRUCTION 🚧',
+      '  ```',
+      '',
+      '🌟 after the list',
+    ].join('\n');
+    const result = markdownToHtml(markdown, { sanitize: false });
+
+    assert.false(
+      result.includes('* 🚧'),
+      'content of the list-nested fence is unchanged',
+    );
+    assert.true(
+      result.includes('<li>🌟 after the list</li>'),
+      'normalization still applies after the fence closes (state did not invert)',
+    );
+  });
+
+  test('a decorative bullet alone on its line still becomes a list item', function (assert) {
+    const result = markdownToHtml('🌟\n\ntext after', { sanitize: false });
+
+    assert.true(
+      result.includes('<li>🌟</li>'),
+      'a bare decorative bullet line is normalized',
+    );
+  });
+
+  test('a decorative bullet indented four spaces under a list item renders as a nested list', function (assert) {
+    const markdown = '- item one\n    🌟 nested point';
+    const result = markdownToHtml(markdown, { sanitize: false });
+
+    assert.true(
+      result.includes('<li>🌟 nested point</li>'),
+      'the indented decorative bullet becomes its own list item',
+    );
+    assert.true(
+      /<li>item one[\s\S]*<ul>[\s\S]*🌟 nested point/.test(result),
+      'the decorative bullet nests as a sub-list under the parent item',
     );
   });
 

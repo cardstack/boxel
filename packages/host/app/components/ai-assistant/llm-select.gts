@@ -28,7 +28,7 @@ interface Signature {
     onCollapse?: () => void;
   };
   Blocks: {
-    footer: [];
+    menuActions: [];
   };
   Element: HTMLElement;
 }
@@ -93,9 +93,11 @@ export default class LLMSelect extends Component<Signature> {
               </button>
             </li>
           {{/each}}
-          {{yield to='footer'}}
         </ul>
       </:content>
+      <:contentActions>
+        {{yield to='menuActions'}}
+      </:contentActions>
     </PillMenu>
     <style scoped>
       .llm-select {
@@ -134,15 +136,11 @@ export default class LLMSelect extends Component<Signature> {
         padding: 0;
         margin: 0;
         display: grid;
-        gap: var(--boxel-sp-xxxs);
-        max-height: 300px;
-        overflow-y: auto;
-
-        scroll-timeline: --pill-menu-content-scroll-timeline;
+        gap: var(--boxel-sp-3xs);
       }
 
       .llm-option {
-        background: var(--boxel-light);
+        background-color: var(--boxel-light);
         border-radius: var(--boxel-border-radius);
         border: 1px solid var(--boxel-400);
       }
@@ -152,7 +150,7 @@ export default class LLMSelect extends Component<Signature> {
       }
 
       .llm-option.selected {
-        background-color: var(--boxel-teal);
+        background-color: var(--boxel-highlight);
       }
 
       .selected-icon {

@@ -1,6 +1,6 @@
-import { CardDef, field, contains, Component } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import MarkdownField from 'https://cardstack.com/base/markdown';
+import { CardDef, field, contains, Component } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import MarkdownField from '@cardstack/base/markdown';
 
 // 🧩 PATTERN: Theme-first workflow.
 //

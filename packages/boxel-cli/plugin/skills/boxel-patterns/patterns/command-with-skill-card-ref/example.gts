@@ -1,4 +1,4 @@
-import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
+import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
 // 🎯 NEWER PATH (2026-05+): tools/ai-assistant (was commands/use-ai-assistant).
 //    Symbol is still `UseAiAssistantCommand`.
 import UseAiAssistantCommand from '@cardstack/boxel-host/tools/ai-assistant';

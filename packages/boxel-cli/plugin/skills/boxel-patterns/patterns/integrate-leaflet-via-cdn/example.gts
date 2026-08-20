@@ -1,6 +1,6 @@
-import { CardDef, field, contains, Component } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
+import { CardDef, field, contains, Component } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
 import { modifier } from 'ember-modifier';
 // @ts-expect-error esm.sh is a runtime import; TS can't resolve it
 import L from 'https://esm.sh/leaflet@1.9.4';
