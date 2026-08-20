@@ -17,7 +17,12 @@ import { get } from 'lodash-es';
 import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
 
 import { cn, gt, MenuItem, MenuDivider } from '@cardstack/boxel-ui/helpers';
-import { IconCode, IconSearch, type Icon } from '@cardstack/boxel-ui/icons';
+import {
+  IconCode,
+  IconSearch,
+  Upload,
+  type Icon,
+} from '@cardstack/boxel-ui/icons';
 
 import {
   chooseCard,
@@ -35,6 +40,7 @@ import {
   CardError,
   loadCardDef,
   localId as localIdSymbol,
+  ri,
   rri,
   specRef,
   type getCard,
@@ -43,6 +49,7 @@ import {
   type CodeRef,
   type LooseSingleCardDocument,
   type LocalPath,
+  type RealmIdentifier,
   type RealmResourceIdentifier,
   type ResolvedCodeRef,
   type Filter,
@@ -82,6 +89,7 @@ import type { CardDefOrId } from './stack-item';
 import type { StackItemComponentAPI } from './stack-item';
 
 import type CardService from '../../services/card-service';
+import type FileUploadService from '../../services/file-upload';
 import type LoaderService from '../../services/loader-service';
 import type NetworkService from '../../services/network';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
@@ -140,6 +148,7 @@ export default class InteractSubmode extends Component {
   @consume(CardContextName) declare private cardContext: CardContext;
 
   @service declare private cardService: CardService;
+  @service('file-upload') declare private fileUpload: FileUploadService;
   @service declare private toolService: ToolService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private store: StoreService;
@@ -799,6 +808,11 @@ export default class InteractSubmode extends Component {
         action: () => this.createCardInstance.perform(),
         icon: IconSearch,
       }),
+      new MenuItem({
+        label: 'Upload File…',
+        action: () => this.triggerUploadFile(),
+        icon: Upload,
+      }),
       new MenuDivider(),
       new MenuItem({
         label: 'Open Code Mode',
@@ -823,6 +837,39 @@ export default class InteractSubmode extends Component {
     this.operatorModeStateService.setNewFileDropdownOpen();
     this.operatorModeStateService.updateSubmode('code');
   };
+
+  @action
+  private triggerUploadFile() {
+    // Same destination convention as the other create actions in this
+    // menu: the current workspace when it is writable, otherwise the
+    // default writable realm.
+    let realm = this.operatorModeStateService.getWritableRealmURL();
+    if (!realm) {
+      throw new Error('No writable realm found');
+    }
+    this.uploadFiles.perform(ri(realm.href)).catch((error) => {
+      console.error('Unexpected error during file upload', error);
+    });
+  }
+
+  private uploadFiles = dropTask(async (realm: RealmIdentifier) => {
+    let files = await this.fileUpload.pickLocalFiles({});
+    if (files.length === 0) {
+      return;
+    }
+    // Parallel POSTs are safe: the realm advisory lock serializes
+    // writes server-side (packages/runtime-common/realm.ts).
+    let tasks = files.map((file) =>
+      this.fileUpload.uploadProvidedFile({ realm, file }),
+    );
+    let results = await Promise.all(tasks.map((task) => task.result));
+    let firstSuccess = results.find((fileDef) => fileDef?.url);
+    if (firstSuccess?.url) {
+      this.viewCard(this.rightMostStackIndex, firstSuccess.url, 'isolated', {
+        type: 'file',
+      });
+    }
+  });
 
   private createCardInstance = restartableTask(async () => {
     let specFilter: Filter = {
