@@ -14,12 +14,21 @@
 
 const CHANNEL = 'boxel:actions-queue';
 
-// One sample costs two run-list requests plus one per active run. A busy hour
-// on this repository has ~60 runs in flight, so a 60-second interval would spend
-// ~3,800 of the 5,000 hourly REST requests a token is allowed — enough to
-// starve anything else using the same token. Two minutes halves that, and the
-// reserve below stops a spike from consuming the rest.
-const DEFAULT_INTERVAL_SECONDS = 120;
+// One sample costs two run-list requests plus one per active run, so the hourly
+// spend scales with how busy the repository is, against the 5,000 requests an
+// hour a token is allowed. Measured over this collector's own history: 4 active
+// runs at the median, 43 at p95, 51 at peak.
+//
+//   active runs   at 60s      at 30s
+//             4    360/hr      720/hr
+//            43   2,700/hr   5,400/hr
+//            51   3,180/hr   6,360/hr
+//
+// A minute is comfortable across that range and doubles the resolution. Thirty
+// seconds exceeds the budget above roughly forty concurrent runs — which is
+// exactly when the queue is worth watching — so it needs the per-sample cost
+// reduced first, not the interval shortened.
+const DEFAULT_INTERVAL_SECONDS = 60;
 
 // Requests deliberately left unspent, so a burst of runs can never take the
 // token to zero and lock out other consumers.
