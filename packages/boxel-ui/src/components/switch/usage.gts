@@ -20,8 +20,7 @@ export default class SwitchUsage extends Component {
   @tracked label = 'Switch';
   @tracked size: SwitchSize = 'base';
 
-  /* Switch asserts when it has neither a label nor a visible label block,
-     so the example only renders once the knob names it. */
+  /* Switch asserts without a label, so wait for the knob to name it */
   get hasLabel() {
     return Boolean(this.label && this.label.trim());
   }
@@ -65,12 +64,10 @@ export default class SwitchUsage extends Component {
 
   constructor(owner: Owner, args: Record<string, never>) {
     super(owner, args);
-    /* ember-freestyle seeds each CSSVariableInfo.value with the value computed
-       on a temp element at document.body — outside the themed docs container —
-       so the seed pins the chrome's :root values on the preview via inline
-       style and stops it from following theme cycling and dark mode. Clear the
-       seeds so the preview inherits the active theme until a control is
-       touched. */
+    /* ember-freestyle seeds each value from a temp element at
+       document.body, outside the themed docs container, pinning the
+       chrome's :root values on the preview via inline style. Clear the
+       seeds so it follows theme cycling until a control is touched. */
     for (let info of [
       this.boxelSwitchWidth,
       this.boxelSwitchHeight,
@@ -111,9 +108,10 @@ export default class SwitchUsage extends Component {
           off. It responds to click, Space, and Enter, and announces itself to
           assistive technology as a switch. It is fully controlled: the switch
           never changes state on its own — it calls onChange with the new value,
-          and only moves when isEnabled is updated to match. Pass label for a
-          visually-hidden accessible name, or yield a block to render a visible
-          label beside the track — one of the two is required.
+          and only moves when isEnabled is updated to match. label is always
+          required — it is the accessible name. Yield a block to also render a
+          visible label beside the track, in which case label should repeat that
+          text.
         </:description>
         <:example>
           {{#if this.hasLabel}}
@@ -269,7 +267,7 @@ export default class SwitchUsage extends Component {
         <:description>
           Yielding a block renders it as a visible label beside the track;
           clicking the text toggles the switch, and it names the control for
-          assistive technology, so no label arg is needed.
+          assistive technology, so no label arg is passed.
         </:description>
         <:example>
           <Switch

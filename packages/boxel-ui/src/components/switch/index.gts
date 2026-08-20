@@ -1,5 +1,5 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-import { assert } from '@ember/debug';
+import { assert, warn } from '@ember/debug';
 import { concat, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import type { ComponentLike } from '@glint/template';
@@ -17,44 +17,44 @@ interface SwitchSignature {
   Element: HTMLLabelElement;
 }
 interface SwitchArgs {
-  /* decorative glyph inside the thumb for the matching state; the label
-     still names the control. Skipped at size small — the thumb is too
-     small to carry a legible glyph there. */
+  /* decorative; skipped at size small, where no glyph stays legible */
   checkedIcon?: ComponentLike<{ Element: Element }>;
   disabled?: boolean;
   isEnabled: boolean;
-  /* names the switch for assistive technology when no block is given; a
-     yielded visible label names it instead, so pass one or the other.
-     Glint can't tie block presence to the args type, so the requirement
-     is asserted at render time rather than in the signature. */
-  label?: string;
+  label?: string; /* Visually-hidden accessible name. Use default block instead to add a visible label. */
   onChange: (isEnabled: boolean) => void;
   size?: SwitchSize;
   uncheckedIcon?: ComponentLike<{ Element: Element }>;
 }
 
-/* Only reached when no visible label block is given, so an empty @label
-   here means the switch would render with no accessible name at all.
-   assert is compiled out of production builds. */
+/* asserts are compiled out of production builds */
 function srOnlyLabel(label: string | undefined) {
   assert(
-    'Switch requires an accessible name: pass @label or provide a visible label block',
+    'Switch requires an accessible name: pass @label or a visible label block',
     Boolean(label && label.trim()),
   );
   return label;
 }
 
-/* explicit width/height attributes so icons carry intrinsic size (they
-   scale with the thumb per preset, not with ambient CSS) */
+/* Warns rather than asserts so a mislabeled switch still renders */
+function warnOnRedundantLabel(label: string | undefined) {
+  warn(
+    'Switch ignores @label when a visible label block is given — the block names the control',
+    label === undefined,
+    { id: 'boxel-ui.switch.redundant-label' },
+  );
+  return '';
+}
+
+/* Intrinsic size, which prerendering needs. Tracks the @size presets
+   only; .switch-thumb clamps glyphs when CSS sets the geometry. */
 function iconSize(size?: SwitchSize) {
   return size === 'touch' ? 14 : 10;
 }
 
-/* Fully controlled: preventDefault keeps the checkbox from toggling itself
-   (click covers pointer and Space alike), so the DOM checked property — and
-   the aria-checked the browser derives from it — only ever changes when
-   @isEnabled does. Without this, an @onChange that drops the value would
-   leave the native state disagreeing with the rendered one. */
+/* Fully controlled: preventDefault stops the checkbox toggling itself, so
+   checked — and the aria-checked derived from it — follows @isEnabled
+   alone, even when @onChange drops the value. Click covers Space too. */
 function toggleOnClick(
   isEnabled: boolean,
   onChange: SwitchArgs['onChange'],
@@ -64,11 +64,10 @@ function toggleOnClick(
   onChange(!isEnabled);
 }
 
-/* Enter is inert on checkboxes, listed in WAI-ARIA as optional for role=switch,
-   so it gets its own keydown path. https://www.w3.org/WAI/ARIA/apg/patterns/switch/
-   Held keys repeat keydown, and unlike Space — which reaches the click handler
-   only on keyup, once per press — nothing else throttles this path, so skip the
-   repeats and toggle once per press. */
+/* Checkboxes ignore Enter, which WAI-ARIA lists as optional for
+   role=switch, so it needs its own keydown path — and its own repeat
+   guard, since Space activates on keyup and cannot repeat.
+   https://www.w3.org/WAI/ARIA/apg/patterns/switch/ */
 function toggleOnEnter(
   isEnabled: boolean,
   onChange: SwitchArgs['onChange'],
@@ -96,13 +95,12 @@ const Switch: TemplateOnlyComponent<SwitchSignature> = <template>
     ...attributes
   >
     {{#if (has-block)}}
-      <span class='switch-label'>{{yield}}</span>
+      <span class='switch-label'>{{warnOnRedundantLabel @label}}{{yield}}</span>
     {{else}}
       <span class='boxel-sr-only'>{{srOnlyLabel @label}}</span>
     {{/if}}
     <span class='switch-track'>
-      {{! a native checkbox's checkedness maps to aria-checked automatically;
-          an explicit binding could disagree with it }}
+      {{! aria-checked is derived from checked; binding it could disagree }}
       {{! template-lint-disable require-mandatory-role-attributes }}
       <input
         {{on 'click' (fn toggleOnClick @isEnabled @onChange)}}
@@ -113,7 +111,7 @@ const Switch: TemplateOnlyComponent<SwitchSignature> = <template>
         disabled={{@disabled}}
         role='switch'
       />
-      {{! presentational: the input above carries all semantics and state }}
+      {{! presentational: the input carries the semantics and state }}
       <span class='switch-thumb' aria-hidden='true'>
         {{#unless (eq @size 'small')}}
           {{#let (if @isEnabled @checkedIcon @uncheckedIcon) as |StateIcon|}}
@@ -143,7 +141,7 @@ const Switch: TemplateOnlyComponent<SwitchSignature> = <template>
         );
         --_switch-thumb-edge-color: var(
           --boxel-switch-thumb-edge,
-          color-mix(in oklch, var(--primary-foreground) 12%, transparent)
+          color-mix(in oklch, var(--foreground) 12%, transparent)
         );
         --_switch-thumb-icon-color: var(
           --boxel-switch-thumb-icon,
@@ -158,12 +156,8 @@ const Switch: TemplateOnlyComponent<SwitchSignature> = <template>
         display: inline-flex;
         align-items: center;
         color: var(--boxel-switch-foreground, var(--foreground));
-        /* Pads the label out to the 24px minimum target size (WCAG 2.5.8)
-           when the drawn track is smaller, without growing the track. The
-           padding is inside the element's own box, so the target never
-           overlaps a neighboring control the way an outset overlay would;
-           max() keeps it at zero once the track already clears the minimum.
-           align-items: center keeps the track centered in the padded box. */
+        /* Reaches the 24px minimum target (WCAG 2.5.8) inside the
+           element's own box, so it never covers a neighbor. */
         padding-block: max(
           0px,
           calc((var(--_switch-min-target) - var(--_switch-height)) / 2)
@@ -178,10 +172,8 @@ const Switch: TemplateOnlyComponent<SwitchSignature> = <template>
         gap: var(--boxel-sp-xs);
       }
 
-      /* Size presets set the same public knobs callers use, so all geometry
-         (thumb, travel, hit area) follows; an inline --boxel-switch-* on the
-         element still outranks them. size-base has no rule: it keeps the
-         defaults and lets ancestor-provided variables through. */
+      /* Presets set the public knobs, so all geometry follows; an inline
+         --boxel-switch-* still outranks them. */
       .switch.size-small {
         --boxel-switch-width: 1.75rem;
         --boxel-switch-height: 1rem;
@@ -193,8 +185,6 @@ const Switch: TemplateOnlyComponent<SwitchSignature> = <template>
         --boxel-switch-height: 1.625rem;
       }
 
-      /* With no visible label the wrapper has no other content, so it sizes
-         to this track plus whatever padding the minimum target size adds. */
       .switch-track {
         box-sizing: border-box;
         flex: none;
@@ -210,9 +200,8 @@ const Switch: TemplateOnlyComponent<SwitchSignature> = <template>
         box-shadow: var(--shadow-xs);
       }
 
-      /* Invisible semantic layer over the track: still the focusable,
-         checkable element and the :focus-visible source for the track's
-         ring; the sibling .switch-thumb draws what used to be here. */
+      /* Invisible, but still the focusable, checkable element and the
+         :focus-visible source for the track's ring. */
       .switch-input {
         -webkit-appearance: none;
         appearance: none;
@@ -220,8 +209,7 @@ const Switch: TemplateOnlyComponent<SwitchSignature> = <template>
         inset: 0;
         margin: 0;
         opacity: 0;
-        /* the UA gives disabled inputs their own cursor, which would
-           disagree with the control's */
+        /* the UA's disabled cursor would disagree with the control's */
         cursor: inherit;
       }
 
@@ -235,17 +223,22 @@ const Switch: TemplateOnlyComponent<SwitchSignature> = <template>
         /* icons draw with currentColor */
         color: var(--_switch-thumb-icon-color);
         border-radius: 50%;
-        /* a shadow ring, not a border: a border would add to the thumb's
-           border-box and break the height:100% + aspect-ratio square. The
-           foreground-derived color keeps the thumb visible in themes where
-           --input and --background nearly coincide. */
+        /* A shadow, not a border, which would grow the border-box and
+           break the aspect-ratio square. --foreground because it inverts:
+           this exists for themes where --input and --background meet. */
         box-shadow: 0 0 0 1px var(--_switch-thumb-edge-color);
       }
 
-      /* Thumb travel is width minus height: border and padding subtract
-         equally from the track's content box and the (square, track-height)
-         thumb, so the difference holds at any size or border/padding and the
-         thumb always lands flush against the far edge. */
+      /* The icon's intrinsic size follows @size only, so CSS-set geometry
+         could overflow the thumb. :deep: the svg is the caller's. */
+      .switch-thumb :deep(svg) {
+        max-width: 60%;
+        max-height: 60%;
+      }
+
+      /* Travel is width minus height: border and padding subtract equally
+         from the track's content box and the square thumb, so the thumb
+         lands flush against the far edge at any size. */
       .switch.checked .switch-thumb {
         background-color: var(--_switch-active-thumb-color);
         color: var(--_switch-active-thumb-icon-color);
@@ -269,9 +262,8 @@ const Switch: TemplateOnlyComponent<SwitchSignature> = <template>
         outline-offset: 2px;
       }
 
-      /* pressed-state affordance: the thumb swells slightly under the
-         pointer. `scale` composes with the checked-state translate, so it
-         works in both positions. */
+      /* scale composes with the checked translate, so the pressed thumb
+         swells in both positions */
       .switch:not(.disabled):active .switch-thumb {
         scale: 1.05;
       }
