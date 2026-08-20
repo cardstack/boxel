@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Liability Cap \u2014 12 Months' Fees",
+      "clauseType": "liability",
+      "riskLevel": "medium",
+      "standardText": "Neither party's aggregate liability arising out of or in connection with this Agreement shall exceed the total fees paid or payable in the twelve (12) months immediately preceding the event giving rise to the claim, save for liability which cannot be limited at law.",
+      "guidance": "Never concede an uncapped carve-out beyond death, personal injury and fraud without General Counsel sign-off.",
+      "ownerRole": "Legal",
+      "reviewedAt": "2026-02-04"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../clause",
+        "name": "Clause"
+      }
+    }
+  }
+}

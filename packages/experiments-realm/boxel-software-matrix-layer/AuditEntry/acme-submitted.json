@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "action": "submitted",
+      "occurredAt": "2026-07-03T14:05:00.000Z",
+      "subjectTitle": "Acme Industries — Master Services Agreement 2026",
+      "note": "Sent for approval at $420,000 total contract value.",
+      "conditions": null
+    },
+    "relationships": {
+      "subject": {
+        "links": {
+          "self": "../Contract/acme-msa-2026"
+        }
+      },
+      "doneBy": {
+        "links": {
+          "self": "../Employee/marcus-webb"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../audit-entry",
+        "name": "AuditEntry"
+      }
+    }
+  }
+}

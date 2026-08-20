@@ -1,0 +1,17 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ruleName": "High or critical risk grade",
+      "priority": 20,
+      "isActive": true,
+      "minRiskGrade": "high",
+      "requiredRoles": ["Legal", "CFO"],
+      "isParallel": false,
+      "guidance": "Risk grade alone can require approval even on a small contract."
+    },
+    "meta": {
+      "adoptsFrom": { "module": "../approval-rule", "name": "ApprovalRule" }
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "signingTitle": "General Counsel",
+      "isActive": true,
+      "signatureAuthority": {
+        "amount": 250000,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "contractTypes": ["vendor", "nda", "partnership"]
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../signatory",
+        "name": "Signatory"
+      }
+    },
+    "relationships": {
+      "person": {
+        "links": {
+          "self": "../Employee/priya-nair"
+        }
+      }
+    }
+  }
+}

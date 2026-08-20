@@ -36,7 +36,8 @@
       "adoptsFrom": {
         "module": "../booking",
         "name": "Booking"
-      }
+      },
+      "_touched": 1787195035457
     }
   }
 }

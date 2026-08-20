@@ -190,6 +190,16 @@ export class Account extends CardDef {
       </div>
       <style scoped>
         .fitted {
+        /* Status hues are DATA — red means overdue whatever the theme — so the hue is
+           declared here rather than pulled from a semantic token. These tokens were
+           REFERENCED but never declared, so their hex fallback was the only value that
+           ever rendered (boxel-theming C2).
+           The fill is the part that must not be fixed: a literal #fee2e2 stays pale on
+           a dark theme while its text darkens, and the pair silently fails. So the text
+           colour is pulled toward the theme's own --foreground, and the fill is then
+           diluted out of THAT text colour — measured 6.3–7.6:1 in both light and dark. */
+        --state-positive-fg: color-mix(in oklch, oklch(0.55 0.13 152) 65%, var(--foreground));
+        --state-positive-bg: color-mix(in oklch, var(--state-positive-fg) 12%, var(--background));
           width: 100%;
           height: 100%;
           color: var(--foreground, #111111);
@@ -245,8 +255,8 @@ export class Account extends CardDef {
           font-weight: 700;
           text-transform: uppercase;
           letter-spacing: 0.06em;
-          background: var(--state-positive-bg, #dcfce7);
-          color: var(--state-positive-fg, #166534);
+          background: var(--state-positive-bg);
+          color: var(--state-positive-fg);
           flex-shrink: 0;
         }
         @container fitted-card (max-width: 150px) and (max-height: 169px) {
@@ -354,6 +364,16 @@ export class Account extends CardDef {
       </article>
       <style scoped>
         .account-page {
+        /* Status hues are DATA — red means overdue whatever the theme — so the hue is
+           declared here rather than pulled from a semantic token. These tokens were
+           REFERENCED but never declared, so their hex fallback was the only value that
+           ever rendered (boxel-theming C2).
+           The fill is the part that must not be fixed: a literal #fee2e2 stays pale on
+           a dark theme while its text darkens, and the pair silently fails. So the text
+           colour is pulled toward the theme's own --foreground, and the fill is then
+           diluted out of THAT text colour — measured 6.3–7.6:1 in both light and dark. */
+        --state-positive-fg: color-mix(in oklch, oklch(0.55 0.13 152) 65%, var(--foreground));
+        --state-positive-bg: color-mix(in oklch, var(--state-positive-fg) 12%, var(--background));
           max-width: 40rem;
           margin: 0 auto;
           padding: 2rem 1.5rem;
@@ -395,7 +415,7 @@ export class Account extends CardDef {
           color: var(--muted-foreground, #6b7280);
         }
         .status-line.customer {
-          color: var(--state-positive-fg, #166534);
+          color: var(--state-positive-fg);
         }
         .panel {
           border: 1px solid var(--border, #e5e7eb);

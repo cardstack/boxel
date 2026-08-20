@@ -1,0 +1,40 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "ApprovalRule",
+        "module": "../approval-rule"
+      },
+      "specType": "card",
+      "isCard": true,
+      "isField": false,
+      "isComponent": false,
+      "readMe": "## Approval Rule\n\nA declarative routing rule: *IF contract type / minimum value / minimum risk grade /\nminimum clause deviations / handles sensitive data, THEN require these roles, in order.*\n\n```ts\nimport { ApprovalRule, evaluateRules, describeRule } from '../approval-rule';\n\nlet fired = evaluateRules(rules, {\n  contractType, value, riskGrade, deviationCount, handlesSensitiveData,\n});\n// fired[].roles builds the chain; fired[].because explains it to the approver\n```\n\n**Conditions are AND-ed, and that is a deliberate limit.** Express OR by writing a second\nrule. Nested boolean groups make a rule unreadable at exactly the moment someone is working\nout why they were asked to approve something.\n\n**An unpopulated condition is skipped, not treated as false** — a rule that sets only\n`minValue` must not silently require a contract type too.\n\n**`describeRule` exists so the reason cannot drift from the routing.** Every researched CLM\nproduct models its trigger condition and then discards it at render time, falling back to\ninstruction text a human typed. Keeping the rule as data means the sentence shown to the\napprover is generated from the same object that selected them.\n\n`minRiskGrade` is an enum, not free text: `ruleMatches` compares by index in the ordered\ngrade list, so a value outside the set scores −1 and the rule silently never fires.\n\n### Non-goals\n\nDoes not build or store the chain — the consuming app maps `roles` onto\n**ApprovalStepField** entries. Does not decide who fills a role (no role→person directory\nhere). Does not schedule reminders or escalate: `Remind` is blocked on platform identity and\na card-reachable scheduler.",
+      "cardInfo": {}
+    },
+    "meta": {
+      "adoptsFrom": {
+        "name": "Spec",
+        "module": "@cardstack/base/spec"
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../ApprovalRule/vendor-over-100k"
+        }
+      },
+      "linkedExamples.1": {
+        "links": {
+          "self": "../ApprovalRule/sensitive-personal-data"
+        }
+      },
+      "linkedExamples.2": {
+        "links": {
+          "self": "../ApprovalRule/unlimited-liability"
+        }
+      }
+    }
+  }
+}

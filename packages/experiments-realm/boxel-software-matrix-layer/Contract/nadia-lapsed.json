@@ -1,31 +1,40 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Contract",
+        "module": "../contract"
+      }
+    },
     "type": "card",
     "attributes": {
-      "title": "Nadia Rahman — Retainer 2025",
-      "status": "expired",
-      "startDate": "2025-06-01",
-      "endDate": "2026-05-31",
-      "signedAt": "2025-05-28",
+      "terms": "## Retainer\n\nTwelve months of design support at USD 400 per month. Unused hours do not carry over.",
+      "title": "Nadia Rahman \u2014 Retainer 2025",
       "value": {
         "amount": 4800,
         "currency": {
           "code": "USD"
         }
       },
-      "terms": "## Retainer\n\nTwelve months of design support at USD 400 per month. Unused hours do not carry over.",
+      "status": "expired",
+      "endDate": "2026-05-31",
       "cardInfo": {
         "name": null,
-        "summary": null,
         "notes": null,
+        "summary": null,
         "cardThumbnailURL": null
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../contract",
-        "name": "Contract"
-      }
+      },
+      "isSigned": true,
+      "signedAt": "2025-05-28",
+      "cardTitle": "Nadia Rahman \u2014 Retainer 2025",
+      "startDate": "2025-06-01",
+      "documentUrl": null,
+      "daysToExpiry": 0,
+      "cardDescription": null,
+      "cardThumbnailURL": null,
+      "contractNumber": "CTR-2025-0088",
+      "contractType": "contractor",
+      "autoRenews": false
     },
     "relationships": {
       "account": {

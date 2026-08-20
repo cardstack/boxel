@@ -1,0 +1,36 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "contractTitle": "Acme Industries — Master Services Agreement 2026",
+      "versionNumber": 1,
+      "effectiveDate": "2026-07-15",
+      "summary": "Original executed agreement.",
+      "valueAtVersion": {
+        "amount": 5880,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "endDateAtVersion": "2027-07-14"
+    },
+    "relationships": {
+      "executedBy": {
+        "links": {
+          "self": "../Employee/priya-nair"
+        }
+      },
+      "contract": {
+        "links": {
+          "self": "../Contract/acme-msa-2026"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../contract-version",
+        "name": "ContractVersion"
+      }
+    }
+  }
+}

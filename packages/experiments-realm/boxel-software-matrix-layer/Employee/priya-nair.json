@@ -1,35 +1,55 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Employee",
+        "module": "../employee"
+      }
+    },
     "type": "card",
     "attributes": {
       "name": "Priya Nair",
+      "role": "Senior Backend Engineer",
       "email": "priya.nair@example.com",
       "phone": "+1 555 0104",
-      "role": "Senior Backend Engineer",
-      "department": "Engineering",
-      "startDate": "2024-02-12",
-      "status": "active",
-      "salary": 150000,
-      "cardInfo": {
-        "name": "Priya Nair"
-      },
       "photo": {
         "url": "https://images.pexels.com/photos/1181690/pexels-photo-1181690.jpeg",
-        "sourceMode": "url"
+        "sourceMode": "url",
+        "resolvedUrl": "https://images.pexels.com/photos/1181690/pexels-photo-1181690.jpeg"
       },
-      "ptoAllowanceDays": 25
+      "title": "Priya Nair",
+      "salary": 150000,
+      "status": "active",
+      "tenure": {
+        "unit": "years",
+        "label": "2.5 years",
+        "value": 2.5
+      },
+      "cardInfo": {
+        "name": "Priya Nair",
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "initials": "PN",
+      "cardTitle": "Priya Nair",
+      "startDate": "2024-02-12",
+      "department": "Engineering",
+      "ptoBalance": null,
+      "managerName": "Marcus Webb",
+      "employmentType": null,
+      "cardDescription": null,
+      "terminationDate": null,
+      "cardThumbnailURL": null,
+      "onboardingStatus": null,
+      "ptoAllowanceDays": 25,
+      "weeklyInterviewCapacityHours": null
     },
     "relationships": {
       "manager": {
         "links": {
           "self": "./marcus-webb"
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../employee",
-        "name": "Employee"
       }
     }
   }

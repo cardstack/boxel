@@ -1,0 +1,21 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "templateName": "NDA (One-Way)",
+      "contractType": "nda",
+      "useCase": "Protecting our information only",
+      "isPublished": true,
+      "lastReviewedAt": "2026-05-15",
+      "requiredInputs": ["Counterparty", "Purpose"],
+      "guidance": "Use when only we disclose. If they need protection too, use the mutual form."
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../contract-template",
+        "name": "ContractTemplate"
+      }
+    }
+  }
+}

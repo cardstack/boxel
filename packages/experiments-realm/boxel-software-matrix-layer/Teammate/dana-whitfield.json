@@ -1,22 +1,25 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Teammate",
+        "module": "../teammate"
+      }
+    },
     "type": "card",
     "attributes": {
       "name": "Dana Whitfield",
       "email": "dana.whitfield@revenue-os.example",
-      "jobTitle": "Account Executive",
       "cardInfo": {
         "name": null,
-        "summary": null,
         "notes": null,
+        "summary": null,
         "cardThumbnailURL": null
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../teammate",
-        "name": "Teammate"
-      }
+      },
+      "jobTitle": "Account Executive",
+      "cardTitle": "Dana Whitfield",
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "cardInfo.theme": {

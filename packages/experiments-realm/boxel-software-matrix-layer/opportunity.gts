@@ -156,6 +156,20 @@ export class Opportunity extends CardDef {
       </div>
       <style scoped>
         .opp-row {
+        /* Status hues are DATA — red means overdue whatever the theme — so the hue is
+           declared here rather than pulled from a semantic token. These tokens were
+           REFERENCED but never declared, so their hex fallback was the only value that
+           ever rendered (boxel-theming C2).
+           The fill is the part that must not be fixed: a literal #fee2e2 stays pale on
+           a dark theme while its text darkens, and the pair silently fails. So the text
+           colour is pulled toward the theme's own --foreground, and the fill is then
+           diluted out of THAT text colour — measured 6.3–7.6:1 in both light and dark. */
+        --stage-closed-lost-fg: color-mix(in oklch, oklch(0.55 0.19 27) 65%, var(--foreground));
+        --stage-closed-lost-bg: color-mix(in oklch, var(--stage-closed-lost-fg) 12%, var(--background));
+        --stage-closed-won-fg: color-mix(in oklch, oklch(0.55 0.13 152) 65%, var(--foreground));
+        --stage-closed-won-bg: color-mix(in oklch, var(--stage-closed-won-fg) 12%, var(--background));
+        --stage-late-fg: color-mix(in oklch, oklch(0.60 0.14 60) 65%, var(--foreground));
+        --stage-late-bg: color-mix(in oklch, var(--stage-late-fg) 12%, var(--background));
           display: flex;
           align-items: center;
           gap: 0.75rem;
@@ -201,17 +215,17 @@ export class Opportunity extends CardDef {
           white-space: nowrap;
         }
         .stage-closed-won {
-          background: var(--stage-closed-won-bg, #dcfce7);
-          color: var(--stage-closed-won-fg, #166534);
+          background: var(--stage-closed-won-bg);
+          color: var(--stage-closed-won-fg);
         }
         .stage-closed-lost {
-          background: var(--stage-closed-lost-bg, #fee2e2);
-          color: var(--stage-closed-lost-fg, #991b1b);
+          background: var(--stage-closed-lost-bg);
+          color: var(--stage-closed-lost-fg);
         }
         .stage-proposal,
         .stage-negotiation {
-          background: var(--stage-late-bg, #fef3c7);
-          color: var(--stage-late-fg, #92400e);
+          background: var(--stage-late-bg);
+          color: var(--stage-late-fg);
         }
       </style>
     </template>
@@ -276,6 +290,22 @@ export class Opportunity extends CardDef {
       </div>
       <style scoped>
         .fitted {
+        /* Status hues are DATA — red means overdue whatever the theme — so the hue is
+           declared here rather than pulled from a semantic token. These tokens were
+           REFERENCED but never declared, so their hex fallback was the only value that
+           ever rendered (boxel-theming C2).
+           The fill is the part that must not be fixed: a literal #fee2e2 stays pale on
+           a dark theme while its text darkens, and the pair silently fails. So the text
+           colour is pulled toward the theme's own --foreground, and the fill is then
+           diluted out of THAT text colour — measured 6.3–7.6:1 in both light and dark. */
+        --stage-closed-lost-fg: color-mix(in oklch, oklch(0.55 0.19 27) 65%, var(--foreground));
+        --stage-closed-lost-bg: color-mix(in oklch, var(--stage-closed-lost-fg) 12%, var(--background));
+        --stage-closed-won-fg: color-mix(in oklch, oklch(0.55 0.13 152) 65%, var(--foreground));
+        --stage-closed-won-bg: color-mix(in oklch, var(--stage-closed-won-fg) 12%, var(--background));
+        --stage-late-fg: color-mix(in oklch, oklch(0.60 0.14 60) 65%, var(--foreground));
+        --stage-late-bg: color-mix(in oklch, var(--stage-late-fg) 12%, var(--background));
+        --state-overdue-fg: color-mix(in oklch, oklch(0.55 0.19 27) 65%, var(--foreground));
+        --state-overdue-bg: color-mix(in oklch, var(--state-overdue-fg) 12%, var(--background));
           display: flex;
           flex-direction: column;
           justify-content: center;
@@ -332,17 +362,17 @@ export class Opportunity extends CardDef {
           text-overflow: ellipsis;
         }
         .stage-closed-won {
-          background: var(--stage-closed-won-bg, #dcfce7);
-          color: var(--stage-closed-won-fg, #166534);
+          background: var(--stage-closed-won-bg);
+          color: var(--stage-closed-won-fg);
         }
         .stage-closed-lost {
-          background: var(--stage-closed-lost-bg, #fee2e2);
-          color: var(--stage-closed-lost-fg, #991b1b);
+          background: var(--stage-closed-lost-bg);
+          color: var(--stage-closed-lost-fg);
         }
         .stage-proposal,
         .stage-negotiation {
-          background: var(--stage-late-bg, #fef3c7);
-          color: var(--stage-late-fg, #92400e);
+          background: var(--stage-late-bg);
+          color: var(--stage-late-fg);
         }
         .line-account,
         .line-prob,
@@ -357,15 +387,15 @@ export class Opportunity extends CardDef {
           letter-spacing: 0.06em;
           padding: 0.0625rem 0.375rem;
           border-radius: 999px;
-          background: var(--state-overdue-bg, #fee2e2);
-          color: var(--state-overdue-fg, #991b1b);
+          background: var(--state-overdue-bg);
+          color: var(--state-overdue-fg);
           white-space: nowrap;
           flex-shrink: 0;
         }
         /* A stalled deal reads as needing attention at every size, including
            the badge tier where the age line itself is hidden. */
         .fitted.stuck {
-          box-shadow: inset 3px 0 0 var(--state-overdue-fg, #991b1b);
+          box-shadow: inset 3px 0 0 var(--state-overdue-fg);
         }
         @container fitted-card (min-height: 170px) {
           .line-account {
@@ -472,6 +502,16 @@ export class Opportunity extends CardDef {
       </article>
       <style scoped>
         .opp-page {
+        /* Status hues are DATA — red means overdue whatever the theme — so the hue is
+           declared here rather than pulled from a semantic token. These tokens were
+           REFERENCED but never declared, so their hex fallback was the only value that
+           ever rendered (boxel-theming C2).
+           The fill is the part that must not be fixed: a literal #fee2e2 stays pale on
+           a dark theme while its text darkens, and the pair silently fails. So the text
+           colour is pulled toward the theme's own --foreground, and the fill is then
+           diluted out of THAT text colour — measured 6.3–7.6:1 in both light and dark. */
+        --stage-closed-lost-fg: color-mix(in oklch, oklch(0.55 0.19 27) 65%, var(--foreground));
+        --stage-closed-lost-bg: color-mix(in oklch, var(--stage-closed-lost-fg) 12%, var(--background));
           max-width: 46rem;
           margin: 0 auto;
           padding: 2rem 1.5rem;
@@ -571,7 +611,7 @@ export class Opportunity extends CardDef {
           background: var(--primary, #111111);
         }
         .step-lost .dot {
-          background: var(--stage-closed-lost-fg, #991b1b);
+          background: var(--stage-closed-lost-fg);
         }
         .step-label {
           font-size: 0.625rem;
@@ -589,7 +629,7 @@ export class Opportunity extends CardDef {
           color: var(--foreground, #111111);
         }
         .step-lost .step-label {
-          color: var(--stage-closed-lost-fg, #991b1b);
+          color: var(--stage-closed-lost-fg);
         }
         .panel {
           border: 1px solid var(--border, #e5e7eb);

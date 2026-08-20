@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Payment Terms \u2014 Net 30",
+      "clauseType": "payment",
+      "riskLevel": "low",
+      "standardText": "Invoices are payable within thirty (30) days of receipt of a valid invoice.",
+      "guidance": "Standard for all vendor and customer agreements. Net-45 needs Finance sign-off; anything beyond Net-60 needs the CFO.",
+      "ownerRole": "Legal",
+      "reviewedAt": "2026-02-04"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../clause",
+        "name": "Clause"
+      }
+    }
+  }
+}

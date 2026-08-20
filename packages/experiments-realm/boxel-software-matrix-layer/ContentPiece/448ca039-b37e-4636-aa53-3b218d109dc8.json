@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Monday motivation",
+      "platform": "instagram_story",
+      "scheduledAt": "2026-08-23T23:30:00.000Z",
+      "status": "planned",
+      "brief": null,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../content-calendar/content-piece",
+        "name": "ContentPiece"
+      }
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "signingTitle": "VP People",
+      "isActive": true,
+      "signatureAuthority": {
+        "amount": 150000,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "contractTypes": ["employment", "contractor"]
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../signatory",
+        "name": "Signatory"
+      }
+    },
+    "relationships": {
+      "person": {
+        "links": {
+          "self": "../Employee/leo-park"
+        }
+      }
+    }
+  }
+}

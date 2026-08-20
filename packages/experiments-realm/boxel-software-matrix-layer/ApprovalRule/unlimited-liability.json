@@ -1,0 +1,17 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ruleName": "Non-standard liability language",
+      "priority": 5,
+      "isActive": true,
+      "minDeviations": 1,
+      "requiredRoles": ["Legal", "CEO"],
+      "isParallel": false,
+      "guidance": "Any deviation from the approved liability clause goes to Legal and then the CEO, regardless of value."
+    },
+    "meta": {
+      "adoptsFrom": { "module": "../approval-rule", "name": "ApprovalRule" }
+    }
+  }
+}

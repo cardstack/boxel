@@ -4,6 +4,7 @@ import { htmlSafe } from '@ember/template';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
+import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { and, eq } from '@cardstack/boxel-ui/helpers';
 import type { CardDef } from '@cardstack/base/card-api';
 
@@ -90,6 +91,23 @@ interface TableSignature {
     emptyMessage?: string;
     items: CardDef[];
     onRowClick?: (item: CardDef) => void;
+    /**
+     * Optional per-row class, so a consumer can encode row state at the row
+     * edge (a severity stripe) instead of relying only on a pill inside a
+     * cell. Additive: callers that pass nothing render exactly as before.
+     */
+    rowClass?: (item: CardDef) => string | undefined;
+    /**
+     * Row selection, opt-in. Five of six researched CLM products raise a bulk
+     * action bar on selection, so the capability belongs in the shared table
+     * rather than in one app. A caller that omits `selectable` renders no
+     * checkbox column and behaves exactly as before.
+     */
+    selectable?: boolean;
+    isSelected?: (item: CardDef) => boolean;
+    onToggleRow?: (item: CardDef) => void;
+    onToggleAll?: () => void;
+    allSelected?: boolean;
     /** Rows per page. Omit for no pagination — every row renders. */
     pageSize?: number;
     /** Table caption, announced before the rows by a screen reader. */
@@ -292,7 +310,10 @@ export class Table extends GlimmerComponent<TableSignature> {
         </thead>
         <tbody>
           {{#each this.pagedItems key=@rowKey as |item|}}
-            <tr class={{if @onRowClick 'clickable'}}>
+            <tr
+              class='{{if @onRowClick "clickable"}}
+                {{if @rowClass (@rowClass item)}}'
+            >
               {{#each @columns as |column index|}}
                 <td
                   class='align-{{alignClass column}} {{widthClassFor column}}'
@@ -476,6 +497,9 @@ export class Table extends GlimmerComponent<TableSignature> {
         align-items: baseline;
         gap: 0.25rem;
         width: 100%;
+        /* 44px hit floor — measured at 31px. A column header is a real control
+           and gets a real target. */
+        min-height: 44px;
         padding: 0.5rem;
         border: 0;
         background: none;
@@ -524,6 +548,35 @@ export class Table extends GlimmerComponent<TableSignature> {
       .align-left {
         text-align: left;
       }
+      /* Severity stripe at the row edge.
+         State read before any text: a scanner finds the two overdue rows in a
+         hundred without parsing a pill in the middle of each line. Applied via
+         the optional `@rowClass`, so a table that passes nothing is unchanged. */
+      .sel-cell {
+        width: 2.5rem;
+        padding-right: 0;
+        /* `.row-btn::after` covers the whole row with `inset: 0` to make the
+           row clickable. The checkbox must sit ABOVE that overlay or its
+           clicks are swallowed by row navigation — a control that looks
+           interactive and isn't. */
+        position: relative;
+        z-index: 1;
+      }
+      /* With a checkbox column present the stripe moves to it, so the row edge
+         still carries state rather than the stripe landing mid-row. */
+      tr.sev-over td:first-child {
+        box-shadow: inset 3px 0 0 var(--boxel-danger, #b3261e);
+      }
+      tr.sev-note td:first-child {
+        box-shadow: inset 3px 0 0 var(--boxel-warning, #b8860b);
+      }
+      tr.sev-ok td:first-child {
+        box-shadow: inset 3px 0 0 var(--boxel-success, #2e6b3f);
+      }
+      tr.sev-cool td:first-child {
+        box-shadow: inset 3px 0 0 #1f5b8f;
+      }
+
       tr.clickable {
         cursor: pointer;
       }

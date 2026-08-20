@@ -1,0 +1,40 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "ContractTemplate",
+        "module": "../contract-template"
+      },
+      "specType": "card",
+      "isCard": true,
+      "isField": false,
+      "isComponent": false,
+      "readMe": "## Contract Template\n\nA standard starting point per contract type: `templateName`, `contractType`, `useCase`,\n`bodyMarkdown`, `guidance`, `requiredInputs`, `isPublished`, and `standardClauses` linked to\nthe **Clause** library.\n\n```ts\nimport { ContractTemplate } from '../contract-template';\n@field template = linksTo(ContractTemplate);\n```\n\n**Clauses are linked, never copied.** A template that retyped its own clause text would let\nthe library and the templates disagree — the drift the clause library exists to prevent.\n\n**`isPublished` is a gate, not decoration.** Juro's publish/unpublish exists so a standard\ncannot change under a review already running; the same reasoning applies to a template, and\nthe fitted view marks a draft so nobody picks one by accident.\n\n**`requiredInputs` is the useful half.** It is what a drafter must supply before the template\nis usable, and writing it down is what stops it living only in one person's head.\n\n### Non-goals\n\nDoes not generate a document — the spec puts document generation explicitly out of scope, so\nthis is a starting *position*, not a factory. Does not own clause text (**Clause** does) or\ndeviation tracking (**ContractClause** does). Does not enforce that a contract created from\nit actually uses the linked clauses.",
+      "cardInfo": {}
+    },
+    "meta": {
+      "adoptsFrom": {
+        "name": "Spec",
+        "module": "@cardstack/base/spec"
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../ContractTemplate/vendor-msa"
+        }
+      },
+      "linkedExamples.1": {
+        "links": {
+          "self": "../ContractTemplate/nda-mutual"
+        }
+      },
+      "linkedExamples.2": {
+        "links": {
+          "self": "../ContractTemplate/employment-offer"
+        }
+      }
+    }
+  }
+}

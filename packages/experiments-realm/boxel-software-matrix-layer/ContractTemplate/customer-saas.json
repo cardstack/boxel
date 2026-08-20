@@ -1,0 +1,21 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "templateName": "Customer SaaS Agreement",
+      "contractType": "customer",
+      "useCase": "Selling software services",
+      "isPublished": true,
+      "lastReviewedAt": "2026-06-01",
+      "requiredInputs": ["Counterparty", "Subscription tier", "Term length"],
+      "guidance": "Our paper. Do not accept counterparty templates without Legal review."
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../contract-template",
+        "name": "ContractTemplate"
+      }
+    }
+  }
+}

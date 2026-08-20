@@ -1,45 +1,52 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Deal",
+        "module": "../deal"
+      }
+    },
     "type": "card",
     "attributes": {
       "name": "Acme Enterprise Renewal",
+      "stage": "negotiation",
+      "terms": "- 24-month term, annual billing\n- 8% multi-year discount contingent on signature before **Aug 25**\n- Includes priority support retainer and two on-site training days",
       "value": {
         "amount": 58000,
         "currency": {
           "code": "USD"
         }
       },
-      "stage": "negotiation",
-      "closeDate": "2026-08-25",
-      "competitors": [
-        "LegacySoft",
-        "StayPut Inc"
-      ],
-      "terms": "- 24-month term, annual billing\n- 8% multi-year discount contingent on signature before **Aug 25**\n- Includes priority support retainer and two on-site training days",
       "cardInfo": {
         "name": null,
-        "summary": null,
         "notes": null,
+        "summary": null,
         "cardThumbnailURL": null
       },
+      "cardTitle": "Acme Enterprise Renewal",
+      "closeDate": "2026-08-25",
+      "competitors": ["LegacySoft", "StayPut Inc"],
+      "daysInStage": 10,
       "probability": null,
-      "lastStageChangedAt": "2026-08-08"
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../deal",
-        "name": "Deal"
-      }
+      "cardDescription": null,
+      "cardThumbnailURL": null,
+      "lastStageChangedAt": "2026-08-08",
+      "effectiveProbability": 85
     },
     "relationships": {
+      "owner": {
+        "links": {
+          "self": "../Teammate/dana-whitfield"
+        }
+      },
       "account": {
         "links": {
           "self": "../Account/acme-industries"
         }
       },
-      "owner": {
+      "cardInfo.theme": {
         "links": {
-          "self": "../Teammate/dana-whitfield"
+          "self": "../Theme/ledger"
         }
       },
       "decisionMakers.0": {
@@ -50,11 +57,6 @@
       "decisionMakers.1": {
         "links": {
           "self": "../Contact/jason-lim"
-        }
-      },
-      "cardInfo.theme": {
-        "links": {
-          "self": "../Theme/ledger"
         }
       }
     }

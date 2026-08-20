@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Data Processing \u2014 EEA Standard",
+      "clauseType": "data_protection",
+      "riskLevel": "high",
+      "standardText": "The processor shall process personal data only on documented instructions from the controller, and shall not engage a sub-processor without prior written authorisation.",
+      "guidance": "Required whenever personal data leaves the customer's jurisdiction. Review annually against current guidance.",
+      "ownerRole": "Legal",
+      "reviewedAt": "2026-02-04"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../clause",
+        "name": "Clause"
+      }
+    }
+  }
+}

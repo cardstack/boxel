@@ -1,0 +1,26 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "Riso",
+        "notes": null,
+        "summary": "Fluorescent ink on white stock — hard black rules, zero radius, offset shadows with no blur. Neon brutalism that keeps the paper white.",
+        "cardThumbnailURL": null
+      },
+      "cardTitle": "Riso",
+      "cardDescription": "Fluorescent ink on white stock — hard black rules, zero radius, offset shadows with no blur. Neon brutalism that keeps the paper white.",
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap"
+      ],
+      "cssVariables": ":root {\n  /* Paper. Riso prints on white stock and the stock stays white. */\n  --background: #ffffff;\n  --foreground: #000000;\n  --card: #ffffff;\n  --card-foreground: #000000;\n  --popover: #ffffff;\n  --popover-foreground: #000000;\n\n  /* The inks. Every one takes BLACK type, not white — measured, not assumed:\n     fluorescent pink on white is only 3.50:1 and could never carry text, but\n     black on that same pink is 6.00:1. That is why riso art is black-on-ink. */\n  --primary: #ff2e88;\n  --primary-foreground: #000000;\n  --secondary: #ffe800;\n  --secondary-foreground: #000000;\n  --accent: #00e5ff;\n  --accent-foreground: #000000;\n  --destructive: #ff4438;\n  --destructive-foreground: #000000;\n\n  --muted: #f4f4f4;\n  --muted-foreground: #3d3d3d;\n\n  /* Brutalist: the border is structure, not decoration. Full-strength black,\n     and thick enough to read as a drawn line. */\n  --border: #000000;\n  --input: #000000;\n  --ring: #ff2e88;\n\n  /* No rounding. A brutalist surface has corners. */\n  --radius: 0rem;\n\n  --font-sans: 'Space Grotesk', system-ui, sans-serif;\n  --font-heading: 'Archivo Black', 'Space Grotesk', system-ui, sans-serif;\n  --font-serif: 'Space Grotesk', system-ui, sans-serif;\n  --font-mono: 'Space Mono', ui-monospace, monospace;\n\n  /* Hard shadows with zero blur — an offset block of ink, the way a second\n     pass of the drum lands slightly off register. A blurred shadow would be\n     the one un-brutalist thing on the page. */\n  --shadow-xs: 2px 2px 0 #000000;\n  --shadow-sm: 3px 3px 0 #000000;\n  --shadow-md: 5px 5px 0 #000000;\n  --shadow-lg: 8px 8px 0 #000000;\n}\n\nh1,\nh2,\nh3 {\n  font-family: var(--font-heading);\n  letter-spacing: -0.03em;\n  text-transform: uppercase;\n}\n\nh1 {\n  line-height: 0.92;\n}\n",
+      "cardThumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "name": "Theme",
+        "module": "@cardstack/base/card-api"
+      }
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ruleName": "Vendor contracts over $100,000",
+      "priority": 10,
+      "isActive": true,
+      "appliesToTypes": ["vendor"],
+      "minValue": { "amount": 100000, "currency": { "code": "USD" } },
+      "requiredRoles": ["Legal", "Finance", "CFO"],
+      "isParallel": false,
+      "guidance": "Standard high-value vendor path. Finance checks the commercial terms; the CFO signs."
+    },
+    "meta": {
+      "adoptsFrom": { "module": "../approval-rule", "name": "ApprovalRule" }
+    }
+  }
+}

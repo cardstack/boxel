@@ -1,0 +1,26 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "templateName": "Contractor Agreement",
+      "contractType": "contractor",
+      "useCase": "Freelance engagement",
+      "isPublished": true,
+      "lastReviewedAt": "2026-04-20",
+      "requiredInputs": [
+        "Contractor name",
+        "Rate",
+        "Deliverables",
+        "IP assignment"
+      ],
+      "guidance": "Check worker classification before use — a contractor agreement does not make someone a contractor."
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../contract-template",
+        "name": "ContractTemplate"
+      }
+    }
+  }
+}

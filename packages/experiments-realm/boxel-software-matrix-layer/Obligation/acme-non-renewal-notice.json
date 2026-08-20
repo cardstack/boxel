@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../obligation",
+        "name": "Obligation"
+      }
+    },
+    "attributes": {
+      "obligationType": "notification",
+      "description": "Serve 60-day non-renewal notice if not renewing",
+      "consequence": "Miss it and the contract auto-renews for another 12 months at USD 5,880.",
+      "firstDueDate": "2027-05-15",
+      "recurrence": {
+        "pattern": "none",
+        "startDate": "2027-05-15"
+      }
+    },
+    "relationships": {
+      "contract": {
+        "links": {
+          "self": "../Contract/acme-msa-2026"
+        }
+      },
+      "owner": {
+        "links": {
+          "self": "../Employee/marcus-webb"
+        }
+      }
+    }
+  }
+}

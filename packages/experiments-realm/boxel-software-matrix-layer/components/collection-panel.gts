@@ -5,7 +5,7 @@ import { on } from '@ember/modifier';
 import { fn, get } from '@ember/helper';
 import { consume } from 'ember-provide-consume-context';
 import { debounce } from 'lodash-es';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { and, eq } from '@cardstack/boxel-ui/helpers';
 import {
   BoxelInput,
   Button,
@@ -46,6 +46,45 @@ interface Signature {
     label: string;
     searchPlaceholder?: string;
     newLabel?: string;
+    /**
+     * Field to sort by. Defaults to `title`.
+     *
+     * It has to be an argument rather than a constant because a sort naming a
+     * field the card does not have returns an EMPTY result, not an unsorted
+     * one — so a card whose human label lives under another name (Clause.name,
+     * Signatory.signingTitle) silently renders as "none yet" instead of its
+     * rows. The default keeps every existing consumer unchanged.
+     */
+    sortBy?: string;
+    /** Which view the panel opens in. Defaults to `table`. */
+    defaultView?: 'grid' | 'strip' | 'table';
+    /**
+     * Whether this collection may be added to. Defaults to true.
+     *
+     * Exists for collections where creating a row by hand is not merely
+     * unnecessary but wrong — an audit trail whose entries can be typed in is
+     * not an audit trail, and a derived view (contracts inside a notice window)
+     * has nothing to create because membership is computed.
+     */
+    allowCreate?: boolean;
+    /**
+     * Optional scope applied to the resolved rows.
+     *
+     * The panel runs its own query, so a consumer holding a scope (a saved
+     * view) otherwise has no way to narrow this list and the two disagree on
+     * screen. Omitting it keeps every row.
+     */
+    rowFilter?: (card: CardDef) => boolean;
+  };
+  /**
+   * Optional custom cell renderer, forwarded to `Table`.
+   *
+   * Without it a column marked `custom: true` renders the raw field object —
+   * an AmountWithCurrency prints as "[object Object]" and a boolean as "true".
+   * Callers that pass no block keep the `{{get row column.key}}` fallback.
+   */
+  Blocks: {
+    cell: [CardDef, TableColumn];
   };
   Element: HTMLElement;
 }
@@ -82,7 +121,17 @@ export class CollectionPanel extends GlimmerComponent<Signature> {
   @consume(CardCrudFunctionsContextName)
   declare cardCrudFunctions: CardCrudFunctions | undefined;
 
-  @tracked view: View = 'grid';
+  /**
+   * Which view a panel opens in. Defaults to `grid`, unchanged.
+   *
+   * A table is the better default for a register — all six researched CLM
+   * products present their repository as one, and a grid buries the columns a
+   * reader scans by. But this component is shared with apps already published
+   * in the target realm, and changing a default changes THEIR first screen
+   * without anyone asking. So the default stays as it was and a consumer that
+   * wants a table says so: `@defaultView='table'`.
+   */
+  @tracked view: View = this.args.defaultView ?? 'grid';
   @tracked search = '';
   @tracked sortKey: string | undefined;
   @tracked sortDescending = false;
@@ -167,7 +216,8 @@ export class CollectionPanel extends GlimmerComponent<Signature> {
       return undefined;
     }
     // `sort` without `on` returns an EMPTY result rather than an unsorted one.
-    return { filter, sort: [{ by: 'title', on: ref, direction: 'asc' }] };
+    let by = this.args.sortBy ?? 'title';
+    return { filter, sort: [{ by, on: ref, direction: 'asc' }] };
   }
 
   get wireQuery(): SearchEntryWireQuery | undefined {
@@ -181,6 +231,10 @@ export class CollectionPanel extends GlimmerComponent<Signature> {
     };
   }
 
+  get canCreate(): boolean {
+    return this.args.allowCreate !== false;
+  }
+
   get rows(): CardDef[] {
     // Filter the dead slots: a deleted target leaves its slot in place, so a
     // raw iteration renders an empty row and a raw `.length` counts a card
@@ -188,6 +242,9 @@ export class CollectionPanel extends GlimmerComponent<Signature> {
     let instances = ((this.tableQuery?.instances ?? []) as CardDef[]).filter(
       Boolean,
     );
+    if (this.args.rowFilter) {
+      instances = instances.filter(this.args.rowFilter);
+    }
     let key = this.sortKey;
     if (!key) {
       return instances;
@@ -331,25 +388,25 @@ export class CollectionPanel extends GlimmerComponent<Signature> {
             @selectedId={{this.view}}
             @onChange={{this.setView}}
           />
-          {{#if this.cardCrudFunctions.createCard}}
-          {{! The one thing this bar is FOR. It was grey-on-grey and sitting
+          {{#if (and this.canCreate this.cardCrudFunctions.createCard)}}
+            {{! The one thing this bar is FOR. It was grey-on-grey and sitting
               flush against the view switcher, so the only action in the
               toolbar looked like a third view option. Filled, iconed, and
               separated: "add" is a different kind of verb from "look at
               differently". }}
-          <Button
-            class='cp-new'
-            @kind='primary'
-            @size='extra-small'
-            @loading={{this.creating}}
-            {{on 'click' this.create}}
-          >
-            {{#unless this.creating}}
-              <PlusIcon width='14' height='14' aria-hidden='true' />
-            {{/unless}}
-            New
-            {{@newLabel}}
-          </Button>
+            <Button
+              class='cp-new'
+              @kind='primary'
+              @size='extra-small'
+              @loading={{this.creating}}
+              {{on 'click' this.create}}
+            >
+              {{#unless this.creating}}
+                <PlusIcon width='14' height='14' aria-hidden='true' />
+              {{/unless}}
+              New
+              {{@newLabel}}
+            </Button>
           {{/if}}
         </div>
       </div>
@@ -371,6 +428,7 @@ export class CollectionPanel extends GlimmerComponent<Signature> {
         <Table
           class={{if this.isRefreshing 'cp-busy'}}
           @columns={{@columns}}
+          @pageSize={{5}}
           @items={{this.rows}}
           @rowKey='id'
           @sortKey={{this.sortKey}}
@@ -381,7 +439,11 @@ export class CollectionPanel extends GlimmerComponent<Signature> {
           @emptyMessage={{this.emptyMessage}}
         >
           <:cell as |row column|>
-            {{get row column.key}}
+            {{#if (has-block 'cell')}}
+              {{yield row column to='cell'}}
+            {{else}}
+              {{get row column.key}}
+            {{/if}}
           </:cell>
         </Table>
 
@@ -432,6 +494,19 @@ export class CollectionPanel extends GlimmerComponent<Signature> {
         font-family: var(--font-sans, var(--boxel-font-family));
         color: var(--foreground, var(--boxel-dark));
       }
+      /* Measured hit targets: search 40px, add button 24px, sort buttons 31px —
+         all under the 44px floor. Raised through each component's own knobs
+         and this panel's scope rather than by forking the components. */
+      .cp :deep(.boxel-input) {
+        min-height: 44px;
+      }
+      .cp :deep(.boxel-button) {
+        min-height: 44px;
+      }
+      .cp :deep(.sort-btn) {
+        min-height: 44px;
+      }
+
       .cp-bar {
         display: flex;
         align-items: center;
@@ -504,7 +579,7 @@ export class CollectionPanel extends GlimmerComponent<Signature> {
         height: 10.5rem;
         min-width: 0;
         border: 1px solid var(--border, var(--boxel-200));
-        border-radius: var(--boxel-border-radius-sm, 6px);
+        border-radius: var(--boxel-border-radius, 6px);
         overflow: hidden;
         background: var(--card, var(--boxel-light));
         cursor: pointer;

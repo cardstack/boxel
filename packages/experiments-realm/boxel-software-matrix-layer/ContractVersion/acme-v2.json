@@ -1,0 +1,36 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "contractTitle": "Acme Industries — Master Services Agreement 2026",
+      "versionNumber": 2,
+      "effectiveDate": "2026-08-01",
+      "summary": "Amendment 1 — added the EEA data-processing schedule and extended the term by six months.",
+      "valueAtVersion": {
+        "amount": 7350,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "endDateAtVersion": "2028-01-14"
+    },
+    "relationships": {
+      "executedBy": {
+        "links": {
+          "self": "../Employee/dana-kim"
+        }
+      },
+      "contract": {
+        "links": {
+          "self": "../Contract/acme-msa-2026"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../contract-version",
+        "name": "ContractVersion"
+      }
+    }
+  }
+}

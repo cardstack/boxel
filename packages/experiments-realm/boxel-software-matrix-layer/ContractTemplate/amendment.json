@@ -1,0 +1,21 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "templateName": "Amendment",
+      "contractType": "vendor",
+      "useCase": "Modify an existing contract",
+      "isPublished": false,
+      "lastReviewedAt": "2026-07-30",
+      "requiredInputs": ["Parent contract", "What changes", "Effective date"],
+      "guidance": "Draft. Do not use until the version-record flow is agreed."
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../contract-template",
+        "name": "ContractTemplate"
+      }
+    }
+  }
+}

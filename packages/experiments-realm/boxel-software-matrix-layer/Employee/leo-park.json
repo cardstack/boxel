@@ -1,43 +1,55 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Employee",
+        "module": "../employee"
+      }
+    },
     "type": "card",
     "attributes": {
       "name": "Leo Park",
+      "role": "Frontend Engineer",
       "email": "leo.park@example.com",
       "phone": "+1 555 0105",
-      "role": "Frontend Engineer",
-      "department": "Engineering",
-      "startDate": "2026-07-01",
-      "status": "onboarding",
-      "salary": 128000,
-      "cardInfo": {
-        "name": "Leo Park",
-        "summary": null,
-        "cardThumbnailURL": null,
-        "notes": null
-      },
       "photo": {
         "url": "https://images.pexels.com/photos/1516680/pexels-photo-1516680.jpeg",
-        "sourceMode": "url"
+        "sourceMode": "url",
+        "resolvedUrl": "https://images.pexels.com/photos/1516680/pexels-photo-1516680.jpeg"
       },
-      "employmentType": null,
-      "terminationDate": null,
+      "title": "Leo Park",
+      "salary": 128000,
+      "status": "onboarding",
+      "tenure": {
+        "unit": "days",
+        "label": "48 days",
+        "value": 48
+      },
+      "cardInfo": {
+        "name": "Leo Park",
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "initials": "LP",
+      "cardTitle": "Leo Park",
+      "startDate": "2026-07-01",
+      "department": "Engineering",
       "ptoBalance": null,
+      "managerName": "Marcus Webb",
+      "employmentType": null,
+      "cardDescription": null,
+      "terminationDate": null,
+      "cardThumbnailURL": null,
       "onboardingStatus": null,
-      "weeklyInterviewCapacityHours": null,
-      "ptoAllowanceDays": 25
+      "ptoAllowanceDays": 25,
+      "weeklyInterviewCapacityHours": null
     },
     "relationships": {
       "manager": {
         "links": {
           "self": "./marcus-webb"
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../employee",
-        "name": "Employee"
       }
     }
   }

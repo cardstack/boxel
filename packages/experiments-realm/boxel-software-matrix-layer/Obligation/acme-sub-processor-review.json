@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../obligation",
+        "name": "Obligation"
+      }
+    },
+    "attributes": {
+      "obligationType": "compliance",
+      "description": "Annual review of the Schedule 4 sub-processor list",
+      "consequence": "Bespoke clause with no approved standard \u2014 unreviewed exposure if skipped.",
+      "firstDueDate": "2026-08-01",
+      "recurrence": {
+        "pattern": "yearly",
+        "startDate": "2026-08-01"
+      }
+    },
+    "relationships": {
+      "contract": {
+        "links": {
+          "self": "../Contract/acme-msa-2026"
+        }
+      },
+      "owner": {
+        "links": {
+          "self": "../Employee/priya-nair"
+        }
+      }
+    }
+  }
+}

@@ -1,46 +1,52 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Account",
+        "module": "../account"
+      }
+    },
     "type": "card",
     "attributes": {
       "name": "Acme Industries Sdn Bhd",
       "email": "accounts@acme-industries.example",
       "phone": "+60322821888",
-      "billingAddress": {
-        "addressLine1": "Level 12, Menara Acme",
-        "addressLine2": "Jalan Sultan Ismail",
-        "city": "Kuala Lumpur",
-        "state": "Wilayah Persekutuan",
-        "postalCode": "50250",
-        "country": {
-          "name": "Malaysia",
-          "code": "MY"
-        }
-      },
+      "domain": "acme-industries.example",
       "cardInfo": {
         "name": null,
-        "summary": null,
         "notes": null,
+        "summary": null,
         "cardThumbnailURL": null
       },
-      "domain": "acme-industries.example",
       "industry": "Industrial Manufacturing",
-      "firstPaidAt": "2026-07-28"
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../account",
-        "name": "Account"
-      }
+      "cardTitle": "Acme Industries Sdn Bhd",
+      "isCustomer": true,
+      "firstPaidAt": "2026-07-28",
+      "billingAddress": {
+        "city": "Kuala Lumpur",
+        "state": "Wilayah Persekutuan",
+        "country": {
+          "code": "MY",
+          "name": "Malaysia"
+        },
+        "postalCode": "50250",
+        "fullAddress": "Level 12, Menara Acme, Jalan Sultan Ismail, Kuala Lumpur, Wilayah Persekutuan, 50250, Malaysia",
+        "poBoxNumber": null,
+        "addressLine1": "Level 12, Menara Acme",
+        "addressLine2": "Jalan Sultan Ismail"
+      },
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
-      "cardInfo.theme": {
-        "links": {
-          "self": "../Theme/ledger"
-        }
-      },
       "owner": {
         "links": {
           "self": "../Teammate/dana-whitfield"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/ledger"
         }
       }
     }

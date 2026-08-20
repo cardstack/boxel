@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "VersionDiff",
+        "module": "../components/version-diff"
+      },
+      "specType": "component",
+      "isCard": false,
+      "isField": false,
+      "isComponent": true,
+      "readMe": "## Version Diff\n\nA field-level comparison of two **ContractVersion** records: value, end date, executed by,\nand effective date, each marked changed or unchanged.\n\n```ts\nimport { VersionDiff } from '../components/version-diff';\n\n<VersionDiff @before={{versions.0}} @after={{versions.1}} />\n```\n\n**Field-level, not text diff, on purpose.** The spec asks to \"diff two versions, show\nchanges\", and a word-level diff of contract prose is negotiation redlining — explicitly out\nof scope. What a reviewer needs here is narrower and more answerable: did the value, the end\ndate or the signing party move, and by how much.\n\n**Unchanged rows are kept, not hidden.** A diff showing only what moved makes the reader\nguess whether an absent field was unchanged or simply not recorded — and \"the end date didn't\nchange\" is itself a finding when someone expected it to.\n\n**Change is marked by weight and a label, never by colour alone.**\n\n### Non-goals\n\nDoes not fetch or order versions — the consumer passes two, already chosen. Does not diff\nprose, clauses or attachments. Does not write anything: it is a read-only rendering of two\nrecords it is handed.\n\n### Examples\n\nA component cannot sit in `containedExamples`, so the two linked examples are the records it\nis rendered *from* — the original and amendment 1 of the Acme MSA. Passing them as `@before`\nand `@after` produces the comparison this component exists for: value $5,880 → $7,350, end\ndate 2027-07-14 → 2028-01-14, executed by Priya Nair → Dana Kim, all four rows marked\nchanged.",
+      "cardInfo": {}
+    },
+    "meta": {
+      "adoptsFrom": {
+        "name": "Spec",
+        "module": "@cardstack/base/spec"
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../ContractVersion/acme-v1"
+        }
+      },
+      "linkedExamples.1": {
+        "links": {
+          "self": "../ContractVersion/acme-v2"
+        }
+      }
+    }
+  }
+}

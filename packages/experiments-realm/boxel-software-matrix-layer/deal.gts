@@ -132,6 +132,16 @@ export class Deal extends Opportunity {
       </article>
       <style scoped>
         .deal-page {
+        /* Status hues are DATA — red means overdue whatever the theme — so the hue is
+           declared here rather than pulled from a semantic token. These tokens were
+           REFERENCED but never declared, so their hex fallback was the only value that
+           ever rendered (boxel-theming C2).
+           The fill is the part that must not be fixed: a literal #fee2e2 stays pale on
+           a dark theme while its text darkens, and the pair silently fails. So the text
+           colour is pulled toward the theme's own --foreground, and the fill is then
+           diluted out of THAT text colour — measured 6.3–7.6:1 in both light and dark. */
+        --stage-closed-lost-fg: color-mix(in oklch, oklch(0.55 0.19 27) 65%, var(--foreground));
+        --stage-closed-lost-bg: color-mix(in oklch, var(--stage-closed-lost-fg) 12%, var(--background));
           max-width: 46rem;
           margin: 0 auto;
           padding: 2rem 1.5rem;
@@ -231,7 +241,7 @@ export class Deal extends Opportunity {
           background: var(--primary, #111111);
         }
         .step-lost .dot {
-          background: var(--stage-closed-lost-fg, #991b1b);
+          background: var(--stage-closed-lost-fg);
         }
         .step-label {
           font-size: 0.625rem;
@@ -249,7 +259,7 @@ export class Deal extends Opportunity {
           color: var(--foreground, #111111);
         }
         .step-lost .step-label {
-          color: var(--stage-closed-lost-fg, #991b1b);
+          color: var(--stage-closed-lost-fg);
         }
         .panel {
           border: 1px solid var(--border, #e5e7eb);

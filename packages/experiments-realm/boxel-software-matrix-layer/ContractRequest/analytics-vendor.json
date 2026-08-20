@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "whatFor": "Analytics vendor for the growth team",
+      "contractType": "vendor",
+      "status": "submitted",
+      "neededBy": "2026-09-30",
+      "involvesSensitiveData": true,
+      "estimatedValue": { "amount": 48000, "currency": { "code": "USD" } },
+      "background": "Replacing the spreadsheet reporting. Vendor will process customer email addresses.",
+      "decisionNote": null
+    },
+    "relationships": {
+      "requestedBy": { "links": { "self": "../Employee/marcus-webb" } }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../contract-request",
+        "name": "ContractRequest"
+      }
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "action": "approved_with_conditions",
+      "occurredAt": "2026-07-09T11:40:00.000Z",
+      "subjectTitle": "Acme Industries — Master Services Agreement 2026",
+      "note": "Cleared subject to the liability cap being restored.",
+      "conditions": "Liability cap must return to 1x fees over 12 months before signature."
+    },
+    "relationships": {
+      "subject": {
+        "links": {
+          "self": "../Contract/acme-msa-2026"
+        }
+      },
+      "doneBy": {
+        "links": {
+          "self": "../Employee/dana-kim"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../audit-entry",
+        "name": "AuditEntry"
+      }
+    }
+  }
+}

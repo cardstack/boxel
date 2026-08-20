@@ -1,0 +1,17 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ruleName": "Handles sensitive personal data",
+      "priority": 1,
+      "isActive": true,
+      "requiresSensitiveData": true,
+      "requiredRoles": ["Legal", "Security", "DPO"],
+      "isParallel": true,
+      "guidance": "Runs in parallel: none of the three blocks the others, and all must clear before signature."
+    },
+    "meta": {
+      "adoptsFrom": { "module": "../approval-rule", "name": "ApprovalRule" }
+    }
+  }
+}

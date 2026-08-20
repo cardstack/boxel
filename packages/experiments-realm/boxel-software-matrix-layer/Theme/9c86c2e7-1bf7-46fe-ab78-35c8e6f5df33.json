@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "Neon Brutalist",
+        "notes": null,
+        "summary": "JetBrains Mono throughout, near-black page, electric magenta — hacker-zine terminal.",
+        "cardThumbnailURL": null
+      },
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap"
+      ],
+      "cssVariables": ":root {\n  /* Page. Near-black, not pure black — #0d0d12 carries a faint blue cast so the\n     magenta reads as ink on a surface rather than as light in a void. */\n  --background: #0d0d12;\n  --foreground: #f5f5f7;\n  --card: #16161d;\n  --card-foreground: #f5f5f7;\n\n  /* Not in the pasted style; a card reading --popover would have got nothing.\n     Mirrors --card, which is what a popover is: a card that floats. */\n  --popover: #16161d;\n  --popover-foreground: #f5f5f7;\n\n  /* Electric magenta. On THIS ground it measures 5.58:1 as text, so the style's\n     own intent — \"powers links and pull quotes\" — is safe here. That is a\n     property of the dark page, not of the hue: the same magenta on white is\n     3.50:1 and could not carry a word. */\n  --primary: #ff2d92;\n  --primary-foreground: #0d0d12;\n  --accent: #ff2d92;\n  --accent-foreground: #0d0d12;\n\n  --secondary: #1a1a22;\n  --secondary-foreground: #f5f5f7;\n  --muted: #15151b;\n  --muted-foreground: #a0a0aa;\n\n  /* Also absent from the pasted style. Chosen away from the magenta so a\n     destructive action never reads as the accent — 6.36:1 with dark type. */\n  --destructive: #ff5c4d;\n  --destructive-foreground: #0d0d12;\n\n  --border: #2a2a33;\n  --input: #2a2a33;\n  --ring: #ff2d92;\n\n  /* 2px, not 0 — the pasted style says \"sharp 2px corners\", which is a\n     different decision from brutalism's hard 0 and is kept as written. */\n  --radius: 2px;\n\n  /* One face for everything. A monospace body is the whole terminal idea; it is\n     not a code-only choice here. */\n  --font-sans: 'JetBrains Mono', 'Fira Code', Menlo, monospace;\n  --font-mono: 'JetBrains Mono', 'Fira Code', Menlo, monospace;\n  --font-heading: 'JetBrains Mono', 'Fira Code', Menlo, monospace;\n  --font-serif: 'JetBrains Mono', 'Fira Code', Menlo, monospace;\n\n  /* On a near-black page a dark shadow is invisible. Depth comes from a\n     magenta glow instead — the terminal-phosphor reading of elevation. */\n  --shadow-xs: 0 0 0 1px #2a2a33;\n  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.6);\n  --shadow-md: 0 4px 18px rgba(0, 0, 0, 0.7);\n  --shadow-lg: 0 0 24px rgba(255, 45, 146, 0.18), 0 8px 30px rgba(0, 0, 0, 0.8);\n}\n\nh1,\nh2,\nh3 {\n  font-family: var(--font-heading);\n  font-weight: 700;\n  letter-spacing: -0.02em;\n}\n"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "name": "Theme",
+        "module": "@cardstack/base/card-api"
+      }
+    }
+  }
+}

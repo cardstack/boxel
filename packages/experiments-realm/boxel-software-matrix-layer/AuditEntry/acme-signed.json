@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "action": "signed",
+      "occurredAt": "2026-07-14T10:02:00.000Z",
+      "subjectTitle": "Acme Industries — Master Services Agreement 2026",
+      "note": "Countersigned and filed.",
+      "conditions": null
+    },
+    "relationships": {
+      "subject": {
+        "links": {
+          "self": "../Contract/acme-msa-2026"
+        }
+      },
+      "doneBy": {
+        "links": {
+          "self": "../Employee/priya-nair"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../audit-entry",
+        "name": "AuditEntry"
+      }
+    }
+  }
+}

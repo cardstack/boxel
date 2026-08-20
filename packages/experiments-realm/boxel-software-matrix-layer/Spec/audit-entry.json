@@ -1,0 +1,40 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "AuditEntry",
+        "module": "../audit-entry"
+      },
+      "specType": "card",
+      "isCard": true,
+      "isField": false,
+      "isComponent": false,
+      "readMe": "## Audit Entry\n\nThe append-only record of what happened to a contract: `action` (an enum — created,\nsubmitted, approved, approved&nbsp;with&nbsp;conditions, rejected, delegated, on&nbsp;hold,\nresumed, signed, amended, renewed, terminated), `doneBy` linked to an **Employee**,\n`occurredAt`, the `subject` it concerns, plus `note` and `conditions`.\n\n```ts\nimport { AuditEntry, auditActionLabel, auditActionHue } from '../audit-entry';\n@field trail = linksToMany(AuditEntry);\n```\n\n**Why it is its own card, not a `containsMany` on Contract.** An audit trail's whole value\nis that it cannot be rewritten by the thing it describes. Held on the contract, \"who\napproved this and when\" would be as mutable as the contract body — exactly the claim an\nauditor is testing. A separate card gives each event a stable address that survives edits\nto its subject.\n\n**`subjectTitle` is a deliberate snapshot.** Reading the title through `subject` shows\ntoday's name; an audit entry must say what the thing was called when the decision was made.\nSo the link is for navigation and the stored title is the record.\n\n**`doneBy`, not `actor`.** The edit form takes its label from the field name, and \"Actor\" is\na system word that makes readers ask what it means. \"Done by\" reads correctly for every\naction in the vocabulary.\n\n### Non-goals\n\nDoes not enforce append-only — the realm has no immutable-record primitive, so this is a\nconvention the consuming app keeps, not a guarantee the storage makes. Says so in the card.\nDoes not own approval routing (**ApprovalChainField** does) or the decision UI (the\nconsuming app does). Does not authenticate the actor: identity is supplied by the consumer,\nbecause a card cannot read the signed-in user.",
+      "cardInfo": {}
+    },
+    "meta": {
+      "adoptsFrom": {
+        "name": "Spec",
+        "module": "@cardstack/base/spec"
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../AuditEntry/acme-legal-approved"
+        }
+      },
+      "linkedExamples.1": {
+        "links": {
+          "self": "../AuditEntry/acme-signed"
+        }
+      },
+      "linkedExamples.2": {
+        "links": {
+          "self": "../AuditEntry/acme-submitted"
+        }
+      }
+    }
+  }
+}

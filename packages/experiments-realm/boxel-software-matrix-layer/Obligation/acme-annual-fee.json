@@ -1,0 +1,47 @@
+{
+  "data": {
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../obligation",
+        "name": "Obligation"
+      }
+    },
+    "attributes": {
+      "obligationType": "payment",
+      "description": "Annual subscription fee",
+      "consequence": "Late payment accrues interest at 1.5% monthly.",
+      "firstDueDate": "2026-08-15",
+      "recurrence": {
+        "pattern": "yearly",
+        "startDate": "2026-08-15"
+      },
+      "amount": {
+        "amount": 5880,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "completions": [
+        {
+          "period": "2026-08-15",
+          "completedAt": "2026-08-14",
+          "evidenceUrl": "https://example.com/payments/acme-2026.pdf",
+          "note": "Paid in advance, cleared 14 Aug."
+        }
+      ]
+    },
+    "relationships": {
+      "contract": {
+        "links": {
+          "self": "../Contract/acme-msa-2026"
+        }
+      },
+      "owner": {
+        "links": {
+          "self": "../Employee/marcus-webb"
+        }
+      }
+    }
+  }
+}

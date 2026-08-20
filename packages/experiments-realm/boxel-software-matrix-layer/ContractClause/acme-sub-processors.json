@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "clauseType": "data_protection",
+      "deviationSeverity": "bespoke",
+      "actualText": "Supplier may engage the sub-processors listed at Schedule 4 without further authorisation, provided it remains liable for their acts and omissions.",
+      "deviationNotes": "No approved standard covers a pre-authorised sub-processor list. Flagged for legal review before the next renewal."
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../contract-clause",
+        "name": "ContractClause"
+      }
+    },
+    "relationships": {
+      "contract": {
+        "links": {
+          "self": "../Contract/acme-msa-2026"
+        }
+      }
+    }
+  }
+}

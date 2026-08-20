@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "New studio tour",
+      "platform": "instagram_story",
+      "scheduledAt": "2026-08-19T01:00:00.000Z",
+      "status": "planned",
+      "brief": "Walk-through once the mirrors go in.",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../content-calendar/content-piece",
+        "name": "ContentPiece"
+      }
+    }
+  }
+}

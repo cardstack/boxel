@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "action": "approved",
+      "occurredAt": "2026-07-11T16:20:00.000Z",
+      "subjectTitle": "Acme Industries — Master Services Agreement 2026",
+      "note": "Commercials match the approved budget line.",
+      "conditions": null
+    },
+    "relationships": {
+      "subject": {
+        "links": {
+          "self": "../Contract/acme-msa-2026"
+        }
+      },
+      "doneBy": {
+        "links": {
+          "self": "../Employee/marcus-webb"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../audit-entry",
+        "name": "AuditEntry"
+      }
+    }
+  }
+}

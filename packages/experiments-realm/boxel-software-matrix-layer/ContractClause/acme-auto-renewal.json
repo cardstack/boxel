@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "clauseType": "auto_renewal",
+      "deviationSeverity": "none",
+      "actualText": "This Agreement renews automatically for successive twelve (12) month terms unless either party gives not less than sixty (60) days' written notice before the end of the then-current term."
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../contract-clause",
+        "name": "ContractClause"
+      }
+    },
+    "relationships": {
+      "contract": {
+        "links": {
+          "self": "../Contract/acme-msa-2026"
+        }
+      },
+      "standardClause": {
+        "links": {
+          "self": "../Clause/auto-renewal-12-months"
+        }
+      }
+    }
+  }
+}

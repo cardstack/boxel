@@ -1,0 +1,21 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "templateName": "Employment Offer",
+      "contractType": "employment",
+      "useCase": "New hire",
+      "isPublished": true,
+      "lastReviewedAt": "2026-04-20",
+      "requiredInputs": ["Candidate", "Salary", "Start date", "Reporting line"],
+      "guidance": "People team owns this one. Legal reviews only non-standard terms."
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../contract-template",
+        "name": "ContractTemplate"
+      }
+    }
+  }
+}

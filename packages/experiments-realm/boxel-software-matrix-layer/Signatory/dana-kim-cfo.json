@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "signingTitle": "Chief Financial Officer",
+      "isActive": true,
+      "signatureAuthority": {
+        "amount": 1000000,
+        "currency": {
+          "code": "USD"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../signatory",
+        "name": "Signatory"
+      }
+    },
+    "relationships": {
+      "person": {
+        "links": {
+          "self": "../Employee/dana-kim"
+        }
+      }
+    }
+  }
+}

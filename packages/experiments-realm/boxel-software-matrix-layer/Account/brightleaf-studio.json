@@ -1,34 +1,42 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Account",
+        "module": "../account"
+      }
+    },
     "type": "card",
     "attributes": {
       "name": "Brightleaf Studio",
-      "domain": "brightleaf.example",
-      "industry": "Design Agency",
       "email": "hello@brightleaf.example",
-      "billingAddress": {
-        "addressLine1": "88 Lorong Panggung",
-        "addressLine2": null,
-        "city": "Kuala Lumpur",
-        "state": "Wilayah Persekutuan",
-        "postalCode": "50000",
-        "country": {
-          "name": "Malaysia",
-          "code": "MY"
-        }
-      },
+      "phone": null,
+      "domain": "brightleaf.example",
       "cardInfo": {
         "name": null,
-        "summary": null,
         "notes": null,
+        "summary": null,
         "cardThumbnailURL": null
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../account",
-        "name": "Account"
-      }
+      },
+      "industry": "Design Agency",
+      "cardTitle": "Brightleaf Studio",
+      "isCustomer": false,
+      "firstPaidAt": null,
+      "billingAddress": {
+        "city": "Kuala Lumpur",
+        "state": "Wilayah Persekutuan",
+        "country": {
+          "code": "MY",
+          "name": "Malaysia"
+        },
+        "postalCode": "50000",
+        "fullAddress": "88 Lorong Panggung, Kuala Lumpur, Wilayah Persekutuan, 50000, Malaysia",
+        "poBoxNumber": null,
+        "addressLine1": "88 Lorong Panggung",
+        "addressLine2": null
+      },
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "owner": {

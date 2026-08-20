@@ -1,36 +1,55 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Employee",
+        "module": "../employee"
+      }
+    },
     "type": "card",
     "attributes": {
       "name": "Marcus Webb",
+      "role": "VP of Engineering",
       "email": "marcus.webb@example.com",
       "phone": "+1 555 0102",
-      "role": "VP of Engineering",
-      "department": "Engineering",
-      "startDate": "2023-01-16",
-      "status": "active",
-      "employmentType": "full-time",
-      "ptoBalance": 12,
-      "salary": 195000,
-      "cardInfo": {
-        "name": "Marcus Webb"
-      },
       "photo": {
         "url": "https://images.pexels.com/photos/2379004/pexels-photo-2379004.jpeg",
-        "sourceMode": "url"
-      }
+        "sourceMode": "url",
+        "resolvedUrl": "https://images.pexels.com/photos/2379004/pexels-photo-2379004.jpeg"
+      },
+      "title": "Marcus Webb",
+      "salary": 195000,
+      "status": "active",
+      "tenure": {
+        "unit": "years",
+        "label": "3.6 years",
+        "value": 3.6
+      },
+      "cardInfo": {
+        "name": "Marcus Webb",
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "initials": "MW",
+      "cardTitle": "Marcus Webb",
+      "startDate": "2023-01-16",
+      "department": "Engineering",
+      "ptoBalance": 12,
+      "managerName": "Sofia Reyes",
+      "employmentType": "full-time",
+      "cardDescription": null,
+      "terminationDate": null,
+      "cardThumbnailURL": null,
+      "onboardingStatus": null,
+      "ptoAllowanceDays": null,
+      "weeklyInterviewCapacityHours": null
     },
     "relationships": {
       "manager": {
         "links": {
           "self": "./sofia-reyes"
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../employee",
-        "name": "Employee"
       }
     }
   }

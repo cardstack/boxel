@@ -1,40 +1,45 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Opportunity",
+        "module": "../opportunity"
+      }
+    },
     "type": "card",
     "attributes": {
       "name": "Brightleaf Workspace Rollout",
+      "stage": "closed won",
       "value": {
         "amount": 6800,
         "currency": {
           "code": "USD"
         }
       },
-      "stage": "closed won",
-      "probability": 60,
-      "closeDate": "2026-08-28",
       "cardInfo": {
         "name": null,
-        "summary": null,
         "notes": null,
+        "summary": null,
         "cardThumbnailURL": null
       },
-      "lastStageChangedAt": "2026-08-10"
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../opportunity",
-        "name": "Opportunity"
-      }
+      "cardTitle": "Brightleaf Workspace Rollout",
+      "closeDate": "2026-08-28",
+      "daysInStage": 8,
+      "probability": 60,
+      "cardDescription": null,
+      "cardThumbnailURL": null,
+      "lastStageChangedAt": "2026-08-10",
+      "effectiveProbability": 60
     },
     "relationships": {
-      "account": {
-        "links": {
-          "self": "../Account/brightleaf-studio"
-        }
-      },
       "owner": {
         "links": {
           "self": "../Teammate/dana-whitfield"
+        }
+      },
+      "account": {
+        "links": {
+          "self": "../Account/brightleaf-studio"
         }
       },
       "cardInfo.theme": {

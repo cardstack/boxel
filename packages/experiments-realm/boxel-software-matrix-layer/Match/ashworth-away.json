@@ -33,7 +33,8 @@
       "adoptsFrom": {
         "module": "../club-membership/match",
         "name": "Match"
-      }
+      },
+      "_touched": 1787195049568
     }
   }
 }

@@ -1,47 +1,116 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Contract",
+        "module": "../contract"
+      }
+    },
     "type": "card",
     "attributes": {
+      "terms": "## Term\n\nOne year from 15 July 2026, renewing annually unless either party gives 60 days' notice.\n\n## Fees\n\nUSD 5,880 billed annually in advance. Late payment accrues 1.5% monthly.\n\n## Scope\n\nWorkspace Pro for up to 50 seats. Additional seats billed pro rata at the then-current list price.",
       "title": "Acme Industries — Master Services Agreement 2026",
-      "status": "signed",
-      "startDate": "2026-07-15",
-      "endDate": "2027-07-14",
-      "signedAt": "2026-07-14",
       "value": {
         "amount": 5880,
         "currency": {
           "code": "USD"
         }
       },
-      "documentUrl": "https://example.com/contracts/acme-msa-2026.pdf",
-      "terms": "## Term\n\nOne year from 15 July 2026, renewing annually unless either party gives 60 days' notice.\n\n## Fees\n\nUSD 5,880 billed annually in advance. Late payment accrues 1.5% monthly.\n\n## Scope\n\nWorkspace Pro for up to 50 seats. Additional seats billed pro rata at the then-current list price.",
+      "status": "signed",
+      "endDate": "2027-07-14",
       "cardInfo": {
         "name": null,
-        "summary": null,
         "notes": null,
+        "summary": null,
         "cardThumbnailURL": null
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../contract",
-        "name": "Contract"
+      },
+      "isSigned": true,
+      "signedAt": "2026-07-14",
+      "cardTitle": "Acme Industries — Master Services Agreement 2026",
+      "startDate": "2026-07-15",
+      "documentUrl": "https://example.com/contracts/acme-msa-2026.pdf",
+      "daysToExpiry": 330,
+      "cardDescription": null,
+      "cardThumbnailURL": null,
+      "contractNumber": "MSA-2026-0117",
+      "contractType": "vendor",
+      "autoRenews": true,
+      "renewalNoticeDays": 60,
+      "risk": {
+        "criteria": [
+          {
+            "name": "Value",
+            "score": 1,
+            "notes": "USD 5,880/yr — well under the $50K band."
+          },
+          {
+            "name": "Term",
+            "score": 2,
+            "notes": "12 months, auto-renewing."
+          },
+          {
+            "name": "Liability",
+            "score": 4,
+            "notes": "Uncapped for data-breach claims — the deviation."
+          },
+          {
+            "name": "Data",
+            "score": 3,
+            "notes": "Processes customer personal data in the EEA."
+          },
+          {
+            "name": "Deviation",
+            "score": 2,
+            "notes": "One major (liability), one bespoke (sub-processors)."
+          }
+        ],
+        "notes": "Assessed at signature. Re-score if the liability carve-out is renegotiated at renewal."
+      },
+      "approvalChain": {
+        "startedAt": "2026-07-06T09:00:00.000Z",
+        "steps": [
+          {
+            "decision": "approved",
+            "decidedAt": "2026-07-08T15:20:00.000Z",
+            "openedAt": "2026-07-06T09:00:00.000Z",
+            "comment": "Liability carve-out accepted on the stated trade-off."
+          },
+          {
+            "decision": "pending",
+            "openedAt": "2026-07-08T15:20:00.000Z"
+          }
+        ]
       }
     },
     "relationships": {
-      "account": {
-        "links": {
-          "self": "../Account/acme-industries"
-        }
-      },
       "deal": {
         "links": {
           "self": "../Deal/acme-enterprise-renewal"
         }
       },
+      "account": {
+        "links": {
+          "self": "../Account/acme-industries"
+        }
+      },
       "cardInfo.theme": {
         "links": {
           "self": "../Theme/ledger"
+        }
+      },
+      "owner": {
+        "links": {
+          "self": "../Employee/marcus-webb"
+        }
+      },
+      "approvalChain.steps.0.approver": {
+        "links": {
+          "self": "../Employee/dana-kim"
+        }
+      },
+      "approvalChain.steps.1.approver": {
+        "links": {
+          "self": "../Employee/marcus-webb"
         }
       }
     }

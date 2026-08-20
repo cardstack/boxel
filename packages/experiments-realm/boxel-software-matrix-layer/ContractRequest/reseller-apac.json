@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "whatFor": "APAC reseller agreement",
+      "contractType": "customer",
+      "status": "accepted",
+      "neededBy": "2026-08-20",
+      "involvesSensitiveData": false,
+      "estimatedValue": { "amount": 180000, "currency": { "code": "USD" } },
+      "background": "First reseller in the region.",
+      "decisionNote": null
+    },
+    "relationships": {
+      "requestedBy": { "links": { "self": "../Employee/marcus-webb" } }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../contract-request",
+        "name": "ContractRequest"
+      }
+    }
+  }
+}

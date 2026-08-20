@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "clauseType": "liability",
+      "deviationSeverity": "major",
+      "actualText": "Supplier's aggregate liability shall be unlimited in respect of any breach of clause 9 (Data Protection), and otherwise capped at the fees paid in the twelve (12) months preceding the claim.",
+      "deviationNotes": "Counterparty refused the cap for data-breach claims. Conceded in exchange for Net-30 and a 12-month term rather than 24. Raises composite risk and adds an executive approval step."
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../contract-clause",
+        "name": "ContractClause"
+      }
+    },
+    "relationships": {
+      "contract": {
+        "links": {
+          "self": "../Contract/acme-msa-2026"
+        }
+      },
+      "standardClause": {
+        "links": {
+          "self": "../Clause/liability-cap-12-months"
+        }
+      }
+    }
+  }
+}

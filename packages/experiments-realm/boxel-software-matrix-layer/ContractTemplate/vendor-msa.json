@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "templateName": "Vendor MSA",
+      "contractType": "vendor",
+      "useCase": "Standard vendor engagement",
+      "isPublished": true,
+      "lastReviewedAt": "2026-06-01",
+      "requiredInputs": [
+        "Counterparty",
+        "Term length",
+        "Annual value",
+        "Payment terms"
+      ],
+      "guidance": "Use for any recurring vendor relationship. Pair with a Statement of Work per engagement."
+    },
+    "relationships": {
+      "standardClauses": {
+        "links": { "self": "../Clause/liability-cap-12-months" }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../contract-template",
+        "name": "ContractTemplate"
+      }
+    }
+  }
+}

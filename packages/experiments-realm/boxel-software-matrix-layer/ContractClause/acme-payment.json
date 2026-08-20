@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "clauseType": "payment",
+      "deviationSeverity": "none",
+      "actualText": "Invoices are payable within thirty (30) days of receipt of a valid invoice."
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../contract-clause",
+        "name": "ContractClause"
+      }
+    },
+    "relationships": {
+      "contract": {
+        "links": {
+          "self": "../Contract/acme-msa-2026"
+        }
+      },
+      "standardClause": {
+        "links": {
+          "self": "../Clause/payment-terms-net-30"
+        }
+      }
+    }
+  }
+}

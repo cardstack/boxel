@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../obligation",
+        "name": "Obligation"
+      }
+    },
+    "attributes": {
+      "obligationType": "delivery",
+      "description": "Submit pilot outcome report",
+      "consequence": "Non-delivery blocks conversion to a full agreement.",
+      "firstDueDate": "2026-08-12",
+      "recurrence": {
+        "pattern": "none",
+        "startDate": "2026-08-12"
+      }
+    },
+    "relationships": {
+      "contract": {
+        "links": {
+          "self": "../Contract/brightleaf-pilot-terms"
+        }
+      },
+      "owner": {
+        "links": {
+          "self": "../Employee/dana-kim"
+        }
+      }
+    }
+  }
+}
