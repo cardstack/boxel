@@ -308,7 +308,7 @@
         "collapsed": false,
         "gridPos": {
           "x": 0,
-          "y": 9,
+          "y": 18,
           "w": 24,
           "h": 1
         },
@@ -324,7 +324,7 @@
         },
         "gridPos": {
           "x": 0,
-          "y": 10,
+          "y": 19,
           "w": 24,
           "h": 8
         },
@@ -399,7 +399,7 @@
         "collapsed": false,
         "gridPos": {
           "x": 0,
-          "y": 18,
+          "y": 27,
           "w": 24,
           "h": 1
         },
@@ -415,7 +415,7 @@
         },
         "gridPos": {
           "x": 0,
-          "y": 19,
+          "y": 28,
           "w": 8,
           "h": 8
         },
@@ -470,7 +470,7 @@
         },
         "gridPos": {
           "x": 8,
-          "y": 19,
+          "y": 28,
           "w": 8,
           "h": 8
         },
@@ -525,7 +525,7 @@
         },
         "gridPos": {
           "x": 16,
-          "y": 19,
+          "y": 28,
           "w": 8,
           "h": 8
         },
@@ -580,7 +580,7 @@
         },
         "gridPos": {
           "x": 0,
-          "y": 27,
+          "y": 36,
           "w": 8,
           "h": 8
         },
@@ -635,7 +635,7 @@
         },
         "gridPos": {
           "x": 8,
-          "y": 27,
+          "y": 36,
           "w": 8,
           "h": 8
         },
@@ -690,7 +690,7 @@
         },
         "gridPos": {
           "x": 16,
-          "y": 27,
+          "y": 36,
           "w": 8,
           "h": 8
         },
@@ -742,7 +742,7 @@
         "collapsed": false,
         "gridPos": {
           "x": 0,
-          "y": 35,
+          "y": 44,
           "w": 24,
           "h": 1
         },
@@ -758,7 +758,7 @@
         },
         "gridPos": {
           "x": 0,
-          "y": 36,
+          "y": 45,
           "w": 24,
           "h": 10
         },
@@ -791,7 +791,7 @@
         "collapsed": false,
         "gridPos": {
           "x": 0,
-          "y": 46,
+          "y": 55,
           "w": 24,
           "h": 1
         },
@@ -807,7 +807,7 @@
         },
         "gridPos": {
           "x": 0,
-          "y": 47,
+          "y": 56,
           "w": 12,
           "h": 6
         },
@@ -862,7 +862,7 @@
         },
         "gridPos": {
           "x": 12,
-          "y": 47,
+          "y": 56,
           "w": 12,
           "h": 6
         },
@@ -897,7 +897,7 @@
         },
         "gridPos": {
           "x": 0,
-          "y": 53,
+          "y": 62,
           "w": 24,
           "h": 4
         },
@@ -912,6 +912,208 @@
           "mode": "markdown",
           "content": "Sampled from the GitHub Actions REST API by `packages/observability/collectors/actions-queue.ts`, which emits one JSON line per observation on channel `boxel:actions-queue`.\n\nThe collector runs **outside** GitHub Actions on purpose — a scheduled workflow would queue behind the backlog it measures and go blind during the incident it exists for.\n\nDepth and grouped depth come from periodic snapshots, so each point is a sample rather than a continuous measure; gaps mean the collector was down or throttled (see *Collector health*)."
         }
+      },
+      {
+        "id": 40,
+        "type": "row",
+        "title": "Right now",
+        "collapsed": false,
+        "gridPos": {
+          "x": 0,
+          "y": 9,
+          "w": 24,
+          "h": 1
+        },
+        "panels": []
+      },
+      {
+        "id": 41,
+        "type": "table",
+        "title": "Queued now, by branch",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "A point-in-time count, unlike the timeseries above — a branch whose jobs have finished disappears from this table instead of leaving a line behind.",
+        "gridPos": {
+          "x": 0,
+          "y": 10,
+          "w": 8,
+          "h": 8
+        },
+        "interval": "5m",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "refId": "A",
+            "queryType": "instant",
+            "expr": "sum by (key) (last_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"group\" | dimension=\"branch\" | unwrap queued [5m])) > 0"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {
+                "Time": true
+              },
+              "renameByName": {
+                "key": "branch",
+                "Value": "jobs",
+                "Value #A": "jobs"
+              }
+            }
+          },
+          {
+            "id": "sortBy",
+            "options": {
+              "fields": {},
+              "sort": [
+                {
+                  "field": "jobs",
+                  "desc": true
+                }
+              ]
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {}
+          },
+          "overrides": []
+        },
+        "options": {}
+      },
+      {
+        "id": 42,
+        "type": "table",
+        "title": "Runners held now, by branch",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Which branches are occupying the pool at this moment.",
+        "gridPos": {
+          "x": 8,
+          "y": 10,
+          "w": 8,
+          "h": 8
+        },
+        "interval": "5m",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "refId": "A",
+            "queryType": "instant",
+            "expr": "sum by (key) (last_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"group\" | dimension=\"branch\" | unwrap running [5m])) > 0"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {
+                "Time": true
+              },
+              "renameByName": {
+                "key": "branch",
+                "Value": "jobs",
+                "Value #A": "jobs"
+              }
+            }
+          },
+          {
+            "id": "sortBy",
+            "options": {
+              "fields": {},
+              "sort": [
+                {
+                  "field": "jobs",
+                  "desc": true
+                }
+              ]
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {}
+          },
+          "overrides": []
+        },
+        "options": {}
+      },
+      {
+        "id": 43,
+        "type": "table",
+        "title": "Queued now, by author",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "The same instant count grouped by whoever triggered the run.",
+        "gridPos": {
+          "x": 16,
+          "y": 10,
+          "w": 8,
+          "h": 8
+        },
+        "interval": "5m",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "refId": "A",
+            "queryType": "instant",
+            "expr": "sum by (key) (last_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"group\" | dimension=\"actor\" | unwrap queued [5m])) > 0"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {
+                "Time": true
+              },
+              "renameByName": {
+                "key": "author",
+                "Value": "jobs",
+                "Value #A": "jobs"
+              }
+            }
+          },
+          {
+            "id": "sortBy",
+            "options": {
+              "fields": {},
+              "sort": [
+                {
+                  "field": "jobs",
+                  "desc": true
+                }
+              ]
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {}
+          },
+          "overrides": []
+        },
+        "options": {}
       }
     ],
     "refresh": "1m",
