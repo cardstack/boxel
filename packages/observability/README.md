@@ -41,6 +41,10 @@ provisioning/          # mounted into Grafana at /etc/grafana/provisioning/
   alerting/            # alert rule groups, contact points, notification policies
   local-only/          # local-dev overrides — bind-mounted file-by-file over
                        # `datasources/`. apply-datasources.sh ignores this dir.
+collectors/
+  actions-queue.ts     # samples the GitHub Actions REST API and prints one JSON
+                       # line per observation on channel `boxel:actions-queue`;
+                       # feeds the "GitHub Actions Queue" dashboard
 alloy/
   config.alloy         # local log scraper config — discovers Docker containers
                        # and ships their stdout into Loki
@@ -68,6 +72,79 @@ templates/
 docker-compose.yml     # local Grafana 12.4.3 + Loki 3.4.4 + Alloy 1.10.0
                        #               + Prometheus 3.0.0 (scrapes synapse)
 ```
+
+## Collectors
+
+Some signals have no service to emit them, so a collector samples an external
+API and prints the result as JSON log lines on stdout — the same shape every
+other service logs in, so the existing Alloy (local) and FireLens (hosted)
+pipelines carry it to Loki with no special handling.
+
+### actions-queue
+
+Samples GitHub Actions queue depth, per-job wait times and runner consumption.
+
+```bash
+GITHUB_TOKEN=$(gh auth token) node collectors/actions-queue.ts --once
+GITHUB_TOKEN=$(gh auth token) node collectors/actions-queue.ts   # loops, default 60s
+```
+
+It emits four event types, all on channel `boxel:actions-queue`:
+
+| `event_type`                             | one line per              | carries                                                                                     |
+| ---------------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------- |
+| `job`                                    | queued or running job     | branch, actor, workflow, runner labels, `queued_seconds`, `running_seconds`, `current_step` |
+| `group`                                  | dimension × key           | `dimension` (branch / actor / workflow), `key`, `queued`, `running`                         |
+| `snapshot`                               | sample                    | `queued_jobs`, `running_jobs`, `active_runs`, `rate_limit_remaining`                        |
+| `collector-error`, `collector-throttled` | failure or skipped sample | why the series has a gap                                                                    |
+
+Grouped depth is emitted as its own lines rather than nested on the snapshot
+because LogQL flattens nested JSON into one label per key, which for dynamic
+keys like branch names produces a label per branch instead of a series that can
+be grouped by branch.
+
+Two constraints are load-bearing:
+
+- **It must not run as a scheduled GitHub Actions workflow.** It would queue
+  behind the backlog it measures and go blind during the incident it exists
+  for. Hosted, it belongs on a schedule outside Actions.
+- **A sample costs one request per active run, plus two.** The hourly spend
+  therefore scales with how busy the repository is, against a token's 5,000
+  requests an hour. At the observed peak of ~50 concurrent runs a 60-second
+  interval spends around 3,200 an hour, which is comfortable; 30 seconds
+  exceeds the budget above roughly forty concurrent runs, so higher resolution
+  needs the per-sample cost reduced rather than the interval shortened.
+  Sampling stops rather than reporting partial depth when the remaining budget
+  nears its reserve.
+
+The dashboard reads `{service="actions-collector", env="$env"}`, so a hosted
+deployment needs to log under that service name.
+
+#### Hosted
+
+Runs as a small ECS service — `cardstack/infra:configs/boxel-actions-collector`
+— rather than a scheduled task: the signal is standing state sampled every
+couple of minutes, and a per-invocation Fargate task would spend longer
+starting than working. FireLens applies `service=actions-collector`, which is
+what the dashboard selects on.
+
+Before the first apply, put a GitHub token at
+`/<env>/boxel/ACTIONS_COLLECTOR_GITHUB_TOKEN` as a `SecureString`. It is
+deliberately not managed by Terraform, like the other secrets on that path. The
+collector accepts either that name or a plain `GITHUB_TOKEN`, which is the
+convenient one locally.
+
+The token's only job is the rate limit: these endpoints are readable without
+authentication on a public repository, but unauthenticated callers get 60
+requests an hour against the 5,000 an authenticated one gets, and a single
+sample can cost sixty. So the token needs **no permissions** while `boxel` is
+public — a fine-grained token scoped to _Public repositories (read-only)_, or
+even a classic token with no scopes ticked, is enough. Were the repository ever
+made private, it would need Actions: Read-only on it.
+
+Build and deploy with the **Manual Deploy [actions-collector]** workflow. It is
+`workflow_dispatch` only — putting the deploy of a queue sampler on a CI
+trigger would make it queue behind the backlog it reports on.
 
 ## Local workflow
 
