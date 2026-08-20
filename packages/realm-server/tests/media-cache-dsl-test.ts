@@ -391,6 +391,51 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('concurrent misses for one spec coalesce onto one capture', async function (assert) {
+      await seedInstanceRow('card-1');
+      await seedRealmConfigRow(true);
+      // Recent capture history keeps the congestion pre-check's estimate
+      // under the budget while the first capture is in flight, so the
+      // second request reaches the queue and can coalesce instead of
+      // failing fast.
+      let job = await insertJob(dbAdapter, {
+        job_type: 'screenshot-card',
+        concurrency_group: `screenshot:${REALM_URL}`,
+        status: 'resolved',
+        finished_at: new Date().toISOString(),
+        result: {},
+      });
+      await query(dbAdapter, [
+        `INSERT INTO job_reservations (job_id, created_at, locked_until, completed_at, worker_id)
+         VALUES (${Number(job.id)}, NOW() - INTERVAL '200 milliseconds', NOW(), NOW(), 'test-worker')`,
+      ]);
+      captureGate = new Deferred<void>();
+      await startWorker();
+
+      let first = get('_screenshot/card-1');
+      // Wait for the first capture to be claimed and parked on the gate so
+      // the second request's publish sees it as an in-flight twin.
+      let deadline = Date.now() + 5000;
+      while (captureCalls === 0 && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      let second = get('_screenshot/card-1');
+      // Give the second request time to publish (and coalesce) before the
+      // render completes.
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      captureGate.fulfill();
+      captureGate = undefined;
+
+      let [firstResponse, secondResponse] = await Promise.all([first, second]);
+      assert.strictEqual(firstResponse.status, 200);
+      assert.strictEqual(secondResponse.status, 200);
+      assert.strictEqual(
+        captureCalls,
+        1,
+        'both requests were satisfied by one render',
+      );
+    });
+
     test('a congested lane fails fast with 503 + Retry-After', async function (assert) {
       await seedInstanceRow('card-1');
       await seedRealmConfigRow(true);

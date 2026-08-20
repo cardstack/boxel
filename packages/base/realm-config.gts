@@ -688,10 +688,10 @@ export class RealmConfig extends CardDef {
   // for arbitrary capture specs. Full captureSpec power on a GET is an
   // unbounded spec space reachable with only realm read, so it is off
   // unless the realm turns it on; the gate blocks Chrome work only, never
-  // serving — declared screenshots and already-captured specs (including
-  // ones a write-holder produced via POST) stream regardless. Read from the
-  // realm's indexed config at request time, so editing this takes effect
-  // with the index update, no restart.
+  // serving — any capture whose canonical spec already has a MediaCache
+  // ledger entry streams regardless. Read from the realm's indexed config
+  // at request time, so editing this takes effect with the index update,
+  // no restart.
   @field allowArbitraryScreenshots = contains(BooleanField);
 
   @field cardTitle = contains(StringField, {
