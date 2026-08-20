@@ -1023,7 +1023,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       .exists('Go to system card action is visible');
     assert
       .dom('[data-test-go-to-system-card]')
-      .hasText('Go to current system card');
+      .hasText('Go to Current System Card');
 
     await click('[data-test-pill-menu-button]');
     await click('[data-test-close-ai-assistant]');

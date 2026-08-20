@@ -129,7 +129,7 @@
   --boxel-button-secondary-active-border: var(--foreground);
   --boxel-button-destructive-active-background: var(--boxel-danger-hover);
   --boxel-button-link-primary-foreground: var(--boxel-highlight-hover);
-  --button-button-disabled-opacity: 1;
+  --boxel-button-disabled-opacity: 1;
   --boxel-button-disabled-background: var(--boxel-border-color);
   --boxel-button-disabled-border: 1px solid var(--boxel-border-color);
   --boxel-button-disabled-foreground: var(--boxel-450);
@@ -177,7 +177,7 @@
   --boxel-button-secondary-active-border: initial;
   --boxel-button-link-primary-foreground: initial;
   --boxel-button-destructive-active-background: initial;
-  --button-button-disabled-opacity: initial;
+  --boxel-button-disabled-opacity: initial;
   --boxel-button-disabled-background: initial;
   --boxel-button-disabled-border: initial;
   --boxel-button-disabled-foreground: initial;
@@ -234,7 +234,7 @@
   --boxel-button-secondary-border: var(--border);
   --boxel-button-secondary-active-border: var(--foreground);
   --boxel-button-destructive-active-background: var(--boxel-danger-hover);
-  --button-button-disabled-opacity: 1;
+  --boxel-button-disabled-opacity: 1;
   --boxel-button-disabled-background: #444051;
   --boxel-button-disabled-foreground: #817c93;
   --boxel-button-disabled-border: 1px solid#444051;
