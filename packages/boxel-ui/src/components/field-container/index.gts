@@ -153,6 +153,9 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
 
       .horizontal.inline > .content {
         overflow: clip;
+        /* clears a focus ring (2px outline at 2px offset) while the row
+           still clips runaway content */
+        overflow-clip-margin: 0.25rem;
       }
 
       .vertical {
