@@ -104,7 +104,8 @@
           "textMode": "auto",
           "wideLayout": true
         },
-        "description": "Jobs waiting for a runner at the most recent sample."
+        "description": "Jobs waiting for a runner at the most recent sample.",
+        "interval": "5m"
       },
       {
         "id": 4,
@@ -154,7 +155,8 @@
           "textMode": "auto",
           "wideLayout": true
         },
-        "description": "Jobs currently holding a runner."
+        "description": "Jobs currently holding a runner.",
+        "interval": "5m"
       },
       {
         "id": 5,
@@ -204,7 +206,8 @@
           "textMode": "auto",
           "wideLayout": true
         },
-        "description": "Workflow runs in queued or in_progress state."
+        "description": "Workflow runs in queued or in_progress state.",
+        "interval": "5m"
       },
       {
         "id": 6,
@@ -246,7 +249,9 @@
         ],
         "fieldConfig": {
           "defaults": {
-            "custom": {}
+            "custom": {
+              "spanNulls": true
+            }
           },
           "overrides": []
         },
@@ -267,7 +272,8 @@
             "sort": "desc"
           }
         },
-        "description": "Queued depth rising while running stays flat means the pool is saturated, not slow."
+        "description": "Queued depth rising while running stays flat means the pool is saturated, not slow.",
+        "interval": "5m"
       },
       {
         "id": 7,
@@ -318,7 +324,8 @@
           "textMode": "auto",
           "wideLayout": true
         },
-        "description": "Age of the oldest job still waiting for a runner."
+        "description": "Age of the oldest job still waiting for a runner.",
+        "interval": "5m"
       },
       {
         "id": 8,
@@ -384,7 +391,9 @@
         ],
         "fieldConfig": {
           "defaults": {
-            "custom": {},
+            "custom": {
+              "spanNulls": true
+            },
             "unit": "s"
           },
           "overrides": []
@@ -406,7 +415,8 @@
             "sort": "desc"
           }
         },
-        "description": "How long jobs have been waiting, measured from job creation."
+        "description": "How long jobs have been waiting, measured from job creation.",
+        "interval": "5m"
       },
       {
         "id": 10,
@@ -450,7 +460,9 @@
         ],
         "fieldConfig": {
           "defaults": {
-            "custom": {}
+            "custom": {
+              "spanNulls": true
+            }
           },
           "overrides": []
         },
@@ -471,7 +483,8 @@
             "sort": "desc"
           }
         },
-        "description": "Queued jobs grouped by branch, from the collector's per-group snapshot lines."
+        "description": "Queued jobs grouped by branch, from the collector's per-group snapshot lines.",
+        "interval": "5m"
       },
       {
         "id": 12,
@@ -502,7 +515,9 @@
         ],
         "fieldConfig": {
           "defaults": {
-            "custom": {}
+            "custom": {
+              "spanNulls": true
+            }
           },
           "overrides": []
         },
@@ -523,7 +538,8 @@
             "sort": "desc"
           }
         },
-        "description": "Queued jobs grouped by actor, from the collector's per-group snapshot lines."
+        "description": "Queued jobs grouped by actor, from the collector's per-group snapshot lines.",
+        "interval": "5m"
       },
       {
         "id": 13,
@@ -554,7 +570,9 @@
         ],
         "fieldConfig": {
           "defaults": {
-            "custom": {}
+            "custom": {
+              "spanNulls": true
+            }
           },
           "overrides": []
         },
@@ -575,7 +593,8 @@
             "sort": "desc"
           }
         },
-        "description": "Queued jobs grouped by workflow, from the collector's per-group snapshot lines."
+        "description": "Queued jobs grouped by workflow, from the collector's per-group snapshot lines.",
+        "interval": "5m"
       },
       {
         "id": 14,
@@ -606,7 +625,9 @@
         ],
         "fieldConfig": {
           "defaults": {
-            "custom": {}
+            "custom": {
+              "spanNulls": true
+            }
           },
           "overrides": []
         },
@@ -627,7 +648,8 @@
             "sort": "desc"
           }
         },
-        "description": "Runners currently held, grouped by branch."
+        "description": "Runners currently held, grouped by branch.",
+        "interval": "5m"
       },
       {
         "id": 15,
@@ -658,7 +680,9 @@
         ],
         "fieldConfig": {
           "defaults": {
-            "custom": {}
+            "custom": {
+              "spanNulls": true
+            }
           },
           "overrides": []
         },
@@ -679,7 +703,8 @@
             "sort": "desc"
           }
         },
-        "description": "Runners currently held, grouped by actor."
+        "description": "Runners currently held, grouped by actor.",
+        "interval": "5m"
       },
       {
         "id": 16,
@@ -710,7 +735,9 @@
         ],
         "fieldConfig": {
           "defaults": {
-            "custom": {}
+            "custom": {
+              "spanNulls": true
+            }
           },
           "overrides": []
         },
@@ -731,7 +758,8 @@
             "sort": "desc"
           }
         },
-        "description": "Runners currently held, grouped by workflow."
+        "description": "Runners currently held, grouped by workflow.",
+        "interval": "5m"
       },
       {
         "id": 17,
@@ -824,7 +852,9 @@
         ],
         "fieldConfig": {
           "defaults": {
-            "custom": {}
+            "custom": {
+              "spanNulls": true
+            }
           },
           "overrides": []
         },
@@ -845,7 +875,8 @@
             "sort": "desc"
           }
         },
-        "description": "Sampling stops rather than reporting partial depth when this nears the reserve."
+        "description": "Sampling stops rather than reporting partial depth when this nears the reserve.",
+        "interval": "5m"
       },
       {
         "id": 21,
