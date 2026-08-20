@@ -1,5 +1,6 @@
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
@@ -36,6 +37,29 @@ export default class SwitchUsage extends Component {
   @cssVariable({ cssClassName: 'switch-freestyle-container' })
   declare boxelSwitchThumbEdge: CSSVariableInfo;
 
+  constructor(owner: Owner, args: Record<string, never>) {
+    super(owner, args);
+    /* ember-freestyle seeds each CSSVariableInfo.value with the value computed
+       on a temp element at document.body — outside the themed docs container —
+       so the seed pins the chrome's :root values on the preview via inline
+       style and stops it from following theme cycling and dark mode. Clear the
+       seeds so the preview inherits the active theme until a control is
+       touched. */
+    for (let info of [
+      this.boxelSwitchWidth,
+      this.boxelSwitchHeight,
+      this.boxelSwitchBackground,
+      this.boxelSwitchActiveBackground,
+      this.boxelSwitchThumb,
+      this.boxelSwitchActiveThumb,
+      this.boxelSwitchThumbEdge,
+    ]) {
+      info.value = undefined;
+    }
+  }
+  @cssVariable({ cssClassName: 'switch-freestyle-container' })
+  declare boxelSwitchHitInset: CSSVariableInfo;
+
   <template>
     <div
       class='switch-freestyle-container'
@@ -47,6 +71,7 @@ export default class SwitchUsage extends Component {
         boxel-switch-thumb=this.boxelSwitchThumb.value
         boxel-switch-active-thumb=this.boxelSwitchActiveThumb.value
         boxel-switch-thumb-edge=this.boxelSwitchThumbEdge.value
+        boxel-switch-hit-inset=this.boxelSwitchHitInset.value
       }}
     >
       <FreestyleUsage @name='Switch'>
@@ -148,6 +173,14 @@ export default class SwitchUsage extends Component {
             @defaultValue={{this.boxelSwitchThumbEdge.defaults}}
             @value={{this.boxelSwitchThumbEdge.value}}
             @onInput={{this.boxelSwitchThumbEdge.update}}
+          />
+          <Css.Basic
+            @name='boxel-switch-hit-inset'
+            @type='dimension'
+            @description='How far the clickable area extends past the visible track on each side (default 0.5rem, meeting the 24px minimum target size). Reduce it if switches sit closer together than the default reach'
+            @defaultValue={{this.boxelSwitchHitInset.defaults}}
+            @value={{this.boxelSwitchHitInset.value}}
+            @onInput={{this.boxelSwitchHitInset.update}}
           />
         </:cssVars>
       </FreestyleUsage>

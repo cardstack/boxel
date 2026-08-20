@@ -80,7 +80,7 @@ const Switch: TemplateOnlyComponent<SwitchSignature> = <template>
         );
         --_switch-thumb-edge-color: var(
           --boxel-switch-thumb-edge,
-          color-mix(in oklch, var(--foreground) 25%, transparent)
+          color-mix(in oklch, var(--foreground) 12%, transparent)
         );
 
         box-sizing: border-box;
@@ -90,7 +90,6 @@ const Switch: TemplateOnlyComponent<SwitchSignature> = <template>
         padding: 1px;
         display: inline-flex;
         align-items: center;
-        transition: background-color 0.1s ease-in;
         position: relative;
         background-color: var(--_switch-bg-color);
         color: var(--boxel-switch-foreground, var(--foreground));
@@ -102,6 +101,9 @@ const Switch: TemplateOnlyComponent<SwitchSignature> = <template>
         -webkit-appearance: none;
         appearance: none;
         margin: 0;
+        /* the UA gives disabled inputs their own cursor, which would make
+           the thumb disagree with the track */
+        cursor: inherit;
         height: 100%;
         aspect-ratio: 1;
         background-color: var(--_switch-thumb-color);
@@ -111,20 +113,34 @@ const Switch: TemplateOnlyComponent<SwitchSignature> = <template>
            foreground-derived color keeps the thumb visible in themes where
            --input and --background nearly coincide. */
         box-shadow: 0 0 0 1px var(--_switch-thumb-edge-color);
-        transition: transform 0.1s ease-in;
         /* the control's ring is drawn on the label below; the UA ring here
            would halo the thumb instead */
         outline: none;
       }
 
+      /* Extends the clickable surface past the drawn track so the control
+         meets the 24px minimum target size (WCAG 2.5.8) without growing
+         visually. Part of the label, so clicks here toggle as usual. */
+      .switch::before {
+        content: '';
+        position: absolute;
+        inset: calc(-1 * var(--boxel-switch-hit-inset, 0.5rem));
+      }
+
       /* Thumb travel is width minus height: border and padding subtract
          equally from the track's content box and the (square, track-height)
          thumb, so the difference holds at any size or border/padding and the
-         thumb always lands flush right. */
+         thumb always lands flush against the far edge. */
       .switch.checked .switch-input {
         background-color: var(--_switch-active-thumb-color);
         transform: translateX(
           calc(var(--_switch-width) - var(--_switch-height))
+        );
+      }
+
+      .switch.checked:dir(rtl) .switch-input {
+        transform: translateX(
+          calc(-1 * (var(--_switch-width) - var(--_switch-height)))
         );
       }
 
@@ -137,13 +153,32 @@ const Switch: TemplateOnlyComponent<SwitchSignature> = <template>
         outline-offset: 2px;
       }
 
+      /* pressed-state affordance: the thumb swells slightly under the
+         pointer. `scale` composes with the checked-state translate, so it
+         works in both positions. */
+      .switch:not(.disabled):active .switch-input {
+        scale: 1.15;
+      }
+
+      @media (prefers-reduced-motion: no-preference) {
+        .switch {
+          transition: background-color 0.1s ease-in;
+        }
+
+        .switch-input {
+          transition:
+            transform 0.1s ease-in,
+            scale 0.1s ease-in;
+        }
+      }
+
       .switch:hover {
         cursor: pointer;
       }
 
       .switch.disabled {
         opacity: 0.5;
-        cursor: default;
+        cursor: not-allowed;
       }
     }
   </style>
