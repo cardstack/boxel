@@ -1,9 +1,100 @@
 import { param, query, type Expression } from '../expression.ts';
-import type { QueuePublisher } from '../queue.ts';
+import {
+  registerQueueJobDefinition,
+  type QueueCoalesceContext,
+  type QueueCoalesceDecision,
+  type QueuePublisher,
+} from '../queue.ts';
 import type { ScreenshotPrerenderResponse, DBAdapter } from '../index.ts';
-import type { ScreenshotCardArgs } from '../tasks/screenshot-card.ts';
+import type {
+  ScreenshotCardArgs,
+  ScreenshotPersistArgs,
+} from '../tasks/screenshot-card.ts';
 
 export const SCREENSHOT_CARD_JOB_TIMEOUT_SEC = 60;
+
+// Concurrent requests for one capture fold onto one job: the per-realm
+// concurrency group serializes execution but does not dedupe, so without
+// this two simultaneous misses for the same spec would each run a full
+// render (the store's dedupe-on-write only saves the second upload, not the
+// Chrome work). A twin must match the whole capture identity — card, format,
+// render identity, and persist target — since joining hands the incoming
+// caller the twin's result verbatim. Queued and in-flight twins both join;
+// an in-flight join just registers a late waiter on the running job.
+function chooseScreenshotCardCoalesceDecision(
+  context: QueueCoalesceContext,
+): QueueCoalesceDecision {
+  let { incoming, candidates, inFlightCandidates } = context;
+  let incomingArgs = parseScreenshotCardArgs(incoming.args);
+  if (!incomingArgs) {
+    return { type: 'insert' };
+  }
+  let twin = [...candidates, ...inFlightCandidates].find((candidate) => {
+    if (candidate.jobType !== incoming.jobType) {
+      return false;
+    }
+    let candidateArgs = parseScreenshotCardArgs(candidate.args);
+    return (
+      candidateArgs !== undefined &&
+      candidateArgs.cardId === incomingArgs.cardId &&
+      candidateArgs.format === incomingArgs.format &&
+      candidateArgs.runAs === incomingArgs.runAs &&
+      samePersist(candidateArgs.persist, incomingArgs.persist)
+    );
+  });
+  if (!twin) {
+    return { type: 'insert' };
+  }
+  return { type: 'join', jobId: twin.id };
+}
+
+function parseScreenshotCardArgs(
+  args: unknown,
+): ScreenshotCardArgs | undefined {
+  let obj: unknown = args;
+  if (typeof args === 'string') {
+    try {
+      obj = JSON.parse(args);
+    } catch {
+      return undefined;
+    }
+  }
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
+    return undefined;
+  }
+  let { cardId, format, runAs } = obj as Record<string, unknown>;
+  if (
+    typeof cardId !== 'string' ||
+    typeof format !== 'string' ||
+    typeof runAs !== 'string'
+  ) {
+    return undefined;
+  }
+  return obj as ScreenshotCardArgs;
+}
+
+// Field-by-field rather than JSON.stringify: one side round-trips through
+// jsonb, which does not preserve key order.
+function samePersist(
+  a: ScreenshotPersistArgs | null | undefined,
+  b: ScreenshotPersistArgs | null | undefined,
+): boolean {
+  if (!a || !b) {
+    return !a && !b;
+  }
+  return (
+    a.realmURL === b.realmURL &&
+    a.sourceURL === b.sourceURL &&
+    a.captureSpecHash === b.captureSpecHash &&
+    a.sourceGeneration === b.sourceGeneration &&
+    a.lane === b.lane
+  );
+}
+
+registerQueueJobDefinition({
+  jobType: 'screenshot-card',
+  coalesce: chooseScreenshotCardCoalesceDecision,
+});
 
 // How long a GET `_screenshot/` request holds its connection waiting for an
 // on-demand capture before answering 503 + Retry-After. A cost-posture

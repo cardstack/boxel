@@ -4095,8 +4095,8 @@ export class Realm {
     let entry = await findMediaCacheEntry(this.#dbAdapter, entryKey);
     if (entry) {
       // A hit costs zero Chrome work, so hits serve regardless of the
-      // realm's capture gate — including captures a write-holder published
-      // via POST on a gated realm.
+      // realm's capture gate — however the capture came to be in the
+      // ledger.
       return await serveMediaCacheEntry({
         request,
         requestContext,
