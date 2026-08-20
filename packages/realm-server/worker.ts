@@ -48,6 +48,7 @@ import {
 } from '@cardstack/postgres';
 import { createRemotePrerenderer } from './prerender/remote-prerenderer.ts';
 import { buildCreatePrerenderAuth } from './prerender/auth.ts';
+import { createMediaCacheAdapterFromEnv } from './media-cache/index.ts';
 import { finalizeChildReservationAsFailure } from './lib/finalize-child-fatal-failure.ts';
 
 let log = logger('worker');
@@ -215,6 +216,7 @@ let autoMigrate = migrateDB || undefined;
     prerenderer,
     createPrerenderAuth,
     indexJobsOnly,
+    mediaCacheAdapter: createMediaCacheAdapterFromEnv(),
   });
 
   await worker.run();
