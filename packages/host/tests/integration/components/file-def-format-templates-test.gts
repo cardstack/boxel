@@ -1,4 +1,5 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
+import { find } from '@ember/test-helpers';
 import type { RenderingTestContext } from '@ember/test-helpers';
 
 import GlimmerComponent from '@glimmer/component';
@@ -281,5 +282,45 @@ module('Integration | FileDef format templates', function (hooks) {
     assert
       .dom('[data-test-file-embedded] img[data-test-image-preview]')
       .exists('the image family renders a native <img> inside the shell');
+  });
+
+  test('an isolated image fills its stage frame rather than overflowing it', async function (assert) {
+    // A small image carries its intrinsic pixel dimensions as the <img>'s
+    // width/height attributes. If the renderer's `height: 100%` fails to resolve
+    // against the stage's grid row, the browser falls back to the aspect ratio
+    // those attributes imply and sizes the box from its width — overflowing a
+    // frame taller than the stage and clipping the picture. The image must
+    // instead fill the stage exactly, letting object-fit do the fitting.
+    let image = new ImageDef({
+      id: 'http://example.com/img/tiny.png',
+      url: 'http://example.com/img/tiny.png',
+      sourceUrl: 'http://example.com/img/tiny.png',
+      name: 'tiny.png',
+      contentType: 'image/png',
+      width: 154,
+      height: 160,
+    });
+    await renderCard(loader, image, 'isolated');
+
+    let img = find('[data-test-file-isolated] img[data-test-image-preview]');
+    let stage = find(
+      '[data-test-file-isolated] [data-test-file-preview-stage]',
+    );
+    assert.ok(img, 'the isolated image renders a native <img>');
+    assert.ok(stage, 'the image sits inside the preview stage');
+
+    let imgHeight = img!.getBoundingClientRect().height;
+    let stageHeight = stage!.getBoundingClientRect().height;
+    assert.ok(
+      stageHeight > 0,
+      `the stage has a real height (${stageHeight}px)`,
+    );
+    // The box fills the frame; without the fix it would be sized from the
+    // width/height attributes' aspect ratio (~1.04x its width) and run past the
+    // stage's bottom edge.
+    assert.ok(
+      Math.abs(imgHeight - stageHeight) <= 1,
+      `the <img> height (${imgHeight}px) fills the stage (${stageHeight}px) instead of overflowing it`,
+    );
   });
 });
