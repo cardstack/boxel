@@ -23,6 +23,8 @@ interface Signature {
     onSelectEvent?: (event: BookingCalendarEvent) => void;
     /** Remaining share at or below which an event reads as "limited". */
     limitedThreshold?: number;
+    /** Month to open on — an audience browses forward, so pass the next event. */
+    initialDate?: Date;
   };
   Element: HTMLElement;
 }
@@ -86,6 +88,7 @@ export class BookingCalendar extends GlimmerComponent<Signature> {
         @events={{@events}}
         @kindColors={{@kindColors}}
         @onSelectEvent={{this.select}}
+        @initialDate={{@initialDate}}
       >
         <:chip as |event|>
           <span class='bc-chip'>

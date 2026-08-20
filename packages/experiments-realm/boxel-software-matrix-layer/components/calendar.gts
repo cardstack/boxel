@@ -40,6 +40,9 @@ interface CalendarSignature {
     // clicked three more times — which is exactly how a calendar ends up with
     // four cards all called "New Meeting".
     addingDate?: Date;
+    // Which month to open on. Defaults to today; a consumer whose events
+    // live in the future (a fixture list) opens on the next one instead.
+    initialDate?: Date;
   };
   Blocks: {
     /** Replace the chip's content while keeping the chip chrome. */
@@ -56,7 +59,7 @@ const MAX_CHIPS = 3;
 export class Calendar extends GlimmerComponent<CalendarSignature> {
   weekdays = WEEKDAYS;
 
-  @tracked cursor = new Date();
+  @tracked cursor = this.args.initialDate ?? new Date();
   @tracked isTransitioning = false;
   @tracked draggingEvent: CalendarEvent | undefined;
   @tracked dragOverKey: string | undefined;

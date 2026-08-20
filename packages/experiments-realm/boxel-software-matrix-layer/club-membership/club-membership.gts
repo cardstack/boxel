@@ -25,6 +25,7 @@ import ExternalLinkIcon from '@cardstack/boxel-icons/external-link';
 import CheckIcon from '@cardstack/boxel-icons/check';
 
 import { Booking } from '../booking';
+import { datePart } from '../event';
 import ConfirmBookingCommand from '../confirm-booking';
 import { Survey } from '../survey';
 import { SurveyResponse } from '../survey-response';
@@ -289,9 +290,25 @@ class ClubConsole extends GlimmerComponent<ConsoleSignature> {
       .filter((s) => s.value > 0);
   }
 
-  get pointsLiability(): number {
-    return this.members.reduce((sum, m) => sum + (m.pointsBalance ?? 0), 0);
+  get pointsLiability(): string {
+    return new Intl.NumberFormat().format(
+      this.members.reduce((sum, m) => sum + (m.pointsBalance ?? 0), 0),
+    );
   }
+
+  /** Kickoff order — a fixture list reads forward through the season. */
+  get sortedMatches(): Match[] {
+    return [...this.matches].sort((a, b) => {
+      let at = a.startsAt ? new Date(a.startsAt).getTime() : Infinity;
+      let bt = b.startsAt ? new Date(b.startsAt).getTime() : Infinity;
+      return at - bt;
+    });
+  }
+
+  matchDay = (match: Match): string => {
+    let d = datePart(match.startsAt);
+    return d ? `${d.month} ${d.day}` : 'TBD';
+  };
 
   get nextMatch(): Match | undefined {
     let now = Date.now();
@@ -301,6 +318,20 @@ class ClubConsole extends GlimmerComponent<ConsoleSignature> {
         (a, b) =>
           new Date(a.startsAt!).getTime() - new Date(b.startsAt!).getTime(),
       )[0];
+  }
+
+  get nextMatchWhen(): string | undefined {
+    let at = this.nextMatch?.startsAt;
+    if (!at) {
+      return undefined;
+    }
+    return new Date(at).toLocaleString(undefined, {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
   }
 
   get nextMatchUtilization(): number | undefined {
@@ -637,9 +668,11 @@ class ClubConsole extends GlimmerComponent<ConsoleSignature> {
                       <span
                         class='next-title'
                       >{{this.nextMatch.cardTitle}}</span>
-                      <span
-                        class='next-meta'
-                      >{{this.nextMatch.competition}}</span>
+                      <span class='next-meta'>
+                        {{#if this.nextMatchWhen}}{{this.nextMatchWhen}}{{/if}}
+                        {{#if this.nextMatch.competition}}·
+                          {{this.nextMatch.competition}}{{/if}}
+                      </span>
                     </button>
                     {{#if this.nextMatchUtilization}}
                       <div class='util'>
@@ -799,15 +832,17 @@ class ClubConsole extends GlimmerComponent<ConsoleSignature> {
               @events={{this.calendarEvents}}
               @kindColors={{this.matchColors}}
               @onSelectEvent={{this.openCalendarEvent}}
+              @initialDate={{this.nextMatch.startsAt}}
             />
             <ul class='fixture-list'>
-              {{#each this.matches key='id' as |match|}}
+              {{#each this.sortedMatches key='id' as |match|}}
                 <li>
                   <button
                     type='button'
                     class='fixture-row'
                     {{on 'click' (fn this.open match)}}
                   >
+                    <span class='fixture-when'>{{this.matchDay match}}</span>
                     <span class='fixture-title'>{{match.cardTitle}}</span>
                     <span class='fixture-meta'>{{match.competition}}
                       · {{match.status}}</span>
@@ -952,7 +987,9 @@ class ClubConsole extends GlimmerComponent<ConsoleSignature> {
         width: 3rem;
         height: 3rem;
         border-radius: 50%;
-        background: color-mix(in oklch, currentColor 14%, transparent);
+        /* The accent's one job in the shell: gold roundel on the band. */
+        color: var(--accent, #d9a91d);
+        background: color-mix(in oklch, currentColor 16%, transparent);
         flex-shrink: 0;
       }
       .crest-icon {
@@ -1374,11 +1411,24 @@ class ClubConsole extends GlimmerComponent<ConsoleSignature> {
         flex-direction: column;
         gap: var(--boxel-sp);
       }
+      .fixture-when {
+        width: 3.25rem;
+        flex-shrink: 0;
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        color: var(--muted-foreground, var(--boxel-450));
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
       .fixture-title {
+        flex: 1;
+        min-width: 0;
         font-weight: 600;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+        text-align: left;
       }
       .fixture-meta {
         font-size: var(--boxel-font-size-xs);

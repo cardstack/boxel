@@ -35,6 +35,7 @@ export const MemberTierField = loyaltyTierField({
       hue: 'purple',
       multiplier: 3,
       meaning: 'Invitation only',
+      invitable: false,
     },
   ],
 });

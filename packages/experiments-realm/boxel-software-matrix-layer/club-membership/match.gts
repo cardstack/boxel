@@ -28,6 +28,10 @@ function concatPercent(n: number): string {
   return `${n}% sold`;
 }
 
+function formatCount(n: number): string {
+  return new Intl.NumberFormat().format(n);
+}
+
 function eqAway(value?: string): boolean {
   return value === 'Away';
 }
@@ -456,9 +460,9 @@ export class Match extends Event {
                   (concatPercent this.sold.percent)
                 }}
               </span>
-              <span class='sold-detail'>{{this.sold.sold}}
+              <span class='sold-detail'>{{formatCount this.sold.sold}}
                 of
-                {{this.sold.total}}
+                {{formatCount this.sold.total}}
                 {{if @model.capacity.unit @model.capacity.unit 'seats'}}
                 sold</span>
             </div>

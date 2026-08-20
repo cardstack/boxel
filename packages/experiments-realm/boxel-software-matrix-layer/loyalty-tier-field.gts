@@ -33,6 +33,11 @@ export interface TierOption {
   multiplier?: number;
   /** One line on what the tier gets you — the benefit, not the name restated. */
   meaning?: string;
+  /**
+   * Whether an upgrade prompt may offer this rung. Defaults to true; an
+   * invitation-only rung sets false and `nextTier` stops one short of it.
+   */
+  invitable?: boolean;
 }
 
 export interface LoyaltyTierConfig {
@@ -169,13 +174,17 @@ export function tierAtLeast(
   return v >= 0 && m >= 0 && v >= m;
 }
 
-/** The rung above, or undefined at the top — what an upgrade prompt offers. */
+/**
+ * The rung above, or undefined at the top — what an upgrade prompt offers.
+ * An invitation-only rung (`invitable: false`) is never offered.
+ */
 export function nextTier(
   fieldClass: LoyaltyTierFieldClass,
   value?: string | null,
 ): TierOption | undefined {
   let rank = rankOf(fieldClass.tierOptions, value);
-  return rank >= 0 ? fieldClass.tierOptions[rank + 1] : undefined;
+  let next = rank >= 0 ? fieldClass.tierOptions[rank + 1] : undefined;
+  return next?.invitable === false ? undefined : next;
 }
 
 export function tierOption(
