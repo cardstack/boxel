@@ -1,4 +1,4 @@
-import { ImageDef } from 'https://cardstack.com/base/card-api';
+import { ImageDef } from '@cardstack/base/card-api';
 import WriteBinaryFileCommand from '@cardstack/boxel-host/tools/write-binary-file';
 
 // PATTERN: generated image bytes -> realm file -> ImageDef link.

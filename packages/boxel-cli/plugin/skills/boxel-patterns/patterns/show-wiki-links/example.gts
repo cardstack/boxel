@@ -7,9 +7,9 @@ import {
   contains,
   field,
   linksToMany,
-} from 'https://cardstack.com/base/card-api';
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import MarkdownField from '@cardstack/base/markdown';
+import StringField from '@cardstack/base/string';
 
 function slugify(name: string): string {
   return name

@@ -1,7 +1,7 @@
 import { Resource } from 'ember-resources';
 import { resource } from 'ember-resources';
 import { tracked } from '@glimmer/tracking';
-import { CardDef } from 'https://cardstack.com/base/card-api';
+import { CardDef } from '@cardstack/base/card-api';
 
 // 🧩 PATTERN: Resource class with BOXED constructor
 //

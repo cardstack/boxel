@@ -146,7 +146,7 @@ For every import path and every integration surface:
 
 - **`references/integration-surfaces.md`** — Capability-dimension cheatsheet. 10 sections covering base Card APIs, runtime APIs, host commands, Boxel UI, Ember/Glimmer tools, realm-bundled libraries, AI services, ESM CDN libraries, BFM features, and boxel-cli commands. Use this when planning what a card can reach for.
 - **`references/libraries.md`** — Import-path-dimension catalogue. Three portable tiers:
-  - **Tier 1** — Boxel base (URL-pinned, `https://cardstack.com/base/...`).
+  - **Tier 1** — Boxel base (`@cardstack/base/...`).
   - **Tier 2** — npm (`@cardstack/*`, `@ember/*`, `@glimmer/*`, `ember-*`).
   - **Tier 4** — ESM CDN (`https://esm.run/three`, `https://esm.sh/leaflet`, etc.).
 

@@ -4,9 +4,9 @@ import {
   contains,
   field,
   linksTo,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import enumField from 'https://cardstack.com/base/enum';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import enumField from '@cardstack/base/enum';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';

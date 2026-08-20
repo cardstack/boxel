@@ -24,10 +24,10 @@ Two fields, one logical concept, template-side resolution.
 ### Schema (single image)
 
 ```gts
-import { CardDef, Component, contains, field, linksTo } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import UrlField from 'https://cardstack.com/base/url';
-import ImageDef from 'https://cardstack.com/base/image';
+import { CardDef, Component, contains, field, linksTo } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import UrlField from '@cardstack/base/url';
+import ImageDef from '@cardstack/base/image';
 
 export class Property extends CardDef {
   static displayName = 'Property';
@@ -120,7 +120,7 @@ The relationship link points at a real ImageDef instance in the realm — never 
 ## Gotchas
 
 - **NEVER cross-mix.** Don't put an external URL into `relationships.heroImage.links.self`. That's the realm-bricking shape. The relationship is for in-realm card identifiers only.
-- **Use `UrlField`, not `StringField`, and not `MaybeBase64Field`.** `UrlField` (from `https://cardstack.com/base/url`) extends `StringField` with URL-shape validation in edit mode. The base `cardInfo` field uses `MaybeBase64Field` for historical reasons (it also accepts inline base64) — don't follow that lead in new code; `UrlField` is the canonical choice for an external HTTP(S) URL.
+- **Use `UrlField`, not `StringField`, and not `MaybeBase64Field`.** `UrlField` (from `@cardstack/base/url`) extends `StringField` with URL-shape validation in edit mode. The base `cardInfo` field uses `MaybeBase64Field` for historical reasons (it also accepts inline base64) — don't follow that lead in new code; `UrlField` is the canonical choice for an external HTTP(S) URL.
 - **Empty string vs null.** When clearing the URL, set the JSON value to `null` not `""` — empty strings can confuse downstream consumers expecting truthiness.
 
 ## Source

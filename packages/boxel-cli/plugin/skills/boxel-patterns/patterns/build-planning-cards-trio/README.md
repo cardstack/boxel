@@ -24,7 +24,7 @@ Each one is a real CardDef with `prefersWideFormat = true` so the plan reads at 
 
 ```ts
 // architecture-plan.gts
-import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+import { CardDef, Component } from '@cardstack/base/card-api';
 
 export class ArchitecturePlan extends CardDef {
   static displayName = 'Architecture Plan';

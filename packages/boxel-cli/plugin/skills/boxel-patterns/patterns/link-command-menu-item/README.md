@@ -14,7 +14,7 @@ validated: source-proven
 
 ```ts
 import { getCardMenuItems } from '@cardstack/runtime-common';
-import { type GetCardMenuItemParams } from 'https://cardstack.com/base/card-menu-items';
+import { type GetCardMenuItemParams } from '@cardstack/base/card-menu-items';
 import { type MenuItemOptions } from '@cardstack/boxel-ui/helpers';
 import MyIcon from '@cardstack/boxel-icons/sparkles';
 import MyCommand from './my-command';

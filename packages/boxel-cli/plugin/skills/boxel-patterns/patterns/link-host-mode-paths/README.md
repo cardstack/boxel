@@ -49,7 +49,7 @@ A **same-realm guard** at read time enforces that `instance` points to a card in
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/realm-config",
+        "module": "@cardstack/base/realm-config",
         "name": "RealmConfig"
       }
     }
@@ -190,4 +190,4 @@ For end-to-end test coverage, see `packages/matrix/tests/host-mode.spec.ts` — 
 - [`theme-first-workflow`](../theme-first-workflow/README.md) — every routed page card wants a brand-driven theme.
 - [`show-card-list-with-views`](../show-card-list-with-views/README.md) — for the index card of a `/blog` route.
 - [`integrate-screenshot-card-format`](../integrate-screenshot-card-format/README.md) — auto-generate Open Graph images for each routed page (use the rule's target card id as the screenshot subject).
-- The base CardDef: `https://cardstack.com/base/realm-config` (`RealmConfig` + `RoutingRuleField`).
+- The base CardDef: `@cardstack/base/realm-config` (`RealmConfig` + `RoutingRuleField`).

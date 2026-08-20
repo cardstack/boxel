@@ -1,6 +1,6 @@
 ---
 name: boxel-skill-authoring
-description: Use when creating or editing a user-authored Boxel skill — a markdown file whose `boxel.kind: skill` frontmatter makes it loadable by AI assistant rooms. Covers the SKILL.md format contract, the frontmatter schema, tool declarations (codeRef forms, requiresApproval), placement conventions, and how to verify the skill indexed correctly. Activates for "write me a skill", "add a tool to my skill", or a skill that isn't showing up in the skill chooser.
+description: 'Use when creating or editing a user-authored Boxel skill — a markdown file whose `boxel.kind: skill` frontmatter makes it loadable by AI assistant rooms. Covers the SKILL.md format contract, the frontmatter schema, tool declarations (codeRef forms, requiresApproval), placement conventions, and how to verify the skill indexed correctly. Activates for "write me a skill", "add a tool to my skill", or a skill that isn''t showing up in the skill chooser.'
 boxel:
   kind: skill
 ---

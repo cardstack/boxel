@@ -6,9 +6,9 @@ import {
   contains,
   containsMany,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import DateTimeField from 'https://cardstack.com/base/datetime';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import DateTimeField from '@cardstack/base/datetime';
 
 // 🧩 PATTERN: containsmany-sorted-render
 //

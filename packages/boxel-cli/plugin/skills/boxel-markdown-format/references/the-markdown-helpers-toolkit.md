@@ -1,6 +1,6 @@
 ## The `markdown-helpers` toolkit
 
-Module: `https://cardstack.com/base/markdown-helpers`
+Module: `@cardstack/base/markdown-helpers`
 
 ```gts
 import {
@@ -14,7 +14,7 @@ import {
   markdownLinksForCards,
   markdownEmbedForCard,
   markdownEmbedsForCards,
-} from 'https://cardstack.com/base/markdown-helpers';
+} from '@cardstack/base/markdown-helpers';
 ```
 
 All helpers return pre-escaped strings — safe to interpolate directly.

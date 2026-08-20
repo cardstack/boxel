@@ -51,4 +51,4 @@ import {
 {{formatFileSize @model.assetBytes binary=true precision=1}}
 ```
 
-For static `markdown` templates, use `https://cardstack.com/base/markdown-helpers` instead; those helpers return pre-escaped markdown-safe strings.
+For static `markdown` templates, use `@cardstack/base/markdown-helpers` instead; those helpers return pre-escaped markdown-safe strings.

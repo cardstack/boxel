@@ -331,14 +331,19 @@ Same string language everywhere. Each slot in the object is a plain string; the 
 
 ### Using BXL inside Boxel
 
-In Boxel realms, import the compute factory and syntax tags from the uploaded
-bundle, then assign the returned function to `computeVia`:
+In Boxel realms, import the compute factory and syntax tags from the
+platform module — the host serves `@cardstack/bxl` to card code, and a realm
+that carries its own uploaded bundle imports that bundle by relative path
+instead — then assign the returned function to `computeVia`:
 
 ```ts
-import { expression, fx, jq } from '../bxl';
+import { expression, fx, jq } from '@cardstack/bxl';
 
+// An aggregate's iterating argument has to be collected: function arguments
+// are jq streams, so the uncollected `SUM(LineItems[].Amount)` would run once
+// per line item and hand the field one value per element.
 @field subtotal = contains(NumberField, {
-  computeVia: expression(fx`SUM("Line Item".Amount)`),
+  computeVia: expression(fx`SUM([LineItems[].Amount])`),
 });
 
 @field slug = contains(StringField, {

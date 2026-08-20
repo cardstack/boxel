@@ -3,10 +3,10 @@ import {
   CardInfoField,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { getCardMenuItems } from '@cardstack/runtime-common';
-import { type GetCardMenuItemParams } from 'https://cardstack.com/base/card-menu-items';
+import { type GetCardMenuItemParams } from '@cardstack/base/card-menu-items';
 import { type MenuItemOptions } from '@cardstack/boxel-ui/helpers';
 import MapPinIcon from '@cardstack/boxel-icons/map-pin';
 import BuildingIcon from '@cardstack/boxel-icons/building';

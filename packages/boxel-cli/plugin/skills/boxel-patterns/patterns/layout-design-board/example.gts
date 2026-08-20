@@ -1,4 +1,4 @@
-import { CardDef, field, linksTo, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
+import { CardDef, field, linksTo, contains, StringField, Component } from '@cardstack/base/card-api';
 
 // Each section is a self-contained card. Defined elsewhere — sketch:
 class HeroSection extends CardDef {
