@@ -31,9 +31,14 @@ export interface SerializedModel3d {
   format?: string;
   meshes?: number;
   triangles?: number;
+  vertices?: number;
   materials?: number;
   materialNames?: string[];
   unit?: string;
+  nodes?: number;
+  animations?: number;
+  textures?: number;
+  dimensions?: string;
   generator?: string;
   solidName?: string;
   designer?: string;

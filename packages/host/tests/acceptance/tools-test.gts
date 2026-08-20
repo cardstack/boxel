@@ -1957,23 +1957,39 @@ module('Acceptance | Tools tests', function (hooks) {
       });
 
       await settled();
-      let commandResultEvents = await getRoomEvents(roomId).filter(
-        (event) => event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+      // The failure is reported to the room so the bot can react and other
+      // sessions' spinners clear.
+      let failedResultEvents = await getRoomEvents(roomId).filter(
+        (event) =>
+          event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+          event.content['m.relates_to']?.key === 'failed',
       );
       assert.strictEqual(
-        commandResultEvents.length,
+        failedResultEvents.length,
+        1,
+        'failed command result event dispatched',
+      );
+      let appliedResultEvents = await getRoomEvents(roomId).filter(
+        (event) =>
+          event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+          event.content['m.relates_to']?.key === 'applied',
+      );
+      assert.strictEqual(
+        appliedResultEvents.length,
         0,
-        'No command result event dispatched',
+        'no applied command result event dispatched',
       );
       maybeBoomShouldBoom = false;
       await click('[data-test-alert-action-button="Retry"]');
-      commandResultEvents = await getRoomEvents(roomId).filter(
-        (event) => event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+      appliedResultEvents = await getRoomEvents(roomId).filter(
+        (event) =>
+          event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+          event.content['m.relates_to']?.key === 'applied',
       );
       assert.strictEqual(
-        commandResultEvents.length,
+        appliedResultEvents.length,
         1,
-        'Command result event was dispatched',
+        'applied command result event was dispatched after retry',
       );
       assert.dom('[data-test-apply-state="applied"]').exists();
     });

@@ -2763,6 +2763,115 @@ Attached Files (files with newer versions don't show their content):
     assert.equal(messageText(result[5]).trim(), expected.trim());
   });
 
+  test('a later applied result supersedes an earlier failed result for the same request', async () => {
+    // A tool can fail and then succeed on a user Retry; both result events
+    // stay in the room forever. The prompt must reflect the latest one, or
+    // the model is permanently told the call failed and may re-issue it.
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        room_id: 'room-id-1',
+        sender: '@user:localhost',
+        content: {
+          body: 'set the title',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          data: { context: { tools: [], functions: [] } },
+        },
+        origin_server_ts: 1722242847000,
+        unsigned: { age: 1000, transaction_id: 't0' },
+        event_id: 'user-event-id-1',
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        room_id: 'room-id-1',
+        sender: '@aibot:localhost',
+        content: {
+          body: 'Setting the title',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          data: { context: { functions: [] } },
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+            {
+              id: 'retried-tool-call-id-1',
+              name: 'patchCardInstance',
+              arguments: JSON.stringify({
+                attributes: { description: 'Set the title' },
+              }),
+            },
+          ],
+        },
+        origin_server_ts: 1722242849000,
+        unsigned: { age: 900, transaction_id: 't1' },
+        event_id: 'retried-command-event-id-1',
+        status: EventStatus.SENT,
+      },
+      {
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+        room_id: 'room-id-1',
+        sender: '@user:localhost',
+        content: {
+          'm.relates_to': {
+            event_id: 'retried-command-event-id-1',
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+            key: 'failed',
+          },
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          commandRequestId: 'retried-tool-call-id-1',
+          failureReason: 'store exploded',
+          data: { context: { tools: [], functions: [] } },
+        },
+        origin_server_ts: 1722242853000,
+        unsigned: { age: 800, transaction_id: 't2' },
+        event_id: 'failed-result-id-1',
+        status: EventStatus.SENT,
+      },
+      {
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+        room_id: 'room-id-1',
+        sender: '@user:localhost',
+        content: {
+          'm.relates_to': {
+            event_id: 'retried-command-event-id-1',
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+            key: 'applied',
+          },
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          commandRequestId: 'retried-tool-call-id-1',
+          data: { context: { tools: [], functions: [] } },
+        },
+        origin_server_ts: 1722242857000,
+        unsigned: { age: 700, transaction_id: 't3' },
+        event_id: 'applied-result-id-1',
+        status: EventStatus.SENT,
+      },
+    ];
+    const result = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      [],
+      [],
+      [],
+      fakeMatrixClient,
+    );
+    let toolMessages = result.filter((m) => m.role === 'tool');
+    assert.equal(toolMessages.length, 1, 'one tool message per request');
+    assert.equal(
+      (toolMessages[0] as { tool_call_id?: string }).tool_call_id,
+      'retried-tool-call-id-1',
+    );
+    let content = messageText(toolMessages[0]);
+    assert.true(
+      content.includes('executed'),
+      `the retried call reads as executed, got: ${content}`,
+    );
+    assert.false(
+      content.includes('failed'),
+      `no stale failure text survives the retry, got: ${content}`,
+    );
+  });
+
   test('pairs a pre-rename request/result (legacy wire keys) with the same tool_call_id', async () => {
     // A room whose history predates the command → tool rename replays events
     // with the legacy spellings forever; prompt assembly must pair them

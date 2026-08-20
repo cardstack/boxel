@@ -31,9 +31,9 @@ export default class LLMModeToggle extends Component<Signature> {
           <button
             type='button'
             class='llm-mode-option {{if (eq this.selected "ask") "selected"}}'
-            data-test-llm-mode-option='ask'
             disabled={{@disabled}}
             {{on 'click' (fn this.handleOptionClick 'ask')}}
+            data-test-llm-mode-option='ask'
           >
             Ask
           </button>
@@ -50,9 +50,9 @@ export default class LLMModeToggle extends Component<Signature> {
           <button
             type='button'
             class='llm-mode-option {{if (eq this.selected "act") "selected"}}'
-            data-test-llm-mode-option='act'
             disabled={{@disabled}}
             {{on 'click' (fn this.handleOptionClick 'act')}}
+            data-test-llm-mode-option='act'
           >
             Act
           </button>
@@ -66,40 +66,50 @@ export default class LLMModeToggle extends Component<Signature> {
     </div>
     <style scoped>
       .llm-mode-toggle {
+        /* Matches the extra-small trigger pills sharing the footer row. */
+        --llm-mode-toggle-height: var(--boxel-button-xs);
+        --llm-mode-toggle-inset: 0.125rem;
+        --llm-mode-option-width: 2.5rem;
+        --llm-mode-option-height: calc(
+          var(--llm-mode-toggle-height) - (2 * var(--llm-mode-toggle-inset))
+        );
+
+        display: flex;
+        align-items: center;
+        width: fit-content;
+        height: var(--llm-mode-toggle-height);
+        padding: var(--llm-mode-toggle-inset);
+        background: var(--boxel-650);
+        border-radius: calc(var(--llm-mode-toggle-height) / 2);
+      }
+      .llm-mode-option {
+        width: var(--llm-mode-option-width);
+        height: var(--llm-mode-option-height);
         display: flex;
         align-items: center;
         justify-content: center;
-        background: var(--boxel-650);
-        border-radius: var(--boxel-pill-radius, 999px);
-        overflow: hidden;
-        border-width: 0;
-        box-shadow: none;
-        padding: 1.5px 2px 2px 2px;
-      }
-      .llm-mode-option {
-        flex: 1 1 0;
+        padding: 0;
         background: none;
         border: none;
-        border-radius: var(--boxel-border-radius);
-        padding-block: 2px;
+        border-radius: calc(var(--llm-mode-option-height) / 2);
         color: var(--boxel-light);
-        font: 700 var(--boxel-font-xs);
+        font-weight: 600;
+        font-size: var(--boxel-font-size-xs);
+        letter-spacing: var(--boxel-lsp-sm);
         cursor: pointer;
         transition:
-          background 0.15s,
-          color 0.15s;
+          background-color var(--boxel-transition),
+          color var(--boxel-transition);
       }
       .llm-mode-option.selected {
-        background: var(--boxel-teal);
+        background: var(--boxel-highlight);
         color: var(--boxel-dark);
-        height: 100%;
       }
       .llm-mode-option:disabled {
         opacity: 0.5;
-        cursor: not-allowed;
       }
       .llm-mode-option-tooltip {
-        max-width: 160px;
+        max-width: 10rem;
       }
     </style>
   </template>

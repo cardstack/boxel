@@ -112,6 +112,17 @@ export interface FieldArity {
   kind: 'field-arity';
 }
 
+// A type (`type`/`on`) condition, deferred so pass 1 can resolve the ref's
+// definition: rows stamp `types` with the canonical (defining-module) key, so
+// a ref that names the type through a re-exporting module only matches once
+// the definition's canonical codeRef joins the membership keys. Resolves to
+// an `any` of `types-contains` predicates over the union of the as-given
+// spelling's keys and the canonical ref's keys.
+export interface TypeCondition {
+  kind: 'type-condition';
+  ref: CodeRef;
+}
+
 export type CardExpression = (
   | string
   | Param
@@ -123,6 +134,7 @@ export type CardExpression = (
   | FieldQuery
   | FieldValue
   | FieldArity
+  | TypeCondition
 )[];
 
 export function addExplicitParens(expression: CardExpression): CardExpression;
@@ -227,6 +239,13 @@ export function typesContains(key: string, column = 'i.types'): TypesContains {
     kind: 'types-contains',
     column,
     key,
+  };
+}
+
+export function typeCondition(ref: CodeRef): TypeCondition {
+  return {
+    kind: 'type-condition',
+    ref,
   };
 }
 

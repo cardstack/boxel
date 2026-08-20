@@ -18,10 +18,12 @@ import {
   type FieldValue,
   type FieldArity,
   type JsonContainsQuery,
+  type TypeCondition,
   param,
   isParam,
   tableValuedTree,
   typesContains,
+  typeCondition as typeConditionNode,
   separatedByCommas,
   addExplicitParens,
   any,
@@ -628,7 +630,7 @@ export class IndexQueryEngine {
     if (!isResolvedCodeRef(ref)) {
       return false;
     }
-    let typeKeys = internalKeysFor(ref, undefined, this.#virtualNetwork);
+    let typeKeys = await this.typeKeysFor(ref);
     let rows = (await this.#query([
       'SELECT 1',
       `FROM ${tableFromOpts(opts)} AS i`,
@@ -651,7 +653,7 @@ export class IndexQueryEngine {
     if (!isResolvedCodeRef(ref)) {
       return false;
     }
-    let typeKeys = internalKeysFor(ref, undefined, this.#virtualNetwork);
+    let typeKeys = await this.typeKeysFor(ref);
     let rows = (await this.#query([
       'SELECT 1',
       `FROM ${tableFromOpts(opts)} AS i`,
@@ -1118,10 +1120,14 @@ export class IndexQueryEngine {
 
   // the type condition only consumes absolute URL card refs.
   private typeCondition(ref: CodeRef): CardExpression {
-    // Match any equivalent spelling of the type key (RRI / real-URL /
-    // virtual-alias), so rows indexed before references were canonicalized to
-    // RRI still satisfy the filter without a reindex or DB migration.
-    //
+    // Deferred to pass 1 (`handleTypeCondition`): the membership keys need the
+    // ref's definition, which resolves asynchronously.
+    return [typeConditionNode(ref)];
+  }
+
+  private async handleTypeCondition(
+    condition: TypeCondition,
+  ): Promise<Expression> {
     // Each key is a self-contained `types-contains` membership predicate rather
     // than a comparison against a shared `jsonb_array_elements_text(types)`
     // cross-join alias. The cross join gave every type condition in a query
@@ -1129,11 +1135,55 @@ export class IndexQueryEngine {
     // which miscompose: `not: { type: X }` failed to exclude X, and
     // `every: [{ type: A }, { type: B }]` was unsatisfiable. Per-row membership
     // makes negation a true exclusion and conjunction a true intersection.
-    return any(
-      internalKeysFor(ref, undefined, this.#virtualNetwork).map((typeKey) => [
-        typesContains(typeKey),
-      ]),
-    );
+    let keys = await this.typeKeysFor(condition.ref);
+    return any(keys.map((typeKey) => [typesContains(typeKey)])) as Expression;
+  }
+
+  // Every `types` membership key a ref can legitimately match:
+  //
+  // - all equivalent spellings of the ref itself (RRI / real-URL /
+  //   virtual-alias), so rows indexed before references were canonicalized to
+  //   RRI still satisfy the filter without a reindex or DB migration;
+  // - the same spellings of the ref's canonical (defining-module) codeRef.
+  //   Rows stamp `types` via `identifyCard`, which names the module a class is
+  //   defined in — so a ref that names the type through a re-exporting module
+  //   (e.g. file-api's FileDef, re-exported from card-api) only matches
+  //   through its definition's canonical ref. The host's search resource
+  //   applies the same canonicalization (via the loader) before its
+  //   client-side matching, keeping the two evaluations in agreement.
+  //
+  // A ref whose definition doesn't resolve keeps only its spelling-based keys
+  // and matches nothing (unless rows were stamped under that spelling),
+  // exactly as before.
+  private async typeKeysFor(ref: CodeRef): Promise<string[]> {
+    let keys = internalKeysFor(ref, undefined, this.#virtualNetwork);
+    if (isResolvedCodeRef(ref)) {
+      try {
+        let definition = await this.#definitionLookup.lookupDefinition(ref);
+        if (isResolvedCodeRef(definition.codeRef)) {
+          for (let key of internalKeysFor(
+            definition.codeRef,
+            undefined,
+            this.#virtualNetwork,
+          )) {
+            if (!keys.includes(key)) {
+              keys.push(key);
+            }
+          }
+        }
+      } catch (error) {
+        // A ref that names no resolvable type falls through to the
+        // spelling-based keys (matching nothing unless rows were stamped under
+        // that spelling) — the same way the engine's top-level catch treats a
+        // nonexistent type as an empty result rather than an error. Any other
+        // failure is unexpected and propagates rather than silently
+        // narrowing the match.
+        if (!isFilterRefersToNonexistentTypeError(error)) {
+          throw error;
+        }
+      }
+    }
+    return keys;
   }
 
   // The card's primary `id` and a FileDef's `url` index in URL form, but a
@@ -1534,6 +1584,8 @@ export class IndexQueryEngine {
             return this.handleFieldArity(element);
           } else if (element.kind === 'json-contains-query') {
             return this.handleJsonContainsQuery(element);
+          } else if (element.kind === 'type-condition') {
+            return this.handleTypeCondition(element);
           } else {
             throw assertNever(element);
           }

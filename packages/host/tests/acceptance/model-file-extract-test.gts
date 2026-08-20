@@ -44,6 +44,55 @@ const CUBE_STL = [
   'endsolid testcube',
 ].join('\n');
 
+// A minimal glTF 2.0 document whose header enumerates every fact the extractor
+// projects: one triangulated mesh (24 vertices, 36 indices), bounds spanning
+// 2 x 4 x 6, and a named generator.
+const CUBE_GLTF = JSON.stringify({
+  asset: { version: '2.0', generator: 'Test Exporter 1.0' },
+  meshes: [
+    { primitives: [{ attributes: { POSITION: 0 }, indices: 1, mode: 4 }] },
+  ],
+  accessors: [
+    {
+      type: 'VEC3',
+      componentType: 5126,
+      count: 24,
+      min: [-1, -2, -3],
+      max: [1, 2, 3],
+    },
+    { type: 'SCALAR', componentType: 5123, count: 36 },
+  ],
+  materials: [{}, {}],
+  nodes: [{}, {}, {}],
+});
+
+// A GLB whose bytes announce the binary container (magic + a JSON chunk) but
+// whose version is 1, so the header reader can't summarize it — the stand-in for
+// a real-but-unreadable `.glb` (glTF 1.0, truncated, chunks out of order). It
+// should keep its 3D card, not fall back to a plain FileDef.
+function buildUnreadableGlb(): Uint8Array {
+  let jsonBytes = new TextEncoder().encode(
+    JSON.stringify({ asset: { version: '1.0' } }),
+  );
+  let pad = (4 - (jsonBytes.length % 4)) % 4;
+  let chunkLength = jsonBytes.length + pad;
+  let total = 12 + 8 + chunkLength;
+  let bytes = new Uint8Array(total);
+  let view = new DataView(bytes.buffer);
+  view.setUint32(0, 0x46546c67, true); // 'glTF' magic
+  view.setUint32(4, 1, true); // version 1 — unreadable by the 2.0 reader
+  view.setUint32(8, total, true);
+  view.setUint32(12, chunkLength, true);
+  view.setUint32(16, 0x4e4f534a, true); // 'JSON'
+  bytes.set(jsonBytes, 20);
+  for (let i = 0; i < pad; i++) {
+    bytes[20 + jsonBytes.length + i] = 0x20;
+  }
+  return bytes;
+}
+
+const UNREADABLE_GLB = buildUnreadableGlb();
+
 const CUBE_MODEL_XML = `<?xml version="1.0" encoding="UTF-8"?>
 <model unit="millimeter" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
   <metadata name="Title">Round-trip Cube</metadata>
@@ -89,10 +138,15 @@ module('Acceptance | model file-extract', function (hooks) {
       JSON.stringify(renderOptions),
     )}/file-extract`;
 
+  const MODULE_BY_DEF: Record<string, string> = {
+    StlDef: 'stl-model-def',
+    ThreeMfDef: 'three-mf-def',
+    GltfDef: 'gltf-model-def',
+    GlbDef: 'gltf-model-def',
+  };
+
   const baseFileDefCodeRef = (name: string): ResolvedCodeRef => ({
-    module: `${baseRealm.url}${
-      name === 'StlDef' ? 'stl-model-def' : 'three-mf-def'
-    }` as RealmResourceIdentifier,
+    module: `${baseRealm.url}${MODULE_BY_DEF[name]}` as RealmResourceIdentifier,
     name,
   });
 
@@ -134,6 +188,8 @@ module('Acceptance | model file-extract', function (hooks) {
           ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'cube.stl': CUBE_STL,
           'cube.3mf': CUBE_3MF,
+          'cube.gltf': CUBE_GLTF,
+          'unreadable.glb': UNREADABLE_GLB,
           'notmodel.stl': 'this is not an STL file',
         },
       });
@@ -191,6 +247,33 @@ module('Acceptance | model file-extract', function (hooks) {
     );
   });
 
+  test('extracts glTF facts onto model3d through the render route', async function (assert) {
+    await visit(
+      renderPath(fileURL('cube.gltf'), {
+        fileExtract: true,
+        fileDefCodeRef: baseFileDefCodeRef('GltfDef'),
+      }),
+    );
+    let result = await captureFileExtractResult('ready');
+    let doc = result.searchDoc as Record<string, any>;
+    assert.strictEqual(result.status, 'ready');
+    // Container label folds in the asset version.
+    assert.strictEqual(doc?.model3d?.format, 'glTF JSON 2.0');
+    assert.strictEqual(doc?.model3d?.generator, 'Test Exporter 1.0');
+    // Unlike STL/3MF, a glTF header enumerates its scene graph directly, so
+    // geometry facts are honest header-only answers.
+    assert.strictEqual(doc?.model3d?.meshes, 1);
+    assert.strictEqual(doc?.model3d?.vertices, 24, 'POSITION accessor count');
+    assert.strictEqual(doc?.model3d?.triangles, 12, '36 indices / 3');
+    assert.strictEqual(doc?.model3d?.materials, 2);
+    assert.strictEqual(doc?.model3d?.nodes, 3);
+    assert.strictEqual(
+      doc?.model3d?.dimensions,
+      '2 \u00d7 4 \u00d7 6',
+      'max minus min per axis',
+    );
+  });
+
   test('a .stl whose bytes are not STL falls back and marks mismatch', async function (assert) {
     await visit(
       renderPath(fileURL('notmodel.stl'), {
@@ -203,5 +286,22 @@ module('Acceptance | model file-extract', function (hooks) {
     assert.strictEqual(result.status, 'ready', 'still indexes as base file');
     assert.true(result.mismatch, 'sets mismatch flag');
     assert.strictEqual(doc?.model3d, undefined, 'no 3D metadata on fallback');
+  });
+
+  test('an unreadable-but-real .glb keeps the 3D card instead of falling back', async function (assert) {
+    await visit(
+      renderPath(fileURL('unreadable.glb'), {
+        fileExtract: true,
+        fileDefCodeRef: baseFileDefCodeRef('GlbDef'),
+      }),
+    );
+    let result = await captureFileExtractResult('ready');
+    let doc = result.searchDoc as Record<string, any>;
+    assert.strictEqual(result.status, 'ready');
+    // The bytes announce a GLB container, so — unlike the non-STL bytes above —
+    // the file is not demoted: no mismatch, it stays a GlbDef 3D card. It just
+    // carries no extracted facts, the same as the over-size-cap case.
+    assert.notOk(result.mismatch, 'does not set the mismatch flag');
+    assert.strictEqual(doc?.model3d, undefined, 'no summarized metadata');
   });
 });
