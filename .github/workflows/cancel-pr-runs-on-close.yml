@@ -1,0 +1,71 @@
+name: Cancel PR runs on close
+
+# A merged or closed pull request's in-flight runs can no longer tell anyone
+# anything, but they keep their runners until they finish. That is ordinarily
+# just waste; when the queue is hundreds of jobs deep it actively delays every
+# other pull request, since those runners are what the queue is waiting for.
+#
+# GitHub cancels superseded runs within a branch through `concurrency`, but that
+# only fires when a newer run starts in the same group — closing a pull request
+# starts nothing, so nothing is cancelled.
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cancel:
+    name: Cancel in-flight runs for this branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # A pull request from a fork gets a read-only token, so the cancel calls
+    # would fail; such runs are left for GitHub to reap.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - name: Cancel
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+          SELF: ${{ github.run_id }}
+        run: |
+          # Runs started *by* this close event have to survive: this one, and any
+          # teardown a workflow performs on close — observability-preview.yml's
+          # `preview-cleanup` removes the PR's Grafana preview that way, and
+          # cancelling it would strand the preview and its sticky comment. Those
+          # runs are exactly the ones created at or after the close, so the
+          # timestamp separates them without naming individual workflows.
+          CLOSED_AT=$(gh api "repos/${REPO}/pulls/${PR}" --jq '.closed_at')
+          if [ -z "$CLOSED_AT" ] || [ "$CLOSED_AT" = "null" ]; then
+            echo "No closed_at on PR ${PR}; refusing to cancel anything."
+            exit 0
+          fi
+
+          # Filtering by status server-side keeps this to the runs that can
+          # actually be cancelled, so paginating cannot walk a long-lived
+          # branch's entire history.
+          ids=$(for run_status in queued in_progress; do
+            gh api --paginate "repos/${REPO}/actions/runs?branch=${BRANCH}&status=${run_status}&per_page=100" \
+              --jq ".workflow_runs[]
+                    | select(.id != ${SELF})
+                    | select(.created_at < \"${CLOSED_AT}\")
+                    | .id"
+          done)
+          if [ -z "$ids" ]; then
+            echo "No in-flight runs on ${BRANCH}."
+            exit 0
+          fi
+          for id in $ids; do
+            if gh api -X POST "repos/${REPO}/actions/runs/${id}/cancel" >/dev/null 2>&1; then
+              echo "cancelled ${id}"
+            else
+              # A run that completed between listing and cancelling reports an
+              # error; that is the desired end state either way.
+              echo "could not cancel ${id} (likely already finished)"
+            fi
+          done

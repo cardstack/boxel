@@ -155,7 +155,29 @@ async function initTemplateLinter(): Promise<any> {
   const hostRequire = Module.createRequire(resolve(HOST_PKG, 'package.json'));
   const tlModule = hostRequire('ember-template-lint');
   const TemplateLinter = (tlModule as any).default ?? tlModule;
-  return new TemplateLinter({ workingDir: HOST_PKG });
+  // Host's config, minus no-whitespace-for-layout. That rule trims each
+  // line of a text node before matching, so what it flags is adjacent
+  // "space or &nbsp;" pairs in the authored text — never the newline plus
+  // indentation that prettier's wrapping (the pass right before this one)
+  // introduces. In realm content those &nbsp; runs are deliberate visual
+  // spacing, the rule has no autofix, and its message ("Excess whitespace
+  // detected") doesn't say which characters offend — so a model trying to
+  // clear it tends to pick a whitespace-only rewrite, which prettier then
+  // restores byte-for-byte, looping forever. The disable is uniform across
+  // .gts/.gjs/.hbs on purpose: the rule keys on authored text, not on
+  // whether the file went through the formatter, so gating it by extension
+  // would lint identical text differently.
+  const hostTemplateLintConfig = hostRequire('./.template-lintrc.js');
+  return new TemplateLinter({
+    workingDir: HOST_PKG,
+    config: {
+      ...hostTemplateLintConfig,
+      rules: {
+        ...hostTemplateLintConfig.rules,
+        'no-whitespace-for-layout': false,
+      },
+    },
+  });
 }
 
 // ---------------------------------------------------------------------------
