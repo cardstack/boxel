@@ -159,8 +159,15 @@ describe('ensurePersonalRealm', () => {
 
   it('re-links a personal realm that exists on the server but is missing from the realm list', async () => {
     const { calls } = stubFetchRoutes({
+      // The realm server's collision response: a JSON:API error envelope
+      // (sendResponseForError in packages/realm-server/middleware) around the
+      // message from handleCreateRealmRequest.
       createRealmResponse: new Response(
-        `realm 'https://realms.example.com/newuser/personal/' already exists on this server`,
+        JSON.stringify({
+          errors: [
+            `realm 'https://realms.example.com/newuser/personal/' already exists on this server`,
+          ],
+        }),
         { status: 400 },
       ),
     });
@@ -185,6 +192,38 @@ describe('ensurePersonalRealm', () => {
     await expect(ensurePersonalRealm(AUTH, REALM_SERVER_URL)).rejects.toThrow(
       /returned 500/,
     );
+    expect(callsTo(calls, 'PUT', ACCOUNT_DATA_PATH)).toHaveLength(0);
+  });
+
+  // The zero-realms gate triggers an automatic mutation, so it must only act
+  // on a confirmed answer: an unreadable realm list is "couldn't determine",
+  // never "has none" — treating it as empty would mint a realm for (or, via
+  // the re-link path's read-modify-write, rewrite the realm list of) an
+  // account that already has realms.
+  it('throws when the realm list cannot be read, without creating anything', async () => {
+    const { calls } = stubFetchRoutes({
+      realmsResponse: new Response('bad gateway', { status: 502 }),
+    });
+
+    await expect(ensurePersonalRealm(AUTH, REALM_SERVER_URL)).rejects.toThrow(
+      /Could not read the realm list/,
+    );
+    expect(callsTo(calls, 'POST', '/_create-realm')).toHaveLength(0);
+    expect(callsTo(calls, 'PUT', ACCOUNT_DATA_PATH)).toHaveLength(0);
+  });
+
+  it('throws when the realm list is unparseable, without creating anything', async () => {
+    const { calls } = stubFetchRoutes({
+      realmsResponse: new Response('not json', {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    });
+
+    await expect(ensurePersonalRealm(AUTH, REALM_SERVER_URL)).rejects.toThrow(
+      /Could not read the realm list/,
+    );
+    expect(callsTo(calls, 'POST', '/_create-realm')).toHaveLength(0);
     expect(callsTo(calls, 'PUT', ACCOUNT_DATA_PATH)).toHaveLength(0);
   });
 });

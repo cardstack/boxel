@@ -1,5 +1,5 @@
 import { expect, test } from './fixtures.ts';
-import { getAccountData } from '../support/synapse/index.ts';
+import { getAccountData, updateAccountData } from '../support/synapse/index.ts';
 import {
   createSubscribedUser,
   getMatrixTestContext,
@@ -167,6 +167,22 @@ test.describe('boxel-cli browser authorization', () => {
       // must leave the account alone rather than erroring or double-linking.
       expect(await ensurePersonalRealm(auth, `${serverIndexUrl}/`)).toEqual({
         outcome: 'has-realms',
+      });
+
+      // The realm exists on the server but the account's realm list has lost
+      // it — the bootstrap must re-link via the server's collision response
+      // rather than failing on it. This is the one leg that pins the CLI's
+      // parsing of that response against what the realm server actually
+      // emits; the unit suite can only exercise it against a stub.
+      await updateAccountData(
+        auth.userId,
+        auth.accessToken,
+        APP_BOXEL_REALMS_EVENT_TYPE,
+        JSON.stringify({ realms: [] }),
+      );
+      expect(await ensurePersonalRealm(auth, `${serverIndexUrl}/`)).toEqual({
+        outcome: 'linked',
+        realmUrl: `${serverIndexUrl}/${username}/personal/`,
       });
     } finally {
       if (priorTlsSetting === undefined) {

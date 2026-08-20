@@ -7,7 +7,7 @@ import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import {
   addRealmToMatrixAccountData,
   getRealmServerToken,
-  getUserRealmsFromMatrixAccountData,
+  requireUserRealmsFromMatrixAccountData,
   type MatrixAuth,
 } from './auth.ts';
 
@@ -35,12 +35,16 @@ export type EnsurePersonalRealmResult =
 //
 // "Has none" is judged from the account's realm list in Matrix account data —
 // the same list the web app assembles a session from — so accounts that
-// already have realms, however they got them, are left alone.
+// already have realms, however they got them, are left alone. The read is
+// strict (confirmed answer or throw): this gate triggers an automatic
+// mutation, so a failed read must surface as "couldn't determine" — which the
+// caller turns into a warning — rather than read as "has no realms" and mint
+// a realm for an account that already has them.
 export async function ensurePersonalRealm(
   auth: MatrixAuth,
   realmServerUrl: string,
 ): Promise<EnsurePersonalRealmResult> {
-  let realms = await getUserRealmsFromMatrixAccountData(auth);
+  let realms = await requireUserRealmsFromMatrixAccountData(auth);
   if (realms.length > 0) {
     return { outcome: 'has-realms' };
   }

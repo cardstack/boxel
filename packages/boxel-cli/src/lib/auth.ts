@@ -160,16 +160,44 @@ function userRealmsAccountDataUrl(matrixAuth: MatrixAuth): string {
   ).href;
 }
 
+// Best-effort read for display paths: any failure short of an auth error
+// reads as an empty list. Never gate a mutation on this — an empty result
+// may mean "couldn't read", not "has none"; mutating callers must use
+// requireUserRealmsFromMatrixAccountData instead.
 export async function getUserRealmsFromMatrixAccountData(
   matrixAuth: MatrixAuth,
+): Promise<string[]> {
+  return readUserRealmsFromMatrixAccountData(matrixAuth, 'best-effort');
+}
+
+// Strict read: a confirmed answer or a throw. A 404 (the event has never
+// been set) confirms an empty list; every other failure — network error,
+// non-2xx status, unparseable body — throws, so callers that act on the
+// answer never act on a guess.
+export async function requireUserRealmsFromMatrixAccountData(
+  matrixAuth: MatrixAuth,
+): Promise<string[]> {
+  return readUserRealmsFromMatrixAccountData(matrixAuth, 'strict');
+}
+
+async function readUserRealmsFromMatrixAccountData(
+  matrixAuth: MatrixAuth,
+  mode: 'best-effort' | 'strict',
 ): Promise<string[]> {
   let response: Response;
   try {
     response = await fetch(userRealmsAccountDataUrl(matrixAuth), {
       headers: { Authorization: `Bearer ${matrixAuth.accessToken}` },
     });
-  } catch {
-    // Network unreachable / DNS / similar — treat as empty (best-effort).
+  } catch (e) {
+    // Network unreachable / DNS / similar.
+    if (mode === 'strict') {
+      throw new Error(
+        `Could not read the realm list from Matrix account data: ${
+          e instanceof Error ? e.message : String(e)
+        }`,
+      );
+    }
     return [];
   }
   if (response.status === 401 || response.status === 403) {
@@ -179,14 +207,28 @@ export async function getUserRealmsFromMatrixAccountData(
       `Matrix account_data fetch failed: ${response.status} ${text}`,
     );
   }
+  if (response.status === 404) {
+    // The event has never been set — a confirmed empty list.
+    return [];
+  }
   if (!response.ok) {
-    // 404 just means the event has never been set — return empty list.
+    if (mode === 'strict') {
+      let text = await response.text();
+      throw new Error(
+        `Could not read the realm list from Matrix account data: ${response.status} ${text}`,
+      );
+    }
     return [];
   }
   try {
     let data = (await response.json()) as { realms?: string[] };
     return Array.isArray(data.realms) ? [...data.realms] : [];
   } catch {
+    if (mode === 'strict') {
+      throw new Error(
+        'Could not read the realm list from Matrix account data: response body was not valid JSON',
+      );
+    }
     return [];
   }
 }
@@ -195,7 +237,10 @@ export async function addRealmToMatrixAccountData(
   matrixAuth: MatrixAuth,
   realmUrl: string,
 ): Promise<void> {
-  let existingRealms = await getUserRealmsFromMatrixAccountData(matrixAuth);
+  // Read-modify-write: the read must be a confirmed answer. Building the PUT
+  // body from a failed read's empty guess would replace the account's realm
+  // list with just the realm being added, dropping every other realm in it.
+  let existingRealms = await requireUserRealmsFromMatrixAccountData(matrixAuth);
 
   if (!existingRealms.includes(realmUrl)) {
     existingRealms.push(realmUrl);
