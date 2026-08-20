@@ -10,6 +10,12 @@
     "attributes": {
       "spacing": "0.25rem",
       "version": "7.0",
+      "customCssVariables": [
+        {
+          "name": "boxelSwitchActiveThumb",
+          "value": "var(--boxel-dove, #F7F8FA)"
+        }
+      ],
       "cardInfo": {
         "notes": "v7.0 - Dense Modularity (UI Optimized)",
         "name": "Boxel Brand Guide",
@@ -85,7 +91,7 @@
       "rootVariables": {
         "card": "var(--boxel-light, #FFFFFF)",
         "ring": "var(--boxel-teal, #00FFBA)",
-        "input": "var(--boxel-light, #FFFFFF)",
+        "input": "var(--boxel-450, #919191)",
         "muted": "#F5F5F5",
         "accent": "var(--cardstack-lime, #C3FC33)",
         "border": "#E2E8F0",
@@ -114,6 +120,7 @@
         "background": "var(--boxel-dove, #F7F8FA)",
         "foreground": "var(--boxel-slate, #272330)",
         "destructive": "var(--cardstack-red, #FF5050)",
+        "success": "var(--boxel-success, #00AC3D)",
         "sidebarRing": "var(--boxel-teal, #00FFBA)",
         "sidebarAccent": "var(--cardstack-lime, #C3FC33)",
         "sidebarBorder": "#E2E8F0",
@@ -185,7 +192,7 @@
       "darkModeVariables": {
         "card": "#1E1E1E",
         "ring": "var(--boxel-teal, #00FFBA)",
-        "input": "#27272A",
+        "input": "#52525B",
         "muted": "#27272A",
         "accent": "var(--cardstack-lime, #C3FC33)",
         "border": "#333333",
@@ -214,6 +221,7 @@
         "background": "var(--brand-dark, #272330)",
         "foreground": "var(--brand-light, #F7F8FA)",
         "destructive": "var(--cardstack-red, #FF5050)",
+        "success": "var(--boxel-success, #00AC3D)",
         "sidebarRing": "var(--boxel-teal, #00FFBA)",
         "sidebarAccent": "oklch(0.9338 0.1913 122.52)",
         "sidebarBorder": "#333333",

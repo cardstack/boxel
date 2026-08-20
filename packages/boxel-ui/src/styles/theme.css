@@ -60,7 +60,7 @@
 
   /* form + focus */
   --border: var(--boxel-border-color);
-  --input: var(--boxel-light);
+  --input: var(--boxel-300);
   --ring: var(--boxel-highlight);
 
   /* charts */
@@ -216,7 +216,7 @@
   --destructive: var(--boxel-danger);
   --destructive-foreground: var(--boxel-light-100);
   --border: var(--boxel-550);
-  --input: var(--boxel-dark);
+  --input: var(--boxel-550);
   --ring: var(--boxel-highlight);
   --sidebar: #555366;
   --sidebar-foreground: var(--boxel-light);

@@ -472,6 +472,11 @@ export default class ThemeVarField extends FieldDef {
   @field destructiveForeground = contains(ColorField, {
     description: describeColor('Text/icon color on destructive actions.'),
   });
+  @field success = contains(ColorField, {
+    description: describeColor(
+      'Success/positive feedback color. Not standard shadcn: consumers fall back to primary when unset. Do not use as foreground color.',
+    ),
+  });
   @field border = contains(ColorField, {
     description: describeColor('Specifies border-color.'),
   });
@@ -637,6 +642,7 @@ export default class ThemeVarField extends FieldDef {
     'ring',
     'destructive',
     'destructiveForeground',
+    'success',
   ];
   private chartColors = ['chart1', 'chart2', 'chart3', 'chart4', 'chart5'];
   private sidebarColors = [
@@ -849,6 +855,11 @@ export default class ThemeVarField extends FieldDef {
             </FieldContainer>
             <FieldContainer @label='Destructive Foreground' @vertical={{true}} data-test-field='destructiveForeground'>
               <@fields.destructiveForeground />
+            </FieldContainer>
+          </div>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer @label='Success' @vertical={{true}} data-test-field='success'>
+              <@fields.success />
             </FieldContainer>
           </div>
         </section>

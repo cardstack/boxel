@@ -16,7 +16,7 @@ export const BoxelBrandGuide = `:root {
   --font-sans: 'IBM Plex Sans', 'Helvetica Neue', Arial, ui-sans-serif, sans-serif, system-ui;
   --font-serif: 'IBM Plex Serif', 'Georgia', Times, serif;
   --foreground: var(--boxel-slate, #272330);
-  --input: var(--boxel-light, #FFFFFF);
+  --input: var(--boxel-450, #919191);
   --muted: #F5F5F5;
   --muted-foreground: #64748B;
   --popover: var(--boxel-light, #FFFFFF);
@@ -44,12 +44,14 @@ export const BoxelBrandGuide = `:root {
   --sidebar-primary-foreground: #0F172A;
   --sidebar-ring: var(--boxel-teal, #00FFBA);
   --spacing: 0.25rem;
+  --success: var(--boxel-success, #00AC3D);
   --tracking-normal: 0.01em;
   --brand-primary: var(--boxel-teal);
   --brand-secondary: var(--cardstack-purple);
   --brand-accent: var(--cardstack-lime);
   --brand-light: var(--boxel-dove, #F7F8FA);
   --brand-dark: var(--boxel-slate, #272330);
+  --boxel-switch-active-thumb: var(--boxel-dove, #F7F8FA);
   --boxel-teal: #00FFBA;
   --boxel-cyan: #00EBE5;
   --boxel-slate: #272330;
@@ -110,7 +112,7 @@ export const BoxelBrandGuide = `:root {
   --font-sans: 'IBM Plex Sans', 'Helvetica Neue', Arial, ui-sans-serif, sans-serif, system-ui;
   --font-serif: 'IBM Plex Serif', 'Georgia', Times, serif;
   --foreground: var(--brand-light, #F7F8FA);
-  --input: #27272A;
+  --input: #52525B;
   --muted: #27272A;
   --muted-foreground: #A1A1AA;
   --popover: #1E1E1E;
@@ -138,12 +140,14 @@ export const BoxelBrandGuide = `:root {
   --sidebar-primary-foreground: #0F172A;
   --sidebar-ring: var(--boxel-teal, #00FFBA);
   --spacing: 0.25rem;
+  --success: var(--boxel-success, #00AC3D);
   --tracking-normal: 0.01em;
   --brand-primary: var(--boxel-teal);
   --brand-secondary: var(--cardstack-purple);
   --brand-accent: var(--cardstack-lime);
   --brand-light: var(--boxel-dove, #F7F8FA);
   --brand-dark: var(--boxel-slate, #272330);
+  --boxel-switch-active-thumb: var(--boxel-dove, #F7F8FA);
   --boxel-teal: #00FFBA;
   --boxel-cyan: #00EBE5;
   --boxel-slate: #272330;

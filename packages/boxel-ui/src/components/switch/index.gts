@@ -80,7 +80,7 @@ const Switch: TemplateOnlyComponent<SwitchSignature> = <template>
         );
         --_switch-thumb-edge-color: var(
           --boxel-switch-thumb-edge,
-          color-mix(in oklch, var(--foreground) 12%, transparent)
+          color-mix(in oklch, var(--primary-foreground) 12%, transparent)
         );
 
         box-sizing: border-box;
