@@ -1942,13 +1942,20 @@ class Isolated extends Component<typeof Workspace> {
       }
       .door-open {
         flex: 0 0 auto; /* Keep the action inside its tile while the label ellipsizes */
-        border: none;
-        background: none;
-        padding: 0;
-        font: 600 12.5px var(--grid-sans);
-        color: var(--grid-interactive);
+        border: 0;
+        border-radius: 8px;
+        padding: 5px 12px;
+        background-color: var(--grid-accent);
+        color: var(--grid-accent-ink);
+        font: 600 12px var(--grid-sans);
         cursor: pointer;
         white-space: nowrap;
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.5),
+          0 1px 2px rgba(0, 0, 0, 0.1);
+      }
+      .door-open:hover {
+        background-color: var(--boxel-highlight-hover, #00da9f);
       }
 
       /* ── Inventory (Home): what lives here, grouped by kind ── */
