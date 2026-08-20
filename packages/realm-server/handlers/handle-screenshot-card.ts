@@ -1,5 +1,6 @@
 import type Koa from 'koa';
 
+import { isCaptureFormat } from '@cardstack/runtime-common';
 import { enqueueScreenshotCardJob } from '@cardstack/runtime-common/jobs/screenshot-card';
 import { userInitiatedPriority } from '@cardstack/runtime-common/queue';
 
@@ -64,7 +65,9 @@ export default function handleScreenshotCard({
     if (!cardId || typeof cardId !== 'string') {
       return sendResponseForBadRequest(ctxt, 'cardId is required');
     }
-    if (format !== 'isolated' && format !== 'embedded') {
+    // Shared with the GET `_screenshot/` DSL so both surfaces accept exactly
+    // the same capture formats.
+    if (!isCaptureFormat(format)) {
       return sendResponseForBadRequest(
         ctxt,
         'format must be "isolated" or "embedded"',
@@ -88,6 +91,7 @@ export default function handleScreenshotCard({
           runAs: userId,
           cardId,
           format,
+          persist: null,
         },
         queue,
         dbAdapter,

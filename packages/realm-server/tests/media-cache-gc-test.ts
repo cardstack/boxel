@@ -22,44 +22,11 @@ import {
   touchMediaCacheEntry,
 } from '@cardstack/runtime-common';
 
+import { FakeMediaCacheAdapter } from './helpers/fake-media-cache-adapter.ts';
 import { setupDB } from './helpers/index.ts';
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
-
-// In-memory MediaCacheAdapter: enough store to observe what the sweep
-// deletes, plus scriptable per-key delete failures.
-class FakeMediaCacheAdapter implements MediaCacheAdapter {
-  objects = new Map<string, Uint8Array>();
-  deleted: string[] = [];
-  failDeletesFor = new Set<string>();
-
-  async put(key: string, bytes: Uint8Array, _opts: { contentType: string }) {
-    if (!this.objects.has(key)) {
-      this.objects.set(key, bytes);
-    }
-  }
-  async head(key: string) {
-    let bytes = this.objects.get(key);
-    return bytes ? { size: bytes.length } : undefined;
-  }
-  async getStream(key: string) {
-    let bytes = this.objects.get(key);
-    if (!bytes) {
-      return undefined;
-    }
-    return (async function* () {
-      yield bytes;
-    })();
-  }
-  async delete(key: string) {
-    if (this.failDeletesFor.has(key)) {
-      throw new Error(`simulated delete failure for ${key}`);
-    }
-    this.deleted.push(key);
-    this.objects.delete(key);
-  }
-}
 
 module(basename(import.meta.filename), function (hooks) {
   let dbAdapter: PgAdapter;

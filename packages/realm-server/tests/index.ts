@@ -264,6 +264,7 @@ const ALL_TEST_FILES: string[] = [
   './media-cache-adapter-test',
   './media-cache-gc-test',
   './media-cache-serving-test',
+  './media-cache-dsl-test',
   './prerender-server-test',
   './prerender-manager-test',
   './prerender-host-shell-recycle-test',

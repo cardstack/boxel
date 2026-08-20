@@ -1,10 +1,8 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
-import { Readable } from 'node:stream';
 import type { PgAdapter } from '@cardstack/postgres';
 import type {
-  MediaCacheAdapter,
   MediaCacheEntry,
   QueuePublisher,
   Realm,
@@ -21,42 +19,11 @@ import {
 } from '@cardstack/runtime-common';
 
 import { nodeStreamToBuffer } from '../stream.ts';
+import { FakeMediaCacheAdapter } from './helpers/fake-media-cache-adapter.ts';
 import { setupDB } from './helpers/index.ts';
 
 const REALM_URL = 'http://test-realm/a/';
 const BYTES = new TextEncoder().encode('png-bytes');
-
-// Minimal store: real bytes behind the interface, with a switch between the
-// two stream shapes the serving layer handles (a node Readable, which
-// streams via `nodeStream`, and a bare async iterable, which is buffered).
-class FakeMediaCacheAdapter implements MediaCacheAdapter {
-  objects = new Map<string, Uint8Array>();
-  streamShape: 'readable' | 'iterable' = 'readable';
-
-  async put(key: string, bytes: Uint8Array, _opts: { contentType: string }) {
-    this.objects.set(key, bytes);
-  }
-  async head(key: string) {
-    let bytes = this.objects.get(key);
-    return bytes ? { size: bytes.length } : undefined;
-  }
-  async getStream(key: string) {
-    let bytes = this.objects.get(key);
-    if (!bytes) {
-      return undefined;
-    }
-    if (this.streamShape === 'readable') {
-      return Readable.from(Buffer.from(bytes));
-    }
-    return (async function* () {
-      yield bytes.slice(0, 3);
-      yield bytes.slice(3);
-    })();
-  }
-  async delete(key: string) {
-    this.objects.delete(key);
-  }
-}
 
 function requestContext(
   permissions: Record<string, string[]> = {},
