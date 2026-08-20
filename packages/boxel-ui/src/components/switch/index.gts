@@ -147,11 +147,25 @@ const Switch: TemplateOnlyComponent<SwitchSignature> = <template>
           --boxel-switch-active-thumb-icon,
           var(--_switch-thumb-icon-color)
         );
+        --_switch-min-target: var(--boxel-switch-min-target, 1.5rem);
 
         display: inline-flex;
         align-items: center;
-        position: relative;
         color: var(--boxel-switch-foreground, var(--foreground));
+        /* Pads the label out to the 24px minimum target size (WCAG 2.5.8)
+           when the drawn track is smaller, without growing the track. The
+           padding is inside the element's own box, so the target never
+           overlaps a neighboring control the way an outset overlay would;
+           max() keeps it at zero once the track already clears the minimum.
+           align-items: center keeps the track centered in the padded box. */
+        padding-block: max(
+          0px,
+          calc((var(--_switch-min-target) - var(--_switch-height)) / 2)
+        );
+        padding-inline: max(
+          0px,
+          calc((var(--_switch-min-target) - var(--_switch-width)) / 2)
+        );
       }
 
       .switch.has-label {
@@ -174,8 +188,7 @@ const Switch: TemplateOnlyComponent<SwitchSignature> = <template>
       }
 
       /* With no visible label the wrapper has no other content, so it sizes
-         exactly to this track and consumer CSS on the label element keeps
-         behaving as if the label were the track itself. */
+         to this track plus whatever padding the minimum target size adds. */
       .switch-track {
         box-sizing: border-box;
         flex: none;
@@ -221,15 +234,6 @@ const Switch: TemplateOnlyComponent<SwitchSignature> = <template>
            foreground-derived color keeps the thumb visible in themes where
            --input and --background nearly coincide. */
         box-shadow: 0 0 0 1px var(--_switch-thumb-edge-color);
-      }
-
-      /* Extends the clickable surface past the drawn control so it meets the
-         24px minimum target size (WCAG 2.5.8) without growing visually. Part
-         of the label, so clicks here toggle as usual. */
-      .switch::before {
-        content: '';
-        position: absolute;
-        inset: calc(-1 * var(--boxel-switch-hit-inset, 0.5rem));
       }
 
       /* Thumb travel is width minus height: border and padding subtract

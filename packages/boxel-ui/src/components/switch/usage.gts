@@ -81,13 +81,13 @@ export default class SwitchUsage extends Component {
       this.boxelSwitchThumbEdge,
       this.boxelSwitchThumbIcon,
       this.boxelSwitchActiveThumbIcon,
-      this.boxelSwitchHitInset,
+      this.boxelSwitchMinTarget,
     ]) {
       info.value = undefined;
     }
   }
   @cssVariable({ cssClassName: 'switch-freestyle-container' })
-  declare boxelSwitchHitInset: CSSVariableInfo;
+  declare boxelSwitchMinTarget: CSSVariableInfo;
 
   <template>
     <div
@@ -102,7 +102,7 @@ export default class SwitchUsage extends Component {
         boxel-switch-thumb-edge=this.boxelSwitchThumbEdge.value
         boxel-switch-thumb-icon=this.boxelSwitchThumbIcon.value
         boxel-switch-active-thumb-icon=this.boxelSwitchActiveThumbIcon.value
-        boxel-switch-hit-inset=this.boxelSwitchHitInset.value
+        boxel-switch-min-target=this.boxelSwitchMinTarget.value
       }}
     >
       <FreestyleUsage @name='Switch'>
@@ -255,12 +255,12 @@ export default class SwitchUsage extends Component {
             @onInput={{this.boxelSwitchActiveThumbIcon.update}}
           />
           <Css.Basic
-            @name='boxel-switch-hit-inset'
+            @name='boxel-switch-min-target'
             @type='dimension'
-            @description='How far the clickable area extends past the visible track on each side (default 0.5rem, meeting the 24px minimum target size). Reduce it if switches sit closer together than the default reach'
-            @defaultValue={{this.boxelSwitchHitInset.defaults}}
-            @value={{this.boxelSwitchHitInset.value}}
-            @onInput={{this.boxelSwitchHitInset.update}}
+            @description='Minimum clickable size of the control (default 1.5rem, the 24px minimum target size). The label pads itself out to this size when the drawn track is smaller; the padding stays inside the element, so it never overlaps neighbouring controls'
+            @defaultValue={{this.boxelSwitchMinTarget.defaults}}
+            @value={{this.boxelSwitchMinTarget.value}}
+            @onInput={{this.boxelSwitchMinTarget.update}}
           />
         </:cssVars>
       </FreestyleUsage>
