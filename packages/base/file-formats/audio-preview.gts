@@ -89,8 +89,11 @@ export class AudioPreview extends GlimmerComponent<FilePreviewSignature> {
     return `url(#${this.clipId})`;
   }
 
+  // Gate on the rounded width, not the raw ratio: on very long media the first
+  // moments of playback round to a zero-width clip window, and keying off the
+  // ratio there would dim the whole waveform while highlighting nothing.
   get hasPlayed(): boolean {
-    return this.playedRatio > 0;
+    return this.playedWidth > 0;
   }
 
   // Width of the clip window in the 0–100 viewBox. One decimal keeps the
