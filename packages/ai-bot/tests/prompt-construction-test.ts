@@ -1740,7 +1740,11 @@ Current date and time: 2025-06-11T11:43:00.533Z
     });
   });
 
-  test('Adds the "unable to edit cards" only if there are attached cards and no tools', async () => {
+  test('Adds the "unable to edit cards" note only when no card is open or attached to the message', async () => {
+    // Interactive messages no longer inject per-card patch tools, so the
+    // access statement keys off what the user actually shared: an open or
+    // message-attached card is the grant; without one (and with no attached
+    // files) the model is told to ask instead of guessing at ids.
     const eventList: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
@@ -1751,7 +1755,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
           body: 'set the name to dave',
           data: {
             context: {
-              openCardIds: [rri('http://localhost:4201/drafts/Author/1')],
+              openCardIds: [],
               tools: [],
               submode: 'code',
               functions: [],
@@ -1814,22 +1818,20 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
 
     let nonEditableCardsMessage =
-      'You are unable to edit any cards, the user has not given you access, they need to open the card and let it be auto-attached.';
+      'You are unable to edit any cards: the user has no card open and none attached to this message. Ask them to open the card they want changed.';
 
     let userContextMessage = messages?.[messages.length - 1];
     assert.ok(
       messageText(userContextMessage).includes(nonEditableCardsMessage),
-      'The context leading the user turn should include the "unable to edit cards" message when there are attached cards and no tools, and no attached files, but was ' +
+      'The context leading the user turn should include the "unable to edit cards" message when there are attached cards but none open, and no attached files, but was ' +
         userContextMessage?.content,
     );
 
-    // Now add a tool
+    // Now open a card: the grant is the user opening it, not a tool
     let cardMessageContent = eventList[0].content as CardMessageContent;
     cardMessageContent.data.context ||= {};
-    cardMessageContent.data.context.tools = [
-      getPatchTool(rri('http://localhost:4201/drafts/Author/1'), {
-        attributes: { firstName: { type: 'string' } },
-      }),
+    cardMessageContent.data.context.openCardIds = [
+      rri('http://localhost:4201/drafts/Author/1'),
     ];
 
     const { messages: messages2 } = await getPromptParts(
@@ -1842,7 +1844,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       !messageText(messages2?.[messages2.length - 2]).includes(
         nonEditableCardsMessage,
       ),
-      'System context message should not include the "unable to edit cards" message when there are attached cards and a tool',
+      'System context message should not include the "unable to edit cards" message when a card is open',
     );
 
     // Now remove cards, tools, and add an attached file

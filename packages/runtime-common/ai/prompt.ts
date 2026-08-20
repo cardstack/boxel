@@ -1532,7 +1532,10 @@ function toCheckCorrectnessResultContent(
 export async function buildPromptForModel(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
-  tools: Tool[] = [],
+  // Kept positionally for the many call sites; the context message no
+  // longer derives anything from the tools array (the request carries the
+  // tools separately).
+  _tools: Tool[] = [],
   skillCards: EnabledSkill[] = [],
   disabledSkillIds: string[] = [],
   client: MatrixClient,
@@ -1657,7 +1660,6 @@ export async function buildPromptForModel(
   let contextContent = await buildContextMessage(
     history,
     aiBotUserId,
-    tools,
     disabledSkillIds,
   );
   // The context carries the current time, so its bytes change on every
@@ -2278,7 +2280,6 @@ export const buildAttachmentsMessagePart = async (
 export const buildContextMessage = async (
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
-  tools: Tool[],
   disabledSkillIds: string[],
 ): Promise<string> => {
   let result = '';
@@ -2388,17 +2389,19 @@ export const buildContextMessage = async (
   }
   result += `\nCurrent date and time: ${new Date().toISOString()}\n`;
 
-  let cardPatchTool = tools.find(
-    (tool) => tool.function.name === 'patchCardInstance',
-  );
-
+  // The old wording keyed off the per-card patchCardInstance tool, which
+  // interactive messages no longer inject (its card-specific schema churned
+  // the tools array). The access statement is now derived from what the
+  // user actually shared: with no attached files and no open cards, there
+  // is nothing the model may write to, and it should ask rather than guess
+  // at ids.
   if (
     attachedFiles.length == 0 &&
-    !cardPatchTool &&
+    (context?.openCardIds?.length ?? 0) === 0 &&
     hasSomeAttachedCards(history, aiBotUserId)
   ) {
     result +=
-      'You are unable to edit any cards, the user has not given you access, they need to open the card and let it be auto-attached.';
+      'You are unable to edit any cards: the user has no card open and none attached to this message. Ask them to open the card they want changed.';
   }
 
   return result;
