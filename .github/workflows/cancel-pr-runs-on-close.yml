@@ -30,16 +30,32 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
           BRANCH: ${{ github.event.pull_request.head.ref }}
           SELF: ${{ github.run_id }}
         run: |
-          # Excludes this run: it is itself a run on the branch being cleaned up,
-          # and cancelling it would stop the loop partway through.
-          ids=$(gh api "repos/${REPO}/actions/runs?branch=${BRANCH}&per_page=100" \
-            --jq ".workflow_runs[]
-                  | select(.status == \"queued\" or .status == \"in_progress\")
-                  | select(.id != ${SELF})
-                  | .id")
+          # Runs started *by* this close event have to survive: this one, and any
+          # teardown a workflow performs on close — observability-preview.yml's
+          # `preview-cleanup` removes the PR's Grafana preview that way, and
+          # cancelling it would strand the preview and its sticky comment. Those
+          # runs are exactly the ones created at or after the close, so the
+          # timestamp separates them without naming individual workflows.
+          CLOSED_AT=$(gh api "repos/${REPO}/pulls/${PR}" --jq '.closed_at')
+          if [ -z "$CLOSED_AT" ] || [ "$CLOSED_AT" = "null" ]; then
+            echo "No closed_at on PR ${PR}; refusing to cancel anything."
+            exit 0
+          fi
+
+          # Filtering by status server-side keeps this to the runs that can
+          # actually be cancelled, so paginating cannot walk a long-lived
+          # branch's entire history.
+          ids=$(for run_status in queued in_progress; do
+            gh api --paginate "repos/${REPO}/actions/runs?branch=${BRANCH}&status=${run_status}&per_page=100" \
+              --jq ".workflow_runs[]
+                    | select(.id != ${SELF})
+                    | select(.created_at < \"${CLOSED_AT}\")
+                    | .id"
+          done)
           if [ -z "$ids" ]; then
             echo "No in-flight runs on ${BRANCH}."
             exit 0
