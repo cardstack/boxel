@@ -130,6 +130,11 @@ export async function createRealm(
     param(url),
   ])) as { url: string }[];
   if (existingRows.length > 0) {
+    // boxel-cli's ensurePersonalRealm recognizes this collision by the
+    // phrase "already exists" and extracts the single-quoted URL to re-link
+    // the realm; keep both if rewording (packages/boxel-cli/src/lib/
+    // personal-realm.ts, pinned end-to-end by packages/matrix/tests/
+    // cli-sso.spec.ts).
     throw errorWithStatus(400, `realm '${url}' already exists on this server`);
   }
 
