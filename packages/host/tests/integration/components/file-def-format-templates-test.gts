@@ -337,4 +337,101 @@ module('Integration | FileDef format templates', function (hooks) {
         '5s into a 10s track clips the played layer at half the waveform',
       );
   });
+
+  test('the audio waveform tears down the played span when playback resets to rest', async function (assert) {
+    let { AudioDef } = await loader.import<typeof AudioDefModule>(
+      `${baseRealm.url}audio-file-def`,
+    );
+    let { WaveformMetadataField } = await loader.import<
+      typeof MetadataFieldsModule
+    >(`${baseRealm.url}file-formats/metadata-fields`);
+
+    let audio = new AudioDef({
+      id: 'http://example.com/audio/take.wav',
+      url: 'http://example.com/audio/take.wav',
+      sourceUrl: 'http://example.com/audio/take.wav',
+      name: 'take.wav',
+      contentType: 'audio/wav',
+      contentSize: 2_646_078,
+      duration: 10,
+      waveform: new WaveformMetadataField({
+        decodeStatus: 'ok',
+        barsJson: JSON.stringify(Array.from({ length: 32 }, () => 0.5)),
+        barCount: 32,
+      }),
+    });
+
+    await renderCard(loader, audio, 'isolated');
+
+    let player = find('[data-test-audio-player]') as HTMLAudioElement;
+    // No media loads here, so back the element's currentTime with a mutable
+    // own property and lean on the extracted duration, as above.
+    let position = 5;
+    Object.defineProperty(player, 'currentTime', {
+      configurable: true,
+      get: () => position,
+    });
+    player.dispatchEvent(new Event('timeupdate'));
+    await settled();
+    assert
+      .dom('[data-test-audio-waveform-played]')
+      .exists('playback marks the played span');
+
+    // A seek back to the very start must drop has-progress and remove the
+    // overlay again — the waveform returns to its at-rest full-strength look.
+    position = 0;
+    player.dispatchEvent(new Event('seeking'));
+    await settled();
+    assert
+      .dom('[data-test-audio-waveform-played]')
+      .doesNotExist('seeking back to the start tears the played overlay down');
+  });
+
+  test('the audio waveform prefers the media element duration once metadata loads', async function (assert) {
+    let { AudioDef } = await loader.import<typeof AudioDefModule>(
+      `${baseRealm.url}audio-file-def`,
+    );
+    let { WaveformMetadataField } = await loader.import<
+      typeof MetadataFieldsModule
+    >(`${baseRealm.url}file-formats/metadata-fields`);
+
+    let audio = new AudioDef({
+      id: 'http://example.com/audio/take.wav',
+      url: 'http://example.com/audio/take.wav',
+      sourceUrl: 'http://example.com/audio/take.wav',
+      name: 'take.wav',
+      contentType: 'audio/wav',
+      contentSize: 2_646_078,
+      duration: 10,
+      waveform: new WaveformMetadataField({
+        decodeStatus: 'ok',
+        barsJson: JSON.stringify(Array.from({ length: 32 }, () => 0.5)),
+        barCount: 32,
+      }),
+    });
+
+    await renderCard(loader, audio, 'isolated');
+
+    let player = find('[data-test-audio-player]') as HTMLAudioElement;
+    // Metadata has loaded: the element reports its own duration, which must win
+    // over the extracted 10s. 5s of a 20s media track is a quarter, not the
+    // half the extracted duration would produce.
+    Object.defineProperty(player, 'duration', {
+      configurable: true,
+      value: 20,
+    });
+    Object.defineProperty(player, 'currentTime', {
+      configurable: true,
+      value: 5,
+    });
+    player.dispatchEvent(new Event('timeupdate'));
+    await settled();
+    assert
+      .dom('[data-test-audio-waveform-played]')
+      .hasAttribute(
+        'data-test-audio-waveform-played',
+        '25',
+        "the element's 20s duration wins over the extracted 10s",
+      );
+  });
 });
