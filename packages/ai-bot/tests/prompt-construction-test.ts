@@ -1960,44 +1960,16 @@ Current date and time: 2025-06-11T11:43:00.533Z
       fakeMatrixClient,
     );
     assert.equal(functions.length, 1);
-    if (functions.length > 0) {
-      assert.deepEqual(functions[0], {
-        type: 'function',
-        function: {
-          name: 'patchCardInstance',
-          description:
-            'Propose a patch to an existing card instance to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. If a relationship field value is removed, set the self property of the specific item to null. When editing a relationship array, display the full array in the patch code. Ensure the description explains what change you are making.',
-          parameters: {
-            type: 'object',
-            properties: {
-              description: {
-                type: 'string',
-              },
-              attributes: {
-                type: 'object',
-                properties: {
-                  cardId: {
-                    type: 'string',
-                    const: 'http://localhost:4201/experiments/Friend/1',
-                  },
-                  patch: {
-                    type: 'object',
-                    properties: {
-                      attributes: {
-                        firstName: {
-                          type: 'string',
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-            required: ['attributes', 'description'],
-          },
+    // Byte-for-byte the tool the FIRST message carried — regenerated with
+    // the same inputs, so the assertion stays type-safe.
+    assert.deepEqual(
+      functions[0],
+      getPatchTool(rri('http://localhost:4201/experiments/Friend/1'), {
+        attributes: {
+          firstName: { type: 'string' },
         },
-      });
-    }
+      }),
+    );
   });
 
   test('should include instructions in system prompt for skill cards', async () => {

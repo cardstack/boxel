@@ -28,7 +28,7 @@ function uniqueRealmName(prefix: string) {
 }
 
 test.describe('Commands', () => {
-  test(`it includes the patch tool in message event when top-most card is writable and context is shared`, async ({
+  test(`it does not inject a per-card patch tool even when the top-most card is writable and context is shared`, async ({
     page,
   }) => {
     const { username, password } = await createSubscribedUserAndLogin(
@@ -75,15 +75,18 @@ test.describe('Commands', () => {
       );
     }).toPass();
     let boxelMessageData = JSON.parse(message!.content.data);
-    expect(boxelMessageData.context.tools.length).toBeGreaterThan(0);
-    let patchCardTool = boxelMessageData.context.tools.find(
+    // The card is open and shared in context — but interactive messages no
+    // longer inject the per-card patchCardInstance tool: its definition was
+    // generated from the open card's type, so every card open, switch, or
+    // schema edit changed the tools array, and tool definitions render
+    // ahead of all message history, re-billing the whole conversation on
+    // every change. Card edits go through patch-fields and SEARCH/REPLACE
+    // patches instead.
+    expect(boxelMessageData.context.openCardIds).toContain(cardId);
+    let patchCardTool = (boxelMessageData.context.tools ?? []).find(
       (t: any) => t.function?.name === 'patchCardInstance',
     );
-    expect(patchCardTool).toBeDefined();
-    expect(
-      patchCardTool?.function?.parameters?.properties?.attributes?.properties
-        ?.cardId?.const,
-    ).toEqual(cardId);
+    expect(patchCardTool).toBeUndefined();
   });
 
   test(`it does not include patch tool in message event for an open card that is not attached`, async ({
