@@ -855,6 +855,46 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('a prefix-form root excludes itself from its own dependencies', async function (assert) {
+    // Root exclusion is a string comparison, so the session root and the
+    // consumers recorded against it have to be in the same form. A card must
+    // never appear in its own dependency list.
+    let root = '@cardstack/catalog/Author/mango.json';
+    beginRuntimeDependencyTrackingSession({
+      sessionKey: 'session-prefix-root',
+      rootURL: root,
+      rootKind: 'instance',
+    });
+
+    await withRuntimeDependencyTrackingContext(
+      {
+        mode: 'non-query',
+        source: 'test:prefix-root',
+        consumer: root,
+        consumerKind: 'instance',
+      },
+      async () => {
+        trackRuntimeModuleDependency('@cardstack/catalog/author');
+        // The root referenced by its extensionless spelling is still the root.
+        trackRuntimeInstanceDependency('@cardstack/catalog/Author/mango');
+      },
+    );
+
+    let { deps } = snapshotRuntimeDependencies({ excludeQueryOnly: true });
+    assert.false(
+      deps.includes(root),
+      'the root is not listed as its own dependency',
+    );
+    assert.false(
+      deps.includes('@cardstack/catalog/Author/mango'),
+      'nor is the extensionless spelling of the root',
+    );
+    assert.true(
+      deps.includes('@cardstack/catalog/author'),
+      'a genuine dependency of the root is still recorded',
+    );
+  });
+
   test('drops identifiers that are neither a URL nor a prefix-form RRI', async function (assert) {
     beginRuntimeDependencyTrackingSession({
       sessionKey: 'session-junk',
