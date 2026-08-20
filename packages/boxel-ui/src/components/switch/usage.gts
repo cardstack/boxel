@@ -1,3 +1,5 @@
+import Moon from '@cardstack/boxel-icons/moon';
+import Sun from '@cardstack/boxel-icons/sun';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -19,6 +21,7 @@ export default class SwitchUsage extends Component {
   @tracked size: SwitchSize = 'base';
 
   @tracked isLabeledEnabled = false;
+  @tracked isDarkModeEnabled = false;
 
   @action
   handleChange(isEnabled: boolean) {
@@ -28,6 +31,11 @@ export default class SwitchUsage extends Component {
   @action
   handleLabeledChange(isEnabled: boolean) {
     this.isLabeledEnabled = isEnabled;
+  }
+
+  @action
+  handleDarkModeChange(isEnabled: boolean) {
+    this.isDarkModeEnabled = isEnabled;
   }
 
   @cssVariable({ cssClassName: 'switch-freestyle-container' })
@@ -44,6 +52,10 @@ export default class SwitchUsage extends Component {
   declare boxelSwitchActiveThumb: CSSVariableInfo;
   @cssVariable({ cssClassName: 'switch-freestyle-container' })
   declare boxelSwitchThumbEdge: CSSVariableInfo;
+  @cssVariable({ cssClassName: 'switch-freestyle-container' })
+  declare boxelSwitchThumbIcon: CSSVariableInfo;
+  @cssVariable({ cssClassName: 'switch-freestyle-container' })
+  declare boxelSwitchActiveThumbIcon: CSSVariableInfo;
 
   constructor(owner: Owner, args: Record<string, never>) {
     super(owner, args);
@@ -61,6 +73,9 @@ export default class SwitchUsage extends Component {
       this.boxelSwitchThumb,
       this.boxelSwitchActiveThumb,
       this.boxelSwitchThumbEdge,
+      this.boxelSwitchThumbIcon,
+      this.boxelSwitchActiveThumbIcon,
+      this.boxelSwitchHitInset,
     ]) {
       info.value = undefined;
     }
@@ -79,6 +94,8 @@ export default class SwitchUsage extends Component {
         boxel-switch-thumb=this.boxelSwitchThumb.value
         boxel-switch-active-thumb=this.boxelSwitchActiveThumb.value
         boxel-switch-thumb-edge=this.boxelSwitchThumbEdge.value
+        boxel-switch-thumb-icon=this.boxelSwitchThumbIcon.value
+        boxel-switch-active-thumb-icon=this.boxelSwitchActiveThumbIcon.value
         boxel-switch-hit-inset=this.boxelSwitchHitInset.value
       }}
     >
@@ -137,6 +154,16 @@ export default class SwitchUsage extends Component {
             @onInput={{fn (mut this.size)}}
             @optional={{true}}
           />
+          <Args.Component
+            @name='checkedIcon'
+            @description='Decorative icon rendered inside the thumb while the switch is on (e.g. a boxel-icons component). Skipped at size small'
+            @optional={{true}}
+          />
+          <Args.Component
+            @name='uncheckedIcon'
+            @description='Decorative icon rendered inside the thumb while the switch is off. Skipped at size small'
+            @optional={{true}}
+          />
           <Args.Action
             @name='onChange'
             @description='Called with the requested on/off state when the user toggles the switch. Update isEnabled here to apply the change'
@@ -186,7 +213,7 @@ export default class SwitchUsage extends Component {
           <Css.Basic
             @name='boxel-switch-active-thumb'
             @type='color'
-            @description='Color of the thumb when the switch is on (defaults to boxel-switch-thumb; themed light in dark mode)'
+            @description='Color of the thumb when the switch is on (defaults to boxel-switch-thumb)'
             @defaultValue={{this.boxelSwitchActiveThumb.defaults}}
             @value={{this.boxelSwitchActiveThumb.value}}
             @onInput={{this.boxelSwitchActiveThumb.update}}
@@ -194,10 +221,26 @@ export default class SwitchUsage extends Component {
           <Css.Basic
             @name='boxel-switch-thumb-edge'
             @type='color'
-            @description='Color of the 1px ring around the thumb (defaults to a translucent foreground mix so the thumb stays visible when track and thumb colors coincide)'
+            @description='Color of the 1px ring around the thumb (defaults to a translucent primary-foreground mix so the thumb stays visible when track and thumb colors coincide)'
             @defaultValue={{this.boxelSwitchThumbEdge.defaults}}
             @value={{this.boxelSwitchThumbEdge.value}}
             @onInput={{this.boxelSwitchThumbEdge.update}}
+          />
+          <Css.Basic
+            @name='boxel-switch-thumb-icon'
+            @type='color'
+            @description='Color of the thumb icon (defaults to the foreground color)'
+            @defaultValue={{this.boxelSwitchThumbIcon.defaults}}
+            @value={{this.boxelSwitchThumbIcon.value}}
+            @onInput={{this.boxelSwitchThumbIcon.update}}
+          />
+          <Css.Basic
+            @name='boxel-switch-active-thumb-icon'
+            @type='color'
+            @description='Color of the thumb icon when the switch is on (defaults to boxel-switch-thumb-icon)'
+            @defaultValue={{this.boxelSwitchActiveThumbIcon.defaults}}
+            @value={{this.boxelSwitchActiveThumbIcon.value}}
+            @onInput={{this.boxelSwitchActiveThumbIcon.update}}
           />
           <Css.Basic
             @name='boxel-switch-hit-inset'
@@ -222,6 +265,26 @@ export default class SwitchUsage extends Component {
             @onChange={{this.handleLabeledChange}}
           >
             Email notifications
+          </Switch>
+        </:example>
+      </FreestyleUsage>
+
+      <FreestyleUsage @name='Switch with thumb icons'>
+        <:description>
+          checkedIcon and uncheckedIcon render inside the thumb for the matching
+          state. The icons are decorative — the label still names the control —
+          and they are skipped at size small, where the thumb is too small for a
+          legible glyph.
+        </:description>
+        <:example>
+          <Switch
+            @isEnabled={{this.isDarkModeEnabled}}
+            @onChange={{this.handleDarkModeChange}}
+            @checkedIcon={{Moon}}
+            @uncheckedIcon={{Sun}}
+            @size='touch'
+          >
+            Dark mode
           </Switch>
         </:example>
       </FreestyleUsage>

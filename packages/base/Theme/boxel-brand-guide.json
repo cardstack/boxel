@@ -10,12 +10,6 @@
     "attributes": {
       "spacing": "0.25rem",
       "version": "7.0",
-      "customCssVariables": [
-        {
-          "name": "boxelSwitchActiveThumb",
-          "value": "var(--boxel-dove, #F7F8FA)"
-        }
-      ],
       "cardInfo": {
         "notes": "v7.0 - Dense Modularity (UI Optimized)",
         "name": "Boxel Brand Guide",

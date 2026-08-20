@@ -51,7 +51,6 @@ export const BoxelBrandGuide = `:root {
   --brand-accent: var(--cardstack-lime);
   --brand-light: var(--boxel-dove, #F7F8FA);
   --brand-dark: var(--boxel-slate, #272330);
-  --boxel-switch-active-thumb: var(--boxel-dove, #F7F8FA);
   --boxel-teal: #00FFBA;
   --boxel-cyan: #00EBE5;
   --boxel-slate: #272330;
@@ -147,7 +146,6 @@ export const BoxelBrandGuide = `:root {
   --brand-accent: var(--cardstack-lime);
   --brand-light: var(--boxel-dove, #F7F8FA);
   --brand-dark: var(--boxel-slate, #272330);
-  --boxel-switch-active-thumb: var(--boxel-dove, #F7F8FA);
   --boxel-teal: #00FFBA;
   --boxel-cyan: #00EBE5;
   --boxel-slate: #272330;

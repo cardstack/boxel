@@ -1,8 +1,9 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { concat, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
+import type { ComponentLike } from '@glint/template';
 
-import { cn } from '../../helpers.gts';
+import { cn, eq } from '../../helpers.gts';
 
 export type SwitchSize = 'small' | 'base' | 'touch';
 export const switchSizeOptions: SwitchSize[] = ['small', 'base', 'touch'];
@@ -15,6 +16,10 @@ interface SwitchSignature {
   Element: HTMLLabelElement;
 }
 interface SwitchArgs {
+  /* decorative glyph inside the thumb for the matching state; the label
+     still names the control. Skipped at size small — the thumb is too
+     small to carry a legible glyph there. */
+  checkedIcon?: ComponentLike<{ Element: Element }>;
   disabled?: boolean;
   isEnabled: boolean;
   /* names the switch for assistive technology when no block is given; a
@@ -22,6 +27,13 @@ interface SwitchArgs {
   label?: string;
   onChange: (isEnabled: boolean) => void;
   size?: SwitchSize;
+  uncheckedIcon?: ComponentLike<{ Element: Element }>;
+}
+
+/* explicit width/height attributes so icons carry intrinsic size (they
+   scale with the thumb per preset, not with ambient CSS) */
+function iconSize(size?: SwitchSize) {
+  return size === 'touch' ? 14 : 10;
 }
 
 /* Fully controlled: preventDefault keeps the checkbox from toggling itself
@@ -81,6 +93,16 @@ const Switch: TemplateOnlyComponent<SwitchSignature> = <template>
         disabled={{@disabled}}
         role='switch'
       />
+      {{! presentational: the input above carries all semantics and state }}
+      <span class='switch-thumb' aria-hidden='true'>
+        {{#unless (eq @size 'small')}}
+          {{#let (if @isEnabled @checkedIcon @uncheckedIcon) as |StateIcon|}}
+            {{#if StateIcon}}
+              <StateIcon width={{iconSize @size}} height={{iconSize @size}} />
+            {{/if}}
+          {{/let}}
+        {{/unless}}
+      </span>
     </span>
   </label>
 
@@ -102,6 +124,14 @@ const Switch: TemplateOnlyComponent<SwitchSignature> = <template>
         --_switch-thumb-edge-color: var(
           --boxel-switch-thumb-edge,
           color-mix(in oklch, var(--primary-foreground) 12%, transparent)
+        );
+        --_switch-thumb-icon-color: var(
+          --boxel-switch-thumb-icon,
+          var(--foreground)
+        );
+        --_switch-active-thumb-icon-color: var(
+          --boxel-switch-active-thumb-icon,
+          var(--_switch-thumb-icon-color)
         );
 
         display: inline-flex;
@@ -135,6 +165,7 @@ const Switch: TemplateOnlyComponent<SwitchSignature> = <template>
       .switch-track {
         box-sizing: border-box;
         flex: none;
+        position: relative;
         width: var(--_switch-width);
         height: var(--_switch-height);
         border-radius: var(--boxel-border-radius-pill);
@@ -146,25 +177,36 @@ const Switch: TemplateOnlyComponent<SwitchSignature> = <template>
         box-shadow: var(--shadow-xs);
       }
 
+      /* Invisible semantic layer over the track: still the focusable,
+         checkable element and the :focus-visible source for the track's
+         ring; the sibling .switch-thumb draws what used to be here. */
       .switch-input {
         -webkit-appearance: none;
         appearance: none;
+        position: absolute;
+        inset: 0;
         margin: 0;
-        /* the UA gives disabled inputs their own cursor, which would make
-           the thumb disagree with the track */
+        opacity: 0;
+        /* the UA gives disabled inputs their own cursor, which would
+           disagree with the control's */
         cursor: inherit;
+      }
+
+      .switch-thumb {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
         height: 100%;
         aspect-ratio: 1;
         background-color: var(--_switch-thumb-color);
+        /* icons draw with currentColor */
+        color: var(--_switch-thumb-icon-color);
         border-radius: 50%;
         /* a shadow ring, not a border: a border would add to the thumb's
            border-box and break the height:100% + aspect-ratio square. The
            foreground-derived color keeps the thumb visible in themes where
            --input and --background nearly coincide. */
         box-shadow: 0 0 0 1px var(--_switch-thumb-edge-color);
-        /* the control's ring is drawn on the track below; the UA ring here
-           would halo the thumb instead */
-        outline: none;
       }
 
       /* Extends the clickable surface past the drawn control so it meets the
@@ -180,14 +222,15 @@ const Switch: TemplateOnlyComponent<SwitchSignature> = <template>
          equally from the track's content box and the (square, track-height)
          thumb, so the difference holds at any size or border/padding and the
          thumb always lands flush against the far edge. */
-      .switch.checked .switch-input {
+      .switch.checked .switch-thumb {
         background-color: var(--_switch-active-thumb-color);
+        color: var(--_switch-active-thumb-icon-color);
         transform: translateX(
           calc(var(--_switch-width) - var(--_switch-height))
         );
       }
 
-      .switch.checked:dir(rtl) .switch-input {
+      .switch.checked:dir(rtl) .switch-thumb {
         transform: translateX(
           calc(-1 * (var(--_switch-width) - var(--_switch-height)))
         );
@@ -205,8 +248,8 @@ const Switch: TemplateOnlyComponent<SwitchSignature> = <template>
       /* pressed-state affordance: the thumb swells slightly under the
          pointer. `scale` composes with the checked-state translate, so it
          works in both positions. */
-      .switch:not(.disabled):active .switch-input {
-        scale: 1.15;
+      .switch:not(.disabled):active .switch-thumb {
+        scale: 1.05;
       }
 
       @media (prefers-reduced-motion: no-preference) {
@@ -214,7 +257,7 @@ const Switch: TemplateOnlyComponent<SwitchSignature> = <template>
           transition: background-color 0.1s ease-in;
         }
 
-        .switch-input {
+        .switch-thumb {
           transition:
             transform 0.1s ease-in,
             scale 0.1s ease-in;
