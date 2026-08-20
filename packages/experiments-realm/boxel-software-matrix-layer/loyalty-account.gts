@@ -5,7 +5,9 @@ import {
   contains,
   field,
   linksTo,
+  realmURL,
 } from '@cardstack/base/card-api';
+import { identifyCard, type getCards } from '@cardstack/runtime-common';
 import StringField from '@cardstack/base/string';
 import NumberField from '@cardstack/base/number';
 import DateField from '@cardstack/base/date';
@@ -264,6 +266,76 @@ export class LoyaltyAccount extends CardDef {
   };
 
   static isolated = class Isolated extends Component<typeof LoyaltyAccount> {
+    private ledgerQuery: ReturnType<getCards> | undefined;
+
+    constructor(owner: unknown, args: any) {
+      super(owner as never, args as never);
+      // The ledger is a query, never a link array — see the class doc.
+      this.ledgerQuery = this.args.context?.getCards(
+        this,
+        () => {
+          let ref = identifyCard(PointsTransaction);
+          return ref && this.args.model?.id
+            ? { filter: { type: ref } }
+            : undefined;
+        },
+        () => {
+          let url = this.args.model?.[realmURL]?.href;
+          return url ? [url] : [];
+        },
+        { isLive: true },
+      );
+    }
+
+    get ledger(): PointsTransaction[] {
+      let id = this.args.model?.id;
+      if (!id) {
+        return [];
+      }
+      return ((this.ledgerQuery?.instances ?? []) as PointsTransaction[])
+        .filter((t) => t?.account?.id === id)
+        .sort(
+          (a, b) =>
+            new Date(b.occurredAt ?? 0).getTime() -
+            new Date(a.occurredAt ?? 0).getTime(),
+        )
+        .slice(0, 10);
+    }
+
+    get ledgerLoading(): boolean {
+      return Boolean(this.ledgerQuery?.isLoading);
+    }
+
+    /** Prerender has no query surface; the panel only renders live. */
+    get hasLedgerQuery(): boolean {
+      return Boolean(this.ledgerQuery);
+    }
+
+    signedAmount = (transaction: PointsTransaction): string => {
+      let amount = transaction.amount ?? 0;
+      return `${amount > 0 ? '+' : ''}${new Intl.NumberFormat().format(amount)}`;
+    };
+
+    amountStyle = (transaction: PointsTransaction) => {
+      let hue = (transaction.amount ?? 0) > 0 ? 'green' : 'red';
+      return htmlSafeColor(stateColor(hue).fg);
+    };
+
+    whenLabel = (transaction: PointsTransaction): string => {
+      let at = transaction.occurredAt;
+      if (!at) {
+        return '';
+      }
+      let d = new Date(at);
+      return Number.isNaN(d.getTime())
+        ? ''
+        : d.toLocaleDateString(undefined, {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+          });
+    };
+
     <template>
       <article class='la-page'>
         <header class='lh'>
@@ -305,6 +377,39 @@ export class LoyaltyAccount extends CardDef {
             </span>
           </div>
         </section>
+        {{#if this.hasLedgerQuery}}
+          <section class='panel'>
+            <h2>Ledger</h2>
+            {{#if this.ledgerLoading}}
+              <p class='ledger-note'>Loading points activity…</p>
+            {{else if this.ledger.length}}
+              <ol class='ledger'>
+                {{#each this.ledger key='id' as |transaction|}}
+                  <li class='ledger-row'>
+                    <span
+                      class='ledger-amount'
+                      style={{this.amountStyle transaction}}
+                    >{{this.signedAmount transaction}}</span>
+                    <span class='ledger-reason'>{{if
+                        transaction.reason
+                        transaction.reason
+                        'Points adjustment'
+                      }}</span>
+                    {{#if transaction.source}}
+                      <span class='ledger-source'>{{transaction.source}}</span>
+                    {{/if}}
+                    <span class='ledger-when'>{{this.whenLabel
+                        transaction
+                      }}</span>
+                  </li>
+                {{/each}}
+              </ol>
+            {{else}}
+              <p class='ledger-note'>No points activity yet — it starts with
+                the first earn.</p>
+            {{/if}}
+          </section>
+        {{/if}}
         {{#if @model.holder}}
           <section class='panel'>
             <h2>Holder</h2>
@@ -402,6 +507,64 @@ export class LoyaltyAccount extends CardDef {
         .holder {
           border: 1px solid var(--border, #e5e7eb);
           border-radius: 0.5rem;
+        }
+        .ledger {
+          list-style: none;
+          margin: 0;
+          padding: 0;
+          display: flex;
+          flex-direction: column;
+        }
+        .ledger-row {
+          display: flex;
+          align-items: baseline;
+          gap: 0.625rem;
+          padding: 0.375rem 0;
+          border-bottom: 1px solid var(--border, #f3f4f6);
+          font-size: 0.8125rem;
+        }
+        .ledger-row:last-child {
+          border-bottom: none;
+        }
+        /* Constant-width signed column so the ledger reads as a column of
+           numbers, not a ragged list. */
+        .ledger-amount {
+          width: 4.25rem;
+          text-align: right;
+          font-weight: 700;
+          font-variant-numeric: tabular-nums;
+          flex-shrink: 0;
+        }
+        .ledger-reason {
+          min-width: 0;
+          flex: 1;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .ledger-source {
+          font-size: 0.625rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.06em;
+          padding: 0.125rem 0.5rem;
+          border-radius: 999px;
+          background: var(--muted, #f3f4f6);
+          color: var(--muted-foreground, #6b7280);
+          white-space: nowrap;
+          flex-shrink: 0;
+        }
+        .ledger-when {
+          font-size: 0.75rem;
+          color: var(--muted-foreground, #6b7280);
+          white-space: nowrap;
+          flex-shrink: 0;
+        }
+        .ledger-note {
+          margin: 0;
+          font-size: 0.875rem;
+          font-style: italic;
+          color: var(--muted-foreground, #6b7280);
         }
       </style>
     </template>

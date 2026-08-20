@@ -4,11 +4,16 @@ import {
   contains,
   field,
   linksTo,
+  realmURL,
 } from '@cardstack/base/card-api';
 import StringField from '@cardstack/base/string';
 import NumberField from '@cardstack/base/number';
 import DateTimeField from '@cardstack/base/datetime';
 import AmountWithCurrency from '@cardstack/base/amount-with-currency';
+import { tracked } from '@glimmer/tracking';
+import { on } from '@ember/modifier';
+import { eq } from '@cardstack/boxel-ui/helpers';
+import { Button } from '@cardstack/boxel-ui/components';
 import TicketIcon from '@cardstack/boxel-icons/ticket';
 
 import { Contact } from './contact';
@@ -83,6 +88,20 @@ export class Booking extends CardDef {
           ? `Booking for ${this.holder.name}`
           : `Untitled ${this.constructor.displayName}`)
       );
+    },
+  });
+
+  // Queryable read surface: lists and searches see who and what without
+  // resolving the links themselves.
+  @field eventTitle = contains(StringField, {
+    computeVia: function (this: Booking) {
+      return this.event?.cardTitle;
+    },
+  });
+
+  @field holderName = contains(StringField, {
+    computeVia: function (this: Booking) {
+      return this.holder?.name;
     },
   });
 
@@ -273,10 +292,80 @@ export class Booking extends CardDef {
   };
 
   static isolated = class Isolated extends Component<typeof Booking> {
+    @tracked runningAction: 'confirm' | 'check-in' | undefined;
+    @tracked actionProblem: string | undefined;
+
     get places() {
       let q = this.args.model.quantity ?? 1;
       return q === 1 ? '1 place' : `${q} places`;
     }
+
+    get realm(): string | undefined {
+      return this.args.model?.[realmURL]?.href;
+    }
+
+    /** Commands need a live command context and a saved card. */
+    get canAct(): boolean {
+      return Boolean(
+        this.args.context?.commandContext && this.args.model?.id && this.realm,
+      );
+    }
+
+    get canConfirm(): boolean {
+      let m = this.args.model;
+      return (
+        this.canAct &&
+        !m.checkedInAt &&
+        m.rsvp !== 'Going' &&
+        m.rsvp !== 'Declined'
+      );
+    }
+
+    get canCheckIn(): boolean {
+      let m = this.args.model;
+      return this.canAct && !m.checkedInAt && m.rsvp !== 'Declined';
+    }
+
+    private runCommand = async (
+      kind: 'confirm' | 'check-in',
+      _event?: Event,
+    ) => {
+      let context = this.args.context?.commandContext;
+      if (!context || !this.realm) {
+        return;
+      }
+      this.runningAction = kind;
+      this.actionProblem = undefined;
+      try {
+        // Literal lazy imports: both commands import Booking back, so a
+        // static import here would be a module cycle.
+        if (kind === 'confirm') {
+          let { default: ConfirmBookingCommand } = await import(
+            './confirm-booking'
+          );
+          await new ConfirmBookingCommand(context).execute({
+            booking: this.args.model,
+            realm: this.realm,
+          } as any);
+        } else {
+          let { default: CheckInBookingCommand } = await import(
+            './check-in-booking'
+          );
+          await new CheckInBookingCommand(context).execute({
+            booking: this.args.model,
+            realm: this.realm,
+          } as any);
+        }
+      } catch (error: any) {
+        this.actionProblem = error?.message ?? String(error);
+      } finally {
+        this.runningAction = undefined;
+      }
+    };
+
+    confirm = (_event?: Event) => this.runCommand('confirm');
+    checkIn = (_event?: Event) => this.runCommand('check-in');
+
     <template>
       <article class='bk-page'>
         <header class='bh'>
@@ -310,6 +399,27 @@ export class Booking extends CardDef {
             <p class='fact'>Checked in <@fields.checkedInAt /></p>
           {{else}}
             <p class='fact fact-empty'>Not checked in</p>
+            {{#if this.canCheckIn}}
+              <div class='actions'>
+                {{#if this.canConfirm}}
+                  <Button
+                    @kind='secondary-light'
+                    @size='small'
+                    @loading={{eq this.runningAction 'confirm'}}
+                    {{on 'click' this.confirm}}
+                  >Confirm</Button>
+                {{/if}}
+                <Button
+                  @kind='primary'
+                  @size='small'
+                  @loading={{eq this.runningAction 'check-in'}}
+                  {{on 'click' this.checkIn}}
+                >Check in</Button>
+              </div>
+            {{/if}}
+            {{#if this.actionProblem}}
+              <p class='problem' role='alert'>{{this.actionProblem}}</p>
+            {{/if}}
           {{/if}}
         </section>
         {{#if @model.totalPrice.amount}}
@@ -391,6 +501,27 @@ export class Booking extends CardDef {
         .fact-empty {
           font-style: italic;
           color: var(--muted-foreground, #6b7280);
+        }
+        .actions {
+          display: flex;
+          gap: 0.5rem;
+          margin-top: 0.75rem;
+        }
+        .problem {
+          margin: 0.75rem 0 0;
+          padding: 0.5rem 0.75rem;
+          border-radius: 0.5rem;
+          background: color-mix(
+            in oklch,
+            var(--destructive, #b91c1c) 12%,
+            var(--card, #ffffff)
+          );
+          color: color-mix(
+            in oklch,
+            var(--destructive, #b91c1c) 55%,
+            var(--foreground, #111111)
+          );
+          font-size: 0.8125rem;
         }
         .price {
           font-size: 0.9375rem;
