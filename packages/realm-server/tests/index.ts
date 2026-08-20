@@ -282,6 +282,7 @@ const ALL_TEST_FILES: string[] = [
   './clamp-serialized-error-test',
   './sanitize-for-jsonb-test',
   './is-json-content-type-test',
+  './bxl-node-smoke-test',
   './file-size-limit-test',
   './content-hash-test',
   './fitted-formats-parity-test',
