@@ -627,6 +627,23 @@ module('Acceptance | interact submode | create-file tests', function (hooks) {
       .dom(`[data-test-stack-card="${testRealmURL}interact-multi-first.txt"]`)
       .exists('first uploaded file opened on the stack');
     assert.dom(`[data-test-stack-card-index]`).exists({ count: 2 });
+
+    // The second file never opens on the stack, and a settled upload task is
+    // removed from `activeUploads` whether it succeeded or failed — so the
+    // realm itself is the only place its upload can be verified.
+    let second = await getService('card-service').getSource(
+      new URL(`${testRealmURL}interact-multi-second.txt`),
+    );
+    assert.strictEqual(
+      second.status,
+      200,
+      'second uploaded file is served by the realm',
+    );
+    assert.strictEqual(
+      second.content,
+      'file two',
+      'second uploaded file holds its content',
+    );
   });
 
   test('uploads land in the default writable realm when the current realm is read-only', async function (assert) {
