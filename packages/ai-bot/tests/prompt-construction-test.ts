@@ -1872,7 +1872,11 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
   });
 
-  test('Gets only the latest functions', async () => {
+  test('the first-seen definition of a tool wins for the life of the room', async () => {
+    // The tools array renders ahead of message history, so a definition that
+    // mutated mid-session would re-bill the whole conversation. The union is
+    // first-wins: the earlier patch tool keeps its schema even though a later
+    // message carries a same-named tool generated from a different card.
     const history: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
@@ -1972,17 +1976,14 @@ Current date and time: 2025-06-11T11:43:00.533Z
                 properties: {
                   cardId: {
                     type: 'string',
-                    const: 'http://localhost:4201/experiments/Meeting/2',
+                    const: 'http://localhost:4201/experiments/Friend/1',
                   },
                   patch: {
                     type: 'object',
                     properties: {
                       attributes: {
-                        type: 'object',
-                        properties: {
-                          location: {
-                            type: 'string',
-                          },
+                        firstName: {
+                          type: 'string',
                         },
                       },
                     },
@@ -8033,15 +8034,20 @@ module('markdown skill tools', (hooks) => {
     assert.strictEqual(tools[0].function.description, 'Plans a trip');
   });
 
-  test('the latest read of a skill replaces its earlier definitions wholesale', async () => {
+  test('a re-read of a skill cannot mutate or remove earlier definitions', async () => {
+    // The tools array renders ahead of message history, so a later read of
+    // an edited skill file must not rewrite bytes the cache has already
+    // matched: the first-seen definition wins, and a tool the newer read no
+    // longer declares stays in the union. A room picks up the edited skill
+    // only when it is re-attached in a new room.
     const tools = await getTools(
       [
         readResultEvent('read-1', 1000, [
-          discoveredDef('plan-trip_ab12', { description: 'stale' }),
+          discoveredDef('plan-trip_ab12', { description: 'original' }),
           discoveredDef('book-hotel_cd34'),
         ]),
         readResultEvent('read-2', 2000, [
-          discoveredDef('plan-trip_ab12', { description: 'fresh' }),
+          discoveredDef('plan-trip_ab12', { description: 'edited' }),
         ]),
       ],
       [],
@@ -8050,10 +8056,54 @@ module('markdown skill tools', (hooks) => {
     );
     assert.strictEqual(
       tools.length,
-      1,
-      'a tool the skill no longer declares disappears with the newer read',
+      2,
+      'a tool the newer read no longer declares stays in the union',
     );
-    assert.strictEqual(tools[0].function.description, 'fresh');
+    assert.strictEqual(
+      tools[0].function.description,
+      'original',
+      'the first-seen definition wins over the re-read',
+    );
+    assert.strictEqual(tools[1].function.name, 'book-hotel_cd34');
+  });
+
+  test('the tools array only ever grows by appending across turns', async () => {
+    // The exact property the prompt cache bills by: each turn's serialized
+    // tools array must be a prefix-preserving extension of the previous
+    // turn's. Replay a growing history and assert every prior entry keeps
+    // its position and bytes as new discoveries arrive.
+    const history = [
+      readResultEvent('read-1', 1000, [
+        discoveredDef('plan-trip_ab12', { description: 'original' }),
+        discoveredDef('book-hotel_cd34'),
+      ]),
+      readResultEvent('read-2', 2000, [
+        discoveredDef('rent-car_ef56'),
+        discoveredDef('plan-trip_ab12', { description: 'edited' }),
+      ]),
+      readResultEvent('read-3', 3000, [discoveredDef('find-flight_gh78')]),
+    ];
+    let previous: string[] = [];
+    for (let turn = 1; turn <= history.length; turn++) {
+      const tools = await getTools(
+        history.slice(0, turn),
+        [],
+        '@aibot:localhost',
+        fakeMatrixClient,
+      );
+      const serialized = tools.map((t) => JSON.stringify(t));
+      assert.deepEqual(
+        serialized.slice(0, previous.length),
+        previous,
+        `turn ${turn}: every previously emitted entry keeps its bytes and position`,
+      );
+      assert.true(
+        serialized.length >= previous.length,
+        `turn ${turn}: the array never shrinks`,
+      );
+      previous = serialized;
+    }
+    assert.strictEqual(previous.length, 4, 'all four tools were emitted');
   });
 
   test('discovered tools on a non-bot result event are ignored', async () => {

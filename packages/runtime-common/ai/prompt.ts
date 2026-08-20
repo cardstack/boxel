@@ -31,7 +31,6 @@ import type {
   CardMessageContent,
   CardMessageEvent,
   CodePatchResultEvent,
-  DiscoveredToolDefinition,
   ToolResultEvent,
   MatrixEvent as DiscreteMatrixEvent,
   EncodedToolRequest,
@@ -859,126 +858,129 @@ export function attachedFilesToMessage(
     .join('\n');
 }
 
+// The tools array renders ahead of all message history in the request, so
+// any byte change to it re-bills the entire conversation from the first
+// changed byte. Tools are therefore accumulated first-definition-wins, in
+// first-seen order, over one chronological pass of the room's history: once
+// a function name has entered the array, no re-read of an edited skill
+// file, re-uploaded definition, or same-named message-context tool can
+// mutate its bytes or its position, and new names only ever append. The
+// trade is deliberate: a tool whose definition changed mid-session keeps
+// its original schema until a new room, matching how skill instructions
+// are snapshotted at attach.
+//
+// The one sanctioned removal is the user disabling a skill: its tools drop
+// out (state-event definitions through the enabled-names gate, discovered
+// definitions through the disabled-skills list), costing one honest cache
+// reset per user toggle. Re-enabling restores the exact prior bytes and
+// order, because first-wins re-admits each definition from its original
+// event.
 export async function getTools(
   eventList: DiscreteMatrixEvent[],
   enabledSkills: EnabledSkill[],
   aiBotUserId: string,
   client: MatrixClient,
 ): Promise<Tool[]> {
-  // Build map directly from messages
+  // Names the currently-enabled skills declare; the admission gate for
+  // state-event definitions (the host never delists a definition when a
+  // skill is disabled — this gate is what removes it).
   let enabledToolNames = new Set<string>();
-  let toolMap = new Map<string, Tool>();
-
-  // Get the list of all names from enabled skills
   for (let skill of enabledSkills) {
     let skillTools = skill.attributes?.tools ?? skill.attributes?.commands;
-    if (skillTools) {
-      for (let tool of skillTools) {
-        enabledToolNames.add(tool.functionName);
-      }
+    for (let tool of skillTools ?? []) {
+      enabledToolNames.add(tool.functionName);
     }
   }
-
-  // Tools discovered by reading a skill file (readRealmFile): each read's
-  // result event embeds the definitions in `data.discoveredTools`, so this
-  // source is event-sourced like every other prompt input. A skill read many
-  // times contributes only its latest read's definitions (the file may have
-  // changed between reads); a skill toggled off in room state contributes
-  // none. Merged into the map first, so an enabled skill's uploaded
-  // definition or a message-context tool with the same functionName wins on
-  // conflict.
   let disabledSkillIds = new Set(await getDisabledSkillIds(eventList));
-  let discoveredBySkill = new Map<string, DiscoveredToolDefinition[]>();
+
+  // Map insertion order is the emitted array order.
+  let toolMap = new Map<string, Tool>();
+  let add = (tool: Tool | undefined) => {
+    let name = tool?.function?.name;
+    if (!name) {
+      return;
+    }
+    // Correctness commands should only be emitted by helper flows, not
+    // directly via LLM tool calls.
+    if (name === CHECK_CORRECTNESS_TOOL_NAME) {
+      return;
+    }
+    if (!toolMap.has(name)) {
+      toolMap.set(name, tool!);
+    }
+  };
+
   for (let event of eventList) {
-    if (!isToolResultEvent(event)) {
+    // Definitions the host uploaded and listed in a room-skills state
+    // event. Every state event is scanned — not just the latest — so a
+    // definition's bytes and position come from its first listing even
+    // when the host re-uploads a changed version later. Only names not
+    // already admitted are downloaded. A failed download throws rather
+    // than silently dropping the definition: a dropped entry would change
+    // the array's bytes between rebuilds, which is exactly what this
+    // function exists to prevent.
+    if (event.type === APP_BOXEL_ROOM_SKILLS_EVENT_TYPE) {
+      let toolDefinitionFileDefs =
+        getToolDefinitions<SerializedFile>(
+          (event as SkillsConfigEvent).content,
+        ) ?? [];
+      for (let toolDefinitionFileDef of toolDefinitionFileDefs) {
+        if (
+          !enabledToolNames.has(toolDefinitionFileDef.name) ||
+          toolMap.has(toolDefinitionFileDef.name)
+        ) {
+          continue;
+        }
+        let definitionContent = await downloadFile(
+          client,
+          toolDefinitionFileDef,
+        );
+        add(JSON.parse(definitionContent).tool);
+      }
       continue;
     }
-    // Only the bot publishes readRealmFile results; a discoveredTools block
-    // on anyone else's result event is not a legitimate discovery.
-    if (event.sender !== aiBotUserId) {
-      continue;
-    }
-    let content = event.content;
-    if (!isToolResultWithOutputContent(content)) {
-      continue;
-    }
-    // Only an applied read actually fetched the skill; discoveries claimed
-    // by a failed or invalid result are not evidence of anything.
-    if (content['m.relates_to']?.key !== 'applied') {
-      continue;
-    }
-    let discovered = content.data?.discoveredTools;
-    if (!discovered?.length) {
-      continue;
-    }
-    let bySkill = new Map<string, DiscoveredToolDefinition[]>();
-    for (let def of discovered) {
+
+    // Tools discovered by the bot reading a skill file (readRealmFile):
+    // each applied read's result event embeds the definitions in
+    // `data.discoveredTools`. Only the bot publishes these; a
+    // discoveredTools block on anyone else's result event is not a
+    // legitimate discovery, and a failed or invalid read is not evidence
+    // of anything.
+    if (isToolResultEvent(event) && event.sender === aiBotUserId) {
+      let content = event.content;
       if (
-        !def?.sourceSkillUrl ||
-        def.definition?.type !== 'function' ||
-        !def.definition.function?.name
+        !isToolResultWithOutputContent(content) ||
+        content['m.relates_to']?.key !== 'applied'
       ) {
         continue;
       }
-      let defs = bySkill.get(def.sourceSkillUrl) ?? [];
-      defs.push(def);
-      bySkill.set(def.sourceSkillUrl, defs);
-    }
-    // eventList is chronological, so a later read of the same skill
-    // replaces the earlier one wholesale.
-    for (let [skillUrl, defs] of bySkill) {
-      discoveredBySkill.set(skillUrl, defs);
-    }
-  }
-  for (let [skillUrl, defs] of discoveredBySkill) {
-    if (disabledSkillIds.has(skillUrl)) {
-      continue;
-    }
-    for (let def of defs) {
-      toolMap.set(def.definition.function.name, def.definition);
-    }
-  }
-
-  let skillsConfigEvent = findLast(
-    eventList,
-    (event) => event.type === APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
-  ) as SkillsConfigEvent;
-
-  let toolDefinitionFileDefs =
-    getToolDefinitions<SerializedFile>(skillsConfigEvent?.content) ?? [];
-  for (let toolDefinitionFileDef of toolDefinitionFileDefs) {
-    if (enabledToolNames.has(toolDefinitionFileDef.name)) {
-      let commandDefinitionContent = await downloadFile(
-        client,
-        toolDefinitionFileDef,
-      );
-      let commandDefinitionObject = JSON.parse(commandDefinitionContent);
-      toolMap.set(toolDefinitionFileDef.name, commandDefinitionObject.tool);
-    }
-  }
-
-  // Add in tools from the user's messages
-  for (let event of eventList) {
-    if (event.type !== 'm.room.message' || event.sender == aiBotUserId) {
-      continue;
-    }
-    if (event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE) {
-      let eventTools = event.content.data?.context?.tools;
-      if (eventTools?.length) {
-        for (let tool of eventTools) {
-          toolMap.set(tool.function.name, tool);
+      for (let def of content.data?.discoveredTools ?? []) {
+        if (
+          !def?.sourceSkillUrl ||
+          disabledSkillIds.has(def.sourceSkillUrl) ||
+          def.definition?.type !== 'function' ||
+          !def.definition.function?.name
+        ) {
+          continue;
         }
+        add(def.definition as Tool);
+      }
+      continue;
+    }
+
+    // Tools carried in a user message's context.
+    if (
+      event.type === 'm.room.message' &&
+      event.sender !== aiBotUserId &&
+      event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE
+    ) {
+      for (let tool of event.content.data?.context?.tools ?? []) {
+        add(tool);
       }
     }
   }
 
-  // Correctness commands should only be emitted by helper flows, not
-  // directly via LLM tool calls.
-  toolMap.delete(CHECK_CORRECTNESS_TOOL_NAME);
-
-  return Array.from(toolMap.values()).sort((a, b) =>
-    a.function.name.localeCompare(b.function.name),
-  );
+  return Array.from(toolMap.values());
 }
 
 export function getLastUserMessage(
