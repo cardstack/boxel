@@ -196,8 +196,8 @@ function waveformBarsFor(model: FileModelLike, format: FileFormat): number[] {
     return [];
   }
   // Every producer persists bars as 0..1 amplitudes — decoded RMS of float
-  // samples, MP3's side-info envelope normalized to its own peak, the WAV
-  // streaming envelope — while the renderers draw bar heights from 0–100.
+  // samples, MP3's side-info envelope normalized to its own loudest bar, the
+  // WAV streaming envelope — while the renderers draw bar heights from 0–100.
   // The projection owns that scale conversion; a renderer given raw
   // amplitudes would crush every bar to its minimum sliver height and draw
   // silence.

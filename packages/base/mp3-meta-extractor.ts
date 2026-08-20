@@ -405,7 +405,7 @@ export function extractMp3Tags(bytes: Uint8Array): MediaTags | undefined {
 //
 // The tradeoff is that a quantizer scale is not calibrated amplitude. It tracks
 // loudness well enough to draw, but its absolute values aren't comparable with a
-// decoded RMS, so the envelope is normalized to the track's own peak and the
+// decoded RMS, so the envelope is normalized to its own loudest bar and the
 // absolute amplitude fields are left unset rather than reported wrongly.
 
 // A granule is 576 samples; a Layer III frame holds two of them (one in MPEG-2).
@@ -591,12 +591,24 @@ function scanFrames(
   return { granuleCount, sampleRate, frameCount };
 }
 
+// Scale bars so the loudest bar reads as full scale. The reference must be the
+// loudest bar, not the loudest single granule (`envelope.peak`): a bar is the
+// RMS across its granules, so on a track where one transient granule dominates,
+// even the bar containing it sits near 1/√(granules per bar) of that peak —
+// scaling by the granule peak would collapse the whole waveform toward zero.
+function normalizeBarsToLoudest(bars: number[]): number[] {
+  let loudest = Math.max(0, ...bars);
+  return loudest > 0
+    ? bars.map((bar) => Math.round((bar / loudest) * 10000) / 10000)
+    : bars;
+}
+
 // Build an amplitude envelope from a whole MP3 without decoding it.
 //
-// Bars are normalized to the track's own peak, because a quantizer scale has no
-// absolute meaning — a renderer wants relative heights, and the calibrated
-// figures a decoded envelope would carry are deliberately omitted rather than
-// filled with numbers that don't mean the same thing.
+// Bars are normalized to the envelope's loudest bar, because a quantizer scale
+// has no absolute meaning — a renderer wants relative heights, and the
+// calibrated figures a decoded envelope would carry are deliberately omitted
+// rather than filled with numbers that don't mean the same thing.
 export function extractMp3Envelope(
   bytes: Uint8Array,
   barCount: number,
@@ -615,12 +627,7 @@ export function extractMp3Envelope(
     return undefined;
   }
 
-  let peak = envelope.peak;
-  let bars = envelope.bars();
-  let normalized =
-    peak > 0
-      ? bars.map((bar) => Math.round((bar / peak) * 10000) / 10000)
-      : bars;
+  let normalized = normalizeBarsToLoudest(envelope.bars());
 
   // Granules are a fixed 576 samples, so the count gives a duration that agrees
   // with the frame walk without needing the Xing header the duration reader
@@ -742,12 +749,7 @@ export async function extractMp3EnvelopeFromStream(
     return undefined;
   }
 
-  let peak = envelope.peak;
-  let bars = envelope.bars();
-  let normalized =
-    peak > 0
-      ? bars.map((bar) => Math.round((bar / peak) * 10000) / 10000)
-      : bars;
+  let normalized = normalizeBarsToLoudest(envelope.bars());
   let durationSeconds =
     sampleRate && sampleRate > 0
       ? Math.round(((granuleCount * SAMPLES_PER_GRANULE) / sampleRate) * 1000) /
