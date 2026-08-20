@@ -167,6 +167,7 @@
   --theme-caption-font-weight: initial;
   --theme-caption-line-height: initial;
   --boxel-switch-background: initial;
+  --boxel-switch-active-thumb: initial;
   --boxel-button-default-border: initial;
   --boxel-button-default-active-background: initial;
   --boxel-button-default-active-foreground: initial;
@@ -225,6 +226,10 @@
   --sidebar-accent-foreground: var(--boxel-light);
   --sidebar-border: var(--boxel-550);
   --sidebar-ring: var(--boxel-highlight);
+  /* the thumb's --background default is near-invisible on the checked track's
+     dark green; the unchecked track stays light gray, so only the checked
+     state needs a light thumb */
+  --boxel-switch-active-thumb: var(--foreground);
   --boxel-button-default-border: var(--border);
   --boxel-button-default-active-background: var(--background);
   --boxel-button-default-active-foreground: var(--foreground);
