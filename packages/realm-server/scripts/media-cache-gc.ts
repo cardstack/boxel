@@ -1,6 +1,9 @@
 import '../instrument.ts';
 import '../setup-logger.ts'; // This should be first
-import { logger, systemInitiatedPriority } from '@cardstack/runtime-common';
+import {
+  logger,
+  systemInitiatedPrerenderHtmlPriority,
+} from '@cardstack/runtime-common';
 import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
 import * as Sentry from '@sentry/node';
 
@@ -9,10 +12,11 @@ const MEDIA_CACHE_GC_JOB_TIMEOUT_SEC = 10 * 60;
 
 // Enqueue the GC sweep rather than sweeping inline in the worker-manager
 // process: a worker scans the ledger and deletes reclaimed rows/objects. The
-// sweep runs at the background tier (priority 0) so it never competes with
-// indexing or user work.
+// sweep runs at the background tier (priority 0, the all-priority pool's
+// floor — the same tier the prerender-html reconcile scan uses) so it never
+// competes with indexing or user work.
 export async function enqueueMediaCacheGc({
-  priority = systemInitiatedPriority,
+  priority = systemInitiatedPrerenderHtmlPriority,
   migrateDB,
 }: {
   priority?: number;

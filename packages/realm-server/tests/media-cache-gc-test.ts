@@ -411,6 +411,66 @@ module(basename(import.meta.filename), function (hooks) {
         second.objectKey,
         'the row points at the latest bytes',
       );
+      assert.notOk(
+        adapter.objects.has(first.objectKey),
+        'the repointed-away object is reclaimed inline — the GC sweep could never find it',
+      );
+      assert.deepEqual(adapter.deleted, [first.objectKey]);
+    });
+
+    test('a repoint keeps the prior object when another capture still names it', async function (assert) {
+      let sharedBytes = new Uint8Array([1]);
+      await putMedia(dbAdapter, adapter, {
+        ...entryKey,
+        bytes: sharedBytes,
+        contentType: 'image/png',
+        lane: 'on-demand',
+      });
+      // A second capture identity produced identical bytes (dedupe), so the
+      // object is shared.
+      let other = await putMedia(dbAdapter, adapter, {
+        ...entryKey,
+        captureSpecHash: 'spec-2',
+        bytes: sharedBytes,
+        contentType: 'image/png',
+        lane: 'on-demand',
+      });
+      await putMedia(dbAdapter, adapter, {
+        ...entryKey,
+        bytes: new Uint8Array([2]),
+        contentType: 'image/png',
+        lane: 'on-demand',
+      });
+
+      assert.ok(
+        adapter.objects.has(other.objectKey),
+        'the shared object survives the repoint',
+      );
+      assert.deepEqual(adapter.deleted, []);
+    });
+
+    test('a failed repoint reclaim does not fail the put', async function (assert) {
+      let first = await putMedia(dbAdapter, adapter, {
+        ...entryKey,
+        bytes: new Uint8Array([1]),
+        contentType: 'image/png',
+        lane: 'on-demand',
+      });
+      adapter.failDeletesFor.add(first.objectKey);
+
+      let second = await putMedia(dbAdapter, adapter, {
+        ...entryKey,
+        bytes: new Uint8Array([2]),
+        contentType: 'image/png',
+        lane: 'on-demand',
+      });
+
+      let rows = await ledgerRows();
+      assert.strictEqual(
+        rows[0].object_key,
+        second.objectKey,
+        'the new capture is recorded despite the failed reclaim',
+      );
     });
 
     test('touch bumps last_accessed_at', async function (assert) {

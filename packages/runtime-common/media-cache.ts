@@ -1,5 +1,6 @@
 import { Sha256 } from '@aws-crypto/sha256-js';
 import type { DBAdapter } from './db.ts';
+import { logger } from './log.ts';
 import {
   addExplicitParens,
   asExpressions,
@@ -10,6 +11,8 @@ import {
   type Expression,
 } from './expression.ts';
 import { uint8ArrayToHex } from './index.ts';
+
+const log = logger('media-cache');
 
 // The MediaCache: a content-addressed store for derived media (screenshots),
 // split across two channels that this module keeps consistent:
@@ -98,8 +101,17 @@ export async function computeMediaCacheKey(bytes: Uint8Array): Promise<string> {
 // unreferenced object that the capture's own retry re-references (same
 // bytes → same key). The ledger write is an upsert on the capture identity:
 // a re-capture that produced different bytes repoints the row at the new
-// object, and the old object is reclaimed by the GC sweep once nothing else
-// references it.
+// object.
+//
+// A repoint strips the prior object of this row's reference, and the GC
+// sweep structurally cannot recover it — the ledger is the store's only
+// catalog, so an object no row names is invisible to every later sweep.
+// The put path therefore reclaims inline: once the repointing upsert lands,
+// the prior object is deleted (best-effort) unless some other row still
+// names it. A failed or crash-interrupted delete permanently leaks that one
+// object; this is the same one-object crash exposure the put's own
+// object-before-ledger ordering already carries, and is logged when
+// observed.
 export async function putMedia(
   dbAdapter: DBAdapter,
   adapter: MediaCacheAdapter,
@@ -121,6 +133,17 @@ export async function putMedia(
 ): Promise<{ objectKey: string; sizeBytes: number }> {
   let objectKey = await computeMediaCacheKey(bytes);
   await adapter.put(objectKey, bytes, { contentType });
+  let priorRows = (await query(dbAdapter, [
+    `SELECT object_key FROM media_cache_ledger WHERE realm_url =`,
+    param(realmURL),
+    `AND source_url =`,
+    param(sourceURL),
+    `AND capture_spec_hash =`,
+    param(captureSpecHash),
+    `AND source_generation =`,
+    param(sourceGeneration),
+  ] as Expression)) as { object_key: string }[];
+  let priorObjectKey = priorRows[0]?.object_key;
   let now = Date.now();
   let { nameExpressions, valueExpressions } = asExpressions({
     realm_url: realmURL,
@@ -144,7 +167,39 @@ export async function putMedia(
       valueExpressions,
     ),
   );
+  if (priorObjectKey && priorObjectKey !== objectKey) {
+    await reclaimRepointedObject(dbAdapter, adapter, priorObjectKey);
+  }
   return { objectKey, sizeBytes: bytes.length };
+}
+
+// Reclaims the object a repointing upsert stripped of its reference — unless
+// another capture's row still names it (dedupe across captures), in which
+// case the bytes stay and the sweep handles them when their last row goes.
+// Best-effort by design: a failed delete cannot fail the put (the new
+// capture is already durable and recorded), but the orphan is then
+// permanently unreachable, so it is logged. Shares the put/GC family of
+// accepted races: a concurrent dedupe-put that re-references this key inside
+// the check-then-delete window loses its bytes and self-heals on its next
+// put, serving misses until then.
+async function reclaimRepointedObject(
+  dbAdapter: DBAdapter,
+  adapter: MediaCacheAdapter,
+  objectKey: string,
+): Promise<void> {
+  let refs = await findMediaCacheKeyReferenceCounts(dbAdapter, [objectKey]);
+  if ((refs.get(objectKey) ?? 0) > 0) {
+    return;
+  }
+  try {
+    await adapter.delete(objectKey);
+  } catch (e) {
+    log.warn(
+      `failed to delete repointed-away media cache object ${objectKey}; ` +
+        `no ledger row references it, so these bytes are leaked`,
+      e,
+    );
+  }
 }
 
 // Serving-path bump for the on-demand age-out lane: reading a capture resets
