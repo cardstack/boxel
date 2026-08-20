@@ -764,12 +764,10 @@ export default class WorkspaceChooser extends Component<Signature> {
         }
       }
       .workspace-chooser {
-        opacity: 0;
         position: absolute;
         background-color: var(--boxel-800);
         height: 100%;
         width: 100%;
-        animation: fadeIn 0.5s ease-in forwards;
         z-index: var(--host-workspace-chooser-z-index);
       }
       .sort-controls {
@@ -810,6 +808,11 @@ export default class WorkspaceChooser extends Component<Signature> {
         height: 100%;
         padding: calc(5rem + 3.75rem) 5rem 5rem;
         overflow: auto;
+        /* Fade in only the contents; the dark chooser background above
+           paints immediately so the grey operator-mode canvas never flashes
+           between the (dark) sign-in screen and the (dark) chooser. */
+        opacity: 0;
+        animation: fadeIn 0.5s ease-in forwards;
       }
       .sections-wrapper {
         display: flex;
