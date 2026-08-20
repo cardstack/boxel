@@ -659,6 +659,7 @@ export default class SubmodeLayout extends Component<Signature> {
 
       .ai-assistant-resizable-panel {
         max-width: 100%;
+        min-width: 0;
         overflow: initial;
       }
 
