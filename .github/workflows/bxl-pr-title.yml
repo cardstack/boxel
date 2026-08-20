@@ -1,0 +1,53 @@
+name: PR Title Check [bxl]
+
+# Validates that PRs touching packages/bxl/** carry a conventional-commit title
+# (feat:, fix:, chore:, …). bxl-publish.yml reads the merged PR's title to decide
+# the version bump, so this check is the contract that keeps that flow working:
+# without a recognized prefix a merge publishes nothing, silently.
+#
+# Path-scoped — it does not run for PRs that leave bxl alone. Don't make it a
+# required status check in branch protection: a required check on a
+# path-filtered workflow leaves every unrelated PR pending forever.
+#
+# No `merge_group:` trigger — `paths:` is not honored on merge_group events, so
+# adding it would block unrelated PRs in the merge queue on a bxl-scoped title
+# check. If merge queues are adopted and this needs to gate them, put a
+# changed-files step inside the job instead.
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+    paths:
+      - "packages/bxl/**"
+
+permissions:
+  pull-requests: read
+
+jobs:
+  validate:
+    name: Validate PR title
+    runs-on: ubuntu-latest
+    steps:
+      # Sparse-checkout the one file that defines the allowed prefixes. The
+      # post-merge classifier (bxl-publish.yml, via compute-release.ts) reads
+      # the same file, so the gate and the classifier stay in lockstep.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          sparse-checkout: packages/bxl/scripts/release-prefixes.json
+          sparse-checkout-cone-mode: false
+
+      - id: types
+        run: |
+          {
+            echo 'list<<__EOF__'
+            node -e 'console.log(Object.keys(require("./packages/bxl/scripts/release-prefixes.json")).join("\n"))'
+            echo '__EOF__'
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: amannn/action-semantic-pull-request@0723387faaf9b38adef4775cd42cfd5155ed6017 # v5.5.3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: ${{ steps.types.outputs.list }}
+          requireScope: false
+          subjectPattern: ^.+$

@@ -10,6 +10,8 @@ versions may change syntax behavior until `1.0.0`.
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-08-18
+
 ### Added
 
 - **Cycle-guarded lazy card materialization in `expression()`.** The
@@ -143,6 +145,23 @@ versions may change syntax behavior until `1.0.0`.
   now carries `version` and the `features` detection list.
 - **The `bxl` and `bxl-sync` bins.** The CLI and the per-realm bundle-sync
   flow are not part of this package.
+
+### Infrastructure
+
+- **Published to npm from the monorepo.** Merging a change to anything the
+  tarball ships publishes a `-unstable.<n>` prerelease whose version comes from
+  the merged pull request's conventional-commit prefix; a stable version under
+  `latest` is cut deliberately from one of those prereleases. See the README's
+  "Releasing."
+
+- **The published package carries JavaScript.** `pnpm build` emits the sources
+  to `dist/` with declarations and source maps, and `publishConfig.exports`
+  points the published package there — an installed package lives inside
+  `node_modules`, where Node will not strip types, so raw TypeScript could not
+  load. In-repo consumers still resolve `src/` directly, unchanged. The npm
+  artifact is packed, installed outside the monorepo, and checked — under plain
+  Node and under a consumer's type-check — before merge and again after
+  publish.
 
 ## [0.5.1] — 2026-08-02
 

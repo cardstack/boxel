@@ -1,0 +1,28 @@
+{
+  // Emit configuration for the published npm artifact. `tsconfig.json` is the
+  // development one: `noEmit`, and `.ts` specifiers resolved in place. Here
+  // the same sources compile to `dist/` — see scripts/build.ts for why the
+  // tarball cannot carry raw TypeScript.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    // Publishing output built from failing sources is worse than publishing
+    // nothing, so refuse to emit on a type error.
+    "noEmitOnError": true,
+    "declaration": true,
+    // Both maps resolve against `src/`, which ships in the tarball alongside
+    // `dist/` — so a consumer stepping through the JavaScript or jumping to a
+    // definition lands on the real TypeScript.
+    "declarationMap": true,
+    "sourceMap": true,
+    "inlineSourceMap": false,
+    "inlineSources": false,
+    "rootDir": "src",
+    "outDir": "dist",
+    // Rewrites `./x.ts` specifiers to `./x.js` in the emitted JavaScript,
+    // including dynamic imports. Declaration emit is not covered; build.ts
+    // rewrites those.
+    "rewriteRelativeImportExtensions": true
+  },
+  "include": ["src"]
+}

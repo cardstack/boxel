@@ -257,6 +257,15 @@ jobs:
       - name: BXL test suite
         run: pnpm test
         working-directory: packages/bxl
+      # The suites above read `src/`. This packs the npm artifact, installs it
+      # outside the monorepo the way a consumer does, and checks that every
+      # published subpath loads under plain Node and type-checks — the only
+      # pre-merge signal about the thing bxl-publish.yml ships. Unlike the
+      # suites, it reaches the npm registry, to install the package's own
+      # dependencies into the throwaway consumer project.
+      - name: BXL published package check
+        run: pnpm run verify:package
+        working-directory: packages/bxl
 
   eslint-plugin-boxel-test:
     name: ESLint Plugin Boxel Tests
