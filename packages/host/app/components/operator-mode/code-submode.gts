@@ -452,14 +452,18 @@ export default class CodeSubmode extends Component<Signature> {
         ];
       },
     );
-    items.push(new MenuDivider());
-    items.push(
-      new MenuItem({
-        label: 'Upload File…',
-        action: () => this.triggerUploadFile(),
-        icon: Upload,
-      }),
-    );
+    // An upload needs a destination realm, so the entry (and its divider)
+    // only appears once the current file's realm is known.
+    if (this.operatorModeStateService.realmURL) {
+      items.push(new MenuDivider());
+      items.push(
+        new MenuItem({
+          label: 'Upload File…',
+          action: () => this.triggerUploadFile(),
+          icon: Upload,
+        }),
+      );
+    }
     return items;
   }
 
@@ -595,9 +599,11 @@ export default class CodeSubmode extends Component<Signature> {
 
   @action
   private triggerUploadFile() {
+    // The menu omits this entry when no realm is known, so the guard is a
+    // no-op backstop rather than an error path.
     let realm = this.operatorModeStateService.realmURL;
     if (!realm) {
-      throw new Error('No realm available for upload');
+      return;
     }
     this.uploadFiles.perform(ri(realm)).catch((error) => {
       console.error('Unexpected error during file upload', error);
@@ -605,20 +611,7 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private uploadFiles = dropTask(async (realm: RealmIdentifier) => {
-    let files = await this.fileUpload.pickLocalFiles({});
-    if (files.length === 0) {
-      return;
-    }
-    // Parallel POSTs are correct on the server: the realm advisory
-    // lock (packages/runtime-common/realm.ts:1746) serializes writes
-    // and each upload emits its own incremental-index event. A
-    // separate live file-tree refresh race (uploads AND deletes both
-    // leave the tree stale until the user refreshes / toggles views)
-    // is tracked in CS-11295.
-    let tasks = files.map((file) =>
-      this.fileUpload.uploadProvidedFile({ realm, file }),
-    );
-    let results = await Promise.all(tasks.map((task) => task.result));
+    let results = await this.fileUpload.pickAndUploadFiles(realm);
     let firstSuccess = results.find((fileDef) => fileDef?.url);
     if (firstSuccess?.url) {
       await this.operatorModeStateService.updateCodePath(
