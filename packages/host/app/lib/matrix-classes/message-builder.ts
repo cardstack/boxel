@@ -371,23 +371,33 @@ export default class MessageBuilder {
     message: Message,
     toolRequest: Partial<ToolRequest>,
   ) {
-    let toolResultEvent =
-      this.builderContext.toolResultEvent ??
-      (this.builderContext.events.find((e: any) => {
-        let r = e.content['m.relates_to'];
-        // Correlate the result to its command by commandRequestId (the
-        // globally unique LLM tool-call id), not by the result's
-        // m.relates_to.event_id. A reload strips the m.replace edits and loads
-        // only the original event, so the result's link id — pointing at the
-        // final edit — matches no loaded event. commandRequestId is stable
-        // across edits and present on every one, so it resolves the command on
-        // both the live and reload paths.
-        return (
+    let toolResultEvent = this.builderContext.toolResultEvent;
+    if (!toolResultEvent) {
+      // Correlate the result to its command by commandRequestId (the
+      // globally unique LLM tool-call id), not by the result's
+      // m.relates_to.event_id. A reload strips the m.replace edits and loads
+      // only the original event, so the result's link id — pointing at the
+      // final edit — matches no loaded event. commandRequestId is stable
+      // across edits and present on every one, so it resolves the command on
+      // both the live and reload paths.
+      //
+      // Scan newest-first: a request can have several result events (a
+      // 'failed' first attempt, an 'applied' retry) and the latest one is
+      // the call's actual outcome.
+      let events = this.builderContext.events;
+      for (let i = events.length - 1; i >= 0; i--) {
+        let e = events[i] as any;
+        let r = e.content?.['m.relates_to'];
+        if (
           isToolResultEventType(e.type) &&
           isToolResultRelType(r?.rel_type) &&
           e.content.commandRequestId === toolRequest.id
-        );
-      }) as ToolResultEvent | undefined);
+        ) {
+          toolResultEvent = e as ToolResultEvent;
+          break;
+        }
+      }
+    }
 
     // ai-bot ran this one itself (e.g. readRealmFile), so the host never
     // resolves a command class or runs it. Skip the skill lookup below — it's

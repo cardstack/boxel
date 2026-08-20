@@ -27,6 +27,9 @@ import {
   isFileDefInstance,
   isFileDefCodeRef,
   isClientEvaluable,
+  canonicalizeFilterRefs,
+  identifyCard,
+  isResolvedCodeRef,
   matchInstanceAgainstFilter,
   makeInstanceComparator,
   logger as runtimeLogger,
@@ -44,6 +47,7 @@ import type { Filter, Query } from '@cardstack/runtime-common/query';
 
 import { searchErrorEntry } from '../lib/search-error-entry';
 
+import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
@@ -162,6 +166,7 @@ export class SearchResource<
   @service declare private network: NetworkService;
   @service declare private realmServer: RealmServerService;
   @service declare private store: StoreService;
+  @service declare private loaderService: LoaderService;
   #storeServiceOverride: StoreService | undefined;
   @tracked private realmsToSearch: RealmIdentifier[] = [];
   // Resist the urge to expose this property publicly as that may entice
@@ -183,6 +188,19 @@ export class SearchResource<
   // once it lands.
   @tracked private matchAPI: CardAPIForMatching | undefined;
   #matchAPILoading = false;
+  // The active filter with its `type`/`on` refs rewritten to canonical
+  // (defining-module) form, mirroring the rewrite the query engine applies
+  // before compiling `types` membership predicates. The matcher compares refs
+  // against `identifyCard` of an instance's class — the canonical ref — so a
+  // filter carrying a re-export spelling (e.g. file-api's FileDef) must be
+  // canonicalized here too or the reconciler would strip the server's correct
+  // results. `source` ties the rewrite to the exact filter object it was
+  // computed from; `incomplete` means some ref didn't resolve, in which case
+  // the search stays a server-only passthrough rather than risking a client
+  // evaluation the server disagrees with.
+  @tracked private canonicalizedFilter:
+    | { source: Filter; filter: Filter; incomplete: boolean }
+    | undefined;
   // The query currently driving results, tracked so the client filtering step
   // re-derives when the filter/sort changes (the server result set also
   // changes, but reading this keeps the derivation self-contained).
@@ -234,6 +252,62 @@ export class SearchResource<
       })
       .finally(() => {
         this.#matchAPILoading = false;
+        waiter.endAsync(token);
+      });
+  }
+
+  // Canonicalizes the live filter's `type`/`on` refs via the loader (import
+  // the named module, identify the export's defining-module ref) — the same
+  // rewrite the query engine performs through its definition lookup. Until
+  // this settles for the current filter, `isClientFilterEligible` keeps the
+  // search a server-only passthrough.
+  private loadCanonicalizedFilter(filter: Filter | undefined): void {
+    if (!filter) {
+      this.canonicalizedFilter = undefined;
+      return;
+    }
+    if (this.canonicalizedFilter?.source === filter) {
+      return;
+    }
+    let token = waiter.beginAsync();
+    canonicalizeFilterRefs(filter, async (ref) => {
+      try {
+        let module = await this.loaderService.loader.import<
+          Record<string, unknown>
+        >(ref.module);
+        let canonical = identifyCard(
+          module[ref.name] as Parameters<typeof identifyCard>[0],
+        );
+        return canonical && isResolvedCodeRef(canonical)
+          ? canonical
+          : undefined;
+      } catch (error) {
+        this.#log.warn(
+          `could not canonicalize filter ref ${ref.module}/${ref.name}: ${error}`,
+        );
+        return undefined;
+      }
+    })
+      .then(({ filter: canonical, incomplete }) => {
+        if (isDestroyed(this) || isDestroying(this)) {
+          return;
+        }
+        // A newer filter may have become the active one while this resolved
+        // (sibling canonicalizations race, and a cache-warm import resolves
+        // ahead of a cold one). Drop the stale result so a late resolution
+        // can't clobber the current filter's result and leave `source` pointing
+        // at a filter that's no longer active — which would keep the search a
+        // server-only passthrough until the next query change.
+        if (this.activeQuery?.filter !== filter) {
+          return;
+        }
+        this.canonicalizedFilter = {
+          source: filter,
+          filter: canonical,
+          incomplete,
+        };
+      })
+      .finally(() => {
         waiter.endAsync(token);
       });
   }
@@ -356,6 +430,7 @@ export class SearchResource<
       // matcher dependencies eagerly so the first eligible result set can be
       // reconciled without waiting on a Store mutation to trigger it.
       this.loadMatchAPI();
+      this.loadCanonicalizedFilter(query.filter);
     }
     this.activeQuery = query;
     this.#doWhileRefreshing = doWhileRefreshing;
@@ -527,7 +602,9 @@ export class SearchResource<
       return serverInstances;
     }
     let api = this.matchAPI!;
-    let filter = this.activeQuery?.filter;
+    // Eligibility (below) guarantees the canonicalized form is present and
+    // complete whenever the active query carries a filter.
+    let filter = this.canonicalizedFilter?.filter ?? this.activeQuery?.filter;
 
     // Reading the mutation-version signal here establishes the dependency that
     // re-derives on in-place field edits/saves (adds and deletes already flow
@@ -635,6 +712,20 @@ export class SearchResource<
     let filter = this.activeQuery?.filter as Filter | undefined;
     if (filter && !isClientEvaluable(filter)) {
       return false;
+    }
+    // The matcher needs the filter's refs in canonical form (the engine
+    // rewrites them server-side; see loadCanonicalizedFilter). Until the
+    // rewrite lands for this exact filter — or if some ref didn't resolve —
+    // client evaluation could disagree with the server, so pass through.
+    if (filter) {
+      let canonicalized = this.canonicalizedFilter;
+      if (
+        !canonicalized ||
+        canonicalized.source !== filter ||
+        canonicalized.incomplete
+      ) {
+        return false;
+      }
     }
     return true;
   }

@@ -18,7 +18,7 @@ import type { Message } from './message';
 import type { CardDef } from '@cardstack/base/card-api';
 import type { SerializedFile } from '@cardstack/base/file-api';
 
-type ToolCallStatus = 'applied' | 'ready' | 'applying' | 'invalid';
+type ToolCallStatus = 'applied' | 'ready' | 'applying' | 'invalid' | 'failed';
 
 export default class MessageTool {
   @tracked toolRequest: Partial<ToolRequest>;
