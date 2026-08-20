@@ -85,7 +85,7 @@
       "rootVariables": {
         "card": "var(--boxel-light, #FFFFFF)",
         "ring": "var(--boxel-teal, #00FFBA)",
-        "input": "var(--boxel-450, #919191)",
+        "input": "var(--boxel-400, #afafb7)",
         "muted": "#F5F5F5",
         "accent": "var(--cardstack-lime, #C3FC33)",
         "border": "#E2E8F0",

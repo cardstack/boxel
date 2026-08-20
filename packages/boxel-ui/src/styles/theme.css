@@ -60,7 +60,7 @@
 
   /* form + focus */
   --border: var(--boxel-border-color);
-  --input: var(--boxel-300);
+  --input: var(--boxel-400);
   --ring: var(--boxel-highlight);
 
   /* charts */
@@ -118,7 +118,6 @@
   --warning: var(--boxel-warning);
 
   /* other */
-  --boxel-switch-background: var(--boxel-400);
   --boxel-button-default-border: var(--boxel-button-border-color);
   --boxel-button-default-active-background: var(--background);
   --boxel-button-default-active-foreground: var(--foreground);
@@ -166,7 +165,6 @@
   --theme-caption-font-size: initial;
   --theme-caption-font-weight: initial;
   --theme-caption-line-height: initial;
-  --boxel-switch-background: initial;
   --boxel-switch-active-thumb: initial;
   --boxel-switch-thumb-icon: initial;
   --boxel-switch-active-thumb-icon: initial;
