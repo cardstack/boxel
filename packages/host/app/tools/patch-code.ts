@@ -60,38 +60,64 @@ export default class PatchCodeTool extends HostBaseTool<
     let finalFileIdentifier = fileUrl;
     let lintIssues: string[] = [];
     if (results.some((r) => r.status === 'applied')) {
+      let preLintCode = patchedCode;
       if (patchedCode.trim() !== '' && this.isLintableFile(fileUrl)) {
         let lintResult = await this.lintAndFix(fileUrl, patchedCode);
         patchedCode = lintResult.output;
         lintIssues = lintResult.lintIssues ?? [];
       }
 
-      finalFileIdentifier = await this.determineFinalFileUrl(
-        fileUrl,
-        fileInfo,
-        hasEmptySearchPortion,
-      );
+      // The patch changed the pre-lint content, yet the autofix/format pass
+      // brought it back to the original file: the formatter reverted the
+      // whole edit. Re-patching can never make progress from here — any
+      // further attempt round-trips to this same content — so say so
+      // alongside the lint issues instead of writing a no-op save that
+      // would keep the model trying. Requiring that the pre-lint content
+      // actually differed keeps the message truthful for paths where no
+      // formatter ran (non-lintable targets, blank results) and for block
+      // sets that cancel each other out.
+      let revertedByFormatter =
+        sourceContent !== '' &&
+        preLintCode !== sourceContent &&
+        patchedCode === sourceContent;
+      if (revertedByFormatter) {
+        lintIssues = [
+          ...lintIssues,
+          'The automatic formatter reverted the applied changes, so the file is unchanged. Reformatting-only patches cannot fix the remaining issues; change the content itself or leave it as is.',
+        ];
+      } else {
+        finalFileIdentifier = await this.determineFinalFileUrl(
+          fileUrl,
+          fileInfo,
+          hasEmptySearchPortion,
+        );
 
-      let clientRequestId = this.toolService.trackAiAssistantCardRequest({
-        action: 'patch-code',
-        roomId,
-        fileUrl: finalFileIdentifier,
-      });
+        let clientRequestId = this.toolService.trackAiAssistantCardRequest({
+          action: 'patch-code',
+          roomId,
+          fileUrl: finalFileIdentifier,
+        });
 
-      let savedThroughOpenFile = await this.trySaveThroughOpenFile(
-        finalFileIdentifier,
-        patchedCode,
-        clientRequestId,
-      );
-      if (!savedThroughOpenFile) {
-        this.cardService
-          .saveSource(new URL(finalFileIdentifier), patchedCode, 'bot-patch', {
-            resetLoader: hasExecutableExtension(finalFileIdentifier),
-            clientRequestId,
-          })
-          .catch((error: unknown) => {
-            console.error('PatchCodeTool: failed to save source', error);
-          });
+        let savedThroughOpenFile = await this.trySaveThroughOpenFile(
+          finalFileIdentifier,
+          patchedCode,
+          clientRequestId,
+        );
+        if (!savedThroughOpenFile) {
+          this.cardService
+            .saveSource(
+              new URL(finalFileIdentifier),
+              patchedCode,
+              'bot-patch',
+              {
+                resetLoader: hasExecutableExtension(finalFileIdentifier),
+                clientRequestId,
+              },
+            )
+            .catch((error: unknown) => {
+              console.error('PatchCodeTool: failed to save source', error);
+            });
+        }
       }
     }
 
