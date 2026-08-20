@@ -10,12 +10,13 @@ import {
 } from 'ember-freestyle/decorators/css-variable';
 
 import cssVar from '../../helpers/css-var.ts';
-import Switch from './index.gts';
+import Switch, { type SwitchSize, switchSizeOptions } from './index.gts';
 
 export default class SwitchUsage extends Component {
   @tracked isEnabled = false;
   @tracked isDisabled = false;
   @tracked label = 'Switch';
+  @tracked size: SwitchSize = 'base';
 
   @tracked isLabeledEnabled = false;
 
@@ -97,6 +98,7 @@ export default class SwitchUsage extends Component {
             @isEnabled={{this.isEnabled}}
             @onChange={{this.handleChange}}
             @disabled={{this.isDisabled}}
+            @size={{this.size}}
           />
         </:example>
         <:api as |Args|>
@@ -124,6 +126,15 @@ export default class SwitchUsage extends Component {
             @defaultValue={{false}}
             @value={{this.isDisabled}}
             @onInput={{fn (mut this.isDisabled)}}
+            @optional={{true}}
+          />
+          <Args.String
+            @name='size'
+            @description='Size preset for the track; thumb, travel, and hit area follow. Custom sizes remain available via the width/height CSS variables'
+            @defaultValue='base'
+            @options={{switchSizeOptions}}
+            @value={{this.size}}
+            @onInput={{fn (mut this.size)}}
             @optional={{true}}
           />
           <Args.Action

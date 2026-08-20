@@ -1,8 +1,11 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-import { fn } from '@ember/helper';
+import { concat, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 
 import { cn } from '../../helpers.gts';
+
+export type SwitchSize = 'small' | 'base' | 'touch';
+export const switchSizeOptions: SwitchSize[] = ['small', 'base', 'touch'];
 
 interface SwitchSignature {
   Args: SwitchArgs;
@@ -18,6 +21,7 @@ interface SwitchArgs {
      yielded visible label names it instead, so pass one or the other */
   label?: string;
   onChange: (isEnabled: boolean) => void;
+  size?: SwitchSize;
 }
 
 /* Fully controlled: preventDefault keeps the checkbox from toggling itself
@@ -51,6 +55,7 @@ const Switch: TemplateOnlyComponent<SwitchSignature> = <template>
   <label
     class={{cn
       'switch'
+      (concat 'size-' (if @size @size 'base'))
       checked=@isEnabled
       disabled=@disabled
       has-label=(has-block)
@@ -107,6 +112,21 @@ const Switch: TemplateOnlyComponent<SwitchSignature> = <template>
 
       .switch.has-label {
         gap: var(--boxel-sp-xs);
+      }
+
+      /* Size presets set the same public knobs callers use, so all geometry
+         (thumb, travel, hit area) follows; an inline --boxel-switch-* on the
+         element still outranks them. size-base has no rule: it keeps the
+         defaults and lets ancestor-provided variables through. */
+      .switch.size-small {
+        --boxel-switch-width: 1.75rem;
+        --boxel-switch-height: 1rem;
+      }
+
+      /* meets the 24px target size (WCAG 2.5.8) on its drawn size alone */
+      .switch.size-touch {
+        --boxel-switch-width: 2.75rem;
+        --boxel-switch-height: 1.625rem;
       }
 
       /* With no visible label the wrapper has no other content, so it sizes
