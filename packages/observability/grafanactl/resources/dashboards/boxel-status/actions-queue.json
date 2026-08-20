@@ -18,39 +18,13 @@
     "links": [],
     "panels": [
       {
-        "id": 1,
-        "type": "text",
-        "title": "About this dashboard",
-        "datasource": {
-          "type": "loki",
-          "uid": "loki"
-        },
-        "gridPos": {
-          "x": 0,
-          "y": 0,
-          "w": 24,
-          "h": 4
-        },
-        "targets": [],
-        "fieldConfig": {
-          "defaults": {
-            "custom": {}
-          },
-          "overrides": []
-        },
-        "options": {
-          "mode": "markdown",
-          "content": "Sampled from the GitHub Actions REST API by `packages/observability/collectors/actions-queue.ts`, which emits one JSON line per observation on channel `boxel:actions-queue`.\n\nThe collector runs **outside** GitHub Actions on purpose — a scheduled workflow would queue behind the backlog it measures and go blind during the incident it exists for.\n\nDepth and grouped depth come from periodic snapshots, so each point is a sample rather than a continuous measure; gaps mean the collector was down or throttled (see *Collector health*)."
-        }
-      },
-      {
         "id": 2,
         "type": "row",
         "title": "Queue depth",
         "collapsed": false,
         "gridPos": {
           "x": 0,
-          "y": 4,
+          "y": 0,
           "w": 24,
           "h": 1
         },
@@ -66,7 +40,7 @@
         },
         "gridPos": {
           "x": 0,
-          "y": 5,
+          "y": 1,
           "w": 4,
           "h": 4
         },
@@ -117,7 +91,7 @@
         },
         "gridPos": {
           "x": 4,
-          "y": 5,
+          "y": 1,
           "w": 4,
           "h": 4
         },
@@ -168,7 +142,7 @@
         },
         "gridPos": {
           "x": 8,
-          "y": 5,
+          "y": 1,
           "w": 4,
           "h": 4
         },
@@ -219,7 +193,7 @@
         },
         "gridPos": {
           "x": 12,
-          "y": 5,
+          "y": 1,
           "w": 12,
           "h": 8
         },
@@ -285,7 +259,7 @@
         },
         "gridPos": {
           "x": 0,
-          "y": 9,
+          "y": 5,
           "w": 12,
           "h": 4
         },
@@ -334,7 +308,7 @@
         "collapsed": false,
         "gridPos": {
           "x": 0,
-          "y": 13,
+          "y": 9,
           "w": 24,
           "h": 1
         },
@@ -350,7 +324,7 @@
         },
         "gridPos": {
           "x": 0,
-          "y": 14,
+          "y": 10,
           "w": 24,
           "h": 8
         },
@@ -425,7 +399,7 @@
         "collapsed": false,
         "gridPos": {
           "x": 0,
-          "y": 22,
+          "y": 18,
           "w": 24,
           "h": 1
         },
@@ -441,7 +415,7 @@
         },
         "gridPos": {
           "x": 0,
-          "y": 23,
+          "y": 19,
           "w": 8,
           "h": 8
         },
@@ -496,7 +470,7 @@
         },
         "gridPos": {
           "x": 8,
-          "y": 23,
+          "y": 19,
           "w": 8,
           "h": 8
         },
@@ -551,7 +525,7 @@
         },
         "gridPos": {
           "x": 16,
-          "y": 23,
+          "y": 19,
           "w": 8,
           "h": 8
         },
@@ -606,7 +580,7 @@
         },
         "gridPos": {
           "x": 0,
-          "y": 31,
+          "y": 27,
           "w": 8,
           "h": 8
         },
@@ -661,7 +635,7 @@
         },
         "gridPos": {
           "x": 8,
-          "y": 31,
+          "y": 27,
           "w": 8,
           "h": 8
         },
@@ -716,7 +690,7 @@
         },
         "gridPos": {
           "x": 16,
-          "y": 31,
+          "y": 27,
           "w": 8,
           "h": 8
         },
@@ -768,7 +742,7 @@
         "collapsed": false,
         "gridPos": {
           "x": 0,
-          "y": 39,
+          "y": 35,
           "w": 24,
           "h": 1
         },
@@ -784,7 +758,7 @@
         },
         "gridPos": {
           "x": 0,
-          "y": 40,
+          "y": 36,
           "w": 24,
           "h": 10
         },
@@ -817,7 +791,7 @@
         "collapsed": false,
         "gridPos": {
           "x": 0,
-          "y": 50,
+          "y": 46,
           "w": 24,
           "h": 1
         },
@@ -833,7 +807,7 @@
         },
         "gridPos": {
           "x": 0,
-          "y": 51,
+          "y": 47,
           "w": 12,
           "h": 6
         },
@@ -888,7 +862,7 @@
         },
         "gridPos": {
           "x": 12,
-          "y": 51,
+          "y": 47,
           "w": 12,
           "h": 6
         },
@@ -912,6 +886,32 @@
         },
         "options": {},
         "description": "Gaps in the series above should have a matching line here."
+      },
+      {
+        "id": 1,
+        "type": "text",
+        "title": "About this dashboard",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "gridPos": {
+          "x": 0,
+          "y": 53,
+          "w": 24,
+          "h": 4
+        },
+        "targets": [],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {}
+          },
+          "overrides": []
+        },
+        "options": {
+          "mode": "markdown",
+          "content": "Sampled from the GitHub Actions REST API by `packages/observability/collectors/actions-queue.ts`, which emits one JSON line per observation on channel `boxel:actions-queue`.\n\nThe collector runs **outside** GitHub Actions on purpose — a scheduled workflow would queue behind the backlog it measures and go blind during the incident it exists for.\n\nDepth and grouped depth come from periodic snapshots, so each point is a sample rather than a continuous measure; gaps mean the collector was down or throttled (see *Collector health*)."
+        }
       }
     ],
     "refresh": "1m",
