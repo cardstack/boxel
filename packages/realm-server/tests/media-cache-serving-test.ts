@@ -176,24 +176,16 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(response.status, 200);
   });
 
-  test('HEAD answers with the hit headers and no body', async function (assert) {
-    let response = await serve({ method: 'HEAD' });
-    assert.strictEqual(response.status, 200);
-    assert.strictEqual(
-      response.headers.get('content-length'),
-      String(BYTES.length),
-    );
-    assert.strictEqual(response.nodeStream, undefined);
-    assert.strictEqual(await response.text(), '');
-  });
-
-  test('a bare async-iterable stream is buffered into the body', async function (assert) {
+  test('a bare async-iterable stream still exits via nodeStream', async function (assert) {
+    // Any body shape other than nodeStream is drained through text by the
+    // realm-server's Koa bridge, corrupting binary — so both interface-legal
+    // stream shapes must leave through nodeStream.
     adapter.streamShape = 'iterable';
     let response = await serve();
     assert.strictEqual(response.status, 200);
-    assert.strictEqual(response.nodeStream, undefined);
+    assert.ok(response.nodeStream, 'the wrapped iterable rides nodeStream');
     assert.deepEqual(
-      [...new Uint8Array(await response.arrayBuffer())],
+      [...(await nodeStreamToBuffer(response.nodeStream!))],
       [...BYTES],
     );
   });
@@ -209,12 +201,11 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('200, 304, and HEAD all bump last_accessed_at', async function (assert) {
+  test('200 and 304 both bump last_accessed_at', async function (assert) {
     let before = await lastAccessedAt();
     for (let init of [
       {},
       { headers: { 'if-none-match': `"${entry.objectKey}"` } },
-      { method: 'HEAD' },
     ]) {
       // ensure the clock can only move forward past the prior stamp
       await new Promise((resolve) => setTimeout(resolve, 5));

@@ -3200,11 +3200,12 @@ export class Realm {
       // requests this route must serve (`<img>` loads, og:image fetches)
       // send `image/*`-shaped Accept values that match no supported mime
       // type. Placed after checkPermission so the route inherits realm-read
-      // auth exactly like any realm resource.
-      if (
-        (request.method === 'GET' || request.method === 'HEAD') &&
-        localPath.startsWith('_screenshot/')
-      ) {
+      // auth exactly like any realm resource. GET only — checkPermission
+      // exempts HEAD from auth realm-wide, so admitting HEAD here would
+      // hand unauthenticated callers an existence/size/content-hash oracle
+      // over a private realm's captures; no consumer of this route (image
+      // loads, crawlers) sends HEAD.
+      if (request.method === 'GET' && localPath.startsWith('_screenshot/')) {
         return await this.serveScreenshot(
           request,
           requestContext,

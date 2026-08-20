@@ -1,4 +1,5 @@
 import type { Readable } from 'stream';
+import { toNodeStream } from '#media-cache-stream';
 import { createResponse } from './create-response.ts';
 import type { DBAdapter } from './db.ts';
 import { logger } from './log.ts';
@@ -64,10 +65,6 @@ export function mediaCacheMissResponse({
   });
 }
 
-function isNodeReadable(stream: AsyncIterable<Uint8Array>): stream is Readable {
-  return typeof (stream as Readable).pipe === 'function';
-}
-
 // Streams one resolved ledger entry. The ETag is the entry's object key —
 // the hash of the bytes themselves — so revalidation is exact: any
 // `If-None-Match` echo of it answers as a bodyless 304, and a re-capture
@@ -110,55 +107,28 @@ export async function serveMediaCacheEntry({
     });
   }
 
-  if (request.method === 'HEAD') {
-    await touch(dbAdapter, entry);
-    return createResponse({
-      body: null,
-      init: {
-        status: 200,
-        headers: { ...headers, 'content-length': String(entry.sizeBytes) },
-      },
-      requestContext,
-    });
-  }
-
   let stream = await mediaCacheAdapter.getStream(entry.objectKey);
   if (!stream) {
     return mediaCacheMissResponse({ requestContext });
   }
   await touch(dbAdapter, entry);
 
-  let init = {
-    status: 200,
-    headers: { ...headers, 'content-length': String(entry.sizeBytes) },
-  };
-  if (isNodeReadable(stream)) {
-    // Binary bodies must ride `nodeStream`: the realm-server's Koa bridge
-    // streams a `nodeStream` verbatim but drains any other body shape
-    // through text, which corrupts image bytes. Both production adapters
-    // hand back node Readables, so this is the streaming path.
-    let response: ResponseWithNodeStream = createResponse({
-      body: null,
-      init,
-      requestContext,
-    });
-    response.nodeStream = stream;
-    return response;
-  }
-  // A bare async iterable (the interface's minimum) is buffered whole. Safe
-  // because captures are screenshot-sized, and the entry carries the exact
-  // size; an adapter serving anything large should return a node Readable.
-  let chunks: Uint8Array[] = [];
-  for await (let chunk of stream) {
-    chunks.push(chunk);
-  }
-  let body = new Uint8Array(entry.sizeBytes);
-  let offset = 0;
-  for (let chunk of chunks) {
-    body.set(chunk, offset);
-    offset += chunk.length;
-  }
-  return createResponse({ body, init, requestContext });
+  // The bytes MUST leave via `nodeStream` — the realm-server's Koa bridge
+  // streams a `nodeStream` verbatim but drains every other body shape
+  // (including a Response constructed over a Uint8Array) through text,
+  // which corrupts binary. `toNodeStream` passes an adapter's node Readable
+  // through and wraps a bare async iterable, so both interface-legal stream
+  // shapes exit through the one safe path.
+  let response: ResponseWithNodeStream = createResponse({
+    body: null,
+    init: {
+      status: 200,
+      headers: { ...headers, 'content-length': String(entry.sizeBytes) },
+    },
+    requestContext,
+  });
+  response.nodeStream = toNodeStream(stream) as Readable;
+  return response;
 }
 
 // Best-effort: a failed last-accessed bump must never fail a serve — the
