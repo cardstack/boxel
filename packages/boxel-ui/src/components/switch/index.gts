@@ -1,4 +1,5 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
+import { assert } from '@ember/debug';
 import { concat, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import type { ComponentLike } from '@glint/template';
@@ -23,11 +24,24 @@ interface SwitchArgs {
   disabled?: boolean;
   isEnabled: boolean;
   /* names the switch for assistive technology when no block is given; a
-     yielded visible label names it instead, so pass one or the other */
+     yielded visible label names it instead, so pass one or the other.
+     Glint can't tie block presence to the args type, so the requirement
+     is asserted at render time rather than in the signature. */
   label?: string;
   onChange: (isEnabled: boolean) => void;
   size?: SwitchSize;
   uncheckedIcon?: ComponentLike<{ Element: Element }>;
+}
+
+/* Only reached when no visible label block is given, so an empty @label
+   here means the switch would render with no accessible name at all.
+   assert is compiled out of production builds. */
+function srOnlyLabel(label: string | undefined) {
+  assert(
+    'Switch requires an accessible name: pass @label or provide a visible label block',
+    Boolean(label && label.trim()),
+  );
+  return label;
 }
 
 /* explicit width/height attributes so icons carry intrinsic size (they
@@ -78,7 +92,7 @@ const Switch: TemplateOnlyComponent<SwitchSignature> = <template>
     {{#if (has-block)}}
       <span class='switch-label'>{{yield}}</span>
     {{else}}
-      <span class='boxel-sr-only'>{{@label}}</span>
+      <span class='boxel-sr-only'>{{srOnlyLabel @label}}</span>
     {{/if}}
     <span class='switch-track'>
       {{! a native checkbox's checkedness maps to aria-checked automatically;

@@ -20,6 +20,12 @@ export default class SwitchUsage extends Component {
   @tracked label = 'Switch';
   @tracked size: SwitchSize = 'base';
 
+  /* Switch asserts when it has neither a label nor a visible label block,
+     so the example only renders once the knob names it. */
+  get hasLabel() {
+    return Boolean(this.label && this.label.trim());
+  }
+
   @tracked isLabeledEnabled = false;
   @tracked isDarkModeEnabled = false;
 
@@ -110,18 +116,24 @@ export default class SwitchUsage extends Component {
           label beside the track — one of the two is required.
         </:description>
         <:example>
-          <Switch
-            @label={{this.label}}
-            @isEnabled={{this.isEnabled}}
-            @onChange={{this.handleChange}}
-            @disabled={{this.isDisabled}}
-            @size={{this.size}}
-          />
+          {{#if this.hasLabel}}
+            <Switch
+              @label={{this.label}}
+              @isEnabled={{this.isEnabled}}
+              @onChange={{this.handleChange}}
+              @disabled={{this.isDisabled}}
+              @size={{this.size}}
+            />
+          {{else}}
+            <p>Set the label arg to render this example — without it (or a
+              visible label block) the switch would have no accessible name,
+              which Switch rejects in development.</p>
+          {{/if}}
         </:example>
         <:api as |Args|>
           <Args.String
             @name='label'
-            @description='Accessible label for the switch (visually hidden, read by screen readers). Not needed when a block provides a visible label'
+            @description='Accessible label for the switch (visually hidden, read by screen readers). Required unless a block provides a visible label'
             @value={{this.label}}
             @onInput={{fn (mut this.label)}}
             @optional={{true}}
