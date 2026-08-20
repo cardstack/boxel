@@ -65,13 +65,19 @@ function toggleOnClick(
 }
 
 /* Enter is inert on checkboxes, listed in WAI-ARIA as optional for role=switch,
-   so it gets its own keydown path. https://www.w3.org/WAI/ARIA/apg/patterns/switch/ */
+   so it gets its own keydown path. https://www.w3.org/WAI/ARIA/apg/patterns/switch/
+   Held keys repeat keydown, and unlike Space — which reaches the click handler
+   only on keyup, once per press — nothing else throttles this path, so skip the
+   repeats and toggle once per press. */
 function toggleOnEnter(
   isEnabled: boolean,
   onChange: SwitchArgs['onChange'],
   event: Event,
 ) {
   if (event instanceof KeyboardEvent && event.key === 'Enter') {
+    if (event.repeat) {
+      return;
+    }
     event.preventDefault();
     onChange(!isEnabled);
   }
