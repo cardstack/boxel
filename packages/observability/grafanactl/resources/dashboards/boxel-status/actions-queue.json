@@ -769,7 +769,7 @@
               "uid": "loki"
             },
             "editorMode": "code",
-            "expr": "topk(25, max by (job, head_branch, workflow, actor, current_step) (last_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"job\" | status=\"in_progress\" | unwrap current_step_seconds [10m])))",
+            "expr": "topk(25, max by (job, head_branch, workflow, actor, current_step, run_id, job_id) (last_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"job\" | status=\"in_progress\" | unwrap current_step_seconds [10m])))",
             "refId": "A",
             "queryType": "instant"
           }
@@ -779,10 +779,81 @@
             "custom": {},
             "unit": "s"
           },
-          "overrides": []
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "job"
+              },
+              "properties": [
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "title": "Open this job on GitHub",
+                      "url": "https://github.com/cardstack/boxel/actions/runs/${__data.fields.run_id}/job/${__data.fields.job_id}",
+                      "targetBlank": true
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "head_branch"
+              },
+              "properties": [
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "title": "Actions runs for this branch",
+                      "url": "https://github.com/cardstack/boxel/actions?query=branch%3A${__value.raw}",
+                      "targetBlank": true
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "actor"
+              },
+              "properties": [
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "title": "GitHub profile",
+                      "url": "https://github.com/${__value.raw}",
+                      "targetBlank": true
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
         },
         "options": {},
-        "description": "A job whose current step has run far longer than its peers is the wedge signal — compare against the same step on other shards before concluding it is stuck."
+        "description": "A job whose current step has run far longer than its peers is the wedge signal — compare against the same step on other shards before concluding it is stuck.",
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {
+                "Time": true,
+                "run_id": true,
+                "job_id": true
+              },
+              "renameByName": {
+                "Value": "in step",
+                "Value #A": "in step"
+              }
+            }
+          }
+        ]
       },
       {
         "id": 19,
@@ -985,7 +1056,26 @@
           "defaults": {
             "custom": {}
           },
-          "overrides": []
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "branch"
+              },
+              "properties": [
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "title": "Actions runs for this branch",
+                      "url": "https://github.com/cardstack/boxel/actions?query=branch%3A${__value.raw}",
+                      "targetBlank": true
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
         },
         "options": {}
       },
@@ -1048,7 +1138,26 @@
           "defaults": {
             "custom": {}
           },
-          "overrides": []
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "branch"
+              },
+              "properties": [
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "title": "Actions runs for this branch",
+                      "url": "https://github.com/cardstack/boxel/actions?query=branch%3A${__value.raw}",
+                      "targetBlank": true
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
         },
         "options": {}
       },
@@ -1111,7 +1220,26 @@
           "defaults": {
             "custom": {}
           },
-          "overrides": []
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "author"
+              },
+              "properties": [
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "title": "GitHub profile",
+                      "url": "https://github.com/${__value.raw}",
+                      "targetBlank": true
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
         },
         "options": {}
       }
