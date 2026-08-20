@@ -219,6 +219,17 @@
             "refId": "B",
             "queryType": "range",
             "legendFormat": "running"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "max_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"snapshot\" | unwrap active_runs [$__interval]) by ()",
+            "refId": "C",
+            "queryType": "range",
+            "legendFormat": "active runs"
           }
         ],
         "fieldConfig": {
@@ -246,7 +257,7 @@
             "sort": "desc"
           }
         },
-        "description": "Queued depth rising while running stays flat means the pool is saturated, not slow.",
+        "description": "Queued depth rising while running stays flat means the pool is saturated rather than slow.\n\nCarries the same three values as the stat tiles beside it, because a stat panel has no hover tooltip — read the headline there, hover here.",
         "interval": "5m"
       },
       {
@@ -769,7 +780,7 @@
               "uid": "loki"
             },
             "editorMode": "code",
-            "expr": "topk(25, max by (job, head_branch, workflow, actor, current_step, run_id, job_id) (last_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"job\" | status=\"in_progress\" | unwrap current_step_seconds [10m])))",
+            "expr": "topk(25, max by (job, head_branch, workflow, actor, current_step, run_id, job_id) (last_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"job\" | status=\"in_progress\" | unwrap current_step_seconds [4m])))",
             "refId": "A",
             "queryType": "instant"
           }
@@ -837,7 +848,7 @@
           ]
         },
         "options": {},
-        "description": "A job whose current step has run far longer than its peers is the wedge signal — compare against the same step on other shards before concluding it is stuck.",
+        "description": "Ranked by how long a job's current step has been running. A job whose step has run far longer than the same step on its siblings is the wedge signal — compare before concluding it is stuck.\n\nThe window is four minutes against a two-minute sample interval, so a row can be up to that stale: a job that finished moments ago may still appear, and a job that just changed step may briefly show both. Neither distorts what this panel is for, since a stall worth acting on is measured in hours.",
         "transformations": [
           {
             "id": "organize",

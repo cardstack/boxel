@@ -156,11 +156,13 @@ async function gh<T>(url: string, token: string): Promise<T> {
       // A body that cannot be read is not worth failing over; the status still
       // carries most of the signal.
     }
-    throw new Error(
+    const err = new Error(
       `GET ${url} → ${res.status} ${res.statusText}` +
         (detail ? ` — ${detail}` : '') +
         ` (rate limit remaining: ${res.headers.get('x-ratelimit-remaining') ?? 'unknown'})`,
-    );
+    ) as Error & { status?: number };
+    err.status = res.status;
+    throw err;
   }
   return (await res.json()) as T;
 }
@@ -255,8 +257,7 @@ async function sample(opts: Options): Promise<void> {
         (b) => b.jobs ?? [],
       );
     } catch (e) {
-      // A run can complete and be reaped between listing and this fetch. That is
-      // ordinary, so it must not abort the whole sample.
+      const status = (e as { status?: number }).status;
       emit({
         event_type: 'collector-error',
         observed_at,
@@ -264,7 +265,24 @@ async function sample(opts: Options): Promise<void> {
         run_id: run.id,
         message: e instanceof Error ? e.message : String(e),
       });
-      continue;
+      // A run that completed and was reaped between the listing and this fetch
+      // answers 404, and has no jobs left to count — omitting it understates
+      // nothing, so the sample continues.
+      if (status === 404) continue;
+      // Anything else means this run's jobs are unknown rather than absent.
+      // Publishing the totals anyway would put a confidently low queue depth
+      // on the dashboard at precisely the moment the API is failing, which is
+      // worse than the visible gap a skipped sample leaves — the same reason
+      // the rate-limit reserve above abandons the sample rather than trimming
+      // it.
+      emit({
+        event_type: 'collector-aborted',
+        observed_at,
+        repo: opts.repo,
+        active_runs: runs.length,
+        reason: `job listing failed for run ${run.id} with status ${status ?? 'unknown'}`,
+      });
+      return;
     }
 
     for (const job of jobs) {
