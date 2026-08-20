@@ -7,7 +7,7 @@ import { restartableTask, timeout } from 'ember-concurrency';
 import { modifier } from 'ember-modifier';
 import { TrackedArray, TrackedObject, TrackedSet } from 'tracked-built-ins';
 
-import { BoxelInput } from '@cardstack/boxel-ui/components';
+import { BoxelInput, Button } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import BooleanField from './boolean';
 // host-mode mutation: publish and unpublish are registered host tools
@@ -598,11 +598,13 @@ class Isolated extends Component<typeof Workspace> {
                           <span class='door-title'>{{this.doorTitle
                               index
                             }}</span>
-                          <button
-                            type='button'
+                          <Button
+                            @kind='primary'
+                            @size='extra-small'
+                            @rectangular={{true}}
                             class='door-open'
                             {{on 'click' (this.openDoor index)}}
-                          >Open</button>
+                          >Open</Button>
                         </div>
                       </article>
                     {{/each}}
@@ -1942,20 +1944,8 @@ class Isolated extends Component<typeof Workspace> {
       }
       .door-open {
         flex: 0 0 auto; /* Keep the action inside its tile while the label ellipsizes */
-        border: 0;
-        border-radius: 8px;
-        padding: 5px 12px;
-        background-color: var(--grid-accent);
-        color: var(--grid-accent-ink);
-        font: 600 12px var(--grid-sans);
-        cursor: pointer;
+        --boxel-button-min-width: 0; /* Stay as narrow as the label; the tile is tight */
         white-space: nowrap;
-        box-shadow:
-          inset 0 1px 0 rgba(255, 255, 255, 0.5),
-          0 1px 2px rgba(0, 0, 0, 0.1);
-      }
-      .door-open:hover {
-        background-color: var(--boxel-highlight-hover, #00da9f);
       }
 
       /* ── Inventory (Home): what lives here, grouped by kind ── */
