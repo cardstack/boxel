@@ -1740,11 +1740,12 @@ Current date and time: 2025-06-11T11:43:00.533Z
     });
   });
 
-  test('Adds the "unable to edit cards" note only when no card is open or attached to the message', async () => {
+  test('Adds the "unable to edit cards" note only when no card is open', async () => {
     // Interactive messages no longer inject per-card patch tools, so the
-    // access statement keys off what the user actually shared: an open or
-    // message-attached card is the grant; without one (and with no attached
-    // files) the model is told to ask instead of guessing at ids.
+    // access statement keys off the actual grant: an OPEN card. Cards may
+    // be attached to the message without being open — the note stays (and
+    // deliberately makes no claim about attachments); only opening a card
+    // (or attaching a file) suppresses it.
     const eventList: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
@@ -1818,12 +1819,12 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
 
     let nonEditableCardsMessage =
-      'You are unable to edit any cards: the user has no card open and none attached to this message. Ask them to open the card they want changed.';
+      'You are unable to edit any cards: the user has no card open, and editing requires the card to be open. Ask them to open the card they want changed.';
 
     let userContextMessage = messages?.[messages.length - 1];
     assert.ok(
       messageText(userContextMessage).includes(nonEditableCardsMessage),
-      'The context leading the user turn should include the "unable to edit cards" message when there are attached cards but none open, and no attached files, but was ' +
+      'The note appears when cards are attached but none is open, and no files are attached, but was ' +
         userContextMessage?.content,
     );
 
@@ -3370,6 +3371,52 @@ Current date and time: 2025-06-11T11:43:00.533Z
         'utf-8',
       ),
     );
+
+    // Disabled skills' contents are now downloaded to learn which tool
+    // names they declare — the only names removable from the tools union.
+    // The fixture's mxc URL is remapped to a fresh one: downloadFile caches
+    // by URL across tests, and an earlier test cached different content
+    // under the original.
+    for (let event of eventList) {
+      let disabled = (event as any).content?.disabledSkillCards;
+      if (disabled?.length) {
+        for (let card of disabled) {
+          card.url = 'mxc://mock-server/skill_card_editing_disabled';
+        }
+      }
+    }
+    mockResponses.set('mxc://mock-server/skill_card_editing_disabled', {
+      ok: true,
+      text: JSON.stringify({
+        data: {
+          type: 'card',
+          id: '@cardstack/base/Skill/card-editing',
+          attributes: {
+            instructions: 'Card editing skill',
+            commands: [
+              {
+                codeRef: {
+                  name: 'default',
+                  module: '@cardstack/boxel-host/commands/patch-card-instance',
+                },
+                requiresApproval: false,
+                functionName: 'patchCardInstance',
+              },
+              {
+                codeRef: {
+                  name: 'default',
+                  module: '@cardstack/boxel-host/commands/switch-submode',
+                },
+                requiresApproval: false,
+                functionName: 'switch-submode_dd88',
+              },
+            ],
+            title: 'Card Editing',
+          },
+          meta: { adoptsFrom: skillCardRef },
+        },
+      }),
+    });
 
     const { messages, tools } = await getPromptParts(
       eventList,
@@ -8136,6 +8183,26 @@ module('markdown skill tools', (hooks) => {
   });
 
   test('a skill disabled in room state contributes no discovered tools', async () => {
+    // Disabled skills' contents are downloaded to learn which names they
+    // declare — the removable set.
+    mockResponses.set('mxc://mock-server/trip-planner', {
+      ok: true,
+      text: [
+        '---',
+        'name: "Trip Planner"',
+        'description: "plans trips"',
+        'boxel:',
+        '  kind: skill',
+        '  tools:',
+        '    - codeRef:',
+        '        module: "@cardstack/boxel-host/commands/plan-trip"',
+        '        name: "default"',
+        '      requiresApproval: false',
+        '---',
+        '',
+        'Plan trips.',
+      ].join('\n'),
+    });
     const skillsEvent = {
       type: APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
       event_id: 'skills-1',
@@ -8167,6 +8234,62 @@ module('markdown skill tools', (hooks) => {
       fakeMatrixClient,
     );
     assert.strictEqual(tools.length, 0);
+  });
+
+  test('a definition survives its enabled skill being edited to no longer declare it', async () => {
+    // The removable set is what disabled skills declare — never "names the
+    // current skill contents happen to omit". An enabled skill edited
+    // mid-session to drop a tool must not shrink the array: the historical
+    // state event still carries the definition, and dropping it would
+    // rewrite the request's leading bytes and reset the cache.
+    mockResponses.set('mxc://mock-server/removed-tool-def', {
+      ok: true,
+      text: JSON.stringify({
+        codeRef: {
+          module: '@cardstack/boxel-host/commands/removed-tool',
+          name: 'default',
+        },
+        tool: {
+          type: 'function',
+          function: {
+            name: 'removed-tool_bb22',
+            description: 'declared by an earlier version of the skill',
+            parameters: { type: 'object', properties: {} },
+          },
+        },
+      }),
+    });
+    const { eventList, enabledSkills } = skillsRoomFixture('toolDefinitions');
+    // The host uploaded this definition when the skill still declared it;
+    // the current skill content (enabledSkills) no longer does.
+    (eventList[0] as any).content.toolDefinitions.push({
+      sourceUrl: 'https://realm/commands/removed-tool',
+      url: 'mxc://mock-server/removed-tool-def',
+      name: 'removed-tool_bb22',
+      contentType: 'text/plain',
+    });
+    const first = await getTools(
+      eventList,
+      enabledSkills,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.deepEqual(
+      first.map((t) => t.function.name),
+      ['switch-submode_dd88', 'removed-tool_bb22'],
+      'the edited-away tool stays in the union',
+    );
+    const second = await getTools(
+      eventList,
+      enabledSkills,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.deepEqual(
+      second.map((t) => JSON.stringify(t)),
+      first.map((t) => JSON.stringify(t)),
+      'rebuilding yields byte-identical output',
+    );
   });
 
   test('a skill both enabled and read yields one definition; the uploaded one wins', async () => {

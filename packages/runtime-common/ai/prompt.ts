@@ -858,6 +858,59 @@ export function attachedFilesToMessage(
     .join('\n');
 }
 
+// The names a skill source declares, regardless of markdown or card shape.
+function skillDeclaredToolNames(skill: {
+  attributes?: {
+    tools?: { functionName: string }[];
+    commands?: { functionName: string }[];
+  };
+}): string[] {
+  let skillTools = skill.attributes?.tools ?? skill.attributes?.commands;
+  return (skillTools ?? []).map((tool) => tool.functionName);
+}
+
+// The tool names declared by the skills the user has disabled — the only
+// sanctioned removal from the tools array. Downloaded and parsed exactly
+// like enabled skills; a name an enabled skill still declares is not
+// removable (two skills can declare the same command).
+async function getDisabledSkillToolNames(
+  eventList: DiscreteMatrixEvent[],
+  enabledToolNames: Set<string>,
+  client: MatrixClient,
+): Promise<Set<string>> {
+  let skillsConfigEvent = findLast(
+    eventList,
+    (event) => event.type === APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+  ) as SkillsConfigEvent;
+  let disabledSkillCards = skillsConfigEvent?.content?.disabledSkillCards;
+  let names = new Set<string>();
+  if (!disabledSkillCards?.length) {
+    return names;
+  }
+  await Promise.all(
+    disabledSkillCards.map(async (cardFileDef: SerializedFileDef) => {
+      let content = await downloadFile(client, cardFileDef);
+      if (isMarkdownSkillFile(cardFileDef)) {
+        let { tools } = parseMarkdownSkill(content, cardFileDef);
+        for (let tool of tools ?? []) {
+          if (tool.functionName) {
+            names.add(tool.functionName);
+          }
+        }
+        return;
+      }
+      let skill = (JSON.parse(content) as LooseSingleCardDocument)?.data;
+      for (let name of skillDeclaredToolNames(skill ?? {})) {
+        names.add(name);
+      }
+    }),
+  );
+  for (let name of enabledToolNames) {
+    names.delete(name);
+  }
+  return names;
+}
+
 // The tools array renders ahead of all message history in the request, so
 // any byte change to it re-bills the entire conversation from the first
 // changed byte. Tools are therefore accumulated first-definition-wins, in
@@ -867,30 +920,36 @@ export function attachedFilesToMessage(
 // mutate its bytes or its position, and new names only ever append. The
 // trade is deliberate: a tool whose definition changed mid-session keeps
 // its original schema until a new room, matching how skill instructions
-// are snapshotted at attach.
+// are snapshotted at attach. Every definition listed in a state event was
+// declared by a then-enabled skill when the host wrote it (the host
+// rebuilds the list from enabled skills on every write), so admission
+// needs no gate against current skill contents — gating on the *current*
+// declarations would silently drop a tool when an enabled skill is edited
+// to remove it, shrinking the array mid-session.
 //
-// The one sanctioned removal is the user disabling a skill: its tools drop
-// out (state-event definitions through the enabled-names gate, discovered
-// definitions through the disabled-skills list), costing one honest cache
-// reset per user toggle. Re-enabling restores the exact prior bytes and
-// order, because first-wins re-admits each definition from its original
-// event.
+// The one sanctioned removal is the user disabling a skill: the names that
+// skill declares drop out (state-event definitions through the
+// disabled-names gate, discovered definitions through the disabled-skills
+// list), costing one honest cache reset per user toggle. Re-enabling
+// restores the exact prior bytes and order, because first-wins re-admits
+// each definition from its original event.
 export async function getTools(
   eventList: DiscreteMatrixEvent[],
   enabledSkills: EnabledSkill[],
   aiBotUserId: string,
   client: MatrixClient,
 ): Promise<Tool[]> {
-  // Names the currently-enabled skills declare; the admission gate for
-  // state-event definitions (the host never delists a definition when a
-  // skill is disabled — this gate is what removes it).
   let enabledToolNames = new Set<string>();
   for (let skill of enabledSkills) {
-    let skillTools = skill.attributes?.tools ?? skill.attributes?.commands;
-    for (let tool of skillTools ?? []) {
-      enabledToolNames.add(tool.functionName);
+    for (let name of skillDeclaredToolNames(skill)) {
+      enabledToolNames.add(name);
     }
   }
+  let disabledToolNames = await getDisabledSkillToolNames(
+    eventList,
+    enabledToolNames,
+    client,
+  );
   let disabledSkillIds = new Set(await getDisabledSkillIds(eventList));
 
   // Map insertion order is the emitted array order.
@@ -925,8 +984,12 @@ export async function getTools(
           (event as SkillsConfigEvent).content,
         ) ?? [];
       for (let toolDefinitionFileDef of toolDefinitionFileDefs) {
+        // A nameless entry (pre-rename rooms carry some) can't be deduped
+        // or addressed; downloading it would also make the union depend on
+        // an unfetchable upload.
         if (
-          !enabledToolNames.has(toolDefinitionFileDef.name) ||
+          !toolDefinitionFileDef.name ||
+          disabledToolNames.has(toolDefinitionFileDef.name) ||
           toolMap.has(toolDefinitionFileDef.name)
         ) {
           continue;
@@ -2391,17 +2454,19 @@ export const buildContextMessage = async (
 
   // The old wording keyed off the per-card patchCardInstance tool, which
   // interactive messages no longer inject (its card-specific schema churned
-  // the tools array). The access statement is now derived from what the
-  // user actually shared: with no attached files and no open cards, there
-  // is nothing the model may write to, and it should ask rather than guess
-  // at ids.
+  // the tools array). The policy is unchanged from before this change:
+  // opening a card is what grants edit access, so with no open cards (and
+  // no attached files) the model should ask rather than guess at ids. The
+  // wording deliberately says nothing about attachments — cards may well be
+  // attached to the very message this note trails, and attachment alone was
+  // never the grant.
   if (
     attachedFiles.length == 0 &&
     (context?.openCardIds?.length ?? 0) === 0 &&
     hasSomeAttachedCards(history, aiBotUserId)
   ) {
     result +=
-      'You are unable to edit any cards: the user has no card open and none attached to this message. Ask them to open the card they want changed.';
+      'You are unable to edit any cards: the user has no card open, and editing requires the card to be open. Ask them to open the card they want changed.';
   }
 
   return result;
