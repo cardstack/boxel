@@ -124,7 +124,7 @@ body { margin: 0; }
 {{formatNumber @model.count size="tiny"}}
 ```
 
-Canonical formatter imports live in `@cardstack/boxel-ui/helpers`, not the catalog realm. See `formatters.md` for the full list. For static `markdown` templates, use `https://cardstack.com/base/markdown-helpers` instead.
+Canonical formatter imports live in `@cardstack/boxel-ui/helpers`, not the catalog realm. See `formatters.md` for the full list. For static `markdown` templates, use `@cardstack/base/markdown-helpers` instead.
 
 ## Design Philosophy and Competitive Styling
 

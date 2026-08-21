@@ -7,7 +7,7 @@ import { restartableTask, timeout } from 'ember-concurrency';
 import { modifier } from 'ember-modifier';
 import { TrackedArray, TrackedObject, TrackedSet } from 'tracked-built-ins';
 
-import { BoxelInput } from '@cardstack/boxel-ui/components';
+import { BoxelInput, Button } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import BooleanField from './boolean';
 // host-mode mutation: publish and unpublish are registered host tools
@@ -598,11 +598,13 @@ class Isolated extends Component<typeof Workspace> {
                           <span class='door-title'>{{this.doorTitle
                               index
                             }}</span>
-                          <button
-                            type='button'
+                          <Button
+                            @kind='primary'
+                            @size='extra-small'
+                            @rectangular={{true}}
                             class='door-open'
                             {{on 'click' (this.openDoor index)}}
-                          >Open</button>
+                          >Open</Button>
                         </div>
                       </article>
                     {{/each}}
@@ -635,17 +637,17 @@ class Isolated extends Component<typeof Workspace> {
                       to create something for you.</p>
                   {{/if}}
                   <div class='welcome-actions'>
-                    <button
-                      type='button'
+                    <Button
+                      @kind='primary'
                       class='welcome-cta'
                       {{on 'click' (this.setSegment 'library')}}
-                    >Open Library</button>
+                    >Open Library</Button>
                     {{#if @canEdit}}
-                      <button
-                        type='button'
+                      <Button
+                        @kind='secondary'
                         class='welcome-alt'
                         {{on 'click' this.createNew}}
-                      >New card</button>
+                      >New card</Button>
                     {{/if}}
                   </div>
                 </section>
@@ -1323,23 +1325,6 @@ class Isolated extends Component<typeof Workspace> {
         text-transform: uppercase;
         color: var(--grid-ink-ghost);
       }
-      .new-button {
-        border: 0;
-        border-radius: 8px;
-        padding: 7px 13px;
-        background-color: var(--grid-accent);
-        color: var(--grid-accent-ink);
-        font: 600 12.5px var(--grid-sans);
-        cursor: pointer;
-        white-space: nowrap;
-        box-shadow:
-          inset 0 1px 0 rgba(255, 255, 255, 0.5),
-          0 1px 2px rgba(0, 0, 0, 0.1);
-      }
-      .new-button:hover {
-        background-color: var(--boxel-dark-teal, #00da9f);
-      }
-
       @keyframes softpulse {
         0%,
         100% {
@@ -1942,12 +1927,7 @@ class Isolated extends Component<typeof Workspace> {
       }
       .door-open {
         flex: 0 0 auto; /* Keep the action inside its tile while the label ellipsizes */
-        border: none;
-        background: none;
-        padding: 0;
-        font: 600 12.5px var(--grid-sans);
-        color: var(--grid-interactive);
-        cursor: pointer;
+        --boxel-button-min-width: 0; /* Stay as narrow as the label; the tile is tight */
         white-space: nowrap;
       }
 
@@ -2338,30 +2318,6 @@ class Isolated extends Component<typeof Workspace> {
         display: flex;
         align-items: center;
         gap: 10px;
-      }
-      .welcome-cta {
-        border: 0;
-        border-radius: 8px;
-        padding: 9px 16px;
-        background-color: var(--grid-accent);
-        color: var(--grid-accent-ink);
-        font: 600 13px var(--grid-sans);
-        cursor: pointer;
-        box-shadow:
-          inset 0 1px 0 rgba(255, 255, 255, 0.5),
-          0 1px 2px rgba(0, 0, 0, 0.1);
-      }
-      .welcome-alt {
-        border: 1px solid var(--grid-border);
-        border-radius: 8px;
-        padding: 8px 16px;
-        background-color: var(--grid-surface);
-        font: 600 13px var(--grid-sans);
-        color: var(--grid-nav-ink);
-        cursor: pointer;
-      }
-      .welcome-alt:hover {
-        border-color: var(--grid-hover-border);
       }
       .empty-note {
         margin: 0;

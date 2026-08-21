@@ -41,10 +41,6 @@ boxel:
         name: default
       requiresApproval: false
     - codeRef:
-        module: '@cardstack/boxel-host/tools/write-text-file'
-        name: default
-      requiresApproval: true
-    - codeRef:
         module: '@cardstack/boxel-host/tools/copy-card'
         name: default
       requiresApproval: true
@@ -69,7 +65,7 @@ Quick lookup of every command available to this skill, what it does, and notable
 ## Editing
 
 - **SEARCH/REPLACE** — The way to create or edit files, `.gts` and `.json` alike. Streams as visible text so the user sees real-time progress, and runs through the code-patch pipeline with correctness checking. Create a new file by marking its URL line with `(new)`.
-- `write-text-file_e5a1` — **Avoid; use SEARCH/REPLACE instead.** Tool calls don't stream, so the UI appears frozen during long generation, and the write skips the code-patch pipeline.
+- There is no file-writing tool. Every text file — `.gts`, `.json`, `.md`, `README`, anything — is written with SEARCH/REPLACE, adding `(new)` after the URL to create one. A tool call cannot stream, so the UI sits frozen through a long generation and the write skips the code-patch pipeline; SEARCH/REPLACE streams as it is produced and goes through lint and correctness checks.
 - `patch-fields_3e67` — Fine-grained card field updates (requires approval).
 - `patchCardInstance` — Update card data only.
 - `ApplyMarkdownEditCommand_c112` — Edit long markdown fields (>500 chars) surgically without truncation (requires approval).
@@ -110,4 +106,4 @@ Quick lookup of every command available to this skill, what it does, and notable
 ## Approval requirements
 
 The following require user approval before execution:
-- `transform-cards`, `write-text-file`, `copy-card`, `copy-source`, `patch-fields`, `apply-markdown-edit`
+- `transform-cards`, `copy-card`, `copy-source`, `patch-fields`, `apply-markdown-edit`

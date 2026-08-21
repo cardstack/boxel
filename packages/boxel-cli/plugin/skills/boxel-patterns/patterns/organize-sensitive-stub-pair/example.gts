@@ -22,9 +22,9 @@ import {
   field,
   contains,
   linksTo,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import BooleanField from 'https://cardstack.com/base/boolean';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import BooleanField from '@cardstack/base/boolean';
 import { Command } from '@cardstack/runtime-common';
 import SaveCardCommand from '@cardstack/boxel-host/tools/save-card';
 import { Button } from '@cardstack/boxel-ui/components';

@@ -1,4 +1,4 @@
-import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
+import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
 import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 import { action } from '@ember/object';

@@ -287,7 +287,7 @@ Scan your stage-1 CSS and pull every distinct decision into a named token. The T
       "cssVariables": ":root {\n  --ink: #0f172a;\n  ...\n}\n\n.dark {\n  --ink: #f1f5f9;\n  ...\n}"
     },
     "meta": {
-      "adoptsFrom": { "module": "https://cardstack.com/base/card-api", "name": "Theme" }
+      "adoptsFrom": { "module": "@cardstack/base/card-api", "name": "Theme" }
     }
   }
 }

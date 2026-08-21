@@ -140,6 +140,16 @@ jobs:
               # shared CI-boot paths trigger it.
               - *shared
               - 'packages/bxl/**'
+              # The card-authoring skill's claims are pinned by a BXL suite
+              # that reads the skill file, so an edit to the skill has to run
+              # that suite too.
+              - 'packages/boxel-cli/plugin/skills/bxl-authoring/**'
+              # That suite also asserts the host suites the skill cites still
+              # exist. `bxl-test` runs unconditionally on main, so without
+              # these a host-only rename would merge green and redden main on
+              # a commit whose own CI never ran the failing suite.
+              - 'packages/host/tests/integration/bxl-*'
+              - 'packages/host/tests/helpers/cards/bxl-*'
             bench-amd:
               # The AMD transpiler is a runtime-common module with no
               # cross-workspace deps that affect its wall-time, so the
@@ -246,6 +256,15 @@ jobs:
       - uses: ./.github/actions/init
       - name: BXL test suite
         run: pnpm test
+        working-directory: packages/bxl
+      # The suites above read `src/`. This packs the npm artifact, installs it
+      # outside the monorepo the way a consumer does, and checks that every
+      # published subpath loads under plain Node and type-checks — the only
+      # pre-merge signal about the thing bxl-publish.yml ships. Unlike the
+      # suites, it reaches the npm registry, to install the package's own
+      # dependencies into the throwaway consumer project.
+      - name: BXL published package check
+        run: pnpm run verify:package
         working-directory: packages/bxl
 
   eslint-plugin-boxel-test:

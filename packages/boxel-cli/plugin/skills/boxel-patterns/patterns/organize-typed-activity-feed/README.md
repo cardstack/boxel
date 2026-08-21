@@ -43,11 +43,11 @@ import {
   containsMany,
   linksTo,
   linksToMany,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import BooleanField from 'https://cardstack.com/base/boolean';
-import DatetimeField from 'https://cardstack.com/base/datetime';
-import MarkdownField from 'https://cardstack.com/base/markdown';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import BooleanField from '@cardstack/base/boolean';
+import DatetimeField from '@cardstack/base/datetime';
+import MarkdownField from '@cardstack/base/markdown';
 
 import { FeedCategory, /* domain enums */ } from './enums';
 import { Subject } from './subject';

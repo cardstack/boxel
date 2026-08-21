@@ -60,10 +60,20 @@ export class ImagePreview extends GlimmerComponent<FilePreviewSignature> {
       data-test-image-preview
     />
     <style scoped>
+      /* Fill the stage frame like the stage's own thumbnail sibling does: an
+         absolute box against the relatively-positioned stage resolves both axes
+         to the frame. A plain height:100% grid child does not — the stage's auto
+         row leaves the percentage unresolved, so the browser falls back to the
+         intrinsic aspect ratio from the img's width/height attributes and
+         overflows a frame taller than it. object-fit then does the fitting
+         within a correctly sized box. */
       .image-preview {
-        display: block;
+        position: absolute;
+        inset: 0;
         width: 100%;
         height: 100%;
+        box-sizing: border-box;
+        display: block;
       }
       .image-preview[data-image-fit='cover'] {
         object-fit: cover;

@@ -1,6 +1,6 @@
 {
   "name": "@cardstack/bxl",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "Boxel Expression Language: readable syntax, linter, formatter, and sandboxed evaluator that compiles to canonical jq.",
   "keywords": [
     "bxl",
@@ -39,6 +39,7 @@
     "./*": "./src/*.ts"
   },
   "files": [
+    "dist",
     "src",
     "docs",
     "LICENSES",
@@ -49,10 +50,24 @@
   ],
   "publishConfig": {
     "access": "public",
+    "exports": {
+      ".": "./dist/index.js",
+      "./package.json": "./package.json",
+      "./boxel-runtime": "./dist/boxel-runtime.js",
+      "./compiler": "./dist/compiler.js",
+      "./examples": "./dist/examples/index.js",
+      "./linter": "./dist/linter.js",
+      "./mutation": "./dist/mutation/index.js",
+      "./runtime": "./dist/runtime.js",
+      "./runtime-bare": "./dist/runtime-bare.js",
+      "./syntax/textmate": "./dist/bxl/syntax/bxl.tmLanguage.json",
+      "./*": "./dist/*.js"
+    },
     "provenance": true
   },
   "scripts": {
     "bench:authorization": "node scripts/bench-authorization.ts",
+    "build": "node scripts/build.ts",
     "example:authorization": "node examples/authorization/run.ts",
     "example:mutation": "node tests/unit/bxl-mutation-fixtures-cli.ts",
     "example:mutation:realm": "node tests/unit/bxl-mutation-realm-fixtures-cli.ts",
@@ -62,9 +77,11 @@
     "lint:js": "eslint . --report-unused-disable-directives --cache",
     "lint:js:fix": "eslint . --report-unused-disable-directives --fix",
     "lint:types": "ember-tsc --noEmit",
+    "prepack": "node scripts/build.ts",
     "test": "node scripts/run-tests.mjs",
     "test:authorization:conformance": "node scripts/run-authorization-conformance.ts",
-    "test:authorization:performance": "node tests/unit/authorization-performance-cli.ts"
+    "test:authorization:performance": "node tests/unit/authorization-performance-cli.ts",
+    "verify:package": "node scripts/verify-package.ts"
   },
   "dependencies": {
     "bessel": "catalog:",
@@ -76,9 +93,11 @@
     "@openfga/syntax-transformer": "catalog:",
     "@types/eslint": "catalog:",
     "@types/node": "catalog:",
+    "@types/semver": "^7.7.0",
     "concurrently": "catalog:",
     "esbuild": "catalog:",
     "eslint": "catalog:",
+    "semver": "^7.7.0",
     "typescript": "catalog:",
     "yaml": "catalog:"
   }

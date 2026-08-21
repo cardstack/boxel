@@ -166,7 +166,7 @@ Never feed a possibly-`undefined` slot straight into a helper that dereferences 
 Plain reads collapse every non-present state to `undefined`. When you genuinely need to distinguish *still loading* from *not-found* from *errored* — e.g. to show a tailored message — use `getRelationship` from `@cardstack/runtime-common` / card-api. It is a pure read (it never re-triggers the loader) and reports each slot's true state:
 
 ```ts
-import { getRelationship } from 'https://cardstack.com/base/card-api';
+import { getRelationship } from '@cardstack/base/card-api';
 
 // singular linksTo → one RelationshipState
 let state = getRelationship(this, 'manager');

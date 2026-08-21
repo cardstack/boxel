@@ -16,8 +16,12 @@ import { FileObject } from './file-resources';
 import type { FilePreviewSignature } from './file-preview-stage';
 
 export class PdfViewer extends GlimmerComponent<FilePreviewSignature> {
-  // The served document URL. The auth service worker injects the realm token on
-  // the native `<object>` request, the same path `<img>`/`<audio>` use.
+  // The served document URL, loaded by the native `<object>` as a plain
+  // browser fetch. `<object>`/`<embed>` loads bypass service workers (per
+  // the ServiceWorker spec), so no Authorization header can be attached:
+  // the document renders only when the realm is publicly readable. The
+  // realm's content negotiation keys off the request's Sec-Fetch-Dest to
+  // serve the file's bytes here rather than the host app shell.
   get resourceUrl(): string {
     return this.args.model?.resourceUrl ?? this.args.model?.url ?? '';
   }

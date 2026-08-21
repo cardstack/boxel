@@ -12,6 +12,11 @@ often passes indexing too, then breaks silently — corrupting the realm's index
 crashing at render, or dropping data with no error. Check every card/field you write
 against this list before finishing an issue.
 
+The numbers below are local to this file. The `boxel` skill carries a separate Cardinal
+Rules table with its own numbering, and that is the one a bare "Cardinal Rule N"
+citation in `index.md`, `CLAUDE.md`, or `AGENTS.md` refers to — several of those numbers
+are past the end of this list and do not name a rule here.
+
 ## 1. DateField vs DateTimeField value format
 
 `DateField` values are `YYYY-MM-DD` (no `T`). `DateTimeField` values are full ISO
@@ -81,26 +86,29 @@ while silently dropping some files' indexing jobs. For bulk kit/asset installs, 
 in smaller batches and verify each batch's expected file count actually shows up in a
 realm search before pushing the next batch.
 
-## 8. NEVER curl / HTTP-GET a `https://cardstack.com/base/*` module URL to inspect a base card
+## 8. NEVER curl / HTTP-GET a base card's module reference to inspect it
 
-Base card module URLs (`https://cardstack.com/base/theme`, `.../base/card-api`,
-`.../base/cards/structured-theme`, etc.) are **loader-resolved module references, not
-fetchable HTTP resources.** `cardstack.com` is a marketing site — a direct GET or a
-realm op (`_mtimes`, `boxel file read`) against `cardstack.com/base/...` returns a
-generic Webflow **404 HTML page** (`data-wf-domain=... %%PUBLISH_URL_REPLACEMENT%%`),
-NOT the card. Do not keep retrying it — that page will never become the schema. To
-learn a base card's fields/shape, use the **`get_card_schema` tool** (it resolves
-through the realm server), or read an existing instance of that card already in the
-target realm. Same rule for any published `*.boxel.site` / `*.boxel.build` URL: those
-are Webflow-published sites, not realms — never point realm operations at them.
+Base card modules are addressed by the canonical `@cardstack/base/` prefix
+(`@cardstack/base/theme`, `@cardstack/base/card-api`,
+`@cardstack/base/cards/structured-theme`, etc.). Those are **loader-resolved module
+references, not fetchable HTTP resources** — there is no URL to GET. The older URL
+spelling `https://cardstack.com/base/...` still resolves at runtime, but do not write it
+and never fetch it: `cardstack.com` is a marketing site, so a direct GET or a realm op
+(`_mtimes`, `boxel file read`) against `cardstack.com/base/...` returns a generic
+Webflow **404 HTML page** (`data-wf-domain=... %%PUBLISH_URL_REPLACEMENT%%`), NOT the
+card. Do not keep retrying it — that page will never become the schema. To learn a base
+card's fields/shape, use the **`get_card_schema` tool** (it resolves through the realm
+server), or read an existing instance of that card already in the target realm. Same
+rule for any published `*.boxel.site` / `*.boxel.build` URL: those are Webflow-published
+sites, not realms — never point realm operations at them.
 
 Also: many base cards are **default exports**, so the schema ref is `name: "default"`,
 NOT the class name. The base **Theme** card is the default export of
-`https://cardstack.com/base/theme` (the module is `export default Theme`) — query it as
-module `https://cardstack.com/base/theme`, name `default` (querying `#Theme` fails).
+`@cardstack/base/theme` (the module is `export default Theme`) — query it as
+module `@cardstack/base/theme`, name `default` (querying `#Theme` fails).
 `StructuredTheme` is likewise the default export of `base/structured-theme`. When a
 `get_card_schema` call fails with "named export is a CardDef", retry with `name:
-"default"` before assuming the card is unreachable — do NOT fall back to curling the URL.
+"default"` before assuming the card is unreachable — do NOT fall back to curling a URL.
 
 ## 9. Never call `serializeCard(model)` from a render getter
 
@@ -112,3 +120,13 @@ IDResolver error `conflicting instance id in store` — the serialize path re-re
 the instance under a conflicting local id. When a template needs a JSON:API-shaped
 view of the card, reconstruct the shape from `@model` fields instead of calling
 `serializeCard`.
+
+## 10. `linksTo` fields never appear in `attributes` — not even as `null`
+
+A `linksTo` field is serialized under `relationships`, keyed by its field path — for a
+linksTo nested inside a contained field, a dotted key: `"cardInfo.theme": { "links":
+{ "self": "../Theme/foo" } }`. An empty link is `{ "links": { "self": null } }`, or
+omit the key entirely. Writing `"cardInfo": { "theme": null }` (or any value for the
+link) into `attributes` passes lint and writes successfully — then **every read of the
+instance throws** `linkTo field 'theme' cannot deserialize non-relationship value null`
+until the raw JSON is repaired by hand.

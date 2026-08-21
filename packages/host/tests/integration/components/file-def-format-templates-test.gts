@@ -1,4 +1,5 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
+import { find, settled } from '@ember/test-helpers';
 import type { RenderingTestContext } from '@ember/test-helpers';
 
 import GlimmerComponent from '@glimmer/component';
@@ -12,8 +13,10 @@ import { setupBaseRealm } from '../../helpers/base-realm';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
+import type * as AudioDefModule from '@cardstack/base/audio-file-def';
 import type * as CardApiModule from '@cardstack/base/card-api';
 import type { FilePreviewSignature } from '@cardstack/base/file-formats/file-preview-stage';
+import type * as MetadataFieldsModule from '@cardstack/base/file-formats/metadata-fields';
 
 // Stands in for a family's own glyph, which a FileDef subclass declares as
 // `static icon`. Annotated the way the boxel-icons modules are: `ComponentLike`
@@ -281,5 +284,194 @@ module('Integration | FileDef format templates', function (hooks) {
     assert
       .dom('[data-test-file-embedded] img[data-test-image-preview]')
       .exists('the image family renders a native <img> inside the shell');
+  });
+
+  test('the audio waveform shades the played span as playback advances', async function (assert) {
+    let { AudioDef } = await loader.import<typeof AudioDefModule>(
+      `${baseRealm.url}audio-file-def`,
+    );
+    let { WaveformMetadataField } = await loader.import<
+      typeof MetadataFieldsModule
+    >(`${baseRealm.url}file-formats/metadata-fields`);
+
+    let audio = new AudioDef({
+      id: 'http://example.com/audio/take.wav',
+      url: 'http://example.com/audio/take.wav',
+      sourceUrl: 'http://example.com/audio/take.wav',
+      name: 'take.wav',
+      contentType: 'audio/wav',
+      contentSize: 2_646_078,
+      duration: 10,
+      waveform: new WaveformMetadataField({
+        decodeStatus: 'ok',
+        barsJson: JSON.stringify(Array.from({ length: 32 }, () => 0.5)),
+        barCount: 32,
+      }),
+    });
+
+    await renderCard(loader, audio, 'isolated');
+    assert
+      .dom('[data-test-audio-preview] .wave-svg')
+      .exists('the waveform renders');
+    assert
+      .dom('[data-test-audio-waveform-played]')
+      .doesNotExist('a track at rest marks nothing as played');
+
+    let player = find('[data-test-audio-player]') as HTMLAudioElement;
+    // No media loads in this environment (the src 404s), so the element's own
+    // currentTime/duration never become usable. Shadow currentTime with an own
+    // property so the handler reads a definite position and falls back to the
+    // extracted duration, independent of media state.
+    Object.defineProperty(player, 'currentTime', { value: 5 });
+    player.dispatchEvent(new Event('timeupdate'));
+    await settled();
+
+    assert
+      .dom('[data-test-audio-waveform-played]')
+      .exists('playback marks the played span');
+    assert
+      .dom('[data-test-audio-waveform-played]')
+      .hasAttribute(
+        'data-test-audio-waveform-played',
+        '50',
+        '5s into a 10s track clips the played layer at half the waveform',
+      );
+  });
+
+  test('the audio waveform tears down the played span when playback resets to rest', async function (assert) {
+    let { AudioDef } = await loader.import<typeof AudioDefModule>(
+      `${baseRealm.url}audio-file-def`,
+    );
+    let { WaveformMetadataField } = await loader.import<
+      typeof MetadataFieldsModule
+    >(`${baseRealm.url}file-formats/metadata-fields`);
+
+    let audio = new AudioDef({
+      id: 'http://example.com/audio/take.wav',
+      url: 'http://example.com/audio/take.wav',
+      sourceUrl: 'http://example.com/audio/take.wav',
+      name: 'take.wav',
+      contentType: 'audio/wav',
+      contentSize: 2_646_078,
+      duration: 10,
+      waveform: new WaveformMetadataField({
+        decodeStatus: 'ok',
+        barsJson: JSON.stringify(Array.from({ length: 32 }, () => 0.5)),
+        barCount: 32,
+      }),
+    });
+
+    await renderCard(loader, audio, 'isolated');
+
+    let player = find('[data-test-audio-player]') as HTMLAudioElement;
+    // No media loads here, so back the element's currentTime with a mutable
+    // own property and lean on the extracted duration, as above.
+    let position = 5;
+    Object.defineProperty(player, 'currentTime', {
+      configurable: true,
+      get: () => position,
+    });
+    player.dispatchEvent(new Event('timeupdate'));
+    await settled();
+    assert
+      .dom('[data-test-audio-waveform-played]')
+      .exists('playback marks the played span');
+
+    // A seek back to the very start must drop has-progress and remove the
+    // overlay again — the waveform returns to its at-rest full-strength look.
+    position = 0;
+    player.dispatchEvent(new Event('seeking'));
+    await settled();
+    assert
+      .dom('[data-test-audio-waveform-played]')
+      .doesNotExist('seeking back to the start tears the played overlay down');
+  });
+
+  test('the audio waveform prefers the media element duration once metadata loads', async function (assert) {
+    let { AudioDef } = await loader.import<typeof AudioDefModule>(
+      `${baseRealm.url}audio-file-def`,
+    );
+    let { WaveformMetadataField } = await loader.import<
+      typeof MetadataFieldsModule
+    >(`${baseRealm.url}file-formats/metadata-fields`);
+
+    let audio = new AudioDef({
+      id: 'http://example.com/audio/take.wav',
+      url: 'http://example.com/audio/take.wav',
+      sourceUrl: 'http://example.com/audio/take.wav',
+      name: 'take.wav',
+      contentType: 'audio/wav',
+      contentSize: 2_646_078,
+      duration: 10,
+      waveform: new WaveformMetadataField({
+        decodeStatus: 'ok',
+        barsJson: JSON.stringify(Array.from({ length: 32 }, () => 0.5)),
+        barCount: 32,
+      }),
+    });
+
+    await renderCard(loader, audio, 'isolated');
+
+    let player = find('[data-test-audio-player]') as HTMLAudioElement;
+    // Metadata has loaded: the element reports its own duration, which must win
+    // over the extracted 10s. 5s of a 20s media track is a quarter, not the
+    // half the extracted duration would produce.
+    Object.defineProperty(player, 'duration', {
+      configurable: true,
+      value: 20,
+    });
+    Object.defineProperty(player, 'currentTime', {
+      configurable: true,
+      value: 5,
+    });
+    player.dispatchEvent(new Event('timeupdate'));
+    await settled();
+    assert
+      .dom('[data-test-audio-waveform-played]')
+      .hasAttribute(
+        'data-test-audio-waveform-played',
+        '25',
+        "the element's 20s duration wins over the extracted 10s",
+      );
+  });
+
+  test('an isolated image fills its stage frame rather than overflowing it', async function (assert) {
+    // A small image carries its intrinsic pixel dimensions as the <img>'s
+    // width/height attributes. If the renderer's `height: 100%` fails to resolve
+    // against the stage's grid row, the browser falls back to the aspect ratio
+    // those attributes imply and sizes the box from its width — overflowing a
+    // frame taller than the stage and clipping the picture. The image must
+    // instead fill the stage exactly, letting object-fit do the fitting.
+    let image = new ImageDef({
+      id: 'http://example.com/img/tiny.png',
+      url: 'http://example.com/img/tiny.png',
+      sourceUrl: 'http://example.com/img/tiny.png',
+      name: 'tiny.png',
+      contentType: 'image/png',
+      width: 154,
+      height: 160,
+    });
+    await renderCard(loader, image, 'isolated');
+
+    let img = find('[data-test-file-isolated] img[data-test-image-preview]');
+    let stage = find(
+      '[data-test-file-isolated] [data-test-file-preview-stage]',
+    );
+    assert.ok(img, 'the isolated image renders a native <img>');
+    assert.ok(stage, 'the image sits inside the preview stage');
+
+    let imgHeight = img!.getBoundingClientRect().height;
+    let stageHeight = stage!.getBoundingClientRect().height;
+    assert.ok(
+      stageHeight > 0,
+      `the stage has a real height (${stageHeight}px)`,
+    );
+    // The box fills the frame; without the fix it would be sized from the
+    // width/height attributes' aspect ratio (~1.04x its width) and run past the
+    // stage's bottom edge.
+    assert.ok(
+      Math.abs(imgHeight - stageHeight) <= 1,
+      `the <img> height (${imgHeight}px) fills the stage (${stageHeight}px) instead of overflowing it`,
+    );
   });
 });

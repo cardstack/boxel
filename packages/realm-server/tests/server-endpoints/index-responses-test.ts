@@ -69,6 +69,9 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
                           </template>
                         };
                       }`,
+          // A binary document for the embed-negotiation tests — the realm
+          // serves it verbatim with its extension's content type.
+          'report.pdf': '%PDF-1.4 fake-pdf-bytes',
           'person.gts': `import {
                             contains,
                             field,
@@ -1164,6 +1167,85 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           'scoped CSS content is preserved from last_known_good_deps after card enters error state',
         );
       });
+
+      // An <object>/<embed> load advertises text/html in its Accept header
+      // (the browser issues it as a frame-style navigation), but it is
+      // embedding a document — an app-shell answer would boot the host app
+      // recursively inside the preview. The server tells these loads apart
+      // from address-bar navigations by Sec-Fetch-Dest (see
+      // isDocumentEmbedRequest in handlers/serve-index.ts). Service workers
+      // are spec-required to bypass <object>/<embed> loads, so this
+      // negotiation is only testable — and only fixable — at the wire.
+      module('document embed negotiation', function () {
+        // The Accept header a browser attaches both to <object>/<embed>
+        // loads and to address-bar navigations — Sec-Fetch-Dest is the only
+        // discriminator between them.
+        const FRAME_STYLE_ACCEPT =
+          'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7';
+
+        test('serves document bytes, not the app shell, when Sec-Fetch-Dest is embed', async function (assert) {
+          let response = await request
+            .get('/test/report.pdf')
+            .set('Accept', FRAME_STYLE_ACCEPT)
+            .set('Sec-Fetch-Dest', 'embed');
+
+          assert.strictEqual(response.status, 200, 'serves the file');
+          assert.ok(
+            response.headers['content-type']?.includes('application/pdf'),
+            `content type comes from the file, not the shell (got ${response.headers['content-type']})`,
+          );
+          assert.notOk(
+            (response.text ?? '').includes('<title>'),
+            'the app shell is not served to a document embed',
+          );
+        });
+
+        test('serves document bytes when Sec-Fetch-Dest is object', async function (assert) {
+          let response = await request
+            .get('/test/report.pdf')
+            .set('Accept', FRAME_STYLE_ACCEPT)
+            .set('Sec-Fetch-Dest', 'object');
+
+          assert.strictEqual(response.status, 200, 'serves the file');
+          assert.ok(
+            response.headers['content-type']?.includes('application/pdf'),
+            `content type comes from the file, not the shell (got ${response.headers['content-type']})`,
+          );
+        });
+
+        test('an address-bar navigation to the same file URL still opens the app', async function (assert) {
+          let response = await request
+            .get('/test/report.pdf')
+            .set('Accept', FRAME_STYLE_ACCEPT)
+            .set('Sec-Fetch-Dest', 'document');
+
+          assert.strictEqual(response.status, 200, 'serves HTML response');
+          assert.ok(
+            response.headers['content-type']?.includes('text/html'),
+            'content type is text/html',
+          );
+          assert.ok(
+            response.text.includes('<title>'),
+            'the app shell is served',
+          );
+        });
+
+        test('an HTML-accepting request with no Sec-Fetch-Dest still opens the app', async function (assert) {
+          let response = await request
+            .get('/test/report.pdf')
+            .set('Accept', FRAME_STYLE_ACCEPT);
+
+          assert.strictEqual(response.status, 200, 'serves HTML response');
+          assert.ok(
+            response.headers['content-type']?.includes('text/html'),
+            'content type is text/html',
+          );
+          assert.ok(
+            response.text.includes('<title>'),
+            'the app shell is served',
+          );
+        });
+      });
     },
   );
 
@@ -1247,6 +1329,10 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       assert.ok(
         response.headers['vary']?.includes('Accept'),
         'Vary header includes Accept',
+      );
+      assert.ok(
+        response.headers['vary']?.includes('Sec-Fetch-Dest'),
+        'Vary header includes Sec-Fetch-Dest (the shell is withheld from document embeds, so a cached copy must not satisfy them)',
       );
     });
 

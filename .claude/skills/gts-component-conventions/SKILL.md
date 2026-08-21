@@ -1,6 +1,6 @@
 ---
 name: gts-component-conventions
-description: Styling and authoring conventions for `.gts` components and their CSS in the host and boxel-ui packages, plus the content-tag `<template>`-detection hazards that silently break `.gts` parsing. Use whenever writing, reviewing, or refactoring a `.gts` component, a `<style scoped>` block, or a glimmer template — especially component-styling review passes ("apply these design-review notes", "clean up this component's CSS") and when a `.gts` file mysteriously fails to type-check or lints with phantom unused-import errors. Triggers on editing component markup/CSS, adding SVG icons, writing conditional class names, choosing colors or units, and any cascading "Cannot find name 'template'" or template-was-dropped symptom.
+description: Styling and authoring conventions for `.gts` components and their CSS in the host and boxel-ui packages, plus the content-tag `<template>`-detection hazards that silently break `.gts` parsing. Use whenever writing, reviewing, or refactoring a `.gts` component, a `<style scoped>` block, or a glimmer template — especially component-styling review passes ("apply these design-review notes", "clean up this component's CSS") and when a `.gts` file mysteriously fails to type-check or lints with phantom unused-import errors. Triggers on editing component markup/CSS, adding SVG icons, writing conditional class names, choosing colors or units, improving or designing a boxel-ui component's API or behavior (benchmark against reference design systems), and any cascading "Cannot find name 'template'" or template-was-dropped symptom.
 ---
 
 # `.gts` Component Conventions
@@ -144,6 +144,19 @@ Before building a common UI primitive — progress bar, pill, button, avatar, ta
 {{! Right — the shared, themed component }}
 <ProgressBar @value={{this.percent}} @max={{100}} />
 ```
+
+### 9. Benchmark boxel-ui components against reference design systems
+
+When designing, extending, or reviewing a **boxel-ui** component (`packages/boxel-ui/src/components/**`), don't reason about its API and behavior from scratch — compare it against how the mature design systems solve the same control, and use the differences as a checklist. Each reference is authoritative for something different:
+
+- **React Aria (Adobe)** — behavior and accessibility contracts: keyboard support, focus management, controlled-state semantics, RTL. If React Aria handles an interaction (e.g. hit-target padding, direction-aware thumb travel), treat its absence here as a gap to justify, not a default.
+- **Radix / shadcn** — API shape: controlled vs. uncontrolled props, form participation (`name`/`value` reaching the real input), where `...attributes`-equivalents land, composition via slots/blocks.
+- **Material (Google)** — interaction polish and metrics: minimum touch targets, pressed/hover states, motion (including `prefers-reduced-motion`).
+- **WAI-ARIA APG** — the normative keyboard/ARIA contract for the role itself; check it before trusting any library's interpretation.
+
+The method: enumerate what the references do that the boxel-ui component doesn't, rank the differences (a11y/correctness first, API second, polish last), and adopt _patterns_, not wholesale code — everything still lands as boxel idiom (semantic tokens, `--boxel-*` override knobs, `<style scoped>`, native elements over ARIA re-implementations).
+
+Worked example: the Switch review that produced this section measured the component against those four references and yielded, in rank order — fully controlled state with the arg as single source of truth (Radix/React Aria's controlled contract), WCAG 2.5.8 hit-target extension and RTL thumb travel (React Aria), form participation and a visible-label block (Radix/React Aria API shape), reduced-motion guards, pressed-state affordance, and `cursor: not-allowed` (Material/shadcn polish). None of those came from intuition; all came from asking "what do the reference systems do here that we don't?"
 
 ---
 

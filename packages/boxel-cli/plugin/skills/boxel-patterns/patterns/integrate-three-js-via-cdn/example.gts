@@ -1,5 +1,5 @@
-import { CardDef, field, contains, Component } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+import { CardDef, field, contains, Component } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { modifier } from 'ember-modifier';
 // @ts-expect-error esm.run is a runtime import; TS can't resolve it
 import * as THREE from 'https://esm.run/three@0.169.0';

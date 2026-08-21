@@ -1,4 +1,4 @@
-import { CardDef, field, contains, containsMany, StringField, Component } from 'https://cardstack.com/base/card-api';
+import { CardDef, field, contains, containsMany, StringField, Component } from '@cardstack/base/card-api';
 
 // 🧩 PATTERN: Empty base class as a query-by-type taxonomy.
 //

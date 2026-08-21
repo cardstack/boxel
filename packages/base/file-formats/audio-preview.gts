@@ -14,13 +14,19 @@
 // A fitted cell deliberately does not mount a player: a grid of live audio
 // elements is a page full of independent transport chrome. It shows the
 // waveform and the running time, and the reading formats own playback.
+import { on } from '@ember/modifier';
 import GlimmerComponent from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
 import MusicIcon from '@cardstack/boxel-icons/music';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
 import { formatClock } from './file-presentation';
 import type { FilePreviewSignature } from './file-preview-stage';
+
+// SVG clipPath ids are document-global, and a page can mount several audio
+// previews at once, so each instance takes its own serial.
+let clipSerial = 0;
 
 // One drawn bar of the waveform, in the 0–100 viewBox the template stretches to
 // fill. Centered on the mid-line so the envelope reads as a real waveform rather
@@ -72,6 +78,45 @@ export class AudioPreview extends GlimmerComponent<FilePreviewSignature> {
     return this.args.model?.mediaUrl;
   }
 
+  // How much of the track has played, 0–1, mirrored from the mounted player.
+  // Kept as a ratio rather than a time so the waveform math never cares which
+  // duration source (media element vs. extract) produced it.
+  @tracked playedRatio = 0;
+
+  private clipId = `audio-wave-played-${++clipSerial}`;
+
+  get playedClip(): string {
+    return `url(#${this.clipId})`;
+  }
+
+  // Gate on the rounded width, not the raw ratio: on very long media the first
+  // moments of playback round to a zero-width clip window, and keying off the
+  // ratio there would dim the whole waveform while highlighting nothing.
+  get hasPlayed(): boolean {
+    return this.playedWidth > 0;
+  }
+
+  // Width of the clip window in the 0–100 viewBox. One decimal keeps the
+  // attribute churn per timeupdate readable without visibly stepping.
+  get playedWidth(): number {
+    return Math.round(this.playedRatio * 1000) / 10;
+  }
+
+  updatePlayed = (event: Event) => {
+    let el = event.currentTarget as HTMLAudioElement;
+    // The element's own duration wins once metadata arrives; before that (or
+    // in a context where the media never loads) the extracted figure stands in.
+    let duration =
+      Number.isFinite(el.duration) && el.duration > 0
+        ? el.duration
+        : Number(this.args.model?.durationSeconds);
+    if (!Number.isFinite(duration) || duration <= 0) {
+      this.playedRatio = 0;
+      return;
+    }
+    this.playedRatio = Math.max(0, Math.min(1, el.currentTime / duration));
+  };
+
   // The extracted running time. The native player reports its own once metadata
   // loads, but that never happens in a headless prerender and may lag a slow
   // range fetch, so the figure the extractor already read is shown regardless.
@@ -105,7 +150,10 @@ export class AudioPreview extends GlimmerComponent<FilePreviewSignature> {
           <MusicIcon class='wave-glyph' width='26' height='26' />
         {{/if}}
         {{#if this.duration}}
-          <span class='wave-clock' data-test-audio-duration>{{this.duration}}</span>
+          <span
+            class='wave-clock'
+            data-test-audio-duration
+          >{{this.duration}}</span>
         {{/if}}
       </div>
     {{else}}
@@ -113,14 +161,40 @@ export class AudioPreview extends GlimmerComponent<FilePreviewSignature> {
         <div class='audio-visual'>
           {{#if this.hasWaveform}}
             <svg
-              class='wave-svg'
+              class={{cn 'wave-svg' has-progress=this.hasPlayed}}
               viewBox='0 0 100 100'
               preserveAspectRatio='none'
               aria-hidden='true'
             >
               {{#each this.waveBars as |bar|}}
-                <rect x={{bar.x}} y={{bar.y}} width={{bar.w}} height={{bar.h}} />
+                <rect
+                  x={{bar.x}}
+                  y={{bar.y}}
+                  width={{bar.w}}
+                  height={{bar.h}}
+                />
               {{/each}}
+              {{#if this.hasPlayed}}
+                <g
+                  class='wave-played'
+                  clip-path={{this.playedClip}}
+                  data-test-audio-waveform-played={{this.playedWidth}}
+                >
+                  {{#each this.waveBars as |bar|}}
+                    <rect
+                      x={{bar.x}}
+                      y={{bar.y}}
+                      width={{bar.w}}
+                      height={{bar.h}}
+                    />
+                  {{/each}}
+                </g>
+                <defs>
+                  <clipPath id={{this.clipId}}>
+                    <rect x='0' y='0' width={{this.playedWidth}} height='100' />
+                  </clipPath>
+                </defs>
+              {{/if}}
             </svg>
           {{else}}
             <div class='audio-noviz'>
@@ -162,6 +236,9 @@ export class AudioPreview extends GlimmerComponent<FilePreviewSignature> {
             controls
             preload='metadata'
             data-test-audio-player
+            {{on 'timeupdate' this.updatePlayed}}
+            {{on 'seeking' this.updatePlayed}}
+            {{on 'emptied' this.updatePlayed}}
           ></audio>
         {{else}}
           <p class='audio-empty'>No audio source</p>
@@ -235,6 +312,15 @@ export class AudioPreview extends GlimmerComponent<FilePreviewSignature> {
       }
       .audio-visual .wave-svg rect {
         fill: var(--fd-accent, var(--primary, #7c9dff));
+      }
+
+      /* Once playback begins, the un-played remainder recedes so the
+         accent-colored played span reads as the position. Direct children
+         only: the played layer's rects sit inside their own group and keep
+         full strength. Before playback the class is absent, so a track at
+         rest keeps the waveform's usual weight. */
+      .audio-visual .wave-svg.has-progress > rect {
+        opacity: 0.45;
       }
       .audio-noviz {
         width: 100%;

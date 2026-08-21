@@ -2,9 +2,9 @@ import {
   CardDef,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import { Command } from 'https://cardstack.com/base/command';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import { Command } from '@cardstack/base/command';
 
 // 🧩 PATTERN: a Command shaped for shell invocation.
 //

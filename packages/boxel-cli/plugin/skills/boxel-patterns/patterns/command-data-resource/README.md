@@ -13,9 +13,9 @@ validated: source-proven
 **Recipe shape:**
 
 ```ts
-import { commandData } from 'https://cardstack.com/base/resources/command-data';
+import { commandData } from '@cardstack/base/resources/command-data';
 import GetAllRealmMetasCommand from '@cardstack/boxel-host/tools/get-all-realm-metas';
-import type { GetAllRealmMetasResult } from 'https://cardstack.com/base/command';
+import type { GetAllRealmMetasResult } from '@cardstack/base/command';
 
 class MyComponent extends Component<typeof MyCard> {
   realmsResource = commandData<typeof GetAllRealmMetasResult>(
@@ -34,7 +34,7 @@ class MyComponent extends Component<typeof MyCard> {
 ```
 
 **Gotchas:**
-- The result type lives at `https://cardstack.com/base/command` — `import type { … }` not a regular import.
+- The result type lives at `@cardstack/base/command` — `import type { … }` not a regular import.
 - Cast `cardResult` to the specific result type — TypeScript can't infer past the generic.
 - The resource starts running on mount; if you want to defer, gate it with `@tracked` arguments inside an `input()` callback (see `ember-resources` docs).
 - For commands that take args, use the function form: `commandData(this, MyCommand, () => ({ arg: this.foo }))`.

@@ -27,5 +27,9 @@
     "strict": true,
     "skipLibCheck": true,
     "types": ["node"]
-  }
+  },
+  // `dist/` is the published artifact — the same modules again as JavaScript
+  // plus declarations, which would double every symbol here. `node_modules` is
+  // only listed because naming `exclude` at all replaces the default list.
+  "exclude": ["node_modules", "dist"]
 }

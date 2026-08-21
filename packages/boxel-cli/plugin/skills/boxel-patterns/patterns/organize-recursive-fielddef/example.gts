@@ -6,10 +6,10 @@ import {
   contains,
   containsMany,
   field,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import TextAreaField from 'https://cardstack.com/base/text-area';
-import NumberField from 'https://cardstack.com/base/number';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import TextAreaField from '@cardstack/base/text-area';
+import NumberField from '@cardstack/base/number';
 
 export class CommentThread extends FieldDef {
   static displayName = 'Comment Thread';

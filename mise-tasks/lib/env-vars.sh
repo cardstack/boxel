@@ -234,21 +234,30 @@ else
   fi
   unset _BOXEL_DEV_CERT_DIR _BOXEL_DEV_CERT_FILE _BOXEL_DEV_KEY_FILE
 
-  # Puppeteer 24.35 (and the lockfile's tree) bundles Chrome 143, which
-  # has a known h2 stream-window bug that hangs the dev prerender forever
-  # on the first cold-start fetch of vite's large pre-optimized
-  # `indexeddb-crypto-store` chunk (matrix-js-sdk). Newer Chrome (148+)
-  # doesn't hit the bug. Both prerender's BrowserManager and the
-  # standby-warmup probe (`scripts/wait-for-host-standby.ts`) already
-  # honor `PUPPETEER_EXECUTABLE_PATH`, so just point them at the system
-  # chrome when one's installed. Devs without google-chrome installed
-  # keep the bundled puppeteer chromium — they'll see the hang stall
-  # longer until vite's optimizer cache warms up.
-  if [ -z "${PUPPETEER_EXECUTABLE_PATH:-}" ]; then
-    _boxel_chrome="$(_boxel_resolve_chrome)"
-    [ -n "$_boxel_chrome" ] && export PUPPETEER_EXECUTABLE_PATH="$_boxel_chrome"
-    unset _boxel_chrome
-  fi
+fi
+
+# Puppeteer bundles a Chrome and downloads it at install time, and the
+# lockfile's tree pins a build with a known h2 stream-window bug: it hangs the
+# dev prerender forever on the first cold-start fetch of vite's large
+# pre-optimized `indexeddb-crypto-store` chunk (matrix-js-sdk). Newer Chrome
+# does not hit it. Both prerender's BrowserManager and the standby-warmup probe
+# (`scripts/wait-for-host-standby.ts`) honor `PUPPETEER_EXECUTABLE_PATH`, so
+# point them at the system chrome when one is installed. Devs without
+# google-chrome keep the bundled puppeteer chromium.
+#
+# Setting it also stops the install-time download, because puppeteer reads the
+# variable as "a browser was supplied". That download is otherwise repeated by
+# every job in CI — two archives from Google's storage, on each of twenty-odd
+# shards — and a 403 there fails dependency installation, and the job with it.
+#
+# Like the Percy block below, this sits outside the env/standard branches
+# above. The host-test job runs in env mode (BOXEL_ENVIRONMENT set), whose
+# branch resolved no Chrome path, so CI was downloading a browser while Percy
+# beside it used the image's copy.
+if [ -z "${PUPPETEER_EXECUTABLE_PATH:-}" ]; then
+  _boxel_chrome="$(_boxel_resolve_chrome)"
+  [ -n "$_boxel_chrome" ] && export PUPPETEER_EXECUTABLE_PATH="$_boxel_chrome"
+  unset _boxel_chrome
 fi
 
 # Percy bundles its own Chromium and downloads + unzips it on first use
