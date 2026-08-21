@@ -14,7 +14,7 @@ import GlimmerComponent from '@glimmer/component';
 import { htmlSafe } from '@ember/template';
 import { markdownToHtml } from '@cardstack/runtime-common/marked-sync';
 import {
-  BaseDefComponent,
+  type BaseDefComponent,
   CardDef,
   Component,
   NumberField,

@@ -440,10 +440,25 @@ export class PackageShimHandler {
     return null;
   };
 
+  // Synchronously-shimmed modules in registration order. Loaders replay
+  // this inventory through their identity capture so that export
+  // identities don't depend on which shim a given loader happened to load
+  // first — loader-evaluated modules got that guarantee from
+  // dependency-first evaluation (a re-exporting module always evaluated
+  // after its source), but shims carry no dependency chain. Registration
+  // order therefore stands in for dependency order; registrars put
+  // declaring modules before their re-exporters.
+  private syncModules = new Map<string, ModuleLike>();
+
+  syncShimEntries(): ReadonlyMap<string, ModuleLike> {
+    return this.syncModules;
+  }
+
   shimModule(moduleIdentifier: string, module: ModuleLike) {
     moduleIdentifier = this.resolveImport(moduleIdentifier);
     let key = trimModuleIdentifier(moduleIdentifier);
     this.moduleIds.set(key, async () => module);
+    this.syncModules.set(key, module);
     this.rememberExports(key, module);
   }
 
@@ -504,6 +519,16 @@ export class PackageShimHandler {
         withResolveRetry(label, this.log, descriptor.resolve, retryDeps),
       );
     }
+  }
+
+  // Module lookup for callers outside the fetch pipeline (the Loader's
+  // module-fetch path asks the virtual network for shims registered here
+  // before going to the network). Unlike `handle`, this is not restricted
+  // to the fake packages origin: the caller vouches that the URL is a
+  // module request, so a shim registered under a realm URL can be served
+  // without risking shadowing a card-instance GET of the same URL.
+  async lookupModule(url: string): Promise<ModuleLike | undefined> {
+    return (await this.getModule(url)) ?? (await this.getModuleByPrefix(url));
   }
 
   private async getModule(url: string): Promise<ModuleLike | undefined> {

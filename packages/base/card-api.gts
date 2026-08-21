@@ -27,8 +27,8 @@ import {
   baseRef,
   CardContextName,
   CardError,
-  CodeRef,
-  ToolContext,
+  type CodeRef,
+  type ToolContext,
   Deferred,
   byteStreamToUint8Array,
   fields,
@@ -56,12 +56,12 @@ import {
   loadCardDocument,
   Loader,
   localId,
-  LocalPath,
+  type LocalPath,
   meta,
   primitive,
   realmURL,
   relativeTo,
-  SingleCardDocument,
+  type SingleCardDocument,
   uuidv4,
   NumberSerializer,
   type Format,
@@ -87,9 +87,9 @@ import {
   FileMetaResourceType,
   CardResourceType,
   loadFileMetaDocument,
-  CardResource,
-  LooseLinkableResource,
-  LooseSingleResourceDocument,
+  type CardResource,
+  type LooseLinkableResource,
+  type LooseSingleResourceDocument,
   shouldTrackRuntimeModuleGraph,
   shouldTrackRuntimeRelationship,
   trackRuntimeFileDependency,
@@ -207,8 +207,8 @@ import { TextInputValidator } from './text-input-validator';
 import { type GetMenuItemParams, getDefaultCardMenuItems } from './menu-items';
 import { getDefaultFileMenuItems } from './file-menu-items';
 import {
-  LinkableDocument,
-  SingleFileMetaDocument,
+  type LinkableDocument,
+  type SingleFileMetaDocument,
 } from '@cardstack/runtime-common/document-types';
 import type { MarkdownEmbedChooser } from '@cardstack/runtime-common/bfm-card-references';
 import type { FileMetaResource } from '@cardstack/runtime-common';
@@ -5065,15 +5065,21 @@ export function resolveRef(
 }
 
 function myLoader(): Loader {
-  // we know this code is always loaded by an instance of our Loader, which sets
-  // import.meta.loader.
+  // A Loader that evaluates this module injects `import.meta.loader`. When
+  // the module is compiled into the host bundle instead, the platform
+  // evaluates it and no loader is injected; the host publishes the loader
+  // bundled modules should use (see Loader.setForBundledModules).
 
-  // When type-checking realm-server, tsc sees this file and thinks
-  // it will be transpiled to CommonJS and so it complains about this line. But
-  // this file is always loaded through our loader and always has access to import.meta.
+  // When type-checking realm-server, tsc sees this file and thinks it will
+  // be transpiled to CommonJS and so it complains about import.meta.
   // @ts-ignore
-  return (import.meta as any).loader;
+  let loader = (import.meta as any).loader ?? Loader.forBundledModules();
+  if (!loader) {
+    throw new Error('No Loader is available to this module');
+  }
+  return loader;
 }
+
 
 class FallbackCardStore implements CardStore {
   #instances: Map<string, CardDef> = new Map();

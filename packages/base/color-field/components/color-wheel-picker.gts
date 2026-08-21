@@ -13,7 +13,7 @@ import type {
 import {
   detectColorFormat,
   hslToRgb,
-  RGBA,
+  type RGBA,
   rgbaToFormatString,
   rgbaToHsv,
 } from '@cardstack/boxel-ui/helpers';

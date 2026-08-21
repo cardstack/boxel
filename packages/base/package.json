@@ -15,6 +15,7 @@
     "@types/lodash-es": "catalog:",
     "awesome-phonenumber": "catalog:",
     "concurrently": "catalog:",
+    "date-fns": "catalog:",
     "ember-cli-htmlbars": "^6.3.0",
     "ember-concurrency": "catalog:",
     "ember-css-url": "^1.0.0",
@@ -29,7 +30,7 @@
     "yaml": "catalog:"
   },
   "peerDependencies": {
-    "ember-provide-consume-context": "^0.7.0",
+    "ember-provide-consume-context": "^0.8.0",
     "ember-source": "catalog:",
     "lodash-es": "catalog:"
   },

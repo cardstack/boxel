@@ -1,6 +1,6 @@
 import MusicIcon from '@cardstack/boxel-icons/music';
 import {
-  BaseDefComponent,
+  type BaseDefComponent,
   Component,
   NumberField,
   contains,

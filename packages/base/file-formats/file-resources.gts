@@ -6,6 +6,8 @@ import { htmlSafe } from '@ember/template';
 import GlimmerComponent from '@glimmer/component';
 import { modifier } from 'ember-modifier';
 
+import { waitForPromise } from '@cardstack/runtime-common';
+
 import { profileForFile, type FileTypeProfile } from './file-type-profile';
 // The image primitive lives in its own lean module because card-api's
 // universal graph reaches it (via `image-preview`); re-exported here so this
@@ -244,34 +246,40 @@ const loadProtectedMediaBlob = modifier(
     let objectURL: string | undefined;
     let controller = new AbortController();
     element.removeAttribute('src');
-    void (async () => {
-      try {
-        // `same-origin` rather than `include`: the realm server answers with
-        // `Access-Control-Allow-Origin: *`, which a credentialed cross-origin
-        // request rejects.
-        let response = await fetch(resourceURL, {
-          credentials: 'same-origin',
-          signal: controller.signal,
-        });
-        if (!response.ok) {
-          throw new Error(`Media fetch failed with HTTP ${response.status}`);
-        }
-        let blob = await response.blob();
-        if (cancelled) {
-          return;
-        }
-        objectURL = URL.createObjectURL(blob);
-        element.src = objectURL;
-        element.load();
-      } catch {
-        if (!cancelled) {
-          // Fall back to the canonical source so playback degrades rather
-          // than disappearing.
-          element.src = resourceURL;
+    // Wrapped so a test's `settled()` waits for the blob swap (and for the
+    // fallback assignment below when the fetch rejects) instead of asserting
+    // against an element whose src hasn't been decided yet. Outside tests
+    // `waitForPromise` passes the promise straight through.
+    void waitForPromise(
+      (async () => {
+        try {
+          // `same-origin` rather than `include`: the realm server answers with
+          // `Access-Control-Allow-Origin: *`, which a credentialed cross-origin
+          // request rejects.
+          let response = await fetch(resourceURL, {
+            credentials: 'same-origin',
+            signal: controller.signal,
+          });
+          if (!response.ok) {
+            throw new Error(`Media fetch failed with HTTP ${response.status}`);
+          }
+          let blob = await response.blob();
+          if (cancelled) {
+            return;
+          }
+          objectURL = URL.createObjectURL(blob);
+          element.src = objectURL;
           element.load();
+        } catch {
+          if (!cancelled) {
+            // Fall back to the canonical source so playback degrades rather
+            // than disappearing.
+            element.src = resourceURL;
+            element.load();
+          }
         }
-      }
-    })();
+      })(),
+    );
     return () => {
       cancelled = true;
       controller.abort();

@@ -6,7 +6,9 @@
 
 export interface Waiters {
   buildWaiter(label: string): {
-    beginAsync(): unknown;
+    // `@ember/test-waiters`' signature: an explicit token, then a label that
+    // its `debugInfo()` reports in place of a captured stack.
+    beginAsync(token?: unknown, label?: string): unknown;
     endAsync(token: unknown): void;
   };
   waitForPromise<T>(promise: Promise<T>, label?: string): Promise<T>;
@@ -19,7 +21,9 @@ export function useTestWaiters(w: Waiters) {
 }
 
 export interface TestWaiter {
-  beginAsync(): unknown;
+  // A label names the pending operation in a stuck-waiter dump (a test that
+  // times out prints each open token's label, falling back to its stack).
+  beginAsync(label?: string): unknown;
   endAsync(token: unknown): void;
 }
 
@@ -36,8 +40,8 @@ export function buildWaiter(label: string): TestWaiter {
     return real;
   };
   return {
-    beginAsync() {
-      return resolve()?.beginAsync();
+    beginAsync(label?: string) {
+      return resolve()?.beginAsync(undefined, label);
     },
     endAsync(token: unknown) {
       if (token === undefined) {

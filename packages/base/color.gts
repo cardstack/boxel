@@ -1,5 +1,5 @@
-import { Component } from '@cardstack/base/card-api';
-import StringField from '@cardstack/base/string';
+import { Component } from './card-api';
+import StringField from './string';
 import { Swatch } from '@cardstack/boxel-ui/components';
 import { markdownEscape } from '@cardstack/boxel-ui/helpers';
 import PaletteIcon from '@cardstack/boxel-icons/palette';
