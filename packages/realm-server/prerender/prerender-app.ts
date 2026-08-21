@@ -23,6 +23,7 @@ import { Prerenderer } from './index.ts';
 import type { Timings } from './render-runner.ts';
 import { resolvePrerenderManagerURL } from './config.ts';
 import { heapTelemetry } from './heap-telemetry.ts';
+import { captureHeapSnapshot } from './heap-snapshot.ts';
 import {
   PRERENDER_HOST_SHELL_HASH_HEADER,
   PRERENDER_JOB_ID_HEADER,
@@ -137,6 +138,36 @@ export function buildPrerenderApp(options: {
     // HEALTHCHECK discards this body, so the extra fields cost it nothing.
     ctxt.body = JSON.stringify({ ready: true, memory: heapTelemetry() });
     ctxt.status = 200;
+  });
+
+  // Dumps this process's heap to the artifact sink, for working out what is
+  // holding memory across renders. Off unless `PRERENDER_HEAP_SNAPSHOT` is
+  // set, because the write stops the world for its whole duration.
+  //
+  // Deliberately operator-driven rather than automatic: the pause is the
+  // expensive part, so the moment it happens should be someone's decision.
+  // Reach it the same way as any other VPC-internal endpoint — an SSM
+  // port-forward to the task, then POST to this path.
+  router.post('/heap-snapshot', async (ctxt: Koa.Context) => {
+    let outcome = await captureHeapSnapshot();
+    ctxt.set('Content-Type', 'application/json');
+    ctxt.body = JSON.stringify(outcome);
+    switch (outcome.status) {
+      case 'captured':
+        ctxt.status = 200;
+        break;
+      case 'disabled':
+      case 'no-sink':
+        // Not an error in the caller's request — the capability is simply
+        // switched off on this instance, which is the resting state.
+        ctxt.status = 404;
+        break;
+      case 'busy':
+        ctxt.status = 409;
+        break;
+      default:
+        ctxt.status = 500;
+    }
   });
 
   type RouteBaseArgs = {

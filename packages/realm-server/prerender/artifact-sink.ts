@@ -52,12 +52,25 @@ const DEFAULT_REGION = 'us-east-1';
 // usual tools recognise: `.cpuprofile` (Chrome DevTools / speedscope),
 // `.trace.json` (Chrome tracing / Perfetto), `.heapprofile` (DevTools
 // allocation-sampling view).
-export type ArtifactKind = 'cpuprofile' | 'trace' | 'heap' | 'v8log';
+export type ArtifactKind =
+  | 'cpuprofile'
+  | 'trace'
+  | 'heap'
+  | 'heapsnapshot'
+  | 'v8log';
 
 const SUFFIX_BY_KIND: Record<ArtifactKind, string> = {
   cpuprofile: 'cpuprofile',
   trace: 'trace.json',
   heap: 'heapprofile',
+  // A full retention snapshot of the *prerender server's own* Node heap,
+  // kept distinct from `heap` above: that one is an allocation sampling
+  // profile of a browser page, taken over CDP, and answers "where is this
+  // render allocating". This one answers "what is still holding memory in
+  // the server process", which is the question a heap that grows across
+  // renders and never comes back down poses. Different producer, different
+  // format, different tooling — so a different suffix.
+  heapsnapshot: 'heapsnapshot',
   // Raw V8 `--prof` tick log (the renderer's `isolate-…-prerender-v8-prof`
   // file), uploaded as-is and symbolized offline with `node --prof-process`.
   // This is the one capture that survives a hard synchronous CPU peg: the
@@ -158,6 +171,15 @@ export function shouldCaptureTrace(): boolean {
 
 export function shouldCaptureHeap(): boolean {
   return flagEnabled('PRERENDER_PROFILE_HEAP');
+}
+
+// Gates the on-demand Node heap snapshot. Off by default and deliberately
+// separate from `PRERENDER_PROFILE_HEAP`: writing this snapshot stops the
+// world for as long as it takes to serialise the whole heap, which is a cost
+// an operator should opt into for one instance rather than something a
+// per-render flag can turn on across the fleet.
+export function shouldAllowHeapSnapshot(): boolean {
+  return flagEnabled('PRERENDER_HEAP_SNAPSHOT');
 }
 
 // True when the sink is configured AND at least one heavyweight capture is
