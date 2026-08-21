@@ -60,7 +60,7 @@
 
   /* form + focus */
   --border: var(--boxel-border-color);
-  --input: var(--boxel-light);
+  --input: var(--boxel-400);
   --ring: var(--boxel-highlight);
 
   /* charts */
@@ -118,7 +118,6 @@
   --warning: var(--boxel-warning);
 
   /* other */
-  --boxel-switch-background: var(--boxel-400);
   --boxel-button-default-border: var(--boxel-button-border-color);
   --boxel-button-default-active-background: var(--background);
   --boxel-button-default-active-foreground: var(--foreground);
@@ -167,6 +166,10 @@
   --theme-caption-font-weight: initial;
   --theme-caption-line-height: initial;
   --boxel-switch-background: initial;
+  --boxel-switch-thumb: initial;
+  --boxel-switch-active-thumb: initial;
+  --boxel-switch-thumb-icon: initial;
+  --boxel-switch-active-thumb-icon: initial;
   --boxel-button-default-border: initial;
   --boxel-button-default-active-background: initial;
   --boxel-button-default-active-foreground: initial;
@@ -215,7 +218,7 @@
   --destructive: var(--boxel-danger);
   --destructive-foreground: var(--boxel-light-100);
   --border: var(--boxel-550);
-  --input: var(--boxel-dark);
+  --input: var(--boxel-550);
   --ring: var(--boxel-highlight);
   --sidebar: #555366;
   --sidebar-foreground: var(--boxel-light);
@@ -225,6 +228,8 @@
   --sidebar-accent-foreground: var(--boxel-light);
   --sidebar-border: var(--boxel-550);
   --sidebar-ring: var(--boxel-highlight);
+  --boxel-switch-thumb: var(--boxel-light);
+  --boxel-switch-thumb-icon: var(--background);
   --boxel-button-default-border: var(--border);
   --boxel-button-default-active-background: var(--background);
   --boxel-button-default-active-foreground: var(--foreground);
