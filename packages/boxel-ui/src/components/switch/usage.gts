@@ -119,13 +119,13 @@ export default class SwitchUsage extends Component {
         <:api as |Args|>
           <Args.String
             @name='label'
-            @description='Screen-reader-only name. Do not pass this and a block — the two join into one announced name'
+            @description='Screen-reader-only name. Not needed if passing in a block as label'
             @value={{this.label}}
             @onInput={{fn (mut this.label)}}
             @optional={{true}}
           />
           <Args.Yield
-            @description='Visible label rendered beside the track, programmatically associated with the switch'
+            @description='Visible label rendered beside the track'
             @optional={{true}}
           />
           <Args.Bool
@@ -154,12 +154,12 @@ export default class SwitchUsage extends Component {
           />
           <Args.Component
             @name='checkedIcon'
-            @description='Decorative icon rendered inside the thumb while the switch is on (e.g. a boxel-icons component). Skipped at size small'
+            @description='Decorative icon for the "on" switch thumb. Skipped at size small'
             @optional={{true}}
           />
           <Args.Component
             @name='uncheckedIcon'
-            @description='Decorative icon rendered inside the thumb while the switch is off. Skipped at size small'
+            @description='Decorative icon for the "off" switch thumb. Skipped at size small'
             @optional={{true}}
           />
           <Args.Action
@@ -243,7 +243,7 @@ export default class SwitchUsage extends Component {
           <Css.Basic
             @name='boxel-switch-min-target'
             @type='dimension'
-            @description='Minimum clickable size of the control (default 1.5rem, the 24px minimum target size). The label pads itself out to this size when the drawn track is smaller; the padding stays inside the element, so it never overlaps neighbouring controls'
+            @description='Minimum clickable size (default 1.5rem, the WCAG 24px target), including padding for focus ring.'
             @defaultValue={{this.boxelSwitchMinTarget.defaults}}
             @value={{this.boxelSwitchMinTarget.value}}
             @onInput={{this.boxelSwitchMinTarget.update}}
@@ -281,9 +281,8 @@ export default class SwitchUsage extends Component {
             @checkedIcon={{Moon}}
             @uncheckedIcon={{Sun}}
             @size='touch'
-          >
-            Dark mode
-          </Switch>
+            @label='Dark Mode'
+          />
         </:example>
       </FreestyleUsage>
     </div>

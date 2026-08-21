@@ -132,18 +132,25 @@ const Switch: TemplateOnlyComponent<SwitchSignature> = <template>
           var(--_switch-thumb-icon-color)
         );
         --_switch-min-target: var(--boxel-switch-min-target, 1.5rem);
+        --_switch-ring-width: 2px;
+        --_switch-ring-offset: 2px;
+        --_switch-ring-bleed: calc(
+          var(--_switch-ring-width) + var(--_switch-ring-offset)
+        );
 
         display: inline-flex;
         align-items: center;
         color: var(--boxel-switch-foreground, var(--foreground));
-        /* Reaches the 24px minimum target (WCAG 2.5.8) inside the
-           element's own box, so it never covers a neighbor. */
+        /* Reaches the 24px minimum target (WCAG 2.5.8) inside the element's
+           own box, so it never covers a neighbor — and never less than the
+           ring's bleed past the track, so a scrolling or clipping ancestor
+           cannot cut the focus ring. */
         padding-block: max(
-          0px,
+          var(--_switch-ring-bleed),
           calc((var(--_switch-min-target) - var(--_switch-height)) / 2)
         );
         padding-inline: max(
-          0px,
+          var(--_switch-ring-bleed),
           calc((var(--_switch-min-target) - var(--_switch-width)) / 2)
         );
       }
@@ -239,8 +246,8 @@ const Switch: TemplateOnlyComponent<SwitchSignature> = <template>
       }
 
       .switch:has(:focus-visible) .switch-track {
-        outline: 2px solid var(--ring);
-        outline-offset: 2px;
+        outline: var(--_switch-ring-width) solid var(--ring);
+        outline-offset: var(--_switch-ring-offset);
       }
 
       /* scale composes with the checked translate, so the pressed thumb
