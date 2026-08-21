@@ -13,6 +13,12 @@ inputs:
   registry-prefix:
     description: GHCR namespace holding the mirrored images.
     default: ghcr.io/cardstack/boxel
+  images:
+    description: >-
+      Which images to warm: "all", or a space-separated subset of synapse,
+      smtp4dev, postgres, mock-oauth2-server, caddy. Warming a subset lets a
+      caller pull the one image it needs next before paying for the rest.
+    default: all
 
 runs:
   using: composite
@@ -23,6 +29,7 @@ runs:
         GHCR_PREFIX: ${{ inputs.registry-prefix }}
         GHCR_TOKEN: ${{ github.token }}
         GHCR_USER: ${{ github.actor }}
+        IMAGES: ${{ inputs.images }}
       run: |
         set -uo pipefail
         # Authenticate so the private mirror packages are pullable. Best-effort:
@@ -64,13 +71,34 @@ runs:
           pids+=($!)
         }
 
+        # `all` (the default) keeps every caller that doesn't care unchanged.
+        wanted() {
+          if [ "$IMAGES" = "all" ]; then
+            return 0
+          fi
+          case " $IMAGES " in
+            *" $1 "*) return 0 ;;
+            *) return 1 ;;
+          esac
+        }
+
         logs=()
         pids=()
-        warm_bg matrixdotorg/synapse:v1.126.0 synapse:v1.126.0
-        warm_bg rnwood/smtp4dev:v3.1          smtp4dev:v3.1
-        warm_bg postgres:16.3                 postgres:16.3
-        warm_bg ghcr.io/navikt/mock-oauth2-server:4.0.1 mock-oauth2-server:4.0.1
-        warm_bg caddy:2.10.2-alpine           caddy:2.10.2-alpine
+        if wanted synapse; then
+          warm_bg matrixdotorg/synapse:v1.126.0 synapse:v1.126.0
+        fi
+        if wanted smtp4dev; then
+          warm_bg rnwood/smtp4dev:v3.1 smtp4dev:v3.1
+        fi
+        if wanted postgres; then
+          warm_bg postgres:16.3 postgres:16.3
+        fi
+        if wanted mock-oauth2-server; then
+          warm_bg ghcr.io/navikt/mock-oauth2-server:4.0.1 mock-oauth2-server:4.0.1
+        fi
+        if wanted caddy; then
+          warm_bg caddy:2.10.2-alpine caddy:2.10.2-alpine
+        fi
 
         # `warm` never fails (it downgrades a miss to a warning), so nothing
         # here needs to inspect exit status — but wait on each pid rather than

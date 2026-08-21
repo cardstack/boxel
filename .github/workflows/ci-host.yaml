@@ -560,6 +560,34 @@ jobs:
       # downloaded here, avoiding a per-shard rebuild. The artifact
       # bundles boxel-icons/dist, boxel-ui/dist, packages/host/dist,
       # and the build manifest.
+      # Synapse takes about 67s to answer its healthcheck, and until it does,
+      # `create realm users` below just waits. Starting it after the index
+      # import only hides ~24s of that; starting it here hides it behind the
+      # asset download, the skills-realm population, the rest of the image
+      # warm and the import together — roughly the whole boot.
+      #
+      # Only the synapse image is pulled here so this step stays short; the
+      # step further down warms the other four.
+      - name: Warm the Synapse image ahead of the rest
+        continue-on-error: true
+        uses: ./.github/actions/warm-test-images
+        with:
+          images: synapse
+
+      # Backgrounded because `assert-synapse-running` blocks on Synapse's own
+      # healthcheck. Idempotent: when `test-services:host` reaches
+      # `start:matrix` it finds the container up and only re-registers the
+      # Traefik route, and the container exists within seconds of this step,
+      # so the two cannot race to create it. Nothing waits on this —
+      # `create realm users` already polls and reports its own failure.
+      # Traefik is up by this point, which Synapse needs in environment mode
+      # to publish its dynamically chosen host port.
+      - name: Start Synapse
+        working-directory: packages/matrix
+        run: |
+          pnpm assert-synapse-running >> /tmp/server.log 2>&1 &
+          echo "Synapse is starting in the background; output goes to /tmp/server.log"
+
       - name: Download test web assets
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -595,6 +623,9 @@ jobs:
       - name: Warm test Docker images from the GHCR mirror
         continue-on-error: true
         uses: ./.github/actions/warm-test-images
+        with:
+          # Synapse was warmed and started earlier, above.
+          images: smtp4dev postgres mock-oauth2-server caddy
       # Seed the index tables from a recent main boxel-index-cache artifact,
       # leaving the boot index to reconcile whatever this checkout changed
       # rather than indexing every realm from scratch. Runs before the
