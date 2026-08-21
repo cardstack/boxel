@@ -204,7 +204,7 @@
           "type": "loki",
           "uid": "loki"
         },
-        "description": "The prerender server's own Node heap, from the `prerender-heap` log line each instance emits on a fixed interval. Charted as the highest value across instances in each window, because Loki carries no per-task label here and the instance closest to the limit is the one that matters.\n\n`limit` is the effective `--max-old-space-size`. V8 derives its default from visible memory rather than from the ECS memory setting, so this is the only place the value a running task actually took is readable. Reaching it is fatal: the process dies with `Reached heap limit`, ECS replaces the task, and the surviving instances inherit its realm affinities and serve renders from cold tabs.\n\n`used` climbing steadily between task restarts \u2014 rather than sawtoothing under load and settling when idle \u2014 means memory is being retained, not merely in use. `external` covers strings and buffers held outside the JS heap, where response serialisation holds memory that `used` does not account for.",
+        "description": "The prerender server's own Node heap, from the `prerender-heap` log line each instance emits on a fixed interval. Charted as the highest value across instances in each window, because Loki carries no per-task label here and the instance closest to the limit is the one that matters.\n\n`limit` is the effective `--max-old-space-size`. V8 derives its default from visible memory rather than from the ECS memory setting, so this is the only place the value a running task actually took is readable. Reaching it is fatal: the process dies with `Reached heap limit`, ECS replaces the task, and the surviving instances inherit its realm affinities and serve renders from cold tabs.\n\n`used` climbing steadily between task restarts \u2014 rather than sawtoothing under load and settling when idle \u2014 means memory is being retained, not merely in use. `external` covers strings and buffers held outside the JS heap, where response serialisation holds memory that `used` does not account for.\n\nMin step is pinned to 1m because each instance reports every 30s: a finer step would leave most windows with no sample in them, which draws as isolated spikes and drags the mean down towards the instances that happened to land in a window.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -229,7 +229,7 @@
                 "type": "linear"
               },
               "showPoints": "never",
-              "spanNulls": false,
+              "spanNulls": true,
               "stacking": {
                 "group": "A",
                 "mode": "none"
@@ -321,7 +321,8 @@
           }
         ],
         "title": "Node heap (highest instance)",
-        "type": "timeseries"
+        "type": "timeseries",
+        "interval": "1m"
       },
       {
         "datasource": {
