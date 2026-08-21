@@ -103,7 +103,7 @@ jobs:
     # TEMPORARY (drop before merge): also runs on this branch, so the artifact
     # exists to iterate against without merging first. The consumer below reads
     # from the same branch under the same condition.
-    if: ${{ (github.event_name == 'push'""" + AND + """github.ref == 'refs/heads/main') || github.head_ref == '""" + BRANCH + """' }}
+    if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.head_ref == 'cs-12583-synapse-db-cache' }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
@@ -124,7 +124,13 @@ jobs:
       - name: Package the migrated database
         run: |
           set -euo pipefail
-          db=$(ls packages/matrix/synapse-data*/db/homeserver.db | head -1)
+          shopt -s nullglob
+          dbs=(packages/matrix/synapse-data*/db/homeserver.db)
+          db="${dbs[0]:-}"
+          if [ -z "$db" ]; then
+            echo "::error::Synapse produced no database to bake"
+            exit 1
+          fi
           gzip -c "$db" > /tmp/homeserver.db.gz
           echo "baked $(du -h "$db" | cut -f1) -> $(du -h /tmp/homeserver.db.gz | cut -f1) compressed"
       - name: Upload the migrated database
@@ -675,7 +681,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           # TEMPORARY (drop before merge): consume this branch's own bake while
           # iterating, since main has none until this merges.
-          SYNAPSE_CACHE_BRANCH: ${{ github.head_ref == '""" + BRANCH + """' && '""" + BRANCH + """' || 'main' }}
+          SYNAPSE_CACHE_BRANCH: ${{ github.head_ref == 'cs-12583-synapse-db-cache' && 'cs-12583-synapse-db-cache' || 'main' }}
         run: scripts/import-cached-synapse-db.sh
 
       - name: Start test services (icons + host dist + realm servers)
