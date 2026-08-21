@@ -26,6 +26,72 @@ export type HeapSnapshotOutcome =
 // disruptive way to fail than refusing the second request.
 let inFlight = false;
 
+// Heap size at which an instance captures itself without being asked. Chosen
+// as an absolute size rather than a fraction of the limit, because what makes
+// a snapshot expensive is how big the heap is when it is taken, not how close
+// to the ceiling that was. A leak that shows up at 12 GB shows the same
+// retention at 1.5, for a fraction of the pause.
+const DEFAULT_AUTO_CAPTURE_MB = 1536;
+
+// Fires once per process. A leak refills after a restart, so a second
+// snapshot from the same instance describes the same thing at greater cost;
+// and the failure this guards against — a threshold crossed every 30s,
+// pausing the world each time — is worse than missing a capture.
+let autoCaptureArmed = true;
+
+function autoCaptureThresholdMB(): number {
+  let raw = process.env.PRERENDER_HEAP_SNAPSHOT_MB;
+  if (typeof raw === 'string') {
+    let parsed = Number.parseInt(raw.trim(), 10);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  return DEFAULT_AUTO_CAPTURE_MB;
+}
+
+// Called on each telemetry tick with the heap reading already taken there.
+// Deliberately not awaited by the caller: the write blocks the event loop
+// whether or not anyone waits on it, so awaiting would only delay the tick
+// that follows.
+export function maybeAutoCaptureHeapSnapshot(heapUsedMB: number): void {
+  if (!autoCaptureArmed || !shouldAllowHeapSnapshot()) {
+    return;
+  }
+  let threshold = autoCaptureThresholdMB();
+  if (heapUsedMB < threshold) {
+    return;
+  }
+
+  // Disarm before starting rather than after finishing, so the ticks that
+  // land during a slow capture don't queue up behind it.
+  autoCaptureArmed = false;
+  log.info(
+    `heap reached ${heapUsedMB}MB (auto-capture threshold ${threshold}MB); ` +
+      `capturing one snapshot for this process`,
+  );
+  captureHeapSnapshot()
+    .then((outcome) => {
+      // Re-arm only when nothing was actually written — those outcomes mean
+      // the capture never happened, so this instance still owes one.
+      if (
+        outcome.status === 'disabled' ||
+        outcome.status === 'no-sink' ||
+        outcome.status === 'busy'
+      ) {
+        autoCaptureArmed = true;
+      }
+    })
+    .catch(() => {
+      autoCaptureArmed = true;
+    });
+}
+
+// Test-only: put the once-per-process arm back.
+export function __rearmAutoCaptureForTests(): void {
+  autoCaptureArmed = true;
+}
+
 // Writes the server's own heap to disk and streams it to the artifact sink.
 //
 // `writeHeapSnapshot` serialises straight to a file descriptor rather than

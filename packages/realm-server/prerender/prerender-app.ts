@@ -144,10 +144,13 @@ export function buildPrerenderApp(options: {
   // holding memory across renders. Off unless `PRERENDER_HEAP_SNAPSHOT` is
   // set, because the write stops the world for its whole duration.
   //
-  // Deliberately operator-driven rather than automatic: the pause is the
-  // expensive part, so the moment it happens should be someone's decision.
-  // Reach it the same way as any other VPC-internal endpoint — an SSM
-  // port-forward to the task, then POST to this path.
+  // The same capture also fires on its own once an instance's heap crosses
+  // the auto-capture threshold, which is how it is normally reached: a leak
+  // takes hours to develop and any deploy resets it, so waiting to be asked
+  // means usually not being asked in time. This route is the override for
+  // choosing the moment instead — at a particular heap size, or on an
+  // instance that has already spent its one automatic capture. Reach it the
+  // way any VPC-internal endpoint is reached: SSM port-forward, then POST.
   router.post('/heap-snapshot', async (ctxt: Koa.Context) => {
     let outcome = await captureHeapSnapshot();
     ctxt.set('Content-Type', 'application/json');
