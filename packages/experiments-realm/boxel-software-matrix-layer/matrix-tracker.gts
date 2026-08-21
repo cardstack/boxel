@@ -66,6 +66,7 @@ const GRID_COLUMNS: ColumnSpec[] = [
 ];
 
 export class MatrixTracker extends CardDef {
+  static prefersWideFormat = true;
   static displayName = 'Matrix Tracker';
   static icon = LayoutGridIcon;
 
@@ -82,6 +83,7 @@ export class MatrixTracker extends CardDef {
   // Read-only by design: every number is a live count over real cards, every
   // click is a drill or a navigation — the tracker writes nothing.
   static isolated = class Isolated extends Component<typeof MatrixTracker> {
+    @tracked activeTab = 'overview';
     @tracked bucketFilter = ALL;
     @tracked specStateFilter = ALL;
     @tracked layerFilter = ALL;
@@ -364,14 +366,14 @@ export class MatrixTracker extends CardDef {
       }));
     }
 
-    private scrollToGrid() {
-      try {
-        globalThis.document
-          ?.getElementById('matrix-concept-grid')
-          ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      } catch {
-        // prerender has no document
-      }
+    private get isInteractive() {
+      return Boolean((this.args as any).viewCard);
+    }
+    get showOverview() {
+      return !this.isInteractive || this.activeTab === 'overview';
+    }
+    get showConcepts() {
+      return this.isInteractive && this.activeTab === 'concepts';
     }
 
     private resetFilters() {
@@ -405,12 +407,12 @@ export class MatrixTracker extends CardDef {
     @action drillBucket(bucket: string) {
       this.resetFilters();
       this.bucketFilter = bucket;
-      this.scrollToGrid();
+      this.activeTab = 'concepts';
     }
     @action drillSpecState(state: string) {
       this.resetFilters();
       this.specStateFilter = state;
-      this.scrollToGrid();
+      this.activeTab = 'concepts';
     }
     @action drillVerified() {
       this.drillSpecState('verified');
@@ -419,12 +421,15 @@ export class MatrixTracker extends CardDef {
       // Consumed/reused are not grid filters; the quality buckets carry
       // them — Solid and Gold both require consumption.
       this.resetFilters();
-      this.scrollToGrid();
+      this.activeTab = 'concepts';
     }
     @action drillLayer(layer: string) {
       this.resetFilters();
       this.layerFilter = layer;
-      this.scrollToGrid();
+      this.activeTab = 'concepts';
+    }
+    @action setTab(key: string) {
+      this.activeTab = key;
     }
     @action openCard(item: CardDef) {
       (this.args as any).viewCard?.(item, 'isolated');
@@ -453,6 +458,22 @@ export class MatrixTracker extends CardDef {
             approval step</p>
         </header>
 
+        {{#if this.isInteractive}}
+          <nav class='tab-bar'>
+            <button
+              type='button'
+              class='tab {{if (eq this.activeTab "overview") "active"}}'
+              {{on 'click' (fn this.setTab 'overview')}}
+            >Overview</button>
+            <button
+              type='button'
+              class='tab {{if (eq this.activeTab "concepts") "active"}}'
+              {{on 'click' (fn this.setTab 'concepts')}}
+            >Concepts</button>
+          </nav>
+        {{/if}}
+
+        {{#if this.showOverview}}
         <section class='stat-band'>
           <button
             type='button'
@@ -676,6 +697,9 @@ export class MatrixTracker extends CardDef {
           </div>
         </section>
 
+        {{/if}}
+
+        {{#if this.showConcepts}}
         <section class='panel grid-panel' id='matrix-concept-grid'>
           <div class='table-head'>
             <h2>Concepts</h2>
@@ -762,6 +786,7 @@ export class MatrixTracker extends CardDef {
             />
           {{/if}}
         </section>
+        {{/if}}
       </article>
       <style scoped>
         .tracker {
@@ -1130,8 +1155,28 @@ export class MatrixTracker extends CardDef {
           color: var(--background, #ffffff);
           cursor: pointer;
         }
+        .tab-bar {
+          display: flex;
+          gap: 0.25rem;
+          border-bottom: 1px solid var(--border, #e5e7eb);
+        }
+        .tab {
+          font: inherit;
+          font-size: 0.8125rem;
+          font-weight: 600;
+          padding: 0.5rem 0.875rem;
+          background: transparent;
+          border: none;
+          border-bottom: 2px solid transparent;
+          color: var(--muted-foreground, #6b7280);
+          cursor: pointer;
+        }
+        .tab.active {
+          color: var(--foreground, #111111);
+          border-bottom-color: var(--foreground, #111111);
+        }
         .grid-scroll {
-          max-height: 36rem;
+          max-height: 75vh;
           overflow-y: auto;
           border: 1px solid var(--border, #e5e7eb);
           border-radius: 0.5rem;

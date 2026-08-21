@@ -96,6 +96,7 @@ export function displayState(state: string | undefined): string | undefined {
 }
 
 export class MatrixConcept extends CardDef {
+  static prefersWideFormat = true;
   static displayName = 'Matrix Concept';
   static icon = LayoutGridIcon;
 
@@ -792,7 +793,6 @@ export class MatrixConcept extends CardDef {
       </article>
       <style scoped>
         .concept-page {
-          max-width: 76rem;
           margin: 0 auto;
           padding: 2rem 1.5rem;
           display: flex;
