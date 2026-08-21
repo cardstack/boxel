@@ -31,7 +31,8 @@
       },
       "specKind": "component",
       "specExampleCount": 1,
-      "specReadmeChars": 763
+      "specReadmeChars": 763,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/talent-resource-tracker/TalentResourceTracker/tracker\"]"
     },
     "meta": {
       "adoptsFrom": {

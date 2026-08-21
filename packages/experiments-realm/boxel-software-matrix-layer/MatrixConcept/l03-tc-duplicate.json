@@ -31,7 +31,8 @@
       },
       "specKind": "command",
       "specExampleCount": 1,
-      "specReadmeChars": 1708
+      "specReadmeChars": 1708,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Invoice/inv-f-007\"]"
     },
     "meta": {
       "adoptsFrom": {

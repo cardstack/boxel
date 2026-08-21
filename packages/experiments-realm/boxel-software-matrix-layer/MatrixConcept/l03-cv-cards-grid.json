@@ -31,7 +31,8 @@
       },
       "specKind": "card",
       "specExampleCount": 1,
-      "specReadmeChars": 461
+      "specReadmeChars": 461,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/CardsGrid/demo\"]"
     },
     "meta": {
       "adoptsFrom": {

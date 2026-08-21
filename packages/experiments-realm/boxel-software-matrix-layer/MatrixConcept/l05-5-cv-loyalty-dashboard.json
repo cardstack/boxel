@@ -31,7 +31,8 @@
       },
       "specKind": "component",
       "specExampleCount": 1,
-      "specReadmeChars": 1254
+      "specReadmeChars": 1254,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/ClubMembership/northbridge-fc\"]"
     },
     "meta": {
       "adoptsFrom": {

@@ -31,7 +31,8 @@
       },
       "specKind": "card",
       "specExampleCount": 2,
-      "specReadmeChars": 790
+      "specReadmeChars": 790,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/User/priya-shah\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Teammate/dana-whitfield\"]"
     },
     "meta": {
       "adoptsFrom": {

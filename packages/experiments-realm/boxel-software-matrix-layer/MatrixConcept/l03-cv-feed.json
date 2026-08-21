@@ -31,7 +31,8 @@
       },
       "specKind": "component",
       "specExampleCount": 1,
-      "specReadmeChars": 1523
+      "specReadmeChars": 1523,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Ticket/1240-report-encoding\"]"
     },
     "meta": {
       "adoptsFrom": {

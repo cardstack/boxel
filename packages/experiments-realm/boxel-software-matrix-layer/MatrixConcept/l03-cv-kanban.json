@@ -31,7 +31,8 @@
       },
       "specKind": "component",
       "specExampleCount": 1,
-      "specReadmeChars": 778
+      "specReadmeChars": 778,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/RevenueOs/main\"]"
     },
     "meta": {
       "adoptsFrom": {

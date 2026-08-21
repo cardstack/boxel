@@ -128,6 +128,9 @@ export class MatrixConcept extends CardDef {
   @field specKind = contains(StringField);
   @field specExampleCount = contains(NumberField);
   @field specReadmeChars = contains(NumberField);
+  // Crawl-stamped: the Spec's linked-example instance URLs (JSON array), so
+  // the card can render the examples live without loading the Spec's links.
+  @field specExampleIds = contains(StringField);
   // Crawl-stamped: shared-realm modules that import this concept's block —
   // proof of consumption, not a claim. consumerExamples maps each consumer
   // to a representative instance (JSON string) so the chip can open it live.
@@ -484,6 +487,7 @@ export class MatrixConcept extends CardDef {
   static isolated = class Isolated extends Component<typeof MatrixConcept> {
     private specResource: any;
     private consumerResources = new Map<string, any>();
+    private exampleResources: any[] = [];
 
     constructor(owner: Owner, args: any) {
       super(owner, args);
@@ -491,6 +495,9 @@ export class MatrixConcept extends CardDef {
       this.specResource = (ctx as any)?.getCard?.(
         this,
         () => (this.args.model as MatrixConcept)?.sharedSpec ?? undefined,
+      );
+      this.exampleResources = this.exampleIds.map((id) =>
+        (ctx as any)?.getCard?.(this, () => id),
       );
       for (let [name, id] of Object.entries(this.consumerExampleIds)) {
         this.consumerResources.set(
@@ -593,6 +600,31 @@ export class MatrixConcept extends CardDef {
 
     get specCard(): CardDef | undefined {
       return this.specResource?.card;
+    }
+
+    private get exampleIds(): string[] {
+      try {
+        let raw = (this.args.model as MatrixConcept)?.specExampleIds;
+        let parsed = raw ? JSON.parse(raw) : [];
+        return Array.isArray(parsed) ? parsed.slice(0, 3) : [];
+      } catch {
+        return [];
+      }
+    }
+
+    get exampleCards(): CardDef[] {
+      return this.exampleResources
+        .map((r) => r?.card)
+        .filter(Boolean) as CardDef[];
+    }
+
+    // Contained examples live inside the Spec and have no standalone render
+    // identity — the Spec frame below is where they show.
+    get containedOnly(): boolean {
+      return (
+        this.exampleIds.length === 0 &&
+        ((this.args.model as MatrixConcept).specExampleCount ?? 0) > 0
+      );
     }
 
     specComponent = (card: CardDef) =>
@@ -749,6 +781,31 @@ export class MatrixConcept extends CardDef {
           </div>
 
           <div class='col'>
+            {{#if this.exampleCards.length}}
+              <section class='panel'>
+                <h2>Examples — live</h2>
+                <div class='example-list'>
+                  {{#each this.exampleCards as |ex|}}
+                    <button
+                      type='button'
+                      class='example-item'
+                      title='Open this example'
+                      {{on 'click' (fn this.openConsumer ex)}}
+                    >
+                      {{#let (this.specComponent ex) as |Ex|}}
+                        <Ex @format='embedded' />
+                      {{/let}}
+                    </button>
+                  {{/each}}
+                </div>
+              </section>
+            {{else if this.containedOnly}}
+              <section class='panel'>
+                <h2>Examples — live</h2>
+                <p class='empty'>This Spec carries contained field examples —
+                  they render inside the Spec below.</p>
+              </section>
+            {{/if}}
             {{#if this.hasSpec}}
               <section class='panel spec-panel'>
                 <div class='panel-head'>
@@ -1025,6 +1082,29 @@ export class MatrixConcept extends CardDef {
         }
         .spec-open:hover {
           background: var(--tier-shared-bg, #dbeafe);
+        }
+        .example-list {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+        }
+        .example-item {
+          font: inherit;
+          text-align: left;
+          padding: 0;
+          border: 1px solid var(--border, #e5e7eb);
+          border-radius: 0.5rem;
+          background: transparent;
+          color: inherit;
+          cursor: pointer;
+          overflow: hidden;
+        }
+        .example-item:hover {
+          border-color: var(--foreground, #111111);
+        }
+        .example-item :deep(.boxel-card-container) {
+          box-shadow: none;
+          background: transparent;
         }
         .spec-frame {
           border: 1px solid var(--border, #e5e7eb);

@@ -31,7 +31,8 @@
       },
       "specKind": "command",
       "specExampleCount": 0,
-      "specReadmeChars": 545
+      "specReadmeChars": 545,
+      "specExampleIds": ""
     },
     "meta": {
       "adoptsFrom": {

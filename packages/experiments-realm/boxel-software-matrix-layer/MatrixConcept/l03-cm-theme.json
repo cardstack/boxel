@@ -31,7 +31,8 @@
       },
       "specKind": "card",
       "specExampleCount": 1,
-      "specReadmeChars": 692
+      "specReadmeChars": 692,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Theme/midnight-marker\"]"
     },
     "meta": {
       "adoptsFrom": {

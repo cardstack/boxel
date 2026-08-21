@@ -31,7 +31,8 @@
       },
       "specKind": "card",
       "specExampleCount": 2,
-      "specReadmeChars": 2066
+      "specReadmeChars": 2066,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Incident/1234-dashboard-access\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Incident/1301-mail-outage\"]"
     },
     "meta": {
       "adoptsFrom": {

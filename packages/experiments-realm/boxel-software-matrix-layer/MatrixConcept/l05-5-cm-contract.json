@@ -31,7 +31,8 @@
       },
       "specKind": "card",
       "specExampleCount": 3,
-      "specReadmeChars": 1833
+      "specReadmeChars": 1833,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Contract/acme-msa-2026\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Contract/brightleaf-pilot-terms\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Contract/nadia-lapsed\"]"
     },
     "meta": {
       "adoptsFrom": {

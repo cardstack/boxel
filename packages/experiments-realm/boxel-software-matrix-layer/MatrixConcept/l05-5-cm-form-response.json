@@ -31,7 +31,8 @@
       },
       "specKind": "card",
       "specExampleCount": 1,
-      "specReadmeChars": 1083
+      "specReadmeChars": 1083,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/SurveyResponse/event-feedback-jason\"]"
     },
     "meta": {
       "adoptsFrom": {

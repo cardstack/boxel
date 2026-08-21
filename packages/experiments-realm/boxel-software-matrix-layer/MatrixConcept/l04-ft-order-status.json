@@ -31,7 +31,8 @@
       },
       "specKind": "field",
       "specExampleCount": 1,
-      "specReadmeChars": 1449
+      "specReadmeChars": 1449,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/FulfilmentOrder/ord-1001\"]"
     },
     "meta": {
       "adoptsFrom": {

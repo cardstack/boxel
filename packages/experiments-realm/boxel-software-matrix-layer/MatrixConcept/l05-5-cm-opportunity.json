@@ -31,7 +31,8 @@
       },
       "specKind": "card",
       "specExampleCount": 2,
-      "specReadmeChars": 1318
+      "specReadmeChars": 1318,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Opportunity/acme-plant-expansion\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Opportunity/brightleaf-workspace\"]"
     },
     "meta": {
       "adoptsFrom": {

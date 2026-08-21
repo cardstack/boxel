@@ -31,7 +31,8 @@
       },
       "specKind": "card",
       "specExampleCount": 2,
-      "specReadmeChars": 1744
+      "specReadmeChars": 1744,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Employee/sofia-reyes\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Employee/marcus-webb\"]"
     },
     "meta": {
       "adoptsFrom": {

@@ -31,7 +31,8 @@
       },
       "specKind": "card",
       "specExampleCount": 2,
-      "specReadmeChars": 2140
+      "specReadmeChars": 2140,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Candidate/applied-jordan\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Candidate/offer-tomas\"]"
     },
     "meta": {
       "adoptsFrom": {

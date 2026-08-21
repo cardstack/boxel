@@ -31,7 +31,8 @@
       },
       "specKind": "card",
       "specExampleCount": 2,
-      "specReadmeChars": 1326
+      "specReadmeChars": 1326,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/SlaPolicy/vip-support\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/SlaPolicy/standard-support\"]"
     },
     "meta": {
       "adoptsFrom": {

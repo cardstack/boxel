@@ -31,7 +31,8 @@
       },
       "specKind": "card",
       "specExampleCount": 2,
-      "specReadmeChars": 1278
+      "specReadmeChars": 1278,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Location/meridian-park-stadium\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Location/northgate-fulfillment-centre\"]"
     },
     "meta": {
       "adoptsFrom": {

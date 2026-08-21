@@ -31,7 +31,8 @@
       },
       "specKind": "card",
       "specExampleCount": 1,
-      "specReadmeChars": 1304
+      "specReadmeChars": 1304,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Event/northbridge-v-riverton\"]"
     },
     "meta": {
       "adoptsFrom": {

@@ -31,7 +31,8 @@
       },
       "specKind": "card",
       "specExampleCount": 1,
-      "specReadmeChars": 1414
+      "specReadmeChars": 1414,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Schedule/standard-business-hours\"]"
     },
     "meta": {
       "adoptsFrom": {

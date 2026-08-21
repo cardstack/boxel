@@ -31,7 +31,8 @@
       },
       "specKind": "card",
       "specExampleCount": 1,
-      "specReadmeChars": 1061
+      "specReadmeChars": 1061,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Subscriber/acme-industries\"]"
     },
     "meta": {
       "adoptsFrom": {

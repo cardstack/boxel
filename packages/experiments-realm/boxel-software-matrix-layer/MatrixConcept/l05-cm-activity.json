@@ -31,7 +31,8 @@
       },
       "specKind": "card",
       "specExampleCount": 3,
-      "specReadmeChars": 707
+      "specReadmeChars": 707,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Activity/acme-renewal-call\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Activity/acme-stage-change\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Activity/inv-033-reminder-email\"]"
     },
     "meta": {
       "adoptsFrom": {

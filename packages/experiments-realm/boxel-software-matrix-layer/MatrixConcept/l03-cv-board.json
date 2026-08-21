@@ -31,7 +31,8 @@
       },
       "specKind": "component",
       "specExampleCount": 1,
-      "specReadmeChars": 1976
+      "specReadmeChars": 1976,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/PipelineBoardDemo/q3-pipeline\"]"
     },
     "meta": {
       "adoptsFrom": {

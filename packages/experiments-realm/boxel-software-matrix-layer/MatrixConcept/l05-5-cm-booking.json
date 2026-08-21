@@ -31,7 +31,8 @@
       },
       "specKind": "card",
       "specExampleCount": 1,
-      "specReadmeChars": 1420
+      "specReadmeChars": 1420,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Booking/bk-20260912-00417\"]"
     },
     "meta": {
       "adoptsFrom": {

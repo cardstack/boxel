@@ -31,7 +31,8 @@
       },
       "specKind": "card",
       "specExampleCount": 2,
-      "specReadmeChars": 826
+      "specReadmeChars": 826,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Deal/acme-enterprise-renewal\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Deal/brightleaf-pilot\"]"
     },
     "meta": {
       "adoptsFrom": {

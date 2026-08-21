@@ -31,7 +31,8 @@
       },
       "specKind": "component",
       "specExampleCount": 1,
-      "specReadmeChars": 808
+      "specReadmeChars": 808,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/LineChartDemo/mrr-trend\"]"
     },
     "meta": {
       "adoptsFrom": {

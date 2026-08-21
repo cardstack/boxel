@@ -31,7 +31,8 @@
       },
       "specKind": "component",
       "specExampleCount": 1,
-      "specReadmeChars": 1758
+      "specReadmeChars": 1758,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/InvoiceTableDemo/invoice-tracker\"]"
     },
     "meta": {
       "adoptsFrom": {

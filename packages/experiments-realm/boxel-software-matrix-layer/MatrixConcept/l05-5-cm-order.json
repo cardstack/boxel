@@ -31,7 +31,8 @@
       },
       "specKind": "card",
       "specExampleCount": 2,
-      "specReadmeChars": 934
+      "specReadmeChars": 934,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Order/ord-2026-107\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Order/ord-2026-112\"]"
     },
     "meta": {
       "adoptsFrom": {

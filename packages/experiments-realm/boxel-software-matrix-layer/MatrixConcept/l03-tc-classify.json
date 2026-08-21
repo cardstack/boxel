@@ -31,7 +31,8 @@
       },
       "specKind": "command",
       "specExampleCount": 1,
-      "specReadmeChars": 1849
+      "specReadmeChars": 1849,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Lead/imani-adeyemi\"]"
     },
     "meta": {
       "adoptsFrom": {

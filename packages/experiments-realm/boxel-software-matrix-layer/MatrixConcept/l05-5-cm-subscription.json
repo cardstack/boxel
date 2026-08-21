@@ -31,7 +31,8 @@
       },
       "specKind": "card",
       "specExampleCount": 3,
-      "specReadmeChars": 1321
+      "specReadmeChars": 1321,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Subscription/acme-workspace-pro\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Subscription/brightleaf-trial\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Subscription/acme-data-addon\"]"
     },
     "meta": {
       "adoptsFrom": {

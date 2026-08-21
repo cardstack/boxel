@@ -31,7 +31,8 @@
       },
       "specKind": "command",
       "specExampleCount": 1,
-      "specReadmeChars": 1612
+      "specReadmeChars": 1612,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Shipment/shp-0145\"]"
     },
     "meta": {
       "adoptsFrom": {

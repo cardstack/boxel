@@ -31,7 +31,8 @@
       },
       "specKind": "app",
       "specExampleCount": 1,
-      "specReadmeChars": 3191
+      "specReadmeChars": 3191,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/OrderFulfilmentApp/northlight\"]"
     },
     "meta": {
       "adoptsFrom": {

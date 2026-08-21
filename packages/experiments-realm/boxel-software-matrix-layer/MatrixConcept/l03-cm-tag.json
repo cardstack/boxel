@@ -31,7 +31,8 @@
       },
       "specKind": "card",
       "specExampleCount": 1,
-      "specReadmeChars": 554
+      "specReadmeChars": 554,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Tag/design-review\"]"
     },
     "meta": {
       "adoptsFrom": {

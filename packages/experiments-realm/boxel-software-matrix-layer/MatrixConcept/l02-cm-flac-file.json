@@ -31,7 +31,8 @@
       },
       "specKind": "card",
       "specExampleCount": 0,
-      "specReadmeChars": 532
+      "specReadmeChars": 532,
+      "specExampleIds": ""
     },
     "meta": {
       "adoptsFrom": {

@@ -31,7 +31,8 @@
       },
       "specKind": "card",
       "specExampleCount": 1,
-      "specReadmeChars": 2163
+      "specReadmeChars": 2163,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Meeting/interview-amara-1\"]"
     },
     "meta": {
       "adoptsFrom": {

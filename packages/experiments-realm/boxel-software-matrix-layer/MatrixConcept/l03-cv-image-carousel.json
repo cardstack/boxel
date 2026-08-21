@@ -31,7 +31,8 @@
       },
       "specKind": "component",
       "specExampleCount": 1,
-      "specReadmeChars": 638
+      "specReadmeChars": 638,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/ImageCarouselDemo/gallery\"]"
     },
     "meta": {
       "adoptsFrom": {

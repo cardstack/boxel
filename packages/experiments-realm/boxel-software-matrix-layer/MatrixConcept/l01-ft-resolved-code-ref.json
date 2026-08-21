@@ -31,7 +31,8 @@
       },
       "specKind": "field",
       "specExampleCount": 0,
-      "specReadmeChars": 776
+      "specReadmeChars": 776,
+      "specExampleIds": ""
     },
     "meta": {
       "adoptsFrom": {

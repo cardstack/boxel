@@ -31,7 +31,8 @@
       },
       "specKind": "card",
       "specExampleCount": 2,
-      "specReadmeChars": 4102
+      "specReadmeChars": 4102,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/PerformanceReview/priya-h2-2026\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/PerformanceReview/leo-h2-2026\"]"
     },
     "meta": {
       "adoptsFrom": {

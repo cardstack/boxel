@@ -31,7 +31,8 @@
       },
       "specKind": "card",
       "specExampleCount": 3,
-      "specReadmeChars": 1243
+      "specReadmeChars": 1243,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Account/acme-industries\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Account/nadia-rahman\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Account/brightleaf-studio\"]"
     },
     "meta": {
       "adoptsFrom": {

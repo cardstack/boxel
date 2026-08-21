@@ -31,7 +31,8 @@
       },
       "specKind": "card",
       "specExampleCount": 2,
-      "specReadmeChars": 3264
+      "specReadmeChars": 3264,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Application/riley-chen\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Application/devon-park\"]"
     },
     "meta": {
       "adoptsFrom": {

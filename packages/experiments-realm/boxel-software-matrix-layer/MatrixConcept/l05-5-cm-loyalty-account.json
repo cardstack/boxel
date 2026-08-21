@@ -31,7 +31,8 @@
       },
       "specKind": "card",
       "specExampleCount": 1,
-      "specReadmeChars": 1512
+      "specReadmeChars": 1512,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/LoyaltyAccount/jason-lim\"]"
     },
     "meta": {
       "adoptsFrom": {

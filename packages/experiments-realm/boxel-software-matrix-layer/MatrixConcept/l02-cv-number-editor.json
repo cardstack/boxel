@@ -31,7 +31,8 @@
       },
       "specKind": "component",
       "specExampleCount": 0,
-      "specReadmeChars": 454
+      "specReadmeChars": 454,
+      "specExampleIds": ""
     },
     "meta": {
       "adoptsFrom": {

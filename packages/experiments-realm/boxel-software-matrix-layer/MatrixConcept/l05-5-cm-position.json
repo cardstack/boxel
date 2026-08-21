@@ -31,7 +31,8 @@
       },
       "specKind": "card",
       "specExampleCount": 3,
-      "specReadmeChars": 2353
+      "specReadmeChars": 2353,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Position/platform-engineer\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Position/senior-backend-engineer\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Position/frontend-engineer\"]"
     },
     "meta": {
       "adoptsFrom": {
