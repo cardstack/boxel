@@ -1168,7 +1168,11 @@ jobs:
     # has nothing to do with their diffs. Modules missing from the current
     # reports (because a shard failed to upload) keep their prior values —
     # both update scripts merge with the committed file.
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && !cancelled() && (needs.host-test.result == 'success' || needs.host-test.result == 'failure') }}
+    # TEMPORARY (drop before merge): also run on this PR so the new
+    # report-selection logic gets exercised end to end. The write half is
+    # neutered below, so a PR run reports what it would have committed and
+    # commits nothing.
+    if: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.head_ref == 'cs-12582-weights-from-pr-run') && !cancelled() && (needs.host-test.result == 'success' || needs.host-test.result == 'failure') }}
     concurrency:
       group: host-memory-baseline-update-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -1193,15 +1197,69 @@ jobs:
           pattern: memory-report-*
           merge-multiple: true
 
-      # The merged junit report feeds the shard-timing update. Best-effort:
-      # if the merge job failed to produce it, the memory baseline still
-      # updates and the timings file is simply left alone this run.
-      - name: Download merged junit report
+      # The shard weights are consumed by `pull_request` runs, so they have to
+      # be measured on one. This push-to-main run is the least representative
+      # shape available: Percy is always on for a non-PR event, and the index
+      # cache is deliberately skipped (see `Check if cached index is usable`),
+      # which together cost about 1.5x per test. The penalty is uneven —
+      # fixture-heavy acceptance modules pay far more of it than unit tests —
+      # so weights taken here mis-*assign* work rather than merely mis-scale
+      # it, and greedy packing is scale-invariant so a uniform factor would
+      # have been harmless. Measured: a packer predicting a 1s spread produced
+      # a 239s one.
+      #
+      # Take the report from the run of the PR that produced this merge, and
+      # only when that run was representative and complete. Anything else
+      # leaves the file alone, because a stale-but-consistent set of weights
+      # balances better than a fresh set measured in the wrong environment —
+      # which is also why there is no fallback to this run's own report.
+      - name: Download merged junit report from the merged PR's run
         continue-on-error: true
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          path: merged-junit-report
-          name: host-test-report-merged
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          # TEMPORARY (drop before merge): a PR has no merge commit on main
+          # to resolve, so replay #5834's — a merge whose PR run was
+          # Percy-free, index-cached and green, i.e. one this logic accepts.
+          MERGE_SHA: ${{ github.event_name == 'pull_request' && 'a91e7cfaad1ab2c16eccd08023e6b5cb80abd51b' || github.sha }}
+        run: |
+          set -uo pipefail
+
+          leave() { echo "$1 — leaving shard timings unchanged"; exit 0; }
+
+          pr=$(gh api "repos/$REPO/commits/$MERGE_SHA/pulls" --jq '.[0].number // empty')
+          [ -n "$pr" ] || leave "no PR is associated with $MERGE_SHA"
+
+          head_sha=$(gh api "repos/$REPO/pulls/$pr" --jq '.head.sha // empty')
+          [ -n "$head_sha" ] || leave "could not resolve the head commit of PR #$pr"
+
+          # Newest successful CI Host run for that head. A run with failed
+          # shards reports only the modules that ran, and the generator keeps
+          # existing values for the rest — which is how weights from different
+          # eras end up mixed in one file.
+          run_id=$(gh api "repos/$REPO/actions/runs?head_sha=$head_sha&event=pull_request&per_page=50" \
+            --jq '[.workflow_runs[] | select(.name == "CI Host" and .conclusion == "success")]
+                  | sort_by(.created_at) | last | .id // empty')
+          [ -n "$run_id" ] || leave "PR #$pr has no fully successful CI Host run"
+
+          # Percy roughly doubles some tests and leaves others alone, so a
+          # Percy-enabled PR run is no better a model of the median PR run
+          # than this push run is.
+          if gh api "repos/$REPO/commits/$head_sha/status" --jq '.statuses[].context' | grep -q '^percy/'; then
+            leave "PR #$pr ran Percy"
+          fi
+
+          # The other half of the 1.5x. `Import cached realm index` is skipped
+          # rather than absent when the cache is unusable, so its conclusion
+          # distinguishes the two shapes.
+          imported=$(gh api "repos/$REPO/actions/runs/$run_id/jobs?per_page=100" \
+            --jq '[.jobs[] | select(.name | startswith("Host Tests")) | .steps[]?
+                   | select(.name == "Import cached realm index" and .conclusion == "success")] | length')
+          [ "${imported:-0}" -gt 0 ] || leave "run $run_id indexed from scratch"
+
+          gh run download -R "$REPO" "$run_id" --name host-test-report-merged -D merged-junit-report \
+            || leave "run $run_id published no merged report"
+          echo "Shard timings will be regenerated from PR #$pr's run $run_id"
 
       - name: Update memory baseline and shard timings
         # Retry from the latest main: another PR may merge to main while host
@@ -1254,6 +1312,14 @@ jobs:
             fi
             git add packages/host/memory-baseline.json packages/host/tests/test-module-timings.json
             git commit -m "Update host test baselines [skip ci]"
+
+            # TEMPORARY (drop before merge): report the would-be change and
+            # stop, so exercising this on a PR cannot write to main.
+            if [ "${{ github.event_name }}" = "pull_request" ]; then
+              echo "=== dry run: what would have been committed ==="
+              git show --stat HEAD
+              exit 0
+            fi
 
             if git push; then
               exit 0
