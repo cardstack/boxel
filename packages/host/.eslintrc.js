@@ -32,11 +32,30 @@ const sharedBrowserConfig = {
     '@typescript-eslint/no-empty-function': 'off',
     '@typescript-eslint/no-unused-vars': [
       'error',
-      { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      // `caughtErrors` defaults to reporting, so a `catch` binding this code
+      // does not read has to be named or dropped. Left unreported: a caught
+      // error is often kept for the shape of the catch rather than to be used.
+      {
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+        caughtErrors: 'none',
+      },
     ],
     'prefer-const': 'off',
     '@typescript-eslint/no-explicit-any': 'off',
     '@typescript-eslint/ban-types': 'off',
+    // The three rules `ban-types` was split into. Off for the same reason it is:
+    // `{}` and `Function` are used deliberately here, mostly in type plumbing.
+    '@typescript-eslint/no-empty-object-type': 'off',
+    '@typescript-eslint/no-unsafe-function-type': 'off',
+    '@typescript-eslint/no-wrapper-object-types': 'off',
+    // Successor to `no-var-requires`, which this repo also leaves off: config
+    // files and a few CJS interop points require by design.
+    '@typescript-eslint/no-require-imports': 'off',
+    // A bare member expression is how a getter consumes a tracked property to
+    // register a reactive dependency, and `cond && doThing()` is used as a
+    // guard. Both read as unused expressions.
+    '@typescript-eslint/no-unused-expressions': 'off',
     '@typescript-eslint/ban-ts-comment': 'off',
     '@typescript-eslint/explicit-module-boundary-types': 'off',
     '@typescript-eslint/no-this-alias': 'off',
