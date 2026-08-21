@@ -1,10 +1,66 @@
-import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+import {
+  CardDef,
+  Component,
+  FieldDef,
+  field,
+  contains,
+  containsMany,
+  getRelationshipMembershipState,
+  linksToMany,
+} from '@cardstack/base/card-api';
+import NumberField from '@cardstack/base/number';
 import { tracked } from '@glimmer/tracking';
 import { htmlSafe } from '@ember/template';
 import { on } from '@ember/modifier';
 import Modifier from 'ember-modifier';
+import {
+  searchEntryWireQueryFromQuery,
+  type RenderableSearchEntryLike,
+  type SearchEntryWireQuery,
+} from '@cardstack/runtime-common';
+import {
+  BrokenLinkTemplate,
+  FittedCardContainer,
+} from '@cardstack/boxel-ui/components';
+import { fittedFormatById } from '@cardstack/boxel-ui/helpers';
 import LayoutDashboardIcon from '@cardstack/boxel-icons/layout-dashboard';
 import { RigState, SurfaceRig, type PanSession } from './rig';
+
+// Tiles use the shared cardsgrid-tile fitted size so boards show cards at a
+// size their fitted views are designed for. FittedCardContainer applies the
+// dimensions; these constants drive the grid placement math.
+const cardsgridTile = fittedFormatById.get('cardsgrid-tile')!;
+const TILE_WIDTH = cardsgridTile.width;
+const TILE_HEIGHT = cardsgridTile.height;
+const TILE_GAP = 32;
+const GRID_COLUMNS = 4;
+// Breathing room between the world origin and the default grid (~--boxel-sp-xs)
+const GRID_PADDING = 10;
+
+interface TilePlacement {
+  index: number;
+  x: number;
+  y: number;
+}
+
+// Cards without a persisted frame setting flow into a fixed grid.
+function defaultPlacement(index: number): TilePlacement {
+  return {
+    index,
+    x: GRID_PADDING + (index % GRID_COLUMNS) * (TILE_WIDTH + TILE_GAP),
+    y:
+      GRID_PADDING +
+      Math.floor(index / GRID_COLUMNS) * (TILE_HEIGHT + TILE_GAP),
+  };
+}
+
+export class FrameSettingsField extends FieldDef {
+  static displayName = 'Frame Settings';
+
+  @field cardIndex = contains(NumberField);
+  @field x = contains(NumberField);
+  @field y = contains(NumberField);
+}
 
 interface OnInsertSignature {
   Element: HTMLElement;
@@ -43,6 +99,103 @@ class Isolated extends Component<typeof PosterBoard> {
     return htmlSafe(`cursor: ${this.isPanning ? 'grabbing' : 'grab'};`);
   }
 
+  // ── Tile placement ─────────────────────────────────────
+
+  // The linked cards' reference URLs, read from the relationship membership
+  // state — a pure read that never triggers the lazy link load, so the board
+  // renders tiles without ever fetching the linked instances. Index-aligned
+  // with the cards slots; only a `not-set` slot lacks a reference.
+  get linkedRefs(): (string | undefined)[] {
+    let owner = this.args.model as unknown as PosterBoard | undefined;
+    if (!owner) {
+      return [];
+    }
+    let { membership } = getRelationshipMembershipState(owner, 'cards');
+    return (membership ?? []).map((slot) => slot.reference);
+  }
+
+  get tilePlacements(): TilePlacement[] {
+    let settings = this.args.model?.frameSettings ?? [];
+    return this.linkedRefs.map((_ref, index) => {
+      let setting = settings.find((s) => Number(s.cardIndex) === index);
+      // Number() guards against non-numeric values in hand-edited JSON
+      let x = Number(setting?.x);
+      let y = Number(setting?.y);
+      if (setting && Number.isFinite(x) && Number.isFinite(y)) {
+        return { index, x, y };
+      }
+      return defaultPlacement(index);
+    });
+  }
+
+  get hasCards() {
+    return this.tilePlacements.length > 0;
+  }
+
+  // Tiles render as prerendered fitted HTML addressed by the linked cards'
+  // URLs. `fitted` is bound through `htmlQuery` — a bare `eq.format` would be
+  // read as an `item.` field path and rejected. Instance index rows key on
+  // the `.json` file URL, and `scope: 'cards'` drops each card's dual-indexed
+  // file row. Undefined (no linked cards) leaves the search idle.
+  get tilesQuery(): SearchEntryWireQuery | undefined {
+    let refs = this.linkedRefs.filter(
+      (ref): ref is string => ref !== undefined,
+    );
+    if (refs.length === 0) {
+      return undefined;
+    }
+    return {
+      ...searchEntryWireQueryFromQuery({}, { scope: 'cards' }),
+      cardUrls: refs.map((ref) => `${ref}.json`),
+      filter: { eq: { htmlQuery: { eq: { format: 'fitted' } } } },
+    };
+  }
+
+  // Results come back in engine order, not linked order, so each tile finds
+  // its own entry by reference URL (`entry.id` is the extensionless card id).
+  entryFor = (
+    index: number,
+    entries: RenderableSearchEntryLike[],
+  ): RenderableSearchEntryLike | undefined => {
+    let ref = this.linkedRefs[index];
+    return ref ? entries.find((entry) => entry.id === ref) : undefined;
+  };
+
+  // Empty string (a `not-set` slot) is falsy, so the template's `{{#if ref}}`
+  // guard skips the placeholder for slots with nothing to point at — glint
+  // doesn't narrow in templates, so the fallback keeps the type `string`.
+  refAt = (index: number): string => this.linkedRefs[index] ?? '';
+
+  // Terminal failures (error / not-found) per cards slot, index-aligned with
+  // tilePlacements. Since the board never loads its links, membership
+  // normally reports `not-loaded`; broken kinds surface here when the links
+  // were loaded elsewhere (e.g. the edit format), bringing the real errorDoc
+  // with them. Slots whose entry never arrives fall back to the synthesized
+  // not-found placeholder below.
+  brokenSlotAt = (index: number) => {
+    let owner = this.args.model as unknown as PosterBoard | undefined;
+    if (!owner) {
+      return undefined;
+    }
+    let { membership } = getRelationshipMembershipState(owner, 'cards');
+    let rel = (membership ?? [])[index];
+    return rel && (rel.kind === 'error' || rel.kind === 'not-found')
+      ? rel
+      : undefined;
+  };
+
+  // A card can lack an index entry entirely (deleted target, unsaved link, a
+  // reference outside the searched realms) — the wire document simply omits
+  // it, leaving no errorDoc to thread through.
+  missingEntryErrorDoc = {
+    status: 404,
+    title: 'Not Found',
+    message: 'This card has no entry in the search index',
+  };
+
+  tileStyle = (tile: TilePlacement) =>
+    htmlSafe(`left: ${tile.x}px; top: ${tile.y}px;`);
+
   // ── Wheel ──────────────────────────────────────────────
 
   handleWheel = (event: Event) => {
@@ -63,7 +216,10 @@ class Isolated extends Component<typeof PosterBoard> {
       return;
     }
     const target = event.target as HTMLElement;
-    if (target.closest('[data-poster-board-hud]')) {
+    // Pointers that start on the HUD or inside a card tile are not pans:
+    // capturing them would break the tile's own focus/selection behavior
+    // (and tile pointerdown becomes drag-to-move in step 3)
+    if (target.closest('[data-poster-board-hud], [data-poster-board-tile]')) {
       return;
     }
     this.panSession = this.surfaceRig.startPan(event.clientX, event.clientY);
@@ -168,9 +324,6 @@ class Isolated extends Component<typeof PosterBoard> {
     <div
       class='poster-board-root'
       style={{this.rootStyle}}
-      role='application'
-      aria-label='Poster board canvas'
-      tabindex='0'
       {{OnInsert this.handleInserted}}
       {{on 'wheel' this.handleWheel}}
       {{on 'pointerdown' this.handlePointerDown}}
@@ -178,15 +331,71 @@ class Isolated extends Component<typeof PosterBoard> {
       {{on 'pointerup' this.handlePointerUp}}
       {{on 'pointercancel' this.handlePointerUp}}
       {{on 'keydown' this.handleKeyDown}}
+      role='application'
+      aria-label='Poster board canvas'
+      tabindex='0'
       data-test-poster-board
     >
       <div class='poster-board-plane' style={{this.planeStyle}}>
         <div class='poster-board-grid' aria-hidden='true'></div>
-        <header class='poster-board-hint'>
-          <h1 class='poster-board-hint-title'><@fields.cardTitle /></h1>
-          <p class='poster-board-hint-line'>Scroll or drag to pan · Pinch or
-            Shift + / Shift - to zoom</p>
-        </header>
+        {{#let (component @context.searchResultsComponent) as |SearchResults|}}
+          {{! Overlays default on: each tile registers with the operator-mode
+              overlay layer, giving it the standard hover chrome (type chip,
+              options menu, selection, click-to-open) anchored to the tile. }}
+          <SearchResults @query={{this.tilesQuery}} @mode='none' as |results|>
+            {{#each this.tilePlacements key='index' as |tile|}}
+              <FittedCardContainer
+                @size='cardsgrid-tile'
+                @style={{this.tileStyle tile}}
+                class='poster-board-tile'
+                data-poster-board-tile
+                data-test-poster-board-tile={{tile.index}}
+              >
+                {{#let (this.brokenSlotAt tile.index) as |broken|}}
+                  {{#if broken}}
+                    <BrokenLinkTemplate
+                      @brokenUrl={{broken.reference}}
+                      @errorDoc={{broken.errorDoc}}
+                      @state={{broken.kind}}
+                      @format='fitted'
+                      data-test-poster-board-broken-tile={{tile.index}}
+                    />
+                  {{else}}
+                    {{#let
+                      (this.entryFor tile.index results.entries)
+                      as |entry|
+                    }}
+                      {{#if entry}}
+                        <entry.component class='poster-board-tile-card' />
+                      {{else}}
+                        {{#unless results.isLoading}}
+                          {{#let (this.refAt tile.index) as |ref|}}
+                            {{#if ref}}
+                              <BrokenLinkTemplate
+                                @brokenUrl={{ref}}
+                                @errorDoc={{this.missingEntryErrorDoc}}
+                                @state='not-found'
+                                @format='fitted'
+                                data-test-poster-board-broken-tile={{tile.index}}
+                              />
+                            {{/if}}
+                          {{/let}}
+                        {{/unless}}
+                      {{/if}}
+                    {{/let}}
+                  {{/if}}
+                {{/let}}
+              </FittedCardContainer>
+            {{/each}}
+          </SearchResults>
+        {{/let}}
+        {{#unless this.hasCards}}
+          <header class='poster-board-hint'>
+            <h1 class='poster-board-hint-title'><@fields.cardTitle /></h1>
+            <p class='poster-board-hint-line'>Scroll or drag to pan · Pinch or
+              Shift + / Shift - to zoom</p>
+          </header>
+        {{/unless}}
       </div>
 
       <div
@@ -259,6 +468,24 @@ class Isolated extends Component<typeof PosterBoard> {
 
       .poster-board-plane {
         will-change: transform;
+      }
+
+      .poster-board-tile {
+        position: absolute;
+      }
+
+      /* Tile content is display-only — the overlay layer owns hover/click.
+         The overlay binds its listeners to the card's root element, so that
+         element must keep receiving pointer events; only its descendants opt
+         out, so links/buttons in the card never intercept a click and text
+         never starts a selection. `user-select` resolves through the parent,
+         so setting it once on the root covers the subtree. */
+      .poster-board-tile-card {
+        user-select: none;
+      }
+
+      .poster-board-tile-card :deep(*) {
+        pointer-events: none;
       }
 
       .poster-board-grid {
@@ -360,6 +587,9 @@ export class PosterBoard extends CardDef {
   static displayName = 'Poster Board';
   static icon = LayoutDashboardIcon;
   static prefersWideFormat = true;
+
+  @field cards = linksToMany(() => CardDef);
+  @field frameSettings = containsMany(FrameSettingsField);
 
   static isolated = Isolated;
 }
