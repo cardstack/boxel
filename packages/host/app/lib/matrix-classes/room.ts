@@ -155,7 +155,6 @@ export default class Room {
     ) {
       bundledReplace.content.data = JSON.parse(bundledReplace.content.data);
     }
-    eventId = eventId ?? stateKey; // room state may not necessary have an event ID
     if (!eventId) {
       throw new Error(
         `bug: event ID is undefined for event ${JSON.stringify(
