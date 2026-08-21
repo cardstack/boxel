@@ -231,7 +231,7 @@ export default class SwitchUsage extends Component {
           <Css.Basic
             @name='boxel-switch-thumb-edge'
             @type='color'
-            @description='Color of the 1px ring around the thumb (defaults to a translucent primary-foreground mix so the thumb stays visible when track and thumb colors coincide)'
+            @description='Color of the 1px ring around the thumb (defaults to a translucent foreground mix)'
             @defaultValue={{this.boxelSwitchThumbEdge.defaults}}
             @value={{this.boxelSwitchThumbEdge.value}}
             @onInput={{this.boxelSwitchThumbEdge.update}}

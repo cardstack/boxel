@@ -1,5 +1,5 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-import { assert, warn } from '@ember/debug';
+import { warn } from '@ember/debug';
 import { concat, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import type { ComponentLike } from '@glint/template';
@@ -27,11 +27,11 @@ interface SwitchArgs {
   uncheckedIcon?: ComponentLike<{ Element: Element }>;
 }
 
-/* asserts are compiled out of production builds */
 function srOnlyLabel(label: string | undefined) {
-  assert(
-    'Switch requires an accessible name: pass @label or a visible label block',
+  warn(
+    'Switch has no accessible name: pass @label or a visible label block',
     Boolean(label && label.trim()),
+    { id: 'boxel-ui.switch.missing-label' },
   );
   return label;
 }
@@ -191,7 +191,8 @@ const Switch: TemplateOnlyComponent<SwitchSignature> = <template>
         position: relative;
         width: var(--_switch-width);
         height: var(--_switch-height);
-        border-radius: var(--boxel-border-radius-pill);
+        /* the one radius token CardContainer does not re-declare */
+        border-radius: var(--boxel-border-radius-pill, 9999px);
         padding: 1px;
         display: inline-flex;
         align-items: center;

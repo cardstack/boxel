@@ -165,6 +165,8 @@
   --theme-caption-font-size: initial;
   --theme-caption-font-weight: initial;
   --theme-caption-line-height: initial;
+  --boxel-switch-background: initial;
+  --boxel-switch-thumb: initial;
   --boxel-switch-active-thumb: initial;
   --boxel-switch-thumb-icon: initial;
   --boxel-switch-active-thumb-icon: initial;
@@ -226,6 +228,8 @@
   --sidebar-accent-foreground: var(--boxel-light);
   --sidebar-border: var(--boxel-550);
   --sidebar-ring: var(--boxel-highlight);
+  --boxel-switch-thumb: var(--boxel-light);
+  --boxel-switch-thumb-icon: var(--background);
   --boxel-button-default-border: var(--border);
   --boxel-button-default-active-background: var(--background);
   --boxel-button-default-active-foreground: var(--foreground);

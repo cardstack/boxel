@@ -16,7 +16,7 @@ export const BoxelBrandGuide = `:root {
   --font-sans: 'IBM Plex Sans', 'Helvetica Neue', Arial, ui-sans-serif, sans-serif, system-ui;
   --font-serif: 'IBM Plex Serif', 'Georgia', Times, serif;
   --foreground: var(--boxel-slate, #272330);
-  --input: var(--boxel-450, #919191);
+  --input: var(--boxel-400, #afafb7);
   --muted: #F5F5F5;
   --muted-foreground: #64748B;
   --popover: var(--boxel-light, #FFFFFF);
