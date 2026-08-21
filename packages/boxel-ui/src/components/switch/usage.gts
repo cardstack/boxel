@@ -20,11 +20,6 @@ export default class SwitchUsage extends Component {
   @tracked label = 'Switch';
   @tracked size: SwitchSize = 'base';
 
-  /* Switch asserts without a label, so wait for the knob to name it */
-  get hasLabel() {
-    return Boolean(this.label && this.label.trim());
-  }
-
   @tracked isLabeledEnabled = false;
   @tracked isDarkModeEnabled = false;
 
@@ -104,34 +99,27 @@ export default class SwitchUsage extends Component {
     >
       <FreestyleUsage @name='Switch'>
         <:description>
-          A switch is a component that allows the user to switch a setting on or
-          off. It responds to click, Space, and Enter, and announces itself to
-          assistive technology as a switch. It is fully controlled: the switch
-          never changes state on its own — it calls onChange with the new value,
-          and only moves when isEnabled is updated to match. label is always
-          required — it is the accessible name. Yield a block to also render a
-          visible label beside the track, in which case label should repeat that
-          text.
+          <p>A component that allows the user to switch a setting on or off. It
+            responds to click, Space, and Enter.</p>
+
+          <p>To render with no visible label (screen-reader-only), use the
+            <code>@label</code>
+            arg. For a visible label, yield a block. Not both — the two join
+            into one announced name.</p>
         </:description>
         <:example>
-          {{#if this.hasLabel}}
-            <Switch
-              @label={{this.label}}
-              @isEnabled={{this.isEnabled}}
-              @onChange={{this.handleChange}}
-              @disabled={{this.isDisabled}}
-              @size={{this.size}}
-            />
-          {{else}}
-            <p>Set the label arg to render this example — without it (or a
-              visible label block) the switch would have no accessible name,
-              which Switch rejects in development.</p>
-          {{/if}}
+          <Switch
+            @label={{this.label}}
+            @isEnabled={{this.isEnabled}}
+            @onChange={{this.handleChange}}
+            @disabled={{this.isDisabled}}
+            @size={{this.size}}
+          />
         </:example>
         <:api as |Args|>
           <Args.String
             @name='label'
-            @description='Accessible label for the switch (visually hidden, read by screen readers). Required unless a block provides a visible label'
+            @description='Screen-reader-only name. Do not pass this and a block — the two join into one announced name'
             @value={{this.label}}
             @onInput={{fn (mut this.label)}}
             @optional={{true}}
@@ -282,9 +270,9 @@ export default class SwitchUsage extends Component {
       <FreestyleUsage @name='Switch with thumb icons'>
         <:description>
           checkedIcon and uncheckedIcon render inside the thumb for the matching
-          state. The icons are decorative — the label still names the control —
-          and they are skipped at size small, where the thumb is too small for a
-          legible glyph.
+          state. The icons are decorative — the name still comes from label or
+          the block — and they are skipped at size small, where the thumb is too
+          small for a legible glyph.
         </:description>
         <:example>
           <Switch

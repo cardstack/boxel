@@ -93,10 +93,6 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
        applies to every container — themed cards differ only in the knob
        values their scoped theme stylesheet provides. */
     :global(.boxel-card-container) {
-      /* Setting boxel base css variable overrides. Every chain ends in a
-         literal: the calc()-derived scales below are invalid if any var()
-         in them fails to resolve, and variables.css is not guaranteed to
-         be in scope. Literals mirror its values. */
       --_boxel-scale: var(--theme-scale, var(--boxel-ratio, 1.333));
       --theme-spacing: calc(var(--spacing, 0.25rem) * 4);
       --boxel-spacing: var(--theme-spacing, var(--_boxel-spacing, 1rem));

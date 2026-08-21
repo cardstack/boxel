@@ -1,5 +1,4 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-import { warn } from '@ember/debug';
 import { concat, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import type { ComponentLike } from '@glint/template';
@@ -21,29 +20,10 @@ interface SwitchArgs {
   checkedIcon?: ComponentLike<{ Element: Element }>;
   disabled?: boolean;
   isEnabled: boolean;
-  label?: string; /* Visually-hidden accessible name. Use default block instead to add a visible label. */
+  label?: string; /* Screen-reader-only name, rendered visually hidden. */
   onChange: (isEnabled: boolean) => void;
   size?: SwitchSize;
   uncheckedIcon?: ComponentLike<{ Element: Element }>;
-}
-
-function srOnlyLabel(label: string | undefined) {
-  warn(
-    'Switch has no accessible name: pass @label or a visible label block',
-    Boolean(label && label.trim()),
-    { id: 'boxel-ui.switch.missing-label' },
-  );
-  return label;
-}
-
-/* Warns rather than asserts so a mislabeled switch still renders */
-function warnOnRedundantLabel(label: string | undefined) {
-  warn(
-    'Switch ignores @label when a visible label block is given — the block names the control',
-    label === undefined,
-    { id: 'boxel-ui.switch.redundant-label' },
-  );
-  return '';
 }
 
 /* Intrinsic size, which prerendering needs. Tracks the @size presets
@@ -74,10 +54,10 @@ function toggleOnEnter(
   event: Event,
 ) {
   if (event instanceof KeyboardEvent && event.key === 'Enter') {
+    event.preventDefault();
     if (event.repeat) {
       return;
     }
-    event.preventDefault();
     onChange(!isEnabled);
   }
 }
@@ -95,9 +75,9 @@ const Switch: TemplateOnlyComponent<SwitchSignature> = <template>
     ...attributes
   >
     {{#if (has-block)}}
-      <span class='switch-label'>{{warnOnRedundantLabel @label}}{{yield}}</span>
+      <span class='switch-label'>{{yield}}</span>
     {{else}}
-      <span class='boxel-sr-only'>{{srOnlyLabel @label}}</span>
+      <span class='boxel-sr-only'>{{@label}}</span>
     {{/if}}
     <span class='switch-track'>
       {{! aria-checked is derived from checked; binding it could disagree }}

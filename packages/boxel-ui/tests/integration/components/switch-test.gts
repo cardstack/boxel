@@ -15,10 +15,15 @@ async function pressEnter(repeat = false) {
   if (!input) {
     throw new Error(`expected to find ${INPUT}`);
   }
-  input.dispatchEvent(
-    new KeyboardEvent('keydown', { bubbles: true, key: 'Enter', repeat }),
-  );
+  let event = new KeyboardEvent('keydown', {
+    bubbles: true,
+    cancelable: true,
+    key: 'Enter',
+    repeat,
+  });
+  input.dispatchEvent(event);
   await settled();
+  return event;
 }
 
 class SwitchState {
@@ -132,6 +137,29 @@ module('Integration | Component | switch', function (hooks) {
     await click(SWITCH);
 
     assert.deepEqual(state.calls, [], 'no onChange calls');
+  });
+
+  test('every Enter keydown is prevented, auto-repeat included', async function (assert) {
+    let state = new SwitchState();
+    await render(
+      <template>
+        <Switch
+          @label='Notifications'
+          @isEnabled={{state.isEnabled}}
+          @onChange={{state.accept}}
+        />
+      </template>,
+    );
+
+    assert.true((await pressEnter()).defaultPrevented, 'the first press');
+    // A repeat that reaches the UA unprevented is an implicit submit for
+    // any switch inside a form — every card edit template. Asserted on the
+    // event because a synthetic keydown never submits a form on its own.
+    for (let i = 0; i < 3; i++) {
+      assert.true((await pressEnter(true)).defaultPrevented, `repeat ${i}`);
+    }
+
+    assert.deepEqual(state.calls, [true], 'still one toggle for one press');
   });
 
   test('names the control from @label or a visible label block', async function (assert) {
