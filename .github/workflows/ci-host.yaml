@@ -1168,7 +1168,11 @@ jobs:
     # has nothing to do with their diffs. Modules missing from the current
     # reports (because a shard failed to upload) keep their prior values —
     # both update scripts merge with the committed file.
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && !cancelled() && (needs.host-test.result == 'success' || needs.host-test.result == 'failure') }}
+    # TEMPORARY (drop before merge): also run on this PR so the new
+    # report-selection logic gets exercised end to end. The write half is
+    # neutered below, so a PR run reports what it would have committed and
+    # commits nothing.
+    if: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.head_ref == 'cs-12582-weights-from-pr-run') && !cancelled() && (needs.host-test.result == 'success' || needs.host-test.result == 'failure') }}
     concurrency:
       group: host-memory-baseline-update-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -1214,7 +1218,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          MERGE_SHA: ${{ github.sha }}
+          # TEMPORARY (drop before merge): a PR has no merge commit on main
+          # to resolve, so replay #5834's — a merge whose PR run was
+          # Percy-free, index-cached and green, i.e. one this logic accepts.
+          MERGE_SHA: ${{ github.event_name == 'pull_request' && 'a91e7cfaad1ab2c16eccd08023e6b5cb80abd51b' || github.sha }}
         run: |
           set -uo pipefail
 
@@ -1305,6 +1312,14 @@ jobs:
             fi
             git add packages/host/memory-baseline.json packages/host/tests/test-module-timings.json
             git commit -m "Update host test baselines [skip ci]"
+
+            # TEMPORARY (drop before merge): report the would-be change and
+            # stop, so exercising this on a PR cannot write to main.
+            if [ "${{ github.event_name }}" = "pull_request" ]; then
+              echo "=== dry run: what would have been committed ==="
+              git show --stat HEAD
+              exit 0
+            fi
 
             if git push; then
               exit 0
