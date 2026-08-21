@@ -22,6 +22,7 @@ import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel.ts';
 import { AffinityActivityTracker } from './affinity-activity.ts';
 import { AsyncSemaphore } from './async-semaphore.ts';
 import { formatHeapTelemetry, heapTelemetry } from './heap-telemetry.ts';
+import { maybeAutoCaptureHeapSnapshot } from './heap-snapshot.ts';
 import {
   type BatchOwner,
   computeBatchClearCacheGate,
@@ -997,7 +998,11 @@ export class Prerenderer {
       // has no queue behind it to explain it. Kept separate from the
       // snapshot line so existing greps of that line are unaffected.
       try {
-        log.info('prerender-heap %s', formatHeapTelemetry(heapTelemetry()));
+        let telemetry = heapTelemetry();
+        log.info('prerender-heap %s', formatHeapTelemetry(telemetry));
+        // Reuses the reading just taken, so the instance that crosses the
+        // threshold captures itself off the same tick that reports it.
+        maybeAutoCaptureHeapSnapshot(telemetry.heapUsedMB);
       } catch (e) {
         log.warn('heap telemetry log failed:', e);
       }
