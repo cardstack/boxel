@@ -1,0 +1,32 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Partner work for absolute beginners",
+      "platform": "instagram_reel",
+      "scheduledAt": "2026-08-20T01:00:00.000Z",
+      "status": "planned",
+      "brief": "Two-person routine that works even if only one of them has done Zumba before. Film at the Tuesday class.",
+      "calendarId": "ContentCalendar/main",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "sourceIdea": {
+        "links": {
+          "self": "../content-calendar/ContentIdea/partner-work-beginners"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../content-calendar/content-piece",
+        "name": "ContentPiece"
+      }
+    }
+  }
+}

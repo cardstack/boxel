@@ -1,0 +1,45 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "offeredTitle": "Platform Engineer",
+      "salary": null,
+      "equity": null,
+      "bonus": null,
+      "startDate": null,
+      "extendedDate": null,
+      "expirationDate": null,
+      "decisionDate": null,
+      "approvalChain": {
+        "steps": [],
+        "startedAt": null
+      },
+      "letter": "Dear Tomás Ribeiro,\n\nOn behalf of the Company, I am delighted to offer you the position of **Platform Engineer**.\n\n## Compensation\n\nYour annualized base salary will be **[salary not set]**, paid in accordance with our standard payroll schedule, subject to applicable withholdings. You will also be eligible for our standard benefits program from your first day.\n\n## Start date\n\nYour anticipated start date is **[startDate not set]**. If you need to adjust this date, let us know and we will do our best to accommodate.\n\n## Accepting this offer\n\nThis offer remains open until **[expiresDate not set]**. To accept, reply to this letter in writing before that date. This offer is contingent on satisfactory completion of your background check and proof of eligibility to work.\n\nWe are excited about what you will bring to the team, and we hope you will join us.\n\nSincerely,\n\nThe the Company Talent Team",
+      "status": "draft",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "candidate": {
+        "links": {
+          "self": "../Candidate/offer-tomas"
+        }
+      },
+      "position": {
+        "links": {
+          "self": "../Position/platform-engineer"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../offer",
+        "name": "Offer"
+      }
+    }
+  }
+}

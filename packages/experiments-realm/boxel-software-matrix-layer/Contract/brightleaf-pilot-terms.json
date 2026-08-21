@@ -96,6 +96,11 @@
         "links": {
           "self": "../Theme/riso"
         }
+      },
+      "approvalChain.steps.0.approver": {
+        "links": {
+          "self": "../Employee/leo-park"
+        }
       }
     }
   }

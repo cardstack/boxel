@@ -1,0 +1,36 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "action": "rejected",
+      "occurredAt": "2026-08-20T07:44:38.028Z",
+      "subjectTitle": "Brightleaf Studio — Pilot Terms",
+      "note": "this bad",
+      "conditions": null,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "doneBy": {
+        "links": {
+          "self": "../Employee/leo-park"
+        }
+      },
+      "subject": {
+        "links": {
+          "self": "../Contract/brightleaf-pilot-terms"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../audit-entry",
+        "name": "AuditEntry"
+      }
+    }
+  }
+}

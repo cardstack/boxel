@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "reference": null,
+      "quantity": null,
+      "rsvp": null,
+      "paymentStatus": null,
+      "totalPrice": {
+        "amount": null,
+        "currency": {
+          "code": null
+        }
+      },
+      "checkedInAt": null,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../booking",
+        "name": "Booking"
+      }
+    }
+  }
+}
