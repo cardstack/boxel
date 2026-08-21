@@ -595,6 +595,31 @@ jobs:
       - name: Warm test Docker images from the GHCR mirror
         continue-on-error: true
         uses: ./.github/actions/warm-test-images
+      # Synapse's boot is most of the `create realm users` wait a few steps
+      # below, and none of it depends on the index import that runs next, so
+      # start it here and let the two overlap. This is not the same trade as
+      # making a step before service start faster: those only move the moment
+      # the readiness clock starts, and the wait downstream absorbs the
+      # difference. Synapse is on the critical path — realm-server logs into
+      # it during boot — so starting it earlier shortens the chain itself.
+      #
+      # Backgrounded because `assert-synapse-running` blocks on Synapse's own
+      # healthcheck (`curl --retry 30` against /health); spending that wait
+      # during the import is the entire point.
+      #
+      # Safe against the later start: `assert-synapse-running` is idempotent,
+      # so when `test-services:host` reaches `start:matrix` it finds the
+      # container up and only re-registers its Traefik route. The container
+      # exists within seconds of this step, long before that, so the two
+      # cannot race to create it. Nothing waits on this — `create realm users`
+      # already polls for Synapse and fails loudly on its own if it never
+      # arrives. Output joins /tmp/server.log, which a later step prints and
+      # uploads.
+      - name: Start Synapse ahead of the index import
+        working-directory: packages/matrix
+        run: |
+          pnpm assert-synapse-running >> /tmp/server.log 2>&1 &
+          echo "Synapse is starting in the background; its output goes to /tmp/server.log"
       # Seed the index tables from a recent main boxel-index-cache artifact,
       # leaving the boot index to reconcile whatever this checkout changed
       # rather than indexing every realm from scratch. Runs before the
