@@ -31,7 +31,6 @@ import type {
   CardMessageContent,
   CardMessageEvent,
   CodePatchResultEvent,
-  DiscoveredToolDefinition,
   ToolResultEvent,
   MatrixEvent as DiscreteMatrixEvent,
   EncodedToolRequest,
@@ -80,7 +79,6 @@ import { isMarkdownFile } from '../paths.ts';
 import { SKILL_INSTRUCTIONS_MESSAGE, SYSTEM_MESSAGE } from './constants.ts';
 import { MAX_CORRECTNESS_FIX_ATTEMPTS } from './correctness-constants.ts';
 import { humanReadable } from '../code-ref.ts';
-import { findSearchReplaceBlock } from '../search-replace-markers.ts';
 
 const CARD_PATCH_COMMAND_NAMES = new Set(['patchCardInstance', 'patchFields']);
 const CHECK_CORRECTNESS_TOOL_NAME = 'checkCorrectness';
@@ -95,14 +93,14 @@ function getLog() {
  * When building prompts for the model, file attachments are handled
  * according to the following rules:
  *
- * 1. **Content inclusion**: Only the most recent user message's attached
- *    files have their content downloaded and included in the prompt.
- *    Older messages show file metadata (name, type) only. This keeps
- *    the prompt focused on fresh data and avoids redundant downloads.
- *
- * 2. **Supersession**: Within the current message, if a file (by
- *    sourceUrl) is re-attached in a later event, the earlier version
- *    is shown as metadata only (the later version wins).
+ * 1. **Byte-stable rendering**: A message's attachments are rendered from
+ *    that message's own snapshot alone — content included at every age,
+ *    never re-rendered because a newer version was attached later. Prompt
+ *    caching is an exact prefix match, so rewriting an already-sent
+ *    message re-bills the whole rest of the prompt at full input price on
+ *    every later turn; carrying the superseded content forward costs only
+ *    cached-read tokens. The model is told that a later attachment of the
+ *    same card/file supersedes earlier ones.
  *
  * 3. **MIME type handling** (see `modality.ts` for classification):
  *    - Text-based types (text/*, application/vnd.card+json,
@@ -723,43 +721,35 @@ export function hasSomeAttachedCards(
   return false;
 }
 
+// A message's rendering must depend only on the message itself, never on
+// later history. Prompt caching is an exact prefix match: re-rendering an
+// already-sent message (e.g. dropping an attachment's content because a
+// newer version was attached later) changes bytes mid-history and re-bills
+// everything after them at the full input price on every subsequent turn.
+// Carrying the superseded content forward instead costs only cached-read
+// tokens — a fraction of that.
 export async function getAttachedCards(
   client: MatrixClient,
   matrixEvent: MatrixEventWithBoxelContext,
-  history: DiscreteMatrixEvent[],
 ) {
   let attachedCards = matrixEvent.content?.data?.attachedCards ?? [];
   let results = await Promise.all(
     attachedCards.map(async (attachedCard: SerializedFileDef) => {
-      // If the file is attached later in the history, we should not include the content here
-      let shouldIncludeContent = !history
-        .slice(history.indexOf(matrixEvent) + 1)
-        .some((event) => {
-          // event is not always MatrixEventWithBoxelContext but casting lets us safely check attachedCards
-          return (
-            event as MatrixEventWithBoxelContext
-          ).content?.data?.attachedCards?.some(
-            (cardAttachment: SerializedFileDef) =>
-              cardAttachment.sourceUrl === attachedCard.sourceUrl,
-          );
-        });
       let result: SerializedFileDef = {
         url: attachedCard.url,
         sourceUrl: attachedCard.sourceUrl ?? '',
         name: attachedCard.name,
         contentType: attachedCard.contentType,
       };
-      if (shouldIncludeContent) {
-        if (attachedCard.content) {
-          result.content = JSON.parse(attachedCard.content);
-        } else {
-          try {
-            result.content = await downloadFile(client, attachedCard);
-          } catch (error) {
-            getLog().error(`Failed to fetch file ${attachedCard.url}:`, error);
-            result.error = `Error loading attached card: ${(error as Error).message}`;
-            result.content = undefined;
-          }
+      if (attachedCard.content) {
+        result.content = JSON.parse(attachedCard.content);
+      } else {
+        try {
+          result.content = await downloadFile(client, attachedCard);
+        } catch (error) {
+          getLog().error(`Failed to fetch file ${attachedCard.url}:`, error);
+          result.error = `Error loading attached card: ${(error as Error).message}`;
+          result.content = undefined;
         }
       }
       return result;
@@ -772,30 +762,17 @@ export async function getAttachedCards(
   return results;
 }
 
+// Byte-stable for the same reason as getAttachedCards above: each message
+// keeps its own snapshot's content forever, so history bytes never change
+// after they are first sent.
 export async function getAttachedFiles(
   client: MatrixClient,
   matrixEvent: MatrixEventWithBoxelContext,
-  history: DiscreteMatrixEvent[],
-  isCurrentMessage: boolean = false,
 ): Promise<SerializedFileDef[]> {
   let attachedFiles = matrixEvent.content?.data?.attachedFiles ?? [];
   return Promise.all(
     attachedFiles.map(async (file: SerializedFileDef) => {
-      let isSuperseded = history
-        .slice(history.indexOf(matrixEvent) + 1)
-        .some((event) =>
-          (
-            event as MatrixEventWithBoxelContext
-          ).content?.data?.attachedFiles?.some(
-            (f: SerializedFileDef) => f.sourceUrl === file.sourceUrl,
-          ),
-        );
-
-      if (
-        isCurrentMessage &&
-        !isSuperseded &&
-        isTextBasedContentType(file.contentType)
-      ) {
+      if (isTextBasedContentType(file.contentType)) {
         return downloadTextContent(client, file);
       }
       return toFileDefMetadata(file);
@@ -804,7 +781,6 @@ export async function getAttachedFiles(
 }
 
 export async function loadCurrentlySerializedFileDefs(
-  client: MatrixClient,
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
 ): Promise<SerializedFileDef[]> {
@@ -828,14 +804,9 @@ export async function loadCurrentlySerializedFileDefs(
     return [];
   }
 
-  // Reuse getAttachedFiles with isCurrentMessage=true — this is always the
-  // most recent user event, so supersession can't apply (no later events).
-  return getAttachedFiles(
-    client,
-    lastMessageEventByUser as MatrixEventWithBoxelContext,
-    history,
-    true,
-  );
+  // The only consumer checks presence, so metadata is enough — downloading
+  // content here would be a per-turn fetch whose bytes are never sent.
+  return attachedFiles.map(toFileDefMetadata);
 }
 
 export function attachedFilesToMessage(
@@ -887,126 +858,192 @@ export function attachedFilesToMessage(
     .join('\n');
 }
 
+// The names a skill source declares, regardless of markdown or card shape.
+function skillDeclaredToolNames(skill: {
+  attributes?: {
+    tools?: { functionName: string }[];
+    commands?: { functionName: string }[];
+  };
+}): string[] {
+  let skillTools = skill.attributes?.tools ?? skill.attributes?.commands;
+  return (skillTools ?? []).map((tool) => tool.functionName);
+}
+
+// The tool names declared by the skills the user has disabled — the only
+// sanctioned removal from the tools array. Downloaded and parsed exactly
+// like enabled skills; a name an enabled skill still declares is not
+// removable (two skills can declare the same command).
+async function getDisabledSkillToolNames(
+  eventList: DiscreteMatrixEvent[],
+  enabledToolNames: Set<string>,
+  client: MatrixClient,
+): Promise<Set<string>> {
+  let skillsConfigEvent = findLast(
+    eventList,
+    (event) => event.type === APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+  ) as SkillsConfigEvent;
+  let disabledSkillCards = skillsConfigEvent?.content?.disabledSkillCards;
+  let names = new Set<string>();
+  if (!disabledSkillCards?.length) {
+    return names;
+  }
+  await Promise.all(
+    disabledSkillCards.map(async (cardFileDef: SerializedFileDef) => {
+      let content = await downloadFile(client, cardFileDef);
+      if (isMarkdownSkillFile(cardFileDef)) {
+        let { tools } = parseMarkdownSkill(content, cardFileDef);
+        for (let tool of tools ?? []) {
+          if (tool.functionName) {
+            names.add(tool.functionName);
+          }
+        }
+        return;
+      }
+      let skill = (JSON.parse(content) as LooseSingleCardDocument)?.data;
+      for (let name of skillDeclaredToolNames(skill ?? {})) {
+        names.add(name);
+      }
+    }),
+  );
+  for (let name of enabledToolNames) {
+    names.delete(name);
+  }
+  return names;
+}
+
+// The tools array renders ahead of all message history in the request, so
+// any byte change to it re-bills the entire conversation from the first
+// changed byte. Tools are therefore accumulated first-definition-wins, in
+// first-seen order, over one chronological pass of the room's history: once
+// a function name has entered the array, no re-read of an edited skill
+// file, re-uploaded definition, or same-named message-context tool can
+// mutate its bytes or its position, and new names only ever append. The
+// trade is deliberate: a tool whose definition changed mid-session keeps
+// its original schema until a new room, matching how skill instructions
+// are snapshotted at attach. Every definition listed in a state event was
+// declared by a then-enabled skill when the host wrote it (the host
+// rebuilds the list from enabled skills on every write), so admission
+// needs no gate against current skill contents — gating on the *current*
+// declarations would silently drop a tool when an enabled skill is edited
+// to remove it, shrinking the array mid-session.
+//
+// The one sanctioned removal is the user disabling a skill: the names that
+// skill declares drop out (state-event definitions through the
+// disabled-names gate, discovered definitions through the disabled-skills
+// list), costing one honest cache reset per user toggle. Re-enabling
+// restores the exact prior bytes and order, because first-wins re-admits
+// each definition from its original event.
 export async function getTools(
   eventList: DiscreteMatrixEvent[],
   enabledSkills: EnabledSkill[],
   aiBotUserId: string,
   client: MatrixClient,
 ): Promise<Tool[]> {
-  // Build map directly from messages
   let enabledToolNames = new Set<string>();
-  let toolMap = new Map<string, Tool>();
-
-  // Get the list of all names from enabled skills
   for (let skill of enabledSkills) {
-    let skillTools = skill.attributes?.tools ?? skill.attributes?.commands;
-    if (skillTools) {
-      for (let tool of skillTools) {
-        enabledToolNames.add(tool.functionName);
-      }
+    for (let name of skillDeclaredToolNames(skill)) {
+      enabledToolNames.add(name);
     }
   }
-
-  // Tools discovered by reading a skill file (readRealmFile): each read's
-  // result event embeds the definitions in `data.discoveredTools`, so this
-  // source is event-sourced like every other prompt input. A skill read many
-  // times contributes only its latest read's definitions (the file may have
-  // changed between reads); a skill toggled off in room state contributes
-  // none. Merged into the map first, so an enabled skill's uploaded
-  // definition or a message-context tool with the same functionName wins on
-  // conflict.
+  let disabledToolNames = await getDisabledSkillToolNames(
+    eventList,
+    enabledToolNames,
+    client,
+  );
   let disabledSkillIds = new Set(await getDisabledSkillIds(eventList));
-  let discoveredBySkill = new Map<string, DiscoveredToolDefinition[]>();
+
+  // Map insertion order is the emitted array order.
+  let toolMap = new Map<string, Tool>();
+  let add = (tool: Tool | undefined) => {
+    let name = tool?.function?.name;
+    if (!name) {
+      return;
+    }
+    // Correctness commands should only be emitted by helper flows, not
+    // directly via LLM tool calls.
+    if (name === CHECK_CORRECTNESS_TOOL_NAME) {
+      return;
+    }
+    if (!toolMap.has(name)) {
+      toolMap.set(name, tool!);
+    }
+  };
+
   for (let event of eventList) {
-    if (!isToolResultEvent(event)) {
+    // Definitions the host uploaded and listed in a room-skills state
+    // event. Every state event is scanned — not just the latest — so a
+    // definition's bytes and position come from its first listing even
+    // when the host re-uploads a changed version later. Only names not
+    // already admitted are downloaded. A failed download throws rather
+    // than silently dropping the definition: a dropped entry would change
+    // the array's bytes between rebuilds, which is exactly what this
+    // function exists to prevent.
+    if (event.type === APP_BOXEL_ROOM_SKILLS_EVENT_TYPE) {
+      let toolDefinitionFileDefs =
+        getToolDefinitions<SerializedFile>(
+          (event as SkillsConfigEvent).content,
+        ) ?? [];
+      for (let toolDefinitionFileDef of toolDefinitionFileDefs) {
+        // A nameless entry (pre-rename rooms carry some) can't be deduped
+        // or addressed; downloading it would also make the union depend on
+        // an unfetchable upload.
+        if (
+          !toolDefinitionFileDef.name ||
+          disabledToolNames.has(toolDefinitionFileDef.name) ||
+          toolMap.has(toolDefinitionFileDef.name)
+        ) {
+          continue;
+        }
+        let definitionContent = await downloadFile(
+          client,
+          toolDefinitionFileDef,
+        );
+        add(JSON.parse(definitionContent).tool);
+      }
       continue;
     }
-    // Only the bot publishes readRealmFile results; a discoveredTools block
-    // on anyone else's result event is not a legitimate discovery.
-    if (event.sender !== aiBotUserId) {
-      continue;
-    }
-    let content = event.content;
-    if (!isToolResultWithOutputContent(content)) {
-      continue;
-    }
-    // Only an applied read actually fetched the skill; discoveries claimed
-    // by a failed or invalid result are not evidence of anything.
-    if (content['m.relates_to']?.key !== 'applied') {
-      continue;
-    }
-    let discovered = content.data?.discoveredTools;
-    if (!discovered?.length) {
-      continue;
-    }
-    let bySkill = new Map<string, DiscoveredToolDefinition[]>();
-    for (let def of discovered) {
+
+    // Tools discovered by the bot reading a skill file (readRealmFile):
+    // each applied read's result event embeds the definitions in
+    // `data.discoveredTools`. Only the bot publishes these; a
+    // discoveredTools block on anyone else's result event is not a
+    // legitimate discovery, and a failed or invalid read is not evidence
+    // of anything.
+    if (isToolResultEvent(event) && event.sender === aiBotUserId) {
+      let content = event.content;
       if (
-        !def?.sourceSkillUrl ||
-        def.definition?.type !== 'function' ||
-        !def.definition.function?.name
+        !isToolResultWithOutputContent(content) ||
+        content['m.relates_to']?.key !== 'applied'
       ) {
         continue;
       }
-      let defs = bySkill.get(def.sourceSkillUrl) ?? [];
-      defs.push(def);
-      bySkill.set(def.sourceSkillUrl, defs);
-    }
-    // eventList is chronological, so a later read of the same skill
-    // replaces the earlier one wholesale.
-    for (let [skillUrl, defs] of bySkill) {
-      discoveredBySkill.set(skillUrl, defs);
-    }
-  }
-  for (let [skillUrl, defs] of discoveredBySkill) {
-    if (disabledSkillIds.has(skillUrl)) {
-      continue;
-    }
-    for (let def of defs) {
-      toolMap.set(def.definition.function.name, def.definition);
-    }
-  }
-
-  let skillsConfigEvent = findLast(
-    eventList,
-    (event) => event.type === APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
-  ) as SkillsConfigEvent;
-
-  let toolDefinitionFileDefs =
-    getToolDefinitions<SerializedFile>(skillsConfigEvent?.content) ?? [];
-  for (let toolDefinitionFileDef of toolDefinitionFileDefs) {
-    if (enabledToolNames.has(toolDefinitionFileDef.name)) {
-      let commandDefinitionContent = await downloadFile(
-        client,
-        toolDefinitionFileDef,
-      );
-      let commandDefinitionObject = JSON.parse(commandDefinitionContent);
-      toolMap.set(toolDefinitionFileDef.name, commandDefinitionObject.tool);
-    }
-  }
-
-  // Add in tools from the user's messages
-  for (let event of eventList) {
-    if (event.type !== 'm.room.message' || event.sender == aiBotUserId) {
-      continue;
-    }
-    if (event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE) {
-      let eventTools = event.content.data?.context?.tools;
-      if (eventTools?.length) {
-        for (let tool of eventTools) {
-          toolMap.set(tool.function.name, tool);
+      for (let def of content.data?.discoveredTools ?? []) {
+        if (
+          !def?.sourceSkillUrl ||
+          disabledSkillIds.has(def.sourceSkillUrl) ||
+          def.definition?.type !== 'function' ||
+          !def.definition.function?.name
+        ) {
+          continue;
         }
+        add(def.definition as Tool);
+      }
+      continue;
+    }
+
+    // Tools carried in a user message's context.
+    if (
+      event.type === 'm.room.message' &&
+      event.sender !== aiBotUserId &&
+      event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE
+    ) {
+      for (let tool of event.content.data?.context?.tools ?? []) {
+        add(tool);
       }
     }
   }
 
-  // Correctness commands should only be emitted by helper flows, not
-  // directly via LLM tool calls.
-  toolMap.delete(CHECK_CORRECTNESS_TOOL_NAME);
-
-  return Array.from(toolMap.values()).sort((a, b) =>
-    a.function.name.localeCompare(b.function.name),
-  );
+  return Array.from(toolMap.values());
 }
 
 export function getLastUserMessage(
@@ -1198,8 +1235,6 @@ async function toResultMessages(
         let attachmentResult = await buildAttachmentsMessagePart(
           client,
           toolResult,
-          history,
-          true,
         );
         content = [content, attachmentResult.text].filter(Boolean).join('\n\n');
         let toolMessage: OpenAIPromptMessage = {
@@ -1564,7 +1599,10 @@ function toCheckCorrectnessResultContent(
 export async function buildPromptForModel(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
-  tools: Tool[] = [],
+  // Kept positionally for the many call sites; the context message no
+  // longer derives anything from the tools array (the request carries the
+  // tools separately).
+  _tools: Tool[] = [],
   skillCards: EnabledSkill[] = [],
   disabledSkillIds: string[] = [],
   client: MatrixClient,
@@ -1578,13 +1616,6 @@ export async function buildPromptForModel(
     throw new Error("Username must be a full id, e.g. '@aibot:localhost'");
   }
   let historicalMessages: OpenAIPromptMessage[] = [];
-  let lastUserMessageEvent = findLast(
-    history,
-    (event) =>
-      event.sender !== aiBotUserId &&
-      event.type === 'm.room.message' &&
-      !isToolOrCodePatchResult(event),
-  );
   for (let event of history) {
     if (event.type !== 'm.room.message') {
       continue;
@@ -1601,11 +1632,13 @@ export async function buildPromptForModel(
     let body = event.content.body;
 
     if (event.sender === aiBotUserId) {
-      let codePatchResults = getCodePatchResults(
-        event as CardMessageEvent,
-        history,
-      );
-      let content = elideCodeBlocks(body, codePatchResults);
+      // Past search/replace blocks ride in history verbatim. Eliding them
+      // rewrote already-sent messages — the placeholder text even changed
+      // once the patch result arrived — which broke the cache prefix, and
+      // models imitated the "[Omitting …]" placeholder in place of a real
+      // patch, stalling the session. Carrying the blocks forward costs
+      // cached-read tokens instead.
+      let content = body;
       let toolCalls = toToolCalls(event as CardMessageEvent);
       if (content || toolCalls.length) {
         let historicalMessage: OpenAIPromptMessage = {
@@ -1628,12 +1661,9 @@ export async function buildPromptForModel(
       ).forEach((message) => historicalMessages.push(message));
     }
     if (event.sender !== aiBotUserId) {
-      let isCurrentMessage = event === lastUserMessageEvent;
       let attachmentResult = await buildAttachmentsMessagePart(
         client,
         event as CardMessageEvent,
-        history,
-        isCurrentMessage,
         inputModalities,
       );
       if (attachmentResult.mediaParts.length > 0) {
@@ -1695,10 +1725,8 @@ export async function buildPromptForModel(
   ];
   messages = messages.concat(historicalMessages);
   let contextContent = await buildContextMessage(
-    client,
     history,
     aiBotUserId,
-    tools,
     disabledSkillIds,
   );
   // The context carries the current time, so its bytes change on every
@@ -2209,102 +2237,97 @@ function hasAppliedChanges(
   );
 }
 
+// Renders a message's attachments from that message's own snapshot alone.
+// Nothing here may depend on later history or on whether the message is the
+// current one: the rendering becomes part of the cached prompt prefix, and
+// any retroactive change re-bills everything after it (see getAttachedCards).
 export const buildAttachmentsMessagePart = async (
   client: MatrixClient,
   matrixEvent: MatrixEventWithBoxelContext,
-  history: DiscreteMatrixEvent[],
-  isCurrentMessage: boolean = false,
   inputModalities?: string[],
 ): Promise<{ text: string; mediaParts: ContentPart[] }> => {
-  let attachedCards = await getAttachedCards(client, matrixEvent, history);
+  let attachedCards = await getAttachedCards(client, matrixEvent);
   let text = '';
   if (attachedCards.length > 0) {
-    text += `Attached Cards (cards with newer versions don't show their content):\n${JSON.stringify(attachedCards, null, 2)}\n`;
+    text += `Attached Cards (each shows its content as of this message; a later attachment of the same card supersedes it):\n${JSON.stringify(attachedCards, null, 2)}\n`;
   }
-  let attachedFiles = await getAttachedFiles(
-    client,
-    matrixEvent,
-    history,
-    isCurrentMessage,
-  );
+  let attachedFiles = await getAttachedFiles(client, matrixEvent);
   let mediaParts: ContentPart[] = [];
   let mediaSourceUrls = new Set<string>();
   let unsupportedFiles: { name: string; contentType: string }[] = [];
-  if (isCurrentMessage) {
-    for (let f of attachedFiles) {
-      if (!f.url) {
-        continue;
-      }
-      // Check model capability before downloading
-      let modality = requiredModality(f.contentType);
-      if (!modality) {
-        continue; // not a multimodal type — handled as text metadata below
-      }
-      if (inputModalities && !inputModalities.includes(modality)) {
-        unsupportedFiles.push({
-          name: f.name ?? 'unknown',
-          contentType: f.contentType ?? 'unknown',
+  for (let f of attachedFiles) {
+    if (!f.url) {
+      continue;
+    }
+    // Check model capability before downloading
+    let modality = requiredModality(f.contentType);
+    if (!modality) {
+      continue; // not a multimodal type — handled as text metadata below
+    }
+    if (inputModalities && !inputModalities.includes(modality)) {
+      unsupportedFiles.push({
+        name: f.name ?? 'unknown',
+        contentType: f.contentType ?? 'unknown',
+      });
+      continue;
+    }
+    try {
+      if (isImageContentType(f.contentType)) {
+        let dataUrl = await downloadFileAsBase64DataUrl(
+          client,
+          f.url,
+          f.contentType!,
+        );
+        mediaParts.push({
+          type: 'image_url',
+          image_url: { url: dataUrl },
         });
-        continue;
-      }
-      try {
-        if (isImageContentType(f.contentType)) {
-          let dataUrl = await downloadFileAsBase64DataUrl(
-            client,
-            f.url,
-            f.contentType!,
-          );
-          mediaParts.push({
-            type: 'image_url',
-            image_url: { url: dataUrl },
-          });
-        } else if (isPdfContentType(f.contentType)) {
-          let dataUrl = await downloadFileAsBase64DataUrl(
-            client,
-            f.url,
-            f.contentType!,
-          );
-          mediaParts.push({
-            type: 'file',
-            file: {
-              filename: f.name ?? 'document.pdf',
-              file_data: dataUrl,
-            },
-          });
-        } else if (isAudioContentType(f.contentType)) {
-          let format = audioFormatFromMime(f.contentType!);
-          if (!format) {
-            getLog().error(`Unsupported audio format: ${f.contentType}`);
-            continue;
-          }
-          let dataUrl = await downloadFileAsBase64DataUrl(
-            client,
-            f.url,
-            f.contentType!,
-          );
-          // Strip data URL prefix — OpenRouter expects raw base64 for audio
-          let base64 = dataUrl.replace(/^data:[^;]+;base64,/, '');
-          mediaParts.push({
-            type: 'input_audio',
-            input_audio: { data: base64, format },
-          });
-        } else if (isVideoContentType(f.contentType)) {
-          let dataUrl = await downloadFileAsBase64DataUrl(
-            client,
-            f.url,
-            f.contentType!,
-          );
-          mediaParts.push({
-            type: 'video_url',
-            video_url: { url: dataUrl },
-          });
+      } else if (isPdfContentType(f.contentType)) {
+        let dataUrl = await downloadFileAsBase64DataUrl(
+          client,
+          f.url,
+          f.contentType!,
+        );
+        mediaParts.push({
+          type: 'file',
+          file: {
+            filename: f.name ?? 'document.pdf',
+            file_data: dataUrl,
+          },
+        });
+      } else if (isAudioContentType(f.contentType)) {
+        let format = audioFormatFromMime(f.contentType!);
+        if (!format) {
+          getLog().error(`Unsupported audio format: ${f.contentType}`);
+          continue;
         }
-        if (f.sourceUrl) {
-          mediaSourceUrls.add(f.sourceUrl);
-        }
-      } catch (e) {
-        getLog().error(`Failed to download media file ${f.url}:`, e);
+        let dataUrl = await downloadFileAsBase64DataUrl(
+          client,
+          f.url,
+          f.contentType!,
+        );
+        // Strip data URL prefix — OpenRouter expects raw base64 for audio
+        let base64 = dataUrl.replace(/^data:[^;]+;base64,/, '');
+        mediaParts.push({
+          type: 'input_audio',
+          input_audio: { data: base64, format },
+        });
+      } else if (isVideoContentType(f.contentType)) {
+        let dataUrl = await downloadFileAsBase64DataUrl(
+          client,
+          f.url,
+          f.contentType!,
+        );
+        mediaParts.push({
+          type: 'video_url',
+          video_url: { url: dataUrl },
+        });
       }
+      if (f.sourceUrl) {
+        mediaSourceUrls.add(f.sourceUrl);
+      }
+    } catch (e) {
+      getLog().error(`Failed to download media file ${f.url}:`, e);
     }
   }
   if (unsupportedFiles.length > 0) {
@@ -2314,7 +2337,7 @@ export const buildAttachmentsMessagePart = async (
     text += `Note: The following files were not sent to the model because it does not support their input type: ${fileList}\n`;
   }
   if (attachedFiles.length > 0) {
-    text += `Attached Files (files with newer versions don't show their content):\n${attachedFilesToMessage(
+    text += `Attached Files (each shows its content as of this message; a later attachment of the same file supersedes it):\n${attachedFilesToMessage(
       attachedFiles,
       {
         omitSourceUrls: mediaSourceUrls,
@@ -2325,16 +2348,13 @@ export const buildAttachmentsMessagePart = async (
 };
 
 export const buildContextMessage = async (
-  client: MatrixClient,
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
-  tools: Tool[],
   disabledSkillIds: string[],
 ): Promise<string> => {
   let result = '';
 
   let attachedFiles = await loadCurrentlySerializedFileDefs(
-    client,
     history,
     aiBotUserId,
   );
@@ -2439,17 +2459,21 @@ export const buildContextMessage = async (
   }
   result += `\nCurrent date and time: ${new Date().toISOString()}\n`;
 
-  let cardPatchTool = tools.find(
-    (tool) => tool.function.name === 'patchCardInstance',
-  );
-
+  // The old wording keyed off the per-card patchCardInstance tool, which
+  // interactive messages no longer inject (its card-specific schema churned
+  // the tools array). The policy is unchanged from before this change:
+  // opening a card is what grants edit access, so with no open cards (and
+  // no attached files) the model should ask rather than guess at ids. The
+  // wording deliberately says nothing about attachments — cards may well be
+  // attached to the very message this note trails, and attachment alone was
+  // never the grant.
   if (
     attachedFiles.length == 0 &&
-    !cardPatchTool &&
+    (context?.openCardIds?.length ?? 0) === 0 &&
     hasSomeAttachedCards(history, aiBotUserId)
   ) {
     result +=
-      'You are unable to edit any cards, the user has not given you access, they need to open the card and let it be auto-attached.';
+      'You are unable to edit any cards: the user has no card open, and editing requires the card to be open. Ask them to open the card they want changed.';
   }
 
   return result;
@@ -2667,48 +2691,6 @@ export function isCodePatchResultEvent(
     event.content['m.relates_to']?.rel_type ===
       APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE
   );
-}
-
-function elideCodeBlocks(
-  content: string,
-  codePatchResults: CodePatchResultEvent[],
-) {
-  const DEFAULT_PLACEHOLDER: string =
-    '[Omitting previously suggested code change]';
-  const PLACEHOLDERS = {
-    applied: '[Omitting previously suggested and applied code change]',
-    failed: '[Omitting previously suggested code change that failed to apply]',
-  };
-
-  function getPlaceholder(codeBlockIndex: number) {
-    let codePatchResult = codePatchResults.find((codePatchResult) => {
-      return codePatchResult.content.codeBlockIndex === codeBlockIndex;
-    });
-    if (codePatchResult) {
-      return (
-        PLACEHOLDERS[codePatchResult.content['m.relates_to'].key] ??
-        DEFAULT_PLACEHOLDER
-      );
-    }
-    return DEFAULT_PLACEHOLDER;
-  }
-
-  let codeBlockIndex = 0;
-
-  for (;;) {
-    const block = findSearchReplaceBlock(content);
-    if (!block) {
-      return content;
-    }
-
-    // replace the content between the markers with a placeholder
-    content =
-      content.substring(0, block.start) +
-      getPlaceholder(codeBlockIndex) +
-      content.substring(block.end);
-
-    codeBlockIndex++;
-  }
 }
 
 export function mxcUrlToHttp(mxc: string, baseUrl: string): string {

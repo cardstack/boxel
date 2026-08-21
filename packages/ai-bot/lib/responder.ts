@@ -309,6 +309,12 @@ export class Responder {
       let cachedTokens = (chunk.usage as any).prompt_tokens_details
         ?.cached_tokens;
       let costUsd = (chunk.usage as any).cost;
+      // OpenRouter also stamps each chunk with the provider that served the
+      // request and the generation id. Recording them alongside the counts
+      // makes a cache miss attributable: a cachedTokens collapse with a
+      // provider change is a routing miss, not a prompt-shape bug.
+      let provider = (chunk as any).provider;
+      let generationId = chunk.id;
       // Hand the counts to the publisher so they ride on the final room
       // event. When the final edit has already gone out (the usage chunk
       // trails the finish chunk), finalize() sends one more edit to carry
@@ -318,6 +324,8 @@ export class Responder {
         completionTokens: chunk.usage.completion_tokens,
         ...(typeof cachedTokens === 'number' ? { cachedTokens } : {}),
         ...(typeof costUsd === 'number' ? { costUsd } : {}),
+        ...(typeof provider === 'string' ? { provider } : {}),
+        ...(typeof generationId === 'string' ? { generationId } : {}),
       };
       log.info(
         `Request used ${chunk.usage.prompt_tokens} prompt tokens (${

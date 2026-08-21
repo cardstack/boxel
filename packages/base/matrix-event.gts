@@ -283,6 +283,13 @@ export interface TokenUsage {
   // What the provider charged for the whole request, in USD. Absent when
   // the provider reports no inline cost.
   costUsd?: number;
+  // Which upstream provider served the request (the router's routing
+  // target). Prompt caches live per provider, so a surprising cache miss is
+  // attributable when this changes between turns. Absent when unreported.
+  provider?: string;
+  // The router-side generation id for the request, for post-hoc lookup of
+  // routing and cache detail. Absent when unreported.
+  generationId?: string;
 }
 
 export interface SkillsConfigEvent extends RoomStateEvent {

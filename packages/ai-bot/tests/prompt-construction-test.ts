@@ -40,6 +40,9 @@ import {
   ensureTrailingSlash,
   skillCardRef,
   rri,
+  SEARCH_MARKER,
+  SEPARATOR_MARKER,
+  REPLACE_MARKER,
 } from '@cardstack/runtime-common';
 import {
   absolutizeSkillLinks,
@@ -860,7 +863,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.equal(attachedCards.length, 0);
   });
 
-  test('downloads and includes most recent version of attached files', async () => {
+  test('each message keeps its own attached-file snapshot content', async () => {
     const history: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
@@ -1042,7 +1045,24 @@ Current date and time: 2025-06-11T11:43:00.533Z
       },
     ];
 
-    // Set up mock responses for file downloads
+    // Set up mock responses for file downloads — every message's snapshot
+    // is downloaded now, so each version needs a response.
+    mockResponses.set('http://test.com/spaghetti-recipe-a.gts', {
+      ok: true,
+      text: 'spaghetti content version a',
+    });
+    mockResponses.set('http://test.com/best-friends-a.txt', {
+      ok: true,
+      text: 'best friends version a',
+    });
+    mockResponses.set('http://test.com/spaghetti-recipe-b.gts', {
+      ok: true,
+      text: 'spaghetti content version b',
+    });
+    mockResponses.set('http://test.com/best-friends-b.txt', {
+      ok: true,
+      text: 'best friends version b',
+    });
     mockResponses.set('http://test.com/spaghetti-recipe-c.gts', {
       ok: true,
       text: 'this is the content of the spaghetti-recipe.gts file',
@@ -1071,33 +1091,35 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.ok(
       messageText(userMessages[0]).includes(
         `
-Attached Files (files with newer versions don't show their content):
-[spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts)
-[best-friends.txt](http://test-realm-server/my-realm/best-friends.txt)
+[spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts):
+  1: spaghetti content version a
+[best-friends.txt](http://test-realm-server/my-realm/best-friends.txt):
+  1: best friends version a
       `.trim(),
       ),
+      'first message keeps its own snapshot content',
     );
     assert.ok(
       messageText(userMessages[1]).includes(
         `
-Attached Files (files with newer versions don't show their content):
-[spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts)
-[best-friends.txt](http://test-realm-server/my-realm/best-friends.txt)
-[file-that-does-not-exist.txt](http://test.com/my-realm/file-that-does-not-exist.txt)
-[example.pdf](http://test.com/my-realm/example.pdf): [application/pdf]
+[spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts):
+  1: spaghetti content version b
+[best-friends.txt](http://test-realm-server/my-realm/best-friends.txt):
+  1: best friends version b
       `.trim(),
       ),
+      'second message keeps its own snapshot content',
     );
     assert.ok(
       messageText(userMessages[2]).includes(
         `
-Attached Files (files with newer versions don't show their content):
 [spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts):
   1: this is the content of the spaghetti-recipe.gts file
 [best-friends.txt](http://test-realm-server/my-realm/best-friends.txt):
   1: this is the content of the best-friends.txt file
       `.trim(),
       ),
+      'latest message includes its content with line numbers',
     );
 
     assert.ok(
@@ -1408,9 +1430,9 @@ Attached Files (files with newer versions don't show their content):
         'http://localhost:4201/experiments/Author/1',
       ),
     );
-    assert.false(
+    assert.true(
       messageText(userMessages[0]).includes('"firstName": "Terry"'),
-      'should not include the contents of the first version of the card in the first user message',
+      'each message keeps its own snapshot of the card content',
     );
     assert.true(
       messageText(userMessages[1]).includes(
@@ -1718,7 +1740,12 @@ Attached Files (files with newer versions don't show their content):
     });
   });
 
-  test('Adds the "unable to edit cards" only if there are attached cards and no tools', async () => {
+  test('Adds the "unable to edit cards" note only when no card is open', async () => {
+    // Interactive messages no longer inject per-card patch tools, so the
+    // access statement keys off the actual grant: an OPEN card. Cards may
+    // be attached to the message without being open — the note stays (and
+    // deliberately makes no claim about attachments); only opening a card
+    // (or attaching a file) suppresses it.
     const eventList: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
@@ -1729,7 +1756,7 @@ Attached Files (files with newer versions don't show their content):
           body: 'set the name to dave',
           data: {
             context: {
-              openCardIds: [rri('http://localhost:4201/drafts/Author/1')],
+              openCardIds: [],
               tools: [],
               submode: 'code',
               functions: [],
@@ -1792,22 +1819,20 @@ Attached Files (files with newer versions don't show their content):
     );
 
     let nonEditableCardsMessage =
-      'You are unable to edit any cards, the user has not given you access, they need to open the card and let it be auto-attached.';
+      'You are unable to edit any cards: the user has no card open, and editing requires the card to be open. Ask them to open the card they want changed.';
 
     let userContextMessage = messages?.[messages.length - 1];
     assert.ok(
       messageText(userContextMessage).includes(nonEditableCardsMessage),
-      'The context leading the user turn should include the "unable to edit cards" message when there are attached cards and no tools, and no attached files, but was ' +
+      'The note appears when cards are attached but none is open, and no files are attached, but was ' +
         userContextMessage?.content,
     );
 
-    // Now add a tool
+    // Now open a card: the grant is the user opening it, not a tool
     let cardMessageContent = eventList[0].content as CardMessageContent;
     cardMessageContent.data.context ||= {};
-    cardMessageContent.data.context.tools = [
-      getPatchTool(rri('http://localhost:4201/drafts/Author/1'), {
-        attributes: { firstName: { type: 'string' } },
-      }),
+    cardMessageContent.data.context.openCardIds = [
+      rri('http://localhost:4201/drafts/Author/1'),
     ];
 
     const { messages: messages2 } = await getPromptParts(
@@ -1820,7 +1845,7 @@ Attached Files (files with newer versions don't show their content):
       !messageText(messages2?.[messages2.length - 2]).includes(
         nonEditableCardsMessage,
       ),
-      'System context message should not include the "unable to edit cards" message when there are attached cards and a tool',
+      'System context message should not include the "unable to edit cards" message when a card is open',
     );
 
     // Now remove cards, tools, and add an attached file
@@ -1850,7 +1875,11 @@ Attached Files (files with newer versions don't show their content):
     );
   });
 
-  test('Gets only the latest functions', async () => {
+  test('the first-seen definition of a tool wins for the life of the room', async () => {
+    // The tools array renders ahead of message history, so a definition that
+    // mutated mid-session would re-bill the whole conversation. The union is
+    // first-wins: the earlier patch tool keeps its schema even though a later
+    // message carries a same-named tool generated from a different card.
     const history: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
@@ -1932,47 +1961,16 @@ Attached Files (files with newer versions don't show their content):
       fakeMatrixClient,
     );
     assert.equal(functions.length, 1);
-    if (functions.length > 0) {
-      assert.deepEqual(functions[0], {
-        type: 'function',
-        function: {
-          name: 'patchCardInstance',
-          description:
-            'Propose a patch to an existing card instance to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. If a relationship field value is removed, set the self property of the specific item to null. When editing a relationship array, display the full array in the patch code. Ensure the description explains what change you are making.',
-          parameters: {
-            type: 'object',
-            properties: {
-              description: {
-                type: 'string',
-              },
-              attributes: {
-                type: 'object',
-                properties: {
-                  cardId: {
-                    type: 'string',
-                    const: 'http://localhost:4201/experiments/Meeting/2',
-                  },
-                  patch: {
-                    type: 'object',
-                    properties: {
-                      attributes: {
-                        type: 'object',
-                        properties: {
-                          location: {
-                            type: 'string',
-                          },
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-            required: ['attributes', 'description'],
-          },
+    // Byte-for-byte the tool the FIRST message carried — regenerated with
+    // the same inputs, so the assertion stays type-safe.
+    assert.deepEqual(
+      functions[0],
+      getPatchTool(rri('http://localhost:4201/experiments/Friend/1'), {
+        attributes: {
+          firstName: { type: 'string' },
         },
-      });
-    }
+      }),
+    );
   });
 
   test('should include instructions in system prompt for skill cards', async () => {
@@ -3483,6 +3481,52 @@ Attached Files (files with newer versions don't show their content):
       ),
     );
 
+    // Disabled skills' contents are now downloaded to learn which tool
+    // names they declare — the only names removable from the tools union.
+    // The fixture's mxc URL is remapped to a fresh one: downloadFile caches
+    // by URL across tests, and an earlier test cached different content
+    // under the original.
+    for (let event of eventList) {
+      let disabled = (event as any).content?.disabledSkillCards;
+      if (disabled?.length) {
+        for (let card of disabled) {
+          card.url = 'mxc://mock-server/skill_card_editing_disabled';
+        }
+      }
+    }
+    mockResponses.set('mxc://mock-server/skill_card_editing_disabled', {
+      ok: true,
+      text: JSON.stringify({
+        data: {
+          type: 'card',
+          id: '@cardstack/base/Skill/card-editing',
+          attributes: {
+            instructions: 'Card editing skill',
+            commands: [
+              {
+                codeRef: {
+                  name: 'default',
+                  module: '@cardstack/boxel-host/commands/patch-card-instance',
+                },
+                requiresApproval: false,
+                functionName: 'patchCardInstance',
+              },
+              {
+                codeRef: {
+                  name: 'default',
+                  module: '@cardstack/boxel-host/commands/switch-submode',
+                },
+                requiresApproval: false,
+                functionName: 'switch-submode_dd88',
+              },
+            ],
+            title: 'Card Editing',
+          },
+          meta: { adoptsFrom: skillCardRef },
+        },
+      }),
+    });
+
     const { messages, tools } = await getPromptParts(
       eventList,
       '@aibot:localhost',
@@ -3641,9 +3685,11 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
   });
 
-  test('Elides code blocks in prompt and includes results', async () => {
-    // sending older codeblocks back to the model just confuses it and wastes tokens
-    // so we need to remove them from the prompt
+  test('Keeps past code blocks verbatim in the prompt', async () => {
+    // Eliding old code blocks rewrote already-sent history (the placeholder
+    // text even changed once the patch result arrived), which broke the
+    // cache prefix — and models imitated the "[Omitting …]" placeholder in
+    // place of a real patch, stalling the session. The blocks stay verbatim.
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
@@ -3667,12 +3713,23 @@ Current date and time: 2025-06-11T11:43:00.533Z
       messageText(messages![2]),
       'Updating the file...\n' +
         'http://test.com/spaghetti-recipe.gts\n' +
-        '[Omitting previously suggested and applied code change]\n' +
+        `${SEARCH_MARKER}\n` +
+        'this is the riveting content of the spaghetti-recipe.gts file\n' +
+        `${SEPARATOR_MARKER}\n` +
+        'this is the engaging content of the spaghetti-recipe.gts file\n' +
+        `${REPLACE_MARKER}\n` +
         '\n' +
         'I will also create a file for rigatoni:\n' +
         '\n' +
         'http://test.com/rigatoni-recipe.gts\n' +
-        '[Omitting previously suggested code change that failed to apply]\n',
+        `${SEARCH_MARKER}\n` +
+        `${SEPARATOR_MARKER}\n` +
+        'this is the holy content of the rigatoni-recipe.gts file\n' +
+        `${REPLACE_MARKER}\n`,
+    );
+    assert.false(
+      messageText(messages![2]).includes('[Omitting'),
+      'no elision placeholder appears in the prompt',
     );
   });
 
@@ -4254,7 +4311,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.true(
       messageText(toolCallMessage!).includes(
         `
-Attached Files (files with newer versions don't show their content):
+Attached Files (each shows its content as of this message; a later attachment of the same file supersedes it):
 [postcard.gts](http://test-realm-server/user/test-realm/postcard.gts):
   1: export default Postcard extends CardDef {}
       `.trim(),
@@ -4292,7 +4349,7 @@ Attached Files (files with newer versions don't show their content):
     assert.true(
       messageText(toolCallMessage!).includes(
         `
-Attached Cards (cards with newer versions don't show their content):
+Attached Cards (each shows its content as of this message; a later attachment of the same card supersedes it):
 [
   {
     "url": "mxc://mock-server/nashville",
@@ -6050,7 +6107,7 @@ new
       'the surviving user message keeps its body',
     );
   });
-  test('only the most recent message attachments include file content in the prompt', async () => {
+  test('every message keeps its attached file content in the prompt', async () => {
     // Policy: files attached to older messages should show metadata only,
     // even if they are NOT re-attached in later messages.
     // Only the most recent user message's attachments should include content.
@@ -6150,14 +6207,15 @@ new
 
     let userMessages = prompt.filter((m) => m.role === 'user');
 
-    // Older message's unique file (config.json) should show metadata only, not content
+    // The older message keeps its own snapshot's content — re-rendering it
+    // later would change already-sent history bytes and break prompt caching.
     assert.ok(
       messageText(userMessages[0]).includes('[config.json]'),
       'First message mentions config.json',
     );
-    assert.notOk(
+    assert.ok(
       messageText(userMessages[0]).includes('"key": "value"'),
-      'First message should NOT include config.json content (not the current message)',
+      'First message keeps its config.json snapshot content',
     );
 
     // Most recent message's file (utils.ts) should include content
@@ -8106,15 +8164,20 @@ module('markdown skill tools', (hooks) => {
     assert.strictEqual(tools[0].function.description, 'Plans a trip');
   });
 
-  test('the latest read of a skill replaces its earlier definitions wholesale', async () => {
+  test('a re-read of a skill cannot mutate or remove earlier definitions', async () => {
+    // The tools array renders ahead of message history, so a later read of
+    // an edited skill file must not rewrite bytes the cache has already
+    // matched: the first-seen definition wins, and a tool the newer read no
+    // longer declares stays in the union. A room picks up the edited skill
+    // only when it is re-attached in a new room.
     const tools = await getTools(
       [
         readResultEvent('read-1', 1000, [
-          discoveredDef('plan-trip_ab12', { description: 'stale' }),
+          discoveredDef('plan-trip_ab12', { description: 'original' }),
           discoveredDef('book-hotel_cd34'),
         ]),
         readResultEvent('read-2', 2000, [
-          discoveredDef('plan-trip_ab12', { description: 'fresh' }),
+          discoveredDef('plan-trip_ab12', { description: 'edited' }),
         ]),
       ],
       [],
@@ -8123,10 +8186,54 @@ module('markdown skill tools', (hooks) => {
     );
     assert.strictEqual(
       tools.length,
-      1,
-      'a tool the skill no longer declares disappears with the newer read',
+      2,
+      'a tool the newer read no longer declares stays in the union',
     );
-    assert.strictEqual(tools[0].function.description, 'fresh');
+    assert.strictEqual(
+      tools[0].function.description,
+      'original',
+      'the first-seen definition wins over the re-read',
+    );
+    assert.strictEqual(tools[1].function.name, 'book-hotel_cd34');
+  });
+
+  test('the tools array only ever grows by appending across turns', async () => {
+    // The exact property the prompt cache bills by: each turn's serialized
+    // tools array must be a prefix-preserving extension of the previous
+    // turn's. Replay a growing history and assert every prior entry keeps
+    // its position and bytes as new discoveries arrive.
+    const history = [
+      readResultEvent('read-1', 1000, [
+        discoveredDef('plan-trip_ab12', { description: 'original' }),
+        discoveredDef('book-hotel_cd34'),
+      ]),
+      readResultEvent('read-2', 2000, [
+        discoveredDef('rent-car_ef56'),
+        discoveredDef('plan-trip_ab12', { description: 'edited' }),
+      ]),
+      readResultEvent('read-3', 3000, [discoveredDef('find-flight_gh78')]),
+    ];
+    let previous: string[] = [];
+    for (let turn = 1; turn <= history.length; turn++) {
+      const tools = await getTools(
+        history.slice(0, turn),
+        [],
+        '@aibot:localhost',
+        fakeMatrixClient,
+      );
+      const serialized = tools.map((t) => JSON.stringify(t));
+      assert.deepEqual(
+        serialized.slice(0, previous.length),
+        previous,
+        `turn ${turn}: every previously emitted entry keeps its bytes and position`,
+      );
+      assert.true(
+        serialized.length >= previous.length,
+        `turn ${turn}: the array never shrinks`,
+      );
+      previous = serialized;
+    }
+    assert.strictEqual(previous.length, 4, 'all four tools were emitted');
   });
 
   test('discovered tools on a non-bot result event are ignored', async () => {
@@ -8185,6 +8292,26 @@ module('markdown skill tools', (hooks) => {
   });
 
   test('a skill disabled in room state contributes no discovered tools', async () => {
+    // Disabled skills' contents are downloaded to learn which names they
+    // declare — the removable set.
+    mockResponses.set('mxc://mock-server/trip-planner', {
+      ok: true,
+      text: [
+        '---',
+        'name: "Trip Planner"',
+        'description: "plans trips"',
+        'boxel:',
+        '  kind: skill',
+        '  tools:',
+        '    - codeRef:',
+        '        module: "@cardstack/boxel-host/commands/plan-trip"',
+        '        name: "default"',
+        '      requiresApproval: false',
+        '---',
+        '',
+        'Plan trips.',
+      ].join('\n'),
+    });
     const skillsEvent = {
       type: APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
       event_id: 'skills-1',
@@ -8216,6 +8343,62 @@ module('markdown skill tools', (hooks) => {
       fakeMatrixClient,
     );
     assert.strictEqual(tools.length, 0);
+  });
+
+  test('a definition survives its enabled skill being edited to no longer declare it', async () => {
+    // The removable set is what disabled skills declare — never "names the
+    // current skill contents happen to omit". An enabled skill edited
+    // mid-session to drop a tool must not shrink the array: the historical
+    // state event still carries the definition, and dropping it would
+    // rewrite the request's leading bytes and reset the cache.
+    mockResponses.set('mxc://mock-server/removed-tool-def', {
+      ok: true,
+      text: JSON.stringify({
+        codeRef: {
+          module: '@cardstack/boxel-host/commands/removed-tool',
+          name: 'default',
+        },
+        tool: {
+          type: 'function',
+          function: {
+            name: 'removed-tool_bb22',
+            description: 'declared by an earlier version of the skill',
+            parameters: { type: 'object', properties: {} },
+          },
+        },
+      }),
+    });
+    const { eventList, enabledSkills } = skillsRoomFixture('toolDefinitions');
+    // The host uploaded this definition when the skill still declared it;
+    // the current skill content (enabledSkills) no longer does.
+    (eventList[0] as any).content.toolDefinitions.push({
+      sourceUrl: 'https://realm/commands/removed-tool',
+      url: 'mxc://mock-server/removed-tool-def',
+      name: 'removed-tool_bb22',
+      contentType: 'text/plain',
+    });
+    const first = await getTools(
+      eventList,
+      enabledSkills,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.deepEqual(
+      first.map((t) => t.function.name),
+      ['switch-submode_dd88', 'removed-tool_bb22'],
+      'the edited-away tool stays in the union',
+    );
+    const second = await getTools(
+      eventList,
+      enabledSkills,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.deepEqual(
+      second.map((t) => JSON.stringify(t)),
+      first.map((t) => JSON.stringify(t)),
+      'rebuilding yields byte-identical output',
+    );
   });
 
   test('a skill both enabled and read yields one definition; the uploaded one wins', async () => {
