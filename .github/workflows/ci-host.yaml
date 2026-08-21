@@ -459,31 +459,25 @@ jobs:
     needs: [test-web-assets, check-percy, check-index-cache]
     strategy:
       fail-fast: false
+      # Three places carry the shard count and must move together: this list,
+      # `shardTotal` below, and `--shard-count` on the timings generator, which
+      # decides whether a rebalance is worth committing by predicting the
+      # slowest shard.
+      #
+      # Fewer, longer shards rather than more, shorter ones. Setup is ~195s per
+      # shard and largely irreducible (it is bound by the runner's cores, not
+      # by latency — see the four experiments on CS-12583), so each added shard
+      # buys a shrinking slice of test time for a fixed ~3 minutes of machine
+      # time and one more slot held. With ~8,665s of test work: 20 shards is
+      # ~10.5 minutes and 3.49 machine-hours, 12 is ~15.3 minutes and 3.06.
+      #
+      # The modelled wall-clock cost overstates the real one, because it
+      # assumes every shard starts immediately. They do not: shards have been
+      # observed queueing up to 242s waiting for a runner, and 20 concurrent
+      # jobs per host run is a large share of the pool.
       matrix:
-        shardIndex:
-          [
-            1,
-            2,
-            3,
-            4,
-            5,
-            6,
-            7,
-            8,
-            9,
-            10,
-            11,
-            12,
-            13,
-            14,
-            15,
-            16,
-            17,
-            18,
-            19,
-            20,
-          ]
-        shardTotal: [20]
+        shardIndex: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+        shardTotal: [12]
     concurrency:
       group: boxel-host-test${{ github.head_ref || github.run_id }}-shard${{ matrix.shardIndex }}
       cancel-in-progress: true
@@ -1243,7 +1237,7 @@ jobs:
             # job loudly rather than committing a degraded weights file.
             if [ -f merged-junit-report/host.xml ]; then
               node packages/host/scripts/generate-test-module-timings.mjs merged-junit-report/host.xml \
-                --min-drift-seconds 60 --shard-count 20
+                --min-drift-seconds 60 --shard-count 12
             else
               echo "No merged junit report available — leaving shard timings unchanged."
             fi
