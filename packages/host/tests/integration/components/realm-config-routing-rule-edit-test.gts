@@ -352,9 +352,10 @@ module(
       // test can prove `consumingRealm` (and a derived
       // `lockConsumingRealm`) flow through the model-level derivation
       // rather than the context fallback.
-      let cardApi: typeof import('@cardstack/base/card-api') = await getService(
-        'loader-service',
-      ).loader.import('@cardstack/base/card-api');
+      let _cardApi: typeof import('@cardstack/base/card-api') =
+        await getService('loader-service').loader.import(
+          '@cardstack/base/card-api',
+        );
 
       await setupIntegrationTestRealm({
         mockMatrixUtils,
@@ -403,7 +404,7 @@ module(
       try {
         await renderCard(
           getService('loader-service').loader,
-          realmConfig as InstanceType<typeof cardApi.CardDef>,
+          realmConfig as InstanceType<typeof _cardApi.CardDef>,
           'edit',
         );
         await waitFor('[data-test-add-new="instance"]');
