@@ -85,6 +85,55 @@ jobs:
             echo "Percy will be skipped — no UI-relevant changes"
           fi
 
+  # Bake a migrated Synapse database once, so shards do not each spend ~52s
+  # applying its schema to an empty SQLite file. Only the schema is baked: no
+  # users are registered here, so `create realm users` still runs on every
+  # shard and nothing about credentials is pinned into an artifact.
+  #
+  # The artifact name carries a key derived from the Synapse support tree, the
+  # docker helpers and the pinned image tag (see scripts/synapse-cache-key.sh).
+  # A checkout that changes any of them asks for a name that does not exist and
+  # boots from scratch, so there is no staleness gate to keep in step by hand.
+  # Those inputs moved 18 times in the last 7,246 commits, so in practice this
+  # is a hit.
+  cache-synapse-db:
+    name: Cache the migrated Synapse database
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # TEMPORARY (drop before merge): also runs on this branch, so the artifact
+    # exists to iterate against without merging first. The consumer below reads
+    # from the same branch under the same condition.
+    if: ${{ (github.event_name == 'push'""" + AND + """github.ref == 'refs/heads/main') || github.head_ref == '""" + BRANCH + """' }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      - name: Compute the Synapse cache key
+        id: key
+        run: echo "key=$(scripts/synapse-cache-key.sh)" >> "$GITHUB_OUTPUT"
+      - name: Warm test Docker images from the GHCR mirror
+        continue-on-error: true
+        uses: ./.github/actions/warm-test-images
+      - name: Boot Synapse so it applies its migrations
+        working-directory: packages/matrix
+        run: pnpm assert-synapse-running
+      # Stopped rather than killed: SQLite has pages in the container's memory
+      # until the process exits cleanly, and a torn database is worse than none
+      # because a consumer would open it and fail as though Synapse were broken.
+      - name: Stop Synapse so SQLite flushes to disk
+        run: docker stop boxel-synapse
+      - name: Package the migrated database
+        run: |
+          set -euo pipefail
+          db=$(ls packages/matrix/synapse-data*/db/homeserver.db | head -1)
+          gzip -c "$db" > /tmp/homeserver.db.gz
+          echo "baked $(du -h "$db" | cut -f1) -> $(du -h /tmp/homeserver.db.gz | cut -f1) compressed"
+      - name: Upload the migrated database
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: boxel-synapse-db-${{ steps.key.outputs.key }}
+          path: /tmp/homeserver.db.gz
+          retention-days: 30
+
   check-index-cache:
     # The boxel-index-cache artifact (produced by main runs of ci.yaml)
     # snapshots the index tables, letting shards boot on it instead of
@@ -608,6 +657,26 @@ jobs:
         run: mise run ci:import-index
         env:
           GH_TOKEN: ${{ github.token }}
+
+      # Synapse spends ~52s of every shard applying its schema to a fresh
+      # SQLite file, and `create realm users` below does nothing but wait for
+      # it. Drop in the database baked by `cache-synapse-db` so Synapse opens
+      # one that is already migrated. Best-effort: on a miss the script says so
+      # and Synapse boots exactly as it did before.
+      #
+      # This reduces the work rather than moving it. Shard setup is bound by
+      # the runner's cores, not by latency — measured twice, by starting
+      # Synapse earlier and watching its own boot get slower as it competed
+      # with the rest of setup — so overlapping work does not help and removing
+      # it does.
+      - name: Import the cached Synapse database
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # TEMPORARY (drop before merge): consume this branch's own bake while
+          # iterating, since main has none until this merges.
+          SYNAPSE_CACHE_BRANCH: ${{ github.head_ref == '""" + BRANCH + """' && '""" + BRANCH + """' || 'main' }}
+        run: scripts/import-cached-synapse-db.sh
 
       - name: Start test services (icons + host dist + realm servers)
         run: mise run test-services:host | tee -a /tmp/server.log &
