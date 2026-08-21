@@ -139,7 +139,22 @@ export default class Room {
         event.content.data = JSON.parse(event.content.data);
       }
     }
-    eventId = eventId ?? stateKey; // room state may not necessary have an event ID
+    // Backfilled events carry their latest edit as a server-side aggregation
+    // bundle, and getAggregatedReplacement substitutes that bundle's content
+    // for the event's own — so its data needs the same decoding. Without
+    // this, every rebuilt message whose usage/context arrived on an edit
+    // reads `data` as a wire string and silently loses those fields (the
+    // session token total visibly shrank after a reload because pre-reload
+    // turns' usage vanished this way).
+    let bundledReplace = (event.unsigned as any)?.['m.relations']?.[
+      'm.replace'
+    ];
+    if (
+      bundledReplace?.content?.data &&
+      typeof bundledReplace.content.data === 'string'
+    ) {
+      bundledReplace.content.data = JSON.parse(bundledReplace.content.data);
+    }
     if (!eventId) {
       throw new Error(
         `bug: event ID is undefined for event ${JSON.stringify(
