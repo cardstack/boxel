@@ -1,0 +1,21 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "blockerTitle": "22 layer-03 alias rows may double-count the gap",
+      "detail": "Layer 03 carries bare original-table labels (Grid, List, Chart, Create, Notify, Run…) whose precise siblings exist as separate cells (Cards Grid, Card List, Line Chart…). They read as Missing and inflate the layer-03 numbers on this dashboard; the demand-side audit speaks in the same bare names, so they are not pure noise. Resolution is open (strategy doc §7.5) — until then, read layer 03 coverage with that caveat.",
+      "status": "open",
+      "source": "https://github.com/cardstack/boxel-catalog/blob/main/docs/bottom-up-block-strategy.md",
+      "cardInfo": {
+        "name": "22 layer-03 alias rows may double-count the gap",
+        "summary": "Layer-03 coverage numbers carry known double-counting"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../blocker",
+        "name": "Blocker"
+      }
+    }
+  }
+}

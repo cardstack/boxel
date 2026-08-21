@@ -17,7 +17,7 @@
       "domainKit": null,
       "owner": null,
       "workState": null,
-      "notes": null,
+      "notes": "QC: Contract-only: no realm example of the step-registration flow. Needs a demo or a linked in-app example.",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/form-wizard",
       "specTarget": "catalog",
       "consumers": null,
@@ -28,7 +28,10 @@
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      }
+      },
+      "specKind": "component",
+      "specExampleCount": 0,
+      "specReadmeChars": 916
     },
     "meta": {
       "adoptsFrom": {

@@ -20,15 +20,18 @@
       "notes": null,
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/boolean-field",
       "specTarget": "base realm",
-      "consumers": "account, campaign, concept-review, contract, invoice, matrix-concept, survey-question",
-      "consumerExamples": "{\"account\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Account/acme-industries\", \"campaign\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Campaign/always-on-search-ads\", \"concept-review\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/ConceptReview/batch-l01-cm-card-definition\", \"contract\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Contract/acme-msa-2026\", \"invoice\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Invoice/inv-2026-018\", \"matrix-concept\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/MatrixConcept/l01-cm-card-definition\"}",
+      "consumers": "account, campaign, contract, invoice, matrix-concept, survey-question",
+      "consumerExamples": "{\"account\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Account/acme-industries\", \"campaign\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Campaign/always-on-search-ads\", \"contract\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Contract/acme-msa-2026\", \"invoice\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Invoice/inv-2026-018\", \"matrix-concept\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/MatrixConcept/l01-cm-card-definition\"}",
       "catalogDisposition": null,
       "cardInfo": {
         "name": null,
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      }
+      },
+      "specKind": "field",
+      "specExampleCount": 0,
+      "specReadmeChars": 316
     },
     "meta": {
       "adoptsFrom": {

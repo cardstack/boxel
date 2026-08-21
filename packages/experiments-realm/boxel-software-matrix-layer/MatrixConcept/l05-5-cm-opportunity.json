@@ -17,7 +17,7 @@
       "domainKit": "Sales & Marketing",
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1 · Built — experiments-realm/opportunity.gts, owns stage enum + default probability. POC tier",
+      "notes": "v1 \u00b7 Built \u2014 experiments-realm/opportunity.gts, owns stage enum + default probability. POC tier",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/opportunity",
       "specTarget": "shared block",
       "consumers": "board-demo, close-won, contract, convert-lead, deal, revenue-os",
@@ -28,7 +28,10 @@
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      }
+      },
+      "specKind": "card",
+      "specExampleCount": 2,
+      "specReadmeChars": 1318
     },
     "meta": {
       "adoptsFrom": {

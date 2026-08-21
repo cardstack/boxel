@@ -28,7 +28,10 @@
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      }
+      },
+      "specKind": "app",
+      "specExampleCount": 1,
+      "specReadmeChars": 3191
     },
     "meta": {
       "adoptsFrom": {

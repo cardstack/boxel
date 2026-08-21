@@ -10,7 +10,7 @@
       "implemented": false,
       "evidenceTier": "POC realm",
       "auditStatus": "POC only",
-      "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/employee.gts (Employee CardDef) — org-tree hierarchy via manager link",
+      "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/employee.gts (Employee CardDef) \u2014 org-tree hierarchy via manager link",
       "reference": "institutional-meerkat/legal + audited kit realms",
       "catalogMatch": null,
       "provenance": null,
@@ -28,7 +28,10 @@
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      }
+      },
+      "specKind": "card",
+      "specExampleCount": 2,
+      "specReadmeChars": 1744
     },
     "meta": {
       "adoptsFrom": {

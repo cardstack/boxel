@@ -20,15 +20,18 @@
       "notes": null,
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/datetime-field",
       "specTarget": "base realm",
-      "consumers": "activity, concept-review, payment",
-      "consumerExamples": "{\"activity\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Activity/acme-renewal-call\", \"concept-review\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/ConceptReview/batch-l01-cm-card-definition\", \"payment\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Payment/272f6cbf-4eb6-475c-9f4f-02ac98046a24\"}",
+      "consumers": "activity, payment",
+      "consumerExamples": "{\"activity\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Activity/acme-renewal-call\", \"payment\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Payment/272f6cbf-4eb6-475c-9f4f-02ac98046a24\"}",
       "catalogDisposition": null,
       "cardInfo": {
         "name": null,
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      }
+      },
+      "specKind": "field",
+      "specExampleCount": 0,
+      "specReadmeChars": 362
     },
     "meta": {
       "adoptsFrom": {

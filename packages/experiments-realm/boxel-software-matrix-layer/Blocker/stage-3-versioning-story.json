@@ -1,0 +1,21 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "blockerTitle": "Stage 3 has no version-pinning story",
+      "detail": "`Package Version`, `Version Alias` (layer 01) and `Bundle Manifest` (layer 06) are all Missing, so consumers cannot pin a block version. Packaging (stage 3) either waits on them or ships unversioned — undecided (strategy doc §7.3).",
+      "status": "open",
+      "source": "https://github.com/cardstack/boxel-catalog/blob/main/docs/bottom-up-block-strategy.md",
+      "cardInfo": {
+        "name": "Stage 3 has no version-pinning story",
+        "summary": "Version-pinning blocks packaging; decision open in strategy §7.3"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../blocker",
+        "name": "Blocker"
+      }
+    }
+  }
+}

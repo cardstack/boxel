@@ -17,7 +17,7 @@
       "domainKit": "Forms",
       "owner": "richard",
       "workState": "Done",
-      "notes": "App 4: Club Membership & Ticketing — extracted from catalog listing b6ac3a-survey",
+      "notes": "App 4: Club Membership & Ticketing \u2014 extracted from catalog listing b6ac3a-survey",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/form-response",
       "specTarget": "shared block",
       "consumers": "club-membership, isolated-template",
@@ -28,7 +28,10 @@
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      }
+      },
+      "specKind": "card",
+      "specExampleCount": 1,
+      "specReadmeChars": 1083
     },
     "meta": {
       "adoptsFrom": {

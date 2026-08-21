@@ -10,7 +10,7 @@
       "implemented": false,
       "evidenceTier": "POC realm",
       "auditStatus": "POC only",
-      "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/vendor.gts (Vendor CardDef) — contractStart / contractEnd",
+      "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/vendor.gts (Vendor CardDef) \u2014 contractStart / contractEnd",
       "reference": "institutional-meerkat/legal + audited kit realms",
       "catalogMatch": null,
       "provenance": "periodic:Vendor",
@@ -28,7 +28,10 @@
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      }
+      },
+      "specKind": "card",
+      "specExampleCount": 1,
+      "specReadmeChars": 2746
     },
     "meta": {
       "adoptsFrom": {

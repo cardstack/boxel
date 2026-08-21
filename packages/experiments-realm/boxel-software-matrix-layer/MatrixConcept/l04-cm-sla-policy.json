@@ -10,7 +10,7 @@
       "implemented": false,
       "evidenceTier": "POC realm",
       "auditStatus": "POC only",
-      "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/sla-policy.gts (SlaPolicy CardDef — per-metric targets + applies() conditions)",
+      "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/sla-policy.gts (SlaPolicy CardDef \u2014 per-metric targets + applies() conditions)",
       "reference": null,
       "catalogMatch": null,
       "provenance": null,
@@ -28,7 +28,10 @@
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      }
+      },
+      "specKind": "card",
+      "specExampleCount": 2,
+      "specReadmeChars": 1326
     },
     "meta": {
       "adoptsFrom": {

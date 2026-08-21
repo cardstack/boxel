@@ -17,7 +17,7 @@
       "domainKit": null,
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1 · Built — experiments-realm/board.gts on boxel-ui KanbanPlane, POC tier",
+      "notes": "v1 \u00b7 Built \u2014 experiments-realm/board.gts on boxel-ui KanbanPlane, POC tier",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/board",
       "specTarget": "shared block",
       "consumers": "board-demo, revenue-os",
@@ -28,7 +28,10 @@
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      }
+      },
+      "specKind": "component",
+      "specExampleCount": 1,
+      "specReadmeChars": 1976
     },
     "meta": {
       "adoptsFrom": {

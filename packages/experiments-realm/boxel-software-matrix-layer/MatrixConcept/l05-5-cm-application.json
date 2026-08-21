@@ -10,7 +10,7 @@
       "implemented": false,
       "evidenceTier": "POC realm",
       "auditStatus": "POC only",
-      "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/candidate.gts — modeled as Candidate.appliedRole / appliedDate / status / decisionDate; no dedicated Application CardDef",
+      "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/candidate.gts \u2014 modeled as Candidate.appliedRole / appliedDate / status / decisionDate; no dedicated Application CardDef",
       "reference": null,
       "catalogMatch": null,
       "provenance": null,
@@ -28,7 +28,10 @@
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      }
+      },
+      "specKind": "card",
+      "specExampleCount": 2,
+      "specReadmeChars": 3264
     },
     "meta": {
       "adoptsFrom": {

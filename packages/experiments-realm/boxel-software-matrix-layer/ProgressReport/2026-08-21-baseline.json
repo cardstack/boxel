@@ -1,0 +1,21 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "roundDate": "2026-08-21T09:00:00.000Z",
+      "summary": "Baseline round, taken with the tracker refresh that retired the human review pipeline. Of 590 concepts, **216 are spec-verified** (47 Gold, 54 Solid, 19 Adequate, 96 Thin), 106 are consumed by at least one real block and 80 meet the two-consumer rule. The foundation carries the numbers: Kernel and Contracts are 55/95 and 55/87 verified, while Standards (10/56), Records (8/46) and Solutions (2/34) stay hollow. The single biggest quality gap is missing Spec examples — 120 verified specs have none, including the three most-consumed kernel commands (Validate Input, Resolve Relationship, Format Value), each one fixture away from Gold.",
+      "metrics": "{\"concepts\": 590, \"verified\": 216, \"consumed\": 106, \"reused\": 80, \"gold\": 47, \"solid\": 54, \"adequate\": 19, \"thin\": 96, \"perLayerVerified\": {\"01\": 55, \"02\": 55, \"03\": 44, \"04\": 10, \"05\": 8, \"05.5\": 42, \"06\": 2}}",
+      "deltas": "{}",
+      "cardInfo": {
+        "name": "Progress — 2026-08-21",
+        "summary": "Baseline crawl round at the tracker refresh"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../progress-report",
+        "name": "ProgressReport"
+      }
+    }
+  }
+}

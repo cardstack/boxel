@@ -28,7 +28,10 @@
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      }
+      },
+      "specKind": "card",
+      "specExampleCount": 1,
+      "specReadmeChars": 2163
     },
     "meta": {
       "adoptsFrom": {

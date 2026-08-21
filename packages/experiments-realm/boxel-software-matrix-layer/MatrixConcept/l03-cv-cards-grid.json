@@ -17,7 +17,7 @@
       "domainKit": null,
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1.1 · Catalog implementation exists but Revenue OS does not consume it — no v1 site; wraps platform @context.searchResultsComponent; lands with Campaign Tracker",
+      "notes": "v1.1 \u00b7 Catalog implementation exists but Revenue OS does not consume it \u2014 no v1 site; wraps platform @context.searchResultsComponent; lands with Campaign Tracker",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/cards-grid-card",
       "specTarget": "base realm",
       "consumers": null,
@@ -28,7 +28,10 @@
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      }
+      },
+      "specKind": "card",
+      "specExampleCount": 1,
+      "specReadmeChars": 461
     },
     "meta": {
       "adoptsFrom": {

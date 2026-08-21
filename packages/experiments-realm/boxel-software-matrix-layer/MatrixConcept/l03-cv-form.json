@@ -17,7 +17,7 @@
       "domainKit": null,
       "owner": null,
       "workState": null,
-      "notes": null,
+      "notes": "QC: Contract-only: no usage example in this realm. Needs either a demo card or a linked example exercising @model/@layout.",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/form",
       "specTarget": "catalog",
       "consumers": null,
@@ -28,7 +28,10 @@
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      }
+      },
+      "specKind": "component",
+      "specExampleCount": 0,
+      "specReadmeChars": 827
     },
     "meta": {
       "adoptsFrom": {

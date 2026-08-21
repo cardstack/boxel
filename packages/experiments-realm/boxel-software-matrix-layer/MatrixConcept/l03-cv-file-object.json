@@ -17,7 +17,7 @@
       "domainKit": null,
       "owner": null,
       "workState": null,
-      "notes": null,
+      "notes": "QC: Contract documented but no live example \u2014 needs a PDF/document fixture.",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/file-object",
       "specTarget": "base realm",
       "consumers": null,
@@ -28,7 +28,10 @@
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      }
+      },
+      "specKind": "component",
+      "specExampleCount": 0,
+      "specReadmeChars": 590
     },
     "meta": {
       "adoptsFrom": {

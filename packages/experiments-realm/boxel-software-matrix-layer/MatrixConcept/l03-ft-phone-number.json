@@ -17,7 +17,7 @@
       "domainKit": null,
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1 · Consumed from base — Contact, Lead, Account. Nothing to build",
+      "notes": "v1 \u00b7 Consumed from base \u2014 Contact, Lead, Account. Nothing to build",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/phone-number-field",
       "specTarget": "base realm",
       "consumers": "account, contact, lead",
@@ -28,7 +28,10 @@
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      }
+      },
+      "specKind": "field",
+      "specExampleCount": 1,
+      "specReadmeChars": 574
     },
     "meta": {
       "adoptsFrom": {

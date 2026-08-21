@@ -17,7 +17,7 @@
       "domainKit": "Events",
       "owner": "richard",
       "workState": "Done",
-      "notes": "App 4: Club Membership & Ticketing — Spec live; in-use example wired when Booking lands",
+      "notes": "App 4: Club Membership & Ticketing \u2014 Spec live; in-use example wired when Booking lands",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/rsvp-status-field",
       "specTarget": "shared block",
       "consumers": "booking, confirm-booking",
@@ -28,7 +28,10 @@
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      }
+      },
+      "specKind": "field",
+      "specExampleCount": 1,
+      "specReadmeChars": 1203
     },
     "meta": {
       "adoptsFrom": {

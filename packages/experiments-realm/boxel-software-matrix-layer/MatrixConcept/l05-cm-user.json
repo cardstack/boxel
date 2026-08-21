@@ -17,18 +17,21 @@
       "domainKit": null,
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1 · Built — experiments-realm/user.gts, extended by Teammate. POC tier",
+      "notes": "v1 \u00b7 Built \u2014 experiments-realm/user.gts, extended by Teammate. POC tier",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/user",
       "specTarget": "shared block",
-      "consumers": "account, activity, invoice, opportunity, teammate",
-      "consumerExamples": "{\"account\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Account/acme-industries\", \"activity\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Activity/acme-renewal-call\", \"invoice\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Invoice/inv-2026-018\", \"opportunity\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Opportunity/acme-plant-expansion\", \"teammate\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Teammate/claude-review-agent\"}",
+      "consumers": "account, activity, invoice, opportunity",
+      "consumerExamples": "{\"account\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Account/acme-industries\", \"activity\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Activity/acme-renewal-call\", \"invoice\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Invoice/inv-2026-018\", \"opportunity\": \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Opportunity/acme-plant-expansion\"}",
       "catalogDisposition": null,
       "cardInfo": {
         "name": null,
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      }
+      },
+      "specKind": "card",
+      "specExampleCount": 2,
+      "specReadmeChars": 790
     },
     "meta": {
       "adoptsFrom": {

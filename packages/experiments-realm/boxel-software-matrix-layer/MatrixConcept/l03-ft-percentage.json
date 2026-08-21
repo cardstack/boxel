@@ -17,7 +17,7 @@
       "domainKit": null,
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1 · Consumed from base — Opportunity.probability, Order.taxRate",
+      "notes": "v1 \u00b7 Consumed from base \u2014 Opportunity.probability, Order.taxRate",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/percentage-field",
       "specTarget": "base realm",
       "consumers": "opportunity, order",
@@ -28,7 +28,10 @@
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      }
+      },
+      "specKind": "field",
+      "specExampleCount": 0,
+      "specReadmeChars": 577
     },
     "meta": {
       "adoptsFrom": {

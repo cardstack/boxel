@@ -10,7 +10,7 @@
       "implemented": false,
       "evidenceTier": "POC realm",
       "auditStatus": "POC only",
-      "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/schedule.gts (Schedule CardDef — weekly business hours + holidays; utils/sla.ts does the arithmetic against it)",
+      "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/schedule.gts (Schedule CardDef \u2014 weekly business hours + holidays; utils/sla.ts does the arithmetic against it)",
       "reference": null,
       "catalogMatch": null,
       "provenance": "periodic:Schedule | BSL",
@@ -28,7 +28,10 @@
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      }
+      },
+      "specKind": "card",
+      "specExampleCount": 1,
+      "specReadmeChars": 1414
     },
     "meta": {
       "adoptsFrom": {

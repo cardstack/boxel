@@ -6,24 +6,22 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import BooleanField from 'https://cardstack.com/base/boolean';
+import NumberField from 'https://cardstack.com/base/number';
+import DateTimeField from 'https://cardstack.com/base/datetime';
 import enumField from 'https://cardstack.com/base/enum';
 import type Owner from '@ember/owner';
-import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
-import { eq } from '@cardstack/boxel-ui/helpers';
-import { BoxelButton } from '@cardstack/boxel-ui/components';
-import {
-  identifyCard,
-  realmURL,
-  type getCards,
-} from '@cardstack/runtime-common';
-import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
 import LayoutGridIcon from '@cardstack/boxel-icons/layout-grid';
-import { ConceptReview } from './concept-review';
-import { Teammate } from './teammate';
-import ChangeWorkStateCommand from './change-work-state';
+import { Meter } from 'https://realms-staging.stack.cards/richard.tan1/pretui/ink';
+import {
+  qualityChecks,
+  qualityBucket,
+  qualityScore,
+  bucketLabel,
+  type QualityCheck,
+} from './spec-quality';
 
 const LaneField = enumField(StringField, {
   options: [
@@ -91,13 +89,11 @@ function stateClass(state: string | undefined): string {
 }
 
 // "Done" is the builder's claim, not the pipeline's verdict — the UI says
-// Built and reserves done-language for review approval. Data keeps the sheet
+// Built and reserves done-language for spec quality. Data keeps the sheet
 // vocabulary.
 export function displayState(state: string | undefined): string | undefined {
   return state === 'Done' ? 'Built' : state;
 }
-
-const ACTING_AS_KEY = 'matrix-acting-as';
 
 export class MatrixConcept extends CardDef {
   static displayName = 'Matrix Concept';
@@ -121,18 +117,23 @@ export class MatrixConcept extends CardDef {
   @field owner = contains(StringField);
   @field workState = contains(WorkStateField);
   @field notes = contains(StringField);
-  // Verifier-owned: URL of the Spec in the shared realm that evidences this
-  // concept, and where that Spec's ref resolves to. Written by
-  // verify-specs.py, never by hand or by the crawl.
+  // Crawl-stamped: URL of the Spec in the shared realm that evidences this
+  // concept, where that Spec's ref resolves to, and when it first verified.
   @field sharedSpec = contains(StringField);
   @field specTarget = contains(SpecTargetField);
-  // Verifier-owned: shared-realm modules that import this concept's block —
+  @field verifiedAt = contains(DateTimeField);
+  // Crawl-stamped Spec facts, so quality computes without loading the Spec:
+  // the Spec's specType, its example count, and its readMe length.
+  @field specKind = contains(StringField);
+  @field specExampleCount = contains(NumberField);
+  @field specReadmeChars = contains(NumberField);
+  // Crawl-stamped: shared-realm modules that import this concept's block —
   // proof of consumption, not a claim. consumerExamples maps each consumer
   // to a representative instance (JSON string) so the chip can open it live.
   @field consumers = contains(StringField);
   @field consumerExamples = contains(StringField);
-  // Human-set during review, only meaningful on catalog-matched rows: a pure
-  // listing can be spec'd as-is; otherwise a block must be built here first.
+  // Human-set, only meaningful on catalog-matched rows: a pure listing can
+  // be spec'd as-is; otherwise a block must be built here first.
   @field catalogDisposition = contains(CatalogDispositionField);
 
   @field cardTitle = contains(StringField, {
@@ -477,31 +478,15 @@ export class MatrixConcept extends CardDef {
     </template>
   };
 
+  // Read-only by design: the crawl owns evidence, the verifier owns spec
+  // fields, the sheet owns owner/state/notes. The card is a lens, not a form.
   static isolated = class Isolated extends Component<typeof MatrixConcept> {
-    @tracked reviewVerdict = 'comment';
-    @tracked reviewBody = '';
-    @tracked reviewerId = '';
-    @tracked newState = '';
-    @tracked stateReason = '';
-    @tracked statusMessage = '';
-    @tracked busy = false;
-    @tracked showReviewForm = false;
-
-    private reviewList: ReturnType<getCards> | undefined;
-    private teammateList: ReturnType<getCards> | undefined;
     private specResource: any;
     private consumerResources = new Map<string, any>();
 
     constructor(owner: Owner, args: any) {
       super(owner, args);
-      try {
-        this.reviewerId =
-          globalThis.sessionStorage?.getItem(ACTING_AS_KEY) ?? '';
-      } catch {
-        // storage unavailable (prerender)
-      }
       let ctx = this.args.context;
-      let realms = () => this.realms;
       this.specResource = (ctx as any)?.getCard?.(
         this,
         () => (this.args.model as MatrixConcept)?.sharedSpec ?? undefined,
@@ -512,100 +497,50 @@ export class MatrixConcept extends CardDef {
           (ctx as any)?.getCard?.(this, () => id),
         );
       }
-      this.reviewList = ctx?.getCards(
-        this,
-        () => {
-          let id = (this.args.model as any)?.id;
-          let ref = identifyCard(ConceptReview);
-          return id && ref
-            ? { filter: { on: ref, eq: { 'concept.id': id } } }
-            : undefined;
-        },
-        realms,
-        { isLive: true },
-      );
-      this.teammateList = ctx?.getCards(
-        this,
-        () => {
-          let ref = identifyCard(Teammate);
-          return ref ? { filter: { type: ref } } : undefined;
-        },
-        realms,
-        { isLive: true },
-      );
     }
 
-    private get realms(): string[] | undefined {
-      let url = (this.args.model as any)?.[realmURL];
-      return url ? [url.href] : undefined;
-    }
-    private get realm(): string | undefined {
-      return this.realms?.[0];
-    }
-    private get commandContext() {
-      return (this.args as any).context?.commandContext;
-    }
     private get isInteractive() {
       return Boolean((this.args as any).viewCard);
     }
 
-    get reviews(): ConceptReview[] {
-      return ((this.reviewList?.instances ?? []) as ConceptReview[])
-        .filter(Boolean)
-        .sort(
-          (a, b) =>
-            (b.createdAt?.getTime?.() ?? 0) - (a.createdAt?.getTime?.() ?? 0),
-        );
-    }
-    get teammates(): Teammate[] {
-      return ((this.teammateList?.instances ?? []) as Teammate[]).filter(
-        Boolean,
-      );
-    }
-    get workStates() {
-      return ['Done', 'In Progress', 'Next', 'Blocked'];
-    }
-    get verdicts() {
-      return ['comment', 'approve', 'needs work'];
-    }
-    get selectedReviewer(): Teammate | undefined {
-      return this.teammates.find((t) => (t as any).id === this.reviewerId);
+    private get model(): MatrixConcept {
+      return this.args.model as MatrixConcept;
     }
 
-    // Derived from the thread, never stored — mirrors the tracker's logic.
-    get reviewStatus(): string | undefined {
-      let reviews = this.reviews;
-      if (reviews.some((r) => r.verdict === 'needs work' && !r.resolved)) {
-        return 'changes requested';
-      }
-      if (reviews.some((r) => r.verdict === 'approve')) {
-        return 'approved';
-      }
-      if ((this.args.model as MatrixConcept).workState === 'Done') {
-        return 'awaiting review';
-      }
-      return undefined;
+    get checks(): QualityCheck[] {
+      return qualityChecks(this.model);
+    }
+    get score() {
+      return qualityScore(this.model);
+    }
+    get bucket() {
+      return qualityBucket(this.model);
+    }
+    get bucketName() {
+      return bucketLabel(this.bucket);
+    }
+    get hasSpec() {
+      return Boolean(this.model.sharedSpec);
     }
 
-    // Claims wear outlines; derived facts get filled pills.
-    get statusBadge(): { label: string; cls: string } | undefined {
-      switch (this.reviewStatus) {
-        case 'approved':
-          return { label: 'Approved', cls: 'rs-approved' };
-        case 'changes requested':
-          return { label: 'Changes requested', cls: 'rs-changes' };
-        case 'awaiting review':
-          return { label: 'Built · awaiting review', cls: 'rs-waiting' };
+    // Claims wear outlines; derived quality gets the filled pill.
+    get qualityClass() {
+      switch (this.bucket) {
+        case 'gold':
+          return 'q-gold';
+        case 'solid':
+          return 'q-solid';
+        case 'adequate':
+          return 'q-adequate';
+        case 'thin':
+          return 'q-thin';
+        default:
+          return 'q-none';
       }
-      let ws = (this.args.model as MatrixConcept).workState;
-      return ws
-        ? { label: displayState(ws)!, cls: stateClass(ws) }
-        : undefined;
     }
 
     get ladder() {
-      let m = this.args.model as MatrixConcept;
-      let approved = this.reviewStatus === 'approved';
+      let m = this.model;
       return [
         {
           label: 'Built',
@@ -613,17 +548,19 @@ export class MatrixConcept extends CardDef {
           // is built even when nobody has claimed it in workState.
           done:
             m.workState === 'Done' ||
-            approved ||
             Boolean(m.implemented) ||
             Boolean(m.evidenceTier),
         },
         { label: 'Spec', done: Boolean(m.sharedSpec) },
-        { label: 'Approved', done: approved },
+        {
+          label: 'Quality',
+          done: this.bucket === 'gold' || this.bucket === 'solid',
+        },
       ];
     }
 
     get consumerList(): string[] {
-      return ((this.args.model as MatrixConcept).consumers ?? '')
+      return (this.model.consumers ?? '')
         .split(',')
         .map((s) => s.trim())
         .filter(Boolean);
@@ -632,7 +569,7 @@ export class MatrixConcept extends CardDef {
     // Kernel and Contracts rows ARE the platform — everything imports them,
     // so a consumer list there is definitional noise, not reuse evidence.
     get showConsumers(): boolean {
-      let layer = (this.args.model as MatrixConcept).layer;
+      let layer = this.model.layer;
       return layer !== '01' && layer !== '02' && this.consumerList.length > 0;
     }
 
@@ -653,151 +590,21 @@ export class MatrixConcept extends CardDef {
       }));
     }
 
-    @action openConsumer(card: CardDef) {
-      (this.args as any).viewCard?.(card, 'isolated');
-    }
-
-    @action setVerdict(e: Event) {
-      this.reviewVerdict = (e.target as HTMLSelectElement).value;
-    }
-    @action setReviewer(e: Event) {
-      this.reviewerId = (e.target as HTMLSelectElement).value;
-      try {
-        globalThis.sessionStorage?.setItem(ACTING_AS_KEY, this.reviewerId);
-      } catch {
-        // storage unavailable
-      }
-    }
-    @action setBody(e: Event) {
-      this.reviewBody = (e.target as HTMLTextAreaElement).value;
-    }
-    @action setNewState(e: Event) {
-      this.newState = (e.target as HTMLSelectElement).value;
-    }
-    @action setStateReason(e: Event) {
-      this.stateReason = (e.target as HTMLInputElement).value;
-    }
-    @action toggleReviewForm() {
-      this.showReviewForm = !this.showReviewForm;
-    }
-
-    private async saveReview(verdict: string, body: string): Promise<boolean> {
-      if (!this.commandContext || !this.realm) return false;
-      this.busy = true;
-      this.statusMessage = 'Saving — the realm takes a few seconds…';
-      try {
-        await new SaveCardCommand(this.commandContext).execute({
-          card: new ConceptReview({
-            concept: this.args.model as MatrixConcept,
-            reviewer: this.selectedReviewer,
-            verdict,
-            body,
-            createdAt: new Date(),
-            resolved: verdict !== 'needs work',
-          }),
-          realm: this.realm,
-        } as any);
-        this.statusMessage = '';
-        return true;
-      } catch (e: any) {
-        this.statusMessage = e?.message ?? 'Review failed to save';
-        return false;
-      } finally {
-        this.busy = false;
-      }
-    }
-
-    @action async submitReview() {
-      if (!this.reviewBody.trim()) {
-        this.statusMessage = 'Write something first';
-        return;
-      }
-      if (await this.saveReview(this.reviewVerdict, this.reviewBody.trim())) {
-        this.reviewBody = '';
-        this.showReviewForm = false;
-      }
-    }
-
-    // Approval carries a name: an anonymous approve is worthless in a review
-    // trail, so Acting as… is required here (comments may stay unattributed).
-    @action async approve() {
-      if (!this.selectedReviewer) {
-        this.statusMessage = 'Pick who you are in "Acting as…" to approve';
-        return;
-      }
-      let body =
-        this.stateReason.trim() ||
-        'Approved — Spec and evidence reviewed on the concept card.';
-      if (await this.saveReview('approve', body)) {
-        this.stateReason = '';
-      }
-    }
-
-    @action async requestChanges() {
-      if (!this.selectedReviewer) {
-        this.statusMessage =
-          'Pick who you are in "Acting as…" to request changes';
-        return;
-      }
-      if (!this.stateReason.trim()) {
-        this.statusMessage = 'Say what needs to change in the reason line';
-        return;
-      }
-      if (await this.saveReview('needs work', this.stateReason.trim())) {
-        this.stateReason = '';
-      }
-    }
-
-    @action async changeState() {
-      if (!this.commandContext || !this.realm || !this.newState) return;
-      this.busy = true;
-      try {
-        let result: any = await new ChangeWorkStateCommand(
-          this.commandContext,
-        ).execute({
-          concept: this.args.model as MatrixConcept,
-          author: this.selectedReviewer,
-          newState: this.newState,
-          reason: this.stateReason,
-          realm: this.realm,
-        } as any);
-        this.statusMessage = result?.message ?? 'State changed';
-        this.newState = '';
-        this.stateReason = '';
-      } catch (e: any) {
-        this.statusMessage = e?.message ?? 'State change failed';
-      } finally {
-        this.busy = false;
-      }
-    }
-
     get specCard(): CardDef | undefined {
       return this.specResource?.card;
+    }
+
+    specComponent = (card: CardDef) =>
+      (card.constructor as typeof CardDef).getComponent(card);
+
+    @action openConsumer(card: CardDef) {
+      (this.args as any).viewCard?.(card, 'isolated');
     }
 
     @action openSpec() {
       let spec = this.specCard;
       if (spec) (this.args as any).viewCard?.(spec, 'isolated');
     }
-
-    @action async resolveReview(review: ConceptReview) {
-      if (!this.commandContext || !this.realm) return;
-      this.busy = true;
-      try {
-        review.resolved = true;
-        await new SaveCardCommand(this.commandContext).execute({
-          card: review,
-          realm: this.realm,
-        } as any);
-      } catch (e: any) {
-        this.statusMessage = e?.message ?? 'Resolve failed';
-      } finally {
-        this.busy = false;
-      }
-    }
-
-    reviewComponent = (card: ConceptReview) =>
-      (card.constructor as typeof CardDef).getComponent(card);
 
     <template>
       <article class='concept-page'>
@@ -815,11 +622,19 @@ export class MatrixConcept extends CardDef {
             <h1>{{@model.concept}}</h1>
           </div>
           <div class='ch-status'>
-            {{#if this.statusBadge}}
-              <span
-                class='state {{this.statusBadge.cls}}'
-              >{{this.statusBadge.label}}</span>
-            {{/if}}
+            <div class='badge-row'>
+              {{#if this.hasSpec}}
+                <span
+                  class='state {{this.qualityClass}}'
+                >{{this.bucketName}}
+                  · {{this.score}}/6</span>
+              {{/if}}
+              {{#if @model.workState}}
+                <span
+                  class='state {{stateClass @model.workState}}'
+                >{{displayState @model.workState}}</span>
+              {{/if}}
+            </div>
             <ol class='ladder'>
               {{#each this.ladder as |step|}}
                 <li class='ladder-step {{if step.done "is-done"}}'>
@@ -833,6 +648,32 @@ export class MatrixConcept extends CardDef {
 
         <div class='cols'>
           <div class='col'>
+            <section class='panel'>
+              <div class='panel-head'>
+                <h2>Spec quality</h2>
+                <Meter
+                  @level={{this.score}}
+                  @segments={{6}}
+                  @label='{{this.score}} of 6 checks pass'
+                  @hue={{if this.hasSpec '#ca8a04' '#9ca3af'}}
+                  @heights={{meterHeights}}
+                />
+              </div>
+              <ul class='checklist'>
+                {{#each this.checks as |check|}}
+                  <li class='check {{if check.pass "is-pass" "is-fail"}}'>
+                    <span class='check-mark'>{{if
+                        check.pass
+                        '✓'
+                        '✗'
+                      }}</span>
+                    <span class='check-label'>{{check.label}}</span>
+                    <span class='check-detail'>{{check.detail}}</span>
+                  </li>
+                {{/each}}
+              </ul>
+            </section>
+
             <section class='panel'>
               <h2>Evidence</h2>
               <dl>
@@ -852,30 +693,13 @@ export class MatrixConcept extends CardDef {
                   <dt>Catalog disposition</dt>
                   <dd>{{@model.catalogDisposition}}</dd>
                 {{/if}}
-                {{#if @model.sharedSpec}}
-                  <dt>Spec</dt>
-                  <dd>
-                    {{#if this.specCard}}
-                      <button
-                        type='button'
-                        class='spec-link'
-                        {{on 'click' this.openSpec}}
-                      >Open the Spec to review →</button>
-                    {{else if this.isInteractive}}
-                      <span class='spec-link spec-loading'>Loading Spec…</span>
-                    {{else}}
-                      <a
-                        class='spec-link'
-                        href={{@model.sharedSpec}}
-                        target='_blank'
-                        rel='noopener noreferrer'
-                      >Open the Spec to review ↗</a>
-                    {{/if}}
-                    {{#if @model.specTarget}}
-                      <span class='spec-target'>ref →
-                        {{@model.specTarget}}</span>
-                    {{/if}}
-                  </dd>
+                {{#if @model.specTarget}}
+                  <dt>Spec ref</dt>
+                  <dd>{{@model.specTarget}}</dd>
+                {{/if}}
+                {{#if @model.verifiedAt}}
+                  <dt>Verified</dt>
+                  <dd><@fields.verifiedAt /></dd>
                 {{/if}}
                 {{#if this.showConsumers}}
                   <dt>Used by</dt>
@@ -924,154 +748,51 @@ export class MatrixConcept extends CardDef {
           </div>
 
           <div class='col'>
-            {{#if this.isInteractive}}
-              <section class='panel'>
-                <h2>Workflow</h2>
-                <div class='action-row'>
-                  <select
-                    aria-label='Acting as'
-                    {{on 'change' this.setReviewer}}
-                  >
-                    <option value='' selected={{eq this.reviewerId ''}}>Acting
-                      as…</option>
-                    {{#each this.teammates as |t|}}
-                      <option
-                        value={{t.id}}
-                        selected={{eq this.reviewerId t.id}}
-                      >{{t.name}}</option>
-                    {{/each}}
-                  </select>
-                  <input
-                    type='text'
-                    placeholder='Reason (one line)'
-                    value={{this.stateReason}}
-                    aria-label='Reason'
-                    {{on 'input' this.setStateReason}}
-                  />
+            {{#if this.hasSpec}}
+              <section class='panel spec-panel'>
+                <div class='panel-head'>
+                  <h2>Spec &amp; example — live</h2>
+                  {{#if this.isInteractive}}
+                    {{#if this.specCard}}
+                      <button
+                        type='button'
+                        class='spec-open'
+                        {{on 'click' this.openSpec}}
+                      >Open →</button>
+                    {{/if}}
+                  {{else}}
+                    <a
+                      class='spec-open'
+                      href={{@model.sharedSpec}}
+                      target='_blank'
+                      rel='noopener noreferrer'
+                    >Open ↗</a>
+                  {{/if}}
                 </div>
-                <div class='action-row verdict-row'>
-                  <BoxelButton
-                    @kind='primary'
-                    @size='extra-small'
-                    @loading={{this.busy}}
-                    @disabled={{this.busy}}
-                    {{on 'click' this.approve}}
-                  >Approve</BoxelButton>
-                  <BoxelButton
-                    @kind='secondary'
-                    @size='extra-small'
-                    @disabled={{this.busy}}
-                    {{on 'click' this.requestChanges}}
-                  >Request changes</BoxelButton>
-                  <select
-                    aria-label='New state'
-                    {{on 'change' this.setNewState}}
-                  >
-                    <option value='' selected={{eq this.newState ''}}>Change
-                      state to…</option>
-                    {{#each this.workStates as |s|}}
-                      <option
-                        value={{s}}
-                        selected={{eq this.newState s}}
-                      >{{displayState s}}</option>
-                    {{/each}}
-                  </select>
-                  <BoxelButton
-                    @kind='secondary'
-                    @size='extra-small'
-                    @disabled={{this.busy}}
-                    {{on 'click' this.changeState}}
-                  >Change state</BoxelButton>
-                </div>
-                {{#if this.statusMessage}}
-                  <p class='status'>{{this.statusMessage}}</p>
+                {{#if this.specCard}}
+                  <div class='spec-frame'>
+                    {{#let (this.specComponent this.specCard) as |SpecView|}}
+                      <SpecView @format='isolated' />
+                    {{/let}}
+                  </div>
+                {{else}}
+                  <p class='empty'>Loading Spec…</p>
                 {{/if}}
               </section>
+            {{else}}
+              <section class='panel'>
+                <h2>Spec &amp; example</h2>
+                <p class='empty'>No Spec yet — the checklist on the left is
+                  the to-do list. A Spec in the shared realm whose ref
+                  resolves is what makes this concept count as done.</p>
+              </section>
             {{/if}}
-
-            <section class='panel'>
-              <h2>Reviews</h2>
-              {{#if this.isInteractive}}
-                {{#if this.showReviewForm}}
-                  <div class='review-form'>
-                    <div class='action-row'>
-                      <select
-                        aria-label='Verdict'
-                        {{on 'change' this.setVerdict}}
-                      >
-                        {{#each this.verdicts as |v|}}
-                          <option
-                            value={{v}}
-                            selected={{eq this.reviewVerdict v}}
-                          >{{v}}</option>
-                        {{/each}}
-                      </select>
-                      <span class='hint'>reviewing as
-                        {{if
-                          this.selectedReviewer.name
-                          this.selectedReviewer.name
-                          '…'
-                        }}</span>
-                    </div>
-                    <textarea
-                      rows='3'
-                      placeholder='What did you find? Approvals and change requests both deserve a reason.'
-                      aria-label='Review body'
-                      value={{this.reviewBody}}
-                      {{on 'input' this.setBody}}
-                    ></textarea>
-                    <div class='form-actions'>
-                      <BoxelButton
-                        @kind='primary'
-                        @size='extra-small'
-                        @disabled={{this.busy}}
-                        {{on 'click' this.submitReview}}
-                      >Submit review</BoxelButton>
-                      <BoxelButton
-                        @kind='text-only'
-                        @size='extra-small'
-                        {{on 'click' this.toggleReviewForm}}
-                      >Cancel</BoxelButton>
-                    </div>
-                  </div>
-                {{else}}
-                  <div class='review-form-cta'>
-                    <BoxelButton
-                      @kind='secondary'
-                      @size='extra-small'
-                      {{on 'click' this.toggleReviewForm}}
-                    >Write review</BoxelButton>
-                  </div>
-                {{/if}}
-              {{/if}}
-              <div class='thread'>
-                {{#each this.reviews as |r|}}
-                  <div class='thread-item'>
-                    {{#let (this.reviewComponent r) as |R|}}
-                      <R @format='embedded' />
-                    {{/let}}
-                    {{#if this.isInteractive}}
-                      {{#unless r.resolved}}
-                        <BoxelButton
-                          @kind='text-only'
-                          @size='extra-small'
-                          @disabled={{this.busy}}
-                          {{on 'click' (fn this.resolveReview r)}}
-                        >Mark resolved</BoxelButton>
-                      {{/unless}}
-                    {{/if}}
-                  </div>
-                {{else}}
-                  <p class='empty'>No reviews yet</p>
-                {{/each}}
-              </div>
-            </section>
           </div>
         </div>
       </article>
       <style scoped>
         .concept-page {
-          max-width: 72rem;
+          max-width: 76rem;
           margin: 0 auto;
           padding: 2rem 1.5rem;
           display: flex;
@@ -1121,6 +842,11 @@ export class MatrixConcept extends CardDef {
           flex-direction: column;
           align-items: flex-end;
           gap: 0.5rem;
+        }
+        .badge-row {
+          display: flex;
+          gap: 0.375rem;
+          flex-wrap: wrap;
         }
         .ladder {
           list-style: none;
@@ -1180,6 +906,16 @@ export class MatrixConcept extends CardDef {
           padding: 1rem 1.25rem;
           background: var(--card, #ffffff);
         }
+        .panel-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 0.75rem;
+          margin-bottom: 0.75rem;
+        }
+        .panel-head h2 {
+          margin: 0;
+        }
         h2 {
           margin: 0 0 0.75rem;
           font-size: 0.6875rem;
@@ -1187,6 +923,44 @@ export class MatrixConcept extends CardDef {
           text-transform: uppercase;
           letter-spacing: 0.1em;
           color: var(--muted-foreground, #6b7280);
+        }
+        .checklist {
+          list-style: none;
+          margin: 0;
+          padding: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+        }
+        .check {
+          display: grid;
+          grid-template-columns: 1.125rem 1fr;
+          column-gap: 0.5rem;
+          row-gap: 0.0625rem;
+          font-size: 0.8125rem;
+          align-items: baseline;
+        }
+        .check-mark {
+          font-weight: 700;
+          text-align: center;
+        }
+        .check.is-pass .check-mark {
+          color: var(--state-done-check, #16a34a);
+        }
+        .check.is-fail .check-mark {
+          color: var(--state-blocked-fg, #991b1b);
+        }
+        .check-label {
+          font-weight: 600;
+        }
+        .check.is-fail .check-label {
+          color: var(--foreground, #111111);
+        }
+        .check-detail {
+          grid-column: 2;
+          font-size: 0.75rem;
+          color: var(--muted-foreground, #6b7280);
+          line-height: 1.4;
         }
         dl {
           margin: 0;
@@ -1207,43 +981,6 @@ export class MatrixConcept extends CardDef {
         .mono {
           font-family: var(--font-mono, monospace);
           font-size: 0.75rem;
-        }
-        .spec-link {
-          display: inline-flex;
-          align-items: center;
-          gap: 0.25rem;
-          font-size: 0.8125rem;
-          font-weight: 600;
-          color: var(--tier-shared-fg, #1e40af);
-          text-decoration: none;
-          border: 1px solid currentColor;
-          border-radius: 0.5rem;
-          padding: 0.25rem 0.625rem;
-        }
-        .spec-link:hover {
-          background: var(--tier-shared-bg, #dbeafe);
-        }
-        button.spec-link {
-          font: inherit;
-          font-size: 0.8125rem;
-          font-weight: 600;
-          background: transparent;
-          cursor: pointer;
-        }
-        .spec-loading {
-          color: var(--muted-foreground, #6b7280);
-          border-color: var(--border, #e5e7eb);
-        }
-        .spec-loading:hover {
-          background: transparent;
-        }
-        .spec-target {
-          margin-left: 0.5rem;
-          font-size: 0.6875rem;
-          font-weight: 600;
-          text-transform: uppercase;
-          letter-spacing: 0.04em;
-          color: var(--muted-foreground, #6b7280);
         }
         .consumers {
           display: flex;
@@ -1273,73 +1010,38 @@ export class MatrixConcept extends CardDef {
           font-size: 0.875rem;
           line-height: 1.5;
         }
-        .action-row {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 0.5rem;
-          align-items: center;
-        }
-        .action-row select,
-        .action-row input,
-        .review-form textarea {
+        .spec-open {
           font: inherit;
           font-size: 0.8125rem;
-          padding: 0.375rem 0.5rem;
+          font-weight: 600;
+          color: var(--tier-shared-fg, #1e40af);
+          text-decoration: none;
+          border: 1px solid currentColor;
+          border-radius: 0.5rem;
+          padding: 0.25rem 0.625rem;
+          background: transparent;
+          cursor: pointer;
+          white-space: nowrap;
+        }
+        .spec-open:hover {
+          background: var(--tier-shared-bg, #dbeafe);
+        }
+        .spec-frame {
           border: 1px solid var(--border, #e5e7eb);
           border-radius: 0.5rem;
-          background: var(--card, #ffffff);
-          color: inherit;
+          max-height: 42rem;
+          overflow-y: auto;
+          background: var(--background, #fafafa);
         }
-        .action-row input {
-          flex: 1;
-          min-width: 10rem;
-        }
-        .review-form {
-          display: flex;
-          flex-direction: column;
-          gap: 0.5rem;
-          margin-bottom: 1rem;
-          padding-bottom: 1rem;
-          border-bottom: 1px solid var(--border, #e5e7eb);
-        }
-        .review-form textarea {
-          width: 100%;
-          box-sizing: border-box;
-          resize: vertical;
-        }
-        .form-actions {
-          display: flex;
-          gap: 0.5rem;
-          align-items: center;
-        }
-        .review-form-cta {
-          margin-bottom: 1rem;
-        }
-        .hint {
-          font-size: 0.75rem;
-          color: var(--muted-foreground, #6b7280);
-        }
-        .status {
-          margin: 0.5rem 0 0;
-          font-size: 0.75rem;
-          color: var(--muted-foreground, #6b7280);
-        }
-        .thread {
-          display: flex;
-          flex-direction: column;
-          gap: 0.5rem;
-        }
-        .thread-item {
-          border: 1px solid var(--border, #e5e7eb);
-          border-radius: 0.5rem;
-        }
-        .thread-item > :deep(.boxel-card-container) {
+        .spec-frame :deep(.boxel-card-container) {
           box-shadow: none;
+          background: transparent;
         }
         .empty {
           margin: 0;
           font-size: 0.8125rem;
           color: var(--muted-foreground, #6b7280);
+          line-height: 1.5;
         }
         .state {
           font-size: 0.6875rem;
@@ -1390,19 +1092,29 @@ export class MatrixConcept extends CardDef {
           color: var(--state-blocked-fg, #991b1b);
           background: transparent;
         }
-        .rs-approved {
+        .q-gold {
+          background: #fef9c3;
+          color: #854d0e;
+        }
+        .q-solid {
           background: var(--state-done-bg, #dcfce7);
-          color: var(--tier-platform-fg, #166534);
+          color: var(--state-done-fg, #166534);
         }
-        .rs-waiting {
-          background: var(--state-next-bg, #fef3c7);
-          color: var(--state-next-fg, #92400e);
+        .q-adequate {
+          background: var(--tier-shared-bg, #dbeafe);
+          color: var(--tier-shared-fg, #1e40af);
         }
-        .rs-changes {
-          background: var(--state-blocked-bg, #fee2e2);
-          color: var(--state-blocked-fg, #991b1b);
+        .q-thin {
+          background: var(--muted, #f3f4f6);
+          color: var(--muted-foreground, #6b7280);
+        }
+        .q-none {
+          background: var(--muted, #f3f4f6);
+          color: var(--muted-foreground, #6b7280);
         }
       </style>
     </template>
   };
 }
+
+const meterHeights = [8, 8, 8, 8, 8, 8];

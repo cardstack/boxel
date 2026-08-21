@@ -9,55 +9,61 @@ import type Owner from '@ember/owner';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
-import { fn } from '@ember/helper';
+import { fn, get } from '@ember/helper';
 import { htmlSafe } from '@ember/template';
 import { eq } from '@cardstack/boxel-ui/helpers';
-import { BoxelInput } from '@cardstack/boxel-ui/components';
 import {
   identifyCard,
   realmURL,
   type getCards,
 } from '@cardstack/runtime-common';
 import LayoutGridIcon from '@cardstack/boxel-icons/layout-grid';
-import { DonutChart, type DonutSegment } from './donut-chart';
-import { MatrixConcept, displayState } from './matrix-concept';
-import { ConceptReview } from './concept-review';
+import {
+  Stat,
+  DataGrid,
+  type ColumnSpec,
+  type Row,
+} from 'https://realms-staging.stack.cards/richard.tan1/pretui/reading';
+import { FilterChips } from 'https://realms-staging.stack.cards/richard.tan1/pretui/controls';
+import { SearchInput } from 'https://realms-staging.stack.cards/richard.tan1/pretui/controls-extras';
+import { EmptyState } from 'https://realms-staging.stack.cards/richard.tan1/pretui/structure';
+import { MatrixConcept } from './matrix-concept';
+import { ProgressReport } from './progress-report';
+import { Blocker } from './blocker';
+import {
+  qualityBucket,
+  qualityScore,
+  bucketLabel,
+  consumerList,
+  BUCKETS,
+  type QualityBucket,
+} from './spec-quality';
 
-const TIER_ORDER = [
-  { key: 'Platform', color: '#16a34a' },
-  { key: 'Catalog shared', color: '#2563eb' },
-  { key: 'Catalog listing', color: '#7c3aed' },
-  { key: 'POC realm', color: '#d97706' },
-  { key: 'No evidence', color: '#e5e7eb' },
-];
-// The progress story: DONE means a Spec here whose ref resolves (to a shared
-// block, base-realm code, or a pure catalog listing). Catalog and platform
-// code without a Spec is available, not done; POC folds into not-started.
+// The wall and the availability drills speak spec-state: what evidences a
+// concept right now — a verified Spec, catalog code, platform code, nothing.
 const SPEC_STATES = [
   { key: 'verified', label: 'Spec-verified', color: '#16a34a' },
   { key: 'catalog', label: 'Catalog available', color: '#7c3aed' },
   { key: 'platform', label: 'Platform available', color: '#2563eb' },
   { key: 'none', label: 'Not started', color: '#e5e7eb' },
 ];
-const STATE_ORDER = ['Done', 'In Progress', 'Next', 'Blocked'];
-const REVIEW_STATES = ['awaiting review', 'changes requested', 'approved'];
 const ALL = 'all';
 // Card-context searches are clamped to 100 items per page (search-bounds.ts),
 // so the full matrix is read as fixed pages and concatenated. Bump when the
 // matrix outgrows PAGE_COUNT * PAGE_SIZE.
 const PAGE_SIZE = 100;
 const PAGE_COUNT = 8;
+const RECENT_DAYS = 30;
 
-function timeAgo(d: Date | undefined): string {
-  let t = d?.getTime?.();
-  if (!t) return '';
-  let s = Math.max(0, (Date.now() - t) / 1000);
-  if (s < 60) return 'just now';
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-  if (s < 2592000) return `${Math.floor(s / 86400)}d ago`;
-  return `${Math.floor(s / 2592000)}mo ago`;
-}
+const GRID_COLUMNS: ColumnSpec[] = [
+  { key: 'symbol', label: 'Symbol', mono: true, sortable: true },
+  { key: 'concept', label: 'Concept', sortable: true },
+  { key: 'layer', label: 'Layer', sortable: true },
+  { key: 'lane', label: 'Lane', sortable: true },
+  { key: 'tier', label: 'Evidence', sortable: true },
+  { key: 'score', label: 'Quality', num: true, sortable: true },
+  { key: 'consumers', label: 'Consumers', num: true, sortable: true },
+];
 
 export class MatrixTracker extends CardDef {
   static displayName = 'Matrix Tracker';
@@ -73,22 +79,19 @@ export class MatrixTracker extends CardDef {
     },
   });
 
+  // Read-only by design: every number is a live count over real cards, every
+  // click is a drill or a navigation — the tracker writes nothing.
   static isolated = class Isolated extends Component<typeof MatrixTracker> {
-    @tracked activeTab = 'overview';
+    @tracked bucketFilter = ALL;
+    @tracked specStateFilter = ALL;
     @tracked layerFilter = ALL;
     @tracked laneFilter = ALL;
     @tracked tierFilter = ALL;
-    @tracked stateFilter = ALL;
-    @tracked ownerFilter = ALL;
-    @tracked specStateFilter = ALL;
-    @tracked reviewFilter = ALL;
-    @tracked lagOnly = false;
-    @tracked implementedOnly = false;
-    @tracked queueFilter = 'awaiting review';
     @tracked query = '';
 
     private conceptPages: (ReturnType<getCards> | undefined)[] = [];
-    private reviewList: ReturnType<getCards> | undefined;
+    private reportList: ReturnType<getCards> | undefined;
+    private blockerList: ReturnType<getCards> | undefined;
 
     constructor(owner: Owner, args: any) {
       super(owner, args);
@@ -110,11 +113,24 @@ export class MatrixTracker extends CardDef {
           { isLive: true },
         ),
       );
-      // Reviews are young; one page is plenty until the team outgrows it.
-      this.reviewList = ctx?.getCards(
+      this.reportList = ctx?.getCards(
         this,
         () => {
-          let ref = identifyCard(ConceptReview);
+          let ref = identifyCard(ProgressReport);
+          return ref
+            ? {
+                filter: { type: ref },
+                sort: [{ by: 'roundDate', on: ref, direction: 'desc' }],
+              }
+            : undefined;
+        },
+        () => this.realms,
+        { isLive: true },
+      );
+      this.blockerList = ctx?.getCards(
+        this,
+        () => {
+          let ref = identifyCard(Blocker);
           return ref ? { filter: { type: ref } } : undefined;
         },
         () => this.realms,
@@ -125,10 +141,6 @@ export class MatrixTracker extends CardDef {
     private get realms(): string[] | undefined {
       let url = (this.args.model as any)?.[realmURL];
       return url ? [url.href] : undefined;
-    }
-
-    private get isInteractive() {
-      return Boolean((this.args as any).viewCard);
     }
 
     // Pages can overlap while the realm is mid-index (windows shift as the
@@ -150,29 +162,6 @@ export class MatrixTracker extends CardDef {
     get total() {
       return this.concepts.length;
     }
-    get implementedCount() {
-      return this.concepts.filter((c) => c.implemented).length;
-    }
-
-    get specStateSegments(): DonutSegment[] {
-      return SPEC_STATES.map(({ key, label, color }) => ({
-        label,
-        color,
-        value: this.concepts.filter((c) => this.specState(c) === key).length,
-      }));
-    }
-
-    get stateCounts() {
-      return STATE_ORDER.map((state) => ({
-        state,
-        label: displayState(state),
-        count: this.concepts.filter((c) => c.workState === state).length,
-      }));
-    }
-
-    // A Done claim is verified only by a resolving Spec in this realm —
-    // catalog matches and platform code are available material, not done.
-    isVerified = (c: MatrixConcept) => Boolean(c.sharedSpec);
 
     specState = (c: MatrixConcept): string => {
       if (c.sharedSpec) return 'verified';
@@ -186,112 +175,126 @@ export class MatrixTracker extends CardDef {
       return 'none';
     };
 
+    bucketOf = (c: MatrixConcept): QualityBucket => qualityBucket(c);
+
     get specVerifiedCount() {
       return this.concepts.filter((c) => c.sharedSpec).length;
     }
+    get consumedCount() {
+      return this.concepts.filter((c) => consumerList(c).length >= 1).length;
+    }
+    get reusedCount() {
+      return this.concepts.filter((c) => consumerList(c).length >= 2).length;
+    }
+    get goldCount() {
+      return this.concepts.filter((c) => this.bucketOf(c) === 'gold').length;
+    }
+
+    get recentlyVerified(): MatrixConcept[] {
+      let cutoff = Date.now() - RECENT_DAYS * 86400000;
+      return this.concepts
+        .filter((c) => (c.verifiedAt?.getTime?.() ?? 0) >= cutoff)
+        .sort(
+          (a, b) =>
+            (b.verifiedAt?.getTime?.() ?? 0) - (a.verifiedAt?.getTime?.() ?? 0),
+        );
+    }
+
+    get latestReport(): ProgressReport | undefined {
+      return ((this.reportList?.instances ?? []) as ProgressReport[]).filter(
+        Boolean,
+      )[0];
+    }
+
+    get openBlockers(): Blocker[] {
+      return ((this.blockerList?.instances ?? []) as Blocker[])
+        .filter(Boolean)
+        .filter((b) => b.status !== 'resolved');
+    }
+    get blockedConcepts(): MatrixConcept[] {
+      return this.concepts.filter((c) => c.workState === 'Blocked');
+    }
+    get hasBlockers() {
+      return this.openBlockers.length > 0 || this.blockedConcepts.length > 0;
+    }
+
+    // The wall: one cell per concept, grouped by layer, sorted stably so a
+    // cell stays where the eye left it between visits.
+    get layerBands() {
+      let layers = [...new Set(this.concepts.map((c) => c.layer))]
+        .filter(Boolean)
+        .sort((a, b) => parseFloat(a!) - parseFloat(b!)) as string[];
+      return layers.map((layer) => {
+        let group = this.concepts
+          .filter((c) => c.layer === layer)
+          .sort(
+            (a, b) =>
+              (a.lane ?? '').localeCompare(b.lane ?? '') ||
+              (a.concept ?? '').localeCompare(b.concept ?? ''),
+          );
+        let verified = group.filter((c) => c.sharedSpec).length;
+        let coded = group.filter((c) => c.implemented).length;
+        let pct = (n: number) =>
+          group.length ? Math.round((n / group.length) * 100) : 0;
+        return {
+          layer,
+          layerName: group[0]?.layerName,
+          verified,
+          coded,
+          total: group.length,
+          pctVerified: pct(verified),
+          codedStyle: htmlSafe(`width: ${pct(coded)}%`),
+          verifiedStyle: htmlSafe(`width: ${pct(verified)}%`),
+          cells: group.map((c) => ({
+            card: c,
+            cls: `sp-${this.specState(c)}`,
+            hint: `${c.symbol} ${c.concept} — ${
+              SPEC_STATES.find((s) => s.key === this.specState(c))?.label
+            }`,
+          })),
+        };
+      });
+    }
+
+    get bucketChips() {
+      let counts = new Map<string, number>();
+      for (let c of this.concepts) {
+        let b = this.bucketOf(c);
+        counts.set(b, (counts.get(b) ?? 0) + 1);
+      }
+      return [
+        { value: ALL, label: 'All', count: this.total },
+        ...BUCKETS.map((b) => ({
+          value: b.key,
+          label: b.label,
+          count: counts.get(b.key) ?? 0,
+        })),
+      ];
+    }
+
+    get qualityRows() {
+      return this.bucketChips.slice(1).map((chip) => ({
+        ...chip,
+        color: BUCKETS.find((b) => b.key === chip.value)?.color,
+        dotStyle: htmlSafe(
+          `background: ${BUCKETS.find((b) => b.key === chip.value)?.color}`,
+        ),
+      }));
+    }
+
     get catalogAvailable(): MatrixConcept[] {
       return this.concepts.filter((c) => this.specState(c) === 'catalog');
     }
     get platformAvailable(): MatrixConcept[] {
       return this.concepts.filter((c) => this.specState(c) === 'platform');
     }
-
-    get funnel() {
-      let total = this.total || 1;
-      let bar = (count: number) => ({
-        count,
-        style: htmlSafe(`width: ${Math.round((count / total) * 100)}%`),
-      });
-      return [
-        { label: 'Code exists', ...bar(this.implementedCount) },
-        { label: 'Spec-verified', ...bar(this.specVerifiedCount) },
-        { label: 'Approved', ...bar(this.approved.length) },
-      ];
+    get thinCount() {
+      return this.concepts.filter((c) => this.bucketOf(c) === 'thin').length;
     }
-
-    get allReviews(): ConceptReview[] {
-      return ((this.reviewList?.instances ?? []) as ConceptReview[])
-        .filter(Boolean)
-        .sort(
-          (a, b) =>
-            (b.createdAt?.getTime?.() ?? 0) - (a.createdAt?.getTime?.() ?? 0),
-        );
-    }
-
-    reviewsFor = (c: MatrixConcept) =>
-      this.allReviews.filter((r) => (r.concept as any)?.id === (c as any).id);
-
-    // Review status is derived from the thread, never stored: an unresolved
-    // "needs work" blocks; an approve verdict accepts; Done with neither is
-    // waiting on the review team.
-    reviewStatus = (c: MatrixConcept): string | undefined => {
-      let reviews = this.reviewsFor(c);
-      if (reviews.some((r) => r.verdict === 'needs work' && !r.resolved)) {
-        return 'changes requested';
-      }
-      if (reviews.some((r) => r.verdict === 'approve')) {
-        return 'approved';
-      }
-      if (c.workState === 'Done') {
-        return 'awaiting review';
-      }
-      return undefined;
-    };
-
-    openReviewCount = (c: MatrixConcept) =>
-      this.reviewsFor(c).filter((r) => !r.resolved).length;
-
-    lastActivity = (c: MatrixConcept) =>
-      timeAgo(this.reviewsFor(c)[0]?.createdAt);
-
-    get awaitingReview(): MatrixConcept[] {
+    get missingExampleCount() {
       return this.concepts.filter(
-        (c) => this.reviewStatus(c) === 'awaiting review',
-      );
-    }
-    get changesRequested(): MatrixConcept[] {
-      return this.concepts.filter(
-        (c) => this.reviewStatus(c) === 'changes requested',
-      );
-    }
-    get approved(): MatrixConcept[] {
-      return this.concepts.filter((c) => this.reviewStatus(c) === 'approved');
-    }
-    get recentReviews(): ConceptReview[] {
-      return this.allReviews.slice(0, 15);
-    }
-
-    get doneVerifiedCount() {
-      return this.concepts.filter(
-        (c) => c.workState === 'Done' && this.isVerified(c),
+        (c) => c.sharedSpec && (c.specExampleCount ?? 0) === 0,
       ).length;
-    }
-    get doneUnverifiedCount() {
-      return this.concepts.filter(
-        (c) => c.workState === 'Done' && !this.isVerified(c),
-      ).length;
-    }
-
-    get layerRows() {
-      let layers = [...new Set(this.concepts.map((c) => c.layer))]
-        .filter(Boolean)
-        .sort((a, b) => parseFloat(a!) - parseFloat(b!));
-      return layers.map((layer) => {
-        let group = this.concepts.filter((c) => c.layer === layer);
-        let coded = group.filter((c) => c.implemented).length;
-        let verified = group.filter((c) => this.isVerified(c)).length;
-        let pct = (n: number) =>
-          group.length ? Math.round((n / group.length) * 100) : 0;
-        return {
-          layer,
-          layerName: group[0]?.layerName,
-          coded,
-          verified,
-          total: group.length,
-          codedStyle: htmlSafe(`width: ${pct(coded)}%`),
-          verifiedStyle: htmlSafe(`width: ${pct(verified)}%`),
-        };
-      });
     }
 
     get layerOptions() {
@@ -305,137 +308,87 @@ export class MatrixTracker extends CardDef {
       ) as string[];
     }
     get tierOptions() {
-      return TIER_ORDER.map((t) => t.key);
-    }
-    get stateOptions() {
-      return STATE_ORDER;
-    }
-    get reviewStateOptions() {
-      return REVIEW_STATES;
-    }
-    get ownerOptions() {
-      return [...new Set(this.concepts.map((c) => c.owner))].filter(
-        Boolean,
-      ) as string[];
-    }
-    get tabs() {
       return [
-        { key: 'overview', label: 'Overview' },
-        { key: 'queue', label: 'Review queue' },
-        { key: 'concepts', label: 'Concepts' },
+        'Platform',
+        'Catalog shared',
+        'Catalog listing',
+        'POC realm',
+        'No evidence',
       ];
     }
-    get showOverview() {
-      return !this.isInteractive || this.activeTab === 'overview';
-    }
-
-    get queueChips() {
-      let stateCount = (s: string) =>
-        this.stateCounts.find((x) => x.state === s)?.count ?? 0;
-      return [
-        {
-          key: 'awaiting review',
-          label: 'Awaiting review',
-          count: this.awaitingReview.length,
-        },
-        {
-          key: 'changes requested',
-          label: 'Changes requested',
-          count: this.changesRequested.length,
-        },
-        { key: 'approved', label: 'Approved', count: this.approved.length },
-        { key: 'Done', label: 'Built', count: stateCount('Done') },
-        {
-          key: 'In Progress',
-          label: 'In Progress',
-          count: stateCount('In Progress'),
-        },
-        { key: 'Next', label: 'Next', count: stateCount('Next') },
-        { key: 'Blocked', label: 'Blocked', count: stateCount('Blocked') },
-      ];
-    }
-
-    get queueList(): MatrixConcept[] {
-      switch (this.queueFilter) {
-        case 'awaiting review':
-          return this.awaitingReview;
-        case 'changes requested':
-          return this.changesRequested;
-        case 'approved':
-          return this.approved;
-        default:
-          return this.concepts.filter(
-            (c) => c.workState === this.queueFilter,
-          );
-      }
+    get activeSpecState() {
+      return SPEC_STATES.find((s) => s.key === this.specStateFilter);
     }
 
     get filtered(): MatrixConcept[] {
       let q = this.query.trim().toLowerCase();
-      return this.concepts
-        .filter((c) => {
-          if (this.layerFilter !== ALL && c.layer !== this.layerFilter)
-            return false;
-          if (this.laneFilter !== ALL && c.lane !== this.laneFilter)
-            return false;
-          if (
-            this.tierFilter !== ALL &&
-            (c.evidenceTier ?? 'No evidence') !== this.tierFilter
-          )
-            return false;
-          if (this.stateFilter !== ALL && c.workState !== this.stateFilter)
-            return false;
-          if (this.ownerFilter !== ALL && c.owner !== this.ownerFilter)
-            return false;
-          if (
-            this.specStateFilter !== ALL &&
-            this.specState(c) !== this.specStateFilter
-          )
-            return false;
-          if (
-            this.reviewFilter !== ALL &&
-            this.reviewStatus(c) !== this.reviewFilter
-          )
-            return false;
-          if (this.implementedOnly && !c.implemented) return false;
-          if (
-            this.lagOnly &&
-            !(c.workState === 'Done' && !this.isVerified(c))
-          )
-            return false;
-          if (
-            q &&
-            !`${c.concept} ${c.symbol} ${c.provenance} ${c.domainKit} ${c.owner}`
-              .toLowerCase()
-              .includes(q)
-          )
-            return false;
-          return true;
-        })
-        .sort(
-          (a, b) =>
-            parseFloat(a.layer ?? '0') - parseFloat(b.layer ?? '0') ||
-            (a.lane ?? '').localeCompare(b.lane ?? '') ||
-            (a.concept ?? '').localeCompare(b.concept ?? ''),
-        );
+      return this.concepts.filter((c) => {
+        if (this.bucketFilter !== ALL && this.bucketOf(c) !== this.bucketFilter)
+          return false;
+        if (
+          this.specStateFilter !== ALL &&
+          this.specState(c) !== this.specStateFilter
+        )
+          return false;
+        if (this.layerFilter !== ALL && c.layer !== this.layerFilter)
+          return false;
+        if (this.laneFilter !== ALL && c.lane !== this.laneFilter) return false;
+        if (
+          this.tierFilter !== ALL &&
+          (c.evidenceTier ?? 'No evidence') !== this.tierFilter
+        )
+          return false;
+        if (
+          q &&
+          !`${c.concept} ${c.symbol} ${c.provenance} ${c.domainKit} ${c.owner}`
+            .toLowerCase()
+            .includes(q)
+        )
+          return false;
+        return true;
+      });
     }
 
-    tierOf = (c: MatrixConcept) => c.evidenceTier ?? '—';
-    stateOf = (c: MatrixConcept) => displayState(c.workState) ?? '';
+    get gridRows(): Row[] {
+      return this.filtered.map((c) => ({
+        symbol: c.symbol,
+        concept: c.concept,
+        layer: c.layer,
+        lane: c.lane,
+        tier: c.evidenceTier ?? '—',
+        score: c.sharedSpec ? qualityScore(c) : -1,
+        quality: bucketLabel(this.bucketOf(c)),
+        qkey: this.bucketOf(c),
+        consumers: consumerList(c).length,
+        __card: c,
+      }));
+    }
+
+    private scrollToGrid() {
+      try {
+        globalThis.document
+          ?.getElementById('matrix-concept-grid')
+          ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch {
+        // prerender has no document
+      }
+    }
 
     private resetFilters() {
+      this.bucketFilter = ALL;
+      this.specStateFilter = ALL;
       this.layerFilter = ALL;
       this.laneFilter = ALL;
       this.tierFilter = ALL;
-      this.stateFilter = ALL;
-      this.ownerFilter = ALL;
-      this.specStateFilter = ALL;
-      this.reviewFilter = ALL;
-      this.lagOnly = false;
-      this.implementedOnly = false;
       this.query = '';
     }
 
+    @action setBucket(value: string) {
+      this.bucketFilter = value;
+    }
+    @action setQuery(value: string) {
+      this.query = value;
+    }
     @action setLayer(e: Event) {
       this.layerFilter = (e.target as HTMLSelectElement).value;
     }
@@ -445,88 +398,46 @@ export class MatrixTracker extends CardDef {
     @action setTier(e: Event) {
       this.tierFilter = (e.target as HTMLSelectElement).value;
     }
-    @action setState(e: Event) {
-      this.stateFilter = (e.target as HTMLSelectElement).value;
+    @action clearSpecState() {
+      this.specStateFilter = ALL;
     }
-    @action setOwner(e: Event) {
-      this.ownerFilter = (e.target as HTMLSelectElement).value;
+
+    @action drillBucket(bucket: string) {
+      this.resetFilters();
+      this.bucketFilter = bucket;
+      this.scrollToGrid();
     }
-    @action setSpecState(e: Event) {
-      this.specStateFilter = (e.target as HTMLSelectElement).value;
-    }
-    @action setReviewFilter(e: Event) {
-      this.reviewFilter = (e.target as HTMLSelectElement).value;
-    }
-    @action setTab(key: string) {
-      this.activeTab = key;
-    }
-    @action setQueueFilter(key: string) {
-      this.queueFilter = key;
-    }
-    @action drillToBacklog(state: string) {
+    @action drillSpecState(state: string) {
       this.resetFilters();
       this.specStateFilter = state;
-      this.activeTab = 'concepts';
+      this.scrollToGrid();
     }
-    @action drillState(state: string) {
+    @action drillVerified() {
+      this.drillSpecState('verified');
+    }
+    @action drillConsumed() {
+      // Consumed/reused are not grid filters; the quality buckets carry
+      // them — Solid and Gold both require consumption.
       this.resetFilters();
-      this.stateFilter = state;
-      this.activeTab = 'concepts';
-    }
-    @action drillVerifiedDone() {
-      this.resetFilters();
-      this.stateFilter = 'Done';
-      this.specStateFilter = 'verified';
-      this.activeTab = 'concepts';
-    }
-    @action drillLag() {
-      this.resetFilters();
-      this.lagOnly = true;
-      this.activeTab = 'concepts';
-    }
-    @action drillFunnel(label: string) {
-      this.resetFilters();
-      if (label === 'Code exists') {
-        this.implementedOnly = true;
-      } else if (label === 'Spec-verified') {
-        this.specStateFilter = 'verified';
-      } else {
-        this.reviewFilter = 'approved';
-      }
-      this.activeTab = 'concepts';
-    }
-    @action drillQueue(key: string) {
-      this.queueFilter = key;
-      this.activeTab = 'queue';
-    }
-    @action drillSpecState(label: string) {
-      let s = SPEC_STATES.find((x) => x.label === label);
-      if (!s) return;
-      this.resetFilters();
-      this.specStateFilter = s.key;
-      this.activeTab = 'concepts';
+      this.scrollToGrid();
     }
     @action drillLayer(layer: string) {
       this.resetFilters();
       this.layerFilter = layer;
-      this.activeTab = 'concepts';
+      this.scrollToGrid();
     }
-    @action clearLag() {
-      this.lagOnly = false;
-    }
-    @action clearImplementedOnly() {
-      this.implementedOnly = false;
-    }
-    get specStateOptions() {
-      return SPEC_STATES.map((s) => ({ key: s.key, label: s.label }));
-    }
-    @action setQuery(value: string) {
-      this.query = value;
-    }
-    reviewComponent = (card: ConceptReview) =>
-      (card.constructor as typeof CardDef).getComponent(card);
     @action openCard(item: CardDef) {
       (this.args as any).viewCard?.(item, 'isolated');
+    }
+
+    cardComponent = (card: CardDef) =>
+      (card.constructor as typeof CardDef).getComponent(card);
+
+    get wallLegend() {
+      return SPEC_STATES.map((s) => ({
+        ...s,
+        dotStyle: htmlSafe(`background: ${s.color}`),
+      }));
     }
 
     <template>
@@ -536,400 +447,321 @@ export class MatrixTracker extends CardDef {
             <LayoutGridIcon class='brand-icon' />
             <h1>{{@model.cardTitle}}</h1>
           </div>
-          <div class='funnel'>
-            {{#each this.funnel as |stage|}}
-              <button
-                type='button'
-                class='funnel-row'
-                title='Show these concepts'
-                {{on 'click' (fn this.drillFunnel stage.label)}}
-              >
-                <span class='funnel-label'>{{stage.label}}</span>
-                <div class='funnel-bar'><div
-                    class='funnel-fill'
-                    style={{stage.style}}
-                  ></div></div>
-                <span class='funnel-count'>{{stage.count}}</span>
-                <span class='chev'>›</span>
-              </button>
-            {{/each}}
-            <p class='sub'>of {{this.total}} concepts</p>
-          </div>
+          <p class='sub'>{{this.total}}
+            concepts · a concept counts as done when a Spec in this realm
+            resolves to shared code — quality is six mechanical checks, no
+            approval step</p>
         </header>
 
-        {{#if this.isInteractive}}
-          <nav class='tab-bar'>
-            {{#each this.tabs as |tab|}}
-              <button
-                type='button'
-                class='tab {{if (eq this.activeTab tab.key) "active"}}'
-                {{on 'click' (fn this.setTab tab.key)}}
-              >{{tab.label}}</button>
-            {{/each}}
-          </nav>
-        {{/if}}
-
-        {{#if this.showOverview}}
-        <section class='summary'>
-          <div class='panel donut-panel'>
-            <h2>Progress</h2>
-            <DonutChart
-              @segments={{this.specStateSegments}}
-              @centerValue='{{this.specVerifiedCount}}'
-              @centerLabel='spec-verified'
-              @onSelect={{this.drillSpecState}}
+        <section class='stat-band'>
+          <button
+            type='button'
+            class='stat-cell'
+            {{on 'click' this.drillVerified}}
+          >
+            <Stat
+              @label='Spec-verified'
+              @value={{this.specVerifiedCount}}
+              @hint='of {{this.total}} concepts'
             />
-            <p class='tier-note'>Done means a Spec here whose ref resolves —
-              to a shared block, base-realm code, or a pure catalog listing.
-              Catalog and platform code without a Spec is available material,
-              not done.</p>
-          </div>
-
-          <div class='panel'>
-            <h2>Coverage by layer</h2>
-            <div class='layer-list'>
-              {{#each this.layerRows as |row|}}
-                <button
-                  type='button'
-                  class='layer-row'
-                  title='Show layer {{row.layer}}'
-                  {{on 'click' (fn this.drillLayer row.layer)}}
-                >
-                  <span class='layer-id'>{{row.layer}}</span>
-                  <span class='layer-name'>{{row.layerName}}</span>
-                  <span
-                    class='layer-count'
-                  >{{row.verified}}/{{row.total}}</span>
-                  <div class='bar'>
-                    <div class='bar-code' style={{row.codedStyle}}></div>
-                    <div
-                      class='bar-verified'
-                      style={{row.verifiedStyle}}
-                    ></div>
-                  </div>
-                </button>
-              {{/each}}
-            </div>
-            <p class='tier-note'>Solid = spec-verified · pale = code exists</p>
-          </div>
-
-          <div class='panel'>
-            <h2>Work in flight</h2>
-            <div class='state-list'>
-              {{#each this.stateCounts as |s|}}
-                <button
-                  type='button'
-                  class='state-row'
-                  title='Show these concepts'
-                  {{on 'click' (fn this.drillState s.state)}}
-                >
-                  <span class='state-name'>{{s.label}}</span>
-                  <span class='state-count'>{{s.count}}
-                    <span class='chev'>›</span></span>
-                </button>
-              {{/each}}
-            </div>
-            <div class='verify-row'>
-              {{#if this.doneVerifiedCount}}
-                <button
-                  type='button'
-                  class='chip chip-verified'
-                  {{on 'click' this.drillVerifiedDone}}
-                >{{this.doneVerifiedCount}}
-                  built, verified
-                  <span class='chev'>›</span></button>
-              {{/if}}
-              {{#if this.doneUnverifiedCount}}
-                <button
-                  type='button'
-                  class='chip chip-lag'
-                  {{on 'click' this.drillLag}}
-                >{{this.doneUnverifiedCount}}
-                  built, no evidence yet
-                  <span class='chev'>›</span></button>
-              {{/if}}
-            </div>
-          </div>
-
-          <div class='panel'>
-            <h2>Review pipeline</h2>
-            <div class='state-list'>
-              <button
-                type='button'
-                class='state-row'
-                {{on 'click' (fn this.drillQueue 'awaiting review')}}
-              >
-                <span class='state-name'>Awaiting review</span>
-                <span class='state-count'>{{this.awaitingReview.length}}
-                  <span class='chev'>›</span></span>
-              </button>
-              <button
-                type='button'
-                class='state-row'
-                {{on 'click' (fn this.drillQueue 'changes requested')}}
-              >
-                <span class='state-name'>Changes requested</span>
-                <span class='state-count'>{{this.changesRequested.length}}
-                  <span class='chev'>›</span></span>
-              </button>
-              <button
-                type='button'
-                class='state-row'
-                {{on 'click' (fn this.drillQueue 'approved')}}
-              >
-                <span class='state-name'>Approved</span>
-                <span class='state-count'>{{this.approved.length}}
-                  <span class='chev'>›</span></span>
-              </button>
-            </div>
-          </div>
-        </section>
-        {{/if}}
-
-        {{#if (eq this.activeTab 'queue')}}
-          {{#if this.isInteractive}}
-            <section class='queue-grid'>
-              <div class='panel queue-panel'>
-                <div class='chip-row'>
-                  {{#each this.queueChips as |chip|}}
-                    <button
-                      type='button'
-                      class='filter-chip
-                        {{if (eq this.queueFilter chip.key) "active"}}'
-                      {{on 'click' (fn this.setQueueFilter chip.key)}}
-                    >{{chip.label}}
-                      <span class='chip-count'>{{chip.count}}</span></button>
-                  {{/each}}
-                </div>
-                <div class='queue-list'>
-                  {{#each this.queueList as |c|}}
-                    <button
-                      type='button'
-                      class='queue-row'
-                      {{on 'click' (fn this.openCard c)}}
-                    >
-                      <span class='cell-symbol'>{{c.symbol}}</span>
-                      <span class='cell-concept'>{{c.concept}}</span>
-                      {{#if c.sharedSpec}}
-                        <span class='mini-chip'>spec ✓</span>
-                      {{else}}
-                        <span class='mini-chip mini-missing'>no spec</span>
-                      {{/if}}
-                      <span class='cell-owner'>{{if c.owner c.owner ''}}</span>
-                      <span class='cell-time'>{{this.lastActivity c}}</span>
-                    </button>
-                  {{else}}
-                    <p class='empty'>Nothing here — this list is clear</p>
-                  {{/each}}
-                </div>
-              </div>
-              <div class='queue-side'>
-                <div class='panel'>
-                  <h2>Spec backlog</h2>
-                  <div class='queue-list'>
-                    <button
-                      type='button'
-                      class='queue-row backlog-row'
-                      {{on 'click' (fn this.drillToBacklog 'catalog')}}
-                    >
-                      <span class='cell-concept'>Catalog available — needs a
-                        Spec here (pure listing) or a block</span>
-                      <span
-                        class='backlog-count'
-                      >{{this.catalogAvailable.length}}</span>
-                    </button>
-                    <button
-                      type='button'
-                      class='queue-row backlog-row'
-                      {{on 'click' (fn this.drillToBacklog 'platform')}}
-                    >
-                      <span class='cell-concept'>Platform available — code in
-                        base, needs a Spec here</span>
-                      <span
-                        class='backlog-count'
-                      >{{this.platformAvailable.length}}</span>
-                    </button>
-                  </div>
-                </div>
-                <div class='panel feed-panel'>
-                  <h2>Recent activity</h2>
-                  <div class='feed'>
-                    {{#each this.recentReviews as |r|}}
-                      <button
-                        type='button'
-                        class='feed-item'
-                        {{on 'click' (fn this.openCard r)}}
-                      >
-                        {{#let (this.reviewComponent r) as |R|}}
-                          <R @format='embedded' />
-                        {{/let}}
-                      </button>
-                    {{else}}
-                      <p class='empty'>No reviews yet — open a concept and
-                        file the first one</p>
-                    {{/each}}
-                  </div>
-                </div>
-              </div>
-            </section>
-          {{/if}}
-        {{/if}}
-
-        {{#if (eq this.activeTab 'concepts')}}
-          <section class='panel table-panel'>
-            <div class='table-head'>
-              <h2>Concepts</h2>
-              <span class='count'>{{this.filtered.length}} shown</span>
-            </div>
-            <div class='filters'>
-              <select aria-label='Layer' {{on 'change' this.setLayer}}>
-                <option value='all' selected={{eq this.layerFilter 'all'}}>All
-                  layers</option>
-                {{#each this.layerOptions as |opt|}}
-                  <option
-                    value={{opt}}
-                    selected={{eq this.layerFilter opt}}
-                  >Layer {{opt}}</option>
-                {{/each}}
-              </select>
-              <select aria-label='Lane' {{on 'change' this.setLane}}>
-                <option value='all' selected={{eq this.laneFilter 'all'}}>All
-                  lanes</option>
-                {{#each this.laneOptions as |opt|}}
-                  <option
-                    value={{opt}}
-                    selected={{eq this.laneFilter opt}}
-                  >{{opt}}</option>
-                {{/each}}
-              </select>
-              <select aria-label='Evidence tier' {{on 'change' this.setTier}}>
-                <option value='all' selected={{eq this.tierFilter 'all'}}>All
-                  tiers</option>
-                {{#each this.tierOptions as |opt|}}
-                  <option
-                    value={{opt}}
-                    selected={{eq this.tierFilter opt}}
-                  >{{opt}}</option>
-                {{/each}}
-              </select>
-              <select aria-label='Work state' {{on 'change' this.setState}}>
-                <option value='all' selected={{eq this.stateFilter 'all'}}>Any
-                  work state</option>
-                {{#each this.stateOptions as |opt|}}
-                  <option
-                    value={{opt}}
-                    selected={{eq this.stateFilter opt}}
-                  >{{displayState opt}}</option>
-                {{/each}}
-              </select>
-              <select aria-label='Owner' {{on 'change' this.setOwner}}>
-                <option value='all' selected={{eq this.ownerFilter 'all'}}>Any
-                  owner</option>
-                {{#each this.ownerOptions as |opt|}}
-                  <option
-                    value={{opt}}
-                    selected={{eq this.ownerFilter opt}}
-                  >{{opt}}</option>
-                {{/each}}
-              </select>
-              <select
-                aria-label='Spec state'
-                {{on 'change' this.setSpecState}}
-              >
-                <option
-                  value='all'
-                  selected={{eq this.specStateFilter 'all'}}
-                >Any spec state</option>
-                {{#each this.specStateOptions as |opt|}}
-                  <option
-                    value={{opt.key}}
-                    selected={{eq this.specStateFilter opt.key}}
-                  >{{opt.label}}</option>
-                {{/each}}
-              </select>
-              <select
-                aria-label='Review status'
-                {{on 'change' this.setReviewFilter}}
-              >
-                <option
-                  value='all'
-                  selected={{eq this.reviewFilter 'all'}}
-                >Any review status</option>
-                {{#each this.reviewStateOptions as |opt|}}
-                  <option
-                    value={{opt}}
-                    selected={{eq this.reviewFilter opt}}
-                  >{{opt}}</option>
-                {{/each}}
-              </select>
-              <BoxelInput
-                class='search'
-                @type='search'
-                @value={{this.query}}
-                @onInput={{this.setQuery}}
-                @placeholder='Search concept, symbol, provenance…'
+          </button>
+          <button
+            type='button'
+            class='stat-cell'
+            {{on 'click' this.drillConsumed}}
+          >
+            <Stat
+              @label='Consumed'
+              @value={{this.consumedCount}}
+              @hint='blocks with ≥1 consumer'
+            />
+          </button>
+          <button
+            type='button'
+            class='stat-cell'
+            {{on 'click' this.drillConsumed}}
+          >
+            <Stat
+              @label='Reused'
+              @value={{this.reusedCount}}
+              @hint='two-consumer rule met'
+            />
+          </button>
+          <button
+            type='button'
+            class='stat-cell'
+            {{on 'click' (fn this.drillBucket 'gold')}}
+          >
+            <Stat
+              @label='Gold specs'
+              @value={{this.goldCount}}
+              @hint='all 6 checks pass'
+            />
+          </button>
+          {{#if this.recentlyVerified.length}}
+            <div class='stat-cell stat-static'>
+              <Stat
+                @label='Verified · 30d'
+                @value={{this.recentlyVerified.length}}
+                @hint='since the last crawl rounds'
               />
             </div>
-            {{#if this.lagOnly}}
-              <div class='active-filters'>
+          {{/if}}
+        </section>
+
+        {{#if this.latestReport}}
+          <section class='panel report-panel'>
+            <h2>Latest crawl round</h2>
+            <button
+              type='button'
+              class='report-body'
+              title='Open the full report'
+              {{on 'click' (fn this.openCard this.latestReport)}}
+            >
+              {{#let (this.cardComponent this.latestReport) as |R|}}
+                <R @format='embedded' />
+              {{/let}}
+            </button>
+          </section>
+        {{/if}}
+
+        {{#if this.hasBlockers}}
+          <section class='panel blockers-panel'>
+            <h2>Known blockers</h2>
+            <div class='blocker-list'>
+              {{#each this.openBlockers as |b|}}
                 <button
                   type='button'
-                  class='chip chip-lag'
-                  {{on 'click' this.clearLag}}
-                >Built, no evidence yet ✕</button>
-              </div>
-            {{/if}}
-            {{#if this.implementedOnly}}
-              <div class='active-filters'>
+                  class='blocker-item'
+                  {{on 'click' (fn this.openCard b)}}
+                >
+                  {{#let (this.cardComponent b) as |B|}}
+                    <B @format='embedded' />
+                  {{/let}}
+                </button>
+              {{/each}}
+              {{#each this.blockedConcepts as |c|}}
                 <button
                   type='button'
-                  class='chip chip-verified'
-                  {{on 'click' this.clearImplementedOnly}}
-                >Code exists ✕</button>
-              </div>
-            {{/if}}
-            <div class='rows'>
-              <div class='row row-head'>
-                <span>Symbol</span>
-                <span>Concept</span>
-                <span>Layer</span>
-                <span>Lane</span>
-                <span>Evidence</span>
-                <span>State</span>
-                <span>Owner</span>
-                <span>Review</span>
-              </div>
-              {{#each this.filtered as |c|}}
-                <button
-                  type='button'
-                  class='row'
+                  class='blocked-concept'
                   {{on 'click' (fn this.openCard c)}}
                 >
                   <span class='cell-symbol'>{{c.symbol}}</span>
-                  <span class='cell-concept'>{{c.concept}}</span>
-                  <span class='cell-layer'>{{c.layer}}</span>
-                  <span class='cell-lane'>{{c.lane}}</span>
-                  <span class='cell-tier'>{{this.tierOf c}}</span>
-                  <span class='cell-state'>{{this.stateOf c}}</span>
-                  <span class='cell-owner'>{{if c.owner c.owner ''}}</span>
-                  <span class='cell-review'>
-                    {{#if (eq (this.reviewStatus c) 'approved')}}
-                      <span class='badge badge-approved'>✓</span>
-                    {{else if (eq (this.reviewStatus c) 'changes requested')}}
-                      <span
-                        class='badge badge-changes'
-                      >{{this.openReviewCount c}}</span>
-                    {{else if (eq (this.reviewStatus c) 'awaiting review')}}
-                      <span class='badge badge-waiting'>?</span>
-                    {{/if}}
-                  </span>
+                  <span class='blocked-name'>{{c.concept}}</span>
+                  <span class='blocked-note'>{{if
+                      c.notes
+                      c.notes
+                      'Blocked — no reason recorded'
+                    }}</span>
                 </button>
-              {{else}}
-                <p class='empty'>No concepts match the current filters</p>
               {{/each}}
             </div>
           </section>
         {{/if}}
+
+        <section class='panel wall-panel'>
+          <h2>The matrix — every concept, its evidence right now</h2>
+          <div class='wall'>
+            {{#each this.layerBands as |band|}}
+              <div class='band'>
+                <button
+                  type='button'
+                  class='band-head'
+                  title='Show layer {{band.layer}} in the grid'
+                  {{on 'click' (fn this.drillLayer band.layer)}}
+                >
+                  <span class='band-id'>{{band.layer}}</span>
+                  <span class='band-name'>{{band.layerName}}</span>
+                  <span class='band-count'>{{band.verified}}/{{band.total}}
+                    verified · {{band.coded}} coded</span>
+                  <div class='band-bar'>
+                    <div class='bar-code' style={{band.codedStyle}}></div>
+                    <div
+                      class='bar-verified'
+                      style={{band.verifiedStyle}}
+                    ></div>
+                  </div>
+                </button>
+                <div class='band-cells'>
+                  {{#each band.cells as |cell|}}
+                    <button
+                      type='button'
+                      class='cell {{cell.cls}}'
+                      title={{cell.hint}}
+                      {{on 'click' (fn this.openCard cell.card)}}
+                    ></button>
+                  {{/each}}
+                </div>
+              </div>
+            {{/each}}
+          </div>
+          <div class='legend'>
+            {{#each this.wallLegend as |item|}}
+              <button
+                type='button'
+                class='legend-item'
+                {{on 'click' (fn this.drillSpecState item.key)}}
+              >
+                <span class='legend-dot' style={{item.dotStyle}}></span>
+                {{item.label}}
+              </button>
+            {{/each}}
+          </div>
+        </section>
+
+        <section class='two-col'>
+          <div class='panel'>
+            <h2>Spec quality — six checks, computed live</h2>
+            <div class='state-list'>
+              {{#each this.qualityRows as |row|}}
+                <button
+                  type='button'
+                  class='state-row'
+                  {{on 'click' (fn this.drillBucket row.value)}}
+                >
+                  <span class='state-name'>
+                    <span class='legend-dot' style={{row.dotStyle}}></span>
+                    {{row.label}}
+                  </span>
+                  <span class='state-count'>{{row.count}}
+                    <span class='chev'>›</span></span>
+                </button>
+              {{/each}}
+            </div>
+            <p class='tier-note'>Gold = verified Spec, populated example,
+              substantial readMe, consumed, reused, right spec kind. The bar
+              is set by the top-10 exemplars in
+              spec-quality-standard.md.</p>
+          </div>
+
+          <div class='panel'>
+            <h2>Next best actions</h2>
+            <div class='state-list'>
+              <button
+                type='button'
+                class='state-row'
+                {{on 'click' (fn this.drillSpecState 'catalog')}}
+              >
+                <span class='state-name'>Catalog code without a Spec — cheap
+                  wins</span>
+                <span
+                  class='state-count'
+                >{{this.catalogAvailable.length}}
+                  <span class='chev'>›</span></span>
+              </button>
+              <button
+                type='button'
+                class='state-row'
+                {{on 'click' (fn this.drillSpecState 'platform')}}
+              >
+                <span class='state-name'>Platform code without a Spec</span>
+                <span
+                  class='state-count'
+                >{{this.platformAvailable.length}}
+                  <span class='chev'>›</span></span>
+              </button>
+              <button
+                type='button'
+                class='state-row'
+                {{on 'click' (fn this.drillBucket 'thin')}}
+              >
+                <span class='state-name'>Thin specs to lift (≤3 checks)</span>
+                <span class='state-count'>{{this.thinCount}}
+                  <span class='chev'>›</span></span>
+              </button>
+            </div>
+            <p class='tier-note'>{{this.missingExampleCount}}
+              verified specs still lack an example — the single biggest
+              quality gap, and each is one fixture away from moving up.</p>
+          </div>
+        </section>
+
+        <section class='panel grid-panel' id='matrix-concept-grid'>
+          <div class='table-head'>
+            <h2>Concepts</h2>
+            <span class='count'>{{this.filtered.length}} shown</span>
+          </div>
+          <FilterChips
+            @options={{this.bucketChips}}
+            @value={{this.bucketFilter}}
+            @onValueChange={{this.setBucket}}
+          />
+          <div class='filters'>
+            <select aria-label='Layer' {{on 'change' this.setLayer}}>
+              <option value='all' selected={{eq this.layerFilter 'all'}}>All
+                layers</option>
+              {{#each this.layerOptions as |opt|}}
+                <option
+                  value={{opt}}
+                  selected={{eq this.layerFilter opt}}
+                >Layer {{opt}}</option>
+              {{/each}}
+            </select>
+            <select aria-label='Lane' {{on 'change' this.setLane}}>
+              <option value='all' selected={{eq this.laneFilter 'all'}}>All
+                lanes</option>
+              {{#each this.laneOptions as |opt|}}
+                <option
+                  value={{opt}}
+                  selected={{eq this.laneFilter opt}}
+                >{{opt}}</option>
+              {{/each}}
+            </select>
+            <select aria-label='Evidence tier' {{on 'change' this.setTier}}>
+              <option value='all' selected={{eq this.tierFilter 'all'}}>All
+                tiers</option>
+              {{#each this.tierOptions as |opt|}}
+                <option
+                  value={{opt}}
+                  selected={{eq this.tierFilter opt}}
+                >{{opt}}</option>
+              {{/each}}
+            </select>
+            <SearchInput
+              class='search'
+              @value={{this.query}}
+              @placeholder='Search concept, symbol, provenance…'
+              @onInput={{this.setQuery}}
+            />
+            {{#if this.activeSpecState}}
+              <button
+                type='button'
+                class='active-chip'
+                {{on 'click' this.clearSpecState}}
+              >{{this.activeSpecState.label}} ✕</button>
+            {{/if}}
+          </div>
+          {{#if this.filtered.length}}
+            <div class='grid-scroll'>
+              <DataGrid
+                @columns={{gridColumns}}
+                @rows={{this.gridRows}}
+                @rowKey='symbol'
+              >
+                <:cell as |row column|>
+                  {{#if (eq column.key 'concept')}}
+                    <button
+                      type='button'
+                      class='concept-link'
+                      {{on 'click' (fn this.openCard (getCardOf row))}}
+                    >{{row.concept}}</button>
+                  {{else if (eq column.key 'score')}}
+                    <span class='q-chip q-{{row.qkey}}'>{{row.quality}}
+                      {{#if (isScored row.score)}}·
+                        {{row.score}}/6{{/if}}</span>
+                  {{else}}
+                    {{get row column.key}}
+                  {{/if}}
+                </:cell>
+              </DataGrid>
+            </div>
+          {{else}}
+            <EmptyState
+              @title='No concepts match'
+              @message='Clear a filter or the search to widen the view'
+            />
+          {{/if}}
+        </section>
       </article>
       <style scoped>
         .tracker {
@@ -964,80 +796,35 @@ export class MatrixTracker extends CardDef {
           margin: 0;
           font-size: 0.875rem;
           color: var(--muted-foreground, #6b7280);
+          max-width: 52rem;
         }
         .chev {
           color: var(--muted-foreground, #9ca3af);
           font-weight: 700;
         }
-        .funnel {
-          display: flex;
-          flex-direction: column;
-          gap: 0.25rem;
-          max-width: 34rem;
-          margin-top: 0.375rem;
-        }
-        .funnel-row {
+        .stat-band {
           display: grid;
-          grid-template-columns: 7.5rem 1fr 3rem 0.75rem;
-          align-items: center;
-          gap: 0.625rem;
+          grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+          gap: 0.75rem;
+        }
+        .stat-cell {
           font: inherit;
-          font-size: 0.8125rem;
-          padding: 0.125rem 0.25rem;
-          margin: -0.125rem -0.25rem;
-          border: none;
-          border-radius: 0.375rem;
-          background: transparent;
-          color: inherit;
           text-align: left;
+          padding: 0.875rem 1rem;
+          border: 1px solid var(--border, #e5e7eb);
+          border-radius: 0.75rem;
+          background: var(--card, #ffffff);
+          color: inherit;
           cursor: pointer;
         }
-        .funnel-row:hover {
-          background: var(--muted, #f3f4f6);
+        .stat-cell:hover {
+          border-color: var(--foreground, #111111);
         }
-        .funnel-label {
-          color: var(--muted-foreground, #6b7280);
+        .stat-static {
+          cursor: default;
         }
-        .funnel-bar {
-          height: 0.5rem;
-          border-radius: 999px;
-          background: var(--muted, #f3f4f6);
-          overflow: hidden;
-        }
-        .funnel-fill {
-          height: 100%;
-          border-radius: 999px;
-          background: var(--tier-platform-fg, #16a34a);
-        }
-        .funnel-row:nth-child(2) .funnel-fill {
-          background: var(--state-progress-fg, #2563eb);
-        }
-        .funnel-row:nth-child(3) .funnel-fill {
-          background: var(--tier-listing-fg, #7c3aed);
-        }
-        .funnel-count {
-          font-weight: 700;
-          font-variant-numeric: tabular-nums;
-          text-align: right;
-        }
-        /* Doubled class beats the later .queue-row declaration — with equal
-           specificity the 5-column queue grid won, squeezing the backlog
-           label into the 2.5rem symbol column, one word per line. */
-        .queue-row.backlog-row {
-          grid-template-columns: 1fr auto;
-        }
-        .backlog-row .cell-concept {
-          white-space: normal;
-          font-weight: 500;
-        }
-        .backlog-count {
-          font-weight: 700;
-          font-variant-numeric: tabular-nums;
-        }
-        .summary {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
-          gap: 1rem;
+        .stat-static:hover {
+          border-color: var(--border, #e5e7eb);
         }
         .panel {
           border: 1px solid var(--border, #e5e7eb);
@@ -1053,55 +840,130 @@ export class MatrixTracker extends CardDef {
           letter-spacing: 0.1em;
           color: var(--muted-foreground, #6b7280);
         }
-        .tier-note {
-          margin: 0.75rem 0 0;
-          font-size: 0.75rem;
-          line-height: 1.4;
-          color: var(--muted-foreground, #6b7280);
-        }
-        .layer-list {
-          display: flex;
-          flex-direction: column;
-          gap: 0.5rem;
-        }
-        .layer-row {
-          display: grid;
-          grid-template-columns: 2.5rem 1fr auto;
-          grid-template-rows: auto auto;
-          align-items: baseline;
-          column-gap: 0.5rem;
-          row-gap: 0.25rem;
+        .report-panel .report-body {
+          display: block;
           width: 100%;
           font: inherit;
-          font-size: 0.8125rem;
-          padding: 0.25rem 0.375rem;
+          text-align: left;
+          padding: 0;
           border: none;
-          border-radius: 0.375rem;
           background: transparent;
           color: inherit;
-          text-align: left;
           cursor: pointer;
+          border-radius: 0.5rem;
         }
-        .layer-row:hover {
+        .report-body:hover {
           background: var(--muted, #f3f4f6);
         }
-        .layer-id {
-          font-weight: 700;
-          font-variant-numeric: tabular-nums;
+        .report-body :deep(.boxel-card-container) {
+          box-shadow: none;
+          background: transparent;
         }
-        .layer-name {
+        .blockers-panel {
+          border-color: var(--state-blocked-fg, #991b1b);
+        }
+        .blockers-panel h2 {
+          color: var(--state-blocked-fg, #991b1b);
+        }
+        .blocker-list {
+          display: flex;
+          flex-direction: column;
+          gap: 0.375rem;
+        }
+        .blocker-item {
+          font: inherit;
+          text-align: left;
+          padding: 0;
+          border: 1px solid var(--border, #e5e7eb);
+          border-radius: 0.5rem;
+          background: transparent;
+          color: inherit;
+          cursor: pointer;
+        }
+        .blocker-item:hover {
+          background: var(--muted, #f3f4f6);
+        }
+        .blocker-item :deep(.boxel-card-container) {
+          box-shadow: none;
+          background: transparent;
+        }
+        .blocked-concept {
+          display: grid;
+          grid-template-columns: 2.5rem auto 1fr;
+          gap: 0.5rem;
+          align-items: baseline;
+          font: inherit;
+          font-size: 0.8125rem;
+          text-align: left;
+          padding: 0.4375rem 0.625rem;
+          border: 1px solid var(--border, #e5e7eb);
+          border-radius: 0.5rem;
+          background: transparent;
+          color: inherit;
+          cursor: pointer;
+        }
+        .blocked-concept:hover {
+          background: var(--muted, #f3f4f6);
+        }
+        .blocked-name {
+          font-weight: 600;
+          white-space: nowrap;
+        }
+        .blocked-note {
+          font-size: 0.75rem;
+          color: var(--muted-foreground, #6b7280);
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
         }
-        .layer-count {
+        .wall {
+          display: flex;
+          flex-direction: column;
+          gap: 0.875rem;
+        }
+        .band {
+          display: flex;
+          flex-direction: column;
+          gap: 0.375rem;
+        }
+        .band-head {
+          display: grid;
+          grid-template-columns: 2.5rem auto 1fr;
+          grid-template-rows: auto auto;
+          align-items: baseline;
+          column-gap: 0.625rem;
+          row-gap: 0.25rem;
+          font: inherit;
+          font-size: 0.8125rem;
+          text-align: left;
+          padding: 0.25rem 0.375rem;
+          margin: -0.25rem -0.375rem 0;
+          border: none;
+          border-radius: 0.375rem;
+          background: transparent;
+          color: inherit;
+          cursor: pointer;
+        }
+        .band-head:hover {
+          background: var(--muted, #f3f4f6);
+        }
+        .band-id {
+          font-weight: 700;
+          font-variant-numeric: tabular-nums;
+        }
+        .band-name {
+          font-weight: 600;
+        }
+        .band-count {
+          justify-self: end;
+          font-size: 0.75rem;
           color: var(--muted-foreground, #6b7280);
           font-variant-numeric: tabular-nums;
         }
-        .bar {
+        .band-bar {
           position: relative;
           grid-column: 1 / -1;
-          height: 0.375rem;
+          height: 0.25rem;
           border-radius: 999px;
           background: var(--muted, #f3f4f6);
           overflow: hidden;
@@ -1118,6 +980,71 @@ export class MatrixTracker extends CardDef {
         .bar-verified {
           background: var(--tier-platform-fg, #16a34a);
         }
+        .band-cells {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 3px;
+        }
+        .cell {
+          width: 12px;
+          height: 12px;
+          padding: 0;
+          border: none;
+          border-radius: 3px;
+          cursor: pointer;
+        }
+        .cell:hover {
+          transform: scale(1.5);
+          outline: 1px solid var(--foreground, #111111);
+        }
+        .sp-verified {
+          background: #16a34a;
+        }
+        .sp-catalog {
+          background: #7c3aed;
+        }
+        .sp-platform {
+          background: #2563eb;
+        }
+        .sp-none {
+          background: var(--muted, #e5e7eb);
+        }
+        .legend {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.75rem;
+          margin-top: 0.875rem;
+        }
+        .legend-item {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.375rem;
+          font: inherit;
+          font-size: 0.75rem;
+          color: var(--muted-foreground, #6b7280);
+          padding: 0.125rem 0.375rem;
+          margin: -0.125rem -0.375rem;
+          border: none;
+          border-radius: 0.375rem;
+          background: transparent;
+          cursor: pointer;
+        }
+        .legend-item:hover {
+          background: var(--muted, #f3f4f6);
+          color: var(--foreground, #111111);
+        }
+        .legend-dot {
+          display: inline-block;
+          width: 0.625rem;
+          height: 0.625rem;
+          border-radius: 3px;
+          flex-shrink: 0;
+        }
+        .two-col {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+          gap: 1rem;
+        }
         .state-list {
           display: flex;
           flex-direction: column;
@@ -1127,6 +1054,7 @@ export class MatrixTracker extends CardDef {
           display: flex;
           justify-content: space-between;
           align-items: center;
+          gap: 0.75rem;
           width: 100%;
           font: inherit;
           font-size: 0.8125rem;
@@ -1141,57 +1069,27 @@ export class MatrixTracker extends CardDef {
         .state-row:hover {
           background: var(--muted, #f3f4f6);
         }
+        .state-name {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.5rem;
+        }
         .state-count {
           font-weight: 700;
           font-variant-numeric: tabular-nums;
+          white-space: nowrap;
         }
-        .verify-row {
-          margin-top: 0.75rem;
-          display: flex;
-          flex-wrap: wrap;
-          gap: 0.375rem;
-        }
-        .chip {
-          display: inline-flex;
-          align-items: center;
-          gap: 0.25rem;
-          font: inherit;
+        .tier-note {
+          margin: 0.75rem 0 0;
           font-size: 0.75rem;
-          font-weight: 600;
-          padding: 0.25rem 0.625rem;
-          border-radius: 999px;
-          cursor: pointer;
+          line-height: 1.4;
+          color: var(--muted-foreground, #6b7280);
         }
-        .chip-verified {
-          border: 1px solid var(--state-done-fg, #166534);
-          background: var(--state-done-bg, #dcfce7);
-          color: var(--state-done-fg, #166534);
-        }
-        .chip-verified:hover {
-          background: var(--state-done-fg, #166534);
-          color: var(--state-done-bg, #dcfce7);
-        }
-        .chip-lag {
-          border: 1px solid var(--state-next-fg, #92400e);
-          background: var(--state-next-bg, #fef3c7);
-          color: var(--state-next-fg, #92400e);
-        }
-        .chip-lag:hover {
-          background: var(--state-next-fg, #92400e);
-          color: var(--state-next-bg, #fef3c7);
-        }
-        .chip .chev {
-          color: inherit;
-          opacity: 0.7;
-        }
-        .active-filters {
-          display: flex;
-          gap: 0.375rem;
-        }
-        .table-panel {
+        .grid-panel {
           display: flex;
           flex-direction: column;
           gap: 0.75rem;
+          scroll-margin-top: 1rem;
         }
         .table-head {
           display: flex;
@@ -1219,253 +1117,83 @@ export class MatrixTracker extends CardDef {
           color: inherit;
         }
         .search {
-          max-width: 18rem;
+          min-width: 16rem;
         }
-        .rows {
-          display: flex;
-          flex-direction: column;
-          max-height: 34rem;
-          overflow-y: auto;
-          border: 1px solid var(--border, #e5e7eb);
-          border-radius: 0.5rem;
-        }
-        .tab-bar {
-          display: flex;
-          gap: 0.25rem;
-          border-bottom: 1px solid var(--border, #e5e7eb);
-        }
-        .tab {
-          font: inherit;
-          font-size: 0.8125rem;
-          font-weight: 600;
-          padding: 0.5rem 0.875rem;
-          background: transparent;
-          border: none;
-          border-bottom: 2px solid transparent;
-          color: var(--muted-foreground, #6b7280);
-          cursor: pointer;
-        }
-        .tab.active {
-          color: var(--foreground, #111111);
-          border-bottom-color: var(--foreground, #111111);
-        }
-        .queue-grid {
-          display: grid;
-          grid-template-columns: minmax(0, 3fr) minmax(18rem, 2fr);
-          gap: 1rem;
-          align-items: start;
-        }
-        .queue-side {
-          display: flex;
-          flex-direction: column;
-          gap: 1rem;
-        }
-        .queue-panel {
-          display: flex;
-          flex-direction: column;
-          gap: 0.75rem;
-        }
-        .chip-row {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 0.375rem;
-        }
-        .filter-chip {
-          display: inline-flex;
-          align-items: center;
-          gap: 0.375rem;
+        .active-chip {
           font: inherit;
           font-size: 0.75rem;
           font-weight: 600;
           padding: 0.25rem 0.625rem;
           border-radius: 999px;
-          border: 1px solid var(--border, #e5e7eb);
-          background: transparent;
-          color: var(--muted-foreground, #6b7280);
-          cursor: pointer;
-        }
-        .filter-chip:hover {
-          background: var(--muted, #f3f4f6);
-        }
-        .filter-chip.active {
-          border-color: var(--foreground, #111111);
+          border: 1px solid var(--foreground, #111111);
           background: var(--foreground, #111111);
           color: var(--background, #ffffff);
+          cursor: pointer;
         }
-        .chip-count {
-          font-variant-numeric: tabular-nums;
-          font-weight: 700;
-        }
-        .queue-list,
-        .feed {
-          display: flex;
-          flex-direction: column;
-          gap: 0.375rem;
-          max-height: 28rem;
+        .grid-scroll {
+          max-height: 36rem;
           overflow-y: auto;
-        }
-        .queue-row {
-          display: grid;
-          grid-template-columns: 2.5rem 1fr auto 4.5rem 4rem;
-          gap: 0.5rem;
-          align-items: center;
-          padding: 0.4375rem 0.625rem;
-          font: inherit;
-          font-size: 0.8125rem;
-          text-align: left;
-          background: transparent;
           border: 1px solid var(--border, #e5e7eb);
           border-radius: 0.5rem;
-          cursor: pointer;
-          color: inherit;
         }
-        .queue-row:hover {
-          background: var(--muted, #f3f4f6);
-        }
-        .mini-chip {
-          font-size: 0.625rem;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.04em;
-          padding: 0.125rem 0.4375rem;
-          border-radius: 999px;
-          background: var(--state-done-bg, #dcfce7);
-          color: var(--state-done-fg, #166534);
-          white-space: nowrap;
-        }
-        .mini-missing {
-          background: var(--muted, #f3f4f6);
-          color: var(--muted-foreground, #6b7280);
-        }
-        .cell-time {
-          font-size: 0.6875rem;
-          color: var(--muted-foreground, #6b7280);
-          text-align: right;
-          white-space: nowrap;
-        }
-        .feed-item {
+        .concept-link {
+          font: inherit;
+          font-size: inherit;
+          font-weight: 600;
           padding: 0;
-          font: inherit;
-          text-align: left;
-          background: transparent;
-          border: 1px solid var(--border, #e5e7eb);
-          border-radius: 0.5rem;
-          cursor: pointer;
-          color: inherit;
-        }
-        .feed-item:hover {
-          background: var(--muted, #f3f4f6);
-        }
-        .feed-item :deep(.boxel-card-container) {
-          box-shadow: none;
-          background: transparent;
-        }
-        .badge {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          min-width: 1.25rem;
-          height: 1.25rem;
-          padding: 0 0.25rem;
-          border-radius: 999px;
-          font-size: 0.6875rem;
-          font-weight: 700;
-        }
-        .badge-approved {
-          background: var(--state-done-bg, #dcfce7);
-          color: var(--state-done-fg, #166534);
-        }
-        .badge-changes {
-          background: var(--state-blocked-bg, #fee2e2);
-          color: var(--state-blocked-fg, #991b1b);
-        }
-        .badge-waiting {
-          background: var(--state-next-bg, #fef3c7);
-          color: var(--state-next-fg, #92400e);
-        }
-        .row {
-          display: grid;
-          grid-template-columns: 3rem 1fr 3rem 9.5rem 7.5rem 6.5rem 4.5rem 2.5rem;
-          gap: 0.5rem;
-          align-items: center;
-          padding: 0.4375rem 0.75rem;
-          font: inherit;
-          font-size: 0.8125rem;
-          text-align: left;
-          background: transparent;
           border: none;
-          border-bottom: 1px solid var(--border, #e5e7eb);
-          cursor: pointer;
+          background: transparent;
           color: inherit;
+          text-align: left;
+          cursor: pointer;
         }
-        .row-head {
-          cursor: default;
-          position: sticky;
-          top: 0;
-          z-index: 1;
-          background: var(--card, #ffffff);
-          font-size: 0.625rem;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.06em;
-          color: var(--muted-foreground, #6b7280);
-        }
-        .row:last-child {
-          border-bottom: none;
-        }
-        .row:not(.row-head):hover {
-          background: var(--muted, #f3f4f6);
+        .concept-link:hover {
+          text-decoration: underline;
         }
         .cell-symbol {
           font-family: var(--font-mono, monospace);
           font-weight: 700;
         }
-        .cell-concept {
-          font-weight: 600;
-          overflow: hidden;
-          text-overflow: ellipsis;
+        .q-chip {
+          font-size: 0.6875rem;
+          font-weight: 700;
+          padding: 0.125rem 0.4375rem;
+          border-radius: 999px;
           white-space: nowrap;
         }
-        .cell-layer {
-          font-variant-numeric: tabular-nums;
-          color: var(--muted-foreground, #6b7280);
+        .q-gold {
+          background: #fef9c3;
+          color: #854d0e;
         }
-        .cell-lane,
-        .cell-tier,
-        .cell-state,
-        .cell-owner {
-          font-size: 0.75rem;
-          color: var(--muted-foreground, #6b7280);
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
+        .q-solid {
+          background: var(--state-done-bg, #dcfce7);
+          color: var(--state-done-fg, #166534);
         }
-        .empty {
-          margin: 0;
-          padding: 1rem;
-          font-size: 0.8125rem;
-          color: var(--muted-foreground, #6b7280);
+        .q-adequate {
+          background: var(--tier-shared-bg, #dbeafe);
+          color: var(--tier-shared-fg, #1e40af);
         }
-        @media (max-width: 800px) {
-          .queue-grid {
-            grid-template-columns: 1fr;
-          }
+        .q-thin,
+        .q-none {
+          background: var(--muted, #f3f4f6);
+          color: var(--muted-foreground, #6b7280);
         }
         @media (max-width: 640px) {
-          .row {
-            grid-template-columns: 3rem 1fr 6.5rem;
-          }
-          .cell-layer,
-          .cell-lane,
-          .cell-tier,
-          .cell-owner {
-            display: none;
-          }
-          .row-head {
+          .band-count {
             display: none;
           }
         }
       </style>
     </template>
   };
+}
+
+const gridColumns = GRID_COLUMNS;
+
+function getCardOf(row: Row): CardDef {
+  return row['__card'] as CardDef;
+}
+
+function isScored(score: number): boolean {
+  return score >= 0;
 }

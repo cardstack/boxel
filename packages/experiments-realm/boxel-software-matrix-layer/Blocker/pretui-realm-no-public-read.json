@@ -1,0 +1,21 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "blockerTitle": "Pretui realm has no public read",
+      "detail": "The tracker and concept cards import pretui components cross-realm from `richard.tan1/pretui`. That realm requires an authorized session, so a **local render of any pretui consumer fails module resolution** — the matrix-layer mirror in `packages/experiments-realm` can no longer be verified at localhost:4201 for these cards. Verify on staging instead, or grant the pretui realm public read.",
+      "status": "open",
+      "source": "https://realms-staging.stack.cards/richard.tan1/pretui/",
+      "cardInfo": {
+        "name": "Pretui realm has no public read",
+        "summary": "Local render of pretui consumers fails; verify on staging"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../blocker",
+        "name": "Blocker"
+      }
+    }
+  }
+}

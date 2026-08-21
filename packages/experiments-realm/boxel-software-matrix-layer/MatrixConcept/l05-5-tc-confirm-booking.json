@@ -17,7 +17,7 @@
       "domainKit": "Events",
       "owner": "richard",
       "workState": "Done",
-      "notes": "App 4: Club Membership & Ticketing — UI-exercised: Invited booking confirmed to Going from the app",
+      "notes": "App 4: Club Membership & Ticketing \u2014 UI-exercised: Invited booking confirmed to Going from the app",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/confirm-booking",
       "specTarget": "shared block",
       "consumers": "club-membership",
@@ -28,7 +28,10 @@
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      }
+      },
+      "specKind": "command",
+      "specExampleCount": 1,
+      "specReadmeChars": 927
     },
     "meta": {
       "adoptsFrom": {
