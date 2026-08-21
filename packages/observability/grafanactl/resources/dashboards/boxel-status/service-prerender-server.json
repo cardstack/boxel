@@ -24,7 +24,7 @@
         }
       ]
     },
-    "description": "Per-service deep-dive for the Prerender Server ECS service. Currently stub-only — shows filtered logs from Loki. CloudWatch CPU / memory / running-task-count panels are TBD and will land when ECS cluster naming is standardized in observability config.",
+    "description": "Per-service deep-dive for the Prerender Server ECS service. Request rate and Node heap come from the service's own log lines via Loki, alongside filtered logs. CloudWatch CPU and running-task-count panels are TBD and will land when ECS cluster naming is standardized in observability config.",
     "editable": true,
     "fiscalYearStartMonth": 0,
     "graphTooltip": 0,
@@ -204,12 +204,136 @@
           "type": "loki",
           "uid": "loki"
         },
+        "description": "The prerender server's own Node heap, from the `prerender-heap` log line each instance emits on a fixed interval. Charted as the highest value across instances in each window, because Loki carries no per-task label here and the instance closest to the limit is the one that matters.\n\n`limit` is the effective `--max-old-space-size`. V8 derives its default from visible memory rather than from the ECS memory setting, so this is the only place the value a running task actually took is readable. Reaching it is fatal: the process dies with `Reached heap limit`, ECS replaces the task, and the surviving instances inherit its realm affinities and serve renders from cold tabs.\n\n`used` climbing steadily between task restarts \u2014 rather than sawtoothing under load and settling when idle \u2014 means memory is being retained, not merely in use. `external` covers strings and buffers held outside the JS heap, where response serialisation holds memory that `used` does not account for.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisLabel": "MB",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineInterpolation": "linear",
+              "lineWidth": 1,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "decmbytes"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 8
+        },
+        "id": 3,
+        "options": {
+          "legend": {
+            "calcs": [
+              "mean",
+              "max"
+            ],
+            "displayMode": "table",
+            "placement": "right",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "none"
+          }
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "max_over_time({service=\"prerender\"} |~ \"prerender-heap\" | regexp \"heapUsedMB=(?P<heapUsedMB>[0-9]+)\" | unwrap heapUsedMB [$__interval])",
+            "legendFormat": "used",
+            "queryType": "range",
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "max_over_time({service=\"prerender\"} |~ \"prerender-heap\" | regexp \"heapLimitMB=(?P<heapLimitMB>[0-9]+)\" | unwrap heapLimitMB [$__interval])",
+            "legendFormat": "limit",
+            "queryType": "range",
+            "refId": "B"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "max_over_time({service=\"prerender\"} |~ \"prerender-heap\" | regexp \"rssMB=(?P<rssMB>[0-9]+)\" | unwrap rssMB [$__interval])",
+            "legendFormat": "rss",
+            "queryType": "range",
+            "refId": "C"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "max_over_time({service=\"prerender\"} |~ \"prerender-heap\" | regexp \"externalMB=(?P<externalMB>[0-9]+)\" | unwrap externalMB [$__interval])",
+            "legendFormat": "external",
+            "queryType": "range",
+            "refId": "D"
+          }
+        ],
+        "title": "Node heap (highest instance)",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
         "description": "Last 1000 log lines from the prerender server. Loki label `service=\"prerender\"` (the dashboard / ECS service name is `prerender-server`; alloy/config.alloy strips the `-server` suffix when assigning the label). Drill-throughs from Overview land here.",
         "gridPos": {
           "h": 16,
           "w": 24,
           "x": 0,
-          "y": 8
+          "y": 16
         },
         "id": 1,
         "options": {

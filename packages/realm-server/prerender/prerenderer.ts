@@ -21,6 +21,7 @@ import { toAffinityKey } from './affinity.ts';
 import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel.ts';
 import { AffinityActivityTracker } from './affinity-activity.ts';
 import { AsyncSemaphore } from './async-semaphore.ts';
+import { formatHeapTelemetry, heapTelemetry } from './heap-telemetry.ts';
 import {
   type BatchOwner,
   computeBatchClearCacheGate,
@@ -989,6 +990,17 @@ export class Prerenderer {
       return;
     }
     this.#queueSnapshotInterval = setInterval(() => {
+      // Emitted before the quiet-path return below, and on its own line
+      // rather than appended to the snapshot. The heap holds memory from
+      // work already finished and keeps growing with the pool idle, so
+      // gating this on current load would hide exactly the growth that
+      // has no queue behind it to explain it. Kept separate from the
+      // snapshot line so existing greps of that line are unaffected.
+      try {
+        log.info('prerender-heap %s', formatHeapTelemetry(heapTelemetry()));
+      } catch (e) {
+        log.warn('heap telemetry log failed:', e);
+      }
       try {
         let snap = this.#pagePool.getQueueDepthSnapshot();
         if (snap.affinities.length === 0 && snap.totalPending === 0) {
