@@ -18,7 +18,7 @@
     "@universal-ember/test-support": "catalog:",
     "concurrently": "catalog:",
     "ember-concurrency": "catalog:",
-    "ember-eslint-parser": "^0.13.0",
+    "ember-eslint-parser": "^0.14.6",
     "ember-modifier": "^4.1.0",
     "ember-resources": "catalog:",
     "ember-template-lint": "catalog:",
