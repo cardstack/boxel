@@ -69,6 +69,11 @@ export type MediaCacheLane = 'declared' | 'on-demand';
 // one canonical spec at one generation.
 export interface MediaCacheEntryKey {
   realmURL: string;
+  // The source instance's canonical URL in its extensionless card-id form
+  // (matching `boxel_index.file_alias`); the `.json`-suffixed file-URL form
+  // (matching `boxel_index.url`) also joins correctly, but writers should
+  // store the id form — it is the shape every other screenshot surface
+  // (durable URLs, `meta.screenshots`) speaks.
   sourceURL: string;
   captureSpecHash: string;
   sourceGeneration: number;
@@ -224,6 +229,65 @@ export async function touchMediaCacheEntry(
   ] as Expression);
 }
 
+// Serving-path lookup: the ledger entry for one capture. With a
+// `sourceGeneration` the lookup is the exact primary key (the caller's cache
+// key pins the generation); without one it is the capture's newest
+// generation — the row a re-capture repointed, whatever generation stamped
+// it.
+export async function findMediaCacheEntry(
+  dbAdapter: DBAdapter,
+  {
+    realmURL,
+    sourceURL,
+    captureSpecHash,
+    sourceGeneration,
+  }: Omit<MediaCacheEntryKey, 'sourceGeneration'> & {
+    sourceGeneration?: number;
+  },
+): Promise<MediaCacheEntry | undefined> {
+  let rows = (await query(dbAdapter, [
+    `SELECT * FROM media_cache_ledger WHERE realm_url =`,
+    param(realmURL),
+    `AND source_url =`,
+    param(sourceURL),
+    `AND capture_spec_hash =`,
+    param(captureSpecHash),
+    ...(sourceGeneration != null
+      ? ([`AND source_generation =`, param(sourceGeneration)] as Expression)
+      : []),
+    `ORDER BY source_generation DESC LIMIT 1`,
+  ] as Expression)) as {
+    realm_url: string;
+    source_url: string;
+    capture_spec_hash: string;
+    source_generation: number | string;
+    object_key: string;
+    source_content_hash: string | null;
+    lane: MediaCacheLane;
+    content_type: string;
+    size_bytes: number | string;
+    created_at: number | string;
+    last_accessed_at: number | string;
+  }[];
+  let row = rows[0];
+  if (!row) {
+    return undefined;
+  }
+  return {
+    realmURL: row.realm_url,
+    sourceURL: row.source_url,
+    captureSpecHash: row.capture_spec_hash,
+    sourceGeneration: Number(row.source_generation),
+    objectKey: row.object_key,
+    sourceContentHash: row.source_content_hash,
+    lane: row.lane,
+    contentType: row.content_type,
+    sizeBytes: Number(row.size_bytes),
+    createdAt: Number(row.created_at),
+    lastAccessedAt: Number(row.last_accessed_at),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // GC sweep read side — mirrors `prerender-html-reconcile.ts`: pure queries
 // plus a pure planning step; the enqueue/delete orchestration lives in the
@@ -273,7 +337,8 @@ export async function findMediaCacheGcCandidates(
        CASE
          WHEN EXISTS (
            SELECT 1 FROM boxel_index i
-           WHERE i.url = r.source_url AND i.realm_url = r.realm_url
+           WHERE (i.url = r.source_url OR i.file_alias = r.source_url)
+             AND i.realm_url = r.realm_url
              AND i.type = 'instance' AND i.is_deleted IS TRUE
          ) THEN 'tombstoned'
          WHEN EXISTS (
@@ -292,7 +357,8 @@ export async function findMediaCacheGcCandidates(
     `AND (
        EXISTS (
          SELECT 1 FROM boxel_index i
-         WHERE i.url = r.source_url AND i.realm_url = r.realm_url
+         WHERE (i.url = r.source_url OR i.file_alias = r.source_url)
+           AND i.realm_url = r.realm_url
            AND i.type = 'instance' AND i.is_deleted IS TRUE
        )
        OR EXISTS (
