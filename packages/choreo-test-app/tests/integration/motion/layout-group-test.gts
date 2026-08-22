@@ -1,5 +1,5 @@
 /**
- * Port of framer-motion/src/components/LayoutGroup/__tests__/LayoutGroup.test.tsx (motion@bbabb00).
+ * Port of Motion's packages/framer-motion/src/components/LayoutGroup/__tests__/LayoutGroup.test.tsx (motion@bbabb00).
  * The React Consumer reads LayoutGroupContext; here the group yields the same context to its block.
  */
 import { module, test } from 'qunit';

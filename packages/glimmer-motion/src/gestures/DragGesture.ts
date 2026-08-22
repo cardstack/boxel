@@ -1,5 +1,5 @@
-// @ts-nocheck — vendored verbatim; type-checked upstream under framer-motion's tsconfig
-// Vendored from framer-motion/src/gestures/drag/index.ts (motion@bbabb00) — framework-free; only imports were re-pointed.
+// @ts-nocheck — vendored verbatim; type-checked upstream under Motion's tsconfig
+// Vendored from Motion's packages/framer-motion/src/gestures/drag/index.ts (motion@bbabb00) — framework-free; only imports were re-pointed.
 import { Feature } from "motion-dom"
 import type { VisualElement } from "motion-dom"
 import { noop } from "motion-utils"

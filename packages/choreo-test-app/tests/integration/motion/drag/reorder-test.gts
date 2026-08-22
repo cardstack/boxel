@@ -1,5 +1,5 @@
 /**
- * Ports of framer-motion/cypress/integration/drag-tabs.ts (fixture drag-tabs) and drag-to-reorder.ts
+ * Ports of Motion's packages/framer-motion/cypress/integration/drag-tabs.ts (fixture drag-tabs) and drag-to-reorder.ts
  * (fixture drag-to-reorder), motion@bbabb00. The fixtures' `body` styles apply to the fixture viewport
  * (#ember-testing) here; MotionConfig's transition is passed to the elements it reached.
  */
@@ -235,7 +235,7 @@ class ListItem extends Component<{ Args: { item: string; axis: 'x' | 'y'; group:
     </ReorderItem>
   </template>
 }
-/** framer-motion's animate(motionValue, target) */
+/** Motion's animate(motionValue, target) */
 function animateShadow(value: MotionValue<string>, target: string) {
   value.start(animateMotionValue('boxShadow', value, target, {}));
 }

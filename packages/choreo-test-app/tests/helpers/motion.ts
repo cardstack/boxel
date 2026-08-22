@@ -1,6 +1,6 @@
 import { frame, microtask } from 'motion-dom';
 
-/** the same helpers framer-motion's own suite uses */
+/** the same helpers Motion's own suite uses */
 export const nextFrame = () => new Promise<void>((resolve) => frame.postRender(() => resolve()));
 export const nextMicrotask = () => new Promise<void>((resolve) => microtask.postRender(() => resolve()));
 export const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));

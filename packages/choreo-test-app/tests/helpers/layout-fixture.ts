@@ -1,5 +1,5 @@
 /**
- * Harness for the Cypress layout fixtures (framer-motion/cypress/integration/layout-*.ts).
+ * Harness for the Cypress layout fixtures (Motion's packages/framer-motion/cypress/integration/layout-*.ts).
  *
  * Cypress visits dev/react at a 1000×660 viewport and measures getBoundingClientRect() against the
  * page origin. ember-testing renders inside a 50%-scaled container, so for these suites the container

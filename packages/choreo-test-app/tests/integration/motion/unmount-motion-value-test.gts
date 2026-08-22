@@ -1,5 +1,5 @@
 /**
- * Port of framer-motion/src/motion/__tests__/unmount-motion-value.test.tsx (motion@bbabb00).
+ * Port of Motion's packages/framer-motion/src/motion/__tests__/unmount-motion-value.test.tsx (motion@bbabb00).
  *
  * Regression coverage for motion#3315: VisualElement.unmount() must not stop animations on the motion
  * values it owns synchronously — a remount may re-subscribe before the next frame (React 19 reorder

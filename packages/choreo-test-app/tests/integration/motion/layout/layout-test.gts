@@ -1,5 +1,5 @@
 /**
- * Port of framer-motion/cypress/integration/layout.ts (motion@bbabb00) with its fixtures from
+ * Port of Motion's packages/framer-motion/cypress/integration/layout.ts (motion@bbabb00) with its fixtures from
  * dev/react/src/tests/*. Each fixture is a Glimmer component; `?param=` becomes a component arg.
  * cy.visit → render, .trigger("click")/.click() → click(), .wait → wait, .should → should (retrying).
  * <MotionConfig transition> (layout-crossfade) is not part of the binding: the transition is passed

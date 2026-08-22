@@ -8,7 +8,7 @@ import { snapshotAll, requestSettle } from './layout';
 import { postRender } from './scheduler';
 
 /**
- * LayoutGroup for Glimmer — framer-motion's components/LayoutGroup:
+ * LayoutGroup for Glimmer — Motion's components/LayoutGroup:
  *   - `@id`: namespaces every `layoutId` beneath it (nested groups append: "a-b")
  *   - `@inherit`: true (default) shares the parent's projection group and id, "id" shares only the id,
  *     false starts a fresh group

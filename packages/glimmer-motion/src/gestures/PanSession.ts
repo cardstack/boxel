@@ -1,5 +1,5 @@
-// @ts-nocheck — vendored verbatim; type-checked upstream under framer-motion's tsconfig
-// Vendored from framer-motion/src/gestures/pan/PanSession.ts (motion@bbabb00) — framework-free; only imports were re-pointed.
+// @ts-nocheck — vendored verbatim; type-checked upstream under Motion's tsconfig
+// Vendored from Motion's packages/framer-motion/src/gestures/pan/PanSession.ts (motion@bbabb00) — framework-free; only imports were re-pointed.
 import type { EventInfo, PanHandler } from "motion-dom"
 import { cancelFrame, frame, frameData, isPrimaryPointer } from "motion-dom"
 import { millisecondsToSeconds, pipe, secondsToMilliseconds } from "motion-utils"

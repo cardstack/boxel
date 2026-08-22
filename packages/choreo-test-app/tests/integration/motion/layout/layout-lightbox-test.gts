@@ -1,5 +1,5 @@
 /**
- * Port of framer-motion/cypress/integration/layout-shared-lightbox-crossfade.ts (motion@bbabb00):
+ * Port of Motion's packages/framer-motion/cypress/integration/layout-shared-lightbox-crossfade.ts (motion@bbabb00):
  * children with layoutId animating back to their origin components. `?instant=true` becomes @instant;
  * useIsPresent() is the presence handle's isPresent. The upstream "switch" variant is commented out there.
  */

@@ -1,4 +1,4 @@
-// @ts-nocheck — vendored verbatim from framer-motion/src/components/Reorder/utils/check-reorder.ts
+// @ts-nocheck — vendored verbatim from Motion's packages/framer-motion/src/components/Reorder/utils/check-reorder.ts
 import { mixNumber } from "motion-dom"
 import { moveItem } from "motion-utils"
 import type { Point } from "motion-utils"

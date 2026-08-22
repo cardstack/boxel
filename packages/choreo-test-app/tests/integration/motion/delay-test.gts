@@ -1,5 +1,5 @@
 /**
- * Port of framer-motion/src/motion/__tests__/delay.test.tsx (motion@bbabb00).
+ * Port of Motion's packages/framer-motion/src/motion/__tests__/delay.test.tsx (motion@bbabb00).
  * Every case: a delayed animation has not moved by the next animation frame.
  */
 import { module, test } from 'qunit';

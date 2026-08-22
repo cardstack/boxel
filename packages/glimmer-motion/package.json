@@ -1,7 +1,7 @@
 {
   "name": "glimmer-motion",
   "version": "0.0.0",
-  "description": "framer-motion's React glue for Glimmer, on the motion-dom engine: {{motion}}, <Presence>, <LayoutGroup>, Reorder, drag",
+  "description": "Motion's React glue for Glimmer, on the motion-dom engine: {{motion}}, <Presence>, <LayoutGroup>, Reorder, drag",
   "keywords": [
     "ember-addon"
   ],

@@ -1,5 +1,5 @@
 /**
- * Ports of framer-motion/cypress/integration/drag-svg.ts (fixture drag-svg) and drag-svg-viewbox.ts
+ * Ports of Motion's packages/framer-motion/cypress/integration/drag-svg.ts (fixture drag-svg) and drag-svg-viewbox.ts
  * (fixture drag-svg-viewbox), motion@bbabb00. The commented-out upstream direction-lock cases stay out.
  * MotionConfig transformPagePoint → the `transformPagePoint` arg on the draggable itself.
  */

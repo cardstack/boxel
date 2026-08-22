@@ -68,7 +68,7 @@ export function layoutChange<T>(fn: () => T): T {
 }
 
 /**
- * framer-motion's useInstantLayoutTransition(): run a state change without layout animation —
+ * Motion's useInstantLayoutTransition(): run a state change without layout animation —
  * the root blocks the next update so no projection animates.
  */
 export function instantLayoutTransition(callback?: () => void) {

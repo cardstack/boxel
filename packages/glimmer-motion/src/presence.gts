@@ -8,7 +8,7 @@ import { flushPendingMounts } from './node';
 import { postRender } from './scheduler';
 
 /**
- * AnimatePresence for Glimmer — the same algorithm as framer-motion's
+ * AnimatePresence for Glimmer — the same algorithm as Motion's
  * components/AnimatePresence (diff present vs rendered, keep leavers until
  * every exit inside them completes, `exitComplete` map, mode="wait", custom,
  * onExitComplete, propagate).

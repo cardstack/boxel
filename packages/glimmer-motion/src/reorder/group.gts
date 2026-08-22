@@ -1,5 +1,5 @@
 /**
- * Reorder.Group for Glimmer — framer-motion/src/components/Reorder/Group.tsx.
+ * Reorder.Group for Glimmer — Motion's packages/framer-motion/src/components/Reorder/Group.tsx.
  * Renders a <ul> (or `@tag`) and yields the reorder context the items take as `@group`:
  *
  *   <ReorderGroup @values={{this.items}} @onReorder={{this.setItems}} @axis="x" as |group|>

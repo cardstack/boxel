@@ -1,4 +1,4 @@
-// @ts-nocheck — vendored verbatim from framer-motion/src/components/Reorder/utils/auto-scroll.ts
+// @ts-nocheck — vendored verbatim from Motion's packages/framer-motion/src/components/Reorder/utils/auto-scroll.ts
 const threshold = 50
 const maxSpeed = 25
 

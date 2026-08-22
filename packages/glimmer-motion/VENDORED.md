@@ -1,7 +1,7 @@
-# Vendored from framer-motion
+# Vendored from Motion
 
 Copied verbatim (marked `// @ts-nocheck`, type-checked upstream) from `motion` at commit `bbabb00`
-(`packages/framer-motion/src`), imports re-pointed at `motion-dom` / `motion-utils`. Re-diff these
+(the React package, `packages/framer-motion/src`), imports re-pointed at `motion-dom` / `motion-utils`. Re-diff these
 against upstream whenever `motion-dom` is bumped:
 
 | here | upstream |
@@ -13,4 +13,4 @@ against upstream whenever `motion-dom` is bumped:
 
 Everything else in `src/` is the Glimmer re-implementation of React glue (`motion` component lifecycle,
 AnimatePresence, LayoutGroup, MeasureLayout timing, Reorder.Group/Item). The test-app carries the ports of
-framer-motion's Jest suites and Cypress fixtures that pin the fidelity.
+Motion's Jest suites and Cypress fixtures that pin the fidelity.

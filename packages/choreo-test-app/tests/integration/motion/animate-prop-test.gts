@@ -1,5 +1,5 @@
 /**
- * Port of framer-motion/src/motion/__tests__/animate-prop.test.tsx (motion@bbabb00)
+ * Port of Motion's packages/framer-motion/src/motion/__tests__/animate-prop.test.tsx (motion@bbabb00)
  * to the Glimmer binding. Same cases, same assertions; only the render glue differs:
  *   render(<motion.div …/>) + rerender   →  render(<template>…{{motion …}}…</template>)
  *   rerender with new props              →  set a @tracked value, await settled()

@@ -1,5 +1,5 @@
 /**
- * Port of framer-motion/src/motion/__tests__/style-prop.test.tsx (motion@bbabb00).
+ * Port of Motion's packages/framer-motion/src/motion/__tests__/style-prop.test.tsx (motion@bbabb00).
  * `style` carries static values, transform shorthands (x/y/z) and MotionValues; the engine owns
  * whatever it has a value for, the binding applies the rest — the same split React's style attribute
  * and useStyle make. The first upstream case wraps in <MotionConfig isStatic>; nothing in it animates,

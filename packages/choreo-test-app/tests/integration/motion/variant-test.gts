@@ -1,5 +1,5 @@
 /**
- * Port of framer-motion/src/motion/__tests__/variant.test.tsx (motion@bbabb00).
+ * Port of Motion's packages/framer-motion/src/motion/__tests__/variant.test.tsx (motion@bbabb00).
  * Same cases and assertions; React glue → Glimmer glue (see animate-prop-test).
  * Nested motion.divs become nested elements carrying {{motion}}; variant context
  * and presence flow through the VisualElement tree, as MotionContext would.

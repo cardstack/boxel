@@ -1,4 +1,4 @@
-// @ts-nocheck — vendored verbatim from framer-motion/src/components/Reorder/utils/detect-axis.ts
+// @ts-nocheck — vendored verbatim from Motion's packages/framer-motion/src/components/Reorder/utils/detect-axis.ts
 import type { Axis, Box } from "motion-utils"
 import type { ReorderAxis } from "./types"
 

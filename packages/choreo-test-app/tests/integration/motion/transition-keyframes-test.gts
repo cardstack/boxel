@@ -1,5 +1,5 @@
 /**
- * Port of framer-motion/src/motion/__tests__/transition-keyframes.test.tsx (motion@bbabb00).
+ * Port of Motion's packages/framer-motion/src/motion/__tests__/transition-keyframes.test.tsx (motion@bbabb00).
  * Same cases and assertions; the upstream file fires a few `expect(promise).resolves` without awaiting —
  * here every case is awaited.
  */

@@ -1,5 +1,5 @@
 /**
- * Ports of the remaining framer-motion drag Cypress specs (motion@bbabb00):
+ * Ports of the remaining Motion drag Cypress specs (motion@bbabb00):
  * drag-input-propagation, drag-momentum, drag-framer-page, drag-rotated-parent, drag-scaled-parent,
  * drag-scroll-while-drag, drag-ref-constraints-{absolute-scrolled,element-resize,resize-handle},
  * drag-snap-animate-presence-exit, drag-snap-layout-id-swap, drag-layout-reorder-strict.

@@ -1,6 +1,6 @@
 /**
  * The two features the React layer contributes on top of the motion-dom engine
- * (ported from framer-motion/motion/features/animation/*). Everything else —
+ * (ported from Motion's packages/framer-motion/src/motion/features/animation/*). Everything else —
  * springs, keyframes, variants, projection (layout / layoutId) — lives in the engine.
  */
 import { DragGesture } from './gestures/DragGesture';
@@ -92,7 +92,7 @@ export function initFeatures() {
     animation: { isEnabled: isEnabled(featureProps['animation']!), Feature: AnimationFeature as any },
     exit: { isEnabled: isEnabled(featureProps['exit']!), Feature: ExitAnimationFeature as any },
     layout: { isEnabled: isEnabled(featureProps['layout']!), ProjectionNode: HTMLProjectionNode as any },
-    // the drag and pan gestures are vendored from framer-motion (they are not exported by motion-dom)
+    // the drag and pan gestures are vendored from Motion (they are not exported by motion-dom)
     drag: { isEnabled: isEnabled(featureProps['drag']!), Feature: DragGesture as any, ProjectionNode: HTMLProjectionNode as any },
     pan: { isEnabled: isEnabled(featureProps['pan']!), Feature: PanGesture as any },
   } as any);

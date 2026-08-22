@@ -1,5 +1,5 @@
 /**
- * Ports of framer-motion/cypress/integration/drag-nested.ts (fixture drag-layout-nested) and
+ * Ports of Motion's packages/framer-motion/cypress/integration/drag-nested.ts (fixture drag-layout-nested) and
  * layout-relative-drag.ts (fixture layout-relative-drag), motion@bbabb00. URL params → component args.
  */
 import { module, test } from 'qunit';

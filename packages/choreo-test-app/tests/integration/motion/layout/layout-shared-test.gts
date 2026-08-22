@@ -1,5 +1,5 @@
 /**
- * Port of framer-motion/cypress/integration/layout-shared.ts (motion@bbabb00) with its 18 fixtures.
+ * Port of Motion's packages/framer-motion/cypress/integration/layout-shared.ts (motion@bbabb00) with its 18 fixtures.
  * Each fixture is a Glimmer component; `?type=`/`?size=`/`?move=`/`?sibling=` become args. The two
  * upstream `it.skip` cases (A -> AB -> A switch) are skipped here too. <MotionConfig transition> is
  * passed to each motion element directly (the binding has no MotionConfig), and `key=` remounts are

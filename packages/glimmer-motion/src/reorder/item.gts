@@ -1,5 +1,5 @@
 /**
- * Reorder.Item for Glimmer — framer-motion/src/components/Reorder/Item.tsx.
+ * Reorder.Item for Glimmer — Motion's packages/framer-motion/src/components/Reorder/Item.tsx.
  * Renders an <li> that is a draggable, layout-animated motion element snapping back to origin;
  * while it is dragged it reports its offset to the group, which reorders the values.
  */

@@ -1,5 +1,5 @@
 /**
- * Port of framer-motion/src/components/AnimatePresence/__tests__/AnimatePresence.test.tsx (motion@bbabb00).
+ * Port of Motion's packages/framer-motion/src/components/AnimatePresence/__tests__/AnimatePresence.test.tsx (motion@bbabb00).
  *   <AnimatePresence>{cond && <motion.div key=… />}</AnimatePresence>
  *     → <Presence @items={{…}} @key={{keyOf}} as |it h|><div {{motion presence=h …}} /></Presence>
  * "custom components" wrapping a motion.div become nested elements; presence reaches them

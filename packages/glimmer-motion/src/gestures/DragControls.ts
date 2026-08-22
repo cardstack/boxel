@@ -1,5 +1,5 @@
-// @ts-nocheck — vendored verbatim; type-checked upstream under framer-motion's tsconfig
-// Vendored from framer-motion/src/gestures/drag/use-drag-controls.ts (motion@bbabb00) — framework-free; only imports were re-pointed.
+// @ts-nocheck — vendored verbatim; type-checked upstream under Motion's tsconfig
+// Vendored from Motion's packages/framer-motion/src/gestures/drag/use-drag-controls.ts (motion@bbabb00) — framework-free; only imports were re-pointed.
 import { VisualElementDragControls } from './VisualElementDragControls'
 import type { DragControlOptions } from './VisualElementDragControls'
 
@@ -95,6 +95,6 @@ export class DragControls {
     }
 }
 
-/** framer-motion's useDragControls(): one DragControls per owner, created once */
+/** Motion's useDragControls(): one DragControls per owner, created once */
 export const createDragControls = () => new DragControls()
 

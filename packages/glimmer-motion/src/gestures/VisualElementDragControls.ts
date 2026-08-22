@@ -1,5 +1,5 @@
-// @ts-nocheck — vendored verbatim; type-checked upstream under framer-motion's tsconfig
-// Vendored from framer-motion/src/gestures/drag/VisualElementDragControls.ts (motion@bbabb00) — framework-free; only imports were re-pointed.
+// @ts-nocheck — vendored verbatim; type-checked upstream under Motion's tsconfig
+// Vendored from Motion's packages/framer-motion/src/gestures/drag/VisualElementDragControls.ts (motion@bbabb00) — framework-free; only imports were re-pointed.
 import { addValueToWillChange, animateMotionValue, calcLength, convertBoundingBoxToBox, convertBoxToBoundingBox, createBox, eachAxis, frame, isElementTextInput, measurePageBox, mixNumber, percent, resize, setDragLock } from "motion-dom"
 import type { PanInfo, ResolvedConstraints, Transition, VisualElement, MotionNodeOptions } from "motion-dom"
 import { invariant } from "motion-utils"

@@ -1,5 +1,5 @@
-// @ts-nocheck — vendored verbatim; type-checked upstream under framer-motion's tsconfig
-// Vendored from framer-motion/src/gestures/drag/utils/constraints.ts (motion@bbabb00) — framework-free; only imports were re-pointed.
+// @ts-nocheck — vendored verbatim; type-checked upstream under Motion's tsconfig
+// Vendored from Motion's packages/framer-motion/src/gestures/drag/utils/constraints.ts (motion@bbabb00) — framework-free; only imports were re-pointed.
 import { calcLength, mixNumber } from "motion-dom"
 import type { DragElastic, ResolvedConstraints } from "motion-dom"
 import { progress as calcProgress, clamp } from "motion-utils"

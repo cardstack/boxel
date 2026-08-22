@@ -1,5 +1,5 @@
 /**
- * glimmer-motion — framer-motion's React glue re-done for Glimmer, on the unchanged motion-dom engine.
+ * glimmer-motion — Motion's React glue re-done for Glimmer, on the unchanged motion-dom engine.
  * Deep imports (`glimmer-motion/motion`, `glimmer-motion/presence`, …) are the same modules.
  */
 export { default as motion } from './motion';

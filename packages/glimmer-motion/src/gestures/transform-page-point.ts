@@ -1,5 +1,5 @@
 /**
- * framer-motion's correctParentTransform / transformViewBoxPoint (utils/transform-rotated-parent.ts,
+ * Motion's correctParentTransform / transformViewBoxPoint (utils/transform-rotated-parent.ts,
  * utils/transform-viewbox-point.ts), with the React ref replaced by an element or a {current} ref.
  */
 type Point = { x: number; y: number };

@@ -1,5 +1,5 @@
 /**
- * Port of framer-motion/cypress/integration/drag.ts (motion@bbabb00) with its fixtures
+ * Port of Motion's packages/framer-motion/cypress/integration/drag.ts (motion@bbabb00) with its fixtures
  * (drag, drag-ref-constraints, drag-ref-constraints-resize, drag-snap-to-cursor, drag-constraints-return).
  * cy.trigger(pointer…, x, y) → trigger(): coordinates relative to the element's current box, as in Cypress.
  * The two upstream commented-out "Direction locks to x" cases stay out.
