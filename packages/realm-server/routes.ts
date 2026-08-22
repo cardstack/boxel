@@ -1,6 +1,7 @@
 import type {
   DBAdapter,
   DefinitionLookup,
+  MediaCacheAdapter,
   QueuePublisher,
   Realm,
   VirtualNetwork,
@@ -89,6 +90,13 @@ export type CreateRoutesArgs = {
   serverURL: string;
   dbAdapter: DBAdapter;
   definitionLookup: DefinitionLookup;
+  // MediaCache object store; absent means the POST screenshot endpoint
+  // captures without persisting (and returns no served URL).
+  mediaCacheAdapter?: MediaCacheAdapter;
+  // Bounded sync-wait budget for the POST screenshot endpoint. Defaults to
+  // SCREENSHOT_SYNC_WAIT_BUDGET_MS; tests shrink it to exercise the
+  // 503 + Retry-After path without holding real time.
+  screenshotSyncWaitMs?: number;
   matrixClient: MatrixClient;
   realmServerSecretSeed: string;
   grafanaSecret: string;

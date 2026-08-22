@@ -11,6 +11,7 @@ import {
   type VirtualNetwork,
   type DBAdapter,
   type QueuePublisher,
+  type MediaCacheAdapter,
   DEFAULT_AUDIO_SIZE_LIMIT_BYTES,
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
@@ -940,6 +941,7 @@ export class RealmServer {
   private dbAdapter: DBAdapter;
   private queue: QueuePublisher;
   private definitionLookup: DefinitionLookup;
+  private mediaCacheAdapter: MediaCacheAdapter | undefined;
   private assetsURL: URL;
   private getIndexHTML: () => Promise<string>;
   private serverURL: URL;
@@ -979,6 +981,7 @@ export class RealmServer {
     dbAdapter,
     queue,
     definitionLookup,
+    mediaCacheAdapter,
     assetsURL,
     getIndexHTML,
     matrixRegistrationSecret,
@@ -1003,6 +1006,9 @@ export class RealmServer {
     dbAdapter: DBAdapter;
     queue: QueuePublisher;
     definitionLookup: DefinitionLookup;
+    // MediaCache object store shared with the realms this server mounts;
+    // absent means the POST screenshot endpoint captures without persisting.
+    mediaCacheAdapter?: MediaCacheAdapter;
     assetsURL: URL;
     getIndexHTML: () => Promise<string>;
     matrixRegistrationSecret?: string;
@@ -1056,6 +1062,7 @@ export class RealmServer {
     this.dbAdapter = dbAdapter;
     this.queue = queue;
     this.definitionLookup = definitionLookup;
+    this.mediaCacheAdapter = mediaCacheAdapter;
     this.assetsURL = assetsURL;
     this.getIndexHTML = getIndexHTML;
     this.matrixRegistrationSecret = matrixRegistrationSecret;
@@ -1169,6 +1176,7 @@ export class RealmServer {
         createRoutes({
           dbAdapter: this.dbAdapter,
           definitionLookup: this.definitionLookup,
+          mediaCacheAdapter: this.mediaCacheAdapter,
           serverURL: this.serverURL.href,
           matrixClient: this.matrixClient,
           realmServerSecretSeed: this.realmServerSecretSeed,
