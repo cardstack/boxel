@@ -22,6 +22,7 @@ import {
 import { Prerenderer } from './index.ts';
 import type { Timings } from './render-runner.ts';
 import { resolvePrerenderManagerURL } from './config.ts';
+import { heapTelemetry } from './heap-telemetry.ts';
 import {
   PRERENDER_HOST_SHELL_HASH_HEADER,
   PRERENDER_JOB_ID_HEADER,
@@ -122,11 +123,19 @@ export function buildPrerenderApp(options: {
         PRERENDER_SERVER_STATUS_DRAINING,
       );
       ctxt.set('Content-Type', 'application/json');
-      ctxt.body = JSON.stringify({ ready: false, draining: true });
+      ctxt.body = JSON.stringify({
+        ready: false,
+        draining: true,
+        memory: heapTelemetry(),
+      });
       return;
     }
     ctxt.set('Content-Type', 'application/json');
-    ctxt.body = JSON.stringify({ ready: true });
+    // `memory` makes a single task's heap readable on demand — including
+    // `heapLimitMB`, which is the only way to confirm from outside what
+    // `--max-old-space-size` a running process actually took. The Docker
+    // HEALTHCHECK discards this body, so the extra fields cost it nothing.
+    ctxt.body = JSON.stringify({ ready: true, memory: heapTelemetry() });
     ctxt.status = 200;
   });
 
