@@ -48,6 +48,7 @@ import {
 } from './motion-config.gts';
 import type { PresenceHandle } from './presence-types.ts';
 import { postRender } from './scheduler.ts';
+import { slowed } from './speed.ts';
 import { styleValue } from './unitless.ts';
 
 /** React's HTMLMotionProps = MotionNodeOptions + style (static values and MotionValues) */
@@ -252,7 +253,13 @@ export default class MotionNode implements ChoreoNode {
     if (config.transformPagePoint) {
       defaults['transformPagePoint'] = config.transformPagePoint;
     }
-    return { ...defaults, ...props } as MotionNodeOptions;
+    const merged = { ...defaults, ...props } as MotionNodeOptions;
+    // slow motion: the engine only ever sees the scaled transition, so the
+    // animation is born slower rather than being sped up mid-flight
+    const scaled = slowed(merged.transition as never);
+    return (
+      scaled === merged.transition ? merged : { ...merged, transition: scaled }
+    ) as MotionNodeOptions;
   }
   private unregister?: () => void;
   private popStyle?: HTMLStyleElement;

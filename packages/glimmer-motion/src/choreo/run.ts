@@ -7,6 +7,7 @@
 import type { AnimationPlaybackControls, VisualElement } from 'motion-dom';
 import { animateTarget, delay } from 'motion-dom';
 
+import { motionSpeed, scaleTransition } from '../speed.ts';
 import type { ChoreoNode, Cue, PropValue, Sprite } from './types.ts';
 
 export interface Run {
@@ -110,11 +111,14 @@ export function execute(cues: Cue[], options: RunOptions): Run {
     }
   };
 
+  // the phases keep their proportions under slow motion, so a hold still
+  // covers exactly the move it was written to cover
+  const scale = motionSpeed();
   const at = (ms: number, fn: () => void) => {
     if (ms <= 0) {
       fn();
     } else {
-      timers.push(delay(fn, ms));
+      timers.push(delay(fn, ms * scale));
     }
   };
   const done = (sprite: Sprite) => {
@@ -195,7 +199,10 @@ export function execute(cues: Cue[], options: RunOptions): Run {
     if (cue.target) {
       const controls = animateTarget(ve, {
         ...cue.target,
-        transition: { ...cue.transition, delay: cue.start / 1000 },
+        transition: scaleTransition(
+          { ...cue.transition, delay: cue.start / 1000 } as never,
+          scale,
+        ),
       } as never);
       animations.push(...controls);
       if (cue.kind === 'move') {

@@ -58,3 +58,15 @@ export type {
   UseScrollOptions,
 } from './scroll.ts';
 export { InView, useInView, useScroll } from './scroll.ts';
+export {
+  motionSpeed,
+  onMotionSpeed,
+  scaleTransition,
+  setMotionSpeed,
+} from './speed.ts';
+export type {
+  ViewTransitionBuilder,
+  ViewTransitionOptions,
+  ViewTransitionUpdate,
+} from './view-transition.ts';
+export { animateView, viewTransition } from './view-transition.ts';
