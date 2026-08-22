@@ -6,10 +6,22 @@ import {
   fetchRealmPermissions,
   fetchUserPermissions,
   jobIdentity,
+  putMedia,
+  type MediaCacheLane,
   type ScreenshotPrerenderResponse,
   ensureFullMatrixUserId,
   ensureTrailingSlash,
 } from '../index.ts';
+
+// The ledger identity a capture persists under (see
+// `ScreenshotCardArgs.persist`).
+export interface ScreenshotPersistArgs extends JSONTypes.Object {
+  realmURL: string;
+  sourceURL: string;
+  captureSpecHash: string;
+  sourceGeneration: number;
+  lane: MediaCacheLane;
+}
 
 export interface ScreenshotCardArgs extends JSONTypes.Object {
   realmURL: string;
@@ -17,6 +29,14 @@ export interface ScreenshotCardArgs extends JSONTypes.Object {
   runAs: string;
   cardId: string;
   format: 'isolated' | 'embedded';
+  // When non-null, a successful capture is persisted to the MediaCache under
+  // this ledger identity before the job resolves. This is what makes a
+  // bounded-wait caller (the GET `_screenshot/` route's sync wait) safe to
+  // give up on: the capture still lands durably, and the caller's retry is
+  // a pure ledger hit instead of a second render. Non-optional `| null`
+  // rather than `?:` because the args are a `JSONTypes.Object`, whose index
+  // signature rejects `undefined`.
+  persist: ScreenshotPersistArgs | null;
 }
 
 export { screenshotCard };
@@ -28,9 +48,10 @@ const screenshotCard: Task<ScreenshotCardArgs, ScreenshotPrerenderResponse> = ({
   prerenderer,
   createPrerenderAuth,
   matrixURL,
+  mediaCacheAdapter,
 }) =>
   async function (args) {
-    let { jobInfo, realmURL, runAs, cardId, format } = args;
+    let { jobInfo, realmURL, runAs, cardId, format, persist } = args;
     log.debug(
       `${jobIdentity(jobInfo)} starting screenshot-card for job: ${JSON.stringify(
         {
@@ -85,7 +106,40 @@ const screenshotCard: Task<ScreenshotCardArgs, ScreenshotPrerenderResponse> = ({
       format,
       priority: jobInfo?.priority,
     });
+    // The local (in-process) prerenderer resolves to `{response, timings,
+    // pool}` while the remote one resolves to the bare response; unwrap so
+    // the job result is one shape either way.
+    let response: ScreenshotPrerenderResponse =
+      (result as any)?.response ?? result;
+
+    if (persist && response.status === 'ready' && response.base64) {
+      if (!mediaCacheAdapter) {
+        log.warn(
+          `${jobIdentity(jobInfo)} screenshot-card asked to persist but this worker has no media cache adapter configured; skipping`,
+        );
+      } else {
+        // Persist failure must not fail the capture: the response still
+        // carries the bytes, so the caller can serve (or store) them itself.
+        try {
+          let binary = atob(response.base64);
+          let bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+          }
+          await putMedia(dbAdapter, mediaCacheAdapter, {
+            ...persist,
+            bytes,
+            contentType: response.contentType ?? 'image/png',
+          });
+        } catch (e: any) {
+          log.error(
+            `${jobIdentity(jobInfo)} screenshot-card failed to persist capture to the media cache`,
+            e,
+          );
+        }
+      }
+    }
 
     reportStatus(jobInfo, 'finish');
-    return result;
+    return response;
   };

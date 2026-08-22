@@ -150,6 +150,9 @@ module(basename(import.meta.filename), function () {
         runAs: '@someone:localhost',
         cardId,
         format: 'isolated',
+        // The POST surface returns the capture in its response body rather
+        // than recording it in the MediaCache ledger.
+        persist: null,
       });
     });
 
