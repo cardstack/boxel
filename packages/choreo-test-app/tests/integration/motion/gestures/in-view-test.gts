@@ -32,7 +32,7 @@ module('Integration | motion | whileInView', function (hooks) {
 
   test('onViewportEnter / onViewportLeave fire with the entry', async function (assert) {
     const entered: IntersectionObserverEntry[] = [], left: IntersectionObserverEntry[] = [];
-    const enter = (e: IntersectionObserverEntry) => { entered.push(e); }, leave = (e: IntersectionObserverEntry) => { left.push(e); };
+    const enter = (e: IntersectionObserverEntry | null) => { if (e) entered.push(e); }, leave = (e: IntersectionObserverEntry | null) => { if (e) left.push(e); };
     await render(<template><div id="scroller" style={{SCROLLER}}><div style={{SPACER}}></div><div id="box" style="height:50px" {{motion onViewportEnter=enter onViewportLeave=leave}}></div><div style={{SPACER}}></div></div></template>);
     await waitForObserver();
     scroller().scrollTop = 1000; await waitForObserver();
