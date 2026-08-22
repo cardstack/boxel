@@ -140,4 +140,65 @@ module('Integration | motion | style prop', function (hooks) {
       'rgb(255, 255, 255)'
     );
   });
+
+  /**
+   * React's style prop appends `px` to a number only for length properties;
+   * `gridColumn: 2` writes `2`. Getting this wrong is silent — the browser
+   * drops `2px` as an invalid grid line and the element auto-places.
+   */
+  test('a number lands unitless where React would leave it unitless', async function (assert) {
+    const p = new P({
+      style: {
+        gridColumn: 2,
+        gridRow: 3,
+        opacity: 0.5,
+        order: 2,
+        zIndex: 4,
+      },
+    });
+    await render(
+      <template>
+        <div id="m" {{motion style=p.style}}></div>
+      </template>
+    );
+    const s = el().style;
+    assert.strictEqual(s.gridColumn, '2', 'grid lines are not lengths');
+    assert.strictEqual(s.gridRow, '3');
+    assert.strictEqual(s.zIndex, '4');
+    assert.strictEqual(s.order, '2');
+    assert.strictEqual(s.opacity, '0.5');
+  });
+
+  test('a number still lands as px where it is a length', async function (assert) {
+    const p = new P({ style: { height: 20, top: 8, width: 120 } });
+    await render(
+      <template>
+        <div id="m" {{motion style=p.style}}></div>
+      </template>
+    );
+    const s = el().style;
+    assert.strictEqual(s.width, '120px');
+    assert.strictEqual(s.height, '20px');
+    assert.strictEqual(s.top, '8px');
+  });
+
+  test('a grid-placed element really lands in its column', async function (assert) {
+    const p = new P({ style: { gridColumn: 3 } });
+    await render(
+      <template>
+        <div
+          id="grid"
+          style="display: grid; grid-template-columns: 100px 100px 100px"
+        >
+          <div id="m" {{motion style=p.style}}></div>
+        </div>
+      </template>
+    );
+    await nextMicrotask();
+    assert.strictEqual(
+      getComputedStyle(el()).gridColumnStart,
+      '3',
+      'the third column, not auto-placed'
+    );
+  });
 });

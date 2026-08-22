@@ -45,6 +45,7 @@ import {
 } from './motion-config.gts';
 import type { PresenceHandle } from './presence-types.ts';
 import { postRender } from './scheduler.ts';
+import { styleValue } from './unitless.ts';
 
 /** React's HTMLMotionProps = MotionNodeOptions + style (static values and MotionValues) */
 export type MotionProps = Omit<MotionNodeOptions, 'dragConstraints'> & {
@@ -372,7 +373,16 @@ export default class MotionNode {
             presenceContext?.onExitComplete?.(this.layoutPresenceKey),
         } as any);
         if (presenceContext?.register) {
-          presenceContext.register(this.layoutPresenceKey);
+          // MeasureLayout registers per node and unregisters on unmount. Losing
+          // the release leaves a dead node registered against a Presence child
+          // that will later have to wait for it to report an exit it can no
+          // longer report — every leaver after that is stranded on screen.
+          const release = presenceContext.register(this.layoutPresenceKey);
+          const beforeRelease = this.unregister;
+          this.unregister = () => {
+            beforeRelease?.();
+            release?.();
+          };
         }
         const unregisterProjection = registerProjection(projection);
         const prevUnregister = this.unregister;
@@ -507,6 +517,14 @@ export default class MotionNode {
     ve.updateFeatures();
     ve.scheduleRenderMicrotask();
     ve.animationState?.animateChanges();
+    // React's usePresence: a leaving child is safe to remove once its own exit
+    // animation has finished, and motion's animateChanges() resolves exactly
+    // then. A node WITH a projection is completed by the layout pass below (a
+    // shared-layout leaver must outlive its own values, and the crossfade owns
+    // when it goes). A node WITHOUT one has nothing else to report for it — so
+    // before this it was only ever removed if some later render happened to run
+    // the pass again, and a leaver nothing re-rendered stayed on screen with
+    // its exit finished and its removal never asked for.
     if (projection) {
       // MeasureLayout.componentDidUpdate: once this pass has settled, a lead with nothing to animate may go
       afterSettle(() => {
@@ -570,11 +588,7 @@ export default class MotionNode {
       if (key.startsWith('--')) {
         el.style.setProperty(key, String(v));
       } else if (key in el.style) {
-        (el.style as any)[key] =
-          typeof v === 'number' &&
-          !/^(opacity|zIndex|fontWeight|flex|order|lineHeight|zoom)$/.test(key)
-            ? `${v}px`
-            : String(v);
+        (el.style as any)[key] = styleValue(key, v);
       }
     }
   }
