@@ -590,6 +590,10 @@ export default class MotionNode implements ChoreoNode {
     return this.ve;
   }
 
+  get layoutKey(): string {
+    return this.layoutPresenceKey;
+  }
+
   get isPresent(): boolean {
     const presence =
       this.latest?.ownPresence ?? (this.ve && presenceOf.get(this.ve));

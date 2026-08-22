@@ -30,6 +30,8 @@ export interface ChoreoNode {
   exitComplete(): void;
   id: string | null;
   isPresent: boolean;
+  /** stable identity for this node, for bookkeeping keyed per element */
+  layoutKey: string;
   /** unmount a VisualElement whose teardown was deferred to the choreography */
   release(): void;
   role: string | null;

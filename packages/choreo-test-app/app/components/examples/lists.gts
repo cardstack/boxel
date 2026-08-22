@@ -9,7 +9,8 @@ const quick = { damping: 26, stiffness: 320 };
 /**
  * boxel-motion's list demo: a name crossing between two lists is one sprite
  * to the choreography — the new element carries the old one's bounds as its
- * counterpart — so one Move takes it from where it was to where it is.
+ * counterpart — so one Move takes it from where it was to where it is, while
+ * the columns it left and joined resize around it on the same spring.
  */
 export class Lists extends Component {
   @tracked crew = ['Arden', 'Bex', 'Juno', 'Ines'];
@@ -28,7 +29,7 @@ export class Lists extends Component {
   <template>
     <div class="ex">
       <Choreo class="lists" as |c|>
-        <div class="list">
+        <div class="list" {{motion id="crew" role="column"}}>
           <span class="list-head">Crew</span>
           {{#each this.crew key="@identity" as |name|}}
             <button
@@ -39,7 +40,7 @@ export class Lists extends Component {
             >{{name}}</button>
           {{/each}}
         </div>
-        <div class="list">
+        <div class="list" {{motion id="bench" role="column"}}>
           <span class="list-head">Bench</span>
           {{#each this.bench key="@identity" as |name|}}
             <button
@@ -52,7 +53,10 @@ export class Lists extends Component {
         </div>
 
         <c.Parallel>
-          <c.Move @of={{c.kept "name"}} @spring={{quick}} />
+          {{! the names only translate — they never change size }}
+          <c.Move @of={{c.kept "name"}} @spring={{quick}} @size={{false}} />
+          {{! the columns only change height — they never move }}
+          <c.Move @of={{c.moved "column"}} @spring={{quick}} />
           <c.Hold @of={{c.removed "name"}} @opacity={{0}} />
         </c.Parallel>
       </Choreo>

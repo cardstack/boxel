@@ -14,6 +14,18 @@ export interface Run {
   cancel(keep?: Set<ChoreoNode>): void;
   cues: Cue[];
   finished: Promise<void>;
+  /**
+   * Put every element this run has touched back to its resting layout NOW:
+   * borrowed width/height handed back to the stylesheet, and any transform
+   * this run applied returned to zero.
+   *
+   * The region calls this before it measures a new pass. A Move's values are
+   * the engine's only while it runs, and an element left mid-flight would
+   * otherwise be measured where it currently LOOKS rather than where the
+   * stylesheet puts it — the new pass would see no change at all, generate no
+   * cue, and strand that transform on the element permanently.
+   */
+  releaseForMeasure(): void;
 }
 
 interface RunOptions {
@@ -24,6 +36,9 @@ interface RunOptions {
 
 const dash = (key: string) =>
   key.replace(/[A-Z]/g, (m) => '-' + m.toLowerCase());
+
+/** the values a Move borrows from the stylesheet and must hand back */
+const SIZES: Record<string, true> = { height: true, width: true };
 
 interface HeldValue {
   /** the engine had this value before the hold */
@@ -75,7 +90,25 @@ export function execute(cues: Cue[], options: RunOptions): Run {
   const animations: AnimationPlaybackControls[] = [];
   const active = new Map<Cue, HeldValue[]>();
   const pending = new Set(options.removed);
+  /** width/height a Move took over for its duration, to give back after */
+  const borrowedValues: { el: HTMLElement; key: string; ve: VisualElement }[] =
+    [];
+  /** transforms a Move applied, to return to rest */
+  const movedValues: { key: string; ve: VisualElement }[] = [];
   let cancelled = false;
+
+  const releaseForMeasure = () => {
+    for (const { ve, el, key } of borrowedValues.splice(0)) {
+      ve.removeValue(key);
+      el.style.removeProperty(dash(key));
+      ve.scheduleRender();
+    }
+    for (const { ve, key } of movedValues.splice(0)) {
+      // back to rest, so the element measures where the stylesheet puts it
+      ve.getValue(key)?.jump(0);
+      ve.scheduleRender();
+    }
+  };
 
   const at = (ms: number, fn: () => void) => {
     if (ms <= 0) {
@@ -107,34 +140,72 @@ export function execute(cues: Cue[], options: RunOptions): Run {
     }
   }
 
+  /**
+   * Apply every animation's starting value NOW, synchronously, before the
+   * browser paints.
+   *
+   * Two things go wrong without this. The pass has already patched the DOM, so
+   * one frame of the *destination* layout paints before the engine's batched
+   * render lands the FLIP transform — the elements visibly jump to where they
+   * are going and snap back. And a cue that starts later (anything after the
+   * first block of a sequence) would sit at its destination for the whole
+   * delay, because the engine only applies a keyframe's first value when that
+   * animation actually begins.
+   *
+   * Only explicit [from, to] keyframes are pinned; a target with no `from`
+   * animates out of whatever the value already is, which is correct as it is.
+   */
+  const pinned = new Set<string>();
+  const rendered = new Set<VisualElement>();
+  for (const cue of [...cues].sort((a, b) => a.start - b.start)) {
+    const ve = cue.sprite.node.visualElement;
+    if (!ve || !cue.target) {
+      continue;
+    }
+    for (const key in cue.target) {
+      const value = cue.target[key];
+      if (!Array.isArray(value) || value[0] === undefined) {
+        continue;
+      }
+      const seen = `${cue.sprite.node.layoutKey}:${key}`;
+      if (pinned.has(seen)) {
+        continue; // an earlier cue already owns this property's start
+      }
+      pinned.add(seen);
+      if (cue.kind === 'move') {
+        if (key in SIZES) {
+          if (!ve.hasValue(key)) {
+            borrowedValues.push({ el: cue.sprite.element, key, ve });
+          }
+        } else {
+          movedValues.push({ key, ve });
+        }
+      }
+      ve.getValue(key, value[0] as PropValue)!.jump(value[0] as PropValue);
+      rendered.add(ve);
+    }
+  }
+  rendered.forEach((ve) => ve.render());
+
   for (const cue of cues) {
     const ve = cue.sprite.node.visualElement;
     if (!ve) {
       continue;
     }
     if (cue.target) {
-      // FLIP sizes are the engine's only for the move: afterwards the stylesheet has the element again
-      const borrowed =
-        cue.kind === 'move'
-          ? ['width', 'height'].filter(
-              (key) => key in cue.target! && !ve.hasValue(key),
-            )
-          : [];
       const controls = animateTarget(ve, {
         ...cue.target,
         transition: { ...cue.transition, delay: cue.start / 1000 },
       } as never);
       animations.push(...controls);
-      if (borrowed.length) {
+      if (cue.kind === 'move') {
+        // FLIP sizes are the engine's only while the move runs; afterwards the
+        // stylesheet owns the element again
         Promise.all(
           controls.map((c) => new Promise<void>((r) => c.then(r))),
         ).then(() => {
           if (!cancelled) {
-            for (const key of borrowed) {
-              ve.removeValue(key);
-              cue.sprite.element.style.removeProperty(key);
-            }
-            ve.scheduleRender();
+            releaseForMeasure();
           }
         });
       }
@@ -171,6 +242,10 @@ export function execute(cues: Cue[], options: RunOptions): Run {
       cancelled = true;
       timers.splice(0).forEach((cancel) => cancel());
       animations.splice(0).forEach((a) => a.stop());
+      // an interrupted Move must give its values back too, or the element
+      // stays frozen mid-flight — squeezing every track around it, and
+      // measuring as though it had never needed to move at all
+      releaseForMeasure();
       for (const [cue, held] of active) {
         const ve = cue.sprite.node.visualElement;
         if (ve) {
@@ -188,5 +263,6 @@ export function execute(cues: Cue[], options: RunOptions): Run {
     },
     cues,
     finished,
+    releaseForMeasure,
   };
 }

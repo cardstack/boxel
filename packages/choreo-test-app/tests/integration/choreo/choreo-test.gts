@@ -22,6 +22,9 @@ import { nextFrame, sleep } from '../../helpers/motion';
 const keyOf = (x: { key: string }) => x.key;
 const FAST = { damping: 40, stiffness: 900 };
 
+const cellStyle = (k: string, open: string) =>
+  k === open ? 'grid-column: 1 / -1; height: 60px' : 'height: 30px';
+
 const opacityOf = (sel: string) =>
   parseFloat(getComputedStyle(find(sel)!).opacity);
 
@@ -391,6 +394,130 @@ module('Integration | choreo', function (hooks) {
     await sleep(140);
     await nextFrame();
     assert.notOk(find('#card-0'), 'and dropped after it');
+  });
+
+  test('an interrupted Move hands its borrowed size back, so the next pass measures a true layout', async function (assert) {
+    // The failure this pins: switching the open card mid-flight left the old
+    // hero frozen at its animating width, which squeezed every 1fr track
+    // around it — the other cards collapsed into pills.
+    class App extends Component {
+      @tracked open = 'a';
+      constructor(o: unknown, a: object) {
+        super(o as never, a);
+        app = this;
+      }
+      <template>
+        <Choreo
+          class="grid"
+          style="display:grid;grid-template-columns:1fr 1fr 1fr;width:300px"
+          as |c|
+        >
+          {{#each (array "a" "b" "c") as |k|}}
+            <div
+              id="cell-{{k}}"
+              style={{cellStyle k this.open}}
+              {{motion id=k role="cell"}}
+            ></div>
+          {{/each}}
+          <c.Move @of={{c.moved "cell"}} @ms={{400}} />
+        </Choreo>
+      </template>
+    }
+    let app: App | undefined;
+    await render(<template><App /></template>);
+    await nextFrame();
+    const width = (k: string) =>
+      find(`#cell-${k}`)!.getBoundingClientRect().width;
+    const rest = width('b');
+    app!.open = 'b';
+    await settled();
+    await sleep(120);
+    // …and interrupt it half-way through
+    app!.open = 'c';
+    await settled();
+    await sleep(500);
+    await nextFrame();
+    assert.strictEqual(
+      (find('#cell-a') as HTMLElement).style.width,
+      '',
+      'the interrupted hero gave its width back'
+    );
+    assert.ok(
+      Math.abs(width('a') - rest) < 2,
+      `a returned to a normal track (${width('a')} vs ${rest})`
+    );
+    assert.ok(
+      width('b') > rest * 0.5,
+      `b was not squeezed into a pill (${width('b')})`
+    );
+  });
+
+  test('an interrupted Move never strands a transform on the element', async function (assert) {
+    // Clicking faster than the spring settles used to leave elements offset
+    // forever: the next pass measured them where they LOOKED (mid-flight)
+    // rather than where the stylesheet puts them, saw no change, generated no
+    // cue, and the transform stayed on the element for good.
+    class App extends Component {
+      @tracked left: string[] = ['a', 'b', 'c'];
+      @tracked right: string[] = [];
+      constructor(o: unknown, a: object) {
+        super(o as never, a);
+        app = this;
+      }
+      move = (k: string) => {
+        if (this.left.includes(k)) {
+          this.left = this.left.filter((x) => x !== k);
+          this.right = [...this.right, k];
+        } else {
+          this.right = this.right.filter((x) => x !== k);
+          this.left = [...this.left, k];
+        }
+      };
+      <template>
+        <Choreo style="display:flex;gap:40px" as |c|>
+          <div class="col-l" style="width:120px">
+            {{#each this.left key="@identity" as |k|}}
+              <div
+                id="i-{{k}}"
+                style="height:20px"
+                {{motion id=k role="i"}}
+              >{{k}}</div>
+            {{/each}}
+          </div>
+          <div class="col-r" style="width:120px">
+            {{#each this.right key="@identity" as |k|}}
+              <div
+                id="i-{{k}}"
+                style="height:20px"
+                {{motion id=k role="i"}}
+              >{{k}}</div>
+            {{/each}}
+          </div>
+          <c.Move @of={{c.kept "i"}} @ms={{400}} />
+        </Choreo>
+      </template>
+    }
+    let app: App | undefined;
+    await render(<template><App /></template>);
+    await nextFrame();
+    // hammer:each interrupt lands well inside the 400ms move
+    for (const k of ['a', 'b', 'c', 'a', 'b', 'c']) {
+      app!.move(k);
+      await settled();
+      await sleep(30);
+    }
+    await sleep(900);
+    await nextFrame();
+    const stranded = ['a', 'b', 'c'].filter((k) => {
+      const el = find(`#i-${k}`) as HTMLElement | null;
+      const tf = el?.style.transform ?? '';
+      return tf !== '' && tf !== 'none' && !/\(0px\)/.test(tf);
+    });
+    assert.deepEqual(
+      stranded,
+      [],
+      'no element kept a transform it never undid'
+    );
   });
 
   test('a second dirty pass cancels the run, releases holds and strands no orphans', async function (assert) {

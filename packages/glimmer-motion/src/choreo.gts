@@ -43,6 +43,7 @@ import type {
   Sprite,
   SpriteType,
 } from './choreo/types.ts';
+import { snapshotOnRender } from './layout-group.gts';
 import { flushPendingMounts } from './node.ts';
 import { postRender } from './scheduler.ts';
 
@@ -198,6 +199,10 @@ export default class Choreo extends Component<Signature> implements ChoreoHost {
      re-evaluated on every render pass before the DOM is patched (React's getSnapshotBeforeUpdate slot) */
   get renderDetector(): undefined {
     consumeTag(VOLATILE_TAG);
+    // A region is a layout boundary as well: projecting participants
+    // (`layout` / `layoutId`) snapshot here too, so `{{motion layout=true}}`
+    // works inside a <Choreo> without a <LayoutGroup> wrapped around it.
+    snapshotOnRender();
     if (!this.passPending) {
       this.passPending = true;
       this.snapshot();
@@ -225,6 +230,11 @@ export default class Choreo extends Component<Signature> implements ChoreoHost {
     if (!root) {
       return;
     }
+    // `initial` was captured before the DOM changed, with any in-flight Move's
+    // values still on the elements — that is what was on screen. `final` must
+    // be the layout the stylesheet actually asks for, so put everything the
+    // last run touched back to rest before measuring anything.
+    this.run?.releaseForMeasure();
     const before = this.rootSnapshot ?? root.getBoundingClientRect();
     const after = root.getBoundingClientRect();
     const inserted: Sprite[] = [];
@@ -239,10 +249,10 @@ export default class Choreo extends Component<Signature> implements ChoreoHost {
       delta:
         initial && final
           ? {
-              height: final.parent.height - initial.parent.height,
-              width: final.parent.width - initial.parent.width,
-              x: final.parent.x - initial.parent.x,
-              y: final.parent.y - initial.parent.y,
+              height: final.page.height - initial.page.height,
+              width: final.page.width - initial.page.width,
+              x: final.page.x - initial.page.x,
+              y: final.page.y - initial.page.y,
             }
           : undefined,
       element: node.element as HTMLElement,
@@ -311,10 +321,10 @@ export default class Choreo extends Component<Signature> implements ChoreoHost {
         s.type = 'kept';
         s.delta = s.initial &&
           s.final && {
-            height: s.final.parent.height - s.initial.parent.height,
-            width: s.final.parent.width - s.initial.parent.width,
-            x: s.final.parent.x - s.initial.parent.x,
-            y: s.final.parent.y - s.initial.parent.y,
+            height: s.final.page.height - s.initial.page.height,
+            width: s.final.page.width - s.initial.page.width,
+            x: s.final.page.x - s.initial.page.x,
+            y: s.final.page.y - s.initial.page.y,
           };
       }
     }

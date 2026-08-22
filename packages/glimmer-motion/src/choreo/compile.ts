@@ -122,8 +122,12 @@ function resolveMove(
   if (!sprite.initial || !sprite.final) {
     return null;
   }
-  const from = sprite.initial.parent;
-  const to = sprite.final.parent;
+  // Page space, not parent space: the region itself can move and resize in the
+  // very pass that moves its children (a centred grid that grows re-centres),
+  // and a delta measured against a parent that moved by the same amount is
+  // zero — that element alone would sit still while its siblings flew.
+  const from = sprite.initial.page;
+  const to = sprite.final.page;
   const target: Record<string, unknown> = {};
   const pairs: [number, number][] = [];
   const dx = to.x - from.x;
