@@ -1,13 +1,53 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
-import { RealmPaths, VirtualNetwork } from '@cardstack/runtime-common';
+import {
+  RealmPaths,
+  VirtualNetwork,
+  parseExactVersionTransportURL,
+} from '@cardstack/runtime-common';
 import { ri, rri } from '@cardstack/runtime-common';
 import type { SingleCardDocument } from '@cardstack/runtime-common';
 import { relativizeDocument } from '@cardstack/runtime-common/realm-index-query-engine';
 import { rri as deckRRI } from '@cardstack/deck';
 
 module(basename(import.meta.filename), function () {
+  module('exact Version transport URLs', function () {
+    test('decodes transport without making the URL canonical identity', function (assert) {
+      let transport = parseExactVersionTransportURL(
+        'https://realm.example/tenant/acme/theme@1.2.3/components/picker.gts?source=true',
+      );
+
+      assert.strictEqual(
+        transport?.identifier,
+        '@acme/theme@1.2.3/components/picker.gts',
+      );
+      assert.strictEqual(
+        transport?.mutableURL.href,
+        'https://realm.example/tenant/acme/theme/',
+      );
+      assert.strictEqual(
+        transport?.packageURL.href,
+        'https://realm.example/tenant/acme/theme@1.2.3/',
+      );
+    });
+
+    test('declines mutable packages and malformed Versions', function (assert) {
+      assert.strictEqual(
+        parseExactVersionTransportURL(
+          'https://realm.example/acme/theme/index.js',
+        ),
+        undefined,
+      );
+      assert.strictEqual(
+        parseExactVersionTransportURL(
+          'https://realm.example/acme/theme@latest/index.js',
+        ),
+        undefined,
+      );
+    });
+  });
+
   // Regression test for CS-10498: cards in prefix-mapped realms (like the
   // openrouter realm) threw TypeError: Invalid URL when served.
   //
@@ -683,12 +723,8 @@ module(basename(import.meta.filename), function () {
         'https://realms.example/acme/dashboard/',
       );
       vn.addRealmMapping(
-        '@catalog/palette@1.0.0/',
-        'https://packages.example/catalog/palette/1.0.0/',
-      );
-      vn.addRealmMapping(
-        '@catalog/palette@2.0.0/',
-        'https://packages.example/catalog/palette/2.0.0/',
+        '@catalog/palette/',
+        'https://packages.example/catalog/palette/',
       );
       vn.setRRIImportMap({
         imports: {
@@ -711,7 +747,7 @@ module(basename(import.meta.filename), function () {
           'palette',
           'https://realms.example/acme/dashboard/scene.js',
         ),
-        'https://packages.example/catalog/palette/2.0.0/index.js',
+        'https://packages.example/catalog/palette@2.0.0/index.js',
         'the global pin serves the current package',
       );
       assert.strictEqual(
@@ -719,7 +755,7 @@ module(basename(import.meta.filename), function () {
           'palette',
           'https://realms.example/acme/dashboard/legacy-viewer/scene.js',
         ),
-        'https://packages.example/catalog/palette/1.0.0/index.js',
+        'https://packages.example/catalog/palette@1.0.0/index.js',
         'the importer scope serves the legacy package',
       );
       assert.strictEqual(
@@ -727,7 +763,7 @@ module(basename(import.meta.filename), function () {
           'palette',
           'https://realms.example/acme/dashboard/legacy-viewer-experiments/scene.js',
         ),
-        'https://packages.example/catalog/palette/2.0.0/index.js',
+        'https://packages.example/catalog/palette@2.0.0/index.js',
         'a sibling prefix does not inherit the legacy scope',
       );
     });
@@ -735,15 +771,15 @@ module(basename(import.meta.filename), function () {
     test('projects browser URLs without changing the canonical lock', function (assert) {
       assert.deepEqual(vn.projectRRIImportMap(), {
         imports: {
-          palette: 'https://packages.example/catalog/palette/2.0.0/index.js',
+          palette: 'https://packages.example/catalog/palette@2.0.0/index.js',
         },
         scopes: {
           'https://realms.example/acme/dashboard/legacy-viewer/': {
-            palette: 'https://packages.example/catalog/palette/1.0.0/index.js',
+            palette: 'https://packages.example/catalog/palette@1.0.0/index.js',
           },
         },
         integrity: {
-          'https://packages.example/catalog/palette/2.0.0/index.js':
+          'https://packages.example/catalog/palette@2.0.0/index.js':
             'sha256-v2',
         },
       });
@@ -810,6 +846,24 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(
         vn.resolveImport('@babel/runtime/helpers/objectSpread2'),
         'https://npm.example/helpers/objectSpread2',
+      );
+    });
+
+    test('derives exact Version transport from the mutable package mapping', function (assert) {
+      let exact = '@catalog/palette@2.0.0/src/colors.js';
+      let transport =
+        'https://packages.example/catalog/palette@2.0.0/src/colors.js';
+
+      assert.true(vn.isRegisteredPrefix(exact));
+      assert.strictEqual(vn.toURLHref(exact), transport);
+      assert.strictEqual(vn.unresolveURL(transport), exact);
+      assert.strictEqual(
+        vn.realmForReference(exact),
+        'https://packages.example/catalog/palette/',
+      );
+      assert.strictEqual(
+        vn.realmForReference(transport),
+        'https://packages.example/catalog/palette/',
       );
     });
   });

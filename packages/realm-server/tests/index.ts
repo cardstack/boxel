@@ -367,6 +367,7 @@ const ALL_TEST_FILES: string[] = [
   './claim-boxel-domain-test',
   './client-telemetry-test',
   './realm-identifiers-test',
+  './deck-version-serving-test',
   './bfm-card-references-test',
   './package-shim-handler-test',
   './command-parsing-utils-test',

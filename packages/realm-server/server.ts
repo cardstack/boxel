@@ -33,6 +33,10 @@ import { createRoutes } from './routes.ts';
 import { JobScopedSearchCache } from './job-scoped-search-cache.ts';
 import { createSendEvent } from './handlers/send-event.ts';
 import { createServeFromRealm } from './handlers/serve-from-realm.ts';
+import {
+  createServeDeckVersion,
+  deckCollaborationPolicyFromEnvironment,
+} from './handlers/serve-deck-version.ts';
 import { createServeIndex } from './handlers/serve-index.ts';
 import { findOrMountRealm } from './lib/realm-routing.ts';
 import type { Prerenderer } from '@cardstack/runtime-common';
@@ -1098,6 +1102,13 @@ export class RealmServer {
       dbAdapter: this.dbAdapter,
       virtualNetwork: this.virtualNetwork,
     });
+    let serveDeckVersion = createServeDeckVersion({
+      realms: this.realms,
+      reconciler: this.reconciler,
+      dbAdapter: this.dbAdapter,
+      virtualNetwork: this.virtualNetwork,
+      deckCollaboration: deckCollaborationPolicyFromEnvironment(),
+    });
     let sendEvent = createSendEvent({
       matrixClient: this.matrixClient,
       dbAdapter: this.dbAdapter,
@@ -1201,6 +1212,7 @@ export class RealmServer {
           },
         }),
       )
+      .use(serveDeckVersion)
       .use(serveIndex)
       .use(serveFromRealm);
 

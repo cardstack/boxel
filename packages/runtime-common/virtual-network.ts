@@ -17,6 +17,7 @@ import {
   canonicalRRIImportMap,
   isExactVersionRRI,
   isRRI as isDeckRRI,
+  parseRRI as parseDeckRRI,
   projectRRIImportMap as projectDeckRRIImportMap,
   resolveRRI as resolveDeckRRI,
   type ProjectedImportMap,
@@ -323,6 +324,10 @@ export class VirtualNetwork {
         return true;
       }
     }
+    if (isExactVersionRRI(reference)) {
+      let { scope, name } = parseDeckRRI(reference);
+      return this.realmMappings.has(`@${scope}/${name}/`);
+    }
     return false;
   }
 
@@ -341,6 +346,18 @@ export class VirtualNetwork {
    * whatever was registered, at whatever depth.
    */
   realmForReference(reference: string): string | undefined {
+    let canonicalReference = this.unresolveURL(reference);
+    if (isExactVersionRRI(canonicalReference)) {
+      let { scope, name } = parseDeckRRI(canonicalReference);
+      let target = this.realmMappings.get(`@${scope}/${name}/`);
+      if (target) {
+        let virtual = this.mapURL(
+          ensureTrailingSlash(target),
+          'real-to-virtual',
+        );
+        return ensureTrailingSlash(virtual ? virtual.href : target);
+      }
+    }
     // A realm can be addressed several ways, and which ones exist depends on
     // how it was registered. A prefix mapping contributes its `@scope/name/`
     // spelling and its target; a URL mapping contributes the virtual space and
@@ -403,6 +420,10 @@ export class VirtualNetwork {
   }
 
   private computeUnresolveURL(url: string): RealmResourceIdentifier {
+    let exact = this.unresolveExactVersionURL(url);
+    if (exact) {
+      return exact;
+    }
     for (let [prefix, target] of this.realmMappings) {
       if (url.startsWith(target)) {
         return (prefix + url.slice(target.length)) as RealmResourceIdentifier;
@@ -425,6 +446,36 @@ export class VirtualNetwork {
       }
     }
     return url as RealmResourceIdentifier;
+  }
+
+  private unresolveExactVersionURL(
+    url: string,
+  ): RealmResourceIdentifier | undefined {
+    let best:
+      | { targetLength: number; rri: RealmResourceIdentifier }
+      | undefined;
+    for (let [prefix, target] of this.realmMappings) {
+      let exactTarget = `${target.slice(0, -1)}@`;
+      if (!url.startsWith(exactTarget)) {
+        continue;
+      }
+      let versionEnd = url.indexOf('/', exactTarget.length);
+      if (versionEnd === -1) {
+        continue;
+      }
+      let version = url.slice(exactTarget.length, versionEnd);
+      let candidate = `${prefix.slice(0, -1)}@${version}/${url.slice(versionEnd + 1)}`;
+      if (
+        isExactVersionRRI(candidate) &&
+        (!best || target.length > best.targetLength)
+      ) {
+        best = {
+          targetLength: target.length,
+          rri: candidate as RealmResourceIdentifier,
+        };
+      }
+    }
+    return best?.rri;
   }
 
   /**
@@ -725,6 +776,13 @@ export class VirtualNetwork {
     for (let [prefix, target] of this.realmMappings) {
       if (rri.startsWith(prefix)) {
         return new URL(rri.slice(prefix.length), target).href;
+      }
+    }
+    if (isExactVersionRRI(rri)) {
+      let { scope, name, version, path } = parseDeckRRI(rri);
+      let target = this.realmMappings.get(`@${scope}/${name}/`);
+      if (target) {
+        return `${target.slice(0, -1)}@${version}/${path}`;
       }
     }
     return undefined;

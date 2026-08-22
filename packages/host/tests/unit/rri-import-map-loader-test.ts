@@ -3,8 +3,9 @@ import { module, test } from 'qunit';
 import { Loader, VirtualNetwork } from '@cardstack/runtime-common';
 
 const DASHBOARD_URL = 'https://realms.example/acme/dashboard/';
-const PALETTE_V1_URL = 'https://packages.example/catalog/palette/1.0.0/';
-const PALETTE_V2_URL = 'https://packages.example/catalog/palette/2.0.0/';
+const PALETTE_URL = 'https://packages.example/catalog/palette/';
+const PALETTE_V1_URL = 'https://packages.example/catalog/palette@1.0.0/';
+const PALETTE_V2_URL = 'https://packages.example/catalog/palette@2.0.0/';
 
 const fixtureSources: Record<string, string> = {
   [`${DASHBOARD_URL}scene.js`]: `
@@ -31,8 +32,7 @@ function makeLoader() {
   let sources = { ...fixtureSources };
   let virtualNetwork = new VirtualNetwork();
   virtualNetwork.addRealmMapping('@acme/dashboard/', DASHBOARD_URL);
-  virtualNetwork.addRealmMapping('@catalog/palette@1.0.0/', PALETTE_V1_URL);
-  virtualNetwork.addRealmMapping('@catalog/palette@2.0.0/', PALETTE_V2_URL);
+  virtualNetwork.addRealmMapping('@catalog/palette/', PALETTE_URL);
   virtualNetwork.setRRIImportMap({
     imports: { palette: '@catalog/palette@2.0.0/index.js' },
     scopes: {

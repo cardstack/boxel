@@ -1139,6 +1139,10 @@ export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
 // card definitions.
 export const cardExtensions = ['.gts', '.gjs'];
 export { createResponse } from './create-response.ts';
+export {
+  parseExactVersionTransportURL,
+  type ExactVersionTransport,
+} from './deck-version-url.ts';
 
 export * from './db-queries/db-types.ts';
 export * from './db-queries/realm-metadata-queries.ts';
