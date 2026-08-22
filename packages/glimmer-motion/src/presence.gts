@@ -86,7 +86,16 @@ class Entry<T> implements PresenceHandle {
       initial: this.initialBlocked ? (false as const) : undefined,
       custom: this.owner.args.custom,
       register: (childId) => {
-        this.children.set(childId, false);
+        // React never re-renders a leaving child: the exiting subtree is the
+        // element tree captured before the diff, so nothing can mount into it.
+        // A Glimmer block re-runs from live state, so late arrivals DO mount
+        // here — they have no exit of their own to wait for and must never be
+        // able to block the exit that is already under way.
+        const leaving = !this.isPresent;
+        this.children.set(childId, leaving);
+        if (leaving) {
+          postRender(() => this.checkComplete());
+        }
         return () => {
           this.children.delete(childId);
           if (!this.isPresent && !this.children.size) {
@@ -96,12 +105,7 @@ class Entry<T> implements PresenceHandle {
       },
       onExitComplete: (childId) => {
         this.children.set(childId, true);
-        for (const done of this.children.values()) {
-          if (!done) {
-            return;
-          }
-        }
-        this.owner.onExit(this.key);
+        this.checkComplete();
       },
     };
   }
@@ -116,6 +120,18 @@ class Entry<T> implements PresenceHandle {
   notify() {
     flushPendingMounts();
     this.subscribers.forEach((fn) => fn());
+  }
+  /** every registered child has reported: the leaver is done */
+  checkComplete() {
+    if (this.isPresent) {
+      return;
+    }
+    for (const done of this.children.values()) {
+      if (!done) {
+        return;
+      }
+    }
+    this.owner.onExit(this.key);
   }
   checkImmediateExit() {
     flushPendingMounts();

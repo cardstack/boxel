@@ -2,7 +2,7 @@
 
 **[Motion](https://motion.dev) for Glimmer.** Motion's `motion-dom` engine — untouched — bound to Glimmer
 rendering: `{{motion}}`, `<Presence>` (AnimatePresence), `<LayoutGroup>`, `<ReorderGroup>` /
-`<ReorderItem>`, drag. Verified by ports of Motion's own test suites (319 cases).
+`<ReorderItem>`, drag. Verified by ports of Motion's own test suites (394 cases).
 
 ```gts
 import { motion, Presence, LayoutGroup } from 'glimmer-motion';

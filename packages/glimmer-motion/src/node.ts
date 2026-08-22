@@ -480,6 +480,10 @@ export default class MotionNode {
       });
     }
     const pops = ownPresence?.mode === 'popLayout'; // PopChild applies to the direct child only
+    // React re-renders the WHOLE subtree of a presence child when it starts leaving (every consumer of
+    // PresenceContext below it). Glimmer only re-runs the modifiers whose own args changed, so a descendant
+    // would never learn it is exiting — and its registration would block the exit forever.
+    const presenceFlipped = this.lastPresent !== isPresent;
     if (projection && this.lastPresent !== isPresent) {
       projection.isPresent = isPresent;
       if (pops) {
@@ -513,7 +517,7 @@ export default class MotionNode {
     }
     this.lastPresent = isPresent;
     // React: a changed MotionContext re-renders every consumer below — descendants get their update pass
-    if (treeChanged) {
+    if (treeChanged || presenceFlipped) {
       ve.children.forEach((child) => nodeOf.get(child)?.refresh());
     }
   }

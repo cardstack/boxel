@@ -187,7 +187,7 @@ lifted out of the app into this repo as a v2 addon with the suite as its test-ap
 keyframes/delay, style prop, unmount) and the Cypress fixtures (all `layout-*`, all `drag-*`,
 `drag-to-reorder`, `drag-tabs`).
 
-**319 cases, 317 pass, 2 are upstream's own `it.skip`.** Where a literal was changed the reason is inline;
+**394 cases, 392 pass, 2 are upstream's own `it.skip`.** Where a literal was changed the reason is inline;
 each is a Cypress-runner artefact (an implicit `scrollIntoView`, `50vw` measured against the runner window,
 a "this should actually be 400" comment upstream left in). Environment deltas are documented the same way:
 DOM-read start values need a second frame in a real browser where jsdom collapsed the frameloop, and an
@@ -287,6 +287,38 @@ in through `style`; that's what `useMotionValue` / `useTransform` do in React.
 | `<MotionConfig transition transformPagePoint>` | pass them to the elements                                                    |
 | `useDragControls()`                            | `createDragControls()`                                                       |
 | `Reorder.Group` / `Reorder.Item`               | `<ReorderGroup>` / `<ReorderItem>`                                           |
+
+## Two rules React does not need
+
+React's model hides two things that Glimmer's does not, and both surfaced while porting a real app
+(the [bentobox](https://github.com/christse/bento-boxel) workspace) onto this binding. They are the
+only places where the port is not a mechanical translation.
+
+**1. Motion owns a motion element's inline style — pass CSS through the modifier, not a `style`
+attribute.** In React the `style` prop belongs to Motion: it merges what you write with the
+transforms it renders. In Glimmer a bound `style="…"` attribute is yours, and Glimmer rewrites the
+whole declaration whenever the bound value changes — wiping out the transform Motion just wrote. The
+symptom is brutal and quiet: a card that stays put while the drag logic runs perfectly around it.
+
+```gts
+{{! ✗ the next re-render erases the drag transform }}
+<div class="card" style={{this.accentStyle}} {{motion drag=true}}>
+
+{{! ✓ Motion applies these itself, custom properties included }}
+<div class="card" {{motion style=this.accentStyle drag=true}}>
+```
+
+**2. A leaving child stays live — read exiting content from the yielded item.** React keeps the
+_element tree_ it captured before the diff, so a leaving child cannot re-render and nothing can
+mount inside it. A Glimmer block re-runs from live tracked state for as long as the leaver is on
+screen. So anything the exit needs — the symbol the panel was showing, the rect the modal flew from
+— has to ride on the item `<Presence>` yields, not be read back out of the state that has already
+moved on.
+
+The engine side of that second rule is handled here: a motion element that mounts inside a leaving
+subtree can never block its exit, and a presence flip reaches every motion descendant (React
+re-renders them all; Glimmer only re-runs the modifiers whose own args changed). Both are covered by
+tests — without them a leaver can hang on screen forever.
 
 ## Architecture
 
