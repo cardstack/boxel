@@ -1,8 +1,9 @@
 # glimmer-motion
 
-**[Motion](https://motion.dev) for Glimmer.** The same `motion-dom` engine Motion runs on — untouched — with the
-React glue re-done as a modifier and a handful of components. Layout animations, shared-element transitions
-(`layoutId`), enter/exit presence, variants, drag, reorder: the API you know from React, in `.gts`.
+**[Motion](https://motion.dev) for Glimmer.** The `motion-dom` engine that powers Motion's React library —
+untouched — bound to Glimmer rendering as a modifier and a handful of components. Layout animations,
+shared-element transitions, enter/exit presence, variants, drag, reorder: the API you know from React, in
+`.gts`, verified against Motion's own test suites.
 
 ```gts
 import { motion, Presence, LayoutGroup } from 'glimmer-motion';
@@ -28,35 +29,150 @@ import { motion, Presence, LayoutGroup } from 'glimmer-motion';
 ```
 
 > Naming: Motion (motion.dev) is the library formerly called framer-motion; its React package is still
-> published as `framer-motion`, which is why upstream paths below read `packages/framer-motion/…`.
+> published as `framer-motion`, which is why upstream paths in this repo read `packages/framer-motion/…`.
 
-## Why this exists
+- [Features](#features)
+- [Why the engine is untouched](#why-the-engine-is-untouched)
+- [How it was made](#how-it-was-made)
+- [Fidelity](#fidelity)
+- [Install](#install) · [API](#api) · [React → Glimmer](#react--glimmer)
+- [Architecture](#architecture)
+- [Not ported](#not-ported-yet)
+- [Development](#development) · [Roadmap](#roadmap) · [Credits](#credits)
 
-Motion is two things: an animation engine (`motion-dom` — values, springs, keyframes, the projection
-tree that does layout animation and scale correction, the pan/drag session) and a thin layer of React that
-feeds it props at the right moments. The engine is framework-free and published on its own. Only the glue
-is React.
+## Features
 
-So this package does not re-implement animation. It binds the engine to Glimmer's rendering lifecycle and
-reproduces, exactly, the *ordering* React's glue gives the engine: visual elements constructed parents-first
-during render, mounted children-first in effects, layout snapshots taken before the DOM changes and
-measurements after, presence notifications after the commit, an exiting element frozen at its last props.
-Getting those right is the whole job — and the engine's behaviour then matches Motion to the pixel,
-which we check by running Motion's own test suites against it.
+Everything below is Motion's implementation, driven through Glimmer, and covered by a port of the upstream
+test that pins it.
+
+**Animation**
+- `initial` / `animate` / `exit` targets, keyframes arrays, per-value `transition`s, `transitionEnd`
+- springs, tweens, inertia, `delay`, `repeat`, easing names and cubic-beziers — the engine's full transition surface
+- **variants** with labels, variant functions with `custom`, propagation down the element tree,
+  `staggerChildren` / `delayChildren` / `staggerDirection` / `when: "beforeChildren" | "afterChildren"`
+- motion values: `motionValue`, `transformValue`, `animateMotionValue`, springs — bound through `style`
+- `style` with static values and `MotionValue`s side by side; CSS variables; transform shorthands (`x`, `rotate`, `scale`…)
+- SVG elements (`<circle>`, `<rect>`, `<path>` …): attribute animation, `pathLength`, CSS transforms
+- `onAnimationStart` / `onAnimationComplete` / `onUpdate`, `AnimationControls` via `animate`
+- unmount cleanup of animations and motion values
+
+**Layout**
+- `layout` (`true` / `"position"` / `"size"`) — FLIP layout animation with the projection tree's scale correction
+  (border radius, box shadow, children don't distort)
+- `layoutId` shared-element transitions between elements, crossfade, lead/follow promotion, the lightbox pattern
+- `<LayoutGroup>` with `@id` namespacing and `@inherit`
+- `layoutDependency`, `layoutScroll`, `layoutRoot`, `layoutAnchor`, `layoutCrossfade`, `onLayoutMeasure`
+- nested and relative projection targets (a child following an animating parent)
+- portals (`data-framer-portal-id`), `instantLayoutTransition()`, `layoutChange()` / `snapshotAll()` / `requestSettle()`
+
+**Presence**
+- `<Presence>` = AnimatePresence: `sync` / `wait` / `popLayout` modes, `@initial={{false}}`, `@custom`,
+  `@onExitComplete`, nested presence with `@propagate`
+- `h.isPresent` (tracked), exit-then-enter of the same key, a leaving item keeps its last props
+- interaction with `layout` and `layoutId` (exiting lead hands over to the entering follower)
+
+**Drag** (Motion's pan/drag session, vendored verbatim)
+- `drag` on `true` / `"x"` / `"y"`, `dragDirectionLock`, `dragPropagation`, `dragListener`
+- `dragConstraints` as an object, an element or a `{current}` ref; `dragElastic`, `dragMomentum`,
+  `dragTransition`, `dragSnapToOrigin`, `onMeasureDragConstraints`; constraints re-measured on resize
+- `createDragControls()` with `snapToCursor`; `whileDrag`; `onDragStart` / `onDrag` / `onDragEnd` / `onDirectionLock`
+- pan handlers (`onPanStart` / `onPan` / `onPanEnd` / `onPanSessionStart`)
+- drag inside `layout` / `layoutId` elements, nested draggables, drag while the page or a container scrolls,
+  interactive children (inputs, selects, contenteditable) don't start a drag
+- `transformPagePoint` with `correctParentTransform()` (rotated / scaled parents) and
+  `transformViewBoxPoint()` (`<svg viewBox>`)
+
+**Reorder** (Motion's Reorder.Group / Reorder.Item)
+- `<ReorderGroup>` / `<ReorderItem>` on `ul` / `li` with `...attributes`
+- axis `"x"` / `"y"` / `"xy"` (wrapped lists), detected from the layout when not given
+- auto-scroll of a scrollable ancestor near its edges; works inside `<Presence>` (the tabs demo)
+
+**Glimmer**
+- `.gts`, Glint signatures for every component and the modifier
+- a v2 addon: Embroider and Vite apps consume it directly; ESM, tree-shakeable per module
+- host hooks isolated in ~40 lines (`{{motion}}` shell + a `postRender` scheduler) so the engine glue can be re-hosted
+
+## Why the engine is untouched
+
+Motion's React library is two things. An animation engine — `motion-dom`: motion values, springs and
+keyframes, the *projection tree* that does layout animation and scale correction, the pan/drag session —
+and a thin layer of React that feeds that engine props at the right moments. The engine is framework-free
+and published on its own. Only the glue is React.
+
+So this package does not re-implement animation, and it does not fork Motion. It binds the engine to
+Glimmer's rendering lifecycle and reproduces, exactly, the *ordering* React's glue gives the engine:
+
+- visual elements are constructed **parents-first during render** and mounted **children-first in effects**;
+- every element that re-renders **snapshots its layout before the DOM changes**, the root **measures after**;
+- presence is announced **after the commit**, and a leaving element is rendered **from its last element** — its props frozen;
+- the engine's own update runs in a microtask **after all of that**, never between a render and its mounts.
+
+Getting those right is the whole job. When they are right, the engine's behaviour matches Motion to the
+pixel — which is not an aspiration but the thing we measure.
+
+## How it was made
+
+glimmer-motion started as the motion layer of a port: a React app built on Motion (the "bentobox"
+reference, frozen as ground truth) moving to a modern Vite/Embroider Ember app. The first question was how
+much work Motion needed to run under Glimmer. The answer turned out to be "none, if you don't touch it."
+
+**Strategy.** Cardstack had done this once before with [boxel-motion](https://github.com/cardstack/boxel), a
+Glimmer animation library with its own engine. Comparing the two made the call obvious: Motion's value is
+in the engine (the projection tree especially), and that engine is already framework-free. The binding
+would use `motion-dom` as-is and replicate only the React glue — and it would be held to the standard of
+Motion's own tests rather than our eyes.
+
+**Method: port the test suite, in order, and let it drive the binding.** Each step ported one of Motion's
+Jest suites or Cypress fixture specs line by line — the fixture components rebuilt as Glimmer components,
+the literal expected pixel values kept — and whatever failed was a place where the binding's ordering
+differed from React's. In sequence: the animate prop, variants, AnimatePresence, LayoutGroup, keyframes
+and delay, the style prop and unmount, then the eighteen `layout-*` Cypress specs, then the nineteen
+`drag-*` specs, then Reorder. Nothing was declared done on a behaviour until the upstream test for it was
+green in a real Chrome.
+
+**What that surfaced.** Almost everything a port like this gets wrong is a timing rule, and the tests found
+each one:
+
+- Glimmer installs modifiers children-first, so a child can't find its parent's visual element when its
+  modifier first runs. First runs queue; the queue constructs in document order and mounts post-order after
+  the pass — and sibling order matters, because the engine's stagger index is built from it.
+- There is no `getSnapshotBeforeUpdate`. boxel-motion's render detector — a getter consuming
+  `@glimmer/validator`'s `VOLATILE_TAG` re-evaluates on every render pass — lets `<LayoutGroup>` snapshot
+  every projection node before the DOM changes, the way React re-rendering each motion component would.
+- The engine's update microtask must not run between Glimmer's render and the mounts, or it clears
+  snapshots and layout animations become identity transitions. One settle per pass, after the mounts.
+- An element created already-absent must still mount *present* and then leave, or its exit is swallowed.
+- AnimatePresence renders a leaving child from its last present element; a live Glimmer block doesn't. When
+  a removed tab was also the selected one, its `animate` changed in the same pass as its exit and a stale
+  flag from a blocked initial mount let that change restart opacity over the exit. The modifier now freezes
+  an exiting element's props — React's behaviour, arrived at from a failing Cypress fixture.
+- `initial` values must be in the DOM before the projection first measures (percentage transforms resolve
+  against that box); React has them in the style attribute synchronously, so the binding renders them
+  synchronously at mount.
+- A Cypress page is fresh per test; a test runner isn't. The document projection node caches scroll per
+  `animationId` and leaked a stale offset across tests until the harness reset it the way a page visit does.
+
+**Packaging.** With the suite green the binding was split along the line the imports already drew:
+`MotionNode` (one element's lifecycle, no host framework), the layout pipeline, the features and a
+`postRender` scheduler on one side; the `ember-modifier` shell, the scheduler's runloop adapter and the four
+Glimmer components on the other. That second side is about forty lines plus the components — the surface
+another Glimmer host (a SES-sandboxed renderer, say) re-implements to reuse everything else. Then it was
+lifted out of the app into this repo as a v2 addon with the suite as its test-app.
 
 ## Fidelity
 
-`test-app` carries ports of Motion's test suites, translated line by line — the Jest unit suites
-(animate prop, variants, AnimatePresence, LayoutGroup, keyframes/delay, style prop, unmount) and the Cypress
-fixtures (all of `layout-*`, all of `drag-*`, `drag-to-reorder`, `drag-tabs`) with the upstream fixtures
-rebuilt as Glimmer components and upstream's literal expected pixel values kept.
+`test-app` carries the ports: the Jest suites (animate prop, variants, AnimatePresence, LayoutGroup,
+keyframes/delay, style prop, unmount) and the Cypress fixtures (all `layout-*`, all `drag-*`,
+`drag-to-reorder`, `drag-tabs`).
 
-**319 cases, 317 pass, 2 are upstream's own `it.skip`.** The few places where a literal was changed are
-documented inline with the reason — each one is a Cypress runner artefact (an implicit `scrollIntoView`, a
-`50vw` measured against the runner window, a "this should actually be 400" comment upstream left in).
+**319 cases, 317 pass, 2 are upstream's own `it.skip`.** Where a literal was changed the reason is inline;
+each is a Cypress-runner artefact (an implicit `scrollIntoView`, `50vw` measured against the runner window,
+a "this should actually be 400" comment upstream left in). Environment deltas are documented the same way:
+DOM-read start values need a second frame in a real browser where jsdom collapsed the frameloop, and an
+Ember `render()` settles on a timer where RTL's is synchronous.
 
 ```
-pnpm install && pnpm test        # builds the addon, runs the suite in Chrome against the built package
+pnpm install && pnpm test     # builds the addon, runs the suite in Chrome against the built package
 ```
 
 ## Install
@@ -65,102 +181,77 @@ pnpm install && pnpm test        # builds the addon, runs the suite in Chrome ag
 pnpm add glimmer-motion motion-dom motion-utils
 ```
 
-Peer dependencies: `motion-dom` / `motion-utils` (the engine, pinned together), `ember-modifier`,
-`@glimmer/component`, `@glimmer/tracking`, `ember-source >= 5.4`. It's a v2 addon; Embroider or Vite apps
-consume it directly, TypeScript types and Glint signatures included.
+Peer dependencies: `motion-dom` / `motion-utils` (pinned together), `ember-modifier`, `@glimmer/component`,
+`@glimmer/tracking`, `ember-source >= 5.4`. It's a v2 addon: Embroider and Vite apps consume it directly,
+with TypeScript types and Glint signatures.
 
 ## API
 
-Everything is a named export from `glimmer-motion`; deep imports (`glimmer-motion/presence`, …) are the same
-modules.
+Named exports from `glimmer-motion`; deep imports (`glimmer-motion/presence`, …) are the same modules.
 
 ### `{{motion}}` — `motion.div`, `motion.circle`, … as a modifier
 
-Put it on any element. Named arguments are Motion's props, same names, same types
-(`MotionNodeOptions` from `motion-dom`):
+Any element. Named arguments are Motion's props — same names, same types (`MotionNodeOptions` from
+`motion-dom`):
 
 | group | props |
 |---|---|
 | animation | `initial` `animate` `exit` `variants` `transition` `custom` `inherit` `onAnimationStart` `onAnimationComplete` `onUpdate` |
-| layout | `layout` (`true` / `"position"` / `"size"`) `layoutId` `layoutDependency` `layoutScroll` `layoutRoot` `layoutCrossfade` `layoutAnchor` `onLayoutMeasure` |
-| drag | `drag` (`true` / `"x"` / `"y"`) `dragConstraints` (object, element, or `{current}` ref) `dragElastic` `dragMomentum` `dragSnapToOrigin` `dragDirectionLock` `dragPropagation` `dragTransition` `dragControls` `dragListener` `onDragStart` `onDrag` `onDragEnd` `onDirectionLock` `onMeasureDragConstraints` `whileDrag` |
+| layout | `layout` `layoutId` `layoutDependency` `layoutScroll` `layoutRoot` `layoutCrossfade` `layoutAnchor` `onLayoutMeasure` |
+| drag | `drag` `dragConstraints` `dragElastic` `dragMomentum` `dragSnapToOrigin` `dragDirectionLock` `dragPropagation` `dragTransition` `dragControls` `dragListener` `onDragStart` `onDrag` `onDragEnd` `onDirectionLock` `onMeasureDragConstraints` `whileDrag` |
 | pan | `onPanStart` `onPan` `onPanEnd` `onPanSessionStart` |
-| style | `style` — static values go on the element as React's style attribute would; `MotionValue`s are bound |
-| glimmer-specific | `presence` — the handle a `<Presence>` block yields (React's PresenceContext); `transformPagePoint` — per element, since there is no `<MotionConfig>` |
+| style | `style` — static values land on the element as React's style attribute would; `MotionValue`s are bound |
+| glimmer-specific | `presence` — the handle a `<Presence>` block yields; `transformPagePoint` — per element (no `<MotionConfig>`) |
 
 ```gts
 <div {{motion animate=(hash x=this.x) style=(hash y=this.yValue) layout=true}} />
 <circle cx="50" cy="50" r="20" {{motion drag=true dragConstraints=this.container}} />
 ```
 
-Variants propagate down the element tree exactly as in React: a parent's `initial`/`animate` labels are the
-context for its descendants, `staggerChildren` / `delayChildren` / `when` orchestrate them.
-
 ### `<Presence>` — AnimatePresence
 
-Renders a keyed list and keeps leaving items in the DOM until their `exit` animation finishes. It yields
-the item and a presence handle; pass the handle to the item's `{{motion}}` (descendants inherit it).
-
 ```gts
-<Presence
-  @items={{this.items}}        {{! the present set }}
-  @key={{this.keyOf}}          {{! item → string key }}
-  @mode="sync"                 {{! "sync" | "wait" | "popLayout" }}
-  @initial={{false}}           {{! skip the initial animation on first render }}
-  @custom={{this.direction}}   {{! passed to variant functions of leaving items }}
-  @onExitComplete={{this.done}}
-  as |item h|
->
+<Presence @items={{this.items}} @key={{this.keyOf}} @mode="sync" @initial={{false}} @custom={{this.dir}} @onExitComplete={{this.done}} as |item h|>
   <div {{motion presence=h initial=… animate=… exit=…}}>{{item.label}}</div>
 </Presence>
 ```
 
-`h.isPresent` is tracked, so templates can read it (Motion's `useIsPresent`). For nested presence under a
-leaving parent use `@propagate={{true}} @parent={{outerHandle}}` (Motion's `propagate`). `popLayout` takes
-`@anchorX` / `@anchorY`.
+Keeps leaving items rendered until their `exit` finishes. `@mode` is `"sync"` | `"wait"` | `"popLayout"`
+(`@anchorX` / `@anchorY` for the latter). `h.isPresent` is tracked (`useIsPresent`). Nested presence under
+a leaving parent: `@propagate={{true}} @parent={{outerHandle}}`.
 
 ### `<LayoutGroup>`
-
-Namespaces `layoutId`s and — the important part — hosts the render detector: any render pass inside it
-snapshots every projection node before the DOM changes, which is what React's `getSnapshotBeforeUpdate`
-does for every re-rendered motion component. Wrap the subtree whose layout changes you want animated.
 
 ```gts
 <LayoutGroup @id="tabs" @inherit={{true}}>…</LayoutGroup>
 ```
 
-Outside a `LayoutGroup`, wrap the state change that moves things: `layoutChange(() => { this.items = next })`,
-or call `snapshotAll()` / `requestSettle()` yourself. `instantLayoutTransition(fn)` is Motion's
-`useInstantLayoutTransition`.
+Namespaces `layoutId`s and hosts the render detector: any render pass inside it snapshots every projection
+node before the DOM changes. Outside one, wrap the state change: `layoutChange(() => { this.items = next })`.
+`instantLayoutTransition(fn)` is `useInstantLayoutTransition`.
 
-### `<ReorderGroup>` / `<ReorderItem>` — Reorder.Group / Reorder.Item
+### `<ReorderGroup>` / `<ReorderItem>`
 
 ```gts
 <ReorderGroup @values={{this.items}} @onReorder={{this.setItems}} @axis="y" as |group|>
-  {{#each this.items as |item|}}
-    <ReorderItem @group={{group}} @value={{item}}>{{item}}</ReorderItem>
-  {{/each}}
+  {{#each this.items as |item|}}<ReorderItem @group={{group}} @value={{item}}>{{item}}</ReorderItem>{{/each}}
 </ReorderGroup>
 ```
 
-Renders `ul`/`li` (use `...attributes`). Axis is detected from the item layout unless given (`"x"`, `"y"`,
-`"xy"` for wrapped lists); items are draggable, snap to origin, animate layout, and the group auto-scrolls a
-scrollable ancestor near its edges. `ReorderItem` forwards `@style @initial @animate @exit @whileDrag
-@transition @dragTransition @dragListener @dragControls @presence @onDrag @onDragEnd @layout`.
+`ReorderItem` forwards `@style @initial @animate @exit @whileDrag @transition @dragTransition @dragListener
+@dragControls @presence @onDrag @onDragEnd @layout`.
 
 ### Drag helpers
 
-- `createDragControls()` — Motion's `useDragControls`: `controls.start(pointerEvent, { snapToCursor: true })`
-  from any element, pass `dragControls=controls` to the draggable.
-- `correctParentTransform(elementOrRef)` / `transformViewBoxPoint(svgOrRef)` — `transformPagePoint`
-  functions for a rotated/scaled parent and for an `<svg viewBox>` whose units differ from its pixels.
+`createDragControls()` (`useDragControls`: `controls.start(event, { snapToCursor: true })`),
+`correctParentTransform(elOrRef)`, `transformViewBoxPoint(svgOrRef)`.
 
 ### Motion values
 
-Use `motion-dom` directly — `motionValue()`, `transformValue()`, `animateMotionValue()`, springs — and hand
-values in through `style`; that's what `useMotionValue` / `useTransform` do in React.
+Use `motion-dom` directly — `motionValue()`, `transformValue()`, `animateMotionValue()` — and hand values
+in through `style`; that's what `useMotionValue` / `useTransform` do in React.
 
-## How it maps to React
+## React → Glimmer
 
 | React | here |
 |---|---|
@@ -170,7 +261,7 @@ values in through `style`; that's what `useMotionValue` / `useTransform` do in R
 | `<AnimatePresence>` with keyed children | `<Presence @items @key>` yielding a handle |
 | `useIsPresent()` | `h.isPresent` |
 | `<LayoutGroup>` | `<LayoutGroup>` (also the render detector) |
-| re-render of a motion component → snapshot | any render pass inside a `LayoutGroup` / `ReorderGroup` |
+| re-render of a motion component → snapshot | any render pass inside a `LayoutGroup` / `ReorderGroup`, or `layoutChange()` |
 | `<MotionConfig transition transformPagePoint>` | pass them to the elements |
 | `useDragControls()` | `createDragControls()` |
 | `Reorder.Group` / `Reorder.Item` | `<ReorderGroup>` / `<ReorderItem>` |
@@ -179,44 +270,27 @@ values in through `style`; that's what `useMotionValue` / `useTransform` do in R
 
 ```
 motion-dom (engine, unchanged)
-   ▲
-   │ 30 public exports
+   ▲  30 public exports
 node.ts        MotionNode — one element's lifecycle, no host framework: construct in document order,
                mount post-order after the pass, update, freeze props while exiting, tear down
-layout.ts      the snapshot → mount → measure → settle pipeline (React's getSnapshotBeforeUpdate /
-               componentDidUpdate timing), shared by every projection node
-features.ts    the animation / exit / layout / drag / pan feature registrations
+layout.ts      snapshot → mount → measure → settle (React's getSnapshotBeforeUpdate / componentDidUpdate timing)
+features.ts    animation / exit / layout / drag / pan feature registrations
 scheduler.ts   postRender(fn): the single host hook — "after this render pass has committed"
-gestures/      Motion's pan + drag engine, vendored verbatim (see VENDORED.md)
+gestures/      Motion's pan + drag session, vendored verbatim (VENDORED.md)
 reorder/       Reorder's checkReorder / detectAxis / auto-scroll, vendored verbatim
-   ▲
-   │ Ember host adapter
+   ▲  Ember host adapter
 motion.ts      {{motion}} — the ember-modifier shell; installs the runloop as postRender
 presence.gts, layout-group.gts, reorder/{group,item}.gts — the Glimmer components
 ```
 
-Only the last line knows about Ember. Re-hosting on another Glimmer runtime means re-doing the modifier
-shell, the `postRender` adapter and the four components — the engine glue is untouched.
-
-Three Glimmer-specific mechanisms carry the React ordering rules:
-
-- **Two-phase mount.** Glimmer installs modifiers children-first; React constructs visual elements
-  parents-first during render and mounts them children-first in effects. First runs queue, then the queue
-  constructs in document order and mounts post-order after the pass — sibling order is what the engine's
-  stagger index is built from.
-- **Render detector.** Boxel-motion's trick: a getter that consumes `@glimmer/validator`'s `VOLATILE_TAG`
-  re-evaluates on every render pass, so a `LayoutGroup` can snapshot all projection nodes before the DOM
-  changes, the way React re-rendering every motion component would.
-- **Presence by handle.** There is no context; `<Presence>` yields a handle whose `isPresent` is derived
-  state, and an element that is not present keeps the props it last had while present — `AnimatePresence`
-  renders a leaving child from its last element.
+Only the last two lines know about Ember. Re-hosting means re-doing the modifier shell, the `postRender`
+adapter and the four components; the engine glue is untouched.
 
 ## Not ported (yet)
 
 `MotionConfig` (pass `transition` / `transformPagePoint` per element), `whileHover` / `whileTap` /
-`whileFocus` / `whileInView` gestures, `useScroll` / `useInView`, `m` / `LazyMotion`, `Reorder`'s `as`
-prop (the group is a `ul`, items are `li`), server rendering. Everything else in the Motion prop
-surface is wired through to the engine.
+`whileFocus` / `whileInView`, `useScroll` / `useInView`, `m` / `LazyMotion`, Reorder's `as` prop, server
+rendering. Everything else in the prop surface is wired through to the engine.
 
 ## Development
 
@@ -228,13 +302,23 @@ pnpm lint:types                # glint, both packages
 pnpm --filter test-app start   # the test-app in a browser (/tests)
 ```
 
-`packages/glimmer-motion/VENDORED.md` lists every file copied verbatim from Motion and the upstream
-commit; re-diff them when bumping `motion-dom`. Cypress-port conventions live in
-`test-app/tests/helpers/layout-fixture.ts` (a 1000×660 fixture viewport, `should()` retries, `trigger()`
-pointer events with Cypress' element-relative coordinates, `cyClick()`).
+`packages/glimmer-motion/VENDORED.md` lists every file copied verbatim from Motion and the upstream commit
+(`motion@bbabb00`); re-diff them when bumping `motion-dom`. The Cypress-port harness lives in
+`test-app/tests/helpers/layout-fixture.ts`: a 1000×660 fixture viewport, `should()` retries, `trigger()`
+pointer events with Cypress' element-relative coordinates, `cyClick()`, and per-test reset of the document
+projection node.
+
+## Roadmap
+
+- **boxel-motion** — a re-host inside [cardstack/boxel](https://github.com/cardstack/boxel) for its
+  constraints (SES-sandboxed card code, cross-realm orchestration, the `surface-*` height service, fitted vs
+  embedded intrinsic sizing). It replaces the modifier shell, the scheduler adapter and the components and
+  keeps everything above the adapter line.
+- hover / tap / focus / in-view gestures, `MotionConfig`.
+- publish to npm (consumers today use `file:` against a checkout).
 
 ## Credits
 
-The engine, the algorithms and the test suites are [Motion](https://motion.dev) ([motiondivision/motion](https://github.com/motiondivision/motion))
-(MIT, Motion Division). The render-detector idea is from
-[boxel-motion](https://github.com/cardstack/boxel). This package is the Glimmer binding.
+The engine, the algorithms and the test suites are [Motion](https://motion.dev)
+([motiondivision/motion](https://github.com/motiondivision/motion), MIT). The render-detector idea is from
+[boxel-motion](https://github.com/cardstack/boxel). This package is the Glimmer binding, by Cardstack.
