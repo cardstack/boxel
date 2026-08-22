@@ -1062,6 +1062,7 @@ export * from './matrix-client.ts';
 export * from './queue.ts';
 export * from './job-utils.ts';
 export * from './prerender-html-reconcile.ts';
+export * from './media-cache.ts';
 export * from './expression.ts';
 export * from './searchable-parity.ts';
 export * from './infer-content-type.ts';
