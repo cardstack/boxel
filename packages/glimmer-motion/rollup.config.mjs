@@ -1,7 +1,8 @@
-import { babel } from '@rollup/plugin-babel';
 import { existsSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+
 import { Addon } from '@embroider/addon-dev/rollup';
+import { babel } from '@rollup/plugin-babel';
 
 const addon = new Addon({
   srcDir: 'src',
@@ -43,9 +44,19 @@ export default {
     {
       name: 'resolve-source-extensions',
       resolveId(id, importer) {
-        if (!importer || !id.startsWith('.')) return null;
+        if (!importer || !id.startsWith('.')) {
+          return null;
+        }
         const base = resolve(dirname(importer), id);
-        for (const ext of ['', '.ts', '.gts', '.gjs', '.js']) if (existsSync(base + ext) && !ext.endsWith('/')) { const f = base + ext; if (!existsSync(f) || statSync(f).isDirectory()) continue; return f; }
+        for (const ext of ['', '.ts', '.gts', '.gjs', '.js']) {
+          if (existsSync(base + ext) && !ext.endsWith('/')) {
+            const f = base + ext;
+            if (!existsSync(f) || statSync(f).isDirectory()) {
+              continue;
+            }
+            return f;
+          }
+        }
         return null;
       },
     },

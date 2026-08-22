@@ -1,11 +1,12 @@
+import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import { consumeTag, VOLATILE_TAG } from '@glimmer/validator';
 import { modifier } from 'ember-modifier';
-import type Owner from '@ember/owner';
-import { VOLATILE_TAG, consumeTag } from '@glimmer/validator';
-import { frame, nodeGroup, type NodeGroup } from 'motion-dom';
-import { snapshotAll, requestSettle } from './layout';
-import { postRender } from './scheduler';
+import { frame, type NodeGroup, nodeGroup } from 'motion-dom';
+
+import { requestSettle, snapshotAll } from './layout.ts';
+import { postRender } from './scheduler.ts';
 
 /**
  * LayoutGroup for Glimmer — Motion's components/LayoutGroup:
@@ -24,15 +25,17 @@ import { postRender } from './scheduler';
 type Inherit = boolean | 'id';
 
 export interface LayoutGroupContext {
-  readonly id?: string;
-  readonly group?: NodeGroup;
   readonly forceRender: () => void;
+  readonly group?: NodeGroup;
+  readonly id?: string;
 }
 
 const groups = new WeakMap<Element, LayoutGroup>();
 
 /** the nearest group context above an element, if any */
-export function closestLayoutGroup(el: Element): LayoutGroupContext | undefined {
+export function closestLayoutGroup(
+  el: Element,
+): LayoutGroupContext | undefined {
   const host = el.parentElement?.closest('[data-layout-group]');
   return host ? groups.get(host)?.context : undefined;
 }
@@ -69,21 +72,35 @@ export default class LayoutGroup extends Component<Signature> {
     super(owner, args);
     const group = this;
     this.context = {
-      get id() { return group.effectiveId; },
-      get group() { return group.effectiveGroup; },
-      forceRender: () => frame.postRender(() => { group.version++; }),
+      get id() {
+        return group.effectiveId;
+      },
+      get group() {
+        return group.effectiveGroup;
+      },
+      forceRender: () =>
+        frame.postRender(() => {
+          group.version++;
+        }),
     };
   }
 
-  get inherit(): Inherit { return this.args.inherit ?? true; }
+  get inherit(): Inherit {
+    return this.args.inherit ?? true;
+  }
   get parent(): LayoutGroupContext | undefined {
     return this.element ? closestLayoutGroup(this.element) : undefined;
   }
   /** id composition: upstream-id + "-" + own id, or the upstream id when we have none (only when inheriting) */
   get effectiveId(): string | undefined {
     const own = this.args.id;
-    const upstream = this.inherit === true || this.inherit === 'id' ? this.parent?.id : undefined;
-    if (upstream) return own ? `${upstream}-${own}` : upstream;
+    const upstream =
+      this.inherit === true || this.inherit === 'id'
+        ? this.parent?.id
+        : undefined;
+    if (upstream) {
+      return own ? `${upstream}-${own}` : upstream;
+    }
     return own;
   }
   get effectiveGroup(): NodeGroup {
@@ -105,9 +122,8 @@ export default class LayoutGroup extends Component<Signature> {
 
   <template>
     {{this.renderDetector}}
-    <div data-layout-group style="display: contents" {{this.register}}>
+    <div data-layout-group style='display: contents' {{this.register}}>
       {{yield this.context}}
     </div>
   </template>
 }
-

@@ -5,12 +5,13 @@
  * and useStyle make. The first upstream case wraps in <MotionConfig isStatic>; nothing in it animates,
  * so it is ported without (MotionConfig is not part of the binding yet).
  */
-import { module, test } from 'qunit';
-import { setupRenderingTest } from 'ember-qunit';
-import { render, settled, find } from '@ember/test-helpers';
+import { find, render, settled } from '@ember/test-helpers';
 import { tracked } from '@glimmer/tracking';
-import { motionValue } from 'motion-dom';
+import { setupRenderingTest } from 'ember-qunit';
 import motion from 'glimmer-motion/motion';
+import { motionValue } from 'motion-dom';
+import { module, test } from 'qunit';
+
 import { nextMicrotask } from '../../helpers/motion';
 
 const el = () => find('#m') as HTMLElement;
@@ -20,7 +21,9 @@ class P {
   @tracked x = 0;
   @tracked useX = false;
   @tracked useBackgroundColor = false;
-  constructor(p: Partial<P> = {}) { Object.assign(this, p); }
+  constructor(p: Partial<P> = {}) {
+    Object.assign(this, p);
+  }
 }
 
 module('Integration | motion | style prop', function (hooks) {
@@ -28,58 +31,113 @@ module('Integration | motion | style prop', function (hooks) {
 
   test('should remove non-set styles', async function (assert) {
     const p = new P({ style: { position: 'absolute' } });
-    await render(<template><div id="m" {{motion style=p.style}}></div></template>);
+    await render(
+      <template>
+        <div id="m" {{motion style=p.style}}></div>
+      </template>
+    );
     assert.strictEqual(getComputedStyle(el()).position, 'absolute');
-    p.style = {}; await settled();
+    p.style = {};
+    await settled();
     assert.notStrictEqual(getComputedStyle(el()).position, 'absolute');
   });
 
   test('should update transforms when passed a new value', async function (assert) {
     const p = new P({ x: 0 });
     const style = () => ({ x: p.x });
-    await render(<template><div id="m" {{motion style=(style)}}></div></template>);
+    await render(
+      <template>
+        <div id="m" {{motion style=(style)}}></div>
+      </template>
+    );
     assert.strictEqual(el().style.transform, 'none');
-    p.x = 1; await settled(); await nextMicrotask();
+    p.x = 1;
+    await settled();
+    await nextMicrotask();
     assert.strictEqual(el().style.transform, 'translateX(1px)');
-    p.x = 0; await settled(); await nextMicrotask();
+    p.x = 0;
+    await settled();
+    await nextMicrotask();
     assert.strictEqual(el().style.transform, 'none');
   });
 
   test("doesn't update transforms that are handled by animation props", async function (assert) {
-    const initial = { x: 1 }, animate = { x: 200 };
+    const initial = { x: 1 },
+      animate = { x: 200 };
     const p = new P({ x: 0 });
     const style = () => ({ x: p.x });
-    await render(<template><div id="m" {{motion initial=initial animate=animate style=(style)}}></div></template>);
+    await render(
+      <template>
+        <div
+          id="m"
+          {{motion initial=initial animate=animate style=(style)}}
+        ></div>
+      </template>
+    );
     // environment delta: React asserts translateX(1px) synchronously after render, before the first frame.
     // Ember's render() settles through a polling timer, so the spring from the initial 1 may already be
     // ticking; what the assertion pins is that the initial value landed, not the style's 0.
     const px = () => parseFloat(el().style.transform.replace(/[^0-9.]/g, ''));
-    assert.true(px() >= 1 && px() < 200, `transform is in flight from the initial 1px (${el().style.transform})`);
-    p.x = 2; await settled();
+    assert.true(
+      px() >= 1 && px() < 200,
+      `transform is in flight from the initial 1px (${el().style.transform})`
+    );
+    p.x = 2;
+    await settled();
     assert.notStrictEqual(el().style.transform, 'translateX(2px)');
   });
 
   test('should update when passed new MotionValue', async function (assert) {
-    const x = motionValue(1), y = motionValue(2), z = motionValue(3);
+    const x = motionValue(1),
+      y = motionValue(2),
+      z = motionValue(3);
     const p = new P({ useX: false });
-    const style = () => ({ x: p.useX ? x : 0, y: !p.useX ? y : 0, z: !p.useX ? z : 0 });
-    await render(<template><div id="m" {{motion style=(style)}}></div></template>);
+    const style = () => ({
+      x: p.useX ? x : 0,
+      y: !p.useX ? y : 0,
+      z: !p.useX ? z : 0,
+    });
+    await render(
+      <template>
+        <div id="m" {{motion style=(style)}}></div>
+      </template>
+    );
     assert.strictEqual(el().style.transform, 'translateY(2px) translateZ(3px)');
-    p.useX = true; await settled(); await nextMicrotask();
+    p.useX = true;
+    await settled();
+    await nextMicrotask();
     assert.strictEqual(el().style.transform, 'translateX(1px)');
-    p.useX = false; await settled(); await nextMicrotask();
+    p.useX = false;
+    await settled();
+    await nextMicrotask();
     assert.strictEqual(el().style.transform, 'translateY(2px) translateZ(3px)');
   });
 
   test('should update when swapping between motion value and static value', async function (assert) {
     const backgroundColor = motionValue('#fff');
     const p = new P({ useBackgroundColor: true });
-    const style = () => ({ backgroundColor: p.useBackgroundColor ? backgroundColor : '#000' });
-    await render(<template><div id="m" {{motion style=(style)}}></div></template>);
-    assert.strictEqual(getComputedStyle(el()).backgroundColor, 'rgb(255, 255, 255)');
-    p.useBackgroundColor = false; await settled(); await nextMicrotask();
+    const style = () => ({
+      backgroundColor: p.useBackgroundColor ? backgroundColor : '#000',
+    });
+    await render(
+      <template>
+        <div id="m" {{motion style=(style)}}></div>
+      </template>
+    );
+    assert.strictEqual(
+      getComputedStyle(el()).backgroundColor,
+      'rgb(255, 255, 255)'
+    );
+    p.useBackgroundColor = false;
+    await settled();
+    await nextMicrotask();
     assert.strictEqual(getComputedStyle(el()).backgroundColor, 'rgb(0, 0, 0)');
-    p.useBackgroundColor = true; await settled(); await nextMicrotask();
-    assert.strictEqual(getComputedStyle(el()).backgroundColor, 'rgb(255, 255, 255)');
+    p.useBackgroundColor = true;
+    await settled();
+    await nextMicrotask();
+    assert.strictEqual(
+      getComputedStyle(el()).backgroundColor,
+      'rgb(255, 255, 255)'
+    );
   });
 });

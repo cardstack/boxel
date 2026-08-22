@@ -10,7 +10,12 @@ import { motion, Presence, LayoutGroup } from 'glimmer-motion';
 
 <template>
   <LayoutGroup>
-    <Presence @items={{this.cards}} @key={{this.keyOf}} @mode="popLayout" as |card h|>
+    <Presence
+      @items={{this.cards}}
+      @key={{this.keyOf}}
+      @mode='popLayout'
+      as |card h|
+    >
       <div
         {{motion
           presence=h
@@ -18,8 +23,8 @@ import { motion, Presence, LayoutGroup } from 'glimmer-motion';
           initial=(hash opacity=0 y=20)
           animate=(hash opacity=1 y=0)
           exit=(hash opacity=0 scale=0.9)
-          transition=(hash type="spring" stiffness=300 damping=30)
-          drag="x"
+          transition=(hash type='spring' stiffness=300 damping=30)
+          drag='x'
           dragSnapToOrigin=true
         }}
       >{{card.title}}</div>
@@ -46,6 +51,7 @@ Everything below is Motion's implementation, driven through Glimmer, and covered
 test that pins it.
 
 **Animation**
+
 - `initial` / `animate` / `exit` targets, keyframes arrays, per-value `transition`s, `transitionEnd`
 - springs, tweens, inertia, `delay`, `repeat`, easing names and cubic-beziers — the engine's full transition surface
 - **variants** with labels, variant functions with `custom`, propagation down the element tree,
@@ -57,6 +63,7 @@ test that pins it.
 - unmount cleanup of animations and motion values
 
 **Layout**
+
 - `layout` (`true` / `"position"` / `"size"`) — FLIP layout animation with the projection tree's scale correction
   (border radius, box shadow, children don't distort)
 - `layoutId` shared-element transitions between elements, crossfade, lead/follow promotion, the lightbox pattern
@@ -66,12 +73,14 @@ test that pins it.
 - portals (`data-framer-portal-id`), `instantLayoutTransition()`, `layoutChange()` / `snapshotAll()` / `requestSettle()`
 
 **Presence**
+
 - `<Presence>` = AnimatePresence: `sync` / `wait` / `popLayout` modes, `@initial={{false}}`, `@custom`,
   `@onExitComplete`, nested presence with `@propagate`
 - `h.isPresent` (tracked), exit-then-enter of the same key, a leaving item keeps its last props
 - interaction with `layout` and `layoutId` (exiting lead hands over to the entering follower)
 
 **Drag** (Motion's pan/drag session, vendored verbatim)
+
 - `drag` on `true` / `"x"` / `"y"`, `dragDirectionLock`, `dragPropagation`, `dragListener`
 - `dragConstraints` as an object, an element or a `{current}` ref; `dragElastic`, `dragMomentum`,
   `dragTransition`, `dragSnapToOrigin`, `onMeasureDragConstraints`; constraints re-measured on resize
@@ -82,12 +91,25 @@ test that pins it.
 - `transformPagePoint` with `correctParentTransform()` (rotated / scaled parents) and
   `transformViewBoxPoint()` (`<svg viewBox>`)
 
+**Gestures** (Motion's hover / press / focus / viewport features)
+
+- `whileHover`, `whileTap`, `whileFocus`, `whileInView` with their handlers (`onHoverStart`/`End`,
+  `onTapStart`/`onTap`/`onTapCancel`, `onViewportEnter`/`Leave`), keyboard activation of tap, `globalTapTarget`,
+  `propagate={{hash tap=false}}`, `viewport` options (`root`, `margin`, `amount`, `once`), gesture priority
+  over `animate` and each other
+- `<MotionConfig @transition @reducedMotion @transformPagePoint @skipAnimations @nonce>` — defaults for
+  the tree, `inherit: true` transitions, nested configs
+- `useScroll()` (scroll position/progress motion values; container, target, offsets) and `useInView()`
+  (tracked `isInView`) over Motion's `scroll()` / `inView()`, which are exported too
+
 **Reorder** (Motion's Reorder.Group / Reorder.Item)
+
 - `<ReorderGroup>` / `<ReorderItem>` on `ul` / `li` with `...attributes`
 - axis `"x"` / `"y"` / `"xy"` (wrapped lists), detected from the layout when not given
 - auto-scroll of a scrollable ancestor near its edges; works inside `<Presence>` (the tabs demo)
 
 **Glimmer**
+
 - `.gts`, Glint signatures for every component and the modifier
 - a v2 addon: Embroider and Vite apps consume it directly; ESM, tree-shakeable per module
 - host hooks isolated in ~40 lines (`{{motion}}` shell + a `postRender` scheduler) so the engine glue can be re-hosted
@@ -95,12 +117,12 @@ test that pins it.
 ## Why the engine is untouched
 
 Motion's React library is two things. An animation engine — `motion-dom`: motion values, springs and
-keyframes, the *projection tree* that does layout animation and scale correction, the pan/drag session —
+keyframes, the _projection tree_ that does layout animation and scale correction, the pan/drag session —
 and a thin layer of React that feeds that engine props at the right moments. The engine is framework-free
 and published on its own. Only the glue is React.
 
 So this package does not re-implement animation, and it does not fork Motion. It binds the engine to
-Glimmer's rendering lifecycle and reproduces, exactly, the *ordering* React's glue gives the engine:
+Glimmer's rendering lifecycle and reproduces, exactly, the _ordering_ React's glue gives the engine:
 
 - visual elements are constructed **parents-first during render** and mounted **children-first in effects**;
 - every element that re-renders **snapshots its layout before the DOM changes**, the root **measures after**;
@@ -141,7 +163,7 @@ each one:
   every projection node before the DOM changes, the way React re-rendering each motion component would.
 - The engine's update microtask must not run between Glimmer's render and the mounts, or it clears
   snapshots and layout animations become identity transitions. One settle per pass, after the mounts.
-- An element created already-absent must still mount *present* and then leave, or its exit is swallowed.
+- An element created already-absent must still mount _present_ and then leave, or its exit is swallowed.
 - AnimatePresence renders a leaving child from its last present element; a live Glimmer block doesn't. When
   a removed tab was also the selected one, its `animate` changed in the same pass as its exit and a stale
   flag from a blocked initial mount let that change restart opacity over the exit. The modifier now freezes
@@ -194,14 +216,14 @@ Named exports from `glimmer-motion`; deep imports (`glimmer-motion/presence`, �
 Any element. Named arguments are Motion's props — same names, same types (`MotionNodeOptions` from
 `motion-dom`):
 
-| group | props |
-|---|---|
-| animation | `initial` `animate` `exit` `variants` `transition` `custom` `inherit` `onAnimationStart` `onAnimationComplete` `onUpdate` |
-| layout | `layout` `layoutId` `layoutDependency` `layoutScroll` `layoutRoot` `layoutCrossfade` `layoutAnchor` `onLayoutMeasure` |
-| drag | `drag` `dragConstraints` `dragElastic` `dragMomentum` `dragSnapToOrigin` `dragDirectionLock` `dragPropagation` `dragTransition` `dragControls` `dragListener` `onDragStart` `onDrag` `onDragEnd` `onDirectionLock` `onMeasureDragConstraints` `whileDrag` |
-| pan | `onPanStart` `onPan` `onPanEnd` `onPanSessionStart` |
-| style | `style` — static values land on the element as React's style attribute would; `MotionValue`s are bound |
-| glimmer-specific | `presence` — the handle a `<Presence>` block yields; `transformPagePoint` — per element (no `<MotionConfig>`) |
+| group            | props                                                                                                                                                                                                                                                     |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| animation        | `initial` `animate` `exit` `variants` `transition` `custom` `inherit` `onAnimationStart` `onAnimationComplete` `onUpdate`                                                                                                                                 |
+| layout           | `layout` `layoutId` `layoutDependency` `layoutScroll` `layoutRoot` `layoutCrossfade` `layoutAnchor` `onLayoutMeasure`                                                                                                                                     |
+| drag             | `drag` `dragConstraints` `dragElastic` `dragMomentum` `dragSnapToOrigin` `dragDirectionLock` `dragPropagation` `dragTransition` `dragControls` `dragListener` `onDragStart` `onDrag` `onDragEnd` `onDirectionLock` `onMeasureDragConstraints` `whileDrag` |
+| pan              | `onPanStart` `onPan` `onPanEnd` `onPanSessionStart`                                                                                                                                                                                                       |
+| style            | `style` — static values land on the element as React's style attribute would; `MotionValue`s are bound                                                                                                                                                    |
+| glimmer-specific | `presence` — the handle a `<Presence>` block yields; `transformPagePoint` — per element (no `<MotionConfig>`)                                                                                                                                             |
 
 ```gts
 <div {{motion animate=(hash x=this.x) style=(hash y=this.yValue) layout=true}} />
@@ -253,18 +275,18 @@ in through `style`; that's what `useMotionValue` / `useTransform` do in React.
 
 ## React → Glimmer
 
-| React | here |
-|---|---|
-| `<motion.div …>` | `<div {{motion …}}>` — any tag, including SVG |
-| `ref` | the element itself, or a `{current}` object filled by a modifier |
-| `useMotionValue`, `useTransform` | `motionValue`, `transformValue` from `motion-dom` |
-| `<AnimatePresence>` with keyed children | `<Presence @items @key>` yielding a handle |
-| `useIsPresent()` | `h.isPresent` |
-| `<LayoutGroup>` | `<LayoutGroup>` (also the render detector) |
-| re-render of a motion component → snapshot | any render pass inside a `LayoutGroup` / `ReorderGroup`, or `layoutChange()` |
-| `<MotionConfig transition transformPagePoint>` | pass them to the elements |
-| `useDragControls()` | `createDragControls()` |
-| `Reorder.Group` / `Reorder.Item` | `<ReorderGroup>` / `<ReorderItem>` |
+| React                                          | here                                                                         |
+| ---------------------------------------------- | ---------------------------------------------------------------------------- |
+| `<motion.div …>`                               | `<div {{motion …}}>` — any tag, including SVG                                |
+| `ref`                                          | the element itself, or a `{current}` object filled by a modifier             |
+| `useMotionValue`, `useTransform`               | `motionValue`, `transformValue` from `motion-dom`                            |
+| `<AnimatePresence>` with keyed children        | `<Presence @items @key>` yielding a handle                                   |
+| `useIsPresent()`                               | `h.isPresent`                                                                |
+| `<LayoutGroup>`                                | `<LayoutGroup>` (also the render detector)                                   |
+| re-render of a motion component → snapshot     | any render pass inside a `LayoutGroup` / `ReorderGroup`, or `layoutChange()` |
+| `<MotionConfig transition transformPagePoint>` | pass them to the elements                                                    |
+| `useDragControls()`                            | `createDragControls()`                                                       |
+| `Reorder.Group` / `Reorder.Item`               | `<ReorderGroup>` / `<ReorderItem>`                                           |
 
 ## Architecture
 
@@ -288,9 +310,8 @@ adapter and the four components; the engine glue is untouched.
 
 ## Not ported (yet)
 
-`MotionConfig` (pass `transition` / `transformPagePoint` per element), `whileHover` / `whileTap` /
-`whileFocus` / `whileInView`, `useScroll` / `useInView`, `m` / `LazyMotion`, Reorder's `as` prop, server
-rendering. Everything else in the prop surface is wired through to the engine.
+`m` / `LazyMotion` (a React bundle-splitting device; the addon is tree-shaken per module already),
+Reorder's `as` prop (the group is a `ul`, items are `li`), server rendering.
 
 ## Development
 
@@ -314,7 +335,6 @@ projection node.
   constraints (SES-sandboxed card code, cross-realm orchestration, the `surface-*` height service, fitted vs
   embedded intrinsic sizing). It replaces the modifier shell, the scheduler adapter and the components and
   keeps everything above the adapter line.
-- hover / tap / focus / in-view gestures, `MotionConfig`.
 - publish to npm (consumers today use `file:` against a checkout).
 
 ## Credits

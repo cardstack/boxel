@@ -7,9 +7,15 @@ type PostRender = (fn: () => void) => void;
 
 let impl: PostRender | undefined;
 
-export function setPostRender(fn: PostRender) { impl = fn; }
+export function setPostRender(fn: PostRender) {
+  impl = fn;
+}
 
 export function postRender(fn: () => void) {
-  if (!impl) throw new Error('motion: no postRender scheduler installed (import the host adapter first)');
+  if (!impl) {
+    throw new Error(
+      'motion: no postRender scheduler installed (import the host adapter first)',
+    );
+  }
   impl(fn);
 }

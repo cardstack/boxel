@@ -10,12 +10,21 @@
  */
 import { settled } from '@ember/test-helpers';
 import { rootProjectionNode } from 'motion-dom';
+
 import { sleep } from './motion';
 
-export interface Bbox { top?: number; left?: number; width?: number; height?: number }
+export interface Bbox {
+  height?: number;
+  left?: number;
+  top?: number;
+  width?: number;
+}
 type Rounding = 'exact' | 'round' | 'floor';
 
-export function setupFixtureViewport(hooks: NestedHooks, opts: { width?: number; height?: number; scroll?: boolean } = {}) {
+export function setupFixtureViewport(
+  hooks: NestedHooks,
+  opts: { height?: number; scroll?: boolean; width?: number } = {}
+) {
   const { width = 1000, height = 660, scroll = false } = opts;
   let style: HTMLStyleElement | undefined;
   let appSheets: HTMLLinkElement[] = [];
@@ -32,15 +41,23 @@ export function setupFixtureViewport(hooks: NestedHooks, opts: { width?: number;
     `;
     document.head.appendChild(style);
     // a Cypress page has only the fixture's CSS: the app's stylesheet stays out of fixture tests
-    appSheets = Array.from(document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')).filter((l) => /app\.css|\/assets\/app/.test(l.href) && !/tests/.test(l.href));
-    appSheets.forEach((l) => { l.disabled = true; });
+    appSheets = Array.from(
+      document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')
+    ).filter(
+      (l) => /app\.css|\/assets\/app/.test(l.href) && !/tests/.test(l.href)
+    );
+    appSheets.forEach((l) => {
+      l.disabled = true;
+    });
     window.scrollTo(0, 0);
     // Cypress visits a fresh page per test: the document projection node (root of every projection tree,
     // with its per-animationId scroll cache) is per page too
     (rootProjectionNode as { current: unknown }).current = undefined;
   });
   hooks.afterEach(function () {
-    appSheets.forEach((l) => { l.disabled = false; });
+    appSheets.forEach((l) => {
+      l.disabled = false;
+    });
     style?.remove();
     window.scrollTo(0, 0);
   });
@@ -49,20 +66,57 @@ export function setupFixtureViewport(hooks: NestedHooks, opts: { width?: number;
 class ProbeFailure extends Error {}
 /** a throwing stand-in for QUnit's assert, used while retrying */
 const probe = {
-  strictEqual(a: unknown, b: unknown, msg?: string) { if (a !== b) throw new ProbeFailure(`${msg ?? ''} expected ${String(b)} got ${String(a)}`); },
-  notStrictEqual(a: unknown, b: unknown, msg?: string) { if (a === b) throw new ProbeFailure(`${msg ?? ''} expected not ${String(b)}`); },
-  true(v: unknown, msg?: string) { if (v !== true) throw new ProbeFailure(`${msg ?? ''} expected true`); },
-  false(v: unknown, msg?: string) { if (v !== false) throw new ProbeFailure(`${msg ?? ''} expected false`); },
-  ok(v: unknown, msg?: string) { if (!v) throw new ProbeFailure(`${msg ?? ''} expected truthy`); },
-  closeTo(a: number, b: number, d: number, msg?: string) { if (Math.abs(a - b) > d) throw new ProbeFailure(`${msg ?? ''} expected ${a} within ${d} of ${b}`); },
+  strictEqual(a: unknown, b: unknown, msg?: string) {
+    if (a !== b) {
+      throw new ProbeFailure(
+        `${msg ?? ''} expected ${String(b)} got ${String(a)}`
+      );
+    }
+  },
+  notStrictEqual(a: unknown, b: unknown, msg?: string) {
+    if (a === b) {
+      throw new ProbeFailure(`${msg ?? ''} expected not ${String(b)}`);
+    }
+  },
+  true(v: unknown, msg?: string) {
+    if (v !== true) {
+      throw new ProbeFailure(`${msg ?? ''} expected true`);
+    }
+  },
+  false(v: unknown, msg?: string) {
+    if (v !== false) {
+      throw new ProbeFailure(`${msg ?? ''} expected false`);
+    }
+  },
+  ok(v: unknown, msg?: string) {
+    if (!v) {
+      throw new ProbeFailure(`${msg ?? ''} expected truthy`);
+    }
+  },
+  closeTo(a: number, b: number, d: number, msg?: string) {
+    if (Math.abs(a - b) > d) {
+      throw new ProbeFailure(`${msg ?? ''} expected ${a} within ${d} of ${b}`);
+    }
+  },
 };
 export type ProbeAssert = typeof probe;
 
 /** cy.should(fn): retry until the assertions hold (or 4s), then assert for real */
-export async function should(assert: Assert, fn: (a: ProbeAssert) => void, timeout = 4000) {
+export async function should(
+  assert: Assert,
+  fn: (a: ProbeAssert) => void,
+  timeout = 4000
+) {
   const t0 = performance.now();
   for (;;) {
-    try { fn(probe); break; } catch (e) { if (!(e instanceof ProbeFailure) || performance.now() - t0 > timeout) break; }
+    try {
+      fn(probe);
+      break;
+    } catch (e) {
+      if (!(e instanceof ProbeFailure) || performance.now() - t0 > timeout) {
+        break;
+      }
+    }
     await sleep(16);
   }
   const real: ProbeAssert = {
@@ -71,16 +125,29 @@ export async function should(assert: Assert, fn: (a: ProbeAssert) => void, timeo
     true: (v, m) => assert.true(v as boolean, m),
     false: (v, m) => assert.false(v as boolean, m),
     ok: (v, m) => assert.ok(v, m),
-    closeTo: (a, b, d, m) => assert.true(Math.abs(a - b) <= d, `${m ?? ''} ${a} within ${d} of ${b}`),
+    closeTo: (a, b, d, m) =>
+      assert.true(Math.abs(a - b) <= d, `${m ?? ''} ${a} within ${d} of ${b}`),
   };
   fn(real);
 }
 
-export function expectBbox(a: ProbeAssert, el: Element, expected: Bbox, rounding: Rounding = 'exact') {
+export function expectBbox(
+  a: ProbeAssert,
+  el: Element,
+  expected: Bbox,
+  rounding: Rounding = 'exact'
+) {
   const r = el.getBoundingClientRect();
-  const f = rounding === 'round' ? Math.round : rounding === 'floor' ? Math.floor : (n: number) => n;
+  const f =
+    rounding === 'round'
+      ? Math.round
+      : rounding === 'floor'
+        ? Math.floor
+        : (n: number) => n;
   for (const key of ['top', 'left', 'width', 'height'] as const) {
-    if (expected[key] !== undefined) a.strictEqual(f(r[key]), expected[key], key);
+    if (expected[key] !== undefined) {
+      a.strictEqual(f(r[key]), expected[key], key);
+    }
   }
 }
 
@@ -92,16 +159,32 @@ export const $ = (sel: string) => document.querySelector(sel) as HTMLElement;
  * (Cypress re-measures the element for every trigger; default position is its centre).
  * Events bubble to window, where PanSession listens for moves/ups.
  */
-export function trigger(target: Element | string, type: string, x?: number, y?: number, init: PointerEventInit = {}) {
+export function trigger(
+  target: Element | string,
+  type: string,
+  x?: number,
+  y?: number,
+  init: PointerEventInit = {}
+) {
   const el = typeof target === 'string' ? $(target) : target;
   const r = el.getBoundingClientRect();
   const clientX = r.left + (x ?? r.width / 2);
   const clientY = r.top + (y ?? r.height / 2);
   const down = type === 'pointerdown' || type === 'pointermove';
   const ev = new PointerEvent(type, {
-    bubbles: true, cancelable: true, composed: true, view: window,
-    clientX, clientY, screenX: clientX, screenY: clientY,
-    pointerId: 1, pointerType: 'mouse', isPrimary: true, button: 0, buttons: down ? 1 : 0,
+    bubbles: true,
+    cancelable: true,
+    composed: true,
+    view: window,
+    clientX,
+    clientY,
+    screenX: clientX,
+    screenY: clientY,
+    pointerId: 1,
+    pointerType: 'mouse',
+    isPrimary: true,
+    button: 0,
+    buttons: down ? 1 : 0,
     ...init,
   });
   el.dispatchEvent(ev);
@@ -112,7 +195,14 @@ export function trigger(target: Element | string, type: string, x?: number, y?: 
 export async function cyClick(target: Element | string) {
   const el = typeof target === 'string' ? $(target) : target;
   const r = el.getBoundingClientRect();
-  const init = { bubbles: true, cancelable: true, composed: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, button: 0 };
+  const init = {
+    bubbles: true,
+    cancelable: true,
+    composed: true,
+    clientX: r.left + r.width / 2,
+    clientY: r.top + r.height / 2,
+    button: 0,
+  };
   trigger(el, 'pointerdown');
   el.dispatchEvent(new MouseEvent('mousedown', { ...init, buttons: 1 }));
   trigger(el, 'pointerup');

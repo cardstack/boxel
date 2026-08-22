@@ -1,11 +1,12 @@
-import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 import { registerDestructor } from '@ember/destroyable';
 import type Owner from '@ember/owner';
+import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 import type { PresenceContextProps } from 'motion-dom';
-import type { PresenceHandle } from './presence-types';
-import { flushPendingMounts } from './node';
-import { postRender } from './scheduler';
+
+import { flushPendingMounts } from './node.ts';
+import type { PresenceHandle } from './presence-types.ts';
+import { postRender } from './scheduler.ts';
 
 /**
  * AnimatePresence for Glimmer — the same algorithm as Motion's
@@ -22,17 +23,17 @@ import { postRender } from './scheduler';
  */
 interface Signature<T> {
   Args: {
+    anchorX?: 'left' | 'right';
+    anchorY?: 'top' | 'bottom';
+    custom?: unknown;
+    initial?: boolean;
     items: T[];
     key: (item: T) => string;
     mode?: 'sync' | 'wait' | 'popLayout';
-    initial?: boolean;
-    custom?: unknown;
     onExitComplete?: () => void;
+    parent?: PresenceHandle;
     /** nested presence: exit with the parent handle when it leaves */
     propagate?: boolean;
-    parent?: PresenceHandle;
-    anchorX?: 'left' | 'right';
-    anchorY?: 'top' | 'bottom';
   };
   Blocks: { default: [T, PresenceHandle] };
 }
@@ -51,14 +52,33 @@ class Entry<T> implements PresenceHandle {
     this.subscribers.add(refresh);
     return () => this.subscribers.delete(refresh);
   }
-  constructor(readonly key: string, item: T, private owner: Presence<T>, readonly initialBlocked: boolean) {
+  readonly key: string;
+  private owner: Presence<T>;
+  readonly initialBlocked: boolean;
+  constructor(
+    key: string,
+    item: T,
+    owner: Presence<T>,
+    initialBlocked: boolean,
+  ) {
+    this.key = key;
     this.item = item;
+    this.owner = owner;
+    this.initialBlocked = initialBlocked;
   }
   /** derived from @items (and the parent handle) — nothing is mutated during render */
-  get isPresent() { return this.owner.isKeyPresent(this.key); }
-  get mode() { return this.owner.args.mode ?? 'sync'; }
-  get anchorX() { return this.owner.args.anchorX ?? 'left'; }
-  get anchorY() { return this.owner.args.anchorY ?? 'top'; }
+  get isPresent() {
+    return this.owner.isKeyPresent(this.key);
+  }
+  get mode() {
+    return this.owner.args.mode ?? 'sync';
+  }
+  get anchorX() {
+    return this.owner.args.anchorX ?? 'left';
+  }
+  get anchorY() {
+    return this.owner.args.anchorY ?? 'top';
+  }
   get context(): PresenceContextProps {
     return {
       id: this.id,
@@ -69,12 +89,18 @@ class Entry<T> implements PresenceHandle {
         this.children.set(childId, false);
         return () => {
           this.children.delete(childId);
-          if (!this.isPresent && !this.children.size) this.owner.onExit(this.key);
+          if (!this.isPresent && !this.children.size) {
+            this.owner.onExit(this.key);
+          }
         };
       },
       onExitComplete: (childId) => {
         this.children.set(childId, true);
-        for (const done of this.children.values()) if (!done) return;
+        for (const done of this.children.values()) {
+          if (!done) {
+            return;
+          }
+        }
         this.owner.onExit(this.key);
       },
     };
@@ -83,7 +109,9 @@ class Entry<T> implements PresenceHandle {
   presenceChanged(present: boolean) {
     this.children.forEach((_, k) => this.children.set(k, false));
     postRender(() => this.notify());
-    if (!present) postRender(() => this.checkImmediateExit());
+    if (!present) {
+      postRender(() => this.checkImmediateExit());
+    }
   }
   notify() {
     flushPendingMounts();
@@ -91,7 +119,9 @@ class Entry<T> implements PresenceHandle {
   }
   checkImmediateExit() {
     flushPendingMounts();
-    if (!this.isPresent && !this.children.size) this.owner.onExit(this.key);
+    if (!this.isPresent && !this.children.size) {
+      this.owner.onExit(this.key);
+    }
   }
 }
 
@@ -126,12 +156,16 @@ export default class Presence<T> extends Component<Signature<T>> {
     return this.presentKeys.includes(key);
   }
 
+  /* eslint-disable ember/no-side-effects -- AnimatePresence's diff of present vs rendered children runs
+     during render; this getter is that render step (entries, order and exit bookkeeping are its output) */
   get rendered(): Entry<T>[] {
-    this.version; // exits re-run this
+    void this.version; // exits re-run this
     const items = this.args.items;
     const parentPresent = this.parentPresent;
     if (this.args.propagate && this.args.parent && !this.registeredWithParent) {
-      this.registeredWithParent = this.args.parent.context.register(this.selfId);
+      this.registeredWithParent = this.args.parent.context.register(
+        this.selfId,
+      );
     }
     if (items !== this.lastItems || this.lastParentPresent !== parentPresent) {
       this.lastItems = items;
@@ -139,11 +173,14 @@ export default class Presence<T> extends Component<Signature<T>> {
       this.pendingItems = items;
       const presentKeys = this.presentKeys;
       const blockInitial = this.firstRender && this.args.initial === false;
-      items.forEach((item, i) => {
+      items.forEach((item) => {
         const k = this.args.key(item);
         const e = this.entries.get(k);
-        if (e) e.item = item;
-        else this.entries.set(k, new Entry(k, item, this, blockInitial));
+        if (e) {
+          e.item = item;
+        } else {
+          this.entries.set(k, new Entry(k, item, this, blockInitial));
+        }
       });
       // diff rendered vs present, keeping leavers in their slots (AnimatePresence's splice loop)
       const exitingKeys: string[] = [];
@@ -158,14 +195,18 @@ export default class Presence<T> extends Component<Signature<T>> {
           insertionIndex = presentIndex + exitingKeys.length + 1;
         }
       }
-      if ((this.args.mode ?? 'sync') === 'wait' && exitingKeys.length) next = exitingKeys;
+      if ((this.args.mode ?? 'sync') === 'wait' && exitingKeys.length) {
+        next = exitingKeys;
+      }
       this.order = next.filter((k, i) => next.indexOf(k) === i);
       // presence bookkeeping for the rendered set
       for (const k of this.order) {
         const e = this.entries.get(k)!;
         const present = presentKeys.includes(k);
         if (!present) {
-          if (this.exitComplete.get(k) !== true) this.exitComplete.set(k, false);
+          if (this.exitComplete.get(k) !== true) {
+            this.exitComplete.set(k, false);
+          }
         } else {
           this.exitComplete.delete(k);
           this.exiting.delete(k);
@@ -176,28 +217,47 @@ export default class Presence<T> extends Component<Signature<T>> {
         }
       }
       this.firstRender = false;
-      if (this.args.propagate && !parentPresent && !this.order.length) postRender(() => this.safeToRemove());
+      if (this.args.propagate && !parentPresent && !this.order.length) {
+        postRender(() => this.safeToRemove());
+      }
     }
     return this.order.map((k) => this.entries.get(k)!);
   }
+  /* eslint-enable ember/no-side-effects */
   private lastParentPresent?: boolean;
 
   /** AnimatePresence's onExit for one child: once every exiting child is done, show what's pending */
   onExit(key: string) {
-    if (this.exiting.has(key)) return;
-    if (!this.exitComplete.has(key)) return;
+    if (this.exiting.has(key)) {
+      return;
+    }
+    if (!this.exitComplete.has(key)) {
+      return;
+    }
     this.exiting.add(key);
     this.exitComplete.set(key, true);
-    for (const done of this.exitComplete.values()) if (!done) return;
+    for (const done of this.exitComplete.values()) {
+      if (!done) {
+        return;
+      }
+    }
     // everything that was leaving has left
-    const presentKeys = this.parentPresent ? this.pendingItems.map(this.args.key) : [];
-    for (const k of this.order) if (!presentKeys.includes(k)) this.entries.delete(k);
+    const presentKeys = this.parentPresent
+      ? this.pendingItems.map(this.args.key)
+      : [];
+    for (const k of this.order) {
+      if (!presentKeys.includes(k)) {
+        this.entries.delete(k);
+      }
+    }
     this.lastItems = undefined; // re-diff against what is pending
     this.exitComplete.clear();
     this.exiting.clear();
     this.order = presentKeys;
     this.version++;
-    if (this.args.propagate) this.safeToRemove();
+    if (this.args.propagate) {
+      this.safeToRemove();
+    }
     this.args.onExitComplete?.();
   }
 
@@ -206,7 +266,7 @@ export default class Presence<T> extends Component<Signature<T>> {
   }
 
   <template>
-    {{#each this.rendered key="key" as |e|}}
+    {{#each this.rendered key='key' as |e|}}
       {{yield e.item e}}
     {{/each}}
   </template>

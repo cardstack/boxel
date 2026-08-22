@@ -1,58 +1,55 @@
 // @ts-nocheck — vendored verbatim from Motion's packages/framer-motion/src/gestures/press.ts (motion@bbabb00); imports re-pointed
-import { Feature, frame, press, type VisualElement } from "motion-dom"
-import { extractEventInfo } from "./event-info"
+import { Feature, frame, press, type VisualElement } from 'motion-dom';
+
+import { extractEventInfo } from './event-info.ts';
 
 function handlePressEvent(
-    node: VisualElement<Element>,
-    event: PointerEvent,
-    lifecycle: "Start" | "End" | "Cancel"
+  node: VisualElement<Element>,
+  event: PointerEvent,
+  lifecycle: 'Start' | 'End' | 'Cancel',
 ) {
-    const { props } = node
+  const { props } = node;
 
-    if (node.current instanceof HTMLButtonElement && node.current.disabled) {
-        return
-    }
+  if (node.current instanceof HTMLButtonElement && node.current.disabled) {
+    return;
+  }
 
-    if (node.animationState && props.whileTap) {
-        node.animationState.setActive("whileTap", lifecycle === "Start")
-    }
+  if (node.animationState && props.whileTap) {
+    node.animationState.setActive('whileTap', lifecycle === 'Start');
+  }
 
-    const eventName = ("onTap" + (lifecycle === "End" ? "" : lifecycle)) as
-        | "onTapStart"
-        | "onTap"
-        | "onTapCancel"
+  const eventName = ('onTap' + (lifecycle === 'End' ? '' : lifecycle)) as
+    'onTapStart' | 'onTap' | 'onTapCancel';
 
-    const callback = props[eventName]
-    if (callback) {
-        frame.postRender(() => callback(event, extractEventInfo(event)))
-    }
+  const callback = props[eventName];
+  if (callback) {
+    frame.postRender(() => callback(event, extractEventInfo(event)));
+  }
 }
 
 export class PressGesture extends Feature<Element> {
-    mount() {
-        const { current } = this.node
-        if (!current) return
-
-        const { globalTapTarget, propagate } = this.node.props
-
-        this.unmount = press(
-            current,
-            (_element, startEvent) => {
-                handlePressEvent(this.node, startEvent, "Start")
-
-                return (endEvent, { success }) =>
-                    handlePressEvent(
-                        this.node,
-                        endEvent,
-                        success ? "End" : "Cancel"
-                    )
-            },
-            {
-                useGlobalTarget: globalTapTarget,
-                stopPropagation: propagate?.tap === false,
-            }
-        )
+  mount() {
+    const { current } = this.node;
+    if (!current) {
+      return;
     }
 
-    unmount() {}
+    const { globalTapTarget, propagate } = this.node.props;
+
+    this.unmount = press(
+      current,
+      (_element, startEvent) => {
+        handlePressEvent(this.node, startEvent, 'Start');
+
+        return (endEvent, { success }) =>
+          handlePressEvent(this.node, endEvent, success ? 'End' : 'Cancel');
+      },
+      {
+        useGlobalTarget: globalTapTarget,
+        stopPropagation: propagate?.tap === false,
+      },
+    );
+  }
+
+  unmount() {}
 }

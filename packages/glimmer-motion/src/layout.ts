@@ -5,9 +5,10 @@
  *
  *   layoutChange(() => { this.items = next; });
  */
-import { postRender } from './scheduler';
-import { rootProjectionNode, microtask } from 'motion-dom'
 import type { IProjectionNode } from 'motion-dom';
+import { microtask, rootProjectionNode } from 'motion-dom';
+
+import { postRender } from './scheduler.ts';
 
 const nodes = new Set<IProjectionNode>();
 export let hasTakenAnySnapshot = false;
@@ -24,7 +25,9 @@ export function snapshotAll() {
 
 /** the modifier registers its mount flush here (it imports this module, so no cycle) */
 let flushMounts: () => void = () => {};
-export function setMountFlusher(fn: () => void) { flushMounts = fn; }
+export function setMountFlusher(fn: () => void) {
+  flushMounts = fn;
+}
 
 let settlePending = false;
 /**
@@ -33,7 +36,9 @@ let settlePending = false;
  * microtask after that — never between Glimmer's render and the mounts.
  */
 export function requestSettle() {
-  if (settlePending) return;
+  if (settlePending) {
+    return;
+  }
   settlePending = true;
   postRender(settleNow);
 }
@@ -73,7 +78,10 @@ export function layoutChange<T>(fn: () => T): T {
  */
 export function instantLayoutTransition(callback?: () => void) {
   const root = rootProjectionNode.current as IProjectionNode | undefined;
-  if (!root) { callback?.(); return; }
+  if (!root) {
+    callback?.();
+    return;
+  }
   (root as any).isUpdating = false;
   (root as any).blockUpdate();
   callback?.();

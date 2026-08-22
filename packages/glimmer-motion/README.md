@@ -10,7 +10,17 @@ import { motion, Presence, LayoutGroup } from 'glimmer-motion';
 <template>
   <LayoutGroup>
     <Presence @items={{this.cards}} @key={{this.keyOf}} as |card h|>
-      <div {{motion presence=h layoutId=card.id initial=(hash opacity=0) animate=(hash opacity=1) exit=(hash opacity=0) drag="x" dragSnapToOrigin=true}}>
+      <div
+        {{motion
+          presence=h
+          layoutId=card.id
+          initial=(hash opacity=0)
+          animate=(hash opacity=1)
+          exit=(hash opacity=0)
+          drag='x'
+          dragSnapToOrigin=true
+        }}
+      >
         {{card.title}}
       </div>
     </Presence>
@@ -39,38 +49,40 @@ TypeScript types and Glint signatures.
 - **Drag** — Motion's pan/drag session: axis lock, direction lock, constraints (object / element / ref,
   re-measured on resize), elastic, momentum, snap to origin, `createDragControls()`, `whileDrag`,
   drag + layout, scroll-while-drag, `correctParentTransform()` / `transformViewBoxPoint()`
+- **Gestures** — `whileHover` / `whileTap` / `whileFocus` / `whileInView` and their handlers,
+  `<MotionConfig>` tree defaults, `useScroll()` / `useInView()` helpers over Motion's `scroll()` / `inView()`
 - **Reorder** — `<ReorderGroup>` / `<ReorderItem>`, axis `x` / `y` / `xy` (detected), auto-scroll
 - **Glimmer** — `.gts`, Glint signatures, host hooks isolated so the engine glue can be re-hosted
 
 ## API
 
-| export | what |
-|---|---|
-| `motion` | the modifier: Motion's props as named arguments, plus `presence` and `transformPagePoint` |
-| `Presence` | `@items @key @mode @initial @custom @onExitComplete @propagate @parent @anchorX @anchorY`, yields `item, handle` |
-| `LayoutGroup` | `@id @inherit`; hosts the render detector that snapshots layout before the DOM changes |
-| `ReorderGroup`, `ReorderItem` | `@values @onReorder @axis` yielding `group`; `@group @value` + forwarded motion args |
-| `layoutChange(fn)`, `snapshotAll()`, `requestSettle()`, `afterSettle(fn)`, `instantLayoutTransition(fn)` | layout pipeline |
-| `createDragControls()`, `DragControls` | `useDragControls` |
-| `correctParentTransform(elOrRef)`, `transformViewBoxPoint(svgOrRef)` | `transformPagePoint` helpers |
-| `MotionNode`, `postRender`, `setPostRender`, `flushPendingMounts` | for re-hosting on another Glimmer runtime |
+| export                                                                                                   | what                                                                                                             |
+| -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `motion`                                                                                                 | the modifier: Motion's props as named arguments, plus `presence` and `transformPagePoint`                        |
+| `Presence`                                                                                               | `@items @key @mode @initial @custom @onExitComplete @propagate @parent @anchorX @anchorY`, yields `item, handle` |
+| `LayoutGroup`                                                                                            | `@id @inherit`; hosts the render detector that snapshots layout before the DOM changes                           |
+| `ReorderGroup`, `ReorderItem`                                                                            | `@values @onReorder @axis` yielding `group`; `@group @value` + forwarded motion args                             |
+| `layoutChange(fn)`, `snapshotAll()`, `requestSettle()`, `afterSettle(fn)`, `instantLayoutTransition(fn)` | layout pipeline                                                                                                  |
+| `createDragControls()`, `DragControls`                                                                   | `useDragControls`                                                                                                |
+| `correctParentTransform(elOrRef)`, `transformViewBoxPoint(svgOrRef)`                                     | `transformPagePoint` helpers                                                                                     |
+| `MotionNode`, `postRender`, `setPostRender`, `flushPendingMounts`                                        | for re-hosting on another Glimmer runtime                                                                        |
 
 Deep imports (`glimmer-motion/motion`, `glimmer-motion/presence`, `glimmer-motion/reorder/group`, …) are the
 same modules.
 
 ### React → Glimmer
 
-| React | here |
-|---|---|
-| `<motion.div …>` | `<div {{motion …}}>` — any tag, including SVG |
-| `ref` | the element, or a `{current}` object filled by a modifier |
-| `useMotionValue`, `useTransform` | `motionValue`, `transformValue` from `motion-dom` |
-| `<AnimatePresence>` | `<Presence @items @key>` yielding a handle |
-| `useIsPresent()` | `h.isPresent` |
-| re-render → layout snapshot | a render pass inside `<LayoutGroup>`, or `layoutChange()` |
-| `<MotionConfig>` | pass `transition` / `transformPagePoint` per element |
-| `useDragControls()` | `createDragControls()` |
-| `Reorder.Group` / `.Item` | `<ReorderGroup>` / `<ReorderItem>` |
+| React                            | here                                                      |
+| -------------------------------- | --------------------------------------------------------- |
+| `<motion.div …>`                 | `<div {{motion …}}>` — any tag, including SVG             |
+| `ref`                            | the element, or a `{current}` object filled by a modifier |
+| `useMotionValue`, `useTransform` | `motionValue`, `transformValue` from `motion-dom`         |
+| `<AnimatePresence>`              | `<Presence @items @key>` yielding a handle                |
+| `useIsPresent()`                 | `h.isPresent`                                             |
+| re-render → layout snapshot      | a render pass inside `<LayoutGroup>`, or `layoutChange()` |
+| `<MotionConfig>`                 | pass `transition` / `transformPagePoint` per element      |
+| `useDragControls()`              | `createDragControls()`                                    |
+| `Reorder.Group` / `.Item`        | `<ReorderGroup>` / `<ReorderItem>`                        |
 
 ## How it works
 
@@ -90,7 +102,6 @@ what that surfaced — is in the
 
 ## Not ported (yet)
 
-`MotionConfig`, `whileHover` / `whileTap` / `whileFocus` / `whileInView`, `useScroll` / `useInView`,
 `m` / `LazyMotion`, Reorder's `as`, server rendering.
 
 ## License

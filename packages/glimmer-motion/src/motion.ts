@@ -3,22 +3,24 @@
  * the whole lifecycle. This file is the Ember host adapter: it also installs the runloop as the engine
  * glue's post-render scheduler.
  */
-import Modifier, { type ArgsFor } from 'ember-modifier';
-import { schedule } from '@ember/runloop';
-import type Owner from '@ember/owner';
 import { registerDestructor } from '@ember/destroyable';
-import MotionNode, { type MotionEl, type MotionProps } from './node';
-import { setPostRender } from './scheduler';
+import type Owner from '@ember/owner';
+import { schedule } from '@ember/runloop';
+import Modifier, { type ArgsFor } from 'ember-modifier';
 
-export type { MotionProps, MotionEl } from './node';
-export { flushPendingMounts } from './node';
+import MotionNode, { type MotionEl, type MotionProps } from './node.ts';
+import { setPostRender } from './scheduler.ts';
+
+export type { MotionEl, MotionProps } from './node.ts';
+export { flushPendingMounts } from './node.ts';
 
 // React's useEffect slot is Ember's afterRender queue
+// eslint-disable-next-line ember/no-runloop -- this IS the host adapter: the engine glue's postRender slot is Ember's afterRender queue
 setPostRender((fn) => schedule('afterRender', null, fn));
 
 interface Signature {
+  Args: { Named: MotionProps; Positional: [] };
   Element: MotionEl;
-  Args: { Positional: []; Named: MotionProps };
 }
 
 export default class MotionModifier extends Modifier<Signature> {

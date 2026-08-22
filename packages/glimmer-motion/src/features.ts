@@ -3,14 +3,22 @@
  * (ported from Motion's packages/framer-motion/src/motion/features/animation/*). Everything else —
  * springs, keyframes, variants, projection (layout / layoutId) — lives in the engine.
  */
-import { DragGesture } from './gestures/DragGesture';
-import { PanGesture } from './gestures/PanGesture';
-import { HoverGesture } from './gestures/hover';
-import { PressGesture } from './gestures/press';
-import { FocusGesture } from './gestures/focus';
-import { InViewFeature } from './gestures/viewport';
-import { Feature, createAnimationState, isAnimationControls, resolveVariant, setFeatureDefinitions, HTMLProjectionNode } from 'motion-dom';
-import type { VisualElement, MotionNodeOptions } from 'motion-dom';
+import type { MotionNodeOptions, VisualElement } from 'motion-dom';
+import {
+  createAnimationState,
+  Feature,
+  HTMLProjectionNode,
+  isAnimationControls,
+  resolveVariant,
+  setFeatureDefinitions,
+} from 'motion-dom';
+
+import { DragGesture } from './gestures/drag-gesture.ts';
+import { FocusGesture } from './gestures/focus.ts';
+import { HoverGesture } from './gestures/hover.ts';
+import { PanGesture } from './gestures/pan-gesture.ts';
+import { PressGesture } from './gestures/press.ts';
+import { InViewFeature } from './gestures/viewport.ts';
 
 class AnimationFeature extends Feature<unknown> {
   unmountControls?: VoidFunction;
@@ -20,7 +28,9 @@ class AnimationFeature extends Feature<unknown> {
   }
   updateAnimationControlsSubscription() {
     const { animate } = this.node.getProps();
-    if (isAnimationControls(animate)) this.unmountControls = animate.subscribe(this.node);
+    if (isAnimationControls(animate)) {
+      this.unmountControls = animate.subscribe(this.node);
+    }
   }
   mount() {
     this.updateAnimationControlsSubscription();
@@ -28,7 +38,9 @@ class AnimationFeature extends Feature<unknown> {
   update() {
     const { animate } = this.node.getProps();
     const { animate: prevAnimate } = this.node.prevProps || {};
-    if (animate !== prevAnimate) this.updateAnimationControlsSubscription();
+    if (animate !== prevAnimate) {
+      this.updateAnimationControlsSubscription();
+    }
   }
   unmount() {
     this.node.animationState!.reset();
@@ -41,18 +53,33 @@ class ExitAnimationFeature extends Feature<unknown> {
   id = exitId++;
   isExitComplete = false;
   update() {
-    if (!this.node.presenceContext) return;
+    if (!this.node.presenceContext) {
+      return;
+    }
     const { isPresent, onExitComplete } = this.node.presenceContext;
     const { isPresent: prevIsPresent } = this.node.prevPresenceContext || {};
-    if (!this.node.animationState || isPresent === prevIsPresent) return;
+    if (!this.node.animationState || isPresent === prevIsPresent) {
+      return;
+    }
     if (isPresent && prevIsPresent === false) {
       if (this.isExitComplete) {
         const { initial, custom } = this.node.getProps();
-        if (typeof initial === 'string' || (typeof initial === 'object' && initial !== null && !Array.isArray(initial))) {
+        if (
+          typeof initial === 'string' ||
+          (typeof initial === 'object' &&
+            initial !== null &&
+            !Array.isArray(initial))
+        ) {
           const resolved = resolveVariant(this.node, initial as any, custom);
           if (resolved) {
-            const { transition, transitionEnd, ...target } = resolved as any;
-            for (const key in target) this.node.getValue(key)?.jump(target[key]);
+            const {
+              transition: _transition,
+              transitionEnd: _transitionEnd,
+              ...target
+            } = resolved as any;
+            for (const key in target) {
+              this.node.getValue(key)?.jump(target[key]);
+            }
           }
         }
         this.node.animationState.reset();
@@ -63,7 +90,10 @@ class ExitAnimationFeature extends Feature<unknown> {
       this.isExitComplete = false;
       return;
     }
-    const exitAnimation = this.node.animationState.setActive('exit', !isPresent);
+    const exitAnimation = this.node.animationState.setActive(
+      'exit',
+      !isPresent,
+    );
     if (onExitComplete && !isPresent) {
       exitAnimation.then(() => {
         this.isExitComplete = true;
@@ -73,14 +103,27 @@ class ExitAnimationFeature extends Feature<unknown> {
   }
   mount() {
     const { register, onExitComplete } = this.node.presenceContext || {};
-    if (onExitComplete) onExitComplete(this.id);
-    if (register) this.unmount = register(this.id);
+    if (onExitComplete) {
+      onExitComplete(this.id);
+    }
+    if (register) {
+      this.unmount = register(this.id);
+    }
   }
   unmount() {}
 }
 
 const featureProps: Record<string, (keyof MotionNodeOptions)[]> = {
-  animation: ['animate', 'variants', 'whileHover', 'whileTap', 'exit', 'whileInView', 'whileFocus', 'whileDrag'],
+  animation: [
+    'animate',
+    'variants',
+    'whileHover',
+    'whileTap',
+    'exit',
+    'whileInView',
+    'whileFocus',
+    'whileDrag',
+  ],
   exit: ['exit'],
   layout: ['layout', 'layoutId'],
   drag: ['drag', 'dragControls'],
@@ -90,23 +133,55 @@ const featureProps: Record<string, (keyof MotionNodeOptions)[]> = {
   tap: ['whileTap', 'onTap', 'onTapStart', 'onTapCancel'],
   inView: ['whileInView', 'onViewportEnter', 'onViewportLeave'],
 };
-const isEnabled = (names: (keyof MotionNodeOptions)[]) => (props: MotionNodeOptions) => names.some((n) => !!props[n]);
+const isEnabled =
+  (names: (keyof MotionNodeOptions)[]) => (props: MotionNodeOptions) =>
+    names.some((n) => !!props[n]);
 
 let initialized = false;
 export function initFeatures() {
-  if (initialized) return;
+  if (initialized) {
+    return;
+  }
   initialized = true;
   setFeatureDefinitions({
-    animation: { isEnabled: isEnabled(featureProps['animation']!), Feature: AnimationFeature as any },
-    exit: { isEnabled: isEnabled(featureProps['exit']!), Feature: ExitAnimationFeature as any },
-    layout: { isEnabled: isEnabled(featureProps['layout']!), ProjectionNode: HTMLProjectionNode as any },
+    animation: {
+      isEnabled: isEnabled(featureProps['animation']!),
+      Feature: AnimationFeature as any,
+    },
+    exit: {
+      isEnabled: isEnabled(featureProps['exit']!),
+      Feature: ExitAnimationFeature as any,
+    },
+    layout: {
+      isEnabled: isEnabled(featureProps['layout']!),
+      ProjectionNode: HTMLProjectionNode as any,
+    },
     // the drag and pan gestures are vendored from Motion (they are not exported by motion-dom)
-    drag: { isEnabled: isEnabled(featureProps['drag']!), Feature: DragGesture as any, ProjectionNode: HTMLProjectionNode as any },
-    pan: { isEnabled: isEnabled(featureProps['pan']!), Feature: PanGesture as any },
+    drag: {
+      isEnabled: isEnabled(featureProps['drag']!),
+      Feature: DragGesture as any,
+      ProjectionNode: HTMLProjectionNode as any,
+    },
+    pan: {
+      isEnabled: isEnabled(featureProps['pan']!),
+      Feature: PanGesture as any,
+    },
     // gestures (hover / press / focus / in-view): Motion's feature classes over the engine's hover() / press()
-    hover: { isEnabled: isEnabled(featureProps['hover']!), Feature: HoverGesture as any },
-    tap: { isEnabled: isEnabled(featureProps['tap']!), Feature: PressGesture as any },
-    focus: { isEnabled: isEnabled(featureProps['focus']!), Feature: FocusGesture as any },
-    inView: { isEnabled: isEnabled(featureProps['inView']!), Feature: InViewFeature as any },
+    hover: {
+      isEnabled: isEnabled(featureProps['hover']!),
+      Feature: HoverGesture as any,
+    },
+    tap: {
+      isEnabled: isEnabled(featureProps['tap']!),
+      Feature: PressGesture as any,
+    },
+    focus: {
+      isEnabled: isEnabled(featureProps['focus']!),
+      Feature: FocusGesture as any,
+    },
+    inView: {
+      isEnabled: isEnabled(featureProps['inView']!),
+      Feature: InViewFeature as any,
+    },
   } as any);
 }

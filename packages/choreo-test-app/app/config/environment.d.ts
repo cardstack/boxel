@@ -3,12 +3,12 @@
  *    import config from 'test-app/config/environment'
  */
 declare const config: {
+  APP: Record<string, unknown>;
   environment: string;
+  locationType: 'history' | 'hash' | 'none';
   modulePrefix: string;
   podModulePrefix: string;
-  locationType: 'history' | 'hash' | 'none';
   rootURL: string;
-  APP: Record<string, unknown>;
 };
 
 export default config;
