@@ -159,20 +159,38 @@ module('Integration | motion | MotionConfig', function (hooks) {
     );
   });
 
-  test('reducedMotion="always" puts the element in reduced motion (the dev-mode console warning is compiled out of this build)', async function (assert) {
-    await render(
-      <template>
-        <MotionConfig @reducedMotion="always"><div
-            id="el"
-            {{motion animate=HALF transition=OFF}}
-          ></div></MotionConfig>
-      </template>
-    );
-    await nextFrame();
-    assert.true(
-      (visualElementStore.get(document.querySelector('#el')!) as any)
-        .shouldReduceMotion
-    );
+  test('reducedMotion warning fires in development mode', async function (assert) {
+    const warned: unknown[] = [];
+    const original = console.warn;
+    console.warn = (...args: unknown[]) => {
+      warned.push(args);
+    };
+    try {
+      const done = new Promise<void>((resolve) => {
+        (window as any).__rm = resolve;
+      });
+      const complete = () => (window as any).__rm();
+      await render(
+        <template>
+          <MotionConfig @reducedMotion="always"><div
+              id="el"
+              {{motion
+                animate=HALF
+                transition=OFF
+                onAnimationComplete=complete
+              }}
+            ></div></MotionConfig>
+        </template>
+      );
+      await done;
+      assert.true(warned.length > 0, 'console.warn was called');
+      assert.true(
+        (visualElementStore.get(document.querySelector('#el')!) as any)
+          .shouldReduceMotion
+      );
+    } finally {
+      console.warn = original;
+    }
   });
 
   test('reducedMotion makes transforms animate instantly', async function (assert) {

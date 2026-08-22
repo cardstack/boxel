@@ -194,7 +194,7 @@ DOM-read start values need a second frame in a real browser where jsdom collapse
 Ember `render()` settles on a timer where RTL's is synchronous.
 
 ```
-pnpm install && pnpm test     # builds the addon, runs the suite in Chrome against the built package
+pnpm install && pnpm test     # builds the addon, runs the suite (a development-mode build, as boxel does) in Chrome
 ```
 
 ## Install
@@ -318,7 +318,7 @@ Reorder's `as` prop (the group is a `ul`, items are `li`), server rendering.
 ```
 pnpm install
 pnpm build                     # packages/glimmer-motion → dist/ + declarations/
-pnpm test                      # build, then test-app: vite build --mode test && ember test
+pnpm test                      # build, then test-app: vite build --mode=development --out-dir dist-tests && ember test --path dist-tests
 pnpm lint:types                # glint, both packages
 pnpm --filter test-app start   # the test-app in a browser (/tests)
 ```
