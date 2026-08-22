@@ -280,7 +280,7 @@ module('Integration | motion | AnimatePresence', function (hooks) {
     const p = new P({ isVisible: true });
     await render(
       <template>
-        <div id="root"><Presence @items={{p.one}} @key={{keyOf}} as |it h|><div
+        <div id="root"><Presence @items={{p.one}} @key={{keyOf}} as |_it _h|><div
             ></div></Presence></div>
       </template>
     );
