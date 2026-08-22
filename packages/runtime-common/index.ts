@@ -1143,6 +1143,22 @@ export {
   parseExactVersionTransportURL,
   type ExactVersionTransport,
 } from './deck-version-url.ts';
+export {
+  DECKLIST_PATH,
+  deckLibSpecFromPackage,
+  planDeckInstall,
+  planDeckRemix,
+  planDeckUse,
+} from './decklist-adopt.ts';
+export type {
+  DeckAdoptionPlan,
+  DeckLibSpec,
+  DeckPackageDocuments,
+  DecklistWrite,
+  InstallDeckPlan,
+  RemixDeckPlan,
+  UseDeckPlan,
+} from './decklist-adopt.ts';
 
 export * from './db-queries/db-types.ts';
 export * from './db-queries/realm-metadata-queries.ts';
