@@ -25,6 +25,8 @@ const PNPM_OWNED_FILES = new Set(['pnpm-lock.yaml', 'pnpm-workspace.yaml']);
 // work.
 const VERBATIM_COPIED_TREES = [
   '/packages/boxel-cli/plugin/skills/',
+  '/packages/deck/src/',
+  '/packages/deck/tests/',
   // Licensed FileDef sample files whose bytes must match the integrity
   // manifest in the sibling SOURCES.md.
   '/packages/experiments-realm/filedef-fixtures/samples/',

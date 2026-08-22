@@ -20,6 +20,11 @@ packages/observability/grafanactl/resources/
 # maintained by hand + build-plugin.ts, not prettier.
 packages/boxel-cli/plugin/skills/
 
+# Deck Core is copied byte-for-byte from the pinned cardstack/deck commit.
+# Formatting it here would break the provenance hash in DECK_SOURCE.
+packages/deck/src/
+packages/deck/tests/
+
 # FileDef regression fixtures: licensed sample files whose bytes must match
 # the integrity manifest in the sibling SOURCES.md. Reformatting a fixture
 # breaks its recorded SHA-256 and drifts it from its documented provenance.
