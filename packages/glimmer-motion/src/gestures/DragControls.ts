@@ -1,9 +1,7 @@
 // @ts-nocheck — vendored verbatim; type-checked upstream under framer-motion's tsconfig
 // Vendored from framer-motion/src/gestures/drag/use-drag-controls.ts (motion@bbabb00) — framework-free; only imports were re-pointed.
-import {
-    DragControlOptions,
-    VisualElementDragControls,
-} from "./VisualElementDragControls"
+import { VisualElementDragControls } from './VisualElementDragControls'
+import type { DragControlOptions } from './VisualElementDragControls'
 
 /**
  * Can manually trigger a drag gesture on one or more `drag`-enabled `motion` components.
