@@ -385,3 +385,69 @@ existing demos.
    `fold`, and retire the six timed z-index flags behind `Hold`s.
 3. **Later**: `counterpart` cross-fade helper step; a `c.scrub` for
    scroll-driven timelines; per-sprite `onStart`/`onComplete` hooks.
+
+## Linear backlog coverage
+
+The Cardstack Linear workspace holds the legacy project ("Boxel Motion MVP",
+60 issues, 2021–2022) plus a handful of host-app animation tickets that were
+waiting on it. Checked on 2026-08-23 against phase 1. Issue ids are
+`linear.app/cardstack/issue/<id>`.
+
+**Covered by phase 1**
+
+| issue                                                                                                    | what it asked                                                                                    | here                                                                                         |
+| -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| CS-2527 Orchestration                                                                                    | sequencing, parallel, serial behaviors per sprite                                                | `c.Sequence` / `c.Parallel`                                                                  |
+| CS-284 Update Motion API                                                                                 | behavior per property; velocity carried on interruption; keyframes from a function               | the engine's transitions; `Spring` carries velocity; property functions                      |
+| CS-265 Interrupting animations                                                                           | measure with the animation removed; initial = current spot; a removed id that comes back is kept | the engine's values; a second dirty pass restarts from live values; `counterpart`            |
+| CS-266 Nested sprites                                                                                    | orphans stay nested                                                                              | only the topmost removed element is orphaned                                                 |
+| CS-276 Removed-here / inserted-there is a kept sprite                                                    |                                                                                                  | `counterpart`                                                                                |
+| CS-4173 Interruption and a removed counterpart both mattering                                            | a phantom of the old element while the new one moves                                             | the kept sprite keeps its live values; the counterpart is a separate orphan with its own row |
+| CS-4524 (3) A card controlling its contents while a layout above moves it                                |                                                                                                  | a nested `<Choreo>` inside a moving participant measures its own pass                        |
+| CS-3957 (1, 3, 4) Variant/size changes with content revealed/hidden; same-context orchestration; "stops" |                                                                                                  | `Move` + inserted/removed content; `Wait`                                                    |
+| CS-2536 CompoundValue (translate + scale order)                                                          |                                                                                                  | the engine's transform order                                                                 |
+| CS-273 Endless `maybeTransition` under the inspector                                                     |                                                                                                  | a run starts only on a dirty changeset                                                       |
+| CS-3774 / CS-2537 README; drop the keyframe generator                                                    |                                                                                                  | this document; no generator                                                                  |
+
+**Not covered — phase 3 candidates, most important first**
+
+1. **Far matching across regions** — CS-260 (shipped in the legacy:
+   `sentSprite` / `receivedSprite` between two stable contexts), CS-261
+   (when a context is being destroyed — cross-route), CS-4091 (a _global_
+   changeset that reconciles inserted + removed across contexts and tells
+   each what it may handle), CS-4532 ("focus on cross-plane navigation"),
+   CS-2530 / CS-4066 (which context gets a sprite). Phase 1 matches
+   counterparts only inside one `<Choreo>`; a participant belongs to its
+   nearest region. This is the biggest gap and bento-boxel's own flights
+   are exactly this shape (shelf → canvas, tile → document page, row →
+   detail). Design: one pass-level reconciliation over every region, then
+   a sprite whose counterpart lives in another region is handled by their
+   nearest common ancestor region (or a designated `@scope`), with the
+   orphan locked in page space as it already is.
+2. **Stagger** — CS-3957 (3): "list items animate in sync or staggered".
+   No step has a per-sprite offset. Add `@stagger={{ms}}` (and a
+   direction / origin, as the engine's `stagger()` has) to every step.
+3. **The region as a sprite** — CS-282 (measure contexts like sprites;
+   shipped in the legacy), CS-267 (a context grows/shrinks with its
+   content). The region measures its own box already but does not expose
+   it or move itself. Expose `changeset.region` bounds, and let
+   `<Choreo @id @role>` make its root a participant of the region above.
+4. **Size by transform** — CS-4174: width/height transitions fight
+   translation when both run. Phase 1 animates width/height like the
+   legacy. Add `@via='scale'` on `Move` (scale with the engine's
+   border-radius / shadow correction), or route such sprites to
+   `layout=true` projection.
+5. **Rules** — CS-4739: match elements to animate without a modifier per
+   element. `role` selectors are half of this; a selector-by-CSS query on
+   `@of` would be the rest. Low priority.
+6. **Material recipes** — CS-3968 / CS-4000 (canceled, but the analysis is
+   good): container transform, shared axis, fade, fade-through as named
+   timelines on top of the steps. A recipe layer, after 1–4.
+
+**The host-app tickets this was for** (Miscellaneous Boxel Backlog /
+Connecting Cards Across Contexts, all still open): CS-5320 open/close card
+stack, CS-5326 add/remove a stack, CS-5319 guest ⇄ operator mode, CS-6415
+AI assistant panel, CS-6428 view-code panel, CS-6593 fade-through between
+chat sessions, CS-4744 embedded ⇄ isolated card, CS-4959 a TypeScript-
+friendly high-level API. Every one of them is a region-scoped transition;
+the stack ones need item 1.
