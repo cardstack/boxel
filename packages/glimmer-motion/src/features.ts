@@ -5,8 +5,8 @@
  */
 import { DragGesture } from './gestures/DragGesture';
 import { PanGesture } from './gestures/PanGesture';
-import { createAnimationState, isAnimationControls, resolveVariant, setFeatureDefinitions, HTMLProjectionNode } from 'motion-dom'
-import type { Feature, VisualElement, MotionNodeOptions } from 'motion-dom';
+import { Feature, createAnimationState, isAnimationControls, resolveVariant, setFeatureDefinitions, HTMLProjectionNode } from 'motion-dom';
+import type { VisualElement, MotionNodeOptions } from 'motion-dom';
 
 class AnimationFeature extends Feature<unknown> {
   unmountControls?: VoidFunction;
