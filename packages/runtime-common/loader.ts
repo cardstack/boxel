@@ -210,7 +210,10 @@ export class Loader {
   private static loaders = new WeakMap<Function, Loader>();
 
   private fetchImplementation: Fetch;
-  private resolveImport: (moduleIdentifier: string) => string;
+  private resolveImport: (
+    moduleIdentifier: string,
+    relativeTo?: string,
+  ) => string;
   private virtualNetwork: VirtualNetwork | undefined;
   // Unsubscribe for the realm-mapping-change listener registered below. The
   // VirtualNetwork outlives any single loader (LoaderService replaces the
@@ -229,7 +232,7 @@ export class Loader {
 
   constructor(
     fetch: Fetch,
-    resolveImport?: (moduleIdentifier: string) => string,
+    resolveImport?: (moduleIdentifier: string, relativeTo?: string) => string,
     options?: {
       retrySleep?: (ms: number) => Promise<void>;
       virtualNetwork?: VirtualNetwork;
@@ -1112,7 +1115,7 @@ export class Loader {
           return {
             type: 'dep',
             moduleURL: new URL(
-              this.resolveImport(depId),
+              this.resolveImport(depId, moduleIdentifier),
               new URL(moduleIdentifier),
             ),
           };

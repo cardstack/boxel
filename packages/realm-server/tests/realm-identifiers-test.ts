@@ -5,6 +5,7 @@ import { RealmPaths, VirtualNetwork } from '@cardstack/runtime-common';
 import { ri, rri } from '@cardstack/runtime-common';
 import type { SingleCardDocument } from '@cardstack/runtime-common';
 import { relativizeDocument } from '@cardstack/runtime-common/realm-index-query-engine';
+import { rri as deckRRI } from '@cardstack/deck';
 
 module(basename(import.meta.filename), function () {
   // Regression test for CS-10498: cards in prefix-mapped realms (like the
@@ -669,6 +670,147 @@ module(basename(import.meta.filename), function () {
           /no matching prefix mapping/,
         );
       });
+    });
+  });
+
+  module('VirtualNetwork canonical RRI import map', function (hooks) {
+    let vn: VirtualNetwork;
+
+    hooks.beforeEach(function () {
+      vn = new VirtualNetwork();
+      vn.addRealmMapping(
+        '@acme/dashboard/',
+        'https://realms.example/acme/dashboard/',
+      );
+      vn.addRealmMapping(
+        '@catalog/palette@1.0.0/',
+        'https://packages.example/catalog/palette/1.0.0/',
+      );
+      vn.addRealmMapping(
+        '@catalog/palette@2.0.0/',
+        'https://packages.example/catalog/palette/2.0.0/',
+      );
+      vn.setRRIImportMap({
+        imports: {
+          palette: deckRRI('@catalog/palette@2.0.0/index.js'),
+        },
+        scopes: {
+          '@acme/dashboard/legacy-viewer/': {
+            palette: deckRRI('@catalog/palette@1.0.0/index.js'),
+          },
+        },
+        integrity: {
+          '@catalog/palette@2.0.0/index.js': 'sha256-v2',
+        },
+      });
+    });
+
+    test('resolves one specifier to exact Versions by importer', function (assert) {
+      assert.strictEqual(
+        vn.resolveImport(
+          'palette',
+          'https://realms.example/acme/dashboard/scene.js',
+        ),
+        'https://packages.example/catalog/palette/2.0.0/index.js',
+        'the global pin serves the current package',
+      );
+      assert.strictEqual(
+        vn.resolveImport(
+          'palette',
+          'https://realms.example/acme/dashboard/legacy-viewer/scene.js',
+        ),
+        'https://packages.example/catalog/palette/1.0.0/index.js',
+        'the importer scope serves the legacy package',
+      );
+      assert.strictEqual(
+        vn.resolveImport(
+          'palette',
+          'https://realms.example/acme/dashboard/legacy-viewer-experiments/scene.js',
+        ),
+        'https://packages.example/catalog/palette/2.0.0/index.js',
+        'a sibling prefix does not inherit the legacy scope',
+      );
+    });
+
+    test('projects browser URLs without changing the canonical lock', function (assert) {
+      assert.deepEqual(vn.projectRRIImportMap(), {
+        imports: {
+          palette: 'https://packages.example/catalog/palette/2.0.0/index.js',
+        },
+        scopes: {
+          'https://realms.example/acme/dashboard/legacy-viewer/': {
+            palette: 'https://packages.example/catalog/palette/1.0.0/index.js',
+          },
+        },
+        integrity: {
+          'https://packages.example/catalog/palette/2.0.0/index.js':
+            'sha256-v2',
+        },
+      });
+      assert.deepEqual(vn.getRRIImportMap(), {
+        imports: {
+          palette: deckRRI('@catalog/palette@2.0.0/index.js'),
+        },
+        scopes: {
+          '@acme/dashboard/legacy-viewer/': {
+            palette: deckRRI('@catalog/palette@1.0.0/index.js'),
+          },
+        },
+        integrity: {
+          '@catalog/palette@2.0.0/index.js': 'sha256-v2',
+        },
+      });
+    });
+
+    test('accepts only exact RRI targets, never transport URLs', function (assert) {
+      assert.throws(
+        () =>
+          vn.setRRIImportMap({
+            imports: {
+              palette:
+                'https://packages.example/catalog/palette/2.0.0/index.js',
+            },
+            scopes: {},
+          }),
+        /canonical Deck locks require RRI targets/,
+      );
+      assert.throws(
+        () =>
+          vn.setRRIImportMap({
+            imports: { palette: '@catalog/palette/index.js' },
+            scopes: {},
+          }),
+        /must be exact Versions/,
+      );
+    });
+
+    test('invalidates consumers only when canonical resolution changes', function (assert) {
+      let invalidations = 0;
+      vn.onMappingChange(() => invalidations++);
+      let current = vn.getRRIImportMap();
+      vn.setRRIImportMap(current);
+      assert.strictEqual(
+        invalidations,
+        0,
+        'reinstalling the same lock is inert',
+      );
+      vn.clearRRIImportMap();
+      assert.strictEqual(
+        invalidations,
+        1,
+        'changing the lock invalidates once',
+      );
+    });
+
+    test('leaves unregistered scoped npm packages to existing shims', function (assert) {
+      vn.addImportMap(
+        '@babel/runtime/',
+        (rest) => `https://npm.example/${rest}`,
+      );
+      assert.strictEqual(
+        vn.resolveImport('@babel/runtime/helpers/objectSpread2'),
+        'https://npm.example/helpers/objectSpread2',
+      );
     });
   });
 

@@ -13,9 +13,63 @@ import {
 import type { Readable } from 'stream';
 import { fetcher, type FetcherMiddlewareHandler } from './fetcher.ts';
 import { createEnvironmentAwareFetch } from '#fetch';
+import {
+  canonicalRRIImportMap,
+  isExactVersionRRI,
+  isRRI as isDeckRRI,
+  projectRRIImportMap as projectDeckRRIImportMap,
+  resolveRRI as resolveDeckRRI,
+  type ProjectedImportMap,
+  type RRIImportMap,
+} from '@cardstack/deck';
 
 export interface ResponseWithNodeStream extends Response {
   nodeStream?: Readable;
+}
+
+function cloneRRIImportMap(lock: RRIImportMap): RRIImportMap {
+  return {
+    imports: { ...lock.imports },
+    scopes: Object.fromEntries(
+      Object.entries(lock.scopes).map(([scope, table]) => [
+        scope,
+        { ...table },
+      ]),
+    ),
+    ...(lock.integrity ? { integrity: { ...lock.integrity } } : {}),
+  };
+}
+
+function sameStringRecord(
+  left: Record<string, string>,
+  right: Record<string, string>,
+): boolean {
+  let leftKeys = Object.keys(left).sort();
+  let rightKeys = Object.keys(right).sort();
+  return (
+    leftKeys.length === rightKeys.length &&
+    leftKeys.every(
+      (key, index) =>
+        key === rightKeys[index] && left[key] === right[rightKeys[index]],
+    )
+  );
+}
+
+function sameRRIImportMap(left: RRIImportMap, right: RRIImportMap): boolean {
+  if (!sameStringRecord(left.imports, right.imports)) {
+    return false;
+  }
+  let leftScopes = Object.keys(left.scopes).sort();
+  let rightScopes = Object.keys(right.scopes).sort();
+  return (
+    leftScopes.length === rightScopes.length &&
+    leftScopes.every(
+      (scope, index) =>
+        scope === rightScopes[index] &&
+        sameStringRecord(left.scopes[scope], right.scopes[scope]),
+    ) &&
+    sameStringRecord(left.integrity ?? {}, right.integrity ?? {})
+  );
 }
 
 export type Handler = (req: Request) => Promise<Response | null>;
@@ -25,6 +79,9 @@ export class VirtualNetwork {
   private urlMappings: [string, string][] = [];
   private importMap: Map<string, (rest: string) => string> = new Map();
   private realmMappings = new Map<string, string>();
+  // The canonical dependency lock is expressed entirely in RRIs. URLs are a
+  // transport projection and never become authored repository state.
+  private rriImportMap: RRIImportMap = { imports: {}, scopes: {} };
   // Memo for toURLHref. Hot paths (module-graph walks, per-instance realm
   // membership checks) resolve the same identifiers over and over and only
   // ever need the href STRING, yet toURL pays a native `new URL()` per call —
@@ -104,7 +161,25 @@ export class VirtualNetwork {
     }
   }
 
-  resolveImport = (moduleIdentifier: string) => {
+  resolveImport = (moduleIdentifier: string, relativeTo?: string) => {
+    let fromRRI = relativeTo ? this.unresolveURL(relativeTo) : undefined;
+    let isDirectRRI = isDeckRRI(moduleIdentifier);
+    let deckOwnsSpecifier =
+      !isDirectRRI || this.isRegisteredPrefix(moduleIdentifier);
+    if (deckOwnsSpecifier && (!relativeTo || isDeckRRI(fromRRI!))) {
+      let resolved = resolveDeckRRI({
+        specifier: moduleIdentifier,
+        // Importer-less resolution deliberately excludes scopes: a top-level
+        // request can use global imports but cannot accidentally impersonate
+        // a package subtree.
+        fromRRI: fromRRI ?? '@deck/top-level/',
+        imports: this.rriImportMap.imports,
+        scopes: fromRRI ? this.rriImportMap.scopes : {},
+      });
+      if (resolved) {
+        return this.toURLHref(resolved);
+      }
+    }
     for (let [prefix, handler] of this.importMap) {
       if (moduleIdentifier.startsWith(prefix)) {
         return handler(moduleIdentifier.slice(prefix.length));
@@ -115,6 +190,44 @@ export class VirtualNetwork {
     }
     return moduleIdentifier;
   };
+
+  /**
+   * Replace the canonical dependency lock. The lock is normalized and
+   * validated by Deck Core, including rejection of URL-form identities.
+   */
+  setRRIImportMap(lock: unknown): void {
+    let canonical = canonicalRRIImportMap(lock);
+    let targets = [
+      ...Object.values(canonical.imports),
+      ...Object.values(canonical.scopes).flatMap((table) =>
+        Object.values(table),
+      ),
+    ];
+    if (targets.some((target) => !isExactVersionRRI(target))) {
+      throw new Error('canonical RRI import targets must be exact Versions');
+    }
+    if (sameRRIImportMap(this.rriImportMap, canonical)) {
+      return;
+    }
+    this.rriImportMap = canonical;
+    this.notifyMappingChange();
+  }
+
+  clearRRIImportMap(): void {
+    this.setRRIImportMap({ imports: {}, scopes: {} });
+  }
+
+  /** Return a defensive copy suitable for inspection or persistence. */
+  getRRIImportMap(): RRIImportMap {
+    return cloneRRIImportMap(this.rriImportMap);
+  }
+
+  /** Derive a browser import map from the canonical lock and current routes. */
+  projectRRIImportMap(): ProjectedImportMap {
+    return projectDeckRRIImportMap(this.rriImportMap, (identifier) =>
+      this.toURLHref(identifier),
+    );
+  }
 
   private packageShimHandler = new PackageShimHandler(this.resolveImport);
 

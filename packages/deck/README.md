@@ -16,6 +16,16 @@ The Boxel-owned `package.json` and `tsconfig.json` expose the vendored sources
 to this workspace. The root `@cardstack/deck` entry is browser-safe;
 `@cardstack/deck/node` is server-only.
 
+## Boxel integration
+
+Boxel installs a canonical, URL-free dependency lock with
+`VirtualNetwork.setRRIImportMap()`. Import resolution receives the importing
+module URL, converts it back to an RRI, and uses Deck's longest matching scope
+to select an exact Version RRI. `VirtualNetwork.projectRRIImportMap()` derives
+the browser import map from the current transport routes; projected URLs are
+never written back into canonical state. Replacing the canonical lock
+invalidates Loader module caches in one step.
+
 Run the package checks with:
 
 ```sh
