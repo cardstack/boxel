@@ -2570,6 +2570,31 @@ importers:
         specifier: 'catalog:'
         version: 5.9.3
 
+  packages/deck:
+    dependencies:
+      semver:
+        specifier: ^7.7.0
+        version: 7.8.5
+    devDependencies:
+      '@glint/ember-tsc':
+        specifier: 'catalog:'
+        version: 1.5.0(supports-color@8.1.1)(typescript@5.9.3)
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
+      '@types/qunit':
+        specifier: 'catalog:'
+        version: 2.19.14
+      '@types/semver':
+        specifier: ^7.7.0
+        version: 7.7.1
+      qunit:
+        specifier: 'catalog:'
+        version: 2.26.0
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
   packages/eslint-plugin-boxel:
     dependencies:
       ember-eslint-parser:
@@ -2913,6 +2938,9 @@ importers:
       '@cardstack/choreo-player':
         specifier: workspace:*
         version: link:../choreo-player
+      '@cardstack/deck':
+        specifier: workspace:*
+        version: link:../deck
       '@cardstack/eslint-plugin-boxel':
         specifier: workspace:*
         version: link:../eslint-plugin-boxel
@@ -3632,6 +3660,9 @@ importers:
       '@cardstack/bxl':
         specifier: workspace:*
         version: link:../bxl
+      '@cardstack/deck':
+        specifier: workspace:*
+        version: link:../deck
       '@cardstack/eslint-plugin-boxel':
         specifier: workspace:*
         version: link:../eslint-plugin-boxel
@@ -3974,6 +4005,9 @@ importers:
       '@cardstack/bxl':
         specifier: workspace:*
         version: link:../bxl
+      '@cardstack/deck':
+        specifier: workspace:*
+        version: link:../deck
       '@cardstack/eslint-plugin-boxel':
         specifier: workspace:*
         version: link:../eslint-plugin-boxel
