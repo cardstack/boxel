@@ -1,10 +1,14 @@
 /**
- * The two features the React layer contributes on top of the motion-dom engine
+ * The features the React layer contributes on top of the motion-dom engine (animation, exit, the gestures)
  * (ported from Motion's packages/framer-motion/src/motion/features/animation/*). Everything else —
  * springs, keyframes, variants, projection (layout / layoutId) — lives in the engine.
  */
 import { DragGesture } from './gestures/DragGesture';
 import { PanGesture } from './gestures/PanGesture';
+import { HoverGesture } from './gestures/hover';
+import { PressGesture } from './gestures/press';
+import { FocusGesture } from './gestures/focus';
+import { InViewFeature } from './gestures/viewport';
 import { Feature, createAnimationState, isAnimationControls, resolveVariant, setFeatureDefinitions, HTMLProjectionNode } from 'motion-dom';
 import type { VisualElement, MotionNodeOptions } from 'motion-dom';
 
@@ -81,6 +85,10 @@ const featureProps: Record<string, (keyof MotionNodeOptions)[]> = {
   layout: ['layout', 'layoutId'],
   drag: ['drag', 'dragControls'],
   pan: ['onPan', 'onPanStart', 'onPanSessionStart', 'onPanEnd'],
+  focus: ['whileFocus'],
+  hover: ['whileHover', 'onHoverStart', 'onHoverEnd'],
+  tap: ['whileTap', 'onTap', 'onTapStart', 'onTapCancel'],
+  inView: ['whileInView', 'onViewportEnter', 'onViewportLeave'],
 };
 const isEnabled = (names: (keyof MotionNodeOptions)[]) => (props: MotionNodeOptions) => names.some((n) => !!props[n]);
 
@@ -95,5 +103,10 @@ export function initFeatures() {
     // the drag and pan gestures are vendored from Motion (they are not exported by motion-dom)
     drag: { isEnabled: isEnabled(featureProps['drag']!), Feature: DragGesture as any, ProjectionNode: HTMLProjectionNode as any },
     pan: { isEnabled: isEnabled(featureProps['pan']!), Feature: PanGesture as any },
+    // gestures (hover / press / focus / in-view): Motion's feature classes over the engine's hover() / press()
+    hover: { isEnabled: isEnabled(featureProps['hover']!), Feature: HoverGesture as any },
+    tap: { isEnabled: isEnabled(featureProps['tap']!), Feature: PressGesture as any },
+    focus: { isEnabled: isEnabled(featureProps['focus']!), Feature: FocusGesture as any },
+    inView: { isEnabled: isEnabled(featureProps['inView']!), Feature: InViewFeature as any },
   } as any);
 }
