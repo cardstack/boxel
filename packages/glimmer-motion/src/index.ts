@@ -2,6 +2,16 @@
  * glimmer-motion — Motion's React glue re-done for Glimmer, on the unchanged motion-dom engine.
  * Deep imports (`glimmer-motion/motion`, `glimmer-motion/presence`, …) are the same modules.
  */
+export type { ChoreoContext } from './choreo.gts';
+export { default as Choreo } from './choreo.gts';
+export type { default as Changeset } from './choreo/changeset.ts';
+export type {
+  Bounds,
+  Query,
+  Rect,
+  SpringSpec,
+  Sprite,
+} from './choreo/types.ts';
 export { scroll } from './dom/scroll/index.ts';
 export { scrollInfo } from './dom/scroll/track.ts';
 export type {

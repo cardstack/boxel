@@ -10,6 +10,7 @@ import type {
   IProjectionNode,
   MotionNodeOptions,
   MotionValue,
+  PresenceContextProps,
   VisualElement,
 } from 'motion-dom';
 import {
@@ -30,6 +31,8 @@ import {
   visualElementStore,
 } from 'motion-dom';
 
+import { type ChoreoHost, closestChoreo } from './choreo/registry.ts';
+import type { ChoreoNode } from './choreo/types.ts';
 import { initFeatures } from './features.ts';
 import {
   afterSettle,
@@ -54,7 +57,10 @@ export type MotionProps = Omit<MotionNodeOptions, 'dragConstraints'> & {
   _dragY?: MotionValue<number>;
   /** React accepts a ref object; Glimmer has the element itself, so either is fine */
   dragConstraints?: MotionNodeOptions['dragConstraints'] | Element | null;
+  /** choreography: identity across renders, and the group a <Choreo> step selects by */
+  id?: string;
   presence?: PresenceHandle;
+  role?: string;
   style?: Record<string, unknown>;
   /** MotionConfig's transformPagePoint — passed per element here (React merges the config into props) */
   transformPagePoint?: (p: { x: number; y: number }) => {
@@ -223,7 +229,7 @@ setMountFlusher(flushPendingMounts);
 
 let layoutPresenceId = 0;
 
-export default class MotionNode {
+export default class MotionNode implements ChoreoNode {
   private ve?: HTMLVisualElement;
   private destroyed = false;
   /** this node's registration with its presence child (MeasureLayout registers per node) */
@@ -250,6 +256,11 @@ export default class MotionNode {
   }
   private unregister?: () => void;
   private popStyle?: HTMLStyleElement;
+  /** boxel-motion's sprite identity: a <Choreo> above selects this element by these */
+  id: string | null = null;
+  role: string | null = null;
+  private choreo?: ChoreoHost;
+  private presenceRegistered = false;
 
   constructor() {
     initFeatures();
@@ -257,7 +268,9 @@ export default class MotionNode {
 
   /** React render: the element's props for this pass */
   update(element: MotionEl, named: MotionProps) {
-    const { presence: ownPresence, ...rest } = named;
+    const { presence: ownPresence, id, role, ...rest } = named;
+    this.id = id ?? null;
+    this.role = role ?? null;
     const props = { ...rest } as MotionNodeOptions;
     // dragConstraints given as an element → the ref object the gesture code expects
     if (named.dragConstraints instanceof Element) {
@@ -378,6 +391,7 @@ export default class MotionNode {
           // that will later have to wait for it to report an exit it can no
           // longer report — every leaver after that is stranded on screen.
           const release = presenceContext.register(this.layoutPresenceKey);
+          this.presenceRegistered = true;
           const beforeRelease = this.unregister;
           this.unregister = () => {
             beforeRelease?.();
@@ -425,6 +439,9 @@ export default class MotionNode {
       ve.update(props, mountContext);
       ve.updateFeatures();
       ve.scheduleRenderMicrotask();
+      if (this.id !== null || this.role !== null) {
+        this.joinChoreo(element, presenceContext);
+      }
       if (ve.projection) {
         if (hasTakenAnySnapshot) {
           requestSettle();
@@ -540,6 +557,62 @@ export default class MotionNode {
     }
   }
 
+  /* ---- ChoreoNode: what a <Choreo> above needs from this element ---- */
+
+  /** a participant registers with the nearest region, and with its Presence so a timeline can outlive a plain exit */
+  private joinChoreo(
+    element: MotionEl,
+    presenceContext: PresenceContextProps | null,
+  ) {
+    const host = closestChoreo(element);
+    if (!host) {
+      return;
+    }
+    this.choreo = host;
+    const leave = host.register(this);
+    if (presenceContext?.register && !this.presenceRegistered) {
+      const release = presenceContext.register(this.layoutPresenceKey);
+      this.presenceRegistered = true;
+      const before = this.unregister;
+      this.unregister = () => {
+        before?.();
+        release?.();
+      };
+    }
+    const before = this.unregister;
+    this.unregister = () => {
+      before?.();
+      leave();
+    };
+  }
+
+  get visualElement(): VisualElement | undefined {
+    return this.ve;
+  }
+
+  get isPresent(): boolean {
+    const presence =
+      this.latest?.ownPresence ?? (this.ve && presenceOf.get(this.ve));
+    return presence ? presence.isPresent : true;
+  }
+
+  /** the choreography is done with a leaving element: tell its Presence */
+  exitComplete() {
+    const presence =
+      this.latest?.ownPresence ?? (this.ve && presenceOf.get(this.ve));
+    presence?.context.onExitComplete?.(this.layoutPresenceKey);
+  }
+
+  /** the choreography is done with an element whose unmount it deferred */
+  release() {
+    const ve = this.ve;
+    if (!ve) {
+      return;
+    }
+    this.ve = undefined;
+    ve.unmount();
+  }
+
   /** re-run the update pass with the latest args (a context or presence change above us) */
   refresh() {
     if (this.ve?.current && this.element && this.latest) {
@@ -649,6 +722,10 @@ export default class MotionNode {
     ve.projection?.scheduleCheckAfterUnmount?.();
     this.unregister?.();
     this.popStyle?.remove();
+    // a removed participant may still have a row to play: the region unmounts it when that ends
+    if (this.choreo?.claim(this)) {
+      return;
+    }
     ve.unmount();
     this.ve = undefined;
   }
