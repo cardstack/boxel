@@ -19,7 +19,12 @@ type Filter = (typeof filters)[number];
  * stay out of the root capture, which is what a route change needs it for.
  */
 function settle() {
-  const done = () => document.documentElement.classList.remove('is-switching');
+  const done = () => {
+    document.documentElement.classList.remove('is-switching');
+    for (const card of document.querySelectorAll('.card[data-staying]')) {
+      card.removeAttribute('data-staying');
+    }
+  };
   const running = document.documentElement
     .getAnimations({ subtree: true })
     .filter((animation) =>
@@ -56,18 +61,17 @@ import { animateView } from 'glimmer-motion';
 select = (filter) => {
   if (filter === this.filter) return;
 
-  // .add() resolves the selector and writes a view-transition-name onto each
-  // element — then takes it off again afterwards. Hand-written names are the
-  // thing to get wrong: one per card and the browser snapshots two dozen live
-  // demos; none at all and the only named layer left is the page itself.
+  // .add() writes a view-transition-name onto each element and takes it off
+  // again afterwards. WHICH elements is the whole decision: a name is a layer,
+  // and every layer is a bitmap of live, still-animating content. Name all
+  // twenty-six cards and the compositor builds twenty-six of them. Name none
+  // and the only layer left is the page itself, which blinks.
   animateView(() => {
     this.filter = filter;          // the update runs inside the snapshot
   })
-    .add('.card')
+    .add('.card[data-staying]')    // the cards with somewhere to travel to
     .class('demo-card')            // how CSS reaches the generated layers
-    .layout({ duration: 0.36, ease: [0.22, 1, 0.36, 1] })
-    .enter({ opacity: [0, 1], scale: [0.97, 1] })
-    .exit({ opacity: [1, 0], scale: [1, 0.97] });
+    .layout({ duration: 0.32, ease: [0.22, 1, 0.36, 1] });
 };`;
 
 export class Gallery extends Component {
@@ -100,16 +104,40 @@ export class Gallery extends Component {
     // class takes the body out of the capture AND takes the backdrop away,
     // leaving the cards as the only layers, over a page that stays live.
     document.documentElement.classList.add('is-switching');
+    this.markSurvivors(filter);
     void animateView(() => {
       this.filter = filter;
     })
-      .add('.card')
+      .add('.card[data-staying]')
       .class('demo-card')
-      .layout({ duration: 0.36, ease: [0.22, 1, 0.36, 1] })
-      .enter({ opacity: [0, 1], scale: [0.97, 1] })
-      .exit({ opacity: [1, 0], scale: [1, 0.97] })
+      .layout({ duration: 0.32, ease: [0.22, 1, 0.36, 1] })
       .then(settle, settle);
   };
+
+  /**
+   * Mark the cards that live through the filter, so `.add()` can select them.
+   *
+   * A name is a layer, and a layer is a bitmap of live, still-animating
+   * content. Naming all twenty-six means the compositor builds twenty-six of
+   * them — most for cards that are about to be gone — and the switch judders.
+   * The survivors are the ones with somewhere to travel to; the rest have no
+   * counterpart to morph into and are better off not being captured at all.
+   */
+  markSurvivors(next: Filter) {
+    const staying = new Set(
+      catalog
+        .filter((demo) => next === 'All' || demo.group === next)
+        .map((demo) => demo.id)
+    );
+    for (const card of document.querySelectorAll<HTMLElement>(
+      '.card[data-demo]'
+    )) {
+      card.toggleAttribute(
+        'data-staying',
+        staying.has(card.dataset['demo'] ?? '')
+      );
+    }
+  }
 
   toggleCode = () => {
     this.code = !this.code;
@@ -169,7 +197,7 @@ export class Gallery extends Component {
 
     <div class="grid">
       {{#each this.demos as |demo|}}
-        <article class="card">
+        <article class="card" data-demo={{demo.id}}>
           <div class="card-stage">
             {{#let demo.Example as |Example|}}
               <Example />

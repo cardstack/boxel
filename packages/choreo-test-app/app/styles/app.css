@@ -67,6 +67,19 @@ html::before {
   z-index: 50;
 }
 
+/* The grain is a fixed overlay, so a view transition captures it INTO the
+   snapshot and then paints it live over the top as well — the texture doubles
+   for the length of the transition. Take it off while one is running.
+   Kept as two rules on purpose: :active-view-transition is not everywhere, and
+   an unknown selector would invalidate the whole list if they shared one. */
+html:active-view-transition::before {
+  display: none;
+}
+
+html.is-switching::before {
+  display: none;
+}
+
 body {
   margin: 0;
   color: var(--ink);
