@@ -4,8 +4,10 @@
 
 **Base:** `codex/deck-r0-b0-collaboration-protocol` at `1fd416e9c5`
 
-B1a gives the B0 protocol one conditional-object contract across Boxel Desktop
-and hosted realms. It does not provision AWS resources; that is B1b.
+B1a gives the B0 protocol one conditional-object contract across Boxel Desktop,
+open-source/self-hosted Boxel, small teams, and optional hosted object storage.
+The realm-files implementation is complete and normative; it is not a fallback
+for deployments that lack AWS. B1a does not provision AWS resources.
 
 ## Storage topology
 
@@ -22,15 +24,18 @@ realm root / S3 realm prefix
     └── prepared/              writer-owned recoverable ref updates
 ```
 
-Desktop and a single-process local Realm Server use
-`RealmFileConditionalObjectStore`. A hosted realm may expose the same prefix
-through S3 Files for ordinary POSIX reads, indexing, and agent inspection, but
-Realm Server writes contention-sensitive refs through
+Desktop, open-source Boxel, and small teams use
+`RealmFileConditionalObjectStore`. Atomic replacement plus a realm-local lock
+is sufficient even with a small number of concurrent users. A larger hosted
+realm may expose the same prefix through S3 Files for ordinary POSIX reads,
+indexing, and agent inspection, while Realm Server writes
+contention-sensitive refs through
 `S3ConditionalObjectStore` and S3 `If-Match`/`If-None-Match`. This keeps branch
 metadata visible under the mounted realm while using the durable S3 object
 version as the concurrency authority.
 
-S3 Files is therefore not a second canonical tree, and direct S3 refs do not
+S3 is optional. When selected, S3 Files is not a second canonical tree, and
+direct S3 refs do not
 float in a parallel bucket hierarchy. Both address the same realm-relative
 keys; they are two access paths selected for different consistency needs.
 
@@ -71,8 +76,9 @@ MATRIX_REGISTRATION_SHARED_SECRET=xxxx \
 mise exec -- pnpm lint
 ```
 
-The local run has nine passing assertions and one deliberately skipped live
-AWS assertion. To exercise the real AWS API:
+The mandatory local run has nine passing assertions and one deliberately
+skipped live AWS assertion. The skip does not reduce filesystem-backed Deck
+capability. To validate an optional hosted S3 backend:
 
 ```sh
 export BOXEL_DECK_S3_TEST_BUCKET=<staging-test-bucket>
@@ -80,6 +86,6 @@ export BOXEL_DECK_S3_TEST_REGION=<region>
 ```
 
 The task role or local AWS profile must allow `s3:GetObject` and conditional
-`s3:PutObject` under the test prefix. B1b provisions and drills that exact
-environment, including KMS, bucket versioning, mount/access point, IAM, alarms,
-and rollback.
+`s3:PutObject` under the test prefix. Optional B1b provisions and drills that
+environment for Cardstack hosting, including KMS, bucket versioning,
+mount/access point, IAM, alarms, and rollback.

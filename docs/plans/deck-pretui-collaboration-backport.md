@@ -146,13 +146,25 @@ services but deliberately adds no pilot UI. This gives the whole observable
 system one kill switch without scattering PretUI-specific conditionals through
 Deck Core.
 
-## Hosted substrate: S3 Files plus direct S3
+## Storage backends: filesystem baseline, optional S3
 
-The hosted pilot uses S3 Files as a first-class durable distributed filesystem,
-not merely as a deployment adapter. Realm Server, the indexer, agent jobs, and
-deckd share the selected PretUI branch workspace through its POSIX/NFS surface.
-Active filesystem writes have multi-AZ durability, and the bucket remains the
-long-term persistence plane.
+An ordinary realm filesystem is the normative Deck backend. Atomic file
+replacement, a realm-local writer lock, and generation-checked refs provide
+the complete consistency model for Boxel Desktop, open-source self-hosting,
+one-user realms, and small teams. Repository, branch, History, Checkpoint,
+Review, and merge services do not require AWS or S3 Files.
+
+The same state-machine tests define the backend contract. A deployment may
+replace the local conditional-object adapter with another implementation, but
+it does not gain different protocol semantics by doing so.
+
+### Optional hosted substrate: S3 Files plus direct S3
+
+A larger hosted deployment may use S3 Files as a durable distributed
+filesystem. Realm Server, the indexer, agent jobs, and deckd can share the
+selected PretUI branch workspace through its POSIX/NFS surface, while the
+bucket remains the long-term persistence plane. This is an operations and
+multi-writer scaling choice, not a Deck service prerequisite.
 
 S3 Files is not the collaboration transaction manager. Filesystem exports to
 the bucket are asynchronous, and AWS resolves a same-key filesystem/direct-S3
@@ -175,18 +187,19 @@ export. S3 Versioning is enabled for recovery, but it is not Deck History.
 Directory rename is not a protocol primitive, and S3 Files lost-and-found is
 an operational alarm, not conflict resolution.
 
-The Desktop backend implements the same object/ref/workspace contracts on an
-ordinary filesystem. The Known Date replay must produce identical canonical
-hashes locally and on the S3-backed pilot.
+The Known Date replay must produce the canonical local hashes without any AWS
+configuration. An S3-backed deployment must reproduce those hashes before it
+can claim backend conformance.
 
-### Infrastructure is a required slice
+### Hosted infrastructure is an optional production slice
 
-The AWS proof includes reviewed infrastructure in `cardstack/infra`; it is not
-complete when application tests pass against manually created resources. Keep
-the existing Realm Server EFS mount for non-pilot realms. Add a second,
-feature-gated S3 Files volume and route only the allowlisted PretUI realm to it.
-The initial staging/internal environment enables this infrastructure;
-production remains disabled until the pilot is approved.
+When Cardstack chooses the S3 backend for its hosted PretUI pilot, the AWS proof
+includes reviewed infrastructure in `cardstack/infra`; a production S3 claim
+is not complete when application tests pass only against manually created
+resources. Keep the existing Realm Server EFS mount for non-pilot realms. Add
+a second, feature-gated S3 Files volume and route only the allowlisted PretUI
+realm to it. Open-source and filesystem-backed deployments skip this slice and
+still retain the complete Deck workflow.
 
 Required infrastructure work:
 
@@ -227,9 +240,9 @@ Required infrastructure work:
     approved.
 
 Terraform gates are `fmt`, `validate`, and a reviewed plan that shows no
-replacement of the existing EFS or unrelated ECS resources. The application
-stack cannot call B1 complete until the staged infrastructure smoke and
-recovery drills pass.
+replacement of the existing EFS or unrelated ECS resources. They gate enabling
+the S3 backend in Cardstack hosting; they do not gate B1a, filesystem-backed
+Deck services, or subsequent protocol/CLI development.
 
 ## Replace the current Boxel CLI sync model
 
@@ -376,23 +389,23 @@ retroactively.
 A0–A6 are the locally verified foundation. Remaining work is ordered around
 PretUI collaboration:
 
-| Slice   | Deliverable                                                                                                                             | PretUI proof                                                                                                            |
-| ------- | --------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| **A5**  | Version-aware immutable index snapshots and semver range queries; Known Date vertical-slice migration/replay                            | The catalog can open exact PretUI Versions and a range selects the correct indexed Known Date slice without copying it. |
-| **A6**  | Deterministic exact-Version syndication into the Boxel monorepo workspace package                                                       | A Host module imports generated PretUI, its consumer tests pass, and provenance verification reproduces the same tree.  |
-| **B0**  | Repository, branch-head, Checkpoint, Review, and merge protocol adapters                                                                | Canonical objects round-trip with PretUI RRI roots.                                                                     |
-| **B1a** | Realm-contained Desktop FS and hosted S3 Files/direct-S3 adapters, conditional refs, writer ownership, prepared recovery                | The same state-machine suite passes against local adapters and an AWS test harness.                                     |
-| **B1b** | `cardstack/infra` S3 Files module, bucket/KMS/versioning, access points/mounts, ECS/IAM/SSM wiring, alarms, rollout and recovery drills | The Known Date staging pilot survives races/restarts and the kill switch without replacing Realm Server's existing EFS. |
-| **B2a** | Content-addressed Boxel CLI pull/push/sync/status/watch against an exact branch base                                                    | Two local PretUI workspaces detect divergence without mtimes; stale push writes nothing.                                |
-| **B2b** | Branch-keyed deckd History on implicit `main`; accepted CLI writes append Steps; save/restore                                           | Claude edits a PretUI component through watch, sees every save in History, and restores without local Git.              |
-| **B3a** | Immutable index-generation manifests and RRI-bearing `RealmViewContext` through writer/query                                            | Two hidden PretUI views answer differently for the same component RRI.                                                  |
-| **B3b** | View-qualified caches, jobs, events, activity, prerender, Loader, and test selection                                                    | A hidden branch write cannot invalidate or leak into PretUI `main`.                                                     |
-| **B4**  | Atomic branch/fork creation: clone source, exact lock, completed index, and History ancestry                                            | Three named PretUI branches become visible only after their catalog previews are ready.                                 |
-| **B5a** | Checkpoint creation and immutable source/index/lock views; CLI command                                                                  | A teammate checkpoints an exact date-picker change while later saves continue.                                          |
-| **B5b** | Review opening, candidate generation, exact diff, Browse/Run/catalog preview; CLI command                                               | Review remains fixed when source or target branch moves.                                                                |
-| **B6**  | Three-way merge, target-head recheck, one target write/index/History batch; CLI command                                                 | Disjoint component work merges; competing token edits conflict with no partial main mutation.                           |
-| **B7**  | Complete Boxel CLI and Claude Code skill/workflow, including branch/fork/switch/checkpoint/review/merge and structured JSON output      | The full collaboration replay runs headlessly through public CLI commands.                                              |
-| **B8**  | Polish the additive collaboration affordances in Workspace Chooser, Interact/Code, stack backgrounds, and Review                        | The team can perform the same proven workflow visually in the existing Host, without a parallel Deck application.       |
+| Slice   | Deliverable                                                                                                                              | PretUI proof                                                                                                            |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| **A5**  | Version-aware immutable index snapshots and semver range queries; Known Date vertical-slice migration/replay                             | The catalog can open exact PretUI Versions and a range selects the correct indexed Known Date slice without copying it. |
+| **A6**  | Deterministic exact-Version syndication into the Boxel monorepo workspace package                                                        | A Host module imports generated PretUI, its consumer tests pass, and provenance verification reproduces the same tree.  |
+| **B0**  | Repository, branch-head, Checkpoint, Review, and merge protocol adapters                                                                 | Canonical objects round-trip with PretUI RRI roots.                                                                     |
+| **B1a** | Normative realm-files adapter plus optional direct-S3 adapter, conditional refs, writer ownership, and prepared recovery                 | The state-machine suite passes locally without AWS; the same suite can target a configured S3 test bucket.              |
+| **B1b** | Optional Cardstack-hosting S3 Files module, bucket/KMS/versioning, access points/mounts, ECS/IAM/SSM wiring, alarms, and recovery drills | When selected, the staging backend survives races/restarts without replacing Realm Server's existing EFS.               |
+| **B2a** | Content-addressed Boxel CLI pull/push/sync/status/watch against an exact branch base                                                     | Two local PretUI workspaces detect divergence without mtimes; stale push writes nothing.                                |
+| **B2b** | Branch-keyed deckd History on implicit `main`; accepted CLI writes append Steps; save/restore                                            | Claude edits a PretUI component through watch, sees every save in History, and restores without local Git.              |
+| **B3a** | Immutable index-generation manifests and RRI-bearing `RealmViewContext` through writer/query                                             | Two hidden PretUI views answer differently for the same component RRI.                                                  |
+| **B3b** | View-qualified caches, jobs, events, activity, prerender, Loader, and test selection                                                     | A hidden branch write cannot invalidate or leak into PretUI `main`.                                                     |
+| **B4**  | Atomic branch/fork creation: clone source, exact lock, completed index, and History ancestry                                             | Three named PretUI branches become visible only after their catalog previews are ready.                                 |
+| **B5a** | Checkpoint creation and immutable source/index/lock views; CLI command                                                                   | A teammate checkpoints an exact date-picker change while later saves continue.                                          |
+| **B5b** | Review opening, candidate generation, exact diff, Browse/Run/catalog preview; CLI command                                                | Review remains fixed when source or target branch moves.                                                                |
+| **B6**  | Three-way merge, target-head recheck, one target write/index/History batch; CLI command                                                  | Disjoint component work merges; competing token edits conflict with no partial main mutation.                           |
+| **B7**  | Complete Boxel CLI and Claude Code skill/workflow, including branch/fork/switch/checkpoint/review/merge and structured JSON output       | The full collaboration replay runs headlessly through public CLI commands.                                              |
+| **B8**  | Polish the additive collaboration affordances in Workspace Chooser, Interact/Code, stack backgrounds, and Review                         | The team can perform the same proven workflow visually in the existing Host, without a parallel Deck application.       |
 
 CLI support is not deferred until B7. Each B slice lands its corresponding
 public command and integration test. B7 consolidates the full agent workflow,
@@ -565,8 +578,10 @@ lint/type checks:
 - Tests assert SHA-256/tree/Repository/lock/ref values, not mtimes.
 - A failed sync or merge proves remote bytes, index generation, branch ref, and
   History are all unchanged.
-- Branch tests run against both local and S3 adapters after B1a; B1b repeats
-  them through the real staging mount, IAM policies, ECS task role, and bucket.
+- Branch tests always run against the realm-files adapter. The same contract
+  runs against direct S3 when a test bucket is configured; B1b repeats it
+  through the real staging mount, IAM policies, ECS task role, and bucket only
+  for deployments selecting that backend.
 - PretUI visual proof uses the actual Known Date implementation, catalog card,
   theme, and affected tests—not protocol-themed demo cards.
 - Monorepo syndication is accepted only when a clean regeneration is byte
@@ -590,6 +605,8 @@ lint/type checks:
   PretUI package for Host consumption.
 - Porting the complete Atlas/CRM/Greeter POC UI. Small datasets or interactions
   may be reused when they strengthen a PretUI acceptance case.
+- S3 Files infrastructure for open-source, Desktop, and small-team deployments;
+  their filesystem backend provides the complete Deck consistency contract.
 
 ## Replacement threshold
 
@@ -603,8 +620,9 @@ PretUI can stop using GitHub for daily collaboration after B7 when:
   Host consumer tests.
 - the same release passes the complete off/wrong-realm/PretUI feature-gate
   matrix, including an immediate operator kill-switch test.
-- the Terraform-managed staging substrate has passed its failover,
-  export-window, recovery, observability, and retained-data rollback drills.
+- if Cardstack hosting enables the optional S3 backend, that backend has passed
+  its failover, export-window, recovery, observability, and retained-data
+  rollback drills. Filesystem-backed adoption does not wait for it.
 
 B8 is the broader team-adoption gate: the same workflow becomes visually clear
 inside Boxel, but it does not redefine the protocol already proven by CLI.
