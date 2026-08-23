@@ -1,6 +1,6 @@
-# glimmer-motion
+# Choreo
 
-**Motion, Choreographed.** The [Motion](https://motion.dev) engine for Ember — and a timeline for
+**Motion, Choreo-graphed.** The [Motion](https://motion.dev) engine for Ember — and a timeline for
 the scene. `motion-dom`, untouched, bound as a modifier and a handful of components: layout,
 shared-element transitions, presence, variants, drag, reorder. Then `<Choreo>`: a changeset and a
 sequence over a whole render pass, which Motion's per-element model does not have.
@@ -158,7 +158,7 @@ pixel — which is not an aspiration but the thing we measure.
 
 ## How it was made
 
-glimmer-motion started as the motion layer of a port: a React app built on Motion (the "bentobox"
+Choreo started as the motion layer of a port: a React app built on Motion (the "bentobox"
 reference, frozen as ground truth) moving to a modern Vite/Embroider Ember app. The first question was how
 much work Motion needed to run under Glimmer. The answer turned out to be "none, if you don't touch it."
 
@@ -227,6 +227,12 @@ It has a contract suite that states its rules on small fixtures, and a soak that
 ```
 pnpm install && pnpm test     # builds the addon, runs the suite (a development-mode build, as boxel does) in Chrome
 ```
+
+## The name
+
+The repo is **Choreo** (`cardstack/choreo`). The published package is still
+`glimmer-motion` — one npm name, unchanged, and every import in these docs is the
+real one.
 
 ## Install
 
@@ -545,6 +551,10 @@ projection node.
   open/close (far match), a panel that is its own scene over a moving shell (nested `<Choreo>`), and
   compose/trash (`{{beacon}}`, not `layoutId`).
 - **Open work** is tracked in [docs/open-bugs.md](docs/open-bugs.md), including the demos still missing.
+
+## License
+
+MIT. © 2026 Cardstack Foundation. See [LICENSE](LICENSE).
 
 ## Credits
 

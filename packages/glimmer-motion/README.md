@@ -1,6 +1,8 @@
 # glimmer-motion
 
-**Motion, Choreographed.** The [Motion](https://motion.dev) engine for Ember — and a timeline for
+The npm package of [Choreo](https://github.com/cardstack/glimmer-motion) — Cardstack.
+
+**Motion, Choreo-graphed.** The [Motion](https://motion.dev) engine for Ember — and a timeline for
 the scene. `{{motion}}`, `<Presence>`, `<LayoutGroup>`, Reorder, drag, and `<Choreo>`. Verified by
 ports of Motion's own test suites.
 

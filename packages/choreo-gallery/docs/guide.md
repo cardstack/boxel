@@ -1,4 +1,4 @@
-# glimmer-motion, from a Glimmer card
+# Choreo, from a Glimmer card
 
 The [README](../README.md) is a fidelity document: it says what Motion does and where each piece
 went. This is the other thing — how you actually write motion in a `.gts` file, in the order you

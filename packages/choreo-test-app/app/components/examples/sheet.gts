@@ -33,6 +33,9 @@ const extras = [
 ];
 
 const keyOf = (item: { id: string }) => item.id;
+/** one array, not a fresh one per read: <Presence> diffs by identity, and a
+ *  new [] on every render is a new diff on every render */
+const NONE: typeof extras = [];
 const enters = { opacity: 0, y: 14 };
 const here = { opacity: 1, y: 0 };
 const leaves = { opacity: 0, y: 10 };
@@ -76,7 +79,7 @@ export class Sheet extends Component {
   }
 
   get appOnly() {
-    return this.isApp ? extras : [];
+    return this.isApp ? extras : NONE;
   }
 
   grab = () => {

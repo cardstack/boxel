@@ -1,18 +1,18 @@
 import { LinkTo } from '@ember/routing';
 import { pageTitle } from 'ember-page-title';
 import { MotionConfig } from 'glimmer-motion';
-import { SparkMark } from 'test-app/components/spark-mark';
+import { ChoreoMark } from 'test-app/components/choreo-mark';
 
 <template>
-  {{pageTitle "glimmer-motion"}}
+  {{pageTitle "Choreo"}}
   <MotionConfig @reducedMotion="user">
     <div class="app-shell">
       <header class="topbar">
         <LinkTo @route="index" class="brand">
-          <SparkMark />
+          <ChoreoMark />
           <span class="brand-copy">
-            <span class="brand-name">glimmer-motion</span>
-            <span class="brand-sub">examples</span>
+            <span class="brand-name">Choreo</span>
+            <span class="brand-sub">by Cardstack</span>
           </span>
         </LinkTo>
         {{! One link. Motion is credited in the hero's tagline and the test
@@ -25,6 +25,12 @@ import { SparkMark } from 'test-app/components/spark-mark';
       <main class="page">
         {{outlet}}
       </main>
+      <footer class="footer">
+        <span>© 2026 Cardstack Foundation</span>
+        <a href="https://github.com/cardstack/glimmer-motion/blob/main/LICENSE">
+          MIT License
+        </a>
+      </footer>
     </div>
   </MotionConfig>
 </template>

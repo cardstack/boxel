@@ -204,10 +204,12 @@ button {
   font-weight: 800;
   font-size: clamp(3.4rem, 9vw, 7.2rem);
   letter-spacing: -0.055em;
-  line-height: 0.86;
+  /* two faces on two lines: the narrow one rides higher, and at 0.86 its caps
+     ran into the comma above it */
+  line-height: 0.95;
 }
 
-/* The one exception. 'Choreographed' is thirteen characters; in Syne at 800 it
+/* The one exception. 'Choreo-graphed.' is fifteen characters; in Syne at 800 it
    sets the width of the whole heading and forces the line above it down a size
    with it. The narrower face keeps the word intact and lets the rest stay
    wide — which is the point of the wide face in the first place. */
@@ -219,7 +221,7 @@ button {
      the Syne line above it. */
   font-stretch: 62%;
   font-variation-settings: 'wdth' 62;
-  font-size: 1.08em;
+  font-size: 1.02em;
   letter-spacing: -0.02em;
   font-style: normal;
   color: transparent;
@@ -2247,9 +2249,9 @@ html[data-gm-dragging] * {
   }
 }
 
-.spark-mark {
-  width: 22px;
-  height: 22px;
+.choreo-mark {
+  width: 24px;
+  height: 24px;
   display: block;
   color: var(--ember);
 }
@@ -3626,4 +3628,30 @@ html[data-gm-dragging] * {
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--ink-faint);
+}
+
+/* ---- footer ---- */
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 40px 24px 48px;
+  border-top: 1px solid var(--line);
+  margin-top: 64px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.footer a {
+  color: var(--ink-dim);
+  text-decoration: none;
+}
+
+.footer a:hover {
+  color: var(--copper);
 }

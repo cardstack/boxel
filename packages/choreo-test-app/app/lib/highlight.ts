@@ -65,6 +65,15 @@ function colorize(source: string): string {
       continue;
     }
 
+    // a handlebars comment is prose, not an expression: without this the
+    // words inside it get tokenised as helpers and keywords
+    if (source.startsWith('{{!', i)) {
+      const end = commentEnd(source, i);
+      out += wrap('comment', source.slice(i, end));
+      i = end;
+      continue;
+    }
+
     if (source.startsWith('{{', i)) {
       const end = closeMustache(source, i);
       out += colorizeMustache(source.slice(i, end));
@@ -87,6 +96,15 @@ function colorize(source: string): string {
   return out;
 }
 
+/** `{{!-- … --}}` closes on its own marker; `{{! … }}` closes like a mustache */
+function commentEnd(source: string, start: number): number {
+  if (source.startsWith('{{!--', start)) {
+    const close = source.indexOf('--}}', start);
+    return close === -1 ? source.length : close + 4;
+  }
+  return closeMustache(source, start);
+}
+
 function colorizeMustache(block: string): string {
   const open = block.match(/^\{\{[/#]?/)?.[0] ?? '{{';
   const closed = block.endsWith('}}');
@@ -105,6 +123,13 @@ function colorizeTag(tag: string): string {
   }
 
   while (i < n) {
+    if (tag.startsWith('{{!', i)) {
+      const end = commentEnd(tag, i);
+      out += wrap('comment', tag.slice(i, end));
+      i = end;
+      continue;
+    }
+
     if (tag.startsWith('{{', i)) {
       const end = closeMustache(tag, i);
       out += colorizeMustache(tag.slice(i, end));

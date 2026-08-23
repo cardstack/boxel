@@ -24,8 +24,10 @@ export class Gallery extends Component {
 
   <template>
     <section class="hero">
-      <p class="kicker">glimmer-motion</p>
-      <h1>Motion,<br /><em>Choreographed.</em></h1>
+      {{! the repo is Choreo; the thing you install is still glimmer-motion,
+          so the eyebrow is the package name and nothing else }}
+      <p class="kicker">npm: glimmer-motion</p>
+      <h1>Motion,<br /><em>Choreo-graphed.</em></h1>
       <p class="lede">
         The
         <a href="https://motion.dev">Motion</a>

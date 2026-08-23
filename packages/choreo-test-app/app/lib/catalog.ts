@@ -457,12 +457,13 @@ drop = () => { this.col = Math.round(this.col); };
 
     dragMomentum is off because the detent IS the destination; inertia would
     be a second opinion about where the sheet should end up. }}
+{{! pose is {y: DETENTS[this.mode]}; limits are plain px, {top: 0, bottom: 262} }}
 <div
   {{motion
-    animate=this.pose            {{! {y: DETENTS[this.detent]} }}
+    animate=this.pose
     transition=settle
     drag='y'
-    dragConstraints=this.limits  {{! plain px: {top: 0, bottom: 262} }}
+    dragConstraints=this.limits
     dragElastic=0.05
     dragMomentum=false
     onDragStart=this.grab
@@ -844,13 +845,15 @@ word = {
                     viewport=(everyPass this.root) transition=sweep}}
       >{{entry.marker}}</div>
     {{else if entry.pour}}
+      {{! onViewportEnter is the escape hatch: the pose animates the element,
+          the callback counts the readout up on the same crossing }}
       <article
         {{motion
           initial=resting
           whileInView=arrived
           viewport=(band this.root)
           transition=rise
-          onViewportEnter=(fn this.count entry.pour)   {{! the readout }}
+          onViewportEnter=(fn this.count entry.pour)
         }}
       >
         <b>{{entry.pour.label}}</b>
