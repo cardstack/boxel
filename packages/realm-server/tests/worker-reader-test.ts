@@ -75,4 +75,46 @@ module(basename(import.meta.filename), function () {
 
     assert.strictEqual(result, undefined, 'a 404 reads as not found');
   });
+
+  test('mtimes rejects a failed inventory instead of reporting an empty realm', async function (assert) {
+    let reader = getReader(
+      async () =>
+        new Response('temporarily unavailable', {
+          status: 503,
+          statusText: 'Service Unavailable',
+          headers: { 'X-Boxel-Realm-Url': realmURL },
+        }),
+      realmURL,
+    );
+
+    await assert.rejects(
+      reader.mtimes(),
+      /mtimes request failed.*503 Service Unavailable.*temporarily unavailable/,
+      'a failed inventory fails the index job so it cannot replace the last good index with zero files',
+    );
+  });
+
+  test('mtimes retries an intermediary response before reading the realm inventory', async function (assert) {
+    let fetchCount = 0;
+    let reader = getReader(async () => {
+      fetchCount++;
+      if (fetchCount === 1) {
+        return new Response('proxy route is not ready', { status: 404 });
+      }
+      return Response.json({
+        data: {
+          attributes: {
+            mtimes: { 'index.json': 1_777_777_777 },
+          },
+        },
+      });
+    }, realmURL);
+
+    assert.deepEqual(
+      await reader.mtimes(),
+      { 'index.json': 1_777_777_777 },
+      'the eventual realm inventory is returned',
+    );
+    assert.strictEqual(fetchCount, 2, 'the intermediary response was retried');
+  });
 });

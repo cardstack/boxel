@@ -553,10 +553,15 @@ export function getReader(
           responseText = '';
         }
         let details = responseText ? `: ${responseText}` : '';
-        console.warn(
-          `mtimes request failed for ${realmURL}_mtimes (${response!.status} ${response!.statusText})${details}`,
-        );
-        return {};
+        let message = `mtimes request failed for ${realmURL}_mtimes (${response!.status} ${response!.statusText})${details}`;
+        console.warn(message);
+        // A failed inventory is not an empty inventory. Returning {} here
+        // lets a from-scratch index complete successfully with zero files,
+        // replacing a usable index with an empty one after a transient proxy,
+        // network, or storage outage. Reject the job so the failure is visible
+        // and batch finalization preserves the last good index until a later
+        // reindex can read the realm successfully.
+        throw new Error(message);
       }
       let {
         data: {
