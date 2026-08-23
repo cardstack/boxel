@@ -19,3 +19,6 @@ contracts and are intentionally not featured on the main documentation page.
 - [B2a reviewer guide](./deck-b2a-reviewers-guide.md) — per-realm legacy/Deck
   negotiation and exact, content-addressed pull, push, sync, status, and watch
   against a conditionally advanced branch head.
+- [B2b reviewer guide](./deck-b2b-reviewers-guide.md) — canonical every-save
+  deckd History for accepted writes, branch-scoped listing, and forward-only
+  restore through the same conditional mutation path.

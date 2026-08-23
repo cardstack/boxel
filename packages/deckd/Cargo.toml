@@ -1,0 +1,29 @@
+[package]
+name = "deckd"
+version = "0.1.0"
+edition = "2021"
+description = "Deck History daemon over jj-lib"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/cardstack/boxel"
+readme = "README.md"
+
+[[bin]]
+name = "deckd"
+path = "src/main.rs"
+
+[dependencies]
+axum = { version = "0.8", features = ["json"] }
+base64 = "0.22"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+futures = "0.3"
+# Same audited crates.io pin as the original jj-historyd implementation.
+jj-lib = "0.43.0"
+notify = "7"
+pollster = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "process", "sync", "fs", "io-util", "time"] }
+tower-http = { version = "0.6", features = ["trace"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

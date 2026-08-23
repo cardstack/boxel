@@ -1924,6 +1924,39 @@ importers:
         specifier: 'catalog:'
         version: 5.9.3
 
+  packages/deck-history:
+    dependencies:
+      '@cardstack/deck':
+        specifier: workspace:*
+        version: link:../deck
+    devDependencies:
+      '@glint/ember-tsc':
+        specifier: 'catalog:'
+        version: 1.3.0(typescript@5.9.3)
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
+      '@types/qunit':
+        specifier: 'catalog:'
+        version: 2.19.14
+      '@typescript-eslint/eslint-plugin':
+        specifier: 'catalog:'
+        version: 7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.9.3))(eslint@8.57.1)(typescript@5.9.3)
+      '@typescript-eslint/parser':
+        specifier: 'catalog:'
+        version: 7.18.0(eslint@8.57.1)(typescript@5.9.3)
+      eslint:
+        specifier: 'catalog:'
+        version: 8.57.1
+      qunit:
+        specifier: 'catalog:'
+        version: 2.26.0
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
+  packages/deckd: {}
+
   packages/eslint-plugin-boxel:
     dependencies:
       ember-eslint-parser:
@@ -2805,6 +2838,9 @@ importers:
       '@cardstack/deck':
         specifier: workspace:*
         version: link:../deck
+      '@cardstack/deck-history':
+        specifier: workspace:*
+        version: link:../deck-history
       '@cardstack/eslint-plugin-boxel':
         specifier: workspace:*
         version: link:../eslint-plugin-boxel

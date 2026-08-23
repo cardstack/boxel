@@ -15,7 +15,7 @@ import {
   readDeckBranchSnapshot,
 } from './realm-sync-mode.ts';
 
-export const DECK_BRANCH_UPDATE_SPEC = 'boxel-deck-branch-update-v1';
+export const DECK_BRANCH_UPDATE_SPEC = 'boxel-deck-branch-update-v2';
 
 export interface DeckPushResult {
   files: string[];
@@ -90,12 +90,16 @@ export async function pushDeckBranch(options: {
         : { path, sha256: null },
     ),
   );
+  let paths = changed.map(({ path }) => path).sort();
+  let preview = paths.slice(0, 3).join(', ');
+  let extra = paths.length > 3 ? ` (+${paths.length - 3} more)` : '';
   let next = await publishDeckBranchUpdate({
     realmURL: workspace.realmURL,
     branchName: workspace.branchName,
     authenticator: options.authenticator,
     body: {
       schema: DECK_BRANCH_UPDATE_SPEC,
+      message: `save: ${preview}${extra}`,
       expected: {
         repositoryHash: workspace.baseRepositoryHash,
         treeHash: workspace.baseTreeHash,

@@ -1,5 +1,6 @@
 import Koa from 'koa';
 import cors from '@koa/cors';
+import { DeckdHistory } from '@cardstack/deck-history/deckd';
 import http from 'http';
 import http2 from 'http2';
 import net from 'net';
@@ -1106,6 +1107,11 @@ export class RealmServer {
       dbAdapter: this.dbAdapter,
       virtualNetwork: this.virtualNetwork,
       deckCollaboration: deckCollaborationPolicyFromEnvironment(),
+      realmSecretSeed: this.realmSecretSeed,
+      // Realm Server owns accepted write batches and seals them explicitly.
+      // Disabling deckd's standalone FS watcher prevents a large tree
+      // materialization from being sealed halfway through.
+      deckHistory: new DeckdHistory({ watch: false }),
     });
     let sendEvent = createSendEvent({
       matrixClient: this.matrixClient,

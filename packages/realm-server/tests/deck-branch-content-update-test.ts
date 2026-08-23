@@ -6,7 +6,14 @@ import {
   ensureRepositoryMain,
   hashBytes,
   repositoryManifest,
+  readTreeFromDir,
 } from '@cardstack/deck/node';
+import type {
+  HistoryActor,
+  HistoryBackend,
+  HistoryEntry,
+  RestorePlan,
+} from '@cardstack/deck-history/backend';
 import QUnit from 'qunit';
 
 import {
@@ -21,10 +28,56 @@ const { module, test } = QUnit;
 const realmRRI = '@cardstack/pretui/';
 const policy = { enabled: true, realmRRIs: new Set([realmRRI]) };
 
+class RecordingHistory implements HistoryBackend {
+  readonly kind = 'deckd' as const;
+  entries: Array<{ id: string; files: Map<string, Buffer> }> = [];
+
+  noteMutation(): void {}
+  async flush(): Promise<string | undefined> {
+    return undefined;
+  }
+  async seal(
+    dir: string,
+    _message: string,
+    _actor?: HistoryActor,
+  ): Promise<string | undefined> {
+    let files = await readTreeFromDir(dir);
+    let prior = this.entries.at(-1)?.files;
+    if (
+      prior &&
+      prior.size === files.size &&
+      [...files].every(([path, bytes]) => prior.get(path)?.equals(bytes))
+    ) {
+      return undefined;
+    }
+    let id = `step${this.entries.length + 1}`;
+    this.entries.push({ id, files });
+    return id;
+  }
+  async head(): Promise<string | undefined> {
+    return this.entries.at(-1)?.id;
+  }
+  async list(): Promise<HistoryEntry[]> {
+    return [];
+  }
+  async fileAt(): Promise<Buffer | undefined> {
+    return undefined;
+  }
+  async fileListAt(): Promise<string[]> {
+    return [];
+  }
+  async restorePlan(): Promise<RestorePlan> {
+    return { writes: [], deletes: [] };
+  }
+  close(): void {}
+}
+
 module('Deck branch content updates', function (hooks) {
   let realmDir: string;
+  let history: RecordingHistory;
 
   hooks.beforeEach(async function () {
+    history = new RecordingHistory();
     realmDir = await mkdtemp(join(tmpdir(), 'deck-branch-content-'));
     await writeFile(
       join(realmDir, 'package.json'),
@@ -61,6 +114,7 @@ module('Deck branch content updates', function (hooks) {
     let treeHash = branch.repository.members[realmRRI];
     return {
       schema: DECK_BRANCH_UPDATE_SPEC,
+      message: 'save: index.js',
       expected: {
         repositoryHash: branch.head.repositoryHash,
         treeHash,
@@ -88,6 +142,7 @@ module('Deck branch content updates', function (hooks) {
       realmRRI,
       branch: 'main',
       policy,
+      history,
       request: await request('export const version = 2;\n'),
     });
     let after = await openDeckRepositoryProtocol({
@@ -102,14 +157,20 @@ module('Deck branch content updates', function (hooks) {
       before?.repository.members[realmRRI],
     );
     assert.strictEqual(after?.repository.members[realmRRI], result.treeHash);
-    assert.strictEqual(after?.head.historyHead, 'jj:main');
+    assert.strictEqual(after?.head.historyHead, 'step2');
     assert.strictEqual(after?.head.latestCheckpointHash, null);
     assert.strictEqual(
       await import('node:fs/promises').then(({ readFile }) =>
         readFile(join(realmDir, 'index.js'), 'utf8'),
       ),
+      'export const version = 2;\n',
+      'main materializes the exact accepted tree before its History Step',
+    );
+    assert.strictEqual(history.entries.length, 2);
+    assert.strictEqual(
+      history.entries[0].files.get('index.js')?.toString(),
       'export const version = 1;\n',
-      'publishing a branch tree does not overwrite the live realm projection',
+      'the first write adopts the state being left as a History baseline',
     );
   });
 
@@ -120,6 +181,7 @@ module('Deck branch content updates', function (hooks) {
       realmRRI,
       branch: 'main',
       policy,
+      history,
       request: await request('export const version = 2;\n'),
     });
     await assert.rejects(
@@ -128,6 +190,7 @@ module('Deck branch content updates', function (hooks) {
         realmRRI,
         branch: 'main',
         policy,
+        history,
         request: stale,
       }),
       DeckBranchContentConflictError,
@@ -151,6 +214,7 @@ module('Deck branch content updates', function (hooks) {
         realmRRI,
         branch: 'main',
         policy,
+        history,
         request: writerA,
       }),
       updateDeckBranchContent({
@@ -158,6 +222,7 @@ module('Deck branch content updates', function (hooks) {
         realmRRI,
         branch: 'main',
         policy,
+        history,
         request: writerB,
       }),
     ]);

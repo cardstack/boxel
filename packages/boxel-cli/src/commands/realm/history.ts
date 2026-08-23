@@ -1,11 +1,22 @@
 import * as fs from 'fs';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import type { Command } from 'commander';
 import {
   CheckpointManager,
   type Checkpoint,
 } from '../../lib/checkpoint-manager.ts';
 import { findCheckpoint } from '../../lib/find-checkpoint.ts';
-import { prompt } from '../../lib/prompt.ts';
+import { prompt, resolveRealmSecretSeed } from '../../lib/prompt.ts';
+import { resolveRealmAuthenticator } from '../../lib/auth-resolver.ts';
+import { loadDeckWorkspaceState } from '../../lib/deck-workspace-state.ts';
+import {
+  readDeckHistory,
+  restoreDeckHistory,
+  type DeckHistoryEntry,
+} from '../../lib/deck-realm-history.ts';
+import { detectRealmSyncMode } from '../../lib/realm-sync-mode.ts';
+import type { RealmAuthenticator } from '../../lib/realm-authenticator.ts';
 import {
   BOLD,
   DIM,
@@ -46,6 +57,8 @@ interface HistoryCliOptions {
   message?: string;
   yes?: boolean;
   limit?: string;
+  branch?: string;
+  realmSecretSeed?: boolean;
 }
 
 type StepResult<T> = ({ ok: true } & T) | { ok: false; error: string };
@@ -287,6 +300,96 @@ function printCheckpoints(
   );
 }
 
+function printDeckHistory(entries: DeckHistoryEntry[], branch: string): void {
+  if (entries.length === 0) {
+    console.log(`No History Steps found on ${branch}.`);
+    return;
+  }
+  console.log(`\n${BOLD}History · ${branch}${RESET}\n`);
+  const width = String(entries.length).length;
+  entries.forEach((entry, index) => {
+    let number = `${DIM}${String(index + 1).padStart(width, ' ')}${RESET}`;
+    let actor = entry.author ? ` ${FG_CYAN}${entry.author}${RESET}` : '';
+    let paths = entry.filesSummary.slice(0, 3).join(', ');
+    let extra =
+      entry.filesSummary.length > 3
+        ? ` (+${entry.filesSummary.length - 3} more)`
+        : '';
+    console.log(
+      `${number} ${FG_YELLOW}${entry.changeId.slice(0, 12)}${RESET}${actor} ${entry.description}`,
+    );
+    console.log(
+      `   ${DIM}${formatRelativeDate(new Date(entry.timestamp))}${paths ? ` · ${paths}${extra}` : ''}${RESET}\n`,
+    );
+  });
+  console.log(
+    `${DIM}Restore: boxel realm history <workspace-or-realm-url> --restore <step>${RESET}`,
+  );
+}
+
+async function deckHistoryTarget(
+  target: string,
+  options: HistoryCliOptions,
+): Promise<
+  | {
+      realmURL: string;
+      branchName: string;
+      localDir?: string;
+      authenticator: RealmAuthenticator;
+    }
+  | undefined
+> {
+  let workspace;
+  try {
+    workspace = await loadDeckWorkspaceState(target);
+  } catch (error) {
+    let raw: unknown;
+    try {
+      raw = JSON.parse(
+        await readFile(join(target, '.boxel-sync.json'), 'utf8'),
+      );
+    } catch {
+      throw error;
+    }
+    if (typeof raw === 'object' && raw !== null && !('schema' in raw)) {
+      return undefined;
+    }
+    throw error;
+  }
+  let realmURL = workspace?.realmURL;
+  let branchName = options.branch ?? workspace?.branchName ?? 'main';
+  let localDir = workspace ? target : undefined;
+  if (!realmURL && URL.canParse(target)) {
+    realmURL = new URL(target).href.replace(/\/+$/, '') + '/';
+  }
+  if (!realmURL) return undefined;
+  if (workspace && options.branch && options.branch !== workspace.branchName) {
+    throw new Error(
+      `Workspace tracks branch ${workspace.branchName}, not ${options.branch}`,
+    );
+  }
+  let realmSecretSeed = await resolveRealmSecretSeed(
+    options.realmSecretSeed === true,
+  );
+  let resolution = resolveRealmAuthenticator({
+    realmUrl: realmURL,
+    realmSecretSeed,
+  });
+  if (!resolution.ok) throw new Error(resolution.error);
+  let mode = await detectRealmSyncMode(realmURL, resolution.authenticator);
+  if (mode.mode !== 'deck') {
+    throw new Error(
+      'A realm URL can show History only when that realm advertises Deck; use a local directory for legacy checkpoint history',
+    );
+  }
+  return {
+    realmURL,
+    branchName,
+    ...(localDir ? { localDir } : {}),
+    authenticator: resolution.authenticator,
+  };
+}
+
 function parseLimit(raw: string | undefined): number | null {
   if (raw === undefined) return DEFAULT_LIMIT;
   if (!/^\d+$/.test(raw)) return null;
@@ -304,16 +407,19 @@ export function registerHistoryCommand(realm: Command): void {
     .command('history')
     .alias('hist')
     .description(
-      'View, restore, or create local checkpoints stored under .boxel-history/',
+      'View or restore Deck History, or manage legacy local checkpoints',
     )
-    .argument('<local-dir>', 'The local workspace directory')
+    .argument(
+      '<workspace-or-realm-url>',
+      'A local workspace, or a Deck-enabled realm URL',
+    )
     .option(
       '-r, --restore <ref>',
-      'Restore the workspace to a checkpoint (1-based index, short hash, or full hash)',
+      'Restore a Deck History Step or legacy local checkpoint',
     )
     .option(
       '-m, --message <message>',
-      'Create a manual checkpoint with the given message',
+      'Create a manual checkpoint in a legacy local workspace',
     )
     .option(
       '-y, --yes',
@@ -321,9 +427,17 @@ export function registerHistoryCommand(realm: Command): void {
     )
     .option(
       '--limit <n>',
-      `Maximum number of checkpoints to list or consider for --restore (default: ${DEFAULT_LIMIT})`,
+      `Maximum History Steps or legacy checkpoints to list (default: ${DEFAULT_LIMIT})`,
     )
-    .action(async (localDir: string, opts: HistoryCliOptions) => {
+    .option(
+      '-b, --branch <name>',
+      'Deck branch (default: workspace branch or main)',
+    )
+    .option(
+      '--realm-secret-seed',
+      'Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile',
+    )
+    .action(async (target: string, opts: HistoryCliOptions) => {
       if (opts.restore !== undefined && opts.message !== undefined) {
         bailout('Only one of --restore or --message may be specified.');
       }
@@ -332,6 +446,65 @@ export function registerHistoryCommand(realm: Command): void {
       if (limit === null) {
         bailout('--limit must be a positive integer.');
       }
+
+      let deckTarget;
+      try {
+        deckTarget = await deckHistoryTarget(target, opts);
+      } catch (error) {
+        bailout(errorMessage(error));
+      }
+      if (deckTarget) {
+        if (opts.message !== undefined) {
+          bailout(
+            'Deck History Steps are automatic. An authored collaboration Checkpoint is a separate command added in B5.',
+          );
+        }
+        if (opts.restore !== undefined) {
+          if (!opts.yes) {
+            if (!process.stdin.isTTY) {
+              bailout(
+                '--restore advances the canonical branch. Pass --yes to confirm in non-interactive mode.',
+              );
+            }
+            const answer = await prompt(
+              `${FG_YELLOW}Restore ${deckTarget.branchName} to ${opts.restore} as a new History Step? (y/N) ${RESET}`,
+            );
+            if (!/^y/i.test(answer)) {
+              console.log(`${DIM}Restore cancelled.${RESET}`);
+              return;
+            }
+          }
+          try {
+            let restored = await restoreDeckHistory({
+              realmURL: deckTarget.realmURL,
+              branchName: deckTarget.branchName,
+              revisionId: opts.restore,
+              authenticator: deckTarget.authenticator,
+              ...(deckTarget.localDir ? { localDir: deckTarget.localDir } : {}),
+            });
+            console.log(
+              `${FG_GREEN}✓${RESET} Restored ${deckTarget.branchName} to ${FG_YELLOW}${restored.restored}${RESET} as new Step ${FG_YELLOW}${restored.historyHead}${RESET}`,
+            );
+          } catch (error) {
+            bailout(errorMessage(error));
+          }
+          return;
+        }
+        try {
+          let history = await readDeckHistory({
+            realmURL: deckTarget.realmURL,
+            branchName: deckTarget.branchName,
+            limit,
+            authenticator: deckTarget.authenticator,
+          });
+          printDeckHistory(history.entries, history.branch);
+        } catch (error) {
+          bailout(errorMessage(error));
+        }
+        return;
+      }
+
+      const localDir = target;
 
       if (opts.message !== undefined) {
         const r = await createManualCheckpointStep(localDir, opts.message);
