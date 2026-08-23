@@ -2735,6 +2735,33 @@ importers:
       '@tsconfig/ember':
         specifier: 3.0.1
         version: 3.0.1
+      '@typescript-eslint/eslint-plugin':
+        specifier: 'catalog:'
+        version: 7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.9.3))(eslint@8.57.1)(typescript@5.9.3)
+      '@typescript-eslint/parser':
+        specifier: 'catalog:'
+        version: 7.18.0(eslint@8.57.1)(typescript@5.9.3)
+      ember-eslint-parser:
+        specifier: 0.13.0
+        version: 0.13.0(patch_hash=364c7e71472801c87618bf2b2cdabd256358166bbe107f29d321ab35d0a53425)(@babel/eslint-parser@7.29.7(@babel/core@7.29.7)(eslint@8.57.1))(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.9.3))(typescript@5.9.3)
+      ember-template-lint:
+        specifier: 'catalog:'
+        version: 7.9.3
+      eslint:
+        specifier: 'catalog:'
+        version: 8.57.1
+      eslint-config-prettier:
+        specifier: 'catalog:'
+        version: 9.1.2(eslint@8.57.1)
+      eslint-plugin-ember:
+        specifier: 'catalog:'
+        version: 13.3.2(@babel/eslint-parser@7.29.7(@babel/core@7.29.7)(eslint@8.57.1))(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.9.3))(eslint@8.57.1)(typescript@5.9.3)
+      eslint-plugin-prettier:
+        specifier: 'catalog:'
+        version: 5.5.6(@types/eslint@8.56.5)(eslint-config-prettier@9.1.2(eslint@8.57.1))(eslint@8.57.1)(prettier@3.8.4)
+      prettier:
+        specifier: 'catalog:'
+        version: 3.8.4
       typescript:
         specifier: 'catalog:'
         version: 5.9.3

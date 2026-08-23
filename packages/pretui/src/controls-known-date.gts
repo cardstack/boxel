@@ -109,7 +109,9 @@ export function orderForLocale(locale: string): DateOrder {
   try {
     let parts = new Intl.DateTimeFormat(locale).formatToParts(ORDER_PROBE);
     let sequence = parts
-      .filter((p) => p.type === 'day' || p.type === 'month' || p.type === 'year')
+      .filter(
+        (p) => p.type === 'day' || p.type === 'month' || p.type === 'year',
+      )
       .map((p) => p.type.charAt(0))
       .join('');
     if (sequence === 'dmy' || sequence === 'mdy' || sequence === 'ymd') {
@@ -131,7 +133,10 @@ function monthVocabulary(locale: string): Map<string, number> {
     for (let style of ['long', 'short'] as const) {
       let format: Intl.DateTimeFormat;
       try {
-        format = new Intl.DateTimeFormat(tag, { month: style, timeZone: 'UTC' });
+        format = new Intl.DateTimeFormat(tag, {
+          month: style,
+          timeZone: 'UTC',
+        });
       } catch {
         continue;
       }
@@ -198,7 +203,10 @@ export function parseMonth(text: string, locale = 'en-US'): number | undefined {
  * Four-digit years pass through untouched; three-digit years are refused
  * rather than guessed at.
  */
-export function expandYear(text: string, pivotYear = DEFAULT_PIVOT_YEAR): number | undefined {
+export function expandYear(
+  text: string,
+  pivotYear = DEFAULT_PIVOT_YEAR,
+): number | undefined {
   let trimmed = (text ?? '').trim();
   if (/^\d{4}$/.test(trimmed)) {
     return Number(trimmed);
@@ -312,8 +320,14 @@ export function splitWholeDate(
  * "still open" group — the whole string is already there — so this check is
  * only meaningful, and only applied, while typing.
  */
-export function isTerminalWholeDate(text: string, parts: KnownDateParts): boolean {
-  let groups = (text ?? '').trim().split(/[^0-9A-Za-zÀ-ɏ]+/).filter(Boolean);
+export function isTerminalWholeDate(
+  text: string,
+  parts: KnownDateParts,
+): boolean {
+  let groups = (text ?? '')
+    .trim()
+    .split(/[^0-9A-Za-zÀ-ɏ]+/)
+    .filter(Boolean);
   let last = groups[groups.length - 1] ?? '';
   if (last === parts.year) {
     return /^\d{4}$/.test(last);
@@ -360,20 +374,33 @@ export function parseKnownDate(
       issue:
         missing.length === 1
           ? 'Add the ' + missing[0] + '.'
-          : 'Add the ' + missing.slice(0, -1).join(', ') + ' and ' + missing[missing.length - 1] + '.',
+          : 'Add the ' +
+            missing.slice(0, -1).join(', ') +
+            ' and ' +
+            missing[missing.length - 1] +
+            '.',
     };
   }
 
   let monthNumber = parseMonth(month, options.locale ?? 'en-US');
   if (monthNumber === undefined) {
-    return { empty: false, issue: 'That is not a month — try a number from 1 to 12, or a name.' };
+    return {
+      empty: false,
+      issue: 'That is not a month — try a number from 1 to 12, or a name.',
+    };
   }
   let yearNumber = expandYear(year, options.pivotYear ?? DEFAULT_PIVOT_YEAR);
   if (yearNumber === undefined) {
-    return { empty: false, issue: 'That is not a year — try two or four digits.' };
+    return {
+      empty: false,
+      issue: 'That is not a year — try two or four digits.',
+    };
   }
   if (!/^\d{1,2}$/.test(day)) {
-    return { empty: false, issue: 'That is not a day — try a number from 1 to 31.' };
+    return {
+      empty: false,
+      issue: 'That is not a day — try a number from 1 to 31.',
+    };
   }
   let dayNumber = Number(day);
   let ceiling = daysInMonth(yearNumber, monthNumber);
@@ -559,9 +586,24 @@ export interface KnownDateSignature {
 }
 
 const SLOT_META = {
-  day: { label: 'Day', inputmode: 'numeric', autocomplete: 'bday-day', placeholder: 'DD' },
-  month: { label: 'Month', inputmode: 'text', autocomplete: 'bday-month', placeholder: 'MM' },
-  year: { label: 'Year', inputmode: 'numeric', autocomplete: 'bday-year', placeholder: 'YYYY' },
+  day: {
+    label: 'Day',
+    inputmode: 'numeric',
+    autocomplete: 'bday-day',
+    placeholder: 'DD',
+  },
+  month: {
+    label: 'Month',
+    inputmode: 'text',
+    autocomplete: 'bday-month',
+    placeholder: 'MM',
+  },
+  year: {
+    label: 'Year',
+    inputmode: 'numeric',
+    autocomplete: 'bday-year',
+    placeholder: 'YYYY',
+  },
 } as const;
 
 export class KnownDate extends Component<KnownDateSignature> {
@@ -572,7 +614,6 @@ export class KnownDate extends Component<KnownDateSignature> {
   @tracked private yearText = '';
 
   constructor(owner: unknown, args: KnownDateSignature['Args']) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- the
     // Glimmer owner is opaque here; the base class types it internally.
     super(owner as any, args);
     let seed = fromIsoDate(this.args.value);
@@ -610,7 +651,11 @@ export class KnownDate extends Component<KnownDateSignature> {
       if (Number.isNaN(raw.getTime())) {
         return undefined;
       }
-      return toIsoDate(raw.getUTCFullYear(), raw.getUTCMonth() + 1, raw.getUTCDate());
+      return toIsoDate(
+        raw.getUTCFullYear(),
+        raw.getUTCMonth() + 1,
+        raw.getUTCDate(),
+      );
     }
     let trimmed = String(raw).slice(0, 10);
     return fromIsoDate(trimmed) ? trimmed : undefined;
@@ -645,7 +690,9 @@ export class KnownDate extends Component<KnownDateSignature> {
       return new Intl.DateTimeFormat(this.locale, {
         dateStyle: 'full',
         timeZone: 'UTC',
-      }).format(new Date(Date.UTC(resolved.year, resolved.month - 1, resolved.day)));
+      }).format(
+        new Date(Date.UTC(resolved.year, resolved.month - 1, resolved.day)),
+      );
     } catch {
       return iso;
     }

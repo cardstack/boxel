@@ -1,4 +1,5 @@
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { dirname, join, relative, resolve } from 'node:path';
 
 import {
@@ -8,10 +9,14 @@ import {
   treeHashFromEntries,
   unpack,
 } from '@cardstack/deck/node';
+import { format, type Plugin } from 'prettier';
 
 import { buildDeckVersionIndex } from '../lib/deck-version-index.ts';
 
 const MAPPING_VERSION = 'pretui-boxel-workspace-v1';
+const require = createRequire(import.meta.url);
+const emberTemplateTag =
+  require('prettier-plugin-ember-template-tag') as Plugin;
 const GENERATED_FILES = [
   'controls-known-date.gts',
   'known-date-demo.gts',
@@ -127,6 +132,26 @@ outputs.set(
     "export * from './controls-known-date.gts';\nexport * from './known-date-demo.gts';\n",
   ),
 );
+for (let [path, bytes] of outputs) {
+  let source = bytes.toString();
+  if (path === 'src/controls-known-date.gts') {
+    source = source.replace(
+      '    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- the\n' +
+        '    // Glimmer owner is opaque here; the base class types it internally.\n',
+      '    // Glimmer owner is opaque here; the base class types it internally.\n',
+    );
+  }
+  outputs.set(
+    path,
+    Buffer.from(
+      await format(source, {
+        filepath: path,
+        plugins: [emberTemplateTag],
+        singleQuote: true,
+      }),
+    ),
+  );
+}
 outputs.set(
   'package.json',
   json({
@@ -148,11 +173,87 @@ outputs.set(
       '@cardstack/local-types': 'workspace:*',
       '@glint/ember-tsc': 'catalog:',
       '@tsconfig/ember': '3.0.1',
+      '@typescript-eslint/eslint-plugin': 'catalog:',
+      '@typescript-eslint/parser': 'catalog:',
+      'ember-eslint-parser': '0.13.0',
+      'ember-template-lint': 'catalog:',
+      eslint: 'catalog:',
+      'eslint-config-prettier': 'catalog:',
+      'eslint-plugin-ember': 'catalog:',
+      'eslint-plugin-prettier': 'catalog:',
+      prettier: 'catalog:',
       typescript: 'catalog:',
     },
-    scripts: { 'lint:types': 'ember-tsc --noEmit' },
+    scripts: {
+      lint: 'pnpm lint:types && pnpm lint:js && pnpm lint:hbs',
+      'lint:types': 'ember-tsc --noEmit',
+      'lint:js': 'eslint . --report-unused-disable-directives',
+      'lint:hbs': 'ember-template-lint .',
+    },
     'ember-addon': { type: 'addon', version: 2 },
   }),
+);
+outputs.set(
+  '.eslintrc.cjs',
+  Buffer.from(`'use strict';
+
+module.exports = {
+  root: true,
+  parser: '@typescript-eslint/parser',
+  parserOptions: {
+    ecmaVersion: 'latest',
+    sourceType: 'module',
+    warnOnUnsupportedTypeScriptVersion: false,
+  },
+  plugins: ['@typescript-eslint'],
+  extends: [
+    'eslint:recommended',
+    'plugin:@typescript-eslint/recommended',
+    'plugin:prettier/recommended',
+  ],
+  env: { browser: true },
+  rules: {
+    'no-undef': 'off',
+    '@typescript-eslint/no-explicit-any': 'off',
+  },
+  overrides: [
+    {
+      files: ['**/*.gts'],
+      parser: 'ember-eslint-parser',
+      parserOptions: {
+        ecmaVersion: 'latest',
+        sourceType: 'module',
+        requireConfigFile: false,
+        warnOnUnsupportedTypeScriptVersion: false,
+      },
+      plugins: ['ember', '@typescript-eslint'],
+      extends: [
+        'eslint:recommended',
+        'plugin:@typescript-eslint/recommended',
+        'plugin:ember/recommended',
+        'plugin:ember/recommended-gts',
+        'plugin:prettier/recommended',
+      ],
+      rules: {
+        'no-undef': 'off',
+        '@typescript-eslint/no-explicit-any': 'off',
+      },
+    },
+  ],
+};
+`),
+);
+outputs.set(
+  '.template-lintrc.cjs',
+  Buffer.from(`'use strict';
+
+module.exports = {
+  extends: ['recommended'],
+  rules: {
+    'no-forbidden-elements': false,
+  },
+};
+`),
 );
 outputs.set(
   'tsconfig.json',

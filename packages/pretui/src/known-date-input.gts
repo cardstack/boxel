@@ -40,7 +40,8 @@ export class Input extends Component<InputSignature> {
         font: inherit;
       }
       .known-date-input:focus-visible {
-        outline: 0.1875rem solid color-mix(in srgb, var(--primary, #00a884) 30%, transparent);
+        outline: 0.1875rem solid
+          color-mix(in srgb, var(--primary, #00a884) 30%, transparent);
         border-color: var(--primary, #00a884);
       }
       .known-date-input[aria-invalid='true'] {

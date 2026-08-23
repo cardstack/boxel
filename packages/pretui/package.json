@@ -17,10 +17,22 @@
     "@cardstack/local-types": "workspace:*",
     "@glint/ember-tsc": "catalog:",
     "@tsconfig/ember": "3.0.1",
+    "@typescript-eslint/eslint-plugin": "catalog:",
+    "@typescript-eslint/parser": "catalog:",
+    "ember-eslint-parser": "0.13.0",
+    "ember-template-lint": "catalog:",
+    "eslint": "catalog:",
+    "eslint-config-prettier": "catalog:",
+    "eslint-plugin-ember": "catalog:",
+    "eslint-plugin-prettier": "catalog:",
+    "prettier": "catalog:",
     "typescript": "catalog:"
   },
   "scripts": {
-    "lint:types": "ember-tsc --noEmit"
+    "lint": "pnpm lint:types && pnpm lint:js && pnpm lint:hbs",
+    "lint:types": "ember-tsc --noEmit",
+    "lint:js": "eslint . --report-unused-disable-directives",
+    "lint:hbs": "ember-template-lint ."
   },
   "ember-addon": {
     "type": "addon",
